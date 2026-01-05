@@ -1,4 +1,4 @@
-# firebet
+# firebat
 
 To install dependencies:
 
