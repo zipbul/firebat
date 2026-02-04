@@ -18,7 +18,7 @@ const runBuild = async (): Promise<void> => {
   const pluginBuildResult = await Bun.build({
     entrypoints: ['oxlint-plugin.ts'],
     outdir,
-    target: 'node',
+    target: 'bun',
     minify: true,
     sourcemap: 'inline',
     packages: 'external',
@@ -44,6 +44,22 @@ const runBuild = async (): Promise<void> => {
 
   if (chmodResult.exitCode !== 0) {
     console.error(`${logPrefix} chmod failed (${chmodResult.exitCode})`);
+
+    process.exit(1);
+  }
+
+  // NOTE: Drizzle migrator expects migrationsFolder/meta/_journal.json at runtime.
+  // We ship migrations as packaged, read-only assets next to dist/*.js.
+  try {
+    const migrationsSrcDirPath = 'src/infrastructure/sqlite/migrations';
+    const migrationsDistDirPath = `${outdir}/migrations`;
+
+    await Bun.$`rm -rf ${migrationsDistDirPath}`;
+    await Bun.$`mkdir -p ${migrationsDistDirPath}`;
+    await Bun.$`cp -R ${migrationsSrcDirPath}/. ${migrationsDistDirPath}/`;
+  } catch (error) {
+    console.error(`${logPrefix} failed: could not copy migrations into dist/`);
+    console.error(error);
 
     process.exit(1);
   }

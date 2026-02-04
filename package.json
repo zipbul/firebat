@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "bun run scripts/build.ts",
+    "firebat": "bun dist/firebat.js",
     "db:generate": "bunx -y drizzle-kit generate --config ./drizzle.config.ts",
     "db:migrate": "bunx -y drizzle-kit migrate --config ./drizzle.config.ts",
     "lint": "bun run build && oxlint --config ../../.oxlintrc.jsonc --type-aware --fix .",

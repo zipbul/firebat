@@ -1,4 +1,5 @@
 import { runCli } from './src/adapters/cli/entry';
+import { runCache } from './src/adapters/cli/cache';
 import { runInstall } from './src/adapters/cli/install';
 import { runMcp } from './src/adapters/mcp/entry';
 
@@ -14,6 +15,12 @@ const main = async (): Promise<void> => {
 			await runInstall();
 
 			return;
+		}
+
+		if (subcommand === 'cache') {
+			const exitCode = await runCache(argv.slice(1));
+
+			process.exit(exitCode);
 		}
 
 		if (subcommand === 'mcp') {

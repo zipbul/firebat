@@ -39,11 +39,10 @@ const toAbsoluteTargets = async (rootAbs: string, targets: ReadonlyArray<string>
 
 interface RepositoryContext {
   readonly rootAbs: string;
-  readonly dbPath?: string;
 }
 
 const getRepositories = async (ctx: RepositoryContext) => {
-  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, dbPath: ctx.dbPath });
+  const orm = await getOrmDb({ rootAbs: ctx.rootAbs });
   const fileIndexRepository = createHybridFileIndexRepository({
     memory: createInMemoryFileIndexRepository(),
     sqlite: createSqliteFileIndexRepository(orm),
@@ -84,9 +83,9 @@ export const indexSymbolsUseCase = async (input: IndexSymbolsInput): Promise<Ind
 
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = resolveRoot(input.root);
-  const toolVersion = computeToolVersion(ctx.config);
+  const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { fileIndexRepository, symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
+  const { fileIndexRepository, symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
   const targets = await toAbsoluteTargets(rootAbs, input.targets);
 
   await indexTargets({ projectKey, targets, repository: fileIndexRepository, concurrency: 8 });
@@ -150,9 +149,9 @@ export const indexSymbolsUseCase = async (input: IndexSymbolsInput): Promise<Ind
 export const searchSymbolFromIndexUseCase = async (input: SearchSymbolFromIndexInput): Promise<ReadonlyArray<SymbolMatch>> => {
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = resolveRoot(input.root);
-  const toolVersion = computeToolVersion(ctx.config);
+  const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
+  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
 
   return symbolIndexRepository.search({ projectKey, query: input.query, ...(input.limit !== undefined ? { limit: input.limit } : {}) });
 };
@@ -160,9 +159,9 @@ export const searchSymbolFromIndexUseCase = async (input: SearchSymbolFromIndexI
 export const getIndexStatsFromIndexUseCase = async (input: RootOnlyInput): Promise<SymbolIndexStats> => {
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = resolveRoot(input.root);
-  const toolVersion = computeToolVersion(ctx.config);
+  const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
+  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
 
   return symbolIndexRepository.getStats({ projectKey });
 };
@@ -170,9 +169,9 @@ export const getIndexStatsFromIndexUseCase = async (input: RootOnlyInput): Promi
 export const clearIndexUseCase = async (input: RootOnlyInput): Promise<void> => {
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = resolveRoot(input.root);
-  const toolVersion = computeToolVersion(ctx.config);
+  const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
-  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
+  const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs });
 
   await symbolIndexRepository.clearProject({ projectKey });
 };

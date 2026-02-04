@@ -9,15 +9,7 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 
 const DB_RELATIVE_PATH = '.firebat/firebat.sqlite';
 
-const resolveDbPath = (rootAbs: string, dbPath: string | undefined): string => {
-  const configured = dbPath?.trim() ?? '';
-
-  if (configured.length > 0) {
-    return path.isAbsolute(configured) ? configured : path.resolve(rootAbs, configured);
-  }
-
-  return path.resolve(rootAbs, DB_RELATIVE_PATH);
-};
+const resolveDbPath = (rootAbs: string): string => path.resolve(rootAbs, DB_RELATIVE_PATH);
 
 const ensureDatabase = async (dbFilePath: string): Promise<Database> => {
   const dirPath = path.dirname(dbFilePath);
@@ -39,12 +31,11 @@ const ormPromisesByPath = new Map<string, Promise<FirebatDrizzleDb>>();
 
 interface DbOpenInput {
   readonly rootAbs?: string;
-  readonly dbPath?: string;
 }
 
 const getDb = async (input?: DbOpenInput): Promise<Database> => {
   const rootAbs = input?.rootAbs ?? process.cwd();
-  const dbFilePath = resolveDbPath(rootAbs, input?.dbPath);
+  const dbFilePath = resolveDbPath(rootAbs);
   const existing = dbPromisesByPath.get(dbFilePath);
 
   if (existing) {
@@ -60,7 +51,7 @@ const getDb = async (input?: DbOpenInput): Promise<Database> => {
 
 const getOrmDb = async (input?: DbOpenInput): Promise<FirebatDrizzleDb> => {
   const rootAbs = input?.rootAbs ?? process.cwd();
-  const dbFilePath = resolveDbPath(rootAbs, input?.dbPath);
+  const dbFilePath = resolveDbPath(rootAbs);
   const existing = ormPromisesByPath.get(dbFilePath);
 
   if (existing) {
@@ -68,7 +59,7 @@ const getOrmDb = async (input?: DbOpenInput): Promise<FirebatDrizzleDb> => {
   }
 
   const created = (async (): Promise<FirebatDrizzleDb> => {
-    const sqlite = await getDb({ rootAbs, dbPath: input?.dbPath });
+    const sqlite = await getDb({ rootAbs });
     const orm = createDrizzleDb(sqlite);
     const migrationsFolder = path.resolve(import.meta.dir, './migrations');
 

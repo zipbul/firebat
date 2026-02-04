@@ -263,9 +263,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
 
   const ctx = await resolveRuntimeContextFromCwd();
 
-  const toolVersion = computeToolVersion(ctx.config);
+  const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
-  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, dbPath: ctx.config.dbPath });
+  const orm = await getOrmDb({ rootAbs: ctx.rootAbs });
   const artifactRepository = createHybridArtifactRepository({
     memory: createInMemoryArtifactRepository(),
     sqlite: createSqliteArtifactRepository(orm),

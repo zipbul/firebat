@@ -16,6 +16,7 @@ const printHelp = (): void => {
     '  firebat [targets...] [options]',
     '  firebat scan [targets...] [options]',
     '  firebat install',
+    '  firebat cache clean',
     '  firebat mcp',
     '',
     'Defaults:',

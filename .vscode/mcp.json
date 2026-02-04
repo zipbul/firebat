@@ -30,8 +30,8 @@
     "firebat": {
       "type": "stdio",
       "command": "bun",
-      "args": ["index.ts", "mcp"],
-      "cwd": "${workspaceFolder}/packages/firebat"
+      "args": ["firebat.js", "mcp"],
+      "cwd": "${workspaceFolder}/dist"
     }
   }
 }

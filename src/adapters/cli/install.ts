@@ -145,7 +145,7 @@ export const runInstall = async (): Promise<void> => {
   const gitignoreUpdated = await ensureGitignoreHasFirebat(rootAbs);
 
   // DB warm-up (creates .firebat/firebat.sqlite + runs migrations)
-  await getOrmDb({ rootAbs, dbPath: ctx.config.dbPath });
+  await getOrmDb({ rootAbs });
 
   const installManifestPath = path.join(firebatDir, 'install-manifest.json');
   const manifest = {

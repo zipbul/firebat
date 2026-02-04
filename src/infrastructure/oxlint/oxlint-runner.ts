@@ -1,7 +1,5 @@
 import * as path from 'node:path';
 
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-
 import * as z from 'zod';
 
 interface OxlintDiagnostic {
@@ -31,13 +29,6 @@ interface RunOxlintInput {
 const splitCommand = (value: string): string[] => value.split(/\s+/).filter(Boolean);
 
 const tryResolveOxlintCommand = async (): Promise<string[] | null> => {
-  const ctx = await resolveRuntimeContextFromCwd();
-  const configured = (ctx.config.oxlintCommand ?? '').trim();
-
-  if (configured.length > 0) {
-    return splitCommand(configured);
-  }
-
   const candidates = [
     // project-local
     path.resolve(process.cwd(), 'node_modules', '.bin', 'oxlint'),
@@ -133,7 +124,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
     return {
       ok: false,
       tool: 'oxlint',
-      error: 'oxlint is not available. Install it (or use a firebat build that bundles it), or configure .firebat/config.json (oxlintCommand) to enable the lint tool.',
+      error: 'oxlint is not available. Install it (or use a firebat build that bundles it) to enable the lint tool.',
     };
   }
 
