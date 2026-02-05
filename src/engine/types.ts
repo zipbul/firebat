@@ -3,8 +3,11 @@ import type { Comment, Node, OxcError, Program } from 'oxc-parser';
 import type { FirebatItemKind } from '../types';
 
 import type { IntegerCFG } from './cfg';
+import type { NodeId } from './cfg-types';
+export type { WriteBehindQueue } from './write-behind-queue';
 
-export type NodeId = number;
+export { EdgeType } from './cfg-types';
+export type { NodeId } from './cfg-types';
 
 export interface BitSet {
   add(index: number): void;
@@ -18,12 +21,6 @@ export interface BitSet {
   array(): number[];
 }
 
-export enum EdgeType {
-  Normal = 0,
-  True = 1,
-  False = 2,
-  Exception = 3,
-}
 
 export interface VariableUsage {
   name: string;

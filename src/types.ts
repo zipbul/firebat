@@ -1,5 +1,7 @@
 export type OutputFormat = 'text' | 'json';
 
+export type { FirebatConfig } from './firebat-config';
+
 export type MinSizeOption = number | 'auto';
 
 export type FirebatDetector =

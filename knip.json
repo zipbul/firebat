@@ -1,14 +1,6 @@
 {
-  "$schema": "https://unpkg.com/knip@latest/schema.json",
-  "ignore": [
-    "**/node_modules/**",
-    "**/dist/**",
-    "**/build/**",
-    "**/target/**",
-    "**/rust-packages/**",
-    "benchmarks/**",
-    ".husky/**",
-    ".lintstagedrc.json"
-  ],
-  "ignoreDependencies": ["@commitlint/cli", "mitata"]
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "tags": [
+    "-lintignore"
+  ]
 }

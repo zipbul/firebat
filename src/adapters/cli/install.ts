@@ -4,10 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 
-interface LoadedTextFile {
-  readonly filePath: string;
-  readonly text: string;
-}
+import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
 interface AssetTemplateMeta {
   readonly sourcePath: string;
@@ -42,34 +39,6 @@ const sha256Hex = async (text: string): Promise<string> => {
   const arr = Array.from(new Uint8Array(digest));
 
   return arr.map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-const loadFirstExistingText = async (candidates: ReadonlyArray<string>): Promise<LoadedTextFile> => {
-  for (const filePath of candidates) {
-    try {
-      const file = Bun.file(filePath);
-
-      if (!(await file.exists())) {
-        continue;
-      }
-
-      return { filePath, text: await file.text() };
-    } catch {
-      continue;
-    }
-  }
-
-  throw new Error('[firebat] Could not locate packaged assets/. Ensure the firebat package includes assets/.');
-};
-
-const resolveAssetCandidates = (assetFileName: string): string[] => {
-  // Works in both repo (src/* sibling to assets/*) and published package (dist/* sibling to assets/*)
-  return [
-    path.resolve(import.meta.dir, '../../../assets', assetFileName),
-    path.resolve(import.meta.dir, '../../assets', assetFileName),
-    path.resolve(import.meta.dir, '../assets', assetFileName),
-    path.resolve(process.cwd(), 'assets', assetFileName),
-  ];
 };
 
 const ensureGitignoreHasFirebat = async (rootAbs: string): Promise<boolean> => {

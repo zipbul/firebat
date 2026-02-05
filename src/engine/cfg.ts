@@ -1,4 +1,4 @@
-import { EdgeType, type NodeId } from './types';
+import { EdgeType, type NodeId } from './cfg-types';
 
 const INITIAL_CAPACITY = 1024;
 
@@ -96,3 +96,4 @@ class IntegerCFG {
 }
 
 export { IntegerCFG };
+
