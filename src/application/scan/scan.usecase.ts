@@ -3,6 +3,7 @@ import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatReport } from '../../types';
 
 import { analyzeApiDrift, createEmptyApiDrift } from '../../features/api-drift';
+import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
@@ -77,6 +78,9 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     ...(options.detectors.includes('unknown-proof')
       ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
       : {}),
+    ...(options.detectors.includes('barrel-policy')
+      ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] }
+      : {}),
   });
 
   const allowCache = options.fix === false;
@@ -137,6 +141,12 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
   const exactDuplicates = options.detectors.includes('exact-duplicates') ? detectExactDuplicates(program, resolvedMinSize) : [];
   const waste = options.detectors.includes('waste') ? detectWaste(program) : [];
+  const barrelPolicyPromise = options.detectors.includes('barrel-policy')
+    ? analyzeBarrelPolicy(program, {
+        rootAbs: ctx.rootAbs,
+        ...(options.barrelPolicyIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelPolicyIgnoreGlobs } : {}),
+      })
+    : Promise.resolve(createEmptyBarrelPolicy());
   const unknownProofPromise = options.detectors.includes('unknown-proof')
     ? analyzeUnknownProof(program, {
         rootAbs: ctx.rootAbs,
@@ -159,7 +169,8 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     ? analyzeForwarding(program, options.maxForwardDepth)
     : createEmptyForwarding();
 
-  const [unknownProof, lint, typecheck, format] = await Promise.all([
+  const [barrelPolicy, unknownProof, lint, typecheck, format] = await Promise.all([
+    barrelPolicyPromise,
     unknownProofPromise,
     lintPromise ?? Promise.resolve(createEmptyLint()),
     typecheckPromise,
@@ -178,6 +189,7 @@ const scanUseCase = async (options: FirebatCliOptions): Promise<FirebatReport> =
     analyses: {
       'exact-duplicates': exactDuplicates,
       waste,
+      barrelPolicy,
       unknownProof,
       format,
       lint,

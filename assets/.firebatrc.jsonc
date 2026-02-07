@@ -19,6 +19,10 @@
     // Detect dead stores / overwrites / wasted assignments.
     "waste": true,
 
+    // Strict directory barrel policy (no export *; no cross-directory deep imports; strict index.ts/x barrels only).
+    // Default ignores are minimal: node_modules/**, dist/**. Add extra ignores here if needed.
+    "barrel-policy": true,
+
     // Run TypeScript typecheck diagnostics.
     "typecheck": true,
 

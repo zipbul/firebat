@@ -64,6 +64,7 @@ const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
+  'barrel-policy',
   'unknown-proof',
   'format',
   'lint',
@@ -141,6 +142,27 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
     return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
       ? boundaryGlobs
       : undefined;
+  }
+
+  return undefined;
+};
+
+const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): ReadonlyArray<string> | undefined => {
+  const value = (features as any)?.['barrel-policy'];
+
+  if (value === undefined || value === false) {
+    return undefined;
+  }
+
+  if (value === true) {
+    return undefined;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const ignoreGlobs = (value as any).ignoreGlobs;
+    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((e: any) => typeof e === 'string') ? ignoreGlobs : undefined;
   }
 
   return undefined;
@@ -294,6 +316,7 @@ const runMcpServer = async (): Promise<void> => {
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
       const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
       const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(effectiveFeatures);
+      const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(effectiveFeatures);
       const options: FirebatCliOptions = {
         targets,
         format: 'json',
@@ -303,6 +326,7 @@ const runMcpServer = async (): Promise<void> => {
         detectors: args.detectors !== undefined ? asDetectors(args.detectors) : cfgDetectors,
         fix: false,
         ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
+        ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
         help: false,
       };
       const report = await scanUseCase(options);

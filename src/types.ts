@@ -7,6 +7,7 @@ export type MinSizeOption = number | 'auto';
 export type FirebatDetector =
   | 'exact-duplicates'
   | 'waste'
+  | 'barrel-policy'
   | 'unknown-proof'
   | 'format'
   | 'lint'
@@ -162,6 +163,25 @@ export interface NoopAnalysis {
   readonly findings: ReadonlyArray<NoopFinding>;
 }
 
+export type BarrelPolicyFindingKind =
+  | 'export-star'
+  | 'deep-import'
+  | 'index-deep-import'
+  | 'missing-index'
+  | 'invalid-index-statement';
+
+export interface BarrelPolicyFinding {
+  readonly kind: BarrelPolicyFindingKind;
+  readonly message: string;
+  readonly filePath: string;
+  readonly span: SourceSpan;
+  readonly evidence?: string;
+}
+
+export interface BarrelPolicyAnalysis {
+  readonly findings: ReadonlyArray<BarrelPolicyFinding>;
+}
+
 export type ForwardingFindingKind = 'thin-wrapper' | 'forward-chain';
 
 export interface ForwardingFinding {
@@ -308,6 +328,7 @@ export interface FirebatMeta {
 export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
+  readonly barrelPolicy: BarrelPolicyAnalysis;
   readonly unknownProof: UnknownProofAnalysis;
   readonly format: FormatAnalysis;
   readonly lint: LintAnalysis;

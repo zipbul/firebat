@@ -48,6 +48,9 @@
         "exact-duplicates": {
           "$ref": "#/$defs/exactDuplicatesToggle"
         },
+        "barrel-policy": {
+          "$ref": "#/$defs/barrelPolicyToggle"
+        },
         "unknown-proof": {
           "$ref": "#/$defs/unknownProofToggle"
         },
@@ -82,6 +85,7 @@
               "additionalProperties": false,
               "properties": {
                 "exact-duplicates": { "$ref": "#/$defs/exactDuplicatesInheritable" },
+                "barrel-policy": { "$ref": "#/$defs/barrelPolicyInheritable" },
                 "unknown-proof": { "$ref": "#/$defs/unknownProofInheritable" },
                 "format": { "$ref": "#/$defs/emptyInheritable" },
                 "structural-duplicates": { "$ref": "#/$defs/structuralDuplicatesInheritable" },
@@ -145,6 +149,25 @@
         }
       ]
     },
+    "barrelPolicyToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ignoreGlobs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1,
+              "description": "Additional ignore globs for barrel-policy. Default ignores are minimal: node_modules/** and dist/**."
+            }
+          },
+          "minProperties": 1
+        }
+      ]
+    },
     "structuralDuplicatesToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
@@ -198,6 +221,26 @@
               "type": "array",
               "items": { "type": "string" },
               "minItems": 1
+            }
+          },
+          "minProperties": 1
+        }
+      ]
+    },
+    "barrelPolicyInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ignoreGlobs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1,
+              "description": "Additional ignore globs for barrel-policy. Default ignores are minimal: node_modules/** and dist/**."
             }
           },
           "minProperties": 1

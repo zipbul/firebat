@@ -10,6 +10,7 @@ const DEFAULT_MAX_FORWARD_DEPTH = 0;
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
+  'barrel-policy',
   'unknown-proof',
   'format',
   'lint',
@@ -75,6 +76,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
     if (
       selection !== 'exact-duplicates' &&
       selection !== 'waste' &&
+      selection !== 'barrel-policy' &&
       selection !== 'unknown-proof' &&
       selection !== 'format' &&
       selection !== 'lint' &&
@@ -89,7 +91,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'forwarding'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|unknown-proof|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
+        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|barrel-policy|unknown-proof|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
       );
     }
 

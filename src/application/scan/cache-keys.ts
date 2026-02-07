@@ -19,11 +19,13 @@ interface ComputeScanArtifactKeyInput {
   readonly minSize: string;
   readonly maxForwardDepth: number;
   readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
+  readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
 }
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedDetectors = [...input.detectors].sort();
   const normalizedUnknownProofBoundaryGlobs = input.unknownProofBoundaryGlobs ? [...input.unknownProofBoundaryGlobs].sort() : [];
+  const normalizedBarrelPolicyIgnoreGlobs = input.barrelPolicyIgnoreGlobs ? [...input.barrelPolicyIgnoreGlobs].sort() : [];
 
   return hashString(
     [
@@ -32,6 +34,7 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `minSize=${input.minSize}`,
       `maxForwardDepth=${String(input.maxForwardDepth)}`,
       `unknownProofBoundaryGlobs=${normalizedUnknownProofBoundaryGlobs.join(',')}`,
+      `barrelPolicyIgnoreGlobs=${normalizedBarrelPolicyIgnoreGlobs.join(',')}`,
     ].join('|'),
   );
 };

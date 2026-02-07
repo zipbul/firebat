@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import type {
   ApiDriftGroup,
+  BarrelPolicyFinding,
   CouplingHotspot,
   DependencyAnalysis,
   DependencyEdgeCutHint,
@@ -57,6 +58,14 @@ const formatWasteText = (finding: WasteFinding): string => {
   const start = toPos(finding.span.start.line, finding.span.start.column);
 
   return `[waste] ${finding.kind}: ${finding.label} @ ${rel}:${start}`;
+};
+
+const formatBarrelPolicyFindingText = (finding: BarrelPolicyFinding): string => {
+  const rel = path.relative(process.cwd(), finding.filePath);
+  const start = toPos(finding.span.start.line, finding.span.start.column);
+  const evidence = typeof finding.evidence === 'string' && finding.evidence.length > 0 ? ` evidence=${finding.evidence}` : '';
+
+  return `  - ${finding.kind}: ${finding.message} @ ${rel}:${start}${evidence}`;
 };
 
 const formatDependencyFanStatText = (stat: DependencyFanStat): string => `  - ${stat.module}: ${stat.count}`;
@@ -223,6 +232,7 @@ const formatText = (report: FirebatReport): string => {
   const detectors = report.meta.detectors.join(',');
   const duplicates = report.analyses['exact-duplicates'];
   const waste = report.analyses.waste;
+  const barrelPolicyFindings = report.analyses.barrelPolicy.findings.length;
   const unknownProof = report.analyses.unknownProof;
   const lint = report.analyses.lint;
   const format = report.analyses.format;
@@ -234,7 +244,7 @@ const formatText = (report: FirebatReport): string => {
   const unknownProofFindings = unknownProof.findings.length;
 
   lines.push(
-    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} formatStatus=${format.status} unknownProofFindings=${unknownProofFindings} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
+    `[firebat] engine=${report.meta.engine} version=${report.meta.version} detectors=${detectors} minSize=${report.meta.minSize} duplicates=${duplicates.length} waste=${waste.length} barrelPolicyFindings=${barrelPolicyFindings} formatStatus=${format.status} unknownProofFindings=${unknownProofFindings} lintErrors=${lintErrors} typecheckErrors=${typecheckErrors} typecheckWarnings=${typecheckWarnings}`,
   );
 
   if (selectedDetectors.has('unknown-proof')) {
@@ -258,6 +268,10 @@ const formatText = (report: FirebatReport): string => {
 
   if (selectedDetectors.has('format')) {
     lines.push(formatFormatText(report.analyses.format));
+  }
+
+  if (selectedDetectors.has('barrel-policy')) {
+    lines.push(`[barrel-policy] findings=${report.analyses.barrelPolicy.findings.length}`);
   }
 
   if (selectedDetectors.has('typecheck')) {
@@ -306,6 +320,17 @@ const formatText = (report: FirebatReport): string => {
   for (const finding of waste) {
     lines.push('');
     lines.push(formatWasteText(finding));
+  }
+
+  if (selectedDetectors.has('barrel-policy')) {
+    const findings = report.analyses.barrelPolicy.findings;
+
+    lines.push('');
+    lines.push(`[barrel-policy] findings=${findings.length}`);
+
+    for (const finding of findings) {
+      lines.push(formatBarrelPolicyFindingText(finding));
+    }
   }
 
   if (selectedDetectors.has('unknown-proof')) {

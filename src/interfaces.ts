@@ -21,6 +21,7 @@ export interface FirebatCliOptions {
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly fix: boolean;
   readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
+  readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
   readonly help: boolean;
   readonly configPath?: string;
   readonly logLevel?: FirebatLogLevel;

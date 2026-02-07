@@ -56,8 +56,9 @@ const printHelp = (): void => {
     '  --format text|json       Output format (default: text)',
     '  --min-size <n|auto>      Minimum size threshold for duplicates (default: auto)',
     '  --max-forward-depth <n>  Max allowed thin-wrapper chain depth (default: 0)',
-    '  --only <list>            Limit detectors to exact-duplicates,waste,unknown-proof,format,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
+    '  --only <list>            Limit detectors to exact-duplicates,waste,barrel-policy,unknown-proof,format,lint,typecheck,dependencies,coupling,structural-duplicates,nesting,early-return,noop,api-drift,forwarding',
     '  (config) unknown-proof   Configure boundary globs via features["unknown-proof"].boundaryGlobs (default: global)',
+    '  (config) barrel-policy   Configure ignore globs via features["barrel-policy"].ignoreGlobs (default: node_modules/**,dist/**)',
     '  --fix                    Apply safe autofixes where supported (oxfmt --write; oxlint --fix)',
     '  --config <path>          Config file path (default: <root>/.firebatrc.jsonc)',
     '  --log-level <level>      silent|error|warn|info (default: error)',
@@ -74,10 +75,12 @@ const countBlockingFindings = (report: FirebatReport): number => {
   const lintErrors = report.analyses.lint.diagnostics.filter(item => item.severity === 'error').length;
   const unknownProofFindings = report.analyses.unknownProof.findings.length;
   const formatFindings = report.analyses.format.status === 'needs-formatting' || report.analyses.format.status === 'failed' ? 1 : 0;
+  const barrelPolicyFindings = report.analyses.barrelPolicy.findings.length;
 
   return (
     report.analyses['exact-duplicates'].length +
     report.analyses.waste.length +
+    barrelPolicyFindings +
     formatFindings +
     unknownProofFindings +
     lintErrors +
@@ -90,6 +93,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
   const all: ReadonlyArray<FirebatDetector> = [
     'exact-duplicates',
     'waste',
+    'barrel-policy',
     'unknown-proof',
     'format',
     'lint',
@@ -132,6 +136,27 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
     return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
       ? boundaryGlobs
       : undefined;
+  }
+
+  return undefined;
+};
+
+const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): ReadonlyArray<string> | undefined => {
+  const value = (features as any)?.['barrel-policy'];
+
+  if (value === undefined || value === false) {
+    return undefined;
+  }
+
+  if (value === true) {
+    return undefined;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const ignoreGlobs = (value as any).ignoreGlobs;
+    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((e: any) => typeof e === 'string') ? ignoreGlobs : undefined;
   }
 
   return undefined;
@@ -181,6 +206,7 @@ const resolveOptions = async (argv: readonly string[]): Promise<FirebatCliOption
   const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
   const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(featuresCfg);
+  const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
 
   const merged: FirebatCliOptions = {
     ...options,
@@ -195,6 +221,7 @@ const resolveOptions = async (argv: readonly string[]): Promise<FirebatCliOption
     ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
     ...(options.explicit?.logLevel ? {} : loggingCfg?.level !== undefined ? { logLevel: loggingCfg.level } : {}),
     ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
+    ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
     configPath: loaded.resolvedPath,
   };
 

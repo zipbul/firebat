@@ -34,9 +34,14 @@ export interface FirebatUnknownProofConfig {
 	readonly boundaryGlobs?: ReadonlyArray<string> | undefined;
 }
 
+export interface FirebatBarrelPolicyConfig {
+	readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
+}
+
 export interface FirebatFeaturesConfig {
 	readonly 'exact-duplicates'?: FeatureToggle<FirebatExactDuplicatesConfig> | undefined;
 	readonly waste?: boolean | undefined;
+	readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
 	readonly 'unknown-proof'?: FeatureToggle<FirebatUnknownProofConfig> | undefined;
 	readonly format?: boolean | undefined;
 	readonly lint?: boolean | undefined;
@@ -54,6 +59,7 @@ export interface FirebatFeaturesConfig {
 export interface FirebatMcpFeaturesConfig {
 	readonly 'exact-duplicates'?: InheritableFeatureToggle<FirebatExactDuplicatesConfig> | undefined;
 	readonly waste?: boolean | 'inherit' | undefined;
+	readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
 	readonly 'unknown-proof'?: InheritableFeatureToggle<FirebatUnknownProofConfig> | undefined;
 	readonly format?: boolean | 'inherit' | undefined;
 	readonly lint?: boolean | 'inherit' | undefined;
@@ -113,6 +119,17 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 					])
 					.optional(),
 				waste: z.boolean().optional(),
+				'barrel-policy': z
+					.union([
+						z.literal(false),
+						z.literal(true),
+						z
+							.object({
+								ignoreGlobs: z.array(z.string()).nonempty().optional(),
+							})
+							.strict(),
+					])
+					.optional(),
 				'unknown-proof': z
 					.union([
 						z.literal(false),
@@ -178,6 +195,18 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 									])
 									.optional(),
 								waste: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
+								'barrel-policy': z
+									.union([
+										z.literal(false),
+										z.literal('inherit'),
+										z.literal(true),
+										z
+											.object({
+												ignoreGlobs: z.array(z.string()).nonempty().optional(),
+											})
+											.strict(),
+									])
+									.optional(),
 								'unknown-proof': z
 									.union([
 										z.literal(false),
