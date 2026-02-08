@@ -27,6 +27,7 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
   const cwd = input.cwd ?? process.cwd();
 
   logger.debug('oxfmt: resolving command');
+
   const resolved = await tryResolveLocalBin({ cwd, binName: 'oxfmt', callerDir: import.meta.dir });
 
   if (!resolved || resolved.length === 0) {
@@ -66,7 +67,6 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
       stderr: 'pipe',
       stdin: 'ignore',
     });
-
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),

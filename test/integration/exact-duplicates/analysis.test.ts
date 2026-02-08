@@ -4,22 +4,11 @@ import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
 import { createProgramFromMap } from '../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {
-  return [
-    `export function ${name}() {`,
-    `  const localValue = ${value};`,
-    '  return localValue + 1;',
-    '}',
-  ].join('\n');
+  return [`export function ${name}() {`, `  const localValue = ${value};`, '  return localValue + 1;', '}'].join('\n');
 }
 
 function createClassSource(name: string): string {
-  return [
-    `export class ${name} {`,
-    '  run() {',
-    '    return 1;',
-    '  }',
-    '}',
-  ].join('\n');
+  return [`export class ${name} {`, '  run() {', '    return 1;', '  }', '}'].join('\n');
 }
 
 describe('integration/exact-duplicates', () => {

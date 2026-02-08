@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 const INSERT_FIXTURE = [
@@ -13,7 +14,6 @@ const INSERT_FIXTURE = [
   '  }',
   '}',
 ].join('\n');
-
 let ctx: McpTestContext;
 
 beforeAll(async () => {
@@ -34,7 +34,6 @@ describe('insert_after_symbol', () => {
   test('should insert text after a function', async () => {
     // Arrange
     const relPath = 'src/ins-after1.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'insert_after_symbol', {
       root: ctx.tmpRootAbs,
@@ -45,6 +44,7 @@ describe('insert_after_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.changed).toBe(true);
     }
@@ -53,7 +53,6 @@ describe('insert_after_symbol', () => {
   test('should insert text after a class', async () => {
     // Arrange
     const relPath = 'src/ins-after2.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'insert_after_symbol', {
       root: ctx.tmpRootAbs,
@@ -69,19 +68,12 @@ describe('insert_after_symbol', () => {
   test('should insert multiline code block', async () => {
     // Arrange
     const relPath = 'src/ins-after3.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'insert_after_symbol', {
       root: ctx.tmpRootAbs,
       namePath: 'target',
       relativePath: relPath,
-      body: [
-        '',
-        'export function companion(y: number): number {',
-        '  return y * 2;',
-        '}',
-        '',
-      ].join('\n'),
+      body: ['', 'export function companion(y: number): number {', '  return y * 2;', '}', ''].join('\n'),
     });
 
     // Assert
@@ -127,6 +119,7 @@ describe('insert_after_symbol', () => {
         relativePath: relPath,
         body: `\n// after insert ${i}\n`,
       });
+
       expect(structured).toBeDefined();
     }
   }, 30_000);

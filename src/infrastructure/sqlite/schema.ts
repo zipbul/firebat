@@ -10,10 +10,7 @@ export const files = sqliteTable(
     contentHash: text('contentHash').notNull(),
     updatedAt: integer('updatedAt').notNull(),
   },
-  table => [
-    primaryKey({ columns: [table.projectKey, table.filePath] }),
-    index('idx_files_projectKey').on(table.projectKey),
-  ],
+  table => [primaryKey({ columns: [table.projectKey, table.filePath] }), index('idx_files_projectKey').on(table.projectKey)],
 );
 
 export const artifacts = sqliteTable(

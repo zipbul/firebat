@@ -36,7 +36,6 @@ const createSqliteMemoryRepository = (db: FirebatDrizzleDb): MemoryRepository =>
 
      async write({ projectKey, memoryKey, payloadJson }): Promise<void> {
       const now = Date.now();
-      
       // Retry logic for DB busy/locked scenarios
       const maxRetries = 3;
       let lastError: Error | null = null;
@@ -61,11 +60,13 @@ const createSqliteMemoryRepository = (db: FirebatDrizzleDb): MemoryRepository =>
           return Promise.resolve();
         } catch (err) {
           lastError = err instanceof Error ? err : new Error(String(err));
+
           const errMsg = lastError.message.toLowerCase();
           
           // Retry on busy/locked errors
           if ((errMsg.includes('busy') || errMsg.includes('locked')) && attempt < maxRetries - 1) {
             await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+
             continue;
           }
           

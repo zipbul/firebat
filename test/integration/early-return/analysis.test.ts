@@ -22,12 +22,7 @@ function createComplexSource(): string {
 }
 
 function createSimpleSource(): string {
-  return [
-    'export function simple(value) {',
-    '  const nextValue = value + 1;',
-    '  return nextValue;',
-    '}',
-  ].join('\n');
+  return ['export function simple(value) {', '  const nextValue = value + 1;', '  return nextValue;', '}'].join('\n');
 }
 
 function createIfElseSource(): string {

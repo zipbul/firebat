@@ -178,7 +178,6 @@ const analyzeTypecheck = async (
         const openUris: string[] = [];
         const seenByUri = new Map<string, ReadonlyArray<LspDiagnostic>>();
         let lastUpdateAt = 0;
-
         const dispose = session.lsp.onNotification('textDocument/publishDiagnostics', (raw: any) => {
           if (!raw || typeof raw !== 'object') {
             return;
@@ -192,6 +191,7 @@ const analyzeTypecheck = async (
           }
 
           lastUpdateAt = Date.now();
+
           seenByUri.set(uri, diagnostics);
         });
 
@@ -199,6 +199,7 @@ const analyzeTypecheck = async (
           // Open all program files so tsgo can compute diagnostics.
           for (const file of program) {
             const opened = await openTsDocument({ lsp: session.lsp, filePath: file.filePath, text: file.sourceText });
+
             openUris.push(opened.uri);
           }
 
@@ -212,6 +213,7 @@ const analyzeTypecheck = async (
             if (lastUpdateAt === 0) {
               // No diagnostics yet; wait a short baseline.
               await new Promise<void>(r => setTimeout(r, 25));
+
               continue;
             }
 

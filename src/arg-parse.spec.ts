@@ -108,7 +108,6 @@ describe('arg-parse', () => {
   it('should enable fix mode when --fix is provided', () => {
     // Arrange
     let argv = ['--fix'];
-
     // Act
     let result = parseArgs(argv);
 
@@ -130,7 +129,6 @@ describe('arg-parse', () => {
   it('should parse configPath and logLevel when provided', () => {
     // Arrange
     let argv = ['--config', './.firebatrc.jsonc', '--log-level', 'warn'];
-
     // Act
     let result = parseArgs(argv);
 
@@ -144,7 +142,6 @@ describe('arg-parse', () => {
   it('should parse logStack when provided', () => {
     // Arrange
     let argv = ['--log-stack'];
-
     // Act
     let result = parseArgs(argv);
 
@@ -152,8 +149,6 @@ describe('arg-parse', () => {
     expect(result.logStack).toBe(true);
     expect(result.explicit?.logStack).toBe(true);
   });
-
-  
 
   it('should throw a validation error when an unknown option is provided', () => {
     // Arrange

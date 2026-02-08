@@ -4,6 +4,7 @@ const initHasher = async (): Promise<void> => {
 
 const toU64Hex = (value: bigint): string => {
   const unsigned = BigInt.asUintN(64, value);
+
   return unsigned.toString(16).padStart(16, '0');
 };
 

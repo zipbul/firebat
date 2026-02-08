@@ -1,6 +1,5 @@
-import * as path from 'node:path';
 import { stat, readFile } from 'node:fs/promises';
-
+import * as path from 'node:path';
 import * as z from 'zod';
 
 interface PackageJson {
@@ -103,7 +102,9 @@ const resolveFirebatRootFromCwd = async (startDirAbs: string = process.cwd()): P
     current = parent;
   }
 
-  throw new Error('[firebat] Could not locate a package.json that declares firebat. Run within the package that depends on firebat.');
+  throw new Error(
+    '[firebat] Could not locate a package.json that declares firebat. Run within the package that depends on firebat.',
+  );
 };
 
 export { resolveFirebatRootFromCwd };

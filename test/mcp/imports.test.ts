@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -16,7 +17,6 @@ describe('get_available_external_symbols', () => {
   test('should return imported symbols from import-target.ts', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_available_external_symbols', {
       root: ctx.tmpRootAbs,
@@ -31,7 +31,6 @@ describe('get_available_external_symbols', () => {
   test('should return symbols from sample.ts (no imports → empty or self-defined)', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_available_external_symbols', {
       root: ctx.tmpRootAbs,
@@ -45,7 +44,6 @@ describe('get_available_external_symbols', () => {
   test('should handle non-existent file gracefully', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'non-existent.ts');
-
     // Act
     const { structured, raw } = await callTool(ctx.client, 'get_available_external_symbols', {
       root: ctx.tmpRootAbs,
@@ -59,7 +57,6 @@ describe('get_available_external_symbols', () => {
   test('should include symbol names in results', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_available_external_symbols', {
       root: ctx.tmpRootAbs,
@@ -70,8 +67,10 @@ describe('get_available_external_symbols', () => {
     for (const sym of structured.symbols) {
       expect(typeof sym).toBe('string');
     }
+
     // import-target.ts imports 'path', 'readFile', 'writeFile', type 'Stats'
     const symbols: string[] = structured.symbols;
+
     expect(symbols.some(s => s.includes('path'))).toBe(true);
   }, 30_000);
 
@@ -85,6 +84,7 @@ describe('get_available_external_symbols', () => {
         root: ctx.tmpRootAbs,
         filePath,
       });
+
       expect(Array.isArray(structured.symbols)).toBe(true);
     }
   }, 60_000);
@@ -94,7 +94,6 @@ describe('parse_imports', () => {
   test('should parse imports from import-target.ts', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
@@ -109,37 +108,33 @@ describe('parse_imports', () => {
   test('should identify namespace imports (import * as path)', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
       filePath,
     });
-
     // Assert
-    const nsImport = structured.imports.find(
-      (i: any) => i.specifier === 'node:path' || i.specifier === 'path',
-    );
+    const nsImport = structured.imports.find((i: any) => i.specifier === 'node:path' || i.specifier === 'path');
+
     expect(nsImport).toBeTruthy();
   }, 30_000);
 
   test('should identify named imports (readFile, writeFile)', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
       filePath,
     });
-
     // Assert
-    const fsImport = structured.imports.find(
-      (i: any) => i.specifier === 'node:fs/promises' || i.specifier === 'fs/promises',
-    );
+    const fsImport = structured.imports.find((i: any) => i.specifier === 'node:fs/promises' || i.specifier === 'fs/promises');
+
     expect(fsImport).toBeTruthy();
+
     if (fsImport?.names) {
       const names = fsImport.names.map((n: any) => n.name ?? n.imported ?? n);
+
       expect(names).toContain('readFile');
     }
   }, 30_000);
@@ -147,24 +142,20 @@ describe('parse_imports', () => {
   test('should identify type-only imports', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
       filePath,
     });
-
     // Assert – the server doesn't return a typeOnly field; detect via the raw import text
-    const typeImport = structured.imports.find(
-      (i: any) => typeof i.raw === 'string' && /import\s+type\b/.test(i.raw),
-    );
+    const typeImport = structured.imports.find((i: any) => typeof i.raw === 'string' && /import\s+type\b/.test(i.raw));
+
     expect(typeImport).toBeTruthy();
   }, 30_000);
 
   test('should return empty imports for file with no imports', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'editable.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
@@ -179,7 +170,6 @@ describe('parse_imports', () => {
   test('should handle non-existent file', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'no-such-file.ts');
-
     // Act
     const { structured, raw } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
@@ -193,7 +183,6 @@ describe('parse_imports', () => {
   test('should include specifier and resolved path in each import', async () => {
     // Arrange
     const filePath = path.join(ctx.fixturesAbs, 'import-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'parse_imports', {
       root: ctx.tmpRootAbs,
@@ -218,6 +207,7 @@ describe('parse_imports', () => {
         root: ctx.tmpRootAbs,
         filePath,
       });
+
       expect(Array.isArray(structured.imports)).toBe(true);
     }
   }, 60_000);
@@ -232,6 +222,7 @@ describe('parse_imports', () => {
         root: ctx.tmpRootAbs,
         filePath,
       });
+
       expect(structured.imports.length).toBeGreaterThan(0);
     }
   }, 60_000);

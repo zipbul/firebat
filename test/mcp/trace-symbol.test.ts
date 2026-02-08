@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -20,7 +21,6 @@ describe('trace_symbol', () => {
   test('should trace an exported function symbol', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -29,6 +29,7 @@ describe('trace_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.graph).toBeDefined();
       expect(Array.isArray(structured.graph.nodes)).toBe(true);
@@ -42,7 +43,6 @@ describe('trace_symbol', () => {
   test('should trace a class symbol', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -56,7 +56,6 @@ describe('trace_symbol', () => {
   test('should trace an interface symbol', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -70,7 +69,6 @@ describe('trace_symbol', () => {
   test('should trace a type alias', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -88,7 +86,6 @@ describe('trace_symbol', () => {
   test('should respect maxDepth=0 (no traversal)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -103,7 +100,6 @@ describe('trace_symbol', () => {
   test('should handle maxDepth=5', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -122,7 +118,6 @@ describe('trace_symbol', () => {
   test('should handle non-existent symbol gracefully', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -137,7 +132,6 @@ describe('trace_symbol', () => {
   test('should handle non-existent file gracefully', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'nope.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'trace_symbol', {
       entryFile: bogus,
@@ -155,7 +149,6 @@ describe('trace_symbol', () => {
   test('should accept tsconfigPath without crashing', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'trace_symbol', {
       entryFile: fixture,
@@ -182,6 +175,7 @@ describe('trace_symbol', () => {
         entryFile: fixture,
         symbol: sym,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

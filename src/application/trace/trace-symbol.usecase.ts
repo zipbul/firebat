@@ -269,7 +269,6 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   await initHasher();
 
   const ctx = await resolveRuntimeContextFromCwd();
-
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
   const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger });
@@ -288,7 +287,6 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   await indexTargets({ projectKey, targets: relatedFiles, repository: fileIndexRepository, concurrency: 4, logger });
 
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
-
   const inputsDigest = await computeInputsDigest({
     projectKey,
     targets: relatedFiles,

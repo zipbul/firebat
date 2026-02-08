@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -25,7 +26,6 @@ describe('get_diagnostics', () => {
   test('should return diagnostics for a valid file', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_diagnostics', {
       root: ctx.tmpRootAbs,
@@ -34,6 +34,7 @@ describe('get_diagnostics', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       // diagnostics may be an empty array for a clean file
       expect(structured.diagnostics).toBeDefined();
@@ -43,7 +44,6 @@ describe('get_diagnostics', () => {
   test('should accept forceRefresh=true', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_diagnostics', {
       root: ctx.tmpRootAbs,
@@ -58,7 +58,6 @@ describe('get_diagnostics', () => {
   test('should accept timeoutMs', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_diagnostics', {
       root: ctx.tmpRootAbs,
@@ -84,7 +83,6 @@ describe('get_diagnostics', () => {
   test('should handle tsconfigPath parameter', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_diagnostics', {
       root: ctx.tmpRootAbs,
@@ -112,6 +110,7 @@ describe('get_diagnostics', () => {
         root: ctx.tmpRootAbs,
         filePath: f,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }
@@ -127,6 +126,7 @@ describe('get_all_diagnostics', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.diagnostics).toBeDefined();
     }
@@ -159,6 +159,7 @@ describe('get_all_diagnostics', () => {
       const { structured } = await callToolSafe(ctx.client, 'get_all_diagnostics', {
         root: ctx.tmpRootAbs,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 const REGEX_FIXTURE = [
@@ -16,7 +17,6 @@ const REGEX_FIXTURE = [
   '  return "Goodbye!";',
   '}',
 ].join('\n');
-
 let ctx: McpTestContext;
 
 beforeAll(async () => {
@@ -39,7 +39,6 @@ describe('replace_regex', () => {
   test('should replace first match by default', async () => {
     // Arrange
     const relPath = 'src/rx1.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
@@ -50,6 +49,7 @@ describe('replace_regex', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.changed).toBe(true);
     }
@@ -58,7 +58,6 @@ describe('replace_regex', () => {
   test('should replace all matches when allowMultipleOccurrences=true', async () => {
     // Arrange
     const relPath = 'src/rx2.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
@@ -70,8 +69,10 @@ describe('replace_regex', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.changed).toBe(true);
+
       if (structured.matchCount !== undefined) {
         expect(structured.matchCount).toBeGreaterThan(1);
       }
@@ -81,7 +82,6 @@ describe('replace_regex', () => {
   test('should handle regex with capture groups', async () => {
     // Arrange
     const relPath = 'src/rx3.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
@@ -98,7 +98,6 @@ describe('replace_regex', () => {
   test('should handle regex that matches nothing', async () => {
     // Arrange
     const relPath = 'src/rx4.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
@@ -109,6 +108,7 @@ describe('replace_regex', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.changed).toBe(false);
     }
@@ -117,7 +117,6 @@ describe('replace_regex', () => {
   test('should handle multiline regex', async () => {
     // Arrange
     const relPath = 'src/rx5.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
@@ -133,7 +132,6 @@ describe('replace_regex', () => {
   test('should handle replacement with empty string (deletion)', async () => {
     // Arrange
     const relPath = 'src/rx1.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
@@ -184,6 +182,7 @@ describe('replace_regex', () => {
         regex: `tag`,
         repl: `tag${i}`,
       });
+
       expect(structured).toBeDefined();
     }
   }, 30_000);

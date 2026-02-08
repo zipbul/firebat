@@ -3,12 +3,14 @@
 
 export const hello = () => {
   console.log('hello');
+
   return 123;
 };
 
 // Intentional duplicate of hello (exact-duplicates detector)
 export const hello2 = () => {
   console.log('hello');
+
   return 123;
 };
 
@@ -29,16 +31,19 @@ export class Calculator {
 
   add(n: number): this {
     this.value += n;
+
     return this;
   }
 
   subtract(n: number): this {
     this.value -= n;
+
     return this;
   }
 
   multiply(n: number): this {
     this.value *= n;
+
     return this;
   }
 
@@ -75,6 +80,7 @@ export enum Direction {
 
 // Waste: dead store
 const unused = 42;
+
 void unused;
 
 // Nesting: deeply nested
@@ -84,10 +90,13 @@ export function deepNest(a: boolean, b: boolean, c: boolean): string {
       if (c) {
         return 'abc';
       }
+
       return 'ab';
     }
+
     return 'a';
   }
+
   return 'none';
 }
 
@@ -96,12 +105,12 @@ export function earlyReturnCandidate(x: number): string {
   if (x > 0) {
     if (x > 10) {
       return 'big';
-    } else {
-      return 'small';
     }
-  } else {
-    return 'negative';
+      return 'small';
+    
   }
+    return 'negative';
+  
 }
 
 // Noop block

@@ -20,6 +20,7 @@ const tryResolveLocalBin = async (input: ResolveLocalBinInput): Promise<string |
   for (const candidate of candidates) {
     try {
       const file = Bun.file(candidate);
+
       if (await file.exists()) {
         return candidate;
       }
@@ -30,6 +31,7 @@ const tryResolveLocalBin = async (input: ResolveLocalBinInput): Promise<string |
 
   if (typeof Bun.which === 'function') {
     const resolved = Bun.which(input.binName);
+
     if (resolved !== null && resolved.length > 0) {
       return resolved;
     }
@@ -50,11 +52,13 @@ const tryResolveBunxCommand = (): BunxCommand | null => {
   }
 
   const bunx = Bun.which('bunx');
+
   if (bunx !== null && bunx.length > 0) {
     return { command: bunx, prefixArgs: [] };
   }
 
   const bun = Bun.which('bun');
+
   if (bun !== null && bun.length > 0) {
     // `bun x` is an alias for bunx.
     return { command: bun, prefixArgs: ['x'] };

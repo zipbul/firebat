@@ -1,8 +1,8 @@
-import type { FormatAnalysis } from '../../types';
 import type { FirebatLogger } from '../../ports/logger';
-import { createNoopLogger } from '../../ports/logger';
+import type { FormatAnalysis } from '../../types';
 
 import { runOxfmt } from '../../infrastructure/oxfmt/oxfmt-runner';
+import { createNoopLogger } from '../../ports/logger';
 
 export const createEmptyFormat = (): FormatAnalysis => ({
   status: 'ok',
@@ -39,9 +39,8 @@ export const analyzeFormat = async (input: {
 
   if (!input.fix) {
     const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 0;
-    const fileCount = typeof result.rawStdout === 'string'
-      ? result.rawStdout.split('\n').filter(l => l.trim().length > 0).length
-      : undefined;
+    const fileCount =
+      typeof result.rawStdout === 'string' ? result.rawStdout.split('\n').filter(l => l.trim().length > 0).length : undefined;
 
     return {
       status: exitCode === 0 ? 'ok' : 'needs-formatting',

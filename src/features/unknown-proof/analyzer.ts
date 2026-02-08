@@ -23,7 +23,6 @@ export const analyzeUnknownProof = async (
 ): Promise<UnknownProofAnalysis> => {
 	const rootAbs = input?.rootAbs ?? process.cwd();
 	const boundaryGlobs = input?.boundaryGlobs;
-
 	const collected = collectUnknownProofCandidates({
 		program,
 		rootAbs,

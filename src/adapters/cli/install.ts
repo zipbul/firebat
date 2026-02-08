@@ -51,8 +51,9 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 };
 
 const toJsonValue = (value: unknown): JsonValue => {
-  if (value === null) return null;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (value === null) {return null;}
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {return value;}
 
   if (Array.isArray(value)) {
     return value.map(item => toJsonValue(item));
@@ -60,9 +61,11 @@ const toJsonValue = (value: unknown): JsonValue => {
 
   if (isPlainObject(value)) {
     const out: Record<string, JsonValue> = {};
+
     for (const [k, v] of Object.entries(value)) {
       out[k] = toJsonValue(v);
     }
+
     return out;
   }
 
@@ -70,32 +73,38 @@ const toJsonValue = (value: unknown): JsonValue => {
 };
 
 const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
-  if (a === b) return true;
+  if (a === b) {return true;}
 
-  if (a === null || b === null) return false;
+  if (a === null || b === null) {return false;}
 
   if (Array.isArray(a)) {
-    if (!Array.isArray(b)) return false;
-    if (a.length !== b.length) return false;
+    if (!Array.isArray(b)) {return false;}
+
+    if (a.length !== b.length) {return false;}
     for (let i = 0; i < a.length; i += 1) {
-      if (!deepEqual(a[i]!, b[i]!)) return false;
+      if (!deepEqual(a[i]!, b[i]!)) {return false;}
     }
+
     return true;
   }
 
   if (typeof a === 'object') {
-    if (typeof b !== 'object' || Array.isArray(b)) return false;
+    if (typeof b !== 'object' || Array.isArray(b)) {return false;}
+
     const aKeys = Object.keys(a as any).sort();
     const bKeys = Object.keys(b as any).sort();
-    if (aKeys.length !== bKeys.length) return false;
+
+    if (aKeys.length !== bKeys.length) {return false;}
     for (let i = 0; i < aKeys.length; i += 1) {
-      if (aKeys[i] !== bKeys[i]) return false;
+      if (aKeys[i] !== bKeys[i]) {return false;}
     }
     for (const k of aKeys) {
       const av = (a as any)[k] as JsonValue;
       const bv = (b as any)[k] as JsonValue;
-      if (!deepEqual(av, bv)) return false;
+
+      if (!deepEqual(av, bv)) {return false;}
     }
+
     return true;
   }
 
@@ -103,15 +112,19 @@ const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
 };
 
 const sortJsonValue = (value: JsonValue): JsonValue => {
-  if (value === null) return null;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
-  if (Array.isArray(value)) return value.map(v => sortJsonValue(v));
+  if (value === null) {return null;}
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {return value;}
+
+  if (Array.isArray(value)) {return value.map(v => sortJsonValue(v));}
 
   const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
   const out: Record<string, JsonValue> = {};
+
   for (const [k, v] of entries) {
     out[k] = sortJsonValue(v);
   }
+
   return out;
 };
 
@@ -131,6 +144,7 @@ const parseJsoncOrThrow = (filePath: string, text: string): JsonValue => {
     return toJsonValue(Bun.JSONC.parse(text));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+
     throw new Error(`[firebat] Failed to parse JSONC: ${filePath}: ${msg}`);
   }
 };
@@ -142,11 +156,13 @@ const parseYesFlag = (argv: readonly string[]): { yes: boolean; help: boolean } 
   for (const arg of argv) {
     if (arg === '-y' || arg === '--yes') {
       yes = true;
+
       continue;
     }
 
     if (arg === '-h' || arg === '--help') {
       help = true;
+
       continue;
     }
 
@@ -212,14 +228,15 @@ const ensureBaseSnapshot = async (input: {
   readonly templateText: string;
 }): Promise<{ sha256: string; filePath: string }> => {
   const baseDir = path.join(input.firebatDir, 'install-bases');
+
   await mkdir(baseDir, { recursive: true });
 
   const parsed = parseJsoncOrThrow(`assets/${input.assetFileName}`, input.templateText);
   const normalizedText = jsonText(parsed);
   const sha256 = await sha256Hex(normalizedText);
   const filePath = path.join(baseDir, `${input.assetFileName}.${sha256}.json`);
-
   const f = Bun.file(filePath);
+
   if (!(await f.exists())) {
     await Bun.write(filePath, normalizedText);
   }
@@ -271,6 +288,7 @@ const printInstallHelp = (): void => {
     `    ${hc('-h, --help', `${H.bold}${H.green}`, c)}  Show this help`,
     '',
   ];
+
   writeStdout(lines.join('\n'));
 };
 
@@ -299,6 +317,7 @@ const printUpdateHelp = (): void => {
     `    ${hc('-h, --help', `${H.bold}${H.green}`, c)}  Show this help`,
     '',
   ];
+
   writeStdout(lines.join('\n'));
 };
 
@@ -309,7 +328,6 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
   { asset: '.oxfmtrc.jsonc', dest: '.oxfmtrc.jsonc' },
   { asset: '.firebatrc.jsonc', dest: '.firebatrc.jsonc' },
 ];
-
 const AGENT_PROMPT_BLOCK = [
   '## firebat (MCP Code Quality Scanner)',
   '',
@@ -342,12 +360,11 @@ const printAgentPromptGuide = (): void => {
   const c = isTty();
   const border = '│';
   const promptLines = AGENT_PROMPT_BLOCK.split('\n');
-
   const guideLines = [
     '',
     `  ${hc('🤖 Agent Integration', `${H.bold}${H.cyan}`, c)}`,
     '',
-    `  Copy the block below into your agent\'s instruction file`,
+    `  Copy the block below into your agent's instruction file`,
     `  ${hc('(e.g. copilot-instructions.md, AGENTS.md, .cursor/rules)', H.dim, c)}`,
     `  so your AI agent can leverage firebat automatically:`,
     '',
@@ -363,18 +380,21 @@ const printAgentPromptGuide = (): void => {
 const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[], logger: FirebatLogger): Promise<number> => {
   try {
     const { yes, help } = parseYesFlag(argv);
+
     void yes;
     logger.debug(`${mode}: starting`, { args: argv.join(' ') });
 
     if (help) {
-      if (mode === 'install') printInstallHelp();
-      else printUpdateHelp();
+      if (mode === 'install') {printInstallHelp();}
+      else {printUpdateHelp();}
+
       return 0;
     }
 
     const ctx = await resolveRuntimeContextFromCwd();
     const rootAbs = ctx.rootAbs;
     const firebatDir = path.join(rootAbs, '.firebat');
+
     logger.debug(`${mode} root: ${rootAbs}`);
 
     await mkdir(firebatDir, { recursive: true });
@@ -382,39 +402,46 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     const assetResults: AssetInstallResult[] = [];
     const assetManifest: Record<string, AssetTemplateMeta> = {};
     const baseSnapshots: Record<string, { sha256: string; filePath: string }> = {};
-
     const loadedTemplates: Array<{ asset: string; destAbs: string; templateText: string; templatePath: string }> = [];
 
     for (const item of ASSETS) {
       const loaded = await loadFirstExistingText(resolveAssetCandidates(item.asset));
+
       loadedTemplates.push({
         asset: item.asset,
         destAbs: path.join(rootAbs, item.dest),
         templateText: loaded.text,
         templatePath: loaded.filePath,
       });
+
       logger.trace(`Template loaded: ${item.asset} from ${loaded.filePath}`);
     }
 
     if (mode === 'update') {
       const manifestPath = path.join(firebatDir, 'install-manifest.json');
       const mf = Bun.file(manifestPath);
+
       if (!(await mf.exists())) {
         logger.error('update aborted: no install manifest found. Run `firebat install` first.');
+
         return 1;
       }
 
       let manifest: any;
+
       try {
         manifest = await mf.json();
       } catch {
         logger.error('update aborted: install manifest is unreadable. Run `firebat install` first.');
+
         return 1;
       }
 
       const bases = manifest?.baseSnapshots;
+
       if (!bases || typeof bases !== 'object') {
         logger.error('update aborted: no base snapshots found. Run `firebat install` first.');
+
         return 1;
       }
 
@@ -428,16 +455,19 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
         if (!basePath) {
           logger.error(`update aborted: missing base snapshot for ${tpl.asset}. Run \`firebat install\` first.`);
+
           return 1;
         }
 
         const baseFile = Bun.file(basePath);
+
         if (!(await baseFile.exists())) {
           logger.error(`update aborted: base snapshot not found for ${tpl.asset}. Run \`firebat install\` first.`);
+
           return 1;
         }
-        const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
 
+        const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
         const destFile = Bun.file(tpl.destAbs);
         const userText = (await destFile.exists()) ? await destFile.text() : null;
 
@@ -448,8 +478,10 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
           void parseJsoncOrThrow(tpl.destAbs, userText);
 
           const synced = syncJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
+
           if (!synced.ok) {
             logger.error(`update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
+
             return 1;
           }
 
@@ -464,6 +496,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         const nextNormalized = jsonText(nextParsed);
         const nextSha = await sha256Hex(nextNormalized);
         const nextBasePath = path.join(firebatDir, 'install-bases', `${tpl.asset}.${nextSha}.json`);
+
         nextBaseWrites.push({ filePath: nextBasePath, text: nextNormalized, asset: tpl.asset, sha256: nextSha });
       }
 
@@ -477,20 +510,24 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
       for (const b of nextBaseWrites) {
         const f = Bun.file(b.filePath);
+
         if (!(await f.exists())) {
           await Bun.write(b.filePath, b.text);
         }
+
         baseSnapshots[b.asset] = { sha256: b.sha256, filePath: b.filePath };
       }
 
       for (const tpl of loadedTemplates) {
         const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
         const nextNormalized = jsonText(nextParsed);
+
         assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(nextNormalized) };
       }
     } else {
       for (const tpl of loadedTemplates) {
         const base = await ensureBaseSnapshot({ rootAbs, firebatDir, assetFileName: tpl.asset, templateText: tpl.templateText });
+
         baseSnapshots[tpl.asset] = base;
 
         const desiredParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
@@ -498,6 +535,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         const desiredInstalled = tpl.templateText;
 
         assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredNormalized) };
+
         assetResults.push(await installTextFileNoOverwrite(tpl.destAbs, desiredInstalled));
       }
     }
@@ -528,6 +566,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     if (mode === 'install') {
       const diffs = assetResults.filter(r => r.kind === 'skipped-exists-different');
+
       for (const r of assetResults) {
         if (r.kind === 'installed') { logger.info(`installed ${r.filePath}`); }
         else if (r.kind === 'skipped-exists-same') { logger.debug(`kept existing (same) ${r.filePath}`); }
@@ -554,7 +593,9 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+
     logger.error(message, undefined, err);
+
     return 1;
   }
 };

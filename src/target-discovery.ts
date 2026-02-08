@@ -87,7 +87,9 @@ export const expandTargets = async (targets: ReadonlyArray<string>): Promise<str
 
       if (typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory()) {
         const files = await scanDirForSources(abs);
+
         expanded.push(...files);
+
         continue;
       }
 

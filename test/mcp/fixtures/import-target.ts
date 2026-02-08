@@ -1,8 +1,9 @@
 // Fixture for import parsing tools (parse_imports, get_available_external_symbols)
 
-import * as path from 'node:path';
-import { readFile, writeFile } from 'node:fs/promises';
 import type { Stats } from 'node:fs';
+
+import { readFile, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
 
 export const resolvePath = (...segments: string[]): string => path.resolve(...segments);
 

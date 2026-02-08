@@ -19,6 +19,7 @@ const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const isIndexFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
+
   return normalized.endsWith('/index.ts') || normalized.endsWith('/index.tsx');
 };
 
@@ -44,7 +45,6 @@ const globToRegExp = (glob: string): RegExp => {
   // - * matches any chars except '/'
   // - ? matches one char except '/'
   const normalized = normalizePath(glob);
-
   let out = '^';
 
   for (let i = 0; i < normalized.length; i += 1) {
@@ -56,15 +56,18 @@ const globToRegExp = (glob: string): RegExp => {
       if (next === '*') {
         out += '.*';
         i += 1;
+
         continue;
       }
 
       out += '[^/]*';
+
       continue;
     }
 
     if (ch === '?') {
       out += '[^/]';
+
       continue;
     }
 
@@ -87,7 +90,7 @@ const isIgnored = (rootAbs: string, fileAbs: string, matchers: ReadonlyArray<Reg
   const rel = normalizePath(path.relative(rootAbs, fileAbs));
 
   // Outside root -> don't ignore here (treat as external)
-  if (rel.startsWith('..')) return false;
+  if (rel.startsWith('..')) {return false;}
 
   return matchers.some(re => re.test(rel));
 };
@@ -181,8 +184,9 @@ export const createEmptyBarrelPolicy = (): BarrelPolicyAnalysis => ({ findings: 
 
 const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): void => {
   walkOxcTree(file.program as any, node => {
-    if (!isOxcNode(node)) return false;
-    if (!isNodeRecord(node)) return true;
+    if (!isOxcNode(node)) {return false;}
+
+    if (!isNodeRecord(node)) {return true;}
 
     if (node.type === 'ExportAllDeclaration') {
       findings.push({
@@ -268,6 +272,7 @@ const checkMissingIndex = (activeFiles: ReadonlyArray<ParsedFile>, fileSet: Read
     }
 
     const dir = normalizePath(path.dirname(normalized));
+
     dirs.add(dir);
   }
 
@@ -325,7 +330,6 @@ const checkDeepImports = async (
   for (const file of activeFiles) {
     const importerAbs = normalizePath(file.filePath);
     const importerDirAbs = normalizePath(path.dirname(importerAbs));
-
     const importLikes = collectImportLikes(file);
 
     for (const entry of importLikes) {
@@ -388,9 +392,7 @@ export const analyzeBarrelPolicy = async (
   }
 
   const ignoreMatchers = compileIgnoreMatchers([...DEFAULT_IGNORE_GLOBS, ...(options.ignoreGlobs ?? [])]);
-
   const activeFiles = program.filter(file => !isIgnored(options.rootAbs, file.filePath, ignoreMatchers));
-
   const fileSet = new Set<string>();
 
   for (const file of activeFiles) {
@@ -398,13 +400,11 @@ export const analyzeBarrelPolicy = async (
   }
 
   const workspacePackages = await createWorkspacePackageMap(options.rootAbs);
-
   const resolver = createImportResolver({
     rootAbs: options.rootAbs,
     fileSet,
     workspacePackages,
   });
-
   const findings: BarrelPolicyFinding[] = [];
 
   for (const file of activeFiles) {

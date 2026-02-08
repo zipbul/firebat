@@ -1,8 +1,8 @@
-import type { ArtifactRepository, GetArtifactInput, SetArtifactInput } from '../../ports/artifact.repository';
-
 import { and, eq } from 'drizzle-orm';
 
+import type { ArtifactRepository, GetArtifactInput, SetArtifactInput } from '../../ports/artifact.repository';
 import type { FirebatDrizzleDb } from './drizzle-db';
+
 import { artifacts } from './schema';
 
 interface JsonObject {
@@ -13,7 +13,7 @@ type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | J
 
 const createSqliteArtifactRepository = (db: FirebatDrizzleDb): ArtifactRepository => {
   return {
-     async getArtifact<T>(input: GetArtifactInput): Promise<T | null> {
+    async getArtifact<T>(input: GetArtifactInput): Promise<T | null> {
       const { projectKey, kind, artifactKey, inputsDigest } = input;
       const row = db
         .select({ payloadJson: artifacts.payloadJson })

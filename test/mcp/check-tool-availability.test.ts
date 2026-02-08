@@ -35,9 +35,11 @@ describe('check_tool_availability', () => {
       expect(typeof structured.tsgo.note).toBe('string');
       expect(structured.tsgo.note.length).toBeGreaterThan(0);
     }
+
     if (structured.oxlint.note !== undefined) {
       expect(typeof structured.oxlint.note).toBe('string');
     }
+
     // astGrep is bundled – always available, no note expected
     expect(structured.astGrep.available).toBe(true);
   }, 30_000);
@@ -58,6 +60,7 @@ describe('check_tool_availability', () => {
       const { structured } = await callTool(ctx.client, 'check_tool_availability', {
         root: ctx.tmpRootAbs,
       });
+
       expect(typeof structured.tsgo.available).toBe('boolean');
       expect(typeof structured.oxlint.available).toBe('boolean');
       expect(typeof structured.astGrep.available).toBe('boolean');

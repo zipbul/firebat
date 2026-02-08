@@ -1,8 +1,8 @@
-import type { LintAnalysis } from '../../types';
 import type { FirebatLogger } from '../../ports/logger';
-import { createNoopLogger } from '../../ports/logger';
+import type { LintAnalysis } from '../../types';
 
 import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
+import { createNoopLogger } from '../../ports/logger';
 
 export const createEmptyLint = (): LintAnalysis => ({
   status: 'ok',

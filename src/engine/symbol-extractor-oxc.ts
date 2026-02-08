@@ -42,7 +42,6 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
     }
 
     const node = value;
-
     // Track export context for child declarations
     const isExportWrapper = node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration';
     const childExported = exported || isExportWrapper;

@@ -21,6 +21,7 @@ describe('check_capabilities', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.capabilities).toBeDefined();
     }
@@ -53,6 +54,7 @@ describe('check_capabilities', () => {
       const { structured } = await callToolSafe(ctx.client, 'check_capabilities', {
         root: ctx.tmpRootAbs,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

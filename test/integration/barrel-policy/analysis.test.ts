@@ -43,10 +43,7 @@ describe('integration/barrel-policy', () => {
     sources.set('/virtual/pkg/b/index.ts', "export { consume } from './consumer';\n");
     sources.set(
       '/virtual/pkg/b/consumer.ts',
-      [
-        "import { internal } from '../a/internal';",
-        'export const consume = internal + 1;',
-      ].join('\n'),
+      ["import { internal } from '../a/internal';", 'export const consume = internal + 1;'].join('\n'),
     );
 
     // Act
@@ -66,10 +63,7 @@ describe('integration/barrel-policy', () => {
     sources.set('/virtual/pkg/b/index.ts', "export { consume } from './consumer';\n");
     sources.set(
       '/virtual/pkg/b/consumer.ts',
-      [
-        "import { internal } from '../a/index';",
-        'export const consume = internal + 1;',
-      ].join('\n'),
+      ["import { internal } from '../a/index';", 'export const consume = internal + 1;'].join('\n'),
     );
 
     // Act
@@ -84,13 +78,7 @@ describe('integration/barrel-policy', () => {
     // Arrange
     let sources = new Map<string, string>();
 
-    sources.set(
-      '/virtual/pkg/a/index.ts',
-      [
-        "import { internal } from './internal';",
-        'export { internal };',
-      ].join('\n'),
-    );
+    sources.set('/virtual/pkg/a/index.ts', ["import { internal } from './internal';", 'export { internal };'].join('\n'));
     sources.set('/virtual/pkg/a/internal.ts', 'export const internal = 1;\n');
 
     // Act

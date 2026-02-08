@@ -7,7 +7,6 @@ describe('target-discovery', () => {
   it('should expand directory targets into ts/tsx files', async () => {
     // Arrange
     let input = ['src'];
-
     // Act
     let result = await expandTargets(input);
 
@@ -19,7 +18,6 @@ describe('target-discovery', () => {
   it('should keep explicit .ts file targets', async () => {
     // Arrange
     let target = path.resolve('src/types.ts');
-
     // Act
     let result = await expandTargets([target]);
 

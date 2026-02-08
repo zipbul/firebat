@@ -16,7 +16,8 @@ export type ToolResultLike = {
 };
 
 export const parseJsonText = (text: string | undefined): unknown => {
-  if (text === undefined || text.length === 0) return {};
+  if (text === undefined || text.length === 0) {return {};}
+
   try {
     return JSON.parse(text) as unknown;
   } catch {
@@ -25,13 +26,16 @@ export const parseJsonText = (text: string | undefined): unknown => {
 };
 
 export const getStructuredContent = (result: ToolResultLike): any => {
-  if (result.structuredContent !== undefined) return result.structuredContent;
+  if (result.structuredContent !== undefined) {return result.structuredContent;}
+
   const first = result.content?.[0];
+
   return parseJsonText(first?.text);
 };
 
 export const getTextContent = (result: ToolResultLike): string => {
   const first = result.content?.[0];
+
   return first?.text ?? '';
 };
 
@@ -61,6 +65,7 @@ export const createMcpTestContext = async (opts?: {
 }): Promise<McpTestContext> => {
   const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-mcp-test-'));
   const firebatDir = path.join(tmpRootAbs, '.firebat');
+
   await mkdir(firebatDir, { recursive: true });
 
   // Minimal package.json so firebat recognizes the project root.
@@ -85,6 +90,7 @@ export const createMcpTestContext = async (opts?: {
   if (opts?.extraFiles) {
     for (const [relPath, content] of Object.entries(opts.extraFiles)) {
       const abs = path.join(tmpRootAbs, relPath);
+
       await mkdir(path.dirname(abs), { recursive: true });
       await writeFile(abs, content, 'utf8');
     }
@@ -105,6 +111,7 @@ export const createMcpTestContext = async (opts?: {
     } catch {
       /* best-effort */
     }
+
     await rm(tmpRootAbs, { recursive: true, force: true });
   };
 
@@ -121,6 +128,7 @@ export const callTool = async (
   args: Record<string, unknown> = {},
 ): Promise<{ structured: any; raw: ToolResultLike; isError: boolean }> => {
   const raw = (await client.callTool({ name, arguments: args })) as ToolResultLike;
+
   return { structured: getStructuredContent(raw), raw, isError: raw.isError === true };
 };
 
@@ -136,6 +144,7 @@ export const callToolSafe = async (
     return await callTool(client, name, args);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+
     return {
       structured: { error: msg },
       raw: { content: [{ text: msg }], isError: true },

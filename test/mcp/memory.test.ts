@@ -107,6 +107,7 @@ describe('memory tools (write → read → list → delete)', () => {
     const { structured: read } = await callTool(ctx.client, 'read_memory', {
       memoryKey: 'overwrite-me',
     });
+
     expect(read.found).toBe(true);
     expect(read.value).toBe('replaced');
   }, 30_000);
@@ -232,7 +233,9 @@ describe('memory tools (write → read → list → delete)', () => {
     // Assert
     expect(Array.isArray(structured.memories)).toBe(true);
     expect(structured.memories.length).toBeGreaterThan(0);
+
     const keys = structured.memories.map((m: any) => m.memoryKey);
+
     expect(keys).toContain('test-string');
     expect(keys).toContain('test-number');
     expect(keys).toContain('test-complex');
@@ -273,6 +276,7 @@ describe('memory tools (write → read → list → delete)', () => {
     const { structured: read } = await callTool(ctx.client, 'read_memory', {
       memoryKey: 'to-delete',
     });
+
     expect(read.found).toBe(false);
   }, 30_000);
 
@@ -315,6 +319,7 @@ describe('memory tools (write → read → list → delete)', () => {
       await callTool(ctx.client, 'write_memory', { memoryKey: key, value });
 
       const { structured } = await callTool(ctx.client, 'read_memory', { memoryKey: key });
+
       expect(structured.found).toBe(true);
       expect(structured.value.iteration).toBe(i);
     }

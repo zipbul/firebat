@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -20,7 +21,6 @@ describe('get_hover', () => {
   test('should return hover info for a function name', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -31,6 +31,7 @@ describe('get_hover', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.hover).toBeDefined();
     }
@@ -39,7 +40,6 @@ describe('get_hover', () => {
   test('should return hover info for a class name', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -55,7 +55,6 @@ describe('get_hover', () => {
   test('should return hover info for an interface', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -71,7 +70,6 @@ describe('get_hover', () => {
   test('should return hover info for a type alias', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -87,7 +85,6 @@ describe('get_hover', () => {
   test('should return hover info with exact line and character', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -103,7 +100,6 @@ describe('get_hover', () => {
   test('should return hover info for a variable', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -123,7 +119,6 @@ describe('get_hover', () => {
   test('should accept line as string', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -143,7 +138,6 @@ describe('get_hover', () => {
   test('should handle non-existent file', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'ghost.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -158,7 +152,6 @@ describe('get_hover', () => {
   test('should handle out-of-range line number', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -173,7 +166,6 @@ describe('get_hover', () => {
   test('should handle hover on whitespace/empty area', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_hover', {
       root: ctx.tmpRootAbs,
@@ -204,6 +196,7 @@ describe('get_hover', () => {
         line: 1,
         target,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

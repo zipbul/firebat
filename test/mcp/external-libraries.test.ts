@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -90,6 +91,7 @@ describe('search_external_library_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.matches).toBeDefined();
     }
@@ -137,6 +139,7 @@ describe('search_external_library_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok && Array.isArray(structured.matches)) {
       expect(structured.matches.length).toBeLessThanOrEqual(5);
     }
@@ -151,6 +154,7 @@ describe('search_external_library_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok && Array.isArray(structured.matches)) {
       expect(structured.matches.length).toBe(0);
     }
@@ -166,6 +170,7 @@ describe('get_typescript_dependencies', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(Array.isArray(structured.dependencies)).toBe(true);
     }
@@ -192,6 +197,7 @@ describe('get_typescript_dependencies', () => {
       const { structured } = await callTool(ctx.client, 'get_typescript_dependencies', {
         root: ctx.tmpRootAbs,
       });
+
       expect(typeof structured.ok).toBe('boolean');
     }
   }, 60_000);

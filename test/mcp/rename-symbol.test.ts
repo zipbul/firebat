@@ -14,7 +14,6 @@ const RENAME_FIXTURE = [
   '  bump() { this.value++; }',
   '}',
 ].join('\n');
-
 let ctx: McpTestContext;
 
 beforeAll(async () => {
@@ -35,7 +34,6 @@ describe('rename_symbol', () => {
   test('should rename a function across the file', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/rename1.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'rename_symbol', {
       root: ctx.tmpRootAbs,
@@ -46,6 +44,7 @@ describe('rename_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(Array.isArray(structured.changedFiles)).toBe(true);
       expect(structured.changedFiles.length).toBeGreaterThan(0);
@@ -55,7 +54,6 @@ describe('rename_symbol', () => {
   test('should rename a class', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/rename2.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'rename_symbol', {
       root: ctx.tmpRootAbs,
@@ -71,7 +69,6 @@ describe('rename_symbol', () => {
   test('should accept line hint', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/rename3.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'rename_symbol', {
       root: ctx.tmpRootAbs,
@@ -89,7 +86,6 @@ describe('rename_symbol', () => {
   test('should handle non-existent symbol', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/rename1.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'rename_symbol', {
       root: ctx.tmpRootAbs,
@@ -119,7 +115,6 @@ describe('rename_symbol', () => {
   test('should handle tsconfigPath', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/rename1.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'rename_symbol', {
       root: ctx.tmpRootAbs,

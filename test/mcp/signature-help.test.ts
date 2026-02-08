@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -16,7 +17,6 @@ describe('get_signature_help', () => {
   test('should return signature help inside a function call', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act – line of greetUser which calls getUserName(user)
     const { structured } = await callTool(ctx.client, 'get_signature_help', {
       root: ctx.tmpRootAbs,
@@ -27,6 +27,7 @@ describe('get_signature_help', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.signatureHelp).toBeDefined();
     }
@@ -35,7 +36,6 @@ describe('get_signature_help', () => {
   test('should accept line as string', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_signature_help', {
       root: ctx.tmpRootAbs,
@@ -52,7 +52,6 @@ describe('get_signature_help', () => {
   test('should handle position outside a function call', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_signature_help', {
       root: ctx.tmpRootAbs,
@@ -81,7 +80,6 @@ describe('get_signature_help', () => {
   test('should handle out-of-range line', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_signature_help', {
       root: ctx.tmpRootAbs,
@@ -96,7 +94,6 @@ describe('get_signature_help', () => {
   test('should handle tsconfigPath', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_signature_help', {
       root: ctx.tmpRootAbs,
@@ -122,6 +119,7 @@ describe('get_signature_help', () => {
         line: 26,
         character: 27,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

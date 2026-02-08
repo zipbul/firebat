@@ -4,15 +4,7 @@ import { analyzeNoop } from '../../../src/features/noop';
 import { createProgramFromMap } from '../shared/test-kit';
 
 function createNoopSource(): string {
-  return [
-    'export function noopCase() {',
-    '  1;',
-    '  if (true) {',
-    '    return 0;',
-    '  }',
-    '  return 1;',
-    '}',
-  ].join('\n');
+  return ['export function noopCase() {', '  1;', '  if (true) {', '    return 0;', '  }', '  return 1;', '}'].join('\n');
 }
 
 function createSafeSource(): string {
@@ -28,14 +20,7 @@ function createSafeSource(): string {
 }
 
 function createObjectNoopSource(): string {
-  return [
-    'export function objectNoop() {',
-    '  ({ value: 1 });',
-    '  [1, 2, 3];',
-    '  (() => 1);',
-    '  return 0;',
-    '}',
-  ].join('\n');
+  return ['export function objectNoop() {', '  ({ value: 1 });', '  [1, 2, 3];', '  (() => 1);', '  return 0;', '}'].join('\n');
 }
 
 describe('integration/noop', () => {
@@ -123,13 +108,7 @@ describe('integration/noop', () => {
   it('should report self-assignment when variable is assigned to itself', () => {
     // Arrange
     let sources = new Map<string, string>();
-    let source = [
-      'export function selfAssign() {',
-      '  let x = 1;',
-      '  x = x;',
-      '  return x;',
-      '}',
-    ].join('\n');
+    let source = ['export function selfAssign() {', '  let x = 1;', '  x = x;', '  return x;', '}'].join('\n');
 
     sources.set('/virtual/noop/self-assign.ts', source);
 
@@ -146,12 +125,7 @@ describe('integration/noop', () => {
   it('should report empty-function-body when function has no statements', () => {
     // Arrange
     let sources = new Map<string, string>();
-    let source = [
-      'export function emptyFunc() {',
-      '}',
-      'export const emptyArrow = () => {',
-      '};',
-    ].join('\n');
+    let source = ['export function emptyFunc() {', '}', 'export const emptyArrow = () => {', '};'].join('\n');
 
     sources.set('/virtual/noop/empty-func.ts', source);
 

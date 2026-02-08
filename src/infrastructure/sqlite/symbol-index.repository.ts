@@ -1,8 +1,13 @@
-import type { IndexedSymbolKind, SymbolIndexRepository, SymbolIndexStats, SymbolMatch } from '../../ports/symbol-index.repository';
-
 import { and, eq, sql } from 'drizzle-orm';
 
+import type {
+  IndexedSymbolKind,
+  SymbolIndexRepository,
+  SymbolIndexStats,
+  SymbolMatch,
+} from '../../ports/symbol-index.repository';
 import type { FirebatDrizzleDb } from './drizzle-db';
+
 import { symbolFiles, symbols as symbolsTable } from './schema';
 
 const isIndexedSymbolKind = (value: string): value is IndexedSymbolKind =>
@@ -15,7 +20,7 @@ const isIndexedSymbolKind = (value: string): value is IndexedSymbolKind =>
 
 const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRepository => {
   return {
-     async getIndexedFile({ projectKey, filePath }) {
+    async getIndexedFile({ projectKey, filePath }) {
       const row = db
         .select({
           contentHash: symbolFiles.contentHash,
@@ -29,7 +34,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
       return Promise.resolve(row ?? null);
     },
 
-     async replaceFileSymbols({ projectKey, filePath, contentHash, indexedAt, symbols }) {
+    async replaceFileSymbols({ projectKey, filePath, contentHash, indexedAt, symbols }) {
       db.transaction(tx => {
         tx.delete(symbolsTable)
           .where(and(eq(symbolsTable.projectKey, projectKey), eq(symbolsTable.filePath, filePath)))
@@ -72,7 +77,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
       return Promise.resolve();
     },
 
-     async search({ projectKey, query, limit }) {
+    async search({ projectKey, query, limit }) {
       const trimmed = query.trim();
 
       if (trimmed.length === 0) {
@@ -93,16 +98,11 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
           isExported: symbolsTable.isExported,
         })
         .from(symbolsTable)
-        .where(
-          and(
-            eq(symbolsTable.projectKey, projectKey),
-            sql`lower(${symbolsTable.name}) like lower(${pattern})`,
-          ),
-        )
+        .where(and(eq(symbolsTable.projectKey, projectKey), sql`lower(${symbolsTable.name}) like lower(${pattern})`))
         .limit(max)
         .all();
       const mapped = rows.flatMap((r): SymbolMatch[] => {
-          const kind = r.kind;
+        const kind = r.kind;
 
         if (!isIndexedSymbolKind(kind)) {
           return [];
@@ -125,7 +125,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
       return Promise.resolve(mapped);
     },
 
-     async getStats({ projectKey }): Promise<SymbolIndexStats> {
+    async getStats({ projectKey }): Promise<SymbolIndexStats> {
       const rows = db
         .select({ indexedAt: symbolFiles.indexedAt, symbolCount: symbolFiles.symbolCount })
         .from(symbolFiles)
@@ -146,7 +146,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
       return Promise.resolve({ indexedFileCount, symbolCount, lastIndexedAt });
     },
 
-     async clearProject({ projectKey }) {
+    async clearProject({ projectKey }) {
       db.transaction(tx => {
         tx.delete(symbolsTable).where(eq(symbolsTable.projectKey, projectKey)).run();
         tx.delete(symbolFiles).where(eq(symbolFiles.projectKey, projectKey)).run();

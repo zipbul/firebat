@@ -23,6 +23,7 @@ export function getUserName(user: User): string {
 
 export function greetUser(user: User): string {
   const name = getUserName(user);
+
   return `Hello, ${name}!`;
 }
 
@@ -31,7 +32,9 @@ export class UserService {
 
   add(input: UserCreateInput): User {
     const user = createUser(input);
+
     this.users.push(user);
+
     return user;
   }
 
@@ -75,6 +78,7 @@ export async function processItemsAsync<T>(items: T[], cb: AsyncCallback<T>): Pr
 export function format(value: string): string;
 export function format(value: number, decimals?: number): string;
 export function format(value: string | number, decimals?: number): string {
-  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'string') {return value.trim();}
+
   return value.toFixed(decimals ?? 2);
 }

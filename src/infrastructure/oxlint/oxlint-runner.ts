@@ -94,6 +94,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   const cwd = input.cwd ?? process.cwd();
 
   logger.debug('oxlint: resolving command');
+
   const resolved = await tryResolveLocalBin({ cwd, binName: 'oxlint', callerDir: import.meta.dir });
 
   if (!resolved || resolved.length === 0) {
@@ -149,6 +150,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
 
     try {
       const parsed = OxlintOutputSchema.safeParse(JSON.parse(trimmed));
+
       return parsed.success ? normalizeDiagnosticsFromParsed(parsed.data) : [];
     } catch {
       return [];

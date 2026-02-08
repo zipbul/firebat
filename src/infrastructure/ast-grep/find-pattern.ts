@@ -1,7 +1,7 @@
 import { ts } from '@ast-grep/napi';
 
-import type { SourceSpan } from '../../types';
 import type { FirebatLogger } from '../../ports/logger';
+import type { SourceSpan } from '../../types';
 
 interface AstGrepMatch {
   readonly filePath: string;
@@ -10,10 +10,7 @@ interface AstGrepMatch {
   readonly ruleId: string;
 }
 
-const toSpan = (range: {
-  start: { line: number; column: number };
-  end: { line: number; column: number };
-}): SourceSpan => {
+const toSpan = (range: { start: { line: number; column: number }; end: { line: number; column: number } }): SourceSpan => {
   return {
     start: { line: range.start.line + 1, column: range.start.column + 1 },
     end: { line: range.end.line + 1, column: range.end.column + 1 },
@@ -59,7 +56,9 @@ const findPatternInFiles = async (input: {
       typeof root.findAll === 'function'
         ? root.findAll(matcher)
         : typeof root.find === 'function'
-          ? (root.find(matcher) ? [root.find(matcher)!] : [])
+          ? root.find(matcher)
+            ? [root.find(matcher)!]
+            : []
           : [];
 
     for (const node of nodes) {

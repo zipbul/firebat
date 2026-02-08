@@ -1,4 +1,3 @@
-
 import FastBitSet from 'fastbitset';
 
 import type { BitSet } from './types';

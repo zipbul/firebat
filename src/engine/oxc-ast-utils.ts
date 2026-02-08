@@ -2,7 +2,8 @@ import type { Node } from 'oxc-parser';
 
 import type { NodeRecord, NodeValue, NodeValueVisitor, OxcNodePredicate, OxcNodeWalker } from './types';
 
-export const isOxcNode = (value: NodeValue): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
+export const isOxcNode = (value: NodeValue): value is Node =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => {
   if (!Array.isArray(value)) {

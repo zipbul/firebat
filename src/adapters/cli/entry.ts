@@ -41,7 +41,6 @@ const writeStdout = (text: string): void => {
 
 const printHelp = (): void => {
   const c = isTty();
-
   const lines = [
     '',
     `  ${hc('🔥 firebat', `${H.bold}${H.cyan}`, c)}  ${hc('Code quality scanner powered by Bun', H.dim, c)}`,
@@ -145,6 +144,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
 
   return all.filter(detector => {
     const value = (features as any)[detector];
+
     return value !== false;
   });
 };
@@ -164,6 +164,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 
   if (typeof value === 'object' && value !== null) {
     const boundaryGlobs = (value as any).boundaryGlobs;
+
     return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
       ? boundaryGlobs
       : undefined;
@@ -187,6 +188,7 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
 
   if (typeof value === 'object' && value !== null) {
     const ignoreGlobs = (value as any).ignoreGlobs;
+
     return Array.isArray(ignoreGlobs) && ignoreGlobs.every((e: any) => typeof e === 'string') ? ignoreGlobs : undefined;
   }
 
@@ -218,6 +220,7 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
 
 const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): Promise<FirebatCliOptions> => {
   const options = parseArgs(argv);
+
   logger.trace('CLI args parsed', { targets: options.targets.length, format: options.format, help: options.help });
 
   if (options.help) {
@@ -225,12 +228,15 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   }
 
   const { rootAbs } = await resolveFirebatRootFromCwd();
+
   logger.debug(`Project root: ${rootAbs}`);
 
   let config: FirebatConfig | null = null;
   const configPath = options.configPath ?? resolveDefaultFirebatRcPath(rootAbs);
   const loaded = await loadFirebatConfigFile({ rootAbs, configPath });
+
   config = loaded.config;
+
   logger.debug(`Config loaded from ${loaded.resolvedPath}`, { hasConfig: config !== null });
 
   const featuresCfg = config?.features;
@@ -239,6 +245,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
   const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(featuresCfg);
   const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
+
   logger.trace('Features resolved from config', { detectors: cfgDetectors.length, minSize: cfgMinSize, maxForwardDepth: cfgMaxForwardDepth });
 
   const merged: FirebatCliOptions = {
@@ -253,6 +260,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 
   if (merged.targets.length > 0) {
     const targets = await expandTargets(merged.targets);
+
     logger.debug(`Expanded ${merged.targets.length} explicit targets to ${targets.length} files`);
 
     return {
@@ -262,6 +270,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   }
 
   const targets = await discoverDefaultTargets(rootAbs);
+
   logger.debug(`Auto-discovered ${targets.length} files from ${rootAbs}`);
 
   return {
@@ -299,6 +308,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   }
 
   const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
+
   logger.debug(`Options resolved: ${options.targets.length} targets, ${options.detectors.length} detectors, format=${options.format}`);
 
   if (options.help) {
@@ -332,17 +342,19 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   }
 
   const output = formatReport(report, options.format);
+
   logger.trace(`Report formatted (${options.format}), length=${output.length}`);
 
   process.stdout.write(output + '\n');
 
   const findingCount = countBlockingFindings(report);
+
   logger.debug(`Blocking findings: ${findingCount}`);
 
   const exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
-
   // Must be last line in CLI output (stderr).
   const tRun1 = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+
   logger.info('Done', { durationMs: Math.round(tRun1 - tRun0) });
 
   return exitCode;

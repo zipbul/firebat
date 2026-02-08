@@ -327,20 +327,20 @@ export interface FirebatMeta {
 
 export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
-  readonly 'waste': ReadonlyArray<WasteFinding>;
+  readonly waste: ReadonlyArray<WasteFinding>;
   readonly 'barrel-policy': BarrelPolicyAnalysis;
   readonly 'unknown-proof': UnknownProofAnalysis;
-  readonly 'format': FormatAnalysis;
-  readonly 'lint': LintAnalysis;
-  readonly 'typecheck': TypecheckAnalysis;
-  readonly 'dependencies': DependencyAnalysis;
-  readonly 'coupling': CouplingAnalysis;
+  readonly format: FormatAnalysis;
+  readonly lint: LintAnalysis;
+  readonly typecheck: TypecheckAnalysis;
+  readonly dependencies: DependencyAnalysis;
+  readonly coupling: CouplingAnalysis;
   readonly 'structural-duplicates': StructuralDuplicatesAnalysis;
-  readonly 'nesting': NestingAnalysis;
+  readonly nesting: NestingAnalysis;
   readonly 'early-return': EarlyReturnAnalysis;
-  readonly 'noop': NoopAnalysis;
+  readonly noop: NoopAnalysis;
   readonly 'api-drift': ApiDriftAnalysis;
-  readonly 'forwarding': ForwardingAnalysis;
+  readonly forwarding: ForwardingAnalysis;
 }
 
 export interface FirebatReport {

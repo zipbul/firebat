@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+
 import { createMcpTestContext, callTool, getTextContent, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -33,6 +34,7 @@ describe('resource: report://last', () => {
     expect(result.contents.length).toBeGreaterThan(0);
 
     const text = result.contents[0]?.text ?? (result.contents[0] as any)?.blob ?? '';
+
     expect(typeof text).toBe('string');
     expect(text.length).toBeGreaterThan(0);
   }, 120_000);
@@ -40,9 +42,9 @@ describe('resource: report://last', () => {
   test('should return valid JSON or text in report contents', async () => {
     // Act
     const result = await ctx.client.readResource({ uri: 'report://last' });
-
     // Assert
     const text = result.contents[0]?.text ?? '';
+
     expect(text.length).toBeGreaterThan(0);
   }, 30_000);
 });
@@ -87,6 +89,7 @@ describe('prompt: review', () => {
         name: 'review',
         arguments: { reportJson: JSON.stringify({ meta: {}, analyses: {} }) },
       });
+
       expect(result.messages.length).toBeGreaterThan(0);
     }
   }, 60_000);
@@ -119,6 +122,7 @@ describe('prompt: workflow', () => {
     // Act & Assert
     for (let i = 0; i < 3; i++) {
       const result = await ctx.client.getPrompt({ name: 'workflow' });
+
       expect(result.messages.length).toBeGreaterThan(0);
     }
   }, 60_000);

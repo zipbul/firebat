@@ -7,5 +7,6 @@ export interface FirebatRuntimeContext {
 
 export const resolveRuntimeContextFromCwd = async (startDirAbs: string = process.cwd()): Promise<FirebatRuntimeContext> => {
   const resolved = await resolveFirebatRootFromCwd(startDirAbs);
+
   return { rootAbs: resolved.rootAbs, reason: resolved.reason };
 };

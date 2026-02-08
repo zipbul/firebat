@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { DuplicateGroup } from '../../types';
 import type { ParsedFile } from '../../engine/types';
+import type { DuplicateGroup } from '../../types';
 
 import { parseSource } from '../../engine/parse-source';
 import { detectExactDuplicates } from './detector';

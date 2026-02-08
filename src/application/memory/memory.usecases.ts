@@ -1,9 +1,10 @@
 import * as path from 'node:path';
 
+import type { FirebatLogger } from '../../ports/logger';
+import type { MemoryRepository } from '../../ports/memory.repository';
+
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { createSqliteMemoryRepository } from '../../infrastructure/sqlite/memory.repository';
-import type { MemoryRepository } from '../../ports/memory.repository';
-import type { FirebatLogger } from '../../ports/logger';
 
 interface JsonObject {
   readonly [k: string]: JsonValue;
@@ -75,6 +76,7 @@ const getRepository = async (input: { readonly root?: string; readonly logger: F
 
 const listMemoriesUseCase = async (input: RootInput) => {
   input.logger.debug('memory:list');
+
   const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
 
   return repo.listKeys({ projectKey });
@@ -82,6 +84,7 @@ const listMemoriesUseCase = async (input: RootInput) => {
 
 const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutput | null> => {
   input.logger.debug('memory:read', { memoryKey: input.memoryKey });
+
   const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
   const rec = await repo.read({ projectKey, memoryKey: input.memoryKey });
 
@@ -98,6 +101,7 @@ const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutp
 
 const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
   input.logger.debug('memory:write', { memoryKey: input.memoryKey });
+
   const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
   const payloadJson = JSON.stringify(input.value);
 
@@ -106,14 +110,10 @@ const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
 
 const deleteMemoryUseCase = async (input: DeleteMemoryInput): Promise<void> => {
   input.logger.debug('memory:delete', { memoryKey: input.memoryKey });
+
   const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
 
   await repo.delete({ projectKey, memoryKey: input.memoryKey });
 };
 
-export {
-  listMemoriesUseCase,
-  readMemoryUseCase,
-  writeMemoryUseCase,
-  deleteMemoryUseCase,
-};
+export { listMemoriesUseCase, readMemoryUseCase, writeMemoryUseCase, deleteMemoryUseCase };

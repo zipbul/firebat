@@ -26,7 +26,6 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
     typeof navigator === 'object' && typeof navigator.hardwareConcurrency === 'number'
       ? Math.max(1, Math.floor(navigator.hardwareConcurrency))
       : 4;
-
   const eligible: Array<{ filePath: string; index: number }> = [];
 
   for (let i = 0; i < fileNames.length; i += 1) {
@@ -45,6 +44,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 
   if (eligible.length === 0) {
     config.logger.debug('No eligible files to parse');
+
     return [];
   }
 
@@ -71,12 +71,14 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
       }
     };
   `;
-
   const workerFile = new File([workerSource], 'firebat-parse-worker.ts', { type: 'text/javascript' });
   const workerUrl = URL.createObjectURL(workerFile);
   const workerCount = Math.max(1, Math.min(hardware, eligible.length));
   const workers: Worker[] = [];
-  config.logger.debug(`Spawning ${workerCount} parse workers for ${eligible.length} eligible files`, { hardwareConcurrency: hardware });
+
+  config.logger.debug(`Spawning ${workerCount} parse workers for ${eligible.length} eligible files`, {
+    hardwareConcurrency: hardware,
+  });
 
   try {
     for (let i = 0; i < workerCount; i += 1) {
@@ -95,12 +97,14 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
         w.onmessage = (event: any) => {
           w.onmessage = prevOnMessage;
           w.onerror = prevOnError;
+
           resolve(event?.data);
         };
 
         w.onerror = (event: any) => {
           w.onmessage = prevOnMessage;
           w.onerror = prevOnError;
+
           reject(event);
         };
 
@@ -112,6 +116,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
       (async (): Promise<void> => {
         while (true) {
           const current = cursor;
+
           cursor += 1;
 
           const item = eligible[current];
@@ -125,7 +130,9 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 
             if (!data || typeof data !== 'object' || data.ok !== true) {
               const errText = typeof data?.error === 'string' ? data.error : 'unknown error';
+
               config.logger.warn(`Parse failed: ${item.filePath}: ${errText}`);
+
               continue;
             }
 
@@ -138,6 +145,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
             };
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
+
             config.logger.warn(`Parse failed: ${item.filePath}: ${message}`);
           }
         }
@@ -147,7 +155,9 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
     await Promise.all(runners);
 
     const results = resultsByIndex.filter((v): v is ParsedFile => v !== undefined);
+
     config.logger.trace(`Parse complete: ${results.length}/${eligible.length} files succeeded`);
+
     return results;
   } finally {
     for (const worker of workers) {

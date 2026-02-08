@@ -70,15 +70,9 @@ const shouldHaveDeadStore = (kind: number): boolean => {
 };
 
 const createReachableReadSource = (): string => {
-  return [
-    'export function reachableRead() {',
-    '  let value = 1;',
-    '  if (1) {',
-    '    value;',
-    '  }',
-    '  return 0;',
-    '}',
-  ].join('\n');
+  return ['export function reachableRead() {', '  let value = 1;', '  if (1) {', '    value;', '  }', '  return 0;', '}'].join(
+    '\n',
+  );
 };
 
 const createUnreachableReadSource = (): string => {

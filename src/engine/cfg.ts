@@ -96,4 +96,3 @@ class IntegerCFG {
 }
 
 export { IntegerCFG };
-

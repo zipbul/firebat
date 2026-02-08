@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 const BODY_FIXTURE = [
@@ -18,7 +19,6 @@ const BODY_FIXTURE = [
   '  }',
   '}',
 ].join('\n');
-
 let ctx: McpTestContext;
 
 beforeAll(async () => {
@@ -39,7 +39,6 @@ describe('replace_symbol_body', () => {
   test('should replace a function body', async () => {
     // Arrange
     const relPath = 'src/body1.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_symbol_body', {
       root: ctx.tmpRootAbs,
@@ -50,6 +49,7 @@ describe('replace_symbol_body', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.changed).toBe(true);
     }
@@ -58,7 +58,6 @@ describe('replace_symbol_body', () => {
   test('should replace a method body using dot notation', async () => {
     // Arrange
     const relPath = 'src/body2.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_symbol_body', {
       root: ctx.tmpRootAbs,
@@ -74,7 +73,6 @@ describe('replace_symbol_body', () => {
   test('should replace with multiline body', async () => {
     // Arrange
     const relPath = 'src/body3.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_symbol_body', {
       root: ctx.tmpRootAbs,
@@ -97,7 +95,6 @@ describe('replace_symbol_body', () => {
   test('should replace with empty body', async () => {
     // Arrange
     const relPath = 'src/body2.ts';
-
     // Act
     const { structured } = await callTool(ctx.client, 'replace_symbol_body', {
       root: ctx.tmpRootAbs,
@@ -140,11 +137,7 @@ describe('replace_symbol_body', () => {
   test('should handle 3 rapid sequential body replacements', async () => {
     // Arrange
     const relPath = 'src/body3.ts';
-    const bodies = [
-      '\n  return x;\n',
-      '\n  return x * 2;\n',
-      '\n  return x + 100;\n',
-    ];
+    const bodies = ['\n  return x;\n', '\n  return x * 2;\n', '\n  return x + 100;\n'];
 
     // Act & Assert
     for (const body of bodies) {
@@ -154,6 +147,7 @@ describe('replace_symbol_body', () => {
         relativePath: relPath,
         body,
       });
+
       expect(structured).toBeDefined();
     }
   }, 30_000);

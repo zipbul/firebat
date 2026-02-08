@@ -1,6 +1,7 @@
-import * as path from 'node:path';
-import { readdir } from 'node:fs/promises';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import { readdir } from 'node:fs/promises';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -8,12 +9,14 @@ let ctx: McpTestContext;
 /** Enumerate all .ts files under a directory (non-recursive). */
 const listTsFiles = async (dir: string): Promise<string[]> => {
   const entries = await readdir(dir, { withFileTypes: true });
+
   return entries.filter(e => e.isFile() && e.name.endsWith('.ts')).map(e => path.join(dir, e.name));
 };
 
 /** Helper to index all fixture .ts files (individual file paths, not directory). */
 const indexFixtures = async () => {
   const files = await listTsFiles(ctx.fixturesAbs);
+
   return callTool(ctx.client, 'index_symbols', {
     root: ctx.tmpRootAbs,
     targets: files,
@@ -32,7 +35,6 @@ describe('index_symbols', () => {
   test('should index fixture files successfully', async () => {
     // Arrange
     const files = await listTsFiles(ctx.fixturesAbs);
-
     // Act
     const { structured } = await callTool(ctx.client, 'index_symbols', {
       root: ctx.tmpRootAbs,
@@ -50,7 +52,6 @@ describe('index_symbols', () => {
   test('should index single file', async () => {
     // Arrange
     const target = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'index_symbols', {
       root: ctx.tmpRootAbs,
@@ -106,6 +107,7 @@ describe('search_symbol_from_index', () => {
     expect(structured.matches.length).toBeGreaterThan(0);
 
     const names = structured.matches.map((s: any) => s.name);
+
     expect(names.some((n: string) => n.includes('add'))).toBe(true);
   }, 60_000);
 
@@ -130,6 +132,7 @@ describe('search_symbol_from_index', () => {
 
     // Assert
     expect(Array.isArray(structured.matches)).toBe(true);
+
     for (const s of structured.matches) {
       expect(s.kind.toLowerCase()).toContain('function');
     }
@@ -157,6 +160,7 @@ describe('search_symbol_from_index', () => {
 
     // Assert
     expect(Array.isArray(structured.matches)).toBe(true);
+
     for (const s of structured.matches) {
       expect(s.filePath).toContain('sample.ts');
     }
@@ -259,6 +263,7 @@ describe('clear_index', () => {
   test('should allow re-indexing after clear', async () => {
     // Act
     await callTool(ctx.client, 'clear_index', { root: ctx.tmpRootAbs });
+
     const files = await listTsFiles(ctx.fixturesAbs);
     const { structured } = await callTool(ctx.client, 'index_symbols', {
       root: ctx.tmpRootAbs,
@@ -273,6 +278,7 @@ describe('clear_index', () => {
   test('should be idempotent (clear twice)', async () => {
     // Act
     await callTool(ctx.client, 'clear_index', { root: ctx.tmpRootAbs });
+
     const { structured } = await callTool(ctx.client, 'clear_index', {
       root: ctx.tmpRootAbs,
     });
@@ -322,12 +328,14 @@ describe('get_project_overview', () => {
   test('should reflect clear_index (counts decrease)', async () => {
     // Arrange
     await indexFixtures();
+
     const { structured: before } = await callTool(ctx.client, 'get_project_overview', {
       root: ctx.tmpRootAbs,
     });
 
     // Act
     await callTool(ctx.client, 'clear_index', { root: ctx.tmpRootAbs });
+
     const { structured: after } = await callTool(ctx.client, 'get_project_overview', {
       root: ctx.tmpRootAbs,
     });
@@ -348,6 +356,7 @@ describe('stress: index → search → clear cycle', () => {
         root: ctx.tmpRootAbs,
         targets: files,
       });
+
       expect(idx.ok).toBe(true);
 
       // Search
@@ -355,12 +364,14 @@ describe('stress: index → search → clear cycle', () => {
         query: 'Calculator',
         root: ctx.tmpRootAbs,
       });
+
       expect(search.matches.length).toBeGreaterThan(0);
 
       // Clear
       const { structured: clr } = await callTool(ctx.client, 'clear_index', {
         root: ctx.tmpRootAbs,
       });
+
       expect(clr.ok).toBe(true);
     }
   }, 120_000);

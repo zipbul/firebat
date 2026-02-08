@@ -51,7 +51,9 @@ class Scanner {
 
   public next(): string {
     const ch = this.peek();
+
     this.i += 1;
+
     return ch;
   }
 
@@ -67,17 +69,21 @@ class Scanner {
       // whitespace
       if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
         this.i += 1;
+
         continue;
       }
 
       // line comment
       if (ch === '/' && next === '/') {
         this.i += 2;
+
         while (!this.eof()) {
           const c = this.peek();
+
           if (c === '\n' || c === '\r') {
             break;
           }
+
           this.i += 1;
         }
         continue;
@@ -86,13 +92,17 @@ class Scanner {
       // block comment
       if (ch === '/' && next === '*') {
         this.i += 2;
+
         while (!this.eof()) {
           const c = this.peek();
           const n = this.peek(1);
+
           if (c === '*' && n === '/') {
             this.i += 2;
+
             break;
           }
+
           this.i += 1;
         }
         continue;
@@ -118,18 +128,23 @@ class Scanner {
 
       if (escaping) {
         out += ch;
+
         escaping = false;
+
         continue;
       }
 
       if (ch === '\\') {
         escaping = true;
+
         out += ch;
+
         continue;
       }
 
       if (ch === quote) {
         const end = this.i;
+
         // Keep raw escapes as part of value; key extraction uses raw content anyway.
         return { value: out, start, end };
       }
@@ -143,18 +158,22 @@ class Scanner {
   public parseIdentifier(): { value: string; start: number; end: number } {
     const start = this.i;
     const first = this.peek();
+
     if (!isIdentStart(first)) {
       throw this.error('Expected identifier');
     }
 
     let out = '';
+
     out += this.next();
 
     while (!this.eof()) {
       const ch = this.peek();
+
       if (!isIdentPart(ch)) {
         break;
       }
+
       out += this.next();
     }
 
@@ -166,8 +185,10 @@ class Scanner {
 
     while (!this.eof()) {
       const ch = this.peek();
+
       if (/[-+0-9.eE]/.test(ch)) {
         this.i += 1;
+
         continue;
       }
       break;
@@ -182,14 +203,19 @@ class Scanner {
 
     if (ch === 't' && this.text.slice(this.i, this.i + 4) === 'true') {
       this.i += 4;
+
       return { kind: 'literal', start, end: this.i };
     }
+
     if (ch === 'f' && this.text.slice(this.i, this.i + 5) === 'false') {
       this.i += 5;
+
       return { kind: 'literal', start, end: this.i };
     }
+
     if (ch === 'n' && this.text.slice(this.i, this.i + 4) === 'null') {
       this.i += 4;
+
       return { kind: 'literal', start, end: this.i };
     }
 
@@ -199,15 +225,19 @@ class Scanner {
   public parseArray(): ValueNode {
     const start = this.i;
     const open = this.next();
+
     if (open !== '[') {
       throw this.error('Expected [');
     }
 
     while (!this.eof()) {
       this.skipWhitespaceAndComments();
+
       const ch = this.peek();
+
       if (ch === ']') {
         this.i += 1;
+
         return { kind: 'array', start, end: this.i };
       }
 
@@ -215,11 +245,15 @@ class Scanner {
       this.parseValue();
 
       this.skipWhitespaceAndComments();
+
       const after = this.peek();
+
       if (after === ',') {
         this.i += 1;
+
         continue;
       }
+
       if (after === ']') {
         continue;
       }
@@ -234,6 +268,7 @@ class Scanner {
     const start = this.i;
     const openBrace = this.i;
     const open = this.next();
+
     if (open !== '{') {
       throw this.error('Expected {');
     }
@@ -242,11 +277,14 @@ class Scanner {
 
     while (!this.eof()) {
       this.skipWhitespaceAndComments();
+
       const ch = this.peek();
 
       if (ch === '}') {
         const closeBrace = this.i;
+
         this.i += 1;
+
         return { kind: 'object', start, end: this.i, openBrace, closeBrace, props };
       }
 
@@ -261,12 +299,15 @@ class Scanner {
       }
 
       this.skipWhitespaceAndComments();
+
       if (this.peek() !== ':') {
         throw this.error('Expected :');
       }
+
       this.i += 1;
 
       this.skipWhitespaceAndComments();
+
       const value = this.parseValue();
 
       props.push({
@@ -279,9 +320,12 @@ class Scanner {
       });
 
       this.skipWhitespaceAndComments();
+
       const after = this.peek();
+
       if (after === ',') {
         this.i += 1;
+
         continue;
       }
 
@@ -293,6 +337,7 @@ class Scanner {
 
   public parseValue(): ValueNode {
     this.skipWhitespaceAndComments();
+
     const start = this.i;
     const ch = this.peek();
 
@@ -306,6 +351,7 @@ class Scanner {
 
     if (ch === '"' || ch === "'") {
       const s = this.parseString();
+
       return { kind: 'string', start: s.start, end: s.end };
     }
 
@@ -324,6 +370,7 @@ class Scanner {
 const parseRootObjectOrThrow = (text: string): Extract<ValueNode, { kind: 'object' }> => {
   const s = new Scanner(text);
   const node = s.parseValue();
+
   s.skipWhitespaceAndComments();
 
   if (node.kind !== 'object') {
@@ -335,18 +382,20 @@ const parseRootObjectOrThrow = (text: string): Extract<ValueNode, { kind: 'objec
 
 const lineStartAt = (text: string, pos: number): number => {
   const idx = text.lastIndexOf('\n', Math.max(0, pos - 1));
+
   return idx === -1 ? 0 : idx + 1;
 };
 
 const lineEndAfter = (text: string, pos: number): number => {
   const idx = text.indexOf('\n', pos);
+
   return idx === -1 ? text.length : idx + 1;
 };
 
 const applyEditsDescending = (text: string, edits: readonly Edit[]): string => {
   const sorted = [...edits].sort((a, b) => b.start - a.start);
-
   let out = text;
+
   for (const e of sorted) {
     out = out.slice(0, e.start) + e.text + out.slice(e.end);
   }
@@ -366,6 +415,7 @@ const renderInsertedProperty = (input: {
   const inner = lines.slice(1, -1); // drop { and }
 
   const strip2 = (line: string): string => (line.startsWith('  ') ? line.slice(2) : line);
+
   const adjusted = inner.map(l => input.indent + strip2(l));
 
   return adjusted.join(input.newline);
@@ -383,17 +433,17 @@ const collectEditsForObjectSync = (input: {
   }
 
   const newline = detectNewline(userText);
-
   const templateKeys = Object.keys(templateValue);
   const templateKeySet = new Set(templateKeys);
-
   const userProps = userNode.props;
   const userPropsByKey = new Map<string, PropNode>();
+
   for (const p of userProps) {
     userPropsByKey.set(p.key, p);
   }
 
   const deletions: Edit[] = [];
+
   for (const p of userProps) {
     if (templateKeySet.has(p.key)) {
       continue;
@@ -401,6 +451,7 @@ const collectEditsForObjectSync = (input: {
 
     const delStart = lineStartAt(userText, p.keyStart);
     const delEnd = lineEndAfter(userText, p.end);
+
     deletions.push({ start: delStart, end: delEnd, text: '' });
   }
 
@@ -408,24 +459,25 @@ const collectEditsForObjectSync = (input: {
   const keptProps = userProps
     .filter(p => templateKeySet.has(p.key))
     .sort((a, b) => a.keyStart - b.keyStart);
-
   const missingKeys = templateKeys.filter(k => !userPropsByKey.has(k));
-
   const insertions: Edit[] = [];
+
   if (missingKeys.length > 0) {
     if (keptProps.length > 0) {
       const first = keptProps[0]!;
       const firstLineStart = lineStartAt(userText, first.keyStart);
       const indent = userText.slice(firstLineStart, first.keyStart);
-
       const blockLines: string[] = [];
+
       for (const k of missingKeys) {
         const v = (templateValue as any)[k] as JsonValue;
         const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
+
         blockLines.push(rendered + ',' );
       }
 
       const block = blockLines.join(newline) + newline;
+
       insertions.push({ start: firstLineStart, end: firstLineStart, text: block });
     } else {
       // Object will be empty after deletions (or was empty).
@@ -433,27 +485,32 @@ const collectEditsForObjectSync = (input: {
       const closeLineStart = lineStartAt(userText, closeBrace);
       const baseIndent = userText.slice(closeLineStart, closeBrace);
       const indent = baseIndent + '  ';
-
       const blockLines: string[] = [];
+
       for (const k of missingKeys) {
         const v = (templateValue as any)[k] as JsonValue;
         const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
+
         blockLines.push(rendered + ',' );
       }
 
       const block = newline + blockLines.join(newline) + newline + baseIndent;
+
       insertions.push({ start: closeBrace, end: closeBrace, text: block });
     }
   }
 
   const nestedEdits: Edit[] = [];
+
   for (const k of templateKeys) {
     const p = userPropsByKey.get(k);
+
     if (!p) {
       continue;
     }
 
     const tplChild = (templateValue as any)[k] as JsonValue;
+
     if (!isPlainObject(tplChild)) {
       continue;
     }
@@ -491,9 +548,11 @@ export const syncJsoncTextToTemplateKeys = (input: {
     }
 
     const next = applyEditsDescending(input.userText, edits);
+
     return { ok: true, text: next, changed: next !== input.userText };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+
     return { ok: false, error: msg };
   }
 };

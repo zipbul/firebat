@@ -1,6 +1,5 @@
-import * as path from 'node:path';
-
 import { defineConfig } from 'drizzle-kit';
+import * as path from 'node:path';
 
 const here = import.meta.dir;
 const repoRoot = path.resolve(here, '../..');

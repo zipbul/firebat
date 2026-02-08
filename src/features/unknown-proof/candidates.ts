@@ -53,20 +53,24 @@ const globToRegExp = (pattern: string): RegExp => {
 
 		if (ch === '*') {
 			const next = pattern[i + 1];
+
 			if (next === '*') {
 				out += '.*';
 				i += 2;
+
 				continue;
 			}
 
 			out += '[^/]*';
 			i += 1;
+
 			continue;
 		}
 
 		if (ch === '?') {
 			out += '[^/]';
 			i += 1;
+
 			continue;
 		}
 
@@ -113,6 +117,7 @@ const collectStringsFromNode = (node: unknown): string[] => {
 
 		if (typeof value === 'string') {
 			out.push(value);
+
 			return;
 		}
 
@@ -142,6 +147,7 @@ const containsTsKeyword = (node: unknown, keywordType: 'TSUnknownKeyword' | 'TSA
 	walkOxcTree(node as any, (n: Node) => {
 		if (n.type === keywordType) {
 			found = true;
+
 			return false;
 		}
 
@@ -238,6 +244,7 @@ const walkOxcTreeWithStack = (root: unknown, visit: (node: any, stack: ReadonlyA
 			for (const entry of value) {
 				rec(entry, keyInParent, stack);
 			}
+
 			return;
 		}
 
@@ -249,15 +256,18 @@ const walkOxcTreeWithStack = (root: unknown, visit: (node: any, stack: ReadonlyA
 			for (const [k, v] of Object.entries(value)) {
 				rec(v, k, stack);
 			}
+
 			return;
 		}
 
 		if (seen.has(value)) {
 			return;
 		}
+
 		seen.add(value);
 
 		const nextStack = [...stack, { node: value, keyInParent }];
+
 		visit(value, nextStack);
 
 		for (const [k, v] of Object.entries(value)) {
@@ -439,16 +449,20 @@ const isAllowedNarrowingContext = (stack: ReadonlyArray<WalkStackEntry>): boolea
 
 	if (parent.type === 'BinaryExpression') {
 		const op = (parent as any).operator;
+
 		if (op === 'instanceof' && (parent as any).left === self) {
 			return true;
 		}
+
 		if (op === 'in' && (parent as any).right === self) {
 			return true;
 		}
+
 		if (op === '===' || op === '!==' || op === '==' || op === '!=') {
 			const left = (parent as any).left;
 			const right = (parent as any).right;
 			const other = left === self ? right : right === self ? left : null;
+
 			if (
 				other &&
 				isNodeRecord(other) &&
@@ -487,6 +501,7 @@ const collectBoundaryUnknownUsages = (input: {
 		}
 
 		const name = typeof (node as any).name === 'string' ? (node as any).name : '';
+
 		if (name.length === 0 || !unknownNames.has(name)) {
 			return;
 		}
@@ -550,7 +565,6 @@ export const collectUnknownProofCandidates = (input: {
 		.map(p => normalizePath(p).trim())
 		.filter(p => p.length > 0);
 	const boundaryMatchers = compileGlobs(boundaryGlobs);
-
 	const perFile = new Map<string, UnknownProofCandidates>();
 
 	for (const file of input.program) {
@@ -566,6 +580,7 @@ export const collectUnknownProofCandidates = (input: {
 			const startOffset = typeof node.start === 'number' ? node.start : 0;
 			const endOffset = typeof node.end === 'number' ? node.end : startOffset;
 			const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
+
 			typeAssertionFindings.push({
 				kind: 'type-assertion',
 				message,
@@ -578,6 +593,7 @@ export const collectUnknownProofCandidates = (input: {
 			// Ban type assertions everywhere.
 			if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
 				pushTypeAssertion(node as any, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
+
 				return true;
 			}
 
@@ -599,6 +615,7 @@ export const collectUnknownProofCandidates = (input: {
 
 						const startOffset = typeof id.start === 'number' ? id.start : (typeof node.start === 'number' ? node.start : 0);
 						const endOffset = typeof id.end === 'number' ? id.end : startOffset;
+
 						nonBoundaryBindings.push({ name, offset: startOffset, span: toSpanFromOffsets(file.sourceText, startOffset, endOffset) });
 					}
 				}
@@ -619,6 +636,7 @@ export const collectUnknownProofCandidates = (input: {
 
 								const startOffset = typeof id.start === 'number' ? id.start : (typeof node.start === 'number' ? node.start : 0);
 								const endOffset = typeof id.end === 'number' ? id.end : startOffset;
+
 								nonBoundaryBindings.push({ name, offset: startOffset, span: toSpanFromOffsets(file.sourceText, startOffset, endOffset) });
 							}
 						}
@@ -662,6 +680,7 @@ export const collectUnknownProofCandidates = (input: {
 
 		if (boundary) {
 			const unknownBindings = collectUnknownAnnotatedBindings(file.program, file.sourceText);
+
 			boundaryUnknownUsages.push(
 				...collectBoundaryUnknownUsages({
 					program: file.program,
@@ -673,15 +692,19 @@ export const collectUnknownProofCandidates = (input: {
 
 		// De-dupe bindings by offset.
 		const seenOffsets = new Set<number>();
+
 		const dedupBindings = (items: ReadonlyArray<BindingCandidate>): BindingCandidate[] => {
 			const out: BindingCandidate[] = [];
+
 			for (const item of items) {
 				if (seenOffsets.has(item.offset)) {
 					continue;
 				}
+
 				seenOffsets.add(item.offset);
 				out.push(item);
 			}
+
 			return out;
 		};
 
@@ -733,6 +756,7 @@ export const stringifyHover = (hover: unknown): string => {
 
 	// LSP Hover.contents can be (string | MarkupContent | MarkedString | (string|MarkedString)[])
 	const parts = extract(raw);
+
 	if (parts.length > 0) {
 		return parts.join('\n');
 	}

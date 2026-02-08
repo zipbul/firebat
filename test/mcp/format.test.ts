@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -8,11 +9,7 @@ beforeAll(async () => {
   ctx = await createMcpTestContext({
     copyFixtures: true,
     extraFiles: {
-      'src/format-me.ts': [
-        'export function   ugly(   x:number,y  :string   ):   string{',
-        '  return x  +   y',
-        '}',
-      ].join('\n'),
+      'src/format-me.ts': ['export function   ugly(   x:number,y  :string   ):   string{', '  return x  +   y', '}'].join('\n'),
     },
   });
 }, 30_000);
@@ -25,7 +22,6 @@ describe('format_document', () => {
   test('should format a single file', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'format_document', {
       root: ctx.tmpRootAbs,
@@ -34,6 +30,7 @@ describe('format_document', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(typeof structured.changed).toBe('boolean');
     }
@@ -42,7 +39,6 @@ describe('format_document', () => {
   test('should format a directory of files', async () => {
     // Arrange
     const dir = ctx.fixturesAbs;
-
     // Act
     const { structured } = await callTool(ctx.client, 'format_document', {
       root: ctx.tmpRootAbs,
@@ -51,6 +47,7 @@ describe('format_document', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(typeof structured.changedCount).toBe('number');
     }
@@ -70,7 +67,6 @@ describe('format_document', () => {
   test('should accept tsconfigPath', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'format_document', {
       root: ctx.tmpRootAbs,
@@ -85,7 +81,6 @@ describe('format_document', () => {
   test('should be idempotent (formatting twice produces same result)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured: first } = await callTool(ctx.client, 'format_document', {
       root: ctx.tmpRootAbs,
@@ -111,6 +106,7 @@ describe('format_document', () => {
         root: ctx.tmpRootAbs,
         filePath: fixture,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

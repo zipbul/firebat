@@ -20,7 +20,6 @@ describe('find_pattern', () => {
   test('should find console.log calls using a rule pattern', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -31,6 +30,7 @@ describe('find_pattern', () => {
     // Assert
     expect(Array.isArray(structured.matches)).toBe(true);
     expect(structured.matches.length).toBeGreaterThan(0);
+
     for (const match of structured.matches) {
       expect(match.filePath).toBeDefined();
       expect(match.text).toContain('console.log');
@@ -42,7 +42,6 @@ describe('find_pattern', () => {
   test('should find console.error calls separately', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -61,7 +60,6 @@ describe('find_pattern', () => {
   test('should find patterns using matcher (string shorthand)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -83,7 +81,6 @@ describe('find_pattern', () => {
       path.join(ctx.fixturesAbs, 'sample.ts'),
       path.join(ctx.fixturesAbs, 'editable.ts'),
     ];
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets,
@@ -92,8 +89,10 @@ describe('find_pattern', () => {
 
     // Assert
     expect(Array.isArray(structured.matches)).toBe(true);
+
     // Should find return statements across both files
     const files = new Set(structured.matches.map((m: any) => m.filePath));
+
     expect(files.size).toBeGreaterThanOrEqual(1);
   }, 30_000);
 
@@ -104,7 +103,6 @@ describe('find_pattern', () => {
   test('should return empty matches when pattern does not exist', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -123,7 +121,6 @@ describe('find_pattern', () => {
   test('should error when neither rule nor matcher is provided', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { isError } = await callToolSafe(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -136,7 +133,6 @@ describe('find_pattern', () => {
   test('should handle non-existent target file gracefully', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'ghost.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'find_pattern', {
       targets: [bogus],
@@ -154,7 +150,6 @@ describe('find_pattern', () => {
   test('should match class declarations', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -169,7 +164,6 @@ describe('find_pattern', () => {
   test('should match arrow functions', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -183,7 +177,6 @@ describe('find_pattern', () => {
   test('should match if-statements', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [fixture],
@@ -221,6 +214,7 @@ describe('find_pattern', () => {
         targets: [fixture],
         rule: { pattern },
       });
+
       expect(isError).toBe(false);
       expect(Array.isArray(structured.matches)).toBe(true);
     }
@@ -233,7 +227,6 @@ describe('find_pattern', () => {
   test('should search in an entire directory', async () => {
     // Arrange
     const dir = ctx.fixturesAbs;
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets: [dir],

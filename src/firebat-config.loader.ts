@@ -10,7 +10,8 @@ export const loadFirebatConfigFile = async (params: {
   readonly rootAbs: string;
   readonly configPath?: string;
 }): Promise<{ config: FirebatConfig | null; resolvedPath: string; exists: boolean }> => {
-  const resolvedPath = params.configPath !== undefined ? path.resolve(params.configPath) : resolveDefaultFirebatRcPath(params.rootAbs);
+  const resolvedPath =
+    params.configPath !== undefined ? path.resolve(params.configPath) : resolveDefaultFirebatRcPath(params.rootAbs);
   const file = Bun.file(resolvedPath);
 
   if (!(await file.exists())) {

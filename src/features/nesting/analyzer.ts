@@ -6,7 +6,14 @@ import type { NestingAnalysis, NestingItem } from '../../types';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
-import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, visitOxcChildren } from '../../engine/oxc-ast-utils';
+import {
+  getNodeHeader,
+  isFunctionNode,
+  isNodeRecord,
+  isOxcNode,
+  isOxcNodeArray,
+  visitOxcChildren,
+} from '../../engine/oxc-ast-utils';
 
 const createEmptyNesting = (): NestingAnalysis => ({
   items: [],
@@ -27,7 +34,12 @@ const isDecisionPoint = (nodeType: string): boolean => {
   );
 };
 
-const analyzeFunctionNode = (functionNode: Node, filePath: string, sourceText: string, parent: Node | null): NestingItem | null => {
+const analyzeFunctionNode = (
+  functionNode: Node,
+  filePath: string,
+  sourceText: string,
+  parent: Node | null,
+): NestingItem | null => {
   const bodyValue = resolveFunctionBody(functionNode);
 
   if (bodyValue === null || bodyValue === undefined) {

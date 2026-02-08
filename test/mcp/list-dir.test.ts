@@ -20,7 +20,6 @@ describe('list_dir', () => {
   test('should list files in fixtures directory (non-recursive)', async () => {
     // Arrange
     const relPath = 'fixtures';
-
     // Act
     const { structured } = await callTool(ctx.client, 'list_dir', {
       relativePath: relPath,
@@ -29,9 +28,12 @@ describe('list_dir', () => {
     // Assert
     expect(Array.isArray(structured.entries)).toBe(true);
     expect(structured.entries.length).toBeGreaterThan(0);
+
     const names = structured.entries.map((e: any) => e.name);
+
     expect(names).toContain('sample.ts');
     expect(names).toContain('editable.ts');
+
     for (const entry of structured.entries) {
       expect(typeof entry.name).toBe('string');
       expect(typeof entry.isDir).toBe('boolean');
@@ -43,9 +45,9 @@ describe('list_dir', () => {
     const { structured } = await callTool(ctx.client, 'list_dir', {
       relativePath: '.',
     });
-
     // Assert
     const names = structured.entries.map((e: any) => e.name);
+
     expect(names).toContain('package.json');
     expect(names).toContain('fixtures');
   }, 30_000);
@@ -63,7 +65,9 @@ describe('list_dir', () => {
 
     // Assert
     expect(Array.isArray(structured.entries)).toBe(true);
+
     const names = structured.entries.map((e: any) => e.name);
+
     // Should include nested files like fixtures/sample.ts
     expect(names.some((n: string) => n.includes('sample.ts'))).toBe(true);
   }, 30_000);
@@ -74,9 +78,9 @@ describe('list_dir', () => {
       relativePath: '.',
       recursive: true,
     });
-
     // Assert
     const fixturesEntry = structured.entries.find((e: any) => e.name === 'fixtures');
+
     expect(fixturesEntry).toBeDefined();
     expect(fixturesEntry.isDir).toBe(true);
   }, 30_000);
@@ -144,6 +148,7 @@ describe('list_dir', () => {
       const { structured, isError } = await callToolSafe(ctx.client, 'list_dir', {
         relativePath: '.',
       });
+
       expect(isError).toBe(false);
       expect(Array.isArray(structured.entries)).toBe(true);
     }

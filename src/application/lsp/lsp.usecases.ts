@@ -1,8 +1,9 @@
-import * as path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import type { FirebatLogger } from '../../ports/logger';
 
 import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../infrastructure/tsgo/tsgo-runner';
-import type { FirebatLogger } from '../../ports/logger';
 
 type LineParam = number | string;
 
@@ -20,7 +21,9 @@ type WorkspaceEdit = {
 const resolveRootAbs = (root: string | undefined): string => {
   const cwd = process.cwd();
 
-  if (!root || root.trim().length === 0) {return cwd;}
+  if (!root || root.trim().length === 0) {
+    return cwd;
+  }
 
   const trimmed = root.trim();
 
@@ -52,11 +55,7 @@ const resolveLineNumber0 = (lines: string[], line: LineParam): number => {
 
 const NEARBY_SEARCH_RANGE = 5;
 
-const findSymbolPosition = (
-  lines: string[],
-  lineIdx: number,
-  symbolName: string,
-): { line: number; character: number } => {
+const findSymbolPosition = (lines: string[], lineIdx: number, symbolName: string): { line: number; character: number } => {
   // 1. Exact line (fast path)
   const exactCol = (lines[lineIdx] ?? '').indexOf(symbolName);
 
@@ -69,7 +68,9 @@ const findSymbolPosition = (
     for (const d of [-delta, delta]) {
       const candidate = lineIdx + d;
 
-      if (candidate < 0 || candidate >= lines.length) {continue;}
+      if (candidate < 0 || candidate >= lines.length) {
+        continue;
+      }
 
       const col = (lines[candidate] ?? '').indexOf(symbolName);
 
@@ -92,7 +93,7 @@ const positionToOffset = (text: string, pos: LspPosition): number => {
     offset += (lines[i]?.length ?? 0) + 1; // +\n
   }
 
-  const col = Math.max(0, Math.min((lines[line]?.length ?? 0), pos.character));
+  const col = Math.max(0, Math.min(lines[line]?.length ?? 0, pos.character));
 
   return offset + col;
 };
@@ -144,18 +145,22 @@ const withOpenDocument = async <T>(
 };
 
 const normalizeLocations = (value: unknown): Array<{ uri: string; range: LspRange }> => {
-  if (!value) {return [];}
+  if (!value) {
+    return [];
+  }
 
   if (Array.isArray(value)) {
     const out: Array<{ uri: string; range: LspRange }> = [];
 
     for (const item of value) {
-      if (!item || typeof item !== 'object') {continue;}
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
 
-      if ('uri' in (item) && 'range' in (item)) {
+      if ('uri' in item && 'range' in item) {
         out.push(item);
-      } else if ('targetUri' in (item) && 'targetRange' in (item)) {
-        out.push({ uri: (item).targetUri, range: (item).targetRange });
+      } else if ('targetUri' in item && 'targetRange' in item) {
+        out.push({ uri: item.targetUri, range: item.targetRange });
       }
     }
 
@@ -197,23 +202,25 @@ export const getHoverUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
-      const pos =
-        input.target !== undefined
-          ? findSymbolPosition(doc.lines, baseLineIdx, input.target)
-          : { line: baseLineIdx, character: input.character !== undefined ? Math.max(0, Math.floor(input.character)) : 0 };
-      const hover = await session.lsp.request('textDocument/hover', {
-        textDocument: { uri: doc.uri },
-        position: { line: pos.line, character: pos.character },
-      });
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+        const pos =
+          input.target !== undefined
+            ? findSymbolPosition(doc.lines, baseLineIdx, input.target)
+            : { line: baseLineIdx, character: input.character !== undefined ? Math.max(0, Math.floor(input.character)) : 0 };
+        const hover = await session.lsp.request('textDocument/hover', {
+          textDocument: { uri: doc.uri },
+          position: { line: pos.line, character: pos.character },
+        });
 
-      return hover;
-    });
+        return hover;
+      });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, hover: result.value, ...(result.note !== undefined ? { note: result.note } : {}) };
 };
@@ -234,30 +241,31 @@ export const findReferencesUseCase = async (input: {
   const result = await withTsgoLspSession<Array<{ filePath: string; range: LspRange; snippet?: string }>>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
-      const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
-      const refs = await session.lsp.request<any[]>('textDocument/references', {
-        textDocument: { uri: doc.uri },
-        position: { line: pos.line, character: pos.character },
-        context: { includeDeclaration: true },
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+        const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
+        const refs = await session.lsp.request<any[]>('textDocument/references', {
+          textDocument: { uri: doc.uri },
+          position: { line: pos.line, character: pos.character },
+          context: { includeDeclaration: true },
+        });
+        const mapped: Array<{ filePath: string; range: LspRange; snippet?: string }> = [];
+
+        for (const r of refs ?? []) {
+          const refPath = lspUriToFilePath(r.uri);
+          const snippet = await previewRange(refPath, r.range, 0, 0);
+
+          mapped.push({ filePath: refPath, range: r.range, ...(snippet.length > 0 ? { snippet: snippet.trim() } : {}) });
+        }
+
+        return mapped;
       });
-
-      const mapped: Array<{ filePath: string; range: LspRange; snippet?: string }> = [];
-
-      for (const r of refs ?? []) {
-        const refPath = lspUriToFilePath(r.uri);
-        const snippet = await previewRange(refPath, r.range, 0, 0);
-
-        mapped.push({ filePath: refPath, range: r.range, ...(snippet.length > 0 ? { snippet: snippet.trim() } : {}) });
-      }
-
-      return mapped;
-    });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, references: result.value };
 };
@@ -281,31 +289,33 @@ export const getDefinitionsUseCase = async (input: {
   const result = await withTsgoLspSession<Array<{ filePath: string; range: LspRange; preview?: string }>>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
-      const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
-      const raw = await session.lsp.request('textDocument/definition', {
-        textDocument: { uri: doc.uri },
-        position: { line: pos.line, character: pos.character },
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+        const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
+        const raw = await session.lsp.request('textDocument/definition', {
+          textDocument: { uri: doc.uri },
+          position: { line: pos.line, character: pos.character },
+        });
+        const locs = normalizeLocations(raw);
+        const before = input.before ?? 2;
+        const after = input.after ?? 2;
+        const defs: Array<{ filePath: string; range: LspRange; preview?: string }> = [];
+
+        for (const loc of locs) {
+          const defPath = lspUriToFilePath(loc.uri);
+          const preview = await previewRange(defPath, loc.range, before, after);
+
+          defs.push({ filePath: defPath, range: loc.range, preview });
+        }
+
+        return defs;
       });
-      const locs = normalizeLocations(raw);
-      const before = input.before ?? 2;
-      const after = input.after ?? 2;
-      const defs: Array<{ filePath: string; range: LspRange; preview?: string }> = [];
-
-      for (const loc of locs) {
-        const defPath = lspUriToFilePath(loc.uri);
-        const preview = await previewRange(defPath, loc.range, before, after);
-
-        defs.push({ filePath: defPath, range: loc.range, preview });
-      }
-
-      return defs;
-    });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, definitions: result.value };
 };
@@ -326,21 +336,23 @@ export const getDiagnosticsUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      // LSP 3.17 pull diagnostics (server dependent)
-      const diagnostics = await session.lsp
-        .request('textDocument/diagnostic', {
-          textDocument: { uri: doc.uri },
-          ...(input.forceRefresh ? { previousResultId: null } : {}),
-        })
-        .catch(() => null);
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        // LSP 3.17 pull diagnostics (server dependent)
+        const diagnostics = await session.lsp
+          .request('textDocument/diagnostic', {
+            textDocument: { uri: doc.uri },
+            ...(input.forceRefresh ? { previousResultId: null } : {}),
+          })
+          .catch(() => null);
 
-      return diagnostics;
-    });
+        return diagnostics;
+      });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, diagnostics: result.value ?? [] };
 };
@@ -357,25 +369,33 @@ export const getAllDiagnosticsUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    // Check capabilities first — tsgo may not support workspace diagnostics.
-    const init = session.initializeResult as any;
-    const diagCap = init?.capabilities?.diagnosticProvider;
-    if (diagCap && diagCap.workspaceDiagnostics === false) {
-      return { __unsupported: true };
-    }
+      // Check capabilities first — tsgo may not support workspace diagnostics.
+      const init = session.initializeResult as any;
+      const diagCap = init?.capabilities?.diagnosticProvider;
 
-    // LSP 3.17 workspace diagnostics with timeout (server dependent)
-    const diagnostics = await session.lsp.request('workspace/diagnostic', {}, 60_000).catch(() => null);
+      if (diagCap && diagCap.workspaceDiagnostics === false) {
+        return { __unsupported: true };
+      }
 
-    return diagnostics;
+      // LSP 3.17 workspace diagnostics with timeout (server dependent)
+      const diagnostics = await session.lsp.request('workspace/diagnostic', {}, 60_000).catch(() => null);
+
+      return diagnostics;
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   const value = result.value as any;
+
   if (value && value.__unsupported) {
-    return { ok: false, error: 'Workspace diagnostics not supported by the current tsgo LSP server (workspaceDiagnostics: false). Use get_diagnostics for individual files instead.' };
+    return {
+      ok: false,
+      error:
+        'Workspace diagnostics not supported by the current tsgo LSP server (workspaceDiagnostics: false). Use get_diagnostics for individual files instead.',
+    };
   }
 
   return { ok: true, diagnostics: value ?? [] };
@@ -395,13 +415,15 @@ export const getDocumentSymbolsUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      return  session.lsp.request('textDocument/documentSymbol', { textDocument: { uri: doc.uri } });
-    });
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        return session.lsp.request('textDocument/documentSymbol', { textDocument: { uri: doc.uri } });
+      });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, symbols: result.value };
 };
@@ -419,11 +441,13 @@ export const getWorkspaceSymbolsUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  session.lsp.request('workspace/symbol', { query: input.query ?? '' });
+      return session.lsp.request('workspace/symbol', { query: input.query ?? '' });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, symbols: result.value };
 };
@@ -444,19 +468,22 @@ export const getCompletionUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const lineIdx = resolveLineNumber0(doc.lines, input.line);
-      const character0 = input.character !== undefined ? Math.max(0, Math.floor(input.character)) : (doc.lines[lineIdx]?.length ?? 0);
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const lineIdx = resolveLineNumber0(doc.lines, input.line);
+        const character0 =
+          input.character !== undefined ? Math.max(0, Math.floor(input.character)) : (doc.lines[lineIdx]?.length ?? 0);
 
-      return  session.lsp.request('textDocument/completion', {
-        textDocument: { uri: doc.uri },
-        position: { line: lineIdx, character: character0 },
+        return session.lsp.request('textDocument/completion', {
+          textDocument: { uri: doc.uri },
+          position: { line: lineIdx, character: character0 },
+        });
       });
-    });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, completion: result.value };
 };
@@ -477,19 +504,22 @@ export const getSignatureHelpUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const lineIdx = resolveLineNumber0(doc.lines, input.line);
-      const character0 = input.character !== undefined ? Math.max(0, Math.floor(input.character)) : (doc.lines[lineIdx]?.length ?? 0);
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const lineIdx = resolveLineNumber0(doc.lines, input.line);
+        const character0 =
+          input.character !== undefined ? Math.max(0, Math.floor(input.character)) : (doc.lines[lineIdx]?.length ?? 0);
 
-      return  session.lsp.request('textDocument/signatureHelp', {
-        textDocument: { uri: doc.uri },
-        position: { line: lineIdx, character: character0 },
+        return session.lsp.request('textDocument/signatureHelp', {
+          textDocument: { uri: doc.uri },
+          position: { line: lineIdx, character: character0 },
+        });
       });
-    });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, signatureHelp: result.value };
 };
@@ -508,30 +538,34 @@ export const formatDocumentUseCase = async (input: {
   const result = await withTsgoLspSession<{ changed: boolean }>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const edits = await session.lsp
-        .request<LspTextEdit[]>('textDocument/formatting', {
-          textDocument: { uri: doc.uri },
-          options: { tabSize: 2, insertSpaces: true },
-        })
-        .catch(() => null);
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const edits = await session.lsp
+          .request<LspTextEdit[]>('textDocument/formatting', {
+            textDocument: { uri: doc.uri },
+            options: { tabSize: 2, insertSpaces: true },
+          })
+          .catch(() => null);
 
-      if (!edits || edits.length === 0) {
-        return { changed: false };
-      }
+        if (!edits || edits.length === 0) {
+          return { changed: false };
+        }
 
-      const nextText = applyTextEdits(doc.text, edits);
+        const nextText = applyTextEdits(doc.text, edits);
 
-      if (nextText === doc.text) {return { changed: false };}
+        if (nextText === doc.text) {
+          return { changed: false };
+        }
 
-      await writeFile(fileAbs, nextText, 'utf8');
+        await writeFile(fileAbs, nextText, 'utf8');
 
-      return { changed: true };
-    });
+        return { changed: true };
+      });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, changed: result.value.changed };
 };
@@ -553,34 +587,40 @@ export const getCodeActionsUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const startLineIdx = resolveLineNumber0(doc.lines, input.startLine);
-      const endLineIdx = input.endLine !== undefined ? resolveLineNumber0(doc.lines, input.endLine) : startLineIdx;
-      const range: LspRange = {
-        start: { line: startLineIdx, character: 0 },
-        end: { line: endLineIdx, character: (doc.lines[endLineIdx]?.length ?? 0) },
-      };
-      const actions = await session.lsp.request('textDocument/codeAction', {
-        textDocument: { uri: doc.uri },
-        range,
-        context: { diagnostics: [] },
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const startLineIdx = resolveLineNumber0(doc.lines, input.startLine);
+        const endLineIdx = input.endLine !== undefined ? resolveLineNumber0(doc.lines, input.endLine) : startLineIdx;
+        const range: LspRange = {
+          start: { line: startLineIdx, character: 0 },
+          end: { line: endLineIdx, character: doc.lines[endLineIdx]?.length ?? 0 },
+        };
+        const actions = await session.lsp.request('textDocument/codeAction', {
+          textDocument: { uri: doc.uri },
+          range,
+          context: { diagnostics: [] },
+        });
+
+        if (!input.includeKinds || input.includeKinds.length === 0) {
+          return actions;
+        }
+
+        // Best-effort filter for CodeAction objects.
+        if (!Array.isArray(actions)) {
+          return actions;
+        }
+
+        return actions.filter((a: any) => {
+          const kind = typeof a?.kind === 'string' ? a.kind : '';
+
+          return input.includeKinds!.some(k => kind.startsWith(k));
+        });
       });
-
-      if (!input.includeKinds || input.includeKinds.length === 0) {return actions;}
-
-      // Best-effort filter for CodeAction objects.
-      if (!Array.isArray(actions)) {return actions;}
-
-      return actions.filter((a: any) => {
-        const kind = typeof a?.kind === 'string' ? a.kind : '';
-
-        return input.includeKinds!.some(k => kind.startsWith(k));
-      });
-    });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, actions: result.value };
 };
@@ -620,40 +660,44 @@ export const renameSymbolUseCase = async (input: {
   const result = await withTsgoLspSession<{ changedFiles: string[] }>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      let pos: { line: number; character: number };
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        let pos: { line: number; character: number };
 
-      if (input.line !== undefined) {
-        const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+        if (input.line !== undefined) {
+          const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
 
-        pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
-      } else {
-        // Find first occurrence in file
-        const idx = doc.lines.findIndex(l => l.includes(input.symbolName));
+          pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
+        } else {
+          // Find first occurrence in file
+          const idx = doc.lines.findIndex(l => l.includes(input.symbolName));
 
-        if (idx === -1) {throw new Error(`Symbol "${input.symbolName}" not found in file`);}
+          if (idx === -1) {
+            throw new Error(`Symbol "${input.symbolName}" not found in file`);
+          }
 
-        pos = { line: idx, character: (doc.lines[idx] ?? '').indexOf(input.symbolName) };
-      }
+          pos = { line: idx, character: (doc.lines[idx] ?? '').indexOf(input.symbolName) };
+        }
 
-      const edit = await session.lsp.request<WorkspaceEdit | null>('textDocument/rename', {
-        textDocument: { uri: doc.uri },
-        position: { line: pos.line, character: pos.character },
-        newName: input.newName,
+        const edit = await session.lsp.request<WorkspaceEdit | null>('textDocument/rename', {
+          textDocument: { uri: doc.uri },
+          position: { line: pos.line, character: pos.character },
+          newName: input.newName,
+        });
+
+        if (!edit) {
+          return { changedFiles: [] };
+        }
+
+        const { changedFiles } = await applyWorkspaceEditToDisk(edit);
+
+        return { changedFiles };
       });
-
-      if (!edit) {
-        return { changedFiles: [] };
-      }
-
-      const { changedFiles } = await applyWorkspaceEditToDisk(edit);
-
-      return { changedFiles };
-    });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, changedFiles: result.value.changedFiles };
 };
@@ -674,41 +718,45 @@ export const deleteSymbolUseCase = async (input: {
   const result = await withTsgoLspSession<{ changed: boolean }>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
-      const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
-      const raw = await session.lsp
-        .request('textDocument/definition', {
-          textDocument: { uri: doc.uri },
-          position: { line: pos.line, character: pos.character },
-        })
-        .catch(() => null);
-      const locs = normalizeLocations(raw);
+      return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+        const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
+        const raw = await session.lsp
+          .request('textDocument/definition', {
+            textDocument: { uri: doc.uri },
+            position: { line: pos.line, character: pos.character },
+          })
+          .catch(() => null);
+        const locs = normalizeLocations(raw);
 
-      if (locs.length === 0) {
-        return { changed: false };
-      }
+        if (locs.length === 0) {
+          return { changed: false };
+        }
 
-      const loc = locs[0]!;
-      const defPath = lspUriToFilePath(loc.uri);
-      const defText = await readFile(defPath, 'utf8');
-      // Coarse delete: remove the full lines covered by the definition range.
-      const defLines = splitLines(defText);
-      const from = Math.max(0, loc.range.start.line);
-      const to = Math.min(defLines.length - 1, loc.range.end.line);
-      const nextLines = defLines.slice(0, from).concat(defLines.slice(to + 1));
-      const nextText = nextLines.join('\n');
+        const loc = locs[0]!;
+        const defPath = lspUriToFilePath(loc.uri);
+        const defText = await readFile(defPath, 'utf8');
+        // Coarse delete: remove the full lines covered by the definition range.
+        const defLines = splitLines(defText);
+        const from = Math.max(0, loc.range.start.line);
+        const to = Math.min(defLines.length - 1, loc.range.end.line);
+        const nextLines = defLines.slice(0, from).concat(defLines.slice(to + 1));
+        const nextText = nextLines.join('\n');
 
-      if (nextText === defText) {return { changed: false };}
+        if (nextText === defText) {
+          return { changed: false };
+        }
 
-      await writeFile(defPath, nextText, 'utf8');
+        await writeFile(defPath, nextText, 'utf8');
 
-      return { changed: true };
-    });
+        return { changed: true };
+      });
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, changed: result.value.changed };
 };
@@ -725,13 +773,15 @@ export const checkCapabilitiesUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    const init = session.initializeResult as any;
+      const init = session.initializeResult as any;
 
-    return init?.capabilities ?? init ?? null;
+      return init?.capabilities ?? init ?? null;
     },
   );
 
-  if (!result.ok) {return { ok: false, error: result.error };}
+  if (!result.ok) {
+    return { ok: false, error: result.error };
+  }
 
   return { ok: true, capabilities: result.value, ...(result.note ? { note: result.note } : {}) };
 };
@@ -758,7 +808,9 @@ export const getAvailableExternalSymbolsInFileUseCase = async (input: {
         for (const part of inner.split(',')) {
           const trimmed = part.trim();
 
-          if (trimmed.length === 0) {continue;}
+          if (trimmed.length === 0) {
+            continue;
+          }
 
           const [orig, alias] = trimmed.split(/\s+as\s+/i);
 
@@ -771,12 +823,16 @@ export const getAvailableExternalSymbolsInFileUseCase = async (input: {
       const defaultImport = /import\s+([A-Za-z_$][\w$]*)\s+from\s*['"][^'"]+['"]/;
       const d = defaultImport.exec(line);
 
-      if (d?.[1]) {out.add(d[1]);}
+      if (d?.[1]) {
+        out.add(d[1]);
+      }
 
       const nsImport = /import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*['"][^'"]+['"]/;
       const n = nsImport.exec(line);
 
-      if (n?.[1]) {out.add(n[1]);}
+      if (n?.[1]) {
+        out.add(n[1]);
+      }
     }
 
     return { ok: true, symbols: Array.from(out).sort((a, b) => a.localeCompare(b)) };
@@ -827,6 +883,7 @@ export const getTypescriptDependenciesUseCase = async (input: {
     const rootAbs = resolveRootAbs(input.root);
 
     input.logger.debug('lsp:typescriptDependencies', { root: rootAbs });
+
     const pkgPath = path.resolve(rootAbs, 'package.json');
     const pkgText = await readFile(pkgPath, 'utf8');
     const pkg = JSON.parse(pkgText);
@@ -838,11 +895,13 @@ export const getTypescriptDependenciesUseCase = async (input: {
       const depPkgPath = path.resolve(rootAbs, 'node_modules', name, 'package.json');
       const depPkgText = await readWithFallback(depPkgPath);
 
-      if (depPkgText.length === 0) {continue;}
+      if (depPkgText.length === 0) {
+        continue;
+      }
 
       try {
         const depPkg = JSON.parse(depPkgText);
-        const installedVersion = typeof depPkg.version === 'string' ? depPkg.version : deps[name] ?? 'unknown';
+        const installedVersion = typeof depPkg.version === 'string' ? depPkg.version : (deps[name] ?? 'unknown');
         const typesField = (depPkg.types ?? depPkg.typings) as string | undefined;
 
         if (typesField) {
@@ -871,7 +930,10 @@ export const getTypescriptDependenciesUseCase = async (input: {
   }
 };
 
-const externalIndex = new Map<string, Array<{ library: string; symbolName: string; kind: string; filePath: string; line: number }>>();
+const externalIndex = new Map<
+  string,
+  Array<{ library: string; symbolName: string; kind: string; filePath: string; line: number }>
+>();
 
 export const indexExternalLibrariesUseCase = async (input: {
   root: string;
@@ -885,7 +947,9 @@ export const indexExternalLibrariesUseCase = async (input: {
     const maxFiles = input.maxFiles && input.maxFiles > 0 ? Math.min(50_000, Math.floor(input.maxFiles)) : 10_000;
 
     input.logger.debug('lsp:indexExternalLibraries', { root: rootAbs, maxFiles });
-    const include = input.includePatterns && input.includePatterns.length > 0 ? input.includePatterns : ['node_modules/**/*.d.ts'];
+
+    const include =
+      input.includePatterns && input.includePatterns.length > 0 ? input.includePatterns : ['node_modules/**/*.d.ts'];
     const exclude = new Set(input.excludePatterns ?? ['**/node_modules/**/node_modules/**']);
     const entries: Array<{ library: string; symbolName: string; kind: string; filePath: string; line: number }> = [];
     let seenFiles = 0;
@@ -894,7 +958,9 @@ export const indexExternalLibrariesUseCase = async (input: {
       const glob = new Bun.Glob(pattern);
 
       for await (const rel of glob.scan({ cwd: rootAbs, onlyFiles: true, followSymlinks: false })) {
-        if (seenFiles >= maxFiles) {break;}
+        if (seenFiles >= maxFiles) {
+          break;
+        }
 
         // Best-effort exclude check (string contains based)
         if (Array.from(exclude).some(ex => rel.includes(ex.replaceAll('*', '')))) {
@@ -904,7 +970,9 @@ export const indexExternalLibrariesUseCase = async (input: {
         const filePath = path.resolve(rootAbs, rel);
         const text = await readWithFallback(filePath);
 
-        if (text.length === 0) {continue;}
+        if (text.length === 0) {
+          continue;
+        }
 
         const parts = rel.split(path.sep);
         const nmIdx = parts.lastIndexOf('node_modules');
@@ -913,7 +981,9 @@ export const indexExternalLibrariesUseCase = async (input: {
 
         for (let i = 0; i < lines.length; i++) {
           const line = lines[i] ?? '';
-          const m = /\b(export\s+)?(declare\s+)?(class|interface|type|enum|function|const|let|var)\s+([A-Za-z_$][\w$]*)\b/.exec(line);
+          const m = /\b(export\s+)?(declare\s+)?(class|interface|type|enum|function|const|let|var)\s+([A-Za-z_$][\w$]*)\b/.exec(
+            line,
+          );
 
           if (m?.[4]) {
             entries.push({ library, kind: m[3] ?? 'unknown', symbolName: m[4], filePath, line: i + 1 });
@@ -922,7 +992,9 @@ export const indexExternalLibrariesUseCase = async (input: {
 
         seenFiles += 1;
       }
-      if (seenFiles >= maxFiles) {break;}
+      if (seenFiles >= maxFiles) {
+        break;
+      }
     }
 
     externalIndex.set(rootAbs, entries);
@@ -948,11 +1020,17 @@ export const searchExternalLibrarySymbolsUseCase = async (input: {
     const sym = (input.symbolName ?? '').toLowerCase();
     const kind = (input.kind ?? '').toLowerCase();
     const filtered = entries.filter(e => {
-      if (lib && !e.library.toLowerCase().includes(lib)) {return false;}
+      if (lib && !e.library.toLowerCase().includes(lib)) {
+        return false;
+      }
 
-      if (sym && !e.symbolName.toLowerCase().includes(sym)) {return false;}
+      if (sym && !e.symbolName.toLowerCase().includes(sym)) {
+        return false;
+      }
 
-      if (kind && !e.kind.toLowerCase().includes(kind)) {return false;}
+      if (kind && !e.kind.toLowerCase().includes(kind)) {
+        return false;
+      }
 
       return true;
     });

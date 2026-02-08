@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -16,7 +17,6 @@ describe('get_definitions', () => {
   test('should get definition of a function', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -27,6 +27,7 @@ describe('get_definitions', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(Array.isArray(structured.definitions)).toBe(true);
       expect(structured.definitions.length).toBeGreaterThan(0);
@@ -36,7 +37,6 @@ describe('get_definitions', () => {
   test('should get definition with include_body=true', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -48,6 +48,7 @@ describe('get_definitions', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(Array.isArray(structured.definitions)).toBe(true);
     }
@@ -56,7 +57,6 @@ describe('get_definitions', () => {
   test('should get definition with custom before/after context', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -74,7 +74,6 @@ describe('get_definitions', () => {
   test('should get definition with before=0 and after=0', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -92,7 +91,6 @@ describe('get_definitions', () => {
   test('should get definition of a class', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -108,7 +106,6 @@ describe('get_definitions', () => {
   test('should get definition of an interface', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -124,7 +121,6 @@ describe('get_definitions', () => {
   test('should handle non-existent symbol', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -154,7 +150,6 @@ describe('get_definitions', () => {
   test('should accept line as string', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_definitions', {
       root: ctx.tmpRootAbs,
@@ -180,6 +175,7 @@ describe('get_definitions', () => {
         line: 1,
         symbolName: sym,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

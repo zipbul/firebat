@@ -1,10 +1,11 @@
-import * as path from 'node:path';
 import { readFile, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import type { FirebatLogger } from '../../ports/logger';
 
 import { parseSource } from '../../engine/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
 import { indexSymbolsUseCase } from '../symbol-index/symbol-index.usecases';
-import type { FirebatLogger } from '../../ports/logger';
 
 type SourcePosition = { line: number; column: number };
 
@@ -22,7 +23,9 @@ type EditResult = {
 const resolveRootAbs = (root: string | undefined): string => {
   const cwd = process.cwd();
 
-  if (root === undefined || root.trim().length === 0) {return cwd;}
+  if (root === undefined || root.trim().length === 0) {
+    return cwd;
+  }
 
   const trimmed = root.trim();
 
@@ -44,7 +47,7 @@ const posToOffset = (text: string, pos: SourcePosition): number => {
     offset += (lines[i]?.length ?? 0) + 1;
   }
 
-  const col0 = Math.max(0, Math.min((lines[line0]?.length ?? 0), pos.column));
+  const col0 = Math.max(0, Math.min(lines[line0]?.length ?? 0, pos.column));
 
   return offset + col0;
 };
@@ -60,15 +63,22 @@ const offsetToLineIndent = (text: string, offset: number): string => {
 };
 
 const findByNamePath = (symbols: ReadonlyArray<Extracted>, namePath: string): Extracted | null => {
-  const parts = namePath.split('/').map(p => p.trim()).filter(Boolean);
+  const parts = namePath
+    .split('/')
+    .map(p => p.trim())
+    .filter(Boolean);
   const needle = parts.length > 0 ? parts[parts.length - 1]! : namePath.trim();
 
-  if (!needle) {return null;}
+  if (!needle) {
+    return null;
+  }
 
   // Prefer exact match.
   const exact = symbols.find(s => s.name === needle);
 
-  if (exact) {return exact;}
+  if (exact) {
+    return exact;
+  }
 
   // Fallback: case-insensitive contains.
   const lower = needle.toLowerCase();
@@ -77,7 +87,9 @@ const findByNamePath = (symbols: ReadonlyArray<Extracted>, namePath: string): Ex
 };
 
 const writeIfChanged = async (filePath: string, prevText: string, nextText: string): Promise<boolean> => {
-  if (nextText === prevText) {return false;}
+  if (nextText === prevText) {
+    return false;
+  }
 
   await writeFile(filePath, nextText, 'utf8');
 
@@ -110,12 +122,16 @@ export const replaceRangeUseCase = async (input: {
     const startOff = posToOffset(prev, start);
     const endOff = posToOffset(prev, end);
 
-    if (endOff < startOff) {throw new Error('Invalid range: end before start');}
+    if (endOff < startOff) {
+      throw new Error('Invalid range: end before start');
+    }
 
     const next = prev.slice(0, startOff) + input.newText + prev.slice(endOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
+    if (changed) {
+      await reindexFile(rootAbs, fileAbs, input.logger);
+    }
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {
@@ -152,7 +168,9 @@ export const replaceRegexUseCase = async (input: {
     const next = prev.replace(re, input.repl);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
+    if (changed) {
+      await reindexFile(rootAbs, fileAbs, input.logger);
+    }
 
     return { ok: true, filePath: fileAbs, changed, matchCount: matches.length };
   } catch (error) {
@@ -178,14 +196,18 @@ export const insertBeforeSymbolUseCase = async (input: {
     const symbols = extractSymbolsOxc(parsed) as any as Extracted[];
     const sym = findByNamePath(symbols, input.namePath);
 
-    if (!sym) {throw new Error(`Symbol not found: ${input.namePath}`);}
+    if (!sym) {
+      throw new Error(`Symbol not found: ${input.namePath}`);
+    }
 
     const startOff = posToOffset(prev, sym.span.start);
     const insertion = input.body.endsWith('\n') ? input.body : input.body + '\n';
     const next = prev.slice(0, startOff) + insertion + prev.slice(startOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
+    if (changed) {
+      await reindexFile(rootAbs, fileAbs, input.logger);
+    }
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {
@@ -211,14 +233,18 @@ export const insertAfterSymbolUseCase = async (input: {
     const symbols = extractSymbolsOxc(parsed) as any as Extracted[];
     const sym = findByNamePath(symbols, input.namePath);
 
-    if (!sym) {throw new Error(`Symbol not found: ${input.namePath}`);}
+    if (!sym) {
+      throw new Error(`Symbol not found: ${input.namePath}`);
+    }
 
     const endOff = posToOffset(prev, sym.span.end);
     const insertion = input.body.startsWith('\n') ? input.body : '\n' + input.body;
     const next = prev.slice(0, endOff) + insertion + prev.slice(endOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
+    if (changed) {
+      await reindexFile(rootAbs, fileAbs, input.logger);
+    }
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {
@@ -244,7 +270,9 @@ export const replaceSymbolBodyUseCase = async (input: {
     const symbols = extractSymbolsOxc(parsed) as any as Extracted[];
     const sym = findByNamePath(symbols, input.namePath);
 
-    if (!sym) {throw new Error(`Symbol not found: ${input.namePath}`);}
+    if (!sym) {
+      throw new Error(`Symbol not found: ${input.namePath}`);
+    }
 
     const startOff = posToOffset(prev, sym.span.start);
     const endOff = posToOffset(prev, sym.span.end);
@@ -265,7 +293,9 @@ export const replaceSymbolBodyUseCase = async (input: {
     const next = prev.slice(0, startOff) + nextSegment + prev.slice(endOff);
     const changed = await writeIfChanged(fileAbs, prev, next);
 
-    if (changed) {await reindexFile(rootAbs, fileAbs, input.logger);}
+    if (changed) {
+      await reindexFile(rootAbs, fileAbs, input.logger);
+    }
 
     return { ok: true, filePath: fileAbs, changed };
   } catch (error) {

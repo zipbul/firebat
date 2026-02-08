@@ -1,5 +1,5 @@
-import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 import type { FirebatLogLevel } from './firebat-config';
+import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 
 export interface FirebatCliExplicitFlags {
   readonly format: boolean;

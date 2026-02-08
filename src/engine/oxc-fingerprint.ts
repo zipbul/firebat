@@ -5,11 +5,7 @@ import type { NodeRecord, NodeValue, NodeWithValue } from './types';
 import { hashString } from './hasher';
 
 const isOxcNode = (value: NodeValue): value is Node =>
-  typeof value === 'object' &&
-  value !== null &&
-  !Array.isArray(value) &&
-  'type' in value &&
-  typeof (value).type === 'string';
+  typeof value === 'object' && value !== null && !Array.isArray(value) && 'type' in value && typeof value.type === 'string';
 
 const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => {
   if (!Array.isArray(value)) {

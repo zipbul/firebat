@@ -1,9 +1,9 @@
 import type { Node } from 'oxc-parser';
 
 import { IntegerCFG } from './cfg';
-import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type NodeValue, type OxcBuiltFunctionCfg } from './types';
 import { getNodeName, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
 import { evalStaticTruthiness } from './oxc-expression-utils';
+import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type NodeValue, type OxcBuiltFunctionCfg } from './types';
 
 type HandledStatementType =
   | 'BlockStatement'
@@ -268,9 +268,8 @@ export class OxcCFGBuilder {
         if (truthiness === false) {
           this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
-          const falseTails = alternateValue === undefined
-            ? [falseEntry]
-            : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
+          const falseTails =
+            alternateValue === undefined ? [falseEntry] : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
           const mergeNode = this.addNode(null);
 
           this.connect(falseTails, mergeNode, EdgeType.Normal);
@@ -282,9 +281,8 @@ export class OxcCFGBuilder {
         this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
         const trueTails = this.visitStatement(consequentValue, [trueEntry], loopStack, null);
-        const falseTails = alternateValue === undefined
-          ? [falseEntry]
-          : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
+        const falseTails =
+          alternateValue === undefined ? [falseEntry] : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
         const mergeNode = this.addNode(null);
 
         this.connect(trueTails, mergeNode, EdgeType.Normal);
@@ -575,10 +573,6 @@ export class OxcCFGBuilder {
       default: {
         return [...incoming];
       }
-
-
     }
   }
-
-  
 }

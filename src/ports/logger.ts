@@ -16,6 +16,7 @@ export interface FirebatLogger {
 
 export const createNoopLogger = (level: FirebatLogLevel = 'error'): FirebatLogger => {
   const noop = () => undefined;
+
   return {
     level,
     log: noop,

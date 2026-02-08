@@ -1,8 +1,9 @@
-import * as path from 'node:path';
 import { rm } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import type { FirebatLogger } from '../../ports/logger';
 
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import type { FirebatLogger } from '../../ports/logger';
 
 const isTty = (): boolean => Boolean((process as any)?.stdout?.isTTY);
 
@@ -17,7 +18,7 @@ const H = {
   white: '\x1b[37m',
 } as const;
 
-const hc = (text: string, code: string, color: boolean): string => color ? `${code}${text}${H.reset}` : text;
+const hc = (text: string, code: string, color: boolean): string => (color ? `${code}${text}${H.reset}` : text);
 
 const writeStdout = (text: string): void => {
   process.stdout.write(text + '\n');
@@ -45,6 +46,7 @@ const printCacheHelp = (): void => {
     `    ${hc('\u2022', H.dim, c)} ${hc('.firebat/firebat.sqlite-shm', H.gray, c)}`,
     '',
   ];
+
   writeStdout(lines.join('\n'));
 };
 
@@ -80,10 +82,12 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
   }
 
   logger.debug('cache clean: resolving root');
+
   const ctx = await resolveRuntimeContextFromCwd();
   const rootAbs = ctx.rootAbs;
   const base = path.join(rootAbs, '.firebat', 'firebat.sqlite');
   const candidates = [base, `${base}-wal`, `${base}-shm`];
+
   logger.trace(`Cache files to check: ${candidates.join(', ')}`);
 
   const removed: string[] = [];
@@ -93,9 +97,9 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
   for (const candidate of candidates) {
     const result = await safeRemoveFile(candidate);
 
-    if (result === 'removed') removed.push(candidate);
-    else if (result === 'missing') missing.push(candidate);
-    else failed.push(candidate);
+    if (result === 'removed') {removed.push(candidate);}
+    else if (result === 'missing') {missing.push(candidate);}
+    else {failed.push(candidate);}
   }
 
   if (failed.length > 0) {

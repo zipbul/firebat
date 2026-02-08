@@ -68,10 +68,14 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
         const right = expression.right;
 
         if (
-          isOxcNode(left) && isOxcNode(right) &&
-          left.type === 'Identifier' && right.type === 'Identifier' &&
-          isNodeRecord(left) && isNodeRecord(right) &&
-          typeof left.name === 'string' && typeof right.name === 'string' &&
+          isOxcNode(left) &&
+          isOxcNode(right) &&
+          left.type === 'Identifier' &&
+          right.type === 'Identifier' &&
+          isNodeRecord(left) &&
+          isNodeRecord(right) &&
+          typeof left.name === 'string' &&
+          typeof right.name === 'string' &&
           left.name === right.name &&
           (expression.operator === '=' || expression.operator === undefined)
         ) {

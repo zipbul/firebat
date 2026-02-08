@@ -1,8 +1,8 @@
 import * as path from 'node:path';
 
+import type { FirebatLogLevel } from './firebat-config';
 import type { FirebatCliOptions } from './interfaces';
 import type { FirebatCliExplicitFlags } from './interfaces';
-import type { FirebatLogLevel } from './firebat-config';
 import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
@@ -276,7 +276,9 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
 
       configPath = path.resolve(value);
       explicit.configPath = true;
+
       i += 1;
+
       continue;
     }
 
@@ -289,13 +291,16 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
 
       logLevel = parseLogLevel(value);
       explicit.logLevel = true;
+
       i += 1;
+
       continue;
     }
 
     if (arg === '--log-stack') {
       logStack = true;
       explicit.logStack = true;
+
       continue;
     }
 

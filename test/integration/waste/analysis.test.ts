@@ -8,32 +8,15 @@ interface WasteKindFinding {
 }
 
 function createDeadStoreSource(): string {
-  return [
-    'export function deadStore() {',
-    '  let value = 1;',
-    '  return 0;',
-    '}',
-  ].join('\n');
+  return ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n');
 }
 
 function createOverwriteSource(): string {
-  return [
-    'export function overwrite() {',
-    '  let value;',
-    '  value = 1;',
-    '  value = 2;',
-    '  return value;',
-    '}',
-  ].join('\n');
+  return ['export function overwrite() {', '  let value;', '  value = 1;', '  value = 2;', '  return value;', '}'].join('\n');
 }
 
 function createReadSource(): string {
-  return [
-    'export function readValue() {',
-    '  let value = 1;',
-    '  return value;',
-    '}',
-  ].join('\n');
+  return ['export function readValue() {', '  let value = 1;', '  return value;', '}'].join('\n');
 }
 
 function hasKind(findings: ReadonlyArray<WasteKindFinding>, kind: string): boolean {
@@ -53,7 +36,9 @@ describe('integration/waste', () => {
 
     // Assert
     expect(hasKind(findings, 'dead-store')).toBe(true);
+
     let deadStore = findings.find(f => f.kind === 'dead-store');
+
     expect(deadStore?.message).toContain('assigned but never read');
   });
 
@@ -69,7 +54,9 @@ describe('integration/waste', () => {
 
     // Assert
     expect(hasKind(findings, 'dead-store-overwrite')).toBe(true);
+
     let overwrite = findings.find(f => f.kind === 'dead-store-overwrite');
+
     expect(overwrite?.message).toContain('overwritten before being read');
   });
 

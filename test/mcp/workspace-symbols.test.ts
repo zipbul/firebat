@@ -22,6 +22,7 @@ describe('get_workspace_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.symbols).toBeDefined();
       expect(Array.isArray(structured.symbols)).toBe(true);
@@ -58,6 +59,7 @@ describe('get_workspace_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok && Array.isArray(structured.symbols)) {
       expect(structured.symbols.length).toBe(0);
     }
@@ -72,8 +74,10 @@ describe('get_workspace_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok && Array.isArray(structured.symbols) && structured.symbols.length > 0) {
       const names = structured.symbols.map((s: any) => s.name);
+
       expect(names).toContain('Calculator');
     }
   }, 30_000);
@@ -100,6 +104,7 @@ describe('get_workspace_symbols', () => {
         root: ctx.tmpRootAbs,
         query: q,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

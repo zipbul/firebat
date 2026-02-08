@@ -16,7 +16,6 @@ describe('find_references', () => {
   test('should find references to a function', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_references', {
       root: ctx.tmpRootAbs,
@@ -27,6 +26,7 @@ describe('find_references', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(Array.isArray(structured.references)).toBe(true);
       expect(structured.references.length).toBeGreaterThan(0);
@@ -36,7 +36,6 @@ describe('find_references', () => {
   test('should find references to an interface', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_references', {
       root: ctx.tmpRootAbs,
@@ -47,6 +46,7 @@ describe('find_references', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(Array.isArray(structured.references)).toBe(true);
       // User is used in many places
@@ -57,7 +57,6 @@ describe('find_references', () => {
   test('should find references to a class', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'find_references', {
       root: ctx.tmpRootAbs,
@@ -73,7 +72,6 @@ describe('find_references', () => {
   test('should handle non-existent symbol', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'find_references', {
       root: ctx.tmpRootAbs,
@@ -90,7 +88,6 @@ describe('find_references', () => {
   test('should handle non-existent file', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'ghost.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'find_references', {
       root: ctx.tmpRootAbs,
@@ -106,7 +103,6 @@ describe('find_references', () => {
   test('should accept line as string', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'find_references', {
       root: ctx.tmpRootAbs,
@@ -133,6 +129,7 @@ describe('find_references', () => {
         line: 1,
         symbolName: sym,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -20,7 +21,6 @@ describe('lint', () => {
   test('should lint a valid file and return diagnostics array', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'lint', {
       targets: [fixture],
@@ -39,7 +39,6 @@ describe('lint', () => {
       path.join(ctx.fixturesAbs, 'editable.ts'),
       path.join(ctx.fixturesAbs, 'lsp-target.ts'),
     ];
-
     // Act
     const { structured } = await callTool(ctx.client, 'lint', { targets });
 
@@ -52,7 +51,6 @@ describe('lint', () => {
   test('should lint a directory', async () => {
     // Arrange
     const dir = ctx.fixturesAbs;
-
     // Act
     const { structured } = await callTool(ctx.client, 'lint', {
       targets: [dir],
@@ -70,7 +68,6 @@ describe('lint', () => {
   test('should accept configPath argument without crashing', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'lint', {
       targets: [fixture],
@@ -100,7 +97,6 @@ describe('lint', () => {
   test('should handle non-existent file', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'phantom.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'lint', {
       targets: [bogus],
@@ -118,7 +114,6 @@ describe('lint', () => {
   test('should return diagnostics with proper structure when issues exist', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'lint', {
       targets: [fixture],
@@ -146,6 +141,7 @@ describe('lint', () => {
       const { structured } = await callToolSafe(ctx.client, 'lint', {
         targets: [fixture],
       });
+
       expect(structured).toBeDefined();
       expect(structured.tool).toBe('oxlint');
     }

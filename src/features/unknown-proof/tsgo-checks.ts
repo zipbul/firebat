@@ -56,15 +56,19 @@ const formatBoundaryUnknownMessage = (kind: BoundaryUsageKind): { message: strin
 	if (kind === 'call') {
 		return { message: 'Boundary `unknown` is passed without narrowing', evidence: 'propagation=call' };
 	}
+
 	if (kind === 'assign') {
 		return { message: 'Boundary `unknown` is assigned without narrowing', evidence: 'propagation=assign' };
 	}
+
 	if (kind === 'store') {
 		return { message: 'Boundary `unknown` is stored without narrowing', evidence: 'propagation=store' };
 	}
+
 	if (kind === 'return') {
 		return { message: 'Boundary `unknown` is returned without narrowing', evidence: 'propagation=return' };
 	}
+
 	return { message: 'Boundary `unknown` is thrown without narrowing', evidence: 'propagation=throw' };
 };
 
@@ -111,8 +115,9 @@ export const runTsgoUnknownProofChecks = async (input: {
 			};
 
 			const filePaths = new Set<string>();
-			for (const filePath of input.candidatesByFile.keys()) filePaths.add(filePath);
-			for (const filePath of input.boundaryUsageCandidatesByFile?.keys() ?? []) filePaths.add(filePath);
+
+			for (const filePath of input.candidatesByFile.keys()) {filePaths.add(filePath);}
+			for (const filePath of input.boundaryUsageCandidatesByFile?.keys() ?? []) {filePaths.add(filePath);}
 
 			for (const filePath of filePaths) {
 				const file = fileByPath.get(filePath);
@@ -170,6 +175,7 @@ export const runTsgoUnknownProofChecks = async (input: {
 
 						if (flag.unknown) {
 							const msg = formatBoundaryUnknownMessage(candidate.usageKind);
+
 							findings.push({
 								kind: 'unvalidated-unknown',
 								message: msg.message,

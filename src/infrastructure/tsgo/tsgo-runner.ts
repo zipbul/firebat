@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+
 import type { FirebatLogger } from '../../ports/logger';
 
 import { tryResolveBunxCommand, tryResolveLocalBin } from '../tooling/resolve-bin';
@@ -81,7 +82,6 @@ type SharedTsgoSessionEntry = {
 };
 
 const sharedTsgoSessions = new Map<string, SharedTsgoSessionEntry>();
-
 const DEFAULT_SHARED_IDLE_MS = 5_000;
 
 const makeSharedKey = (input: { cwd: string; command: string; args: string[] }): string => {
@@ -179,7 +179,6 @@ const acquireSharedTsgoSession = async (input: {
       initializeResult,
       ...(resolved.note !== undefined ? { note: resolved.note } : {}),
     };
-
     const entry: SharedTsgoSessionEntry = {
       key,
       session,
@@ -220,6 +219,7 @@ const runInSharedTsgoSession = async <T>(
 ): Promise<T> => {
   // Serialize operations to avoid didOpen/didClose interleaving across callers.
   const task = entry.queue.then(() => fn(entry.session));
+
   entry.queue = task.then(
     () => undefined,
     () => undefined,
@@ -266,7 +266,9 @@ const findSymbolPositionInText = (text: string, symbol: string): { line: number;
     // Skip comments quickly (best-effort).
     const trimmed = lineText.trimStart();
 
-    if (trimmed.startsWith('//')) {continue;}
+    if (trimmed.startsWith('//')) {
+      continue;
+    }
 
     for (let p = 0; p < declPatterns.length; p++) {
       const m = declPatterns[p]!.exec(lineText);
@@ -288,7 +290,9 @@ const findSymbolPositionInText = (text: string, symbol: string): { line: number;
     }
   }
 
-  if (candidates.length === 0) {return null;}
+  if (candidates.length === 0) {
+    return null;
+  }
 
   candidates.sort((a, b) => b.score - a.score || a.line - b.line || a.character - b.character);
 
@@ -305,7 +309,9 @@ const toSpanFromRange = (range: LspRange): SourceSpan => {
 const extractEvidenceText = async (filePath: string, span: SourceSpan): Promise<string | undefined> => {
   const text = await readFileText(filePath);
 
-  if (text.length === 0) {return undefined;}
+  if (text.length === 0) {
+    return undefined;
+  }
 
   const lines = splitLines(text);
   const lineIdx = Math.max(0, Math.min(lines.length - 1, span.start.line - 1));
@@ -351,6 +357,7 @@ class LspConnection {
   private writeToStdin(payload: Uint8Array): void {
     try {
       this.stdin.write(payload);
+
       if (typeof this.stdin.flush === 'function') {
         this.stdin.flush();
       }
@@ -386,40 +393,48 @@ class LspConnection {
       // tsgo uses client/registerCapability early and will block if we don't respond.
       if (method === 'client/registerCapability' || method === 'client/unregisterCapability') {
         ok(null);
+
         return;
       }
 
       // Some servers request configuration values after initialization.
       if (method === 'workspace/configuration') {
         const items = Array.isArray(params?.items) ? params.items : [];
+
         ok(items.map(() => null));
+
         return;
       }
 
       if (method === 'workspace/workspaceFolders') {
         ok(null);
+
         return;
       }
 
       if (method === 'window/workDoneProgress/create') {
         ok(null);
+
         return;
       }
 
       if (method === 'window/showMessageRequest') {
         ok(null);
+
         return;
       }
 
       // Best-effort fallback: for common LSP "client-side" request namespaces, respond with null.
       if (method.startsWith('client/') || method.startsWith('workspace/') || method.startsWith('window/')) {
         ok(null);
+
         return;
       }
 
       err(-32601, `Method not found: ${method}`);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+
       err(-32603, message.length > 0 ? message : 'Internal error');
     }
   }
@@ -448,7 +463,9 @@ class LspConnection {
     const readMore = async (): Promise<boolean> => {
       const { value, done } = await reader.read();
 
-      if (done) {return false;}
+      if (done) {
+        return false;
+      }
 
       buffer = Buffer.concat([buffer, Buffer.from(value)]);
 
@@ -458,7 +475,9 @@ class LspConnection {
     const parseOne = (): any | null => {
       const headerEnd = buffer.indexOf('\r\n\r\n');
 
-      if (headerEnd === -1) {return null;}
+      if (headerEnd === -1) {
+        return null;
+      }
 
       const header = buffer.subarray(0, headerEnd).toString('utf8');
       const m = /Content-Length:\s*(\d+)/i.exec(header);
@@ -473,7 +492,9 @@ class LspConnection {
       const len = Number(m[1]);
       const bodyStart = headerEnd + 4;
 
-      if (buffer.length < bodyStart + len) {return null;}
+      if (buffer.length < bodyStart + len) {
+        return null;
+      }
 
       const body = buffer.subarray(bodyStart, bodyStart + len).toString('utf8');
 
@@ -548,7 +569,9 @@ class LspConnection {
 
       const ok = await readMore();
 
-      if (!ok) {break;}
+      if (!ok) {
+        break;
+      }
     }
 
     // Process ended; reject pending requests.
@@ -579,12 +602,19 @@ class LspConnection {
             entry.reject(new Error(`LSP request timed out after ${timeoutMs}ms: ${method}`));
           }
         }, timeoutMs);
-
         // Ensure the timer doesn't prevent process exit and gets cleaned up on resolve/reject.
         const origResolve = resolve as (v: any) => void;
         const origReject = reject;
-        const wrappedResolve = (v: any): void => { clearTimeout(timer); origResolve(v); };
-        const wrappedReject = (e: Error): void => { clearTimeout(timer); origReject(e); };
+
+        const wrappedResolve = (v: any): void => {
+          clearTimeout(timer);
+          origResolve(v);
+        };
+
+        const wrappedReject = (e: Error): void => {
+          clearTimeout(timer);
+          origReject(e);
+        };
 
         this.pending.set(id, { resolve: wrappedResolve, reject: wrappedReject });
       }
@@ -592,7 +622,7 @@ class LspConnection {
 
     this.writeToStdin(buildLspMessage(payload));
 
-    return  p;
+    return p;
   }
 
   async notify(method: string, params?: unknown): Promise<void> {
@@ -681,18 +711,21 @@ class LspConnection {
   }
 
   async waitForExit(): Promise<number> {
-    return  this.proc.exited;
+    return this.proc.exited;
   }
 
   async readStderr(): Promise<string> {
-    if (!this.proc.stderr || typeof this.proc.stderr === 'number') {return '';}
+    if (!this.proc.stderr || typeof this.proc.stderr === 'number') {
+      return '';
+    }
 
-    return  new Response(this.proc.stderr as any).text();
+    return new Response(this.proc.stderr as any).text();
   }
 }
 
 const tryResolveTsgoCommand = async (cwd: string): Promise<{ command: string; args: string[]; note?: string } | null> => {
   const resolved = await tryResolveLocalBin({ cwd, binName: 'tsgo', callerDir: import.meta.dir });
+
   if (resolved) {
     return { command: resolved, args: ['--lsp', '--stdio'] };
   }
@@ -700,6 +733,7 @@ const tryResolveTsgoCommand = async (cwd: string): Promise<{ command: string; ar
   // If running from a nested dir, also try the current process cwd.
   // (Some callers pass a tsconfig-derived cwd.)
   const resolvedFromProcessCwd = await tryResolveLocalBin({ cwd: process.cwd(), binName: 'tsgo', callerDir: import.meta.dir });
+
   if (resolvedFromProcessCwd) {
     return { command: resolvedFromProcessCwd, args: ['--lsp', '--stdio'] };
   }
@@ -723,9 +757,7 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
   try {
     const baseCwd = process.cwd();
     const entryFile = path.isAbsolute(req.entryFile) ? req.entryFile : path.resolve(baseCwd, req.entryFile);
-    const cwd = req.tsconfigPath
-      ? path.dirname(path.resolve(baseCwd, req.tsconfigPath))
-      : baseCwd;
+    const cwd = req.tsconfigPath ? path.dirname(path.resolve(baseCwd, req.tsconfigPath)) : baseCwd;
     const resolved = await tryResolveTsgoCommand(cwd);
 
     if (!resolved) {
@@ -773,7 +805,7 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
       });
 
       // Give tsgo a moment to process the opened document.
-      await new Promise<void>((r) => setTimeout(r, 500));
+      await new Promise<void>(r => setTimeout(r, 500));
 
       const definitionResult = await lsp
         .request<LspLocation | LspLocation[] | LspLocationLink[] | null>('textDocument/definition', {
@@ -793,7 +825,9 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
       const edgeIds = new Set<string>();
 
       const addNode = (node: TraceNode): void => {
-        if (nodeIds.has(node.id)) {return;}
+        if (nodeIds.has(node.id)) {
+          return;
+        }
 
         nodeIds.add(node.id);
         nodes.push(node);
@@ -802,7 +836,9 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
       const addEdge = (edge: TraceEdge): void => {
         const id = `${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ''}`;
 
-        if (edgeIds.has(id)) {return;}
+        if (edgeIds.has(id)) {
+          return;
+        }
 
         edgeIds.add(id);
         edges.push(edge);
@@ -818,18 +854,22 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
       addEdge({ from: symbolNodeId, to: entryFileNodeId, kind: 'references' });
 
       const normalizeLocations = (value: unknown): LspLocation[] => {
-        if (!value) {return [];}
+        if (!value) {
+          return [];
+        }
 
         if (Array.isArray(value)) {
           // Location[] or LocationLink[]
           const out: LspLocation[] = [];
 
           for (const item of value) {
-            if (!item || typeof item !== 'object') {continue;}
+            if (!item || typeof item !== 'object') {
+              continue;
+            }
 
-            if ('uri' in (item) && 'range' in (item)) {
+            if ('uri' in item && 'range' in item) {
               out.push(item as LspLocation);
-            } else if ('targetUri' in (item) && 'targetRange' in (item)) {
+            } else if ('targetUri' in item && 'targetRange' in item) {
               const link = item as LspLocationLink;
 
               out.push({ uri: link.targetUri, range: link.targetRange });
@@ -916,23 +956,32 @@ export type { LspPosition, LspRange, LspLocation, LspLocationLink, TsgoLspSessio
 export const withTsgoLspSession = async <T>(
   input: { root: string; tsconfigPath?: string; logger: FirebatLogger },
   fn: (session: TsgoLspSession) => Promise<T>,
-): Promise<{ ok: true; value: T; note?: string } | { ok: false; error: string } > => {
+): Promise<{ ok: true; value: T; note?: string } | { ok: false; error: string }> => {
   try {
     input.logger.debug('Acquiring tsgo LSP session', { root: input.root, tsconfigPath: input.tsconfigPath });
+
     const acquired = await acquireSharedTsgoSession(input);
 
     if (!acquired.ok) {
       input.logger.warn(`tsgo LSP session unavailable: ${acquired.error}`);
+
       return { ok: false, error: acquired.error };
     }
 
-    input.logger.trace('tsgo LSP session acquired', { key: acquired.entry.key, refCount: acquired.entry.refCount, note: acquired.entry.note });
+    input.logger.trace('tsgo LSP session acquired', {
+      key: acquired.entry.key,
+      refCount: acquired.entry.refCount,
+      note: acquired.entry.note,
+    });
+
     const value = await runInSharedTsgoSession(acquired.entry, fn);
+
     input.logger.trace('tsgo LSP session operation complete');
 
     return { ok: true, value, ...(acquired.entry.note ? { note: acquired.entry.note } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
     input.logger.error(`tsgo LSP session error: ${message}`, undefined, error);
 
     return { ok: false, error: message };

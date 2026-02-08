@@ -78,6 +78,7 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
         const row = sqlite
           .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")
           .get();
+
         return row !== null && row !== undefined;
       } catch {
         return false;
@@ -94,6 +95,7 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
         migrate(orm, { migrationsFolder });
       } catch (err) {
         const msg = String(err).toLowerCase();
+
         if (msg.includes('busy') || msg.includes('locked')) {
           input.logger.warn('sqlite: migrations busy/locked; waiting for schema', { dbFilePath });
         } else {
@@ -102,10 +104,12 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
       }
 
       const deadlineMs = Date.now() + 15_000;
+
       while (!hasMemoriesTable()) {
         if (Date.now() > deadlineMs) {
           throw new Error('sqlite: migrations did not complete in time (memories table missing)');
         }
+
         await sleep(100);
       }
     }

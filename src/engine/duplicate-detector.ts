@@ -3,8 +3,8 @@ import type { Node } from 'oxc-parser';
 import type { DuplicateGroup, DuplicateItem } from '../types';
 import type { ParsedFile } from './types';
 
-import { getNodeType } from './oxc-ast-utils';
 import { collectDuplicateGroups } from './duplicate-collector';
+import { getNodeType } from './oxc-ast-utils';
 import { createOxcFingerprint } from './oxc-fingerprint';
 
 const isDuplicateTarget = (node: Node): boolean => {

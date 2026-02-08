@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 const DELETE_FIXTURE = [
@@ -15,7 +16,6 @@ const DELETE_FIXTURE = [
   '  val = 1;',
   '}',
 ].join('\n');
-
 let ctx: McpTestContext;
 
 beforeAll(async () => {
@@ -36,7 +36,6 @@ describe('delete_symbol', () => {
   test('should delete a function from the file', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/del1.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'delete_symbol', {
       root: ctx.tmpRootAbs,
@@ -47,6 +46,7 @@ describe('delete_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.changed).toBe(true);
     }
@@ -55,7 +55,6 @@ describe('delete_symbol', () => {
   test('should delete a class from the file', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/del2.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'delete_symbol', {
       root: ctx.tmpRootAbs,
@@ -71,7 +70,6 @@ describe('delete_symbol', () => {
   test('should handle non-existent symbol', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/del3.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'delete_symbol', {
       root: ctx.tmpRootAbs,
@@ -101,7 +99,6 @@ describe('delete_symbol', () => {
   test('should accept line as string', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/del3.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'delete_symbol', {
       root: ctx.tmpRootAbs,
@@ -118,7 +115,6 @@ describe('delete_symbol', () => {
   test('should handle tsconfigPath', async () => {
     // Arrange
     const filePath = path.join(ctx.tmpRootAbs, 'src/del3.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'delete_symbol', {
       root: ctx.tmpRootAbs,

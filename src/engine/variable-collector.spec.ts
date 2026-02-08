@@ -2,8 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { NodeValue, VariableUsage } from './types';
 
-import { parseSource } from './parse-source';
 import { isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
+import { parseSource } from './parse-source';
 import { collectVariables } from './variable-collector';
 
 const getFunctionBodyStatement = (sourceText: string, statementIndex: number): NodeValue => {

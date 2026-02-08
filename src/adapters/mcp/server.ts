@@ -95,6 +95,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
 
   return ALL_DETECTORS.filter(detector => {
     const value = (features as any)[detector];
+
     return value !== false;
   });
 };
@@ -138,6 +139,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 
   if (typeof value === 'object' && value !== null) {
     const boundaryGlobs = (value as any).boundaryGlobs;
+
     return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
       ? boundaryGlobs
       : undefined;
@@ -161,6 +163,7 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
 
   if (typeof value === 'object' && value !== null) {
     const ignoreGlobs = (value as any).ignoreGlobs;
+
     return Array.isArray(ignoreGlobs) && ignoreGlobs.every((e: any) => typeof e === 'string') ? ignoreGlobs : undefined;
   }
 
@@ -181,7 +184,7 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
     return root;
   }
 
-  const out: any = { ...(root ?? {}) };
+  const out: any = { ...root };
 
   for (const detector of ALL_DETECTORS) {
     const override = (overrides as any)[detector];
@@ -232,12 +235,12 @@ const runMcpServer = async (): Promise<void> => {
   // - No stdout logs (reserved for protocol messages)
 
   const ctx = await resolveRuntimeContextFromCwd();
-
   let config: FirebatConfig | null = null;
 
   try {
     const configPath = resolveDefaultFirebatRcPath(ctx.rootAbs);
     const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs, configPath });
+
     config = loaded.config;
   } catch {
     // Best-effort: ignore config errors in MCP (no stdout logging).
@@ -263,6 +266,7 @@ const runMcpServer = async (): Promise<void> => {
     }
 
     const trimmed = root.trim();
+
     if (trimmed.length === 0) {
       return ctx.rootAbs;
     }
@@ -271,30 +275,34 @@ const runMcpServer = async (): Promise<void> => {
   };
 
   const diffReports = (prev: FirebatReport | null, next: FirebatReport): { newFindings: number; resolvedFindings: number; unchangedFindings: number } => {
-    if (!prev) return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };
+    if (!prev) {return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };}
 
     const countFindings = (r: FirebatReport): number => {
       let total = 0;
       const a = r.analyses as any;
+
       for (const key of Object.keys(a)) {
         const v = a[key];
+
         if (Array.isArray(v)) { total += v.length; }
         else if (v && typeof v === 'object') {
-          if (Array.isArray(v.items)) total += v.items.length;
-          else if (Array.isArray(v.findings)) total += v.findings.length;
-          else if (Array.isArray(v.cloneClasses)) total += v.cloneClasses.length;
-          else if (Array.isArray(v.groups)) total += v.groups.length;
-          else if (Array.isArray(v.hotspots)) total += v.hotspots.length;
-          else if (Array.isArray(v.diagnostics)) total += v.diagnostics.length;
-          else if (Array.isArray(v.cycles)) total += v.cycles.length;
+          if (Array.isArray(v.items)) {total += v.items.length;}
+          else if (Array.isArray(v.findings)) {total += v.findings.length;}
+          else if (Array.isArray(v.cloneClasses)) {total += v.cloneClasses.length;}
+          else if (Array.isArray(v.groups)) {total += v.groups.length;}
+          else if (Array.isArray(v.hotspots)) {total += v.hotspots.length;}
+          else if (Array.isArray(v.diagnostics)) {total += v.diagnostics.length;}
+          else if (Array.isArray(v.cycles)) {total += v.cycles.length;}
         }
       }
+
       return total;
     };
 
     const prevCount = countFindings(prev);
     const nextCount = countFindings(next);
     const diff = nextCount - prevCount;
+
     return {
       newFindings: diff > 0 ? diff : 0,
       resolvedFindings: diff < 0 ? -diff : 0,
@@ -327,6 +335,7 @@ const runMcpServer = async (): Promise<void> => {
           }
 
           const batch = Array.from(pending);
+
           pending.clear();
 
           void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch, logger }).catch(() => undefined);
@@ -368,6 +377,7 @@ const runMcpServer = async (): Promise<void> => {
       }
     })();
   };
+
   const ScanInputSchema = z
     .object({
       targets: z.array(z.string()).optional().describe('File/dir paths to analyze. Defaults to project source files.'),
@@ -422,7 +432,6 @@ const runMcpServer = async (): Promise<void> => {
           ? args.targets.map(t => path.isAbsolute(t) ? t : path.resolve(ctx.rootAbs, t))
           : await discoverDefaultTargets(ctx.rootAbs);
       const targets = await expandTargets(rawTargets);
-
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
@@ -442,8 +451,8 @@ const runMcpServer = async (): Promise<void> => {
         help: false,
       };
       const report = await scanUseCase(options, { logger });
-
       const diff = diffReports(lastReport, report);
+
       lastReport = report;
       lastScanTimestamp = Date.now();
 
@@ -633,19 +642,26 @@ const runMcpServer = async (): Promise<void> => {
 
       if (args.recursive) {
         const entries: Array<{ name: string; isDir: boolean }> = [];
+
         const walk = async (dir: string, prefix: string): Promise<void> => {
           const dirents = await readdir(dir, { withFileTypes: true });
+
           for (const d of dirents) {
             const rel = prefix ? `${prefix}/${d.name}` : d.name;
             const isDir = d.isDirectory();
+
             entries.push({ name: rel, isDir });
+
             if (isDir) {
               await walk(path.join(dir, d.name), rel);
             }
           }
         };
+
         await walk(absPath, '');
+
         const structured = { entries };
+
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
           structuredContent: structured,
@@ -863,7 +879,9 @@ const runMcpServer = async (): Promise<void> => {
       const fileNeedle = (args.file ?? '').trim().toLowerCase();
       const filtered = matches.filter(m => {
         if (kinds.size > 0 && !kinds.has(m.kind.toLowerCase())) { return false; }
+
         if (fileNeedle && !m.filePath.toLowerCase().includes(fileNeedle)) { return false; }
+
         return true;
       });
       const structured = { matches: filtered };
@@ -925,22 +943,22 @@ const runMcpServer = async (): Promise<void> => {
     },
     safeTool(async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
       const symbolIndex = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
-
       // Best-effort tool availability check
       const tsgoAvailable = await (async () => {
         try {
           const r = await checkCapabilitiesUseCase({ root: ctx.rootAbs, logger });
+
           return r.ok === true;
         } catch { return false; }
       })();
       const oxlintAvailable = await (async () => {
         try {
           const r = await runOxlint({ targets: [], cwd: ctx.rootAbs, logger });
+
           // If targets is empty, oxlint may still report ok=false for "no targets" but the tool itself is found.
           return r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
         } catch { return false; }
       })();
-
       const structured = {
         root: ctx.rootAbs,
         symbolIndex,
@@ -1246,17 +1264,19 @@ const runMcpServer = async (): Promise<void> => {
     safeTool(async (args: z.infer<typeof FormatDocumentInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
       const fileAbs = path.isAbsolute(args.filePath) ? args.filePath : path.resolve(rootAbs, args.filePath);
-
       // Check if filePath is a directory
       let isDir = false;
+
       try {
         const stat = await Bun.file(fileAbs).stat();
+
         isDir = typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory();
       } catch { /* not found */ }
 
       if (isDir) {
         const files = await expandTargets([fileAbs]);
         let changedCount = 0;
+
         for (const f of files) {
           const r = await formatDocumentUseCase({
             root: rootAbs,
@@ -1264,9 +1284,12 @@ const runMcpServer = async (): Promise<void> => {
             ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
             logger,
           });
-          if (r.changed) changedCount++;
+
+          if (r.changed) {changedCount++;}
         }
+
         const structured = { ok: true, changed: changedCount > 0, changedCount };
+
         return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
       }
 
@@ -1678,6 +1701,7 @@ const runMcpServer = async (): Promise<void> => {
       const tsgo = await (async () => {
         try {
           const r = await checkCapabilitiesUseCase({ root: ctx.rootAbs, logger });
+
           return { available: r.ok === true, ...(r.note ? { note: r.note } : {}) };
         } catch { return { available: false, note: 'check failed' }; }
       })();
@@ -1685,11 +1709,11 @@ const runMcpServer = async (): Promise<void> => {
         try {
           const r = await runOxlint({ targets: [], cwd: ctx.rootAbs, logger });
           const available = r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
+
           return { available, ...(r.error && !available ? { note: r.error } : {}) };
         } catch { return { available: false, note: 'check failed' }; }
       })();
       const astGrep = { available: true }; // ast-grep/napi is a bundled dependency, always available.
-
       const structured = { tsgo, oxlint, astGrep };
 
       return {
@@ -1799,13 +1823,16 @@ const runMcpServer = async (): Promise<void> => {
     if (cleaningUp) {
       return;
     }
+
     cleaningUp = true;
 
     logger.debug('MCP server: cleanup triggered', { signal });
 
     try {
       const { closeAll } = await import('../../infrastructure/sqlite/firebat.db');
+
       await closeAll();
+
       logger.trace('MCP server: DB connections closed');
     } catch (err) {
       logger.warn('MCP server: cleanup error', { error: String(err) });
@@ -1813,6 +1840,7 @@ const runMcpServer = async (): Promise<void> => {
 
     try {
       await transport.close();
+
       logger.debug('MCP server: transport closed');
     } catch (err) {
       logger.warn('MCP server: transport close error', { error: String(err) });
@@ -1826,18 +1854,22 @@ const runMcpServer = async (): Promise<void> => {
     await server.connect(transport);
   } catch (err) {
     logger.error('MCP server: connection failed', { error: String(err) });
+
     await cleanup('connect-error');
+
     return;
   }
 
   // Handle transport errors (e.g., EPIPE)
   transport.onerror = (error: Error) => {
     logger.warn('MCP server: transport error', { error: String(error) });
+
     void cleanup('transport-error');
   };
 
   transport.onclose = () => {
     logger.debug('MCP server: transport closed');
+
     void cleanup('transport-close');
   };
 

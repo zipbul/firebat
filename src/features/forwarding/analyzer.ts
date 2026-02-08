@@ -199,27 +199,28 @@ const getWrapperCall = (node: Node): Node | null => {
     return null;
   }
 
-  const maybeCall = body.type === 'BlockStatement'
-    ? (() => {
-        if (!isNodeRecord(body)) {
-          return null;
-        }
+  const maybeCall =
+    body.type === 'BlockStatement'
+      ? (() => {
+          if (!isNodeRecord(body)) {
+            return null;
+          }
 
-        const statements = body.body;
+          const statements = body.body;
 
-        if (!isOxcNodeArray(statements) || statements.length !== 1) {
-          return null;
-        }
+          if (!isOxcNodeArray(statements) || statements.length !== 1) {
+            return null;
+          }
 
-        const statement = statements[0];
+          const statement = statements[0];
 
-        if (!isOxcNode(statement)) {
-          return null;
-        }
+          if (!isOxcNode(statement)) {
+            return null;
+          }
 
-        return getCallFromStatement(statement);
-      })()
-    : getCallFromExpression(body);
+          return getCallFromStatement(statement);
+        })()
+      : getCallFromExpression(body);
 
   if (!maybeCall) {
     return null;

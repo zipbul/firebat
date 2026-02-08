@@ -1,22 +1,23 @@
 import * as path from 'node:path';
 
+import type { FirebatLogger } from '../../ports/logger';
+import type { SymbolMatch, SymbolIndexStats } from '../../ports/symbol-index.repository';
+
 import { initHasher } from '../../engine/hasher';
 import { parseSource } from '../../engine/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
-import type { SymbolMatch, SymbolIndexStats } from '../../ports/symbol-index.repository';
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
-import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { createSqliteSymbolIndexRepository } from '../../infrastructure/sqlite/symbol-index.repository';
-import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
-import { createInMemorySymbolIndexRepository } from '../../infrastructure/memory/symbol-index.repository';
 import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
 import { createHybridSymbolIndexRepository } from '../../infrastructure/hybrid/symbol-index.repository';
-import { computeProjectKey } from '../scan/cache-keys';
-import { indexTargets } from '../indexing/file-indexer';
-import { discoverDefaultTargets } from '../../target-discovery';
+import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
+import { createInMemorySymbolIndexRepository } from '../../infrastructure/memory/symbol-index.repository';
+import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
+import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { createSqliteSymbolIndexRepository } from '../../infrastructure/sqlite/symbol-index.repository';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { discoverDefaultTargets } from '../../target-discovery';
 import { computeToolVersion } from '../../tool-version';
-import type { FirebatLogger } from '../../ports/logger';
+import { indexTargets } from '../indexing/file-indexer';
+import { computeProjectKey } from '../scan/cache-keys';
 
 const resolveRoot = (root: string | undefined): string => {
   const cwd = process.cwd();
@@ -166,7 +167,11 @@ export const searchSymbolFromIndexUseCase = async (input: SearchSymbolFromIndexI
   const projectKey = computeProjectKey({ toolVersion, cwd: rootAbs });
   const { symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, logger: input.logger });
 
-  return symbolIndexRepository.search({ projectKey, query: input.query, ...(input.limit !== undefined ? { limit: input.limit } : {}) });
+  return symbolIndexRepository.search({
+    projectKey,
+    query: input.query,
+    ...(input.limit !== undefined ? { limit: input.limit } : {}),
+  });
 };
 
 export const getIndexStatsFromIndexUseCase = async (input: RootOnlyInput): Promise<SymbolIndexStats> => {

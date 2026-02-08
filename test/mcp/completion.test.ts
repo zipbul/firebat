@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -16,7 +17,6 @@ describe('get_completion', () => {
   test('should return completions at a position inside a function body', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_completion', {
       root: ctx.tmpRootAbs,
@@ -27,6 +27,7 @@ describe('get_completion', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.completion).toBeDefined();
     }
@@ -35,7 +36,6 @@ describe('get_completion', () => {
   test('should return completions at the beginning of a file', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_completion', {
       root: ctx.tmpRootAbs,
@@ -51,7 +51,6 @@ describe('get_completion', () => {
   test('should accept line as string', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_completion', {
       root: ctx.tmpRootAbs,
@@ -79,7 +78,6 @@ describe('get_completion', () => {
   test('should handle out-of-range position', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_completion', {
       root: ctx.tmpRootAbs,
@@ -95,7 +93,6 @@ describe('get_completion', () => {
   test('should handle tsconfigPath', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_completion', {
       root: ctx.tmpRootAbs,
@@ -126,6 +123,7 @@ describe('get_completion', () => {
         filePath: fixture,
         ...pos,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }

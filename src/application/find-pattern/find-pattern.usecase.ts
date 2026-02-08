@@ -29,19 +29,25 @@ const uniqueSorted = (values: ReadonlyArray<string>): string[] =>
 
 const shouldIncludeSourceFile = (filePath: string): boolean => {
   const normalized = filePath.replaceAll('\\', '/');
-  if (normalized.includes('node_modules')) return false;
-  if (normalized.endsWith('.d.ts')) return false;
+
+  if (normalized.includes('node_modules')) {return false;}
+
+  if (normalized.endsWith('.d.ts')) {return false;}
+
   return normalized.endsWith('.ts') || normalized.endsWith('.tsx') || normalized.endsWith('.js') || normalized.endsWith('.jsx');
 };
 
 const scanDirForSourceFiles = async (dirAbs: string): Promise<string[]> => {
   const out: string[] = [];
+
   for (const pattern of ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx']) {
     const glob = new Bun.Glob(pattern);
+
     for await (const relPath of glob.scan({ cwd: dirAbs, onlyFiles: true, followSymlinks: false })) {
       out.push(path.resolve(dirAbs, relPath));
     }
   }
+
   return out.filter(shouldIncludeSourceFile);
 };
 
@@ -54,9 +60,12 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
     // Check if it's a directory
     try {
       const stat = await Bun.file(abs).stat();
+
       if (typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory()) {
         const files = await scanDirForSourceFiles(abs);
+
         results.push(...files);
+
         continue;
       }
     } catch {
@@ -66,6 +75,7 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
     // Glob pattern
     if (raw.includes('*')) {
       const glob = new Bun.Glob(raw);
+
       for await (const filePath of glob.scan({ cwd, onlyFiles: true, followSymlinks: false })) {
         results.push(path.resolve(cwd, filePath));
       }

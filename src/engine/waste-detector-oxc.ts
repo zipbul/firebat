@@ -330,9 +330,10 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
           const loc = getLineColumn(file.sourceText, meta.location);
           const isOverwritten = overwrittenDefIds[defId] === true;
           const kind = isOverwritten && meta.writeKind !== 'declaration' ? 'dead-store-overwrite' : 'dead-store';
-          const message = kind === 'dead-store-overwrite'
-            ? `Variable '${meta.name}' is assigned but overwritten before being read`
-            : `Variable '${meta.name}' is assigned but never read`;
+          const message =
+            kind === 'dead-store-overwrite'
+              ? `Variable '${meta.name}' is assigned but overwritten before being read`
+              : `Variable '${meta.name}' is assigned but never read`;
 
           findings.push({
             kind,

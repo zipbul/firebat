@@ -32,6 +32,7 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
       if (existing && existing.mtimeMs === mtimeMs && existing.size === size) {
         skipped += 1;
+
         return;
       }
 
@@ -45,16 +46,21 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
         size,
         contentHash,
       });
+
       updated += 1;
+
       logger.trace(`Index upsert: ${filePath}`, { size, mtimeMs });
     } catch {
       failed += 1;
+
       logger.warn(`Index failed, entry removed: ${filePath}`);
+
       await input.repository.deleteFile({ projectKey: input.projectKey, filePath });
     }
   });
 
   logger.debug(`Indexing done`, { updated, skipped, failed });
+
   if (skipped > 0) {
     logger.trace(`Index skip: ${skipped} files unchanged`);
   }

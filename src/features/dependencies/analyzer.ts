@@ -164,11 +164,7 @@ const normalizeCycle = (cycle: ReadonlyArray<string>): string[] => {
   return best.concat(best[0] ?? '');
 };
 
-const recordCyclePath = (
-  cycleKeys: Set<string>,
-  cycles: string[][],
-  path: ReadonlyArray<string>,
-): void => {
+const recordCyclePath = (cycleKeys: Set<string>, cycles: string[][], path: ReadonlyArray<string>): void => {
   const normalized = normalizeCycle(path);
 
   if (normalized.length === 0) {

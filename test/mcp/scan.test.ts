@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -20,7 +21,6 @@ describe('scan', () => {
   test('should return a report with timings when scanning a single file', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -38,7 +38,6 @@ describe('scan', () => {
   test('should run all detectors when none are specified', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -60,6 +59,7 @@ describe('scan', () => {
       detectors: ['exact-duplicates'],
       minSize: 'auto',
     });
+
     const { structured: second } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
       detectors: ['exact-duplicates'],
@@ -96,7 +96,6 @@ describe('scan', () => {
     test(`should succeed with detector=${detector}`, async () => {
       // Arrange
       const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
       // Act
       const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
         targets: [fixture],
@@ -119,7 +118,6 @@ describe('scan', () => {
   test('should scan with minSize=0 (smallest possible)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -134,7 +132,6 @@ describe('scan', () => {
   test('should scan with minSize=9999 (very large – should find nothing)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -149,7 +146,6 @@ describe('scan', () => {
   test('should scan with minSize="auto"', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -168,7 +164,6 @@ describe('scan', () => {
   test('should scan with maxForwardDepth=0', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -183,7 +178,6 @@ describe('scan', () => {
   test('should scan with maxForwardDepth=10', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
@@ -206,7 +200,6 @@ describe('scan', () => {
       path.join(ctx.fixturesAbs, 'editable.ts'),
       path.join(ctx.fixturesAbs, 'lsp-target.ts'),
     ];
-
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets,
@@ -239,7 +232,6 @@ describe('scan', () => {
   test('should handle scanning a non-existent file gracefully', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'does-not-exist.ts');
-
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: [bogus],
@@ -253,7 +245,6 @@ describe('scan', () => {
   test('should handle scanning a directory path', async () => {
     // Arrange
     const dir = ctx.fixturesAbs;
-
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: [dir],
@@ -281,6 +272,7 @@ describe('scan', () => {
         detectors: ['noop'],
         minSize: 'auto',
       });
+
       expect(isError).toBe(false);
       expect(structured.report).toBeTruthy();
     }

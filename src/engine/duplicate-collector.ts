@@ -1,5 +1,4 @@
 import type { DuplicateGroup, DuplicateItem, SourceSpan } from '../types';
-
 import type { DuplicateFingerprintResolver, DuplicateItemKindResolver, OxcNodePredicate, ParsedFile } from './types';
 
 import { collectOxcNodes, getNodeHeader } from './oxc-ast-utils';

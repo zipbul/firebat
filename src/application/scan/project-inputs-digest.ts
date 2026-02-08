@@ -27,7 +27,6 @@ const listProjectInputFiles = async (rootAbs: string): Promise<string[]> => {
     path.resolve(rootAbs, 'pnpm-lock.yaml'),
     path.resolve(rootAbs, 'yarn.lock'),
   ];
-
   const tsconfigs = await listRootTsconfigs(rootAbs);
 
   return [...new Set([...candidates, ...tsconfigs])];
@@ -39,7 +38,6 @@ const computeProjectInputsDigest = async (input: {
   fileIndexRepository: FileIndexRepository;
 }): Promise<string> => {
   const files = await listProjectInputFiles(input.rootAbs);
-
   const partsByIndex: string[] = new Array<string>(files.length);
   const concurrency = Math.max(1, Math.min(16, files.length));
 
@@ -79,9 +77,11 @@ const computeProjectInputsDigest = async (input: {
   );
 
   const parts: string[] = [];
+
   for (let i = 0; i < partsByIndex.length; i += 1) {
     const part = partsByIndex[i];
     const filePath = normalizePath(files[i] ?? '');
+
     parts.push(part ?? `project:missing:${filePath}`);
   }
 

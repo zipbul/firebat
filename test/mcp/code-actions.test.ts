@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -16,7 +17,6 @@ describe('get_code_actions', () => {
   test('should return code actions for a line range', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_code_actions', {
       root: ctx.tmpRootAbs,
@@ -26,6 +26,7 @@ describe('get_code_actions', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+
     if (structured.ok) {
       expect(structured.actions).toBeDefined();
     }
@@ -34,7 +35,6 @@ describe('get_code_actions', () => {
   test('should accept startLine and endLine', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callTool(ctx.client, 'get_code_actions', {
       root: ctx.tmpRootAbs,
@@ -50,7 +50,6 @@ describe('get_code_actions', () => {
   test('should accept startLine as string', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_code_actions', {
       root: ctx.tmpRootAbs,
@@ -65,7 +64,6 @@ describe('get_code_actions', () => {
   test('should accept includeKinds filter', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_code_actions', {
       root: ctx.tmpRootAbs,
@@ -94,7 +92,6 @@ describe('get_code_actions', () => {
   test('should handle out-of-range line', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_code_actions', {
       root: ctx.tmpRootAbs,
@@ -109,7 +106,6 @@ describe('get_code_actions', () => {
   test('should handle tsconfigPath', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
-
     // Act
     const { structured } = await callToolSafe(ctx.client, 'get_code_actions', {
       root: ctx.tmpRootAbs,
@@ -133,6 +129,7 @@ describe('get_code_actions', () => {
         filePath: fixture,
         startLine: i * 10,
       });
+
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
     }
