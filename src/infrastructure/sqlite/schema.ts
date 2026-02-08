@@ -77,6 +77,7 @@ export const symbols = sqliteTable(
     startColumn: integer('startColumn').notNull(),
     endLine: integer('endLine').notNull(),
     endColumn: integer('endColumn').notNull(),
+    isExported: integer('isExported', { mode: 'boolean' }).notNull().default(false),
     indexedAt: integer('indexedAt').notNull(),
   },
   table => [

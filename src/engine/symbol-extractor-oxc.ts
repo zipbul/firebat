@@ -12,6 +12,7 @@ interface ExtractedSymbol {
   readonly kind: ExtractedSymbolKind;
   readonly name: string;
   readonly span: SourceSpan;
+  readonly isExported: boolean;
 }
 
 interface NodeWithInit {
@@ -27,10 +28,10 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
   const out: ExtractedSymbol[] = [];
   const { program, sourceText } = file;
 
-  const visit = (value: NodeValue): void => {
+  const visit = (value: NodeValue, exported: boolean): void => {
     if (Array.isArray(value)) {
       for (const entry of value as ReadonlyArray<NodeValue>) {
-        visit(entry);
+        visit(entry, exported);
       }
 
       return;
@@ -42,11 +43,15 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
 
     const node = value;
 
+    // Track export context for child declarations
+    const isExportWrapper = node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration';
+    const childExported = exported || isExportWrapper;
+
     if (node.type === 'FunctionDeclaration') {
       const name = getNodeHeader(node);
 
       if (name !== 'anonymous') {
-        out.push({ kind: 'function', name, span: getNodeSpan(node, sourceText) });
+        out.push({ kind: 'function', name, span: getNodeSpan(node, sourceText), isExported: childExported });
       }
     }
 
@@ -57,7 +62,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
         const name = getNodeHeader(node);
 
         if (name !== 'anonymous') {
-          out.push({ kind: 'function', name, span: getNodeSpan(node, sourceText) });
+          out.push({ kind: 'function', name, span: getNodeSpan(node, sourceText), isExported: childExported });
         }
       }
     }
@@ -66,7 +71,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       const name = getNodeHeader(node);
 
       if (name !== 'anonymous') {
-        out.push({ kind: 'class', name, span: getNodeSpan(node, sourceText) });
+        out.push({ kind: 'class', name, span: getNodeSpan(node, sourceText), isExported: childExported });
       }
     }
 
@@ -74,7 +79,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       const name = getNodeHeader(node);
 
       if (name !== 'anonymous') {
-        out.push({ kind: 'method', name, span: getNodeSpan(node, sourceText) });
+        out.push({ kind: 'method', name, span: getNodeSpan(node, sourceText), isExported: false });
       }
     }
 
@@ -82,7 +87,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       const name = getNodeHeader(node);
 
       if (name !== 'anonymous') {
-        out.push({ kind: 'type', name, span: getNodeSpan(node, sourceText) });
+        out.push({ kind: 'type', name, span: getNodeSpan(node, sourceText), isExported: childExported });
       }
     }
 
@@ -90,7 +95,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       const name = getNodeHeader(node);
 
       if (name !== 'anonymous') {
-        out.push({ kind: 'interface', name, span: getNodeSpan(node, sourceText) });
+        out.push({ kind: 'interface', name, span: getNodeSpan(node, sourceText), isExported: childExported });
       }
     }
 
@@ -98,7 +103,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       const name = getNodeHeader(node);
 
       if (name !== 'anonymous') {
-        out.push({ kind: 'enum', name, span: getNodeSpan(node, sourceText) });
+        out.push({ kind: 'enum', name, span: getNodeSpan(node, sourceText), isExported: childExported });
       }
     }
 
@@ -113,11 +118,11 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
         continue;
       }
 
-      visit(childValue);
+      visit(childValue, isExportWrapper);
     }
   };
 
-  visit(program);
+  visit(program, false);
 
   return out;
 };

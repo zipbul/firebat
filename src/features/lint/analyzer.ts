@@ -10,9 +10,14 @@ export const createEmptyLint = (): LintAnalysis => ({
   diagnostics: [],
 });
 
-export const analyzeLint = async (input: { readonly targets: ReadonlyArray<string>; readonly fix: boolean; readonly logger?: FirebatLogger }): Promise<LintAnalysis> => {
+export const analyzeLint = async (input: { readonly targets: ReadonlyArray<string>; readonly fix: boolean; readonly cwd?: string; readonly logger?: FirebatLogger }): Promise<LintAnalysis> => {
   const logger = input.logger ?? createNoopLogger();
-  const result = await runOxlint({ targets: input.targets, ...(input.fix ? { fix: true } : {}), logger });
+  const result = await runOxlint({
+    targets: input.targets,
+    ...(input.fix ? { fix: true } : {}),
+    ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
+    logger,
+  });
 
   if (!result.ok) {
     const error = result.error ?? 'oxlint failed';

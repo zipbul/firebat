@@ -6,6 +6,7 @@ export interface IndexedSymbol {
   readonly kind: IndexedSymbolKind;
   readonly name: string;
   readonly span: SourceSpan;
+  readonly isExported?: boolean;
 }
 
 export interface SymbolMatch {
@@ -13,6 +14,7 @@ export interface SymbolMatch {
   readonly kind: IndexedSymbolKind;
   readonly name: string;
   readonly span: SourceSpan;
+  readonly isExported?: boolean;
 }
 
 export interface SymbolIndexStats {

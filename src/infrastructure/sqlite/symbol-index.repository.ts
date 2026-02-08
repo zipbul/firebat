@@ -47,6 +47,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
                 startColumn: s.span.start.column,
                 endLine: s.span.end.line,
                 endColumn: s.span.end.column,
+                isExported: s.isExported ?? false,
                 indexedAt,
               })),
             )
@@ -89,6 +90,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
           startColumn: symbolsTable.startColumn,
           endLine: symbolsTable.endLine,
           endColumn: symbolsTable.endColumn,
+          isExported: symbolsTable.isExported,
         })
         .from(symbolsTable)
         .where(
@@ -115,6 +117,7 @@ const createSqliteSymbolIndexRepository = (db: FirebatDrizzleDb): SymbolIndexRep
               start: { line: r.startLine, column: r.startColumn },
               end: { line: r.endLine, column: r.endColumn },
             },
+            isExported: r.isExported ?? false,
           },
         ];
       });

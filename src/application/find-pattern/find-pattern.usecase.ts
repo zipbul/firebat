@@ -27,24 +27,56 @@ interface FindPatternInput {
 const uniqueSorted = (values: ReadonlyArray<string>): string[] =>
   Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 
-const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promise<string[]> => {
-  const hasGlob = targets.some(value => value.includes('*'));
+const shouldIncludeSourceFile = (filePath: string): boolean => {
+  const normalized = filePath.replaceAll('\\', '/');
+  if (normalized.includes('node_modules')) return false;
+  if (normalized.endsWith('.d.ts')) return false;
+  return normalized.endsWith('.ts') || normalized.endsWith('.tsx') || normalized.endsWith('.js') || normalized.endsWith('.jsx');
+};
 
-  if (!hasGlob) {
-    return uniqueSorted(targets.map(t => path.resolve(cwd, t)));
-  }
-
-  const matches: string[] = [];
-
-  for (const pattern of targets) {
+const scanDirForSourceFiles = async (dirAbs: string): Promise<string[]> => {
+  const out: string[] = [];
+  for (const pattern of ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx']) {
     const glob = new Bun.Glob(pattern);
-
-    for await (const filePath of glob.scan({ cwd, onlyFiles: true, followSymlinks: false })) {
-      matches.push(path.resolve(cwd, filePath));
+    for await (const relPath of glob.scan({ cwd: dirAbs, onlyFiles: true, followSymlinks: false })) {
+      out.push(path.resolve(dirAbs, relPath));
     }
   }
+  return out.filter(shouldIncludeSourceFile);
+};
 
-  return uniqueSorted(matches);
+const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promise<string[]> => {
+  const results: string[] = [];
+
+  for (const raw of targets) {
+    const abs = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
+
+    // Check if it's a directory
+    try {
+      const stat = await Bun.file(abs).stat();
+      if (typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory()) {
+        const files = await scanDirForSourceFiles(abs);
+        results.push(...files);
+        continue;
+      }
+    } catch {
+      // not a file/dir — might be a glob pattern
+    }
+
+    // Glob pattern
+    if (raw.includes('*')) {
+      const glob = new Bun.Glob(raw);
+      for await (const filePath of glob.scan({ cwd, onlyFiles: true, followSymlinks: false })) {
+        results.push(path.resolve(cwd, filePath));
+      }
+      continue;
+    }
+
+    // Plain file
+    results.push(abs);
+  }
+
+  return uniqueSorted(results);
 };
 
 const findPatternUseCase = async (input: FindPatternInput): Promise<ReadonlyArray<AstGrepMatch>> => {

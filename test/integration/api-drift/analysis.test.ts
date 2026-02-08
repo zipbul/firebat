@@ -48,6 +48,9 @@ describe('integration/api-drift', () => {
     // Assert
     expect(analysis.groups.length).toBe(1);
     expect(analysis.groups[0]?.outliers.length).toBeGreaterThan(0);
+    let outlier = analysis.groups[0]?.outliers[0];
+    expect(outlier?.filePath).toBeTruthy();
+    expect(outlier?.span).toBeTruthy();
   });
 
   it('should not report drift when function names are unique', () => {

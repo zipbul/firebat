@@ -137,7 +137,7 @@ export const indexSymbolsUseCase = async (input: IndexSymbolsInput): Promise<Ind
         filePath,
         contentHash: fileRec.contentHash,
         indexedAt,
-        symbols: extracted.map(s => ({ kind: s.kind, name: s.name, span: s.span })),
+        symbols: extracted.map(s => ({ kind: s.kind, name: s.name, span: s.span, isExported: s.isExported })),
       });
 
       indexedFiles += 1;

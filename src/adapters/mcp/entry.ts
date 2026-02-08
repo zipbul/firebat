@@ -14,6 +14,8 @@ const installMcpErrorHandlers = (): void => {
   };
 
   process.on('uncaughtException', err => {
+    const msg = `[firebat] uncaughtException: ${err.name}: ${err.message}\n${err.stack ?? ''}`;
+    process.stderr.write(msg + '\n');
     void append(`uncaughtException\n${err.name}: ${err.message}\n${err.stack ?? ''}`);
   });
 
@@ -27,6 +29,7 @@ const installMcpErrorHandlers = (): void => {
             ? String(reason)
             : '[firebat] non-Error rejection reason';
 
+    process.stderr.write(`[firebat] unhandledRejection: ${message}\n`);
     void append(`unhandledRejection\n${message}`);
   });
 };

@@ -5,6 +5,8 @@ import * as z from 'zod';
 import type { SourceSpan } from '../../types';
 import type { FirebatLogger } from '../../ports/logger';
 
+import { tryResolveLocalBin } from '../tooling/resolve-bin';
+
 interface OxlintDiagnostic {
   readonly filePath?: string;
   readonly message: string;
@@ -27,41 +29,10 @@ interface RunOxlintInput {
   readonly targets: ReadonlyArray<string>;
   readonly configPath?: string;
   readonly fix?: boolean;
+  /** Working directory used to resolve project-local binaries. Defaults to process.cwd(). */
+  readonly cwd?: string;
   readonly logger: FirebatLogger;
 }
-
-const tryResolveOxlintCommand = async (): Promise<string[] | null> => {
-  const candidates = [
-    // project-local
-    path.resolve(process.cwd(), 'node_modules', '.bin', 'oxlint'),
-
-    // firebat package-local (dist/* sibling to node_modules/*)
-    path.resolve(import.meta.dir, '../../../node_modules', '.bin', 'oxlint'),
-    path.resolve(import.meta.dir, '../../node_modules', '.bin', 'oxlint'),
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      const file = Bun.file(candidate);
-
-      if (await file.exists()) {
-        return [candidate];
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (typeof Bun.which === 'function') {
-    const resolved = Bun.which('oxlint');
-
-    if (resolved !== null && resolved.length > 0) {
-      return [resolved];
-    }
-  }
-
-  return null;
-};
 
 const SeveritySchema = z.enum(['error', 'warning', 'info']);
 const OxlintDiagnosticSchema = z
@@ -120,11 +91,12 @@ const normalizeDiagnosticsFromParsed = (value: OxlintOutput): ReadonlyArray<Oxli
 
 const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   const { logger } = input;
+  const cwd = input.cwd ?? process.cwd();
 
   logger.debug('oxlint: resolving command');
-  const cmd = await tryResolveOxlintCommand();
+  const resolved = await tryResolveLocalBin({ cwd, binName: 'oxlint', callerDir: import.meta.dir });
 
-  if (!cmd || cmd.length === 0) {
+  if (!resolved || resolved.length === 0) {
     logger.warn('oxlint: command not found — lint tool unavailable');
 
     return {
@@ -134,7 +106,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
     };
   }
 
-  logger.trace('oxlint: resolved command', { cmd: cmd[0] });
+  logger.trace('oxlint: resolved command', { cmd: resolved, cwd });
 
   const args: string[] = [];
 
@@ -156,8 +128,8 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   logger.debug('oxlint: spawning process', { targetCount: input.targets.length, fix: input.fix ?? false, configPath: input.configPath });
 
   const proc = Bun.spawn({
-    cmd: [...cmd, ...args],
-    cwd: process.cwd(),
+    cmd: [resolved, ...args],
+    cwd,
     stdout: 'pipe',
     stderr: 'pipe',
     stdin: 'ignore',

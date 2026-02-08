@@ -100,16 +100,17 @@ const printHelp = (): void => {
 };
 
 const countBlockingFindings = (report: FirebatReport): number => {
-  const typecheckErrors = report.analyses['typecheck'].items.filter(item => item.severity === 'error').length;
-  const forwardingFindings = report.analyses['forwarding'].findings.length;
-  const lintErrors = report.analyses['lint'].diagnostics.filter(item => item.severity === 'error').length;
-  const unknownProofFindings = report.analyses['unknown-proof'].findings.length;
-  const formatFindings = report.analyses['format'].status === 'needs-formatting' || report.analyses['format'].status === 'failed' ? 1 : 0;
-  const barrelPolicyFindings = report.analyses['barrel-policy'].findings.length;
+  const typecheckErrors = report.analyses['typecheck']?.items?.filter(item => item.severity === 'error').length ?? 0;
+  const forwardingFindings = report.analyses['forwarding']?.findings?.length ?? 0;
+  const lintErrors = report.analyses['lint']?.diagnostics?.filter(item => item.severity === 'error').length ?? 0;
+  const unknownProofFindings = report.analyses['unknown-proof']?.findings?.length ?? 0;
+  const formatStatus = report.analyses['format']?.status;
+  const formatFindings = formatStatus === 'needs-formatting' || formatStatus === 'failed' ? 1 : 0;
+  const barrelPolicyFindings = report.analyses['barrel-policy']?.findings?.length ?? 0;
 
   return (
-    report.analyses['exact-duplicates'].length +
-    report.analyses['waste'].length +
+    (report.analyses['exact-duplicates']?.length ?? 0) +
+    (report.analyses['waste']?.length ?? 0) +
     barrelPolicyFindings +
     formatFindings +
     unknownProofFindings +

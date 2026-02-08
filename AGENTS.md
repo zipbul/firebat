@@ -12,9 +12,45 @@
 
 ## 프로젝트 설명
 
-firebat은 코드베이스를 빠르게 점검해 “지금 손봐야 할 품질 이슈”를 드러내는 것을 목표로 하는 분석 도구다. 중복 코드, 불필요한 로직(낭비), 타입 관련 문제, 의존성 구조 이상, 복잡도 신호(중첩/가드 부족 등)처럼 유지보수 비용을 키우는 패턴을 찾아내고, 사람이 바로 판단할 수 있도록 결과를 정리해 제공한다.
+firebat은 코드 품질 스캐너이자 MCP 서버다. CLI(`firebat scan`)와 MCP(stdio) 두 가지 인터페이스를 제공한다.
 
-이 프로젝트의 목적은 팀이 리팩터링과 품질 개선을 “감”이 아니라 관측 가능한 신호에 기반해 우선순위를 잡게 만드는 것이다. 일회성 진단뿐 아니라 개발 흐름 속에서 반복적으로 실행하며 변화 추이를 확인할 수 있는 형태를 지향한다. 또한 외부 도구/에이전트와의 연계를 전제로 하여, 분석 결과를 자동화된 워크플로에 포함시키는 사용을 지원한다.
+**하는 일:** TypeScript/JavaScript 코드베이스를 정적 분석하여 유지보수 비용을 키우는 패턴(중복, 낭비, 복잡도, 타입 문제, 의존성 이상 등)을 찾아내고 구조화된 결과(JSON/텍스트)를 반환한다.
+
+**핵심 설계 원칙:**
+- MCP 네이티브 — AI 에이전트가 분석 결과를 직접 소비하고 코드를 수정하는 워크플로우를 1차 사용 시나리오로 설계한다.
+- 반복 실행 — 개발 흐름 속에서 코드 변경 후 매번 실행하여 리그레션을 즉시 감지한다.
+- 관측 기반 우선순위 — "감"이 아니라 디텍터가 보고하는 신호에 기반해 수정 우선순위를 잡는다.
+
+**구성 요소:**
+- 디텍터: exact-duplicates, structural-duplicates, waste, nesting, early-return, noop, forwarding, barrel-policy, unknown-proof, api-drift, dependencies, coupling, lint(oxlint), format(oxfmt), typecheck(tsgo)
+- MCP 도구: 분석(scan, lint, find_pattern), 탐색(get_hover, get_definitions, find_references, trace_symbol 등), 편집(replace_range, rename_symbol 등), 인덱싱(index_symbols, search_symbol_from_index 등), 메모리(read/write/list/delete_memory), 외부 라이브러리(index_external_libraries 등)
+- 스택: Bun + oxc(파서) + tsgo(타입체크) + ast-grep(패턴 검색) + SQLite(캐시)
+
+## firebat MCP 도구 활용
+
+이 프로젝트는 firebat MCP 서버를 사용한다. 아래 규칙을 따른다.
+
+### 도구 카테고리
+- 🔍 분석: `scan` (디텍터 전체 실행), `lint` (oxlint), `find_pattern` (ast-grep 구조 검색)
+- 🧭 탐색: `get_hover`, `get_definitions`, `find_references`, `trace_symbol`, `parse_imports`, `get_document_symbols`, `get_workspace_symbols`, `get_signature_help`
+- ✏️ 편집: `replace_range`, `replace_regex`, `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`, `rename_symbol`, `delete_symbol`, `format_document`, `get_code_actions`
+- 📇 인덱싱: `index_symbols`, `search_symbol_from_index`, `clear_index`, `get_project_overview`
+- 📦 외부 라이브러리: `index_external_libraries`, `search_external_library_symbols`, `get_available_external_symbols`, `get_typescript_dependencies`
+- 🧠 메모리: `read_memory`, `write_memory`, `list_memories`, `delete_memory`
+- 🛠️ 인프라: `list_dir`, `get_diagnostics`, `get_all_diagnostics`, `get_completion`, `check_capabilities`
+
+### 필수 규칙
+- 파일 변경 후 반드시 `scan`을 실행하여 품질 리그레션을 확인한다.
+- scan 결과에서 발견된 이슈를 우선순위 잡아 수정한다.
+
+### 상황별 도구 선택
+- 코드 변경 후 → `scan`
+- 심볼 찾기 → `index_symbols` → `search_symbol_from_index`
+- 리팩터링 → `find_references` → `rename_symbol`
+- 코드 패턴 검색 → `find_pattern` (ast-grep 구문)
+- 타입/시그니처 확인 → `get_hover`
+- 외부 라이브러리 API 탐색 → `index_external_libraries` → `search_external_library_symbols`
+- 분석 결과 리뷰 → `workflow` 또는 `review` 프롬프트 호출
 
 
 ## 런타임/기술 선택 우선순위 (Bun-first)

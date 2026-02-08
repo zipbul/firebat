@@ -145,7 +145,7 @@ const formatText = (report: FirebatReport): string => {
     for (const finding of waste) {
       const rel = path.relative(process.cwd(), finding.filePath);
       const start = toPos(finding.span.start.line, finding.span.start.column);
-      lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${finding.label} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+      lines.push(`    ${cc('·', A.dim)} ${finding.message} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 
@@ -287,6 +287,14 @@ const formatText = (report: FirebatReport): string => {
       const shape = group.standardCandidate;
       const standard = `(${shape.paramsCount},${shape.optionalCount},${shape.returnKind},${shape.async ? 'async' : 'sync'})`;
       lines.push(`    ${cc('·', A.dim)} ${group.label}: standard=${standard} outliers=${group.outliers.length}`);
+      for (const outlier of group.outliers) {
+        if (outlier.filePath.length > 0) {
+          const rel = path.relative(process.cwd(), outlier.filePath);
+          const start = toPos(outlier.span.start.line, outlier.span.start.column);
+          const oShape = `(${outlier.shape.paramsCount},${outlier.shape.optionalCount},${outlier.shape.returnKind},${outlier.shape.async ? 'async' : 'sync'})`;
+          lines.push(`        ${cc('↳', A.dim)} ${oShape} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+        }
+      }
     }
   }
 

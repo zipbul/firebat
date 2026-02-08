@@ -2,6 +2,8 @@ import * as path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import type { FirebatLogger } from '../../ports/logger';
 
+import { tryResolveBunxCommand, tryResolveLocalBin } from '../tooling/resolve-bin';
+
 interface TsgoTraceRequest {
   readonly entryFile: string;
   readonly symbol: string;
@@ -134,7 +136,7 @@ const acquireSharedTsgoSession = async (input: {
     return {
       ok: false,
       error:
-        'tsgo is not available. Install @typescript/native-preview (devDependency) or ensure `tsgo` is on PATH (or `npx` is available).',
+        'tsgo is not available. Install @typescript/native-preview (devDependency) or ensure `tsgo` is on PATH (or `bunx` is available).',
     };
   }
 
@@ -557,7 +559,7 @@ class LspConnection {
     this.pending.clear();
   }
 
-  async request<T = unknown>(method: string, params?: unknown): Promise<T> {
+  async request<T = unknown>(method: string, params?: unknown, timeoutMs = 30_000): Promise<T> {
     const id = this.nextId++;
     const payload = {
       jsonrpc: '2.0',
@@ -567,6 +569,25 @@ class LspConnection {
     };
     const p = new Promise<T>((resolve, reject) => {
       this.pending.set(id, { resolve: resolve as any, reject });
+
+      if (timeoutMs > 0) {
+        const timer = setTimeout(() => {
+          const entry = this.pending.get(id);
+
+          if (entry) {
+            this.pending.delete(id);
+            entry.reject(new Error(`LSP request timed out after ${timeoutMs}ms: ${method}`));
+          }
+        }, timeoutMs);
+
+        // Ensure the timer doesn't prevent process exit and gets cleaned up on resolve/reject.
+        const origResolve = resolve as (v: any) => void;
+        const origReject = reject;
+        const wrappedResolve = (v: any): void => { clearTimeout(timer); origResolve(v); };
+        const wrappedReject = (e: Error): void => { clearTimeout(timer); origReject(e); };
+
+        this.pending.set(id, { resolve: wrappedResolve, reject: wrappedReject });
+      }
     });
 
     this.writeToStdin(buildLspMessage(payload));
@@ -671,43 +692,28 @@ class LspConnection {
 }
 
 const tryResolveTsgoCommand = async (cwd: string): Promise<{ command: string; args: string[]; note?: string } | null> => {
-  const localBin = path.join(cwd, 'node_modules', '.bin', 'tsgo');
-
-  try {
-    await Bun.file(localBin).stat();
-
-    return { command: localBin, args: ['--lsp', '--stdio'] };
-  } catch {
-    // ignore
+  const resolved = await tryResolveLocalBin({ cwd, binName: 'tsgo', callerDir: import.meta.dir });
+  if (resolved) {
+    return { command: resolved, args: ['--lsp', '--stdio'] };
   }
 
-  // If running from a nested dir, also try workspace root node_modules.
-  try {
-    const rootBin = path.join(process.cwd(), 'node_modules', '.bin', 'tsgo');
-
-    await Bun.file(rootBin).stat();
-
-    return { command: rootBin, args: ['--lsp', '--stdio'] };
-  } catch {
-    // ignore
+  // If running from a nested dir, also try the current process cwd.
+  // (Some callers pass a tsconfig-derived cwd.)
+  const resolvedFromProcessCwd = await tryResolveLocalBin({ cwd: process.cwd(), binName: 'tsgo', callerDir: import.meta.dir });
+  if (resolvedFromProcessCwd) {
+    return { command: resolvedFromProcessCwd, args: ['--lsp', '--stdio'] };
   }
 
-  // Fall back to PATH resolution (best-effort)
-  if (typeof Bun.which === 'function') {
-    const resolved = Bun.which('tsgo');
+  // Last resort: bunx package that provides tsgo
+  const bunx = tryResolveBunxCommand();
 
-    if (resolved) {
-      return { command: resolved, args: ['--lsp', '--stdio'] };
-    }
-  }
-
-  // Last resort: npx package that provides tsgo
-  const npx = typeof Bun.which === 'function' ? Bun.which('npx') : null;
-
-  if (npx) {
-    // `npx -y @typescript/native-preview --lsp --stdio`
-    // This mirrors the typical usage in tools like lsmcp.
-    return { command: npx, args: ['-y', '@typescript/native-preview', '--lsp', '--stdio'], note: 'npx fallback' };
+  if (bunx) {
+    // `bunx -y @typescript/native-preview --lsp --stdio`
+    return {
+      command: bunx.command,
+      args: [...bunx.prefixArgs, '-y', '@typescript/native-preview', '--lsp', '--stdio'],
+      note: 'bunx fallback',
+    };
   }
 
   return null;
@@ -715,10 +721,11 @@ const tryResolveTsgoCommand = async (cwd: string): Promise<{ command: string; ar
 
 const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResult> => {
   try {
-    const entryFile = path.resolve(process.cwd(), req.entryFile);
+    const baseCwd = process.cwd();
+    const entryFile = path.isAbsolute(req.entryFile) ? req.entryFile : path.resolve(baseCwd, req.entryFile);
     const cwd = req.tsconfigPath
-      ? path.dirname(path.resolve(process.cwd(), req.tsconfigPath))
-      : process.cwd();
+      ? path.dirname(path.resolve(baseCwd, req.tsconfigPath))
+      : baseCwd;
     const resolved = await tryResolveTsgoCommand(cwd);
 
     if (!resolved) {
@@ -726,7 +733,7 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
         ok: false,
         tool: 'tsgo',
         error:
-          'tsgo is not available. Install @typescript/native-preview (devDependency) or ensure `tsgo` is on PATH (or `npx` is available).',
+          'tsgo is not available. Install @typescript/native-preview (devDependency) or ensure `tsgo` is on PATH (or `bunx` is available).',
       };
     }
 

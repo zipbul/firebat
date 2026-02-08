@@ -1,7 +1,6 @@
 기능 추가
 
 디렉토리 구조 검사 규칙 추가할수있음?
-.firebatrc.jsonc 추가 필요
 진입부 first unknown 이후 무조건 Type Definition
 
 에이전트 룰 추가

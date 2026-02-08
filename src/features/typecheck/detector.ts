@@ -3,6 +3,9 @@ import * as path from 'node:path';
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan, TypecheckAnalysis, TypecheckItem } from '../../types';
 
+import type { FirebatLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../ports/logger';
+
 import { lspUriToFilePath, openTsDocument, withTsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
@@ -157,12 +160,19 @@ const attachCodeFrames = (
   });
 };
 
-const analyzeTypecheck = async (program: ReadonlyArray<ParsedFile>): Promise<TypecheckAnalysis> => {
-  const root = process.cwd();
+const analyzeTypecheck = async (
+  program: ReadonlyArray<ParsedFile>,
+  input?: {
+    readonly rootAbs?: string;
+    readonly logger?: FirebatLogger;
+  },
+): Promise<TypecheckAnalysis> => {
+  const root = input?.rootAbs ?? process.cwd();
+  const logger = input?.logger ?? createNoopLogger();
 
   try {
     const result = await withTsgoLspSession<ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>>>(
-      { root },
+      { root, logger },
       async session => {
         const collected: Array<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> = [];
         const openUris: string[] = [];

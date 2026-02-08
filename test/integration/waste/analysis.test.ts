@@ -53,6 +53,8 @@ describe('integration/waste', () => {
 
     // Assert
     expect(hasKind(findings, 'dead-store')).toBe(true);
+    let deadStore = findings.find(f => f.kind === 'dead-store');
+    expect(deadStore?.message).toContain('assigned but never read');
   });
 
   it('should report dead-store-overwrite when writes are overwritten', () => {
@@ -67,6 +69,8 @@ describe('integration/waste', () => {
 
     // Assert
     expect(hasKind(findings, 'dead-store-overwrite')).toBe(true);
+    let overwrite = findings.find(f => f.kind === 'dead-store-overwrite');
+    expect(overwrite?.message).toContain('overwritten before being read');
   });
 
   it('should not report findings when values are read', () => {

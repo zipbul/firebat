@@ -2,6 +2,8 @@ import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../ports/logger';
 
+import { tryResolveLocalBin } from '../tooling/resolve-bin';
+
 interface OxfmtRunResult {
   readonly ok: boolean;
   readonly tool: 'oxfmt';
@@ -15,49 +17,19 @@ interface RunOxfmtInput {
   readonly targets: ReadonlyArray<string>;
   readonly configPath?: string;
   readonly mode: 'check' | 'write';
+  /** Working directory used to resolve project-local binaries. Defaults to process.cwd(). */
+  readonly cwd?: string;
   readonly logger: FirebatLogger;
 }
 
-const tryResolveOxfmtCommand = async (): Promise<string[] | null> => {
-  const candidates = [
-    // project-local
-    path.resolve(process.cwd(), 'node_modules', '.bin', 'oxfmt'),
-
-    // firebat package-local (dist/* sibling to node_modules/*)
-    path.resolve(import.meta.dir, '../../../node_modules', '.bin', 'oxfmt'),
-    path.resolve(import.meta.dir, '../../node_modules', '.bin', 'oxfmt'),
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      const file = Bun.file(candidate);
-
-      if (await file.exists()) {
-        return [candidate];
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (typeof Bun.which === 'function') {
-    const resolved = Bun.which('oxfmt');
-
-    if (resolved !== null && resolved.length > 0) {
-      return [resolved];
-    }
-  }
-
-  return null;
-};
-
 const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
   const { logger } = input;
+  const cwd = input.cwd ?? process.cwd();
 
   logger.debug('oxfmt: resolving command');
-  const cmd = await tryResolveOxfmtCommand();
+  const resolved = await tryResolveLocalBin({ cwd, binName: 'oxfmt', callerDir: import.meta.dir });
 
-  if (!cmd || cmd.length === 0) {
+  if (!resolved || resolved.length === 0) {
     logger.warn('oxfmt: command not found — format tool unavailable');
 
     return {
@@ -67,7 +39,7 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
     };
   }
 
-  logger.trace('oxfmt: resolved command', { cmd: cmd[0] });
+  logger.trace('oxfmt: resolved command', { cmd: resolved, cwd });
 
   const args: string[] = [];
 
@@ -88,8 +60,8 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
 
   try {
     const proc = Bun.spawn({
-      cmd: [...cmd, ...args],
-      cwd: process.cwd(),
+      cmd: [resolved, ...args],
+      cwd,
       stdout: 'pipe',
       stderr: 'pipe',
       stdin: 'ignore',

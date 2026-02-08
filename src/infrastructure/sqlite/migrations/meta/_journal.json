@@ -22,6 +22,13 @@
       "when": 1770046924471,
       "tag": "0002_symbol_index",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1770046924472,
+      "tag": "0003_symbol_is_exported",
+      "breakpoints": true
     }
   ]
 }

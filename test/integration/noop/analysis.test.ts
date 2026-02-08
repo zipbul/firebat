@@ -95,4 +95,97 @@ describe('integration/noop', () => {
     // Assert
     expect(expressionNoops.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('should report empty-catch when catch block has no body', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = [
+      'export function emptyCatch() {',
+      '  try {',
+      '    throw new Error("test");',
+      '  } catch (e) {',
+      '  }',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/noop/empty-catch.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let emptyCatches = analysis.findings.filter(finding => finding.kind === 'empty-catch');
+
+    // Assert
+    expect(emptyCatches.length).toBe(1);
+    expect(emptyCatches[0]?.confidence).toBe(0.8);
+  });
+
+  it('should report self-assignment when variable is assigned to itself', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = [
+      'export function selfAssign() {',
+      '  let x = 1;',
+      '  x = x;',
+      '  return x;',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/noop/self-assign.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let selfAssigns = analysis.findings.filter(finding => finding.kind === 'self-assignment');
+
+    // Assert
+    expect(selfAssigns.length).toBe(1);
+    expect(selfAssigns[0]?.evidence).toContain('assigned to itself');
+  });
+
+  it('should report empty-function-body when function has no statements', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = [
+      'export function emptyFunc() {',
+      '}',
+      'export const emptyArrow = () => {',
+      '};',
+    ].join('\n');
+
+    sources.set('/virtual/noop/empty-func.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let emptyBodies = analysis.findings.filter(finding => finding.kind === 'empty-function-body');
+
+    // Assert
+    expect(emptyBodies.length).toBeGreaterThanOrEqual(1);
+    expect(emptyBodies[0]?.confidence).toBe(0.6);
+  });
+
+  it('should not report empty-catch when catch block has statements', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = [
+      'export function handledCatch() {',
+      '  try {',
+      '    throw new Error("test");',
+      '  } catch (e) {',
+      '    console.log(e);',
+      '  }',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/noop/handled-catch.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let emptyCatches = analysis.findings.filter(finding => finding.kind === 'empty-catch');
+
+    // Assert
+    expect(emptyCatches.length).toBe(0);
+  });
 });

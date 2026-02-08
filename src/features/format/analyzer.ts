@@ -13,6 +13,7 @@ export const analyzeFormat = async (input: {
   readonly targets: ReadonlyArray<string>;
   readonly fix: boolean;
   readonly configPath?: string;
+  readonly cwd?: string;
   readonly logger?: FirebatLogger;
 }): Promise<FormatAnalysis> => {
   const logger = input.logger ?? createNoopLogger();
@@ -20,6 +21,7 @@ export const analyzeFormat = async (input: {
     targets: input.targets,
     mode: input.fix ? 'write' : 'check',
     ...(input.configPath !== undefined ? { configPath: input.configPath } : {}),
+    ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
     logger,
   });
 

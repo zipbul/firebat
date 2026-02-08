@@ -71,9 +71,44 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
     const orm = createDrizzleDb(sqlite);
     const migrationsFolder = path.resolve(import.meta.dir, './migrations');
 
-    input.logger.debug('sqlite: running migrations', { migrationsFolder });
+    const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
-    migrate(orm, { migrationsFolder });
+    const hasMemoriesTable = (): boolean => {
+      try {
+        const row = sqlite
+          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")
+          .get();
+        return row !== null && row !== undefined;
+      } catch {
+        return false;
+      }
+    };
+
+    // Concurrency-safe migrations:
+    // - If tables are missing, try to migrate.
+    // - If another process is migrating (busy/locked), wait for schema to appear.
+    if (!hasMemoriesTable()) {
+      input.logger.debug('sqlite: migrations needed', { migrationsFolder });
+
+      try {
+        migrate(orm, { migrationsFolder });
+      } catch (err) {
+        const msg = String(err).toLowerCase();
+        if (msg.includes('busy') || msg.includes('locked')) {
+          input.logger.warn('sqlite: migrations busy/locked; waiting for schema', { dbFilePath });
+        } else {
+          input.logger.warn('sqlite: migration failed', { error: String(err) });
+        }
+      }
+
+      const deadlineMs = Date.now() + 15_000;
+      while (!hasMemoriesTable()) {
+        if (Date.now() > deadlineMs) {
+          throw new Error('sqlite: migrations did not complete in time (memories table missing)');
+        }
+        await sleep(100);
+      }
+    }
 
     input.logger.trace('sqlite: ORM ready');
 
@@ -85,4 +120,19 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
   return created;
 };
 
-export { getDb, getOrmDb };
+const closeAll = async (): Promise<void> => {
+  const dbInstances = await Promise.all(Array.from(dbPromisesByPath.values()));
+
+  for (const db of dbInstances) {
+    try {
+      db.close();
+    } catch {
+      // Best-effort close
+    }
+  }
+
+  dbPromisesByPath.clear();
+  ormPromisesByPath.clear();
+};
+
+export { getDb, getOrmDb, closeAll };

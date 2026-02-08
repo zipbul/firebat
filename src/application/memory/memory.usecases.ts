@@ -2,8 +2,7 @@ import * as path from 'node:path';
 
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { createSqliteMemoryRepository } from '../../infrastructure/sqlite/memory.repository';
-import { createInMemoryMemoryRepository } from '../../infrastructure/memory/memory.repository';
-import { createHybridMemoryRepository } from '../../infrastructure/hybrid/memory.repository';
+import type { MemoryRepository } from '../../ports/memory.repository';
 import type { FirebatLogger } from '../../ports/logger';
 
 interface JsonObject {
@@ -53,29 +52,37 @@ const resolveProjectKey = (root: string | undefined): string => {
   return path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed);
 };
 
-const getRepository = async (input: { readonly logger: FirebatLogger }) => {
-  const orm = await getOrmDb({ logger: input.logger });
+const repoPromisesByProjectKey = new Map<string, Promise<MemoryRepository>>();
 
-  return createHybridMemoryRepository({
-    memory: createInMemoryMemoryRepository(),
-    sqlite: createSqliteMemoryRepository(orm),
-  });
+const getRepository = async (input: { readonly root?: string; readonly logger: FirebatLogger }) => {
+  const projectKey = resolveProjectKey(input.root);
+  const existing = repoPromisesByProjectKey.get(projectKey);
+
+  if (existing) {
+    return { projectKey, repo: await existing };
+  }
+
+  const created = (async (): Promise<MemoryRepository> => {
+    const orm = await getOrmDb({ rootAbs: projectKey, logger: input.logger });
+
+    return createSqliteMemoryRepository(orm);
+  })();
+
+  repoPromisesByProjectKey.set(projectKey, created);
+
+  return { projectKey, repo: await created };
 };
 
 const listMemoriesUseCase = async (input: RootInput) => {
   input.logger.debug('memory:list');
-
-  const projectKey = resolveProjectKey(input.root);
-  const repo = await getRepository({ logger: input.logger });
+  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
 
   return repo.listKeys({ projectKey });
 };
 
 const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutput | null> => {
   input.logger.debug('memory:read', { memoryKey: input.memoryKey });
-
-  const projectKey = resolveProjectKey(input.root);
-  const repo = await getRepository({ logger: input.logger });
+  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
   const rec = await repo.read({ projectKey, memoryKey: input.memoryKey });
 
   if (!rec) {
@@ -91,9 +98,7 @@ const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutp
 
 const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
   input.logger.debug('memory:write', { memoryKey: input.memoryKey });
-
-  const projectKey = resolveProjectKey(input.root);
-  const repo = await getRepository({ logger: input.logger });
+  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
   const payloadJson = JSON.stringify(input.value);
 
   await repo.write({ projectKey, memoryKey: input.memoryKey, payloadJson });
@@ -101,9 +106,7 @@ const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
 
 const deleteMemoryUseCase = async (input: DeleteMemoryInput): Promise<void> => {
   input.logger.debug('memory:delete', { memoryKey: input.memoryKey });
-
-  const projectKey = resolveProjectKey(input.root);
-  const repo = await getRepository({ logger: input.logger });
+  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
 
   await repo.delete({ projectKey, memoryKey: input.memoryKey });
 };

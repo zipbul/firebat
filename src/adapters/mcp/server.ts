@@ -40,7 +40,6 @@ import {
   indexExternalLibrariesUseCase,
   parseImportsUseCase,
   renameSymbolUseCase,
-  resolveSymbolUseCase,
   searchExternalLibrarySymbolsUseCase,
 } from '../../application/lsp/lsp.usecases';
 import {
@@ -50,7 +49,6 @@ import {
   replaceRegexUseCase,
   replaceSymbolBodyUseCase,
 } from '../../application/editor/edit.usecases';
-import { getSymbolsOverviewUseCase, querySymbolsUseCase } from '../../application/symbols/symbol-tools.usecases';
 import { traceSymbolUseCase } from '../../application/trace/trace-symbol.usecase';
 import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
 import { readdir } from 'node:fs/promises';
@@ -203,6 +201,31 @@ const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
 };
 
+/** Wrap a tool handler so that any thrown error becomes a proper MCP error response instead of an unhandled rejection. */
+const safeTool = <TArgs>(handler: (args: TArgs) => Promise<any>) => {
+  return async (args: TArgs): Promise<any> => {
+    try {
+      return await handler(args);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? `${err.name}: ${err.message}`
+          : String(err);
+      const stack =
+        err instanceof Error && err.stack
+          ? `\n${err.stack}`
+          : '';
+
+      process.stderr.write(`[firebat] tool error: ${message}${stack}\n`);
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ error: message }) }],
+        isError: true,
+      };
+    }
+  };
+};
+
 const runMcpServer = async (): Promise<void> => {
   // MCP process constraints:
   // - No `process.exit()` calls (transport stability)
@@ -221,8 +244,8 @@ const runMcpServer = async (): Promise<void> => {
   }
 
   const logger = createPrettyConsoleLogger({
-    level: 'error',
-    includeStack: false,
+    level: 'warn',
+    includeStack: true,
   });
 
   logger.trace('MCP server: initializing', { root: ctx.rootAbs, hasConfig: config !== null });
@@ -232,73 +255,138 @@ const runMcpServer = async (): Promise<void> => {
     version: '2.0.0-strict',
   });
   let lastReport: FirebatReport | null = null;
+  let lastScanTimestamp: number | null = null;
+
+  const resolveRootAbs = (root?: string): string => {
+    if (root === undefined) {
+      return ctx.rootAbs;
+    }
+
+    const trimmed = root.trim();
+    if (trimmed.length === 0) {
+      return ctx.rootAbs;
+    }
+
+    return path.isAbsolute(trimmed) ? trimmed : path.resolve(process.cwd(), trimmed);
+  };
+
+  const diffReports = (prev: FirebatReport | null, next: FirebatReport): { newFindings: number; resolvedFindings: number; unchangedFindings: number } => {
+    if (!prev) return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };
+
+    const countFindings = (r: FirebatReport): number => {
+      let total = 0;
+      const a = r.analyses as any;
+      for (const key of Object.keys(a)) {
+        const v = a[key];
+        if (Array.isArray(v)) { total += v.length; }
+        else if (v && typeof v === 'object') {
+          if (Array.isArray(v.items)) total += v.items.length;
+          else if (Array.isArray(v.findings)) total += v.findings.length;
+          else if (Array.isArray(v.cloneClasses)) total += v.cloneClasses.length;
+          else if (Array.isArray(v.groups)) total += v.groups.length;
+          else if (Array.isArray(v.hotspots)) total += v.hotspots.length;
+          else if (Array.isArray(v.diagnostics)) total += v.diagnostics.length;
+          else if (Array.isArray(v.cycles)) total += v.cycles.length;
+        }
+      }
+      return total;
+    };
+
+    const prevCount = countFindings(prev);
+    const nextCount = countFindings(next);
+    const diff = nextCount - prevCount;
+    return {
+      newFindings: diff > 0 ? diff : 0,
+      resolvedFindings: diff < 0 ? -diff : 0,
+      unchangedFindings: Math.min(prevCount, nextCount),
+    };
+  };
 
   // Bootstrap: ensure symbol index is up-to-date once on server start.
   // Then keep it updated with best-effort directory watchers.
-  try {
-    logger.trace('MCP server: bootstrapping symbol index');
-
-    await indexSymbolsUseCase({ root: ctx.rootAbs, logger });
-
-    const targets = await discoverDefaultTargets(ctx.rootAbs);
-    const targetSet = new Set(targets.map(t => path.resolve(t)));
-    const dirSet = new Set(targets.map(t => path.dirname(path.resolve(t))));
-    const pending = new Set<string>();
-    let flushTimer: Timer | null = null;
-
-    const flush = (): void => {
-      flushTimer = null;
-
-      if (pending.size === 0) {
-        return;
-      }
-
-      const batch = Array.from(pending);
-      pending.clear();
-
-      void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch, logger }).catch(() => undefined);
-    };
-
-    const scheduleFlush = (): void => {
-      if (flushTimer) {
-        return;
-      }
-
-      flushTimer = setTimeout(flush, 250);
-    };
-
-    for (const dirAbs of dirSet) {
+  // IMPORTANT: This is deferred until AFTER `server.connect()` so VS Code clients
+  // can connect quickly without hitting tool-call timeouts.
+  const bootstrapSymbolIndex = (): void => {
+    void (async () => {
       try {
-        const w = watch(dirAbs, { persistent: true }, (_event, filename) => {
-          if (!filename) {
+        logger.trace('MCP server: bootstrapping symbol index');
+
+        await indexSymbolsUseCase({ root: ctx.rootAbs, logger });
+
+        const targets = await discoverDefaultTargets(ctx.rootAbs);
+        const targetSet = new Set(targets.map(t => path.resolve(t)));
+        const dirSet = new Set(targets.map(t => path.dirname(path.resolve(t))));
+        const pending = new Set<string>();
+        let flushTimer: Timer | null = null;
+
+        const flush = (): void => {
+          flushTimer = null;
+
+          if (pending.size === 0) {
             return;
           }
 
-          const abs = path.resolve(dirAbs, String(filename));
+          const batch = Array.from(pending);
+          pending.clear();
 
-          if (!targetSet.has(abs)) {
+          void indexSymbolsUseCase({ root: ctx.rootAbs, targets: batch, logger }).catch(() => undefined);
+        };
+
+        const scheduleFlush = (): void => {
+          if (flushTimer) {
             return;
           }
 
-          pending.add(abs);
-          scheduleFlush();
-        });
+          flushTimer = setTimeout(flush, 250);
+        };
 
-        // Prevent the watcher from keeping large resources if closed.
-        w.on('error', () => undefined);
+        for (const dirAbs of dirSet) {
+          try {
+            const w = watch(dirAbs, { persistent: true }, (_event, filename) => {
+              if (!filename) {
+                return;
+              }
+
+              const abs = path.resolve(dirAbs, String(filename));
+
+              if (!targetSet.has(abs)) {
+                return;
+              }
+
+              pending.add(abs);
+              scheduleFlush();
+            });
+
+            // Prevent the watcher from keeping large resources if closed.
+            w.on('error', () => undefined);
+          } catch {
+            continue;
+          }
+        }
       } catch {
-        continue;
+        // Best-effort: MCP still serves tools even if bootstrap fails.
       }
-    }
-  } catch {
-    // Best-effort: MCP still serves tools even if bootstrap fails.
-  }
+    })();
+  };
   const ScanInputSchema = z
     .object({
-      targets: z.array(z.string()).optional(),
-      detectors: z.array(z.string()).optional(),
-      minSize: z.union([z.number().int().nonnegative(), z.literal('auto')]).optional(),
-      maxForwardDepth: z.number().int().nonnegative().optional(),
+      targets: z.array(z.string()).optional().describe('File/dir paths to analyze. Defaults to project source files.'),
+      detectors: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Subset of detectors to run. Available: exact-duplicates, structural-duplicates, waste, nesting, early-return, noop, forwarding, barrel-policy, unknown-proof, coupling, dependencies, api-drift, lint, format, typecheck.',
+        ),
+      minSize: z
+        .union([z.number().int().nonnegative(), z.literal('auto')])
+        .optional()
+        .describe('Minimum AST node size for duplicate detection. "auto" (default) adapts to codebase.'),
+      maxForwardDepth: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Max re-export depth for forwarding detector. 0 = disabled.'),
     })
     .strict();
 
@@ -306,19 +394,33 @@ const runMcpServer = async (): Promise<void> => {
     'scan',
     {
       title: 'Scan',
-      description: 'Analyze targets and return FirebatReport (JSON).',
+      description:
+        'Run code quality analysis on targets and return a FirebatReport (JSON). ' +
+        'Detects: exact-duplicates, structural-duplicates, waste (dead stores via CFG/dataflow), ' +
+        'nesting, early-return, noop (empty blocks), forwarding (re-export chains), ' +
+        'barrel-policy, unknown-proof, coupling, dependencies, api-drift, lint, format, typecheck. ' +
+        'Use the `detectors` param to run a subset. Results are cached per content digest.',
       inputSchema: ScanInputSchema,
       outputSchema: z
         .object({
           report: z.any(),
           timings: z.object({ totalMs: z.number() }),
+          diff: z
+            .object({
+              newFindings: z.number(),
+              resolvedFindings: z.number(),
+              unchangedFindings: z.number(),
+            })
+            .optional(),
         })
         .strict(),
     },
-    async (args: z.infer<typeof ScanInputSchema>) => {
+    safeTool(async (args: z.infer<typeof ScanInputSchema>) => {
       const t0 = nowMs();
       const rawTargets =
-        args.targets !== undefined && args.targets.length > 0 ? args.targets : await discoverDefaultTargets(ctx.rootAbs);
+        args.targets !== undefined && args.targets.length > 0
+          ? args.targets.map(t => path.isAbsolute(t) ? t : path.resolve(ctx.rootAbs, t))
+          : await discoverDefaultTargets(ctx.rootAbs);
       const targets = await expandTargets(rawTargets);
 
       const effectiveFeatures = resolveMcpFeatures(config);
@@ -341,16 +443,18 @@ const runMcpServer = async (): Promise<void> => {
       };
       const report = await scanUseCase(options, { logger });
 
+      const diff = diffReports(lastReport, report);
       lastReport = report;
+      lastScanTimestamp = Date.now();
 
       const totalMs = nowMs() - t0;
-      const structured = { report, timings: { totalMs } };
+      const structured = { report, timings: { totalMs }, ...(diff.newFindings >= 0 ? { diff } : {}) };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const FindPatternInputSchema = z
@@ -366,7 +470,7 @@ const runMcpServer = async (): Promise<void> => {
     'find_pattern',
     {
       title: 'Find Pattern',
-      description: 'Run ast-grep rule matching across targets (structured rule/matcher).',
+      description: 'Run ast-grep structural pattern matching across targets. Provide a `rule` (ast-grep YAML rule object) or `matcher` (pattern string) to find matching AST nodes.',
       inputSchema: FindPatternInputSchema,
       outputSchema: z
         .object({
@@ -384,7 +488,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof FindPatternInputSchema>) => {
+    safeTool(async (args: z.infer<typeof FindPatternInputSchema>) => {
       const hasRule = args.rule !== undefined;
       const hasMatcher = args.matcher !== undefined;
 
@@ -406,7 +510,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const TraceSymbolInputSchema = z
@@ -422,7 +526,7 @@ const runMcpServer = async (): Promise<void> => {
     'trace_symbol',
     {
       title: 'Trace Symbol',
-      description: 'Type-aware symbol tracing via tsgo.',
+      description: 'Trace a symbol\'s type-level dependency graph via tsgo LSP. Returns nodes (files, symbols, types) and edges showing how the symbol connects across the codebase.',
       inputSchema: TraceSymbolInputSchema,
       outputSchema: z
         .object({
@@ -435,7 +539,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof TraceSymbolInputSchema>) => {
+    safeTool(async (args: z.infer<typeof TraceSymbolInputSchema>) => {
       const request: Parameters<typeof traceSymbolUseCase>[0] = {
         entryFile: args.entryFile,
         symbol: args.symbol,
@@ -449,7 +553,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const LintInputSchema = z
@@ -463,7 +567,7 @@ const runMcpServer = async (): Promise<void> => {
     'lint',
     {
       title: 'Lint',
-      description: 'Run oxlint and return normalized diagnostics (best-effort).',
+      description: 'Run oxlint on the given file/directory targets and return normalized lint diagnostics. Optionally provide a custom configPath pointing to .oxlintrc.json. Returns an array of diagnostics with file, line, column, message, and severity.',
       inputSchema: LintInputSchema,
       outputSchema: z
         .object({
@@ -474,10 +578,11 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof LintInputSchema>) => {
+    safeTool(async (args: z.infer<typeof LintInputSchema>) => {
       const request: Parameters<typeof runOxlint>[0] = {
         targets: args.targets,
         ...(args.configPath !== undefined ? { configPath: args.configPath } : {}),
+        cwd: ctx.rootAbs,
         logger,
       };
       const result = await runOxlint(request);
@@ -492,13 +597,14 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const ListDirInputSchema = z
     .object({
       root: z.string().optional(),
       relativePath: z.string(),
+      recursive: z.boolean().optional().describe('If true, recursively list all entries. Default: false (non-recursive).'),
     })
     .strict();
 
@@ -506,7 +612,7 @@ const runMcpServer = async (): Promise<void> => {
     'list_dir',
     {
       title: 'List Dir',
-      description: 'List directory entries (best-effort, non-recursive).',
+      description: 'List files and subdirectories in a directory. Set recursive=true for a full recursive listing. Returns each entry with its name and whether it is a directory. Use relativePath from root to navigate.',
       inputSchema: ListDirInputSchema,
       outputSchema: z
         .object({
@@ -519,11 +625,33 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof ListDirInputSchema>) => {
+    safeTool(async (args: z.infer<typeof ListDirInputSchema>) => {
       const cwd = process.cwd();
       const root = args.root !== undefined && args.root.trim().length > 0 ? args.root.trim() : cwd;
       const absRoot = path.isAbsolute(root) ? root : path.resolve(cwd, root);
       const absPath = path.resolve(absRoot, args.relativePath);
+
+      if (args.recursive) {
+        const entries: Array<{ name: string; isDir: boolean }> = [];
+        const walk = async (dir: string, prefix: string): Promise<void> => {
+          const dirents = await readdir(dir, { withFileTypes: true });
+          for (const d of dirents) {
+            const rel = prefix ? `${prefix}/${d.name}` : d.name;
+            const isDir = d.isDirectory();
+            entries.push({ name: rel, isDir });
+            if (isDir) {
+              await walk(path.join(dir, d.name), rel);
+            }
+          }
+        };
+        await walk(absPath, '');
+        const structured = { entries };
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
+          structuredContent: structured,
+        };
+      }
+
       const dirents = await readdir(absPath, { withFileTypes: true });
       const entries = dirents.map(d => ({ name: d.name, isDir: d.isDirectory() }));
       const structured = { entries };
@@ -532,7 +660,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const ListMemoriesInputSchema = z.object({ root: z.string().optional() }).strict();
@@ -541,7 +669,7 @@ const runMcpServer = async (): Promise<void> => {
     'list_memories',
     {
       title: 'List Memories',
-      description: 'List stored memory keys for the given root.',
+      description: 'List all memory record keys stored for this project. Memories persist across MCP sessions in SQLite — useful for caching analysis notes, decisions, or intermediate results.',
       inputSchema: ListMemoriesInputSchema,
       outputSchema: z
         .object({
@@ -549,7 +677,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof ListMemoriesInputSchema>) => {
+    safeTool(async (args: z.infer<typeof ListMemoriesInputSchema>) => {
       const memories = await listMemoriesUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
       const structured = { memories };
 
@@ -557,7 +685,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const ReadMemoryInputSchema = z.object({ root: z.string().optional(), memoryKey: z.string() }).strict();
@@ -566,7 +694,7 @@ const runMcpServer = async (): Promise<void> => {
     'read_memory',
     {
       title: 'Read Memory',
-      description: 'Read a memory record by key.',
+      description: 'Read a previously stored memory record by its key. Returns the JSON value if found, or found=false if the key does not exist.',
       inputSchema: ReadMemoryInputSchema,
       outputSchema: z
         .object({
@@ -576,7 +704,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof ReadMemoryInputSchema>) => {
+    safeTool(async (args: z.infer<typeof ReadMemoryInputSchema>) => {
       const rec = await readMemoryUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         memoryKey: args.memoryKey,
@@ -588,7 +716,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const WriteMemoryInputSchema = z
@@ -599,13 +727,13 @@ const runMcpServer = async (): Promise<void> => {
     'write_memory',
     {
       title: 'Write Memory',
-      description: 'Write a memory record (JSON).',
+      description: 'Write or overwrite a memory record with an arbitrary JSON value. The record persists in SQLite across sessions. Use memoryKey as a unique identifier (e.g. "refactor-plan", "last-review-summary").',
       inputSchema: WriteMemoryInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), memoryKey: z.string() })
         .strict(),
     },
-    async (args: z.infer<typeof WriteMemoryInputSchema>) => {
+    safeTool(async (args: z.infer<typeof WriteMemoryInputSchema>) => {
       await writeMemoryUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         memoryKey: args.memoryKey,
@@ -619,7 +747,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const DeleteMemoryInputSchema = z.object({ root: z.string().optional(), memoryKey: z.string() }).strict();
@@ -628,13 +756,13 @@ const runMcpServer = async (): Promise<void> => {
     'delete_memory',
     {
       title: 'Delete Memory',
-      description: 'Delete a memory record by key.',
+      description: 'Delete a memory record by its key. Returns ok=true even if the key did not exist.',
       inputSchema: DeleteMemoryInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), memoryKey: z.string() })
         .strict(),
     },
-    async (args: z.infer<typeof DeleteMemoryInputSchema>) => {
+    safeTool(async (args: z.infer<typeof DeleteMemoryInputSchema>) => {
       await deleteMemoryUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         memoryKey: args.memoryKey,
@@ -647,7 +775,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   // ----
@@ -660,7 +788,7 @@ const runMcpServer = async (): Promise<void> => {
     'index_symbols',
     {
       title: 'Index Symbols',
-      description: 'Index symbols for the given targets (best-effort).',
+      description: 'Parse and index all symbols (functions, classes, types, variables) from the given targets into SQLite. Required before using search_symbol_from_index.',
       inputSchema: IndexSymbolsInputSchema,
       outputSchema: z
         .object({
@@ -673,7 +801,7 @@ const runMcpServer = async (): Promise<void> => {
         })
         .strict(),
     },
-    async (args: z.infer<typeof IndexSymbolsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof IndexSymbolsInputSchema>) => {
       const t0 = nowMs();
       const result = await indexSymbolsUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
@@ -687,13 +815,15 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const SearchSymbolFromIndexInputSchema = z
     .object({
       root: z.string().optional(),
       query: z.string(),
+      kind: z.union([z.string(), z.array(z.string())]).optional(),
+      file: z.string().optional(),
       limit: z.number().int().positive().optional(),
     })
     .strict();
@@ -702,7 +832,7 @@ const runMcpServer = async (): Promise<void> => {
     'search_symbol_from_index',
     {
       title: 'Search Symbol From Index',
-      description: 'Search indexed symbols by substring match on name.',
+      description: 'Search indexed symbols by substring match on name. Optionally filter by symbol kind (e.g. "function", "class", "type") and/or file path substring.',
       inputSchema: SearchSymbolFromIndexInputSchema,
       outputSchema: z
         .object({
@@ -715,90 +845,34 @@ const runMcpServer = async (): Promise<void> => {
                 start: z.object({ line: z.number(), column: z.number() }),
                 end: z.object({ line: z.number(), column: z.number() }),
               }),
+              isExported: z.boolean().optional(),
             }),
           ),
         })
         .strict(),
     },
-    async (args: z.infer<typeof SearchSymbolFromIndexInputSchema>) => {
+    safeTool(async (args: z.infer<typeof SearchSymbolFromIndexInputSchema>) => {
       const matches = await searchSymbolFromIndexUseCase({
         ...(args.root !== undefined ? { root: args.root } : {}),
         query: args.query,
         ...(args.limit !== undefined ? { limit: args.limit } : {}),
         logger,
       });
-      const structured = { matches };
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
-      };
-    },
-  );
-
-  // LSMCP name drift: provide `search_symbols` as an alias of `search_symbol_from_index`.
-  server.registerTool(
-    'search_symbols',
-    {
-      title: 'Search Symbols',
-      description: 'Alias of search_symbol_from_index (name drift compatibility).',
-      inputSchema: SearchSymbolFromIndexInputSchema,
-      outputSchema: z
-        .object({
-          matches: z.array(
-            z.object({
-              filePath: z.string(),
-              kind: z.string(),
-              name: z.string(),
-              span: z.object({
-                start: z.object({ line: z.number(), column: z.number() }),
-                end: z.object({ line: z.number(), column: z.number() }),
-              }),
-            }),
-          ),
-        })
-        .strict(),
-    },
-    async (args: z.infer<typeof SearchSymbolFromIndexInputSchema>) => {
-      const matches = await searchSymbolFromIndexUseCase({
-        ...(args.root !== undefined ? { root: args.root } : {}),
-        query: args.query,
-        ...(args.limit !== undefined ? { limit: args.limit } : {}),
-        logger,
+      const kindsRaw = args.kind === undefined ? [] : Array.isArray(args.kind) ? args.kind : [args.kind];
+      const kinds = new Set(kindsRaw.map(k => k.toLowerCase()));
+      const fileNeedle = (args.file ?? '').trim().toLowerCase();
+      const filtered = matches.filter(m => {
+        if (kinds.size > 0 && !kinds.has(m.kind.toLowerCase())) { return false; }
+        if (fileNeedle && !m.filePath.toLowerCase().includes(fileNeedle)) { return false; }
+        return true;
       });
-      const structured = { matches };
+      const structured = { matches: filtered };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
-  );
-
-  const GetIndexStatsFromIndexInputSchema = z.object({ root: z.string().optional() }).strict();
-
-  server.registerTool(
-    'get_index_stats_from_index',
-    {
-      title: 'Get Index Stats From Index',
-      description: 'Get basic stats for the symbol index.',
-      inputSchema: GetIndexStatsFromIndexInputSchema,
-      outputSchema: z
-        .object({
-          indexedFileCount: z.number(),
-          symbolCount: z.number(),
-          lastIndexedAt: z.number().nullable(),
-        })
-        .strict(),
-    },
-    async (args: z.infer<typeof GetIndexStatsFromIndexInputSchema>) => {
-      const structured = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
-      };
-    },
+    }),
   );
 
   const ClearIndexInputSchema = z.object({ root: z.string().optional() }).strict();
@@ -807,13 +881,13 @@ const runMcpServer = async (): Promise<void> => {
     'clear_index',
     {
       title: 'Clear Index',
-      description: 'Delete all symbol index data for the given root.',
+      description: 'Delete all symbol index data for the given project root. Use to force a full re-index.',
       inputSchema: ClearIndexInputSchema,
       outputSchema: z
         .object({ ok: z.boolean() })
         .strict(),
     },
-    async (args: z.infer<typeof ClearIndexInputSchema>) => {
+    safeTool(async (args: z.infer<typeof ClearIndexInputSchema>) => {
       await clearIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
 
       const structured = { ok: true };
@@ -822,7 +896,7 @@ const runMcpServer = async (): Promise<void> => {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   const GetProjectOverviewInputSchema = z.object({ root: z.string().optional() }).strict();
@@ -831,27 +905,54 @@ const runMcpServer = async (): Promise<void> => {
     'get_project_overview',
     {
       title: 'Get Project Overview',
-      description: 'Return basic project overview information (currently: symbol index stats).',
+      description: 'Return project overview: indexed file count, symbol count, last indexed timestamp, tool availability (tsgo, oxlint), last scan timestamp, and root path.',
       inputSchema: GetProjectOverviewInputSchema,
       outputSchema: z
         .object({
+          root: z.string(),
           symbolIndex: z.object({
             indexedFileCount: z.number(),
             symbolCount: z.number(),
             lastIndexedAt: z.number().nullable(),
           }),
+          tools: z.object({
+            tsgo: z.boolean(),
+            oxlint: z.boolean(),
+          }),
+          lastScanAt: z.number().nullable(),
         })
         .strict(),
     },
-    async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
       const symbolIndex = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
-      const structured = { symbolIndex };
+
+      // Best-effort tool availability check
+      const tsgoAvailable = await (async () => {
+        try {
+          const r = await checkCapabilitiesUseCase({ root: ctx.rootAbs, logger });
+          return r.ok === true;
+        } catch { return false; }
+      })();
+      const oxlintAvailable = await (async () => {
+        try {
+          const r = await runOxlint({ targets: [], cwd: ctx.rootAbs, logger });
+          // If targets is empty, oxlint may still report ok=false for "no targets" but the tool itself is found.
+          return r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
+        } catch { return false; }
+      })();
+
+      const structured = {
+        root: ctx.rootAbs,
+        symbolIndex,
+        tools: { tsgo: tsgoAvailable, oxlint: oxlintAvailable },
+        lastScanAt: lastScanTimestamp,
+      };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
         structuredContent: structured,
       };
-    },
+    }),
   );
 
   // ----
@@ -860,7 +961,7 @@ const runMcpServer = async (): Promise<void> => {
 
   const GetHoverInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]),
       character: z.number().int().nonnegative().optional(),
@@ -873,13 +974,14 @@ const runMcpServer = async (): Promise<void> => {
     'get_hover',
     {
       title: 'Get Hover',
-      description: 'Get hover/type information at a position or for a target string (tsgo LSP).',
+      description: 'Get type information and documentation for a symbol at a specific position via tsgo LSP. Provide line + character for exact position, or use target string to auto-locate the symbol in the line.',
       inputSchema: GetHoverInputSchema,
       outputSchema: z.object({ ok: z.boolean(), hover: z.any().optional(), error: z.string().optional(), note: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetHoverInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetHoverInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getHoverUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         line: args.line,
         ...(args.character !== undefined ? { character: args.character } : {}),
@@ -889,12 +991,12 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const FindReferencesInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]),
       symbolName: z.string(),
@@ -906,13 +1008,14 @@ const runMcpServer = async (): Promise<void> => {
     'find_references',
     {
       title: 'Find References',
-      description: 'Find all references to a symbol (tsgo LSP).',
+      description: 'Find all references to a symbol across the project via tsgo LSP. Returns each reference location with file path, line, and column. Requires symbolName and approximate line in the file where it appears.',
       inputSchema: FindReferencesInputSchema,
       outputSchema: z.object({ ok: z.boolean(), references: z.array(z.any()).optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof FindReferencesInputSchema>) => {
+    safeTool(async (args: z.infer<typeof FindReferencesInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await findReferencesUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         line: args.line,
         symbolName: args.symbolName,
@@ -921,12 +1024,12 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const GetDefinitionsInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]),
       symbolName: z.string(),
@@ -941,13 +1044,14 @@ const runMcpServer = async (): Promise<void> => {
     'get_definitions',
     {
       title: 'Get Definitions',
-      description: 'Go to definition with preview (tsgo LSP).',
+      description: 'Jump to the definition of a symbol via tsgo LSP and return a source preview. Use before/after (default 2) to control context lines around the definition. Set include_body=true to get the full function/class body.',
       inputSchema: GetDefinitionsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), definitions: z.array(z.any()).optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetDefinitionsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetDefinitionsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getDefinitionsUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         line: args.line,
         symbolName: args.symbolName,
@@ -959,12 +1063,12 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const GetDiagnosticsInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       timeoutMs: z.number().int().positive().optional(),
       forceRefresh: z.boolean().optional(),
@@ -976,13 +1080,14 @@ const runMcpServer = async (): Promise<void> => {
     'get_diagnostics',
     {
       title: 'Get Diagnostics',
-      description: 'Get diagnostics for a file (pull diagnostics; server dependent).',
+      description: 'Get TypeScript diagnostics (errors, warnings) for a single file via tsgo LSP pull diagnostics. Use forceRefresh=true to bypass cache. Set timeoutMs to limit wait time for large files.',
       inputSchema: GetDiagnosticsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), diagnostics: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetDiagnosticsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetDiagnosticsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getDiagnosticsUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
         ...(args.forceRefresh !== undefined ? { forceRefresh: args.forceRefresh } : {}),
@@ -991,77 +1096,80 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const GetAllDiagnosticsInputSchema = z.object({ root: z.string(), tsconfigPath: z.string().optional() }).strict();
+  const GetAllDiagnosticsInputSchema = z.object({ root: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
 
   server.registerTool(
     'get_all_diagnostics',
     {
       title: 'Get All Diagnostics',
-      description: 'Project-wide diagnostics (workspace/diagnostic; server dependent).',
+      description: 'Get TypeScript diagnostics for all files in the project via tsgo LSP workspace diagnostics. Returns errors and warnings across the entire codebase in one call.',
       inputSchema: GetAllDiagnosticsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), diagnostics: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetAllDiagnosticsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetAllDiagnosticsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getAllDiagnosticsUseCase({
-        root: args.root,
+        root: rootAbs,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
         logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const GetDocumentSymbolsInputSchema = z.object({ root: z.string(), filePath: z.string(), tsconfigPath: z.string().optional() }).strict();
+  const GetDocumentSymbolsInputSchema = z.object({ root: z.string().optional(), filePath: z.string(), tsconfigPath: z.string().optional() }).strict();
 
   server.registerTool(
     'get_document_symbols',
     {
       title: 'Get Document Symbols',
-      description: 'List all symbols in a document (tsgo LSP).',
+      description: 'List all symbols (functions, classes, variables, types, etc.) in a single file via tsgo LSP. Returns a hierarchical symbol tree with names, kinds, and ranges.',
       inputSchema: GetDocumentSymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), symbols: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetDocumentSymbolsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetDocumentSymbolsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getDocumentSymbolsUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
         logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const GetWorkspaceSymbolsInputSchema = z.object({ root: z.string(), query: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
+  const GetWorkspaceSymbolsInputSchema = z.object({ root: z.string().optional(), query: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
 
   server.registerTool(
     'get_workspace_symbols',
     {
       title: 'Get Workspace Symbols',
-      description: 'Workspace symbol search (tsgo LSP).',
+      description: 'Search for symbols across the entire workspace via tsgo LSP. Provide a query string to filter by name. Returns matching symbols with their file paths, kinds, and locations.',
       inputSchema: GetWorkspaceSymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), symbols: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetWorkspaceSymbolsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetWorkspaceSymbolsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getWorkspaceSymbolsUseCase({
-        root: args.root,
+        root: rootAbs,
         ...(args.query !== undefined && args.query.trim().length > 0 ? { query: args.query } : {}),
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
         logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const GetCompletionInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]),
       character: z.number().int().nonnegative().optional(),
@@ -1073,13 +1181,14 @@ const runMcpServer = async (): Promise<void> => {
     'get_completion',
     {
       title: 'Get Completion',
-      description: 'Completion at a position (tsgo LSP).',
+      description: 'Get code completion suggestions at a specific cursor position via tsgo LSP. Returns available completions with labels, kinds, and documentation.',
       inputSchema: GetCompletionInputSchema,
       outputSchema: z.object({ ok: z.boolean(), completion: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetCompletionInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetCompletionInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getCompletionUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         line: args.line,
         ...(args.character !== undefined ? { character: args.character } : {}),
@@ -1088,12 +1197,12 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const GetSignatureHelpInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]),
       character: z.number().int().nonnegative().optional(),
@@ -1105,13 +1214,14 @@ const runMcpServer = async (): Promise<void> => {
     'get_signature_help',
     {
       title: 'Get Signature Help',
-      description: 'Signature help at a position (tsgo LSP).',
+      description: 'Get function/method signature help at a cursor position via tsgo LSP. Returns parameter information, active parameter index, and documentation for the current call expression.',
       inputSchema: GetSignatureHelpInputSchema,
       outputSchema: z.object({ ok: z.boolean(), signatureHelp: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetSignatureHelpInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetSignatureHelpInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getSignatureHelpUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         line: args.line,
         ...(args.character !== undefined ? { character: args.character } : {}),
@@ -1120,34 +1230,60 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const FormatDocumentInputSchema = z.object({ root: z.string(), filePath: z.string(), tsconfigPath: z.string().optional() }).strict();
+  const FormatDocumentInputSchema = z.object({ root: z.string().optional(), filePath: z.string(), tsconfigPath: z.string().optional() }).strict();
 
   server.registerTool(
     'format_document',
     {
       title: 'Format Document',
-      description: 'Format the entire document (tsgo LSP).',
+      description: 'Auto-format TypeScript/JavaScript files using tsgo LSP formatting. filePath can be a single file or a directory (formats all .ts/.tsx files recursively). Returns changed=true and changedCount for the number of modified files.',
       inputSchema: FormatDocumentInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), changed: z.boolean().optional(), error: z.string().optional() }).strict(),
+      outputSchema: z.object({ ok: z.boolean(), changed: z.boolean().optional(), changedCount: z.number().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof FormatDocumentInputSchema>) => {
+    safeTool(async (args: z.infer<typeof FormatDocumentInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const fileAbs = path.isAbsolute(args.filePath) ? args.filePath : path.resolve(rootAbs, args.filePath);
+
+      // Check if filePath is a directory
+      let isDir = false;
+      try {
+        const stat = await Bun.file(fileAbs).stat();
+        isDir = typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory();
+      } catch { /* not found */ }
+
+      if (isDir) {
+        const files = await expandTargets([fileAbs]);
+        let changedCount = 0;
+        for (const f of files) {
+          const r = await formatDocumentUseCase({
+            root: rootAbs,
+            filePath: f,
+            ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
+            logger,
+          });
+          if (r.changed) changedCount++;
+        }
+        const structured = { ok: true, changed: changedCount > 0, changedCount };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      }
+
       const structured = await formatDocumentUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
         logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const GetCodeActionsInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       startLine: z.union([z.number(), z.string()]),
       endLine: z.union([z.number(), z.string()]).optional(),
@@ -1160,13 +1296,14 @@ const runMcpServer = async (): Promise<void> => {
     'get_code_actions',
     {
       title: 'Get Code Actions',
-      description: 'Get available code actions for a line range (tsgo LSP).',
+      description: 'Get available quick-fixes for a line range via tsgo LSP. Note: tsgo currently only supports "quickfix" actions (no refactor/extract/inline). Use includeKinds to filter. Provide startLine and optionally endLine.',
       inputSchema: GetCodeActionsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), actions: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetCodeActionsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof GetCodeActionsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await getCodeActionsUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         startLine: args.startLine,
         ...(args.endLine !== undefined ? { endLine: args.endLine } : {}),
@@ -1176,12 +1313,12 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const RenameSymbolInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]).optional(),
       symbolName: z.string(),
@@ -1194,15 +1331,16 @@ const runMcpServer = async (): Promise<void> => {
     'rename_symbol',
     {
       title: 'Rename Symbol',
-      description: 'Rename a symbol project-wide (tsgo LSP).',
+      description: 'Rename a symbol across all files in the project via tsgo LSP. Applies changes atomically and returns the list of changed files. Provide symbolName (current name) and newName.',
       inputSchema: RenameSymbolInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), changedFiles: z.array(z.string()).optional(), error: z.string().optional() })
         .strict(),
     },
-    async (args: z.infer<typeof RenameSymbolInputSchema>) => {
+    safeTool(async (args: z.infer<typeof RenameSymbolInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await renameSymbolUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         ...(args.line !== undefined ? { line: args.line } : {}),
         symbolName: args.symbolName,
@@ -1212,12 +1350,12 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const DeleteSymbolInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       filePath: z.string(),
       line: z.union([z.number(), z.string()]),
       symbolName: z.string(),
@@ -1229,13 +1367,14 @@ const runMcpServer = async (): Promise<void> => {
     'delete_symbol',
     {
       title: 'Delete Symbol',
-      description: 'Delete symbol definition (best-effort, via LSP definition lookup).',
+      description: 'Delete a symbol\'s entire definition from the source file. Locates the symbol via tsgo LSP definition lookup at the given line, then removes the full declaration block.',
       inputSchema: DeleteSymbolInputSchema,
       outputSchema: z.object({ ok: z.boolean(), changed: z.boolean().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof DeleteSymbolInputSchema>) => {
+    safeTool(async (args: z.infer<typeof DeleteSymbolInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await deleteSymbolUseCase({
-        root: args.root,
+        root: rootAbs,
         filePath: args.filePath,
         line: args.line,
         symbolName: args.symbolName,
@@ -1244,28 +1383,29 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const CheckCapabilitiesInputSchema = z.object({ root: z.string(), tsconfigPath: z.string().optional() }).strict();
+  const CheckCapabilitiesInputSchema = z.object({ root: z.string().optional(), tsconfigPath: z.string().optional() }).strict();
 
   server.registerTool(
     'check_capabilities',
     {
       title: 'Check Capabilities',
-      description: 'Report supported LSP capabilities (tsgo LSP).',
+      description: 'Report which LSP capabilities the tsgo server supports (hover, references, definition, formatting, etc.). Useful to check feature availability before calling other LSP tools.',
       inputSchema: CheckCapabilitiesInputSchema,
       outputSchema: z.object({ ok: z.boolean(), capabilities: z.any().optional(), error: z.string().optional(), note: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof CheckCapabilitiesInputSchema>) => {
+    safeTool(async (args: z.infer<typeof CheckCapabilitiesInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await checkCapabilitiesUseCase({
-        root: args.root,
+        root: rootAbs,
         ...(args.tsconfigPath !== undefined && args.tsconfigPath.length > 0 ? { tsconfigPath: args.tsconfigPath } : {}),
         logger,
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   // ----
@@ -1274,7 +1414,7 @@ const runMcpServer = async (): Promise<void> => {
 
   const ReplaceRangeInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       relativePath: z.string(),
       startLine: z.number().int().positive(),
       startColumn: z.number().int().positive(),
@@ -1288,20 +1428,21 @@ const runMcpServer = async (): Promise<void> => {
     'replace_range',
     {
       title: 'Replace Range',
-      description: 'Replace a specific 1-based line/column range in a file.',
+      description: 'Replace text in a specific 1-based line/column range within a file. Provide startLine, startColumn, endLine, endColumn to define the range, and newText for the replacement content.',
       inputSchema: ReplaceRangeInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof ReplaceRangeInputSchema>) => {
-      const structured = await replaceRangeUseCase({ ...args, logger });
+    safeTool(async (args: z.infer<typeof ReplaceRangeInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await replaceRangeUseCase({ ...args, root: rootAbs, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const ReplaceRegexInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       relativePath: z.string(),
       regex: z.string(),
       repl: z.string(),
@@ -1313,15 +1454,16 @@ const runMcpServer = async (): Promise<void> => {
     'replace_regex',
     {
       title: 'Replace Regex',
-      description: 'Regex-based replacement (gms).',
+      description: 'Apply a regex-based text replacement across a file using global/multiline/dotAll flags (gms). By default replaces only the first match; set allowMultipleOccurrences=true to replace all matches.',
       inputSchema: ReplaceRegexInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), matchCount: z.number().optional(), error: z.string().optional() })
         .strict(),
     },
-    async (args: z.infer<typeof ReplaceRegexInputSchema>) => {
+    safeTool(async (args: z.infer<typeof ReplaceRegexInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await replaceRegexUseCase({
-        root: args.root,
+        root: rootAbs,
         relativePath: args.relativePath,
         regex: args.regex,
         repl: args.repl,
@@ -1332,111 +1474,61 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const ReplaceSymbolBodyInputSchema = z.object({ root: z.string(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
+  const ReplaceSymbolBodyInputSchema = z.object({ root: z.string().optional(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
 
   server.registerTool(
     'replace_symbol_body',
     {
       title: 'Replace Symbol Body',
-      description: 'Replace the block body of a symbol by namePath (best-effort; TS/JS only).',
+      description: 'Replace the entire block body of a function, method, or class identified by namePath (e.g. "MyClass.myMethod" or "myFunction"). The body parameter should contain the new implementation without braces.',
       inputSchema: ReplaceSymbolBodyInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof ReplaceSymbolBodyInputSchema>) => {
-      const structured = await replaceSymbolBodyUseCase({ ...args, logger });
+    safeTool(async (args: z.infer<typeof ReplaceSymbolBodyInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await replaceSymbolBodyUseCase({ ...args, root: rootAbs, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const InsertBeforeSymbolInputSchema = z.object({ root: z.string(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
+  const InsertBeforeSymbolInputSchema = z.object({ root: z.string().optional(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
 
   server.registerTool(
     'insert_before_symbol',
     {
       title: 'Insert Before Symbol',
-      description: 'Insert text before a symbol definition by namePath (best-effort).',
+      description: 'Insert text immediately before a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding imports, comments, decorators, or new declarations above a symbol.',
       inputSchema: InsertBeforeSymbolInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof InsertBeforeSymbolInputSchema>) => {
-      const structured = await insertBeforeSymbolUseCase({ ...args, logger });
+    safeTool(async (args: z.infer<typeof InsertBeforeSymbolInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await insertBeforeSymbolUseCase({ ...args, root: rootAbs, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const InsertAfterSymbolInputSchema = z.object({ root: z.string(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
+  const InsertAfterSymbolInputSchema = z.object({ root: z.string().optional(), namePath: z.string(), relativePath: z.string(), body: z.string() }).strict();
 
   server.registerTool(
     'insert_after_symbol',
     {
       title: 'Insert After Symbol',
-      description: 'Insert text after a symbol definition by namePath (best-effort).',
+      description: 'Insert text immediately after a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding related functions, exports, or test scaffolding below a symbol.',
       inputSchema: InsertAfterSymbolInputSchema,
       outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof InsertAfterSymbolInputSchema>) => {
-      const structured = await insertAfterSymbolUseCase({ ...args, logger });
+    safeTool(async (args: z.infer<typeof InsertAfterSymbolInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await insertAfterSymbolUseCase({ ...args, root: rootAbs, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
-  );
-
-  // ----
-  // Symbol overview helpers
-  // ----
-
-  const GetSymbolsOverviewInputSchema = z.object({ root: z.string().optional() }).strict();
-
-  server.registerTool(
-    'get_symbols_overview',
-    {
-      title: 'Get Symbols Overview',
-      description: 'Summarize the current symbol index for the project root.',
-      inputSchema: GetSymbolsOverviewInputSchema,
-      outputSchema: z.object({ root: z.string(), index: z.any() }).strict(),
-    },
-    async (args: z.infer<typeof GetSymbolsOverviewInputSchema>) => {
-      const structured = await getSymbolsOverviewUseCase(args.root !== undefined ? { root: args.root, logger } : { logger });
-
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
-  );
-
-  const QuerySymbolsInputSchema = z
-    .object({
-      root: z.string().optional(),
-      query: z.string(),
-      kind: z.union([z.string(), z.array(z.string())]).optional(),
-      file: z.string().optional(),
-      limit: z.number().int().positive().optional(),
-    })
-    .strict();
-
-  server.registerTool(
-    'query_symbols',
-    {
-      title: 'Query Symbols',
-      description: 'Query symbols from the index (best-effort filter).',
-      inputSchema: QuerySymbolsInputSchema,
-      outputSchema: z.object({ matches: z.array(z.any()) }).strict(),
-    },
-    async (args: z.infer<typeof QuerySymbolsInputSchema>) => {
-      const structured = await querySymbolsUseCase({
-        query: args.query,
-        ...(args.root !== undefined ? { root: args.root } : {}),
-        ...(args.kind !== undefined ? { kind: args.kind } : {}),
-        ...(args.file !== undefined ? { file: args.file } : {}),
-        ...(args.limit !== undefined ? { limit: args.limit } : {}),
-        logger,
-      });
-
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   // ----
@@ -1445,7 +1537,7 @@ const runMcpServer = async (): Promise<void> => {
 
   const IndexExternalLibrariesInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       maxFiles: z.number().int().positive().optional(),
       includePatterns: z.array(z.string()).optional(),
       excludePatterns: z.array(z.string()).optional(),
@@ -1456,15 +1548,16 @@ const runMcpServer = async (): Promise<void> => {
     'index_external_libraries',
     {
       title: 'Index External Libraries',
-      description: 'Index .d.ts files in node_modules for basic external symbol search.',
+      description: 'Parse and index TypeScript declaration files (.d.ts) from node_modules into memory for external symbol search. Use includePatterns/excludePatterns to filter libraries. Required before using search_external_library_symbols.',
       inputSchema: IndexExternalLibrariesInputSchema,
       outputSchema: z
         .object({ ok: z.boolean(), indexedFiles: z.number(), symbols: z.number(), error: z.string().optional() })
         .strict(),
     },
-    async (args: z.infer<typeof IndexExternalLibrariesInputSchema>) => {
+    safeTool(async (args: z.infer<typeof IndexExternalLibrariesInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await indexExternalLibrariesUseCase({
-        root: args.root,
+        root: rootAbs,
         ...(args.maxFiles !== undefined ? { maxFiles: args.maxFiles } : {}),
         ...(args.includePatterns !== undefined ? { includePatterns: args.includePatterns } : {}),
         ...(args.excludePatterns !== undefined ? { excludePatterns: args.excludePatterns } : {}),
@@ -1472,29 +1565,30 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const GetTypescriptDependenciesInputSchema = z.object({ root: z.string() }).strict();
+  const GetTypescriptDependenciesInputSchema = z.object({ root: z.string().optional() }).strict();
 
   server.registerTool(
     'get_typescript_dependencies',
     {
       title: 'Get TypeScript Dependencies',
-      description: 'List dependencies that appear to provide TypeScript declarations.',
+      description: 'List all npm dependencies (from package.json) that provide TypeScript type declarations. Checks for bundled types and @types/* packages. Useful for deciding which libraries to index with index_external_libraries.',
       inputSchema: GetTypescriptDependenciesInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), dependencies: z.array(z.string()).optional(), error: z.string().optional() }).strict(),
+      outputSchema: z.object({ ok: z.boolean(), dependencies: z.array(z.object({ name: z.string(), version: z.string(), hasTypes: z.boolean() })).optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetTypescriptDependenciesInputSchema>) => {
-      const structured = await getTypescriptDependenciesUseCase({ root: args.root, logger });
+    safeTool(async (args: z.infer<typeof GetTypescriptDependenciesInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await getTypescriptDependenciesUseCase({ root: rootAbs, logger });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   const SearchExternalLibrarySymbolsInputSchema = z
     .object({
-      root: z.string(),
+      root: z.string().optional(),
       libraryName: z.string().optional(),
       symbolName: z.string().optional(),
       kind: z.string().optional(),
@@ -1506,13 +1600,14 @@ const runMcpServer = async (): Promise<void> => {
     'search_external_library_symbols',
     {
       title: 'Search External Library Symbols',
-      description: 'Search indexed external symbols (requires index_external_libraries first).',
+      description: 'Search symbols from indexed external libraries (node_modules). Filter by libraryName, symbolName substring, and/or kind. Requires index_external_libraries to be run first.',
       inputSchema: SearchExternalLibrarySymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), matches: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof SearchExternalLibrarySymbolsInputSchema>) => {
+    safeTool(async (args: z.infer<typeof SearchExternalLibrarySymbolsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
       const structured = await searchExternalLibrarySymbolsUseCase({
-        root: args.root,
+        root: rootAbs,
         ...(args.libraryName !== undefined ? { libraryName: args.libraryName } : {}),
         ...(args.symbolName !== undefined ? { symbolName: args.symbolName } : {}),
         ...(args.kind !== undefined ? { kind: args.kind } : {}),
@@ -1520,136 +1615,88 @@ const runMcpServer = async (): Promise<void> => {
       });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const ResolveSymbolInputSchema = z
-    .object({ root: z.string(), filePath: z.string(), symbolName: z.string(), tsconfigPath: z.string().optional() })
-    .strict();
-
-  server.registerTool(
-    'resolve_symbol',
-    {
-      title: 'Resolve Symbol',
-      description: 'Resolve a symbol definition using LSP definition lookup.',
-      inputSchema: ResolveSymbolInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), definition: z.any().optional(), error: z.string().optional() }).strict(),
-    },
-    async (args: z.infer<typeof ResolveSymbolInputSchema>) => {
-      const structured = await resolveSymbolUseCase({
-        root: args.root,
-        filePath: args.filePath,
-        symbolName: args.symbolName,
-        ...(args.tsconfigPath !== undefined ? { tsconfigPath: args.tsconfigPath } : {}),
-        logger,
-      });
-
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
-  );
-
-  const GetAvailableExternalSymbolsInputSchema = z.object({ root: z.string(), filePath: z.string() }).strict();
+  const GetAvailableExternalSymbolsInputSchema = z.object({ root: z.string().optional(), filePath: z.string() }).strict();
 
   server.registerTool(
     'get_available_external_symbols',
     {
       title: 'Get Available External Symbols',
-      description: 'List imported symbol names in a file (best-effort import parser).',
+      description: 'List all symbol names that are imported in a given file. Parses import declarations to extract named imports, default imports, and namespace imports. Quick way to see what a file depends on.',
       inputSchema: GetAvailableExternalSymbolsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), symbols: z.array(z.string()), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof GetAvailableExternalSymbolsInputSchema>) => {
-      const structured = await getAvailableExternalSymbolsInFileUseCase(args);
+    safeTool(async (args: z.infer<typeof GetAvailableExternalSymbolsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await getAvailableExternalSymbolsInFileUseCase({ ...args, root: rootAbs });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
-  const ParseImportsInputSchema = z.object({ root: z.string(), filePath: z.string() }).strict();
+  const ParseImportsInputSchema = z.object({ root: z.string().optional(), filePath: z.string() }).strict();
 
   server.registerTool(
     'parse_imports',
     {
       title: 'Parse Imports',
-      description: 'Parse and summarize imports (best-effort).',
+      description: 'Parse all import statements in a file and return structured details: specifier, imported names, type-only status, and resolved paths for relative imports. More detailed than get_available_external_symbols.',
       inputSchema: ParseImportsInputSchema,
       outputSchema: z.object({ ok: z.boolean(), imports: z.any().optional(), error: z.string().optional() }).strict(),
     },
-    async (args: z.infer<typeof ParseImportsInputSchema>) => {
-      const structured = await parseImportsUseCase(args);
+    safeTool(async (args: z.infer<typeof ParseImportsInputSchema>) => {
+      const rootAbs = resolveRootAbs(args.root);
+      const structured = await parseImportsUseCase({ ...args, root: rootAbs });
 
       return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   // ----
-  // Onboarding / guidance tools (text-only)
+  // check_tool_availability: consolidated tool status check
   // ----
 
-  server.registerTool(
-    'index_onboarding',
-    {
-      title: 'Index Onboarding',
-      description: 'Explain the recommended indexing + symbol search workflow for this server.',
-      inputSchema: z.object({}).strict(),
-      outputSchema: z.object({ text: z.string() }).strict(),
-    },
-    () => {
-      const structured = {
-        text: [
-          'Recommended workflow:',
-          '1) `index_symbols` to build the local symbol index (optionally provide `targets`).',
-          '2) Use `search_symbol_from_index` (or `search_symbols`) to find symbols by name substring.',
-          '3) Use LSP tools like `get_definitions` / `find_references` for precision navigation.',
-          '4) Use edit tools (`replace_range`, `replace_regex`, `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`) and re-run `index_symbols` if needed.',
-        ].join('\n'),
-      };
-
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
-  );
+  const CheckToolAvailabilityInputSchema = z.object({ root: z.string().optional() }).strict();
 
   server.registerTool(
-    'get_symbol_search_guidance',
+    'check_tool_availability',
     {
-      title: 'Get Symbol Search Guidance',
-      description: 'Guidance for choosing between index search vs. LSP-based lookup.',
-      inputSchema: z.object({}).strict(),
-      outputSchema: z.object({ text: z.string() }).strict(),
+      title: 'Check Tool Availability',
+      description: 'Check availability of all external tools used by firebat: tsgo (LSP/typecheck), oxlint (linting), and ast-grep (pattern matching). Returns a boolean for each tool and version info when available.',
+      inputSchema: CheckToolAvailabilityInputSchema,
+      outputSchema: z
+        .object({
+          tsgo: z.object({ available: z.boolean(), note: z.string().optional() }),
+          oxlint: z.object({ available: z.boolean(), note: z.string().optional() }),
+          astGrep: z.object({ available: z.boolean() }),
+        })
+        .strict(),
     },
-    () => {
-      const structured = {
-        text: [
-          'Use `search_symbol_from_index` / `search_symbols` when you only have a name hint or want a broad scan.',
-          'Use `get_definitions` / `find_references` when you have a concrete location (file + line) and want precise results.',
-          'For TypeScript imports, `parse_imports` and `get_available_external_symbols` can help identify names quickly.',
-        ].join('\n'),
+    safeTool(async (_args: z.infer<typeof CheckToolAvailabilityInputSchema>) => {
+      const tsgo = await (async () => {
+        try {
+          const r = await checkCapabilitiesUseCase({ root: ctx.rootAbs, logger });
+          return { available: r.ok === true, ...(r.note ? { note: r.note } : {}) };
+        } catch { return { available: false, note: 'check failed' }; }
+      })();
+      const oxlint = await (async () => {
+        try {
+          const r = await runOxlint({ targets: [], cwd: ctx.rootAbs, logger });
+          const available = r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
+          return { available, ...(r.error && !available ? { note: r.error } : {}) };
+        } catch { return { available: false, note: 'check failed' }; }
+      })();
+      const astGrep = { available: true }; // ast-grep/napi is a bundled dependency, always available.
+
+      const structured = { tsgo, oxlint, astGrep };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
+        structuredContent: structured,
       };
-
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
-  );
-
-  server.registerTool(
-    'get_compression_guidance',
-    {
-      title: 'Get Compression Guidance',
-      description: 'Guidance for keeping outputs compact and tool-friendly.',
-      inputSchema: z.object({}).strict(),
-      outputSchema: z.object({ text: z.string() }).strict(),
-    },
-    () => {
-      const structured = {
-        text: [
-          'Tips to keep outputs compact:',
-          '- Prefer `get_index_stats_from_index` / `get_project_overview` for summaries.',
-          '- Use `limit` for `search_symbol_from_index` / `search_symbols` when you expect many matches.',
-          '- For definitions, tune `before`/`after` and `include_body` in `get_definitions` as needed.',
-        ].join('\n'),
-      };
-
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
-    },
+    }),
   );
 
   server.registerResource(
@@ -1704,9 +1751,99 @@ const runMcpServer = async (): Promise<void> => {
     },
   );
 
+  server.registerPrompt(
+    'workflow',
+    {
+      title: 'Firebat Workflow',
+      description: 'Recommended indexing, symbol search, and output workflow for this MCP server.',
+    },
+    () => ({
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: [
+              '## Recommended Workflow',
+              '',
+              '1. `index_symbols` — build the local symbol index (optionally provide `targets`).',
+              '2. `search_symbol_from_index` — find symbols by name substring. Use `kind`/`file` to narrow results.',
+              '3. LSP tools (`get_definitions`, `find_references`) — precision navigation from a known location.',
+              '4. Edit tools (`replace_range`, `replace_regex`, `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol`) — then re-run `index_symbols` if needed.',
+              '',
+              '## Choosing Search Strategy',
+              '',
+              '- **Index search** (`search_symbol_from_index`): when you only have a name hint or want a broad scan.',
+              '- **LSP lookup** (`get_definitions` / `find_references`): when you have a concrete location (file + line) and want precise results.',
+              '- **Imports** (`parse_imports`, `get_available_external_symbols`): to identify external symbol names quickly.',
+              '',
+              '## Keeping Outputs Compact',
+              '',
+              '- Use `get_project_overview` for a quick summary of the project state.',
+              '- Use `limit` in `search_symbol_from_index` when you expect many matches.',
+              '- Tune `before`/`after` and `include_body` in `get_definitions` to control output size.',
+            ].join('\n'),
+          },
+        },
+      ],
+    }),
+  );
+
   const transport = new StdioServerTransport();
 
-  await server.connect(transport);
+  logger.info('MCP server: connecting transport');
+
+  let cleaningUp = false;
+
+  const cleanup = async (signal: string) => {
+    if (cleaningUp) {
+      return;
+    }
+    cleaningUp = true;
+
+    logger.debug('MCP server: cleanup triggered', { signal });
+
+    try {
+      const { closeAll } = await import('../../infrastructure/sqlite/firebat.db');
+      await closeAll();
+      logger.trace('MCP server: DB connections closed');
+    } catch (err) {
+      logger.warn('MCP server: cleanup error', { error: String(err) });
+    }
+
+    try {
+      await transport.close();
+      logger.debug('MCP server: transport closed');
+    } catch (err) {
+      logger.warn('MCP server: transport close error', { error: String(err) });
+    }
+  };
+
+  process.on('SIGTERM', () => { void cleanup('SIGTERM'); });
+  process.on('SIGINT', () => { void cleanup('SIGINT'); });
+
+  try {
+    await server.connect(transport);
+  } catch (err) {
+    logger.error('MCP server: connection failed', { error: String(err) });
+    await cleanup('connect-error');
+    return;
+  }
+
+  // Handle transport errors (e.g., EPIPE)
+  transport.onerror = (error: Error) => {
+    logger.warn('MCP server: transport error', { error: String(error) });
+    void cleanup('transport-error');
+  };
+
+  transport.onclose = () => {
+    logger.debug('MCP server: transport closed');
+    void cleanup('transport-close');
+  };
+
+  logger.info('MCP server: connected and ready');
+
+  bootstrapSymbolIndex();
 };
 
 export { runMcpServer };

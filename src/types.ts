@@ -208,6 +208,8 @@ export interface ApiDriftShape {
 
 export interface ApiDriftOutlier {
   readonly shape: ApiDriftShape;
+  readonly filePath: string;
+  readonly span: SourceSpan;
 }
 
 export interface ApiDriftGroup {
@@ -223,6 +225,7 @@ export interface ApiDriftAnalysis {
 export interface WasteFinding {
   readonly kind: WasteKind;
   readonly label: string;
+  readonly message: string;
   readonly filePath: string;
   readonly span: SourceSpan;
 }
@@ -319,6 +322,7 @@ export interface FirebatMeta {
   readonly minSize: number;
   readonly maxForwardDepth: number;
   readonly detectors: ReadonlyArray<FirebatDetector>;
+  readonly detectorTimings?: Readonly<Record<string, number>>;
 }
 
 export interface FirebatAnalyses {

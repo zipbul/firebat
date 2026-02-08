@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape } from '../../types';
+import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
 
 import {
   collectFunctionNodes,
@@ -12,6 +12,7 @@ import {
   isOxcNode,
   walkOxcTree,
 } from '../../engine/oxc-ast-utils';
+import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyApiDrift = (): ApiDriftAnalysis => ({
   groups: [],
@@ -121,26 +122,37 @@ const buildShape = (node: Node): ApiDriftShape => {
   };
 };
 
+interface ShapeLocation {
+  readonly filePath: string;
+  readonly span: SourceSpan;
+}
+
 const recordShape = (
   name: string,
   shape: ApiDriftShape,
+  location: ShapeLocation,
   countsByName: Map<string, Map<string, number>>,
   shapesByName: Map<string, Map<string, ApiDriftShape>>,
+  locationsByName: Map<string, Map<string, ShapeLocation>>,
 ): void => {
   const key = JSON.stringify(shape);
   const countMap = countsByName.get(name) ?? new Map<string, number>();
   const shapeMap = shapesByName.get(name) ?? new Map<string, ApiDriftShape>();
+  const locMap = locationsByName.get(name) ?? new Map<string, ShapeLocation>();
 
   countMap.set(key, (countMap.get(key) ?? 0) + 1);
   shapeMap.set(key, shape);
+  locMap.set(key, location);
 
   countsByName.set(name, countMap);
   shapesByName.set(name, shapeMap);
+  locationsByName.set(name, locMap);
 };
 
 const buildGroups = (
   countsByName: Map<string, Map<string, number>>,
   shapesByName: Map<string, Map<string, ApiDriftShape>>,
+  locationsByName: Map<string, Map<string, ShapeLocation>>,
 ): ApiDriftGroup[] => {
   const groups: ApiDriftGroup[] = [];
   const names = Array.from(countsByName.keys()).sort((left, right) => left.localeCompare(right));
@@ -148,8 +160,9 @@ const buildGroups = (
   for (const name of names) {
     const countMap = countsByName.get(name);
     const shapeMap = shapesByName.get(name);
+    const locMap = locationsByName.get(name);
 
-    if (!countMap || !shapeMap || countMap.size <= 1) {
+    if (!countMap || !shapeMap || !locMap || countMap.size <= 1) {
       continue;
     }
 
@@ -176,7 +189,13 @@ const buildGroups = (
         continue;
       }
 
-      outliers.push({ shape });
+      const loc = locMap.get(key);
+
+      outliers.push({
+        shape,
+        filePath: loc?.filePath ?? '',
+        span: loc?.span ?? { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } },
+      });
     }
 
     if (outliers.length === 0) {
@@ -200,6 +219,7 @@ const analyzeApiDrift = (files: ReadonlyArray<ParsedFile>): ApiDriftAnalysis => 
 
   const countsByName = new Map<string, Map<string, number>>();
   const shapesByName = new Map<string, Map<string, ApiDriftShape>>();
+  const locationsByName = new Map<string, Map<string, ShapeLocation>>();
 
   for (const file of files) {
     if (file.errors.length > 0) {
@@ -216,13 +236,19 @@ const analyzeApiDrift = (files: ReadonlyArray<ParsedFile>): ApiDriftAnalysis => 
       }
 
       const shape = buildShape(functionNode);
+      const start = getLineColumn(file.sourceText, functionNode.start);
+      const end = getLineColumn(file.sourceText, functionNode.end);
+      const location: ShapeLocation = {
+        filePath: file.filePath,
+        span: { start, end },
+      };
 
-      recordShape(name, shape, countsByName, shapesByName);
+      recordShape(name, shape, location, countsByName, shapesByName, locationsByName);
     }
   }
 
   return {
-    groups: buildGroups(countsByName, shapesByName),
+    groups: buildGroups(countsByName, shapesByName, locationsByName),
   };
 };
 

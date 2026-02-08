@@ -228,9 +228,11 @@ module.exports = {
     // List of module systems to cruise.
     // When left out dependency-cruiser will fall back to the list of _all_
     // module systems it knows of ('amd', 'cjs', 'es6', 'tsd']). It's the
-    // default because it's the safe option. It comes at a performance penalty, though
-    // As in practice only commonjs ('cjs') and ecmascript modules ('es6')
-    // are in wide use, you can limit the moduleSystems to those.
+      // default because it's the safe option. It comes at a performance penalty, though
+      // As in practice only commonjs ('cjs') and ecmascript modules ('es6')
+      // are in wide use, you can limit the moduleSystems to those.
+      // dependency-cruiser will skip everything that doesn't match this pattern
+      // can access (run `bunx depcruise --info` to see which ones that are in
     // moduleSystems: ['cjs', 'es6'],
 
     // false: don't look at JSDoc imports (the default)
@@ -324,7 +326,7 @@ module.exports = {
       conditionNames: ['import', 'require', 'node', 'default', 'types'],
       
       // The extensions, by default are the same as the ones dependency-cruiser
-      // can access (run `npx depcruise --info` to see which ones that are in
+      // can access (run `bunx depcruise --info` to see which ones that are in
       // _your_ environment). If that list is larger than you need you can pass
       // the extensions you actually use (e.g. ['.js', '.jsx']). This can speed
       // up module resolution, which is the most expensive step.

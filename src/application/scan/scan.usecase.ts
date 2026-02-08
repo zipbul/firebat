@@ -150,6 +150,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   let formatPromise: Promise<ReturnType<typeof createEmptyFormat>> | Promise<any> | null = null;
   let lintPromise: Promise<ReturnType<typeof createEmptyLint>> | Promise<any> | null = null;
+  const fixTimings: Record<string, number> = {};
 
   if (options.fix) {
     logger.debug('Running fixable tools before parse (fix mode)');
@@ -159,28 +160,35 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
         ? analyzeFormat({
             targets: options.targets,
             fix: true,
+            cwd: ctx.rootAbs,
             ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
             logger,
           })
         : Promise.resolve(createEmptyFormat()),
-      shouldRunLint ? analyzeLint({ targets: options.targets, fix: true, logger }) : Promise.resolve(createEmptyLint()),
+      shouldRunLint ? analyzeLint({ targets: options.targets, fix: true, cwd: ctx.rootAbs, logger }) : Promise.resolve(createEmptyLint()),
     ]);
 
     formatPromise = Promise.resolve(format);
     lintPromise = Promise.resolve(lint);
-    logger.debug('Fix-mode tools complete', { durationMs: Math.round(nowMs() - tFix0) });
+    const fixDur = Math.round(nowMs() - tFix0);
+    if (shouldRunFormat) {fixTimings['format'] = fixDur;}
+    if (shouldRunLint) {fixTimings['lint'] = fixDur;}
+    logger.debug('Fix-mode tools complete', { durationMs: fixDur });
   } else {
     if (shouldRunFormat) {
+      const tFormat0 = nowMs();
       formatPromise = analyzeFormat({
         targets: options.targets,
         fix: false,
+        cwd: ctx.rootAbs,
         ...(options.configPath !== undefined ? { configPath: options.configPath } : {}),
         logger,
-      });
+      }).then(r => { fixTimings['format'] = Math.round(nowMs() - tFormat0); return r; });
     }
 
     if (shouldRunLint) {
-      lintPromise = analyzeLint({ targets: options.targets, fix: false, logger });
+      const tLint0 = nowMs();
+      lintPromise = analyzeLint({ targets: options.targets, fix: false, cwd: ctx.rootAbs, logger }).then(r => { fixTimings['lint'] = Math.round(nowMs() - tLint0); return r; });
     }
   }
 
@@ -198,36 +206,40 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   const tDetectors0 = nowMs();
   logger.debug('Running detectors...');
 
+  const detectorTimings: Record<string, number> = {};
+
   let exactDuplicates: ReturnType<typeof detectExactDuplicates> = [];
   if (options.detectors.includes('exact-duplicates')) {
     const t0 = nowMs();
     exactDuplicates = detectExactDuplicates(program, resolvedMinSize);
-    logger.debug('exact-duplicates', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['exact-duplicates'] = Math.round(nowMs() - t0);
+    logger.debug('exact-duplicates', { durationMs: detectorTimings['exact-duplicates'] });
   }
 
   let waste: ReturnType<typeof detectWaste> = [];
   if (options.detectors.includes('waste')) {
     const t0 = nowMs();
     waste = detectWaste(program);
-    logger.debug('waste', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['waste'] = Math.round(nowMs() - t0);
+    logger.debug('waste', { durationMs: detectorTimings['waste'] });
   }
 
   const barrelPolicyPromise = options.detectors.includes('barrel-policy')
     ? ((): Promise<any> => { const t0 = nowMs(); return analyzeBarrelPolicy(program, {
         rootAbs: ctx.rootAbs,
         ...(options.barrelPolicyIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelPolicyIgnoreGlobs } : {}),
-      }).then(r => { logger.debug('barrel-policy', { durationMs: Math.round(nowMs() - t0) }); return r; }); })()
+      }).then(r => { detectorTimings['barrel-policy'] = Math.round(nowMs() - t0); logger.debug('barrel-policy', { durationMs: detectorTimings['barrel-policy'] }); return r; }); })()
     : Promise.resolve(createEmptyBarrelPolicy());
   const unknownProofPromise = options.detectors.includes('unknown-proof')
     ? ((): Promise<any> => { const t0 = nowMs(); return analyzeUnknownProof(program, {
         rootAbs: ctx.rootAbs,
         ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
         logger,
-      }).then(r => { logger.debug('unknown-proof', { durationMs: Math.round(nowMs() - t0) }); return r; }); })()
+      }).then(r => { detectorTimings['unknown-proof'] = Math.round(nowMs() - t0); logger.debug('unknown-proof', { durationMs: detectorTimings['unknown-proof'] }); return r; }); })()
     : Promise.resolve(createEmptyUnknownProof());
 
   const typecheckPromise = options.detectors.includes('typecheck')
-    ? ((): Promise<any> => { const t0 = nowMs(); return analyzeTypecheck(program).then(r => { logger.debug('typecheck', { durationMs: Math.round(nowMs() - t0) }); return r; }); })()
+    ? ((): Promise<any> => { const t0 = nowMs(); return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger }).then(r => { detectorTimings['typecheck'] = Math.round(nowMs() - t0); logger.debug('typecheck', { durationMs: detectorTimings['typecheck'] }); return r; }); })()
     : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
 
@@ -235,7 +247,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (shouldRunDependencies) {
     const t0 = nowMs();
     dependencies = analyzeDependencies(program);
-    logger.debug('dependencies', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['dependencies'] = Math.round(nowMs() - t0);
+    logger.debug('dependencies', { durationMs: detectorTimings['dependencies'] });
   } else {
     dependencies = createEmptyDependencies();
   }
@@ -244,7 +257,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('coupling')) {
     const t0 = nowMs();
     coupling = analyzeCoupling(dependencies);
-    logger.debug('coupling', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['coupling'] = Math.round(nowMs() - t0);
+    logger.debug('coupling', { durationMs: detectorTimings['coupling'] });
   } else {
     coupling = createEmptyCoupling();
   }
@@ -253,7 +267,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('structural-duplicates')) {
     const t0 = nowMs();
     structuralDuplicates = analyzeStructuralDuplicates(program, resolvedMinSize);
-    logger.debug('structural-duplicates', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['structural-duplicates'] = Math.round(nowMs() - t0);
+    logger.debug('structural-duplicates', { durationMs: detectorTimings['structural-duplicates'] });
   } else {
     structuralDuplicates = createEmptyStructuralDuplicates();
   }
@@ -262,7 +277,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('nesting')) {
     const t0 = nowMs();
     nesting = analyzeNesting(program);
-    logger.debug('nesting', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['nesting'] = Math.round(nowMs() - t0);
+    logger.debug('nesting', { durationMs: detectorTimings['nesting'] });
   } else {
     nesting = createEmptyNesting();
   }
@@ -271,7 +287,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('early-return')) {
     const t0 = nowMs();
     earlyReturn = analyzeEarlyReturn(program);
-    logger.debug('early-return', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['early-return'] = Math.round(nowMs() - t0);
+    logger.debug('early-return', { durationMs: detectorTimings['early-return'] });
   } else {
     earlyReturn = createEmptyEarlyReturn();
   }
@@ -280,7 +297,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('noop')) {
     const t0 = nowMs();
     noop = analyzeNoop(program);
-    logger.debug('noop', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['noop'] = Math.round(nowMs() - t0);
+    logger.debug('noop', { durationMs: detectorTimings['noop'] });
   } else {
     noop = createEmptyNoop();
   }
@@ -289,7 +307,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('api-drift')) {
     const t0 = nowMs();
     apiDrift = analyzeApiDrift(program);
-    logger.debug('api-drift', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['api-drift'] = Math.round(nowMs() - t0);
+    logger.debug('api-drift', { durationMs: detectorTimings['api-drift'] });
   } else {
     apiDrift = createEmptyApiDrift();
   }
@@ -298,7 +317,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   if (options.detectors.includes('forwarding')) {
     const t0 = nowMs();
     forwarding = analyzeForwarding(program, options.maxForwardDepth);
-    logger.debug('forwarding', { durationMs: Math.round(nowMs() - t0) });
+    detectorTimings['forwarding'] = Math.round(nowMs() - t0);
+    logger.debug('forwarding', { durationMs: detectorTimings['forwarding'] });
   } else {
     forwarding = createEmptyForwarding();
   }
@@ -323,6 +343,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
       minSize: resolvedMinSize,
       maxForwardDepth: options.maxForwardDepth,
       detectors: options.detectors,
+      detectorTimings: { ...detectorTimings, ...fixTimings },
     },
     analyses: {
       ...(selectedDetectors.has('exact-duplicates') ? { 'exact-duplicates': exactDuplicates } : {}),

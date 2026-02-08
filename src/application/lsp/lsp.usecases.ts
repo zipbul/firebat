@@ -50,14 +50,37 @@ const resolveLineNumber0 = (lines: string[], line: LineParam): number => {
   return idx;
 };
 
-const findSymbolInLine = (lineText: string, symbolName: string): number => {
-  const idx = lineText.indexOf(symbolName);
+const NEARBY_SEARCH_RANGE = 5;
 
-  if (idx === -1) {
-    throw new Error(`Symbol "${symbolName}" not found in the specified line`);
+const findSymbolPosition = (
+  lines: string[],
+  lineIdx: number,
+  symbolName: string,
+): { line: number; character: number } => {
+  // 1. Exact line (fast path)
+  const exactCol = (lines[lineIdx] ?? '').indexOf(symbolName);
+
+  if (exactCol !== -1) {
+    return { line: lineIdx, character: exactCol };
   }
 
-  return idx;
+  // 2. Search nearby lines (±NEARBY_SEARCH_RANGE)
+  for (let delta = 1; delta <= NEARBY_SEARCH_RANGE; delta++) {
+    for (const d of [-delta, delta]) {
+      const candidate = lineIdx + d;
+
+      if (candidate < 0 || candidate >= lines.length) {continue;}
+
+      const col = (lines[candidate] ?? '').indexOf(symbolName);
+
+      if (col !== -1) {
+        return { line: candidate, character: col };
+      }
+    }
+  }
+
+  // 3. Fallback: column 0 on original line (never throw)
+  return { line: lineIdx, character: 0 };
 };
 
 const positionToOffset = (text: string, pos: LspPosition): number => {
@@ -175,17 +198,14 @@ export const getHoverUseCase = async (input: {
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
     return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const lineIdx = resolveLineNumber0(doc.lines, input.line);
-      const lineText = doc.lines[lineIdx] ?? '';
-      const character0 =
+      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+      const pos =
         input.target !== undefined
-          ? findSymbolInLine(lineText, input.target)
-          : input.character !== undefined
-            ? Math.max(0, Math.floor(input.character))
-            : 0;
+          ? findSymbolPosition(doc.lines, baseLineIdx, input.target)
+          : { line: baseLineIdx, character: input.character !== undefined ? Math.max(0, Math.floor(input.character)) : 0 };
       const hover = await session.lsp.request('textDocument/hover', {
         textDocument: { uri: doc.uri },
-        position: { line: lineIdx, character: character0 },
+        position: { line: pos.line, character: pos.character },
       });
 
       return hover;
@@ -205,26 +225,34 @@ export const findReferencesUseCase = async (input: {
   symbolName: string;
   tsconfigPath?: string;
   logger: FirebatLogger;
-}): Promise<{ ok: boolean; references?: Array<{ filePath: string; range: LspRange }>; error?: string }> => {
+}): Promise<{ ok: boolean; references?: Array<{ filePath: string; range: LspRange; snippet?: string }>; error?: string }> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
   input.logger.debug('lsp:references', { filePath: input.filePath, symbolName: input.symbolName });
 
-  const result = await withTsgoLspSession<Array<{ filePath: string; range: LspRange }>>(
+  const result = await withTsgoLspSession<Array<{ filePath: string; range: LspRange; snippet?: string }>>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
     return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const lineIdx = resolveLineNumber0(doc.lines, input.line);
-      const lineText = doc.lines[lineIdx] ?? '';
-      const character0 = findSymbolInLine(lineText, input.symbolName);
+      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+      const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
       const refs = await session.lsp.request<any[]>('textDocument/references', {
         textDocument: { uri: doc.uri },
-        position: { line: lineIdx, character: character0 },
+        position: { line: pos.line, character: pos.character },
         context: { includeDeclaration: true },
       });
 
-      return (refs ?? []).map(r => ({ filePath: lspUriToFilePath(r.uri), range: r.range }));
+      const mapped: Array<{ filePath: string; range: LspRange; snippet?: string }> = [];
+
+      for (const r of refs ?? []) {
+        const refPath = lspUriToFilePath(r.uri);
+        const snippet = await previewRange(refPath, r.range, 0, 0);
+
+        mapped.push({ filePath: refPath, range: r.range, ...(snippet.length > 0 ? { snippet: snippet.trim() } : {}) });
+      }
+
+      return mapped;
     });
     },
   );
@@ -254,12 +282,11 @@ export const getDefinitionsUseCase = async (input: {
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
     return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const lineIdx = resolveLineNumber0(doc.lines, input.line);
-      const lineText = doc.lines[lineIdx] ?? '';
-      const character0 = findSymbolInLine(lineText, input.symbolName);
+      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+      const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
       const raw = await session.lsp.request('textDocument/definition', {
         textDocument: { uri: doc.uri },
-        position: { line: lineIdx, character: character0 },
+        position: { line: pos.line, character: pos.character },
       });
       const locs = normalizeLocations(raw);
       const before = input.before ?? 2;
@@ -330,8 +357,15 @@ export const getAllDiagnosticsUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-    // LSP 3.17 workspace diagnostics (server dependent)
-    const diagnostics = await session.lsp.request('workspace/diagnostic', {}).catch(() => null);
+    // Check capabilities first — tsgo may not support workspace diagnostics.
+    const init = session.initializeResult as any;
+    const diagCap = init?.capabilities?.diagnosticProvider;
+    if (diagCap && diagCap.workspaceDiagnostics === false) {
+      return { __unsupported: true };
+    }
+
+    // LSP 3.17 workspace diagnostics with timeout (server dependent)
+    const diagnostics = await session.lsp.request('workspace/diagnostic', {}, 60_000).catch(() => null);
 
     return diagnostics;
     },
@@ -339,7 +373,12 @@ export const getAllDiagnosticsUseCase = async (input: {
 
   if (!result.ok) {return { ok: false, error: result.error };}
 
-  return { ok: true, diagnostics: result.value ?? [] };
+  const value = result.value as any;
+  if (value && value.__unsupported) {
+    return { ok: false, error: 'Workspace diagnostics not supported by the current tsgo LSP server (workspaceDiagnostics: false). Use get_diagnostics for individual files instead.' };
+  }
+
+  return { ok: true, diagnostics: value ?? [] };
 };
 
 export const getDocumentSymbolsUseCase = async (input: {
@@ -582,25 +621,24 @@ export const renameSymbolUseCase = async (input: {
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
     return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      let lineIdx: number;
-      let character0: number;
+      let pos: { line: number; character: number };
 
       if (input.line !== undefined) {
-        lineIdx = resolveLineNumber0(doc.lines, input.line);
-        character0 = findSymbolInLine(doc.lines[lineIdx] ?? '', input.symbolName);
+        const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+
+        pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
       } else {
         // Find first occurrence in file
         const idx = doc.lines.findIndex(l => l.includes(input.symbolName));
 
         if (idx === -1) {throw new Error(`Symbol "${input.symbolName}" not found in file`);}
 
-        lineIdx = idx;
-        character0 = findSymbolInLine(doc.lines[idx] ?? '', input.symbolName);
+        pos = { line: idx, character: (doc.lines[idx] ?? '').indexOf(input.symbolName) };
       }
 
       const edit = await session.lsp.request<WorkspaceEdit | null>('textDocument/rename', {
         textDocument: { uri: doc.uri },
-        position: { line: lineIdx, character: character0 },
+        position: { line: pos.line, character: pos.character },
         newName: input.newName,
       });
 
@@ -637,12 +675,12 @@ export const deleteSymbolUseCase = async (input: {
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
     return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const lineIdx = resolveLineNumber0(doc.lines, input.line);
-      const character0 = findSymbolInLine(doc.lines[lineIdx] ?? '', input.symbolName);
+      const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
+      const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
       const raw = await session.lsp
         .request('textDocument/definition', {
           textDocument: { uri: doc.uri },
-          position: { line: lineIdx, character: character0 },
+          position: { line: pos.line, character: pos.character },
         })
         .catch(() => null);
       const locs = normalizeLocations(raw);
@@ -781,53 +819,10 @@ export const parseImportsUseCase = async (input: {
   }
 };
 
-export const resolveSymbolUseCase = async (input: {
-  root: string;
-  filePath: string;
-  symbolName: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; definition?: { filePath: string; range: LspRange; preview?: string } | null; error?: string }> => {
-  const rootAbs = resolveRootAbs(input.root);
-  const fileAbs = resolveFileAbs(rootAbs, input.filePath);
-
-  input.logger.debug('lsp:resolveSymbol', { filePath: input.filePath, symbolName: input.symbolName });
-
-  const result = await withTsgoLspSession<{ filePath: string; range: LspRange; preview?: string } | null>(
-    { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
-    async session => {
-    return  withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
-      const idx = doc.lines.findIndex(l => l.includes(input.symbolName));
-
-      if (idx === -1) {throw new Error(`Symbol "${input.symbolName}" not found in file`);}
-
-      const character0 = findSymbolInLine(doc.lines[idx] ?? '', input.symbolName);
-      const raw = await session.lsp.request('textDocument/definition', {
-        textDocument: { uri: doc.uri },
-        position: { line: idx, character: character0 },
-      });
-      const locs = normalizeLocations(raw);
-
-      if (locs.length === 0) {return null;}
-
-      const loc = locs[0]!;
-      const filePath = lspUriToFilePath(loc.uri);
-      const preview = await previewRange(filePath, loc.range, 2, 2);
-
-      return { filePath, range: loc.range, preview };
-    });
-    },
-  );
-
-  if (!result.ok) {return { ok: false, error: result.error };}
-
-  return { ok: true, definition: result.value };
-};
-
 export const getTypescriptDependenciesUseCase = async (input: {
   root: string;
   logger: FirebatLogger;
-}): Promise<{ ok: boolean; dependencies?: string[]; error?: string }> => {
+}): Promise<{ ok: boolean; dependencies?: Array<{ name: string; version: string; hasTypes: boolean }>; error?: string }> => {
   try {
     const rootAbs = resolveRootAbs(input.root);
 
@@ -837,7 +832,7 @@ export const getTypescriptDependenciesUseCase = async (input: {
     const pkg = JSON.parse(pkgText);
     const deps = { ...pkg.dependencies, ...pkg.devDependencies } as Record<string, string>;
     const names = Object.keys(deps).sort((a, b) => a.localeCompare(b));
-    const withTypes: string[] = [];
+    const withTypes: Array<{ name: string; version: string; hasTypes: boolean }> = [];
 
     for (const name of names) {
       const depPkgPath = path.resolve(rootAbs, 'node_modules', name, 'package.json');
@@ -847,10 +842,11 @@ export const getTypescriptDependenciesUseCase = async (input: {
 
       try {
         const depPkg = JSON.parse(depPkgText);
+        const installedVersion = typeof depPkg.version === 'string' ? depPkg.version : deps[name] ?? 'unknown';
         const typesField = (depPkg.types ?? depPkg.typings) as string | undefined;
 
         if (typesField) {
-          withTypes.push(name);
+          withTypes.push({ name, version: installedVersion, hasTypes: true });
 
           continue;
         }
@@ -860,7 +856,7 @@ export const getTypescriptDependenciesUseCase = async (input: {
         const candidateText = await readWithFallback(candidate);
 
         if (candidateText.length > 0) {
-          withTypes.push(name);
+          withTypes.push({ name, version: installedVersion, hasTypes: true });
 
           continue;
         }
