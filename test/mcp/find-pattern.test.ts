@@ -1,5 +1,6 @@
-import * as path from 'node:path';
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import * as path from 'node:path';
+
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
@@ -77,10 +78,7 @@ describe('find_pattern', () => {
 
   test('should search across multiple files', async () => {
     // Arrange
-    const targets = [
-      path.join(ctx.fixturesAbs, 'sample.ts'),
-      path.join(ctx.fixturesAbs, 'editable.ts'),
-    ];
+    const targets = [path.join(ctx.fixturesAbs, 'sample.ts'), path.join(ctx.fixturesAbs, 'editable.ts')];
     // Act
     const { structured } = await callTool(ctx.client, 'find_pattern', {
       targets,

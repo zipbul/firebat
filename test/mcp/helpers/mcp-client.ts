@@ -1,9 +1,8 @@
-import * as path from 'node:path';
-import * as os from 'node:os';
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Result parsing helpers
@@ -16,7 +15,9 @@ export type ToolResultLike = {
 };
 
 export const parseJsonText = (text: string | undefined): unknown => {
-  if (text === undefined || text.length === 0) {return {};}
+  if (text === undefined || text.length === 0) {
+    return {};
+  }
 
   try {
     return JSON.parse(text) as unknown;
@@ -26,7 +27,9 @@ export const parseJsonText = (text: string | undefined): unknown => {
 };
 
 export const getStructuredContent = (result: ToolResultLike): any => {
-  if (result.structuredContent !== undefined) {return result.structuredContent;}
+  if (result.structuredContent !== undefined) {
+    return result.structuredContent;
+  }
 
   const first = result.content?.[0];
 
@@ -71,11 +74,7 @@ export const createMcpTestContext = async (opts?: {
   // Minimal package.json so firebat recognizes the project root.
   await writeFile(
     path.join(tmpRootAbs, 'package.json'),
-    JSON.stringify(
-      { name: 'firebat-mcp-test-fixture', private: true, devDependencies: { firebat: '0.0.0' } },
-      null,
-      2,
-    ) + '\n',
+    JSON.stringify({ name: 'firebat-mcp-test-fixture', private: true, devDependencies: { firebat: '0.0.0' } }, null, 2) + '\n',
     'utf8',
   );
 

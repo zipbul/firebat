@@ -1,12 +1,11 @@
 import * as path from 'node:path';
 
 import type { ParsedFile } from '../../engine/types';
+import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan, TypecheckAnalysis, TypecheckItem } from '../../types';
 
-import type { FirebatLogger } from '../../ports/logger';
-import { createNoopLogger } from '../../ports/logger';
-
 import { lspUriToFilePath, openTsDocument, withTsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
+import { createNoopLogger } from '../../ports/logger';
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
@@ -239,7 +238,9 @@ const analyzeTypecheck = async (
           return collected;
         } finally {
           dispose();
-          await Promise.all(openUris.map(uri => session.lsp.notify('textDocument/didClose', { textDocument: { uri } }).catch(() => undefined)));
+          await Promise.all(
+            openUris.map(uri => session.lsp.notify('textDocument/didClose', { textDocument: { uri } }).catch(() => undefined)),
+          );
         }
       },
     );

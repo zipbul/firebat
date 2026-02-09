@@ -329,11 +329,11 @@ const buildLspMessage = (payload: unknown): Uint8Array => {
 
 class LspConnection {
   private readonly proc: ReturnType<typeof Bun.spawn>;
-  private readonly stdin: { write: (chunk: any) => any; flush?: () => any; end?: () => any };
+  private readonly stdin: { write: (chunk: Uint8Array) => unknown; flush?: () => unknown; end?: () => unknown };
   private nextId = 1;
-  private readonly pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
-  private readonly notificationHandlers = new Map<string, Set<(params: any) => void>>();
-  private readonly anyNotificationHandlers = new Set<(method: string, params: any) => void>();
+  private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  private readonly notificationHandlers = new Map<string, Set<(params: unknown) => void>>();
+  private readonly anyNotificationHandlers = new Set<(method: string, params: unknown) => void>();
   private readonly readerLoop: Promise<void>;
 
   private constructor(proc: ReturnType<typeof Bun.spawn>) {
@@ -346,11 +346,11 @@ class LspConnection {
     const stdin: unknown = proc.stdin;
 
     // Bun.spawn({ stdin: 'pipe' }) returns a FileSink (write/flush/end), not a Web WritableStream.
-    if (typeof (stdin as any)?.write !== 'function') {
+    if (!stdin || typeof stdin !== 'object' || !('write' in stdin) || typeof stdin.write !== 'function') {
       throw new Error('tsgo stdin does not support write()');
     }
 
-    this.stdin = stdin as any;
+    this.stdin = stdin as { write: (chunk: Uint8Array) => unknown; flush?: () => unknown; end?: () => unknown };
     this.readerLoop = this.startReadLoop();
   }
 
@@ -366,7 +366,7 @@ class LspConnection {
     }
   }
 
-  private respondToServerRequest(input: { id: string | number; method: string; params: any }): void {
+  private respondToServerRequest(input: { id: string | number; method: string; params: unknown }): void {
     const { id, method, params } = input;
 
     const ok = (result: unknown): void => {
@@ -472,7 +472,7 @@ class LspConnection {
       return true;
     };
 
-    const parseOne = (): any | null => {
+    const parseOne = (): unknown | null => {
       const headerEnd = buffer.indexOf('\r\n\r\n');
 
       if (headerEnd === -1) {
@@ -512,34 +512,37 @@ class LspConnection {
 
       while (msg) {
         if (msg && typeof msg === 'object' && 'id' in msg && 'method' in msg) {
-          const id = (msg as any).id;
-          const method = typeof (msg as any).method === 'string' ? (msg as any).method : '';
-          const params = (msg as any).params;
+          const json = msg as { id?: unknown; method?: unknown; params?: unknown };
+          const id = json.id;
+          const method = typeof json.method === 'string' ? json.method : '';
+          const params = json.params;
 
           if ((typeof id === 'string' || typeof id === 'number') && method.length > 0) {
             this.respondToServerRequest({ id, method, params });
           }
         } else if (msg && typeof msg === 'object' && 'id' in msg) {
-          const id = Number((msg as any).id);
+          const json = msg as { id?: unknown; error?: { message?: string }; result?: unknown };
+          const id = Number(json.id);
           const pending = this.pending.get(id);
 
           if (pending) {
             this.pending.delete(id);
 
-            if ('error' in msg && (msg as any).error) {
-              const err = (msg as any).error;
+            if (json.error) {
+              const err = json.error;
 
               pending.reject(new Error(typeof err?.message === 'string' ? err.message : 'LSP error'));
             } else {
-              pending.resolve((msg as any).result);
+              pending.resolve(json.result);
             }
           }
         }
 
         // Notifications (JSON-RPC: method without id)
         if (msg && typeof msg === 'object' && 'method' in msg && !('id' in msg)) {
-          const method = typeof (msg as any).method === 'string' ? (msg as any).method : '';
-          const params = (msg as any).params;
+          const json = msg as { method?: unknown; params?: unknown };
+          const method = typeof json.method === 'string' ? json.method : '';
+          const params = json.params;
 
           if (method.length > 0) {
             for (const handler of this.anyNotificationHandlers) {
@@ -591,7 +594,7 @@ class LspConnection {
       ...(params !== undefined ? { params } : {}),
     };
     const p = new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: resolve as any, reject });
+      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject });
 
       if (timeoutMs > 0) {
         const timer = setTimeout(() => {
@@ -603,10 +606,10 @@ class LspConnection {
           }
         }, timeoutMs);
         // Ensure the timer doesn't prevent process exit and gets cleaned up on resolve/reject.
-        const origResolve = resolve as (v: any) => void;
+        const origResolve = resolve as (v: unknown) => void;
         const origReject = reject;
 
-        const wrappedResolve = (v: any): void => {
+        const wrappedResolve = (v: unknown): void => {
           clearTimeout(timer);
           origResolve(v);
         };
@@ -635,7 +638,7 @@ class LspConnection {
     this.writeToStdin(buildLspMessage(payload));
   }
 
-  onNotification(method: string, handler: (params: any) => void): () => void {
+  onNotification(method: string, handler: (params: unknown) => void): () => void {
     const normalized = method.trim();
 
     if (normalized.length === 0) {
@@ -643,7 +646,7 @@ class LspConnection {
     }
 
     const existing = this.notificationHandlers.get(normalized);
-    const set = existing ?? new Set<(params: any) => void>();
+    const set = existing ?? new Set<(params: unknown) => void>();
 
     set.add(handler);
 
@@ -666,7 +669,7 @@ class LspConnection {
     };
   }
 
-  onAnyNotification(handler: (method: string, params: any) => void): () => void {
+  onAnyNotification(handler: (method: string, params: unknown) => void): () => void {
     this.anyNotificationHandlers.add(handler);
 
     return () => {
@@ -719,7 +722,7 @@ class LspConnection {
       return '';
     }
 
-    return new Response(this.proc.stderr as any).text();
+    return new Response(this.proc.stderr as BodyInit).text();
   }
 }
 
@@ -879,7 +882,7 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
           return out;
         }
 
-        if (typeof value === 'object' && value && 'uri' in (value as any) && 'range' in (value as any)) {
+        if (typeof value === 'object' && value && 'uri' in value && 'range' in value) {
           return [value as LspLocation];
         }
 

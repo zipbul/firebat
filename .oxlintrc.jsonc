@@ -251,8 +251,6 @@
         "jest/valid-describe-callback": "error",
         "jest/valid-expect": "error",
         "jest/valid-title": "error",
-        "firebat/test-aaa-comments": "error",
-        "firebat/test-bdd-title": "error",
         "firebat/test-describe-sut-name": "error",
         "firebat/test-unit-file-mapping": "error",
       },

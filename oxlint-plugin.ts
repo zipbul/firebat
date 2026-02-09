@@ -12,8 +12,6 @@ import { noUmbrellaTypesRule } from './src/oxlint-plugin/rules/no-umbrella-types
 import { noUnmodifiedLoopConditionRule } from './src/oxlint-plugin/rules/no-unmodified-loop-condition';
 import { paddingLineBetweenStatementsRule } from './src/oxlint-plugin/rules/padding-line-between-statements';
 import { singleExportedClassRule } from './src/oxlint-plugin/rules/single-exported-class';
-import { testAaaCommentsRule } from './src/oxlint-plugin/rules/test-aaa-comments';
-import { testBddTitleRule } from './src/oxlint-plugin/rules/test-bdd-title';
 import { testDescribeSutNameRule } from './src/oxlint-plugin/rules/test-describe-sut-name';
 import { testUnitFileMappingRule } from './src/oxlint-plugin/rules/test-unit-file-mapping';
 import { unusedImportsRule } from './src/oxlint-plugin/rules/unused-imports';
@@ -37,8 +35,6 @@ const plugin = {
     'no-globalthis-mutation': noGlobalThisMutationRule,
     'no-umbrella-types': noUmbrellaTypesRule,
     'single-exported-class': singleExportedClassRule,
-    'test-aaa-comments': testAaaCommentsRule,
-    'test-bdd-title': testBddTitleRule,
     'test-describe-sut-name': testDescribeSutNameRule,
     'test-unit-file-mapping': testUnitFileMappingRule,
     'unused-imports': unusedImportsRule,

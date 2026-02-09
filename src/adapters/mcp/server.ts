@@ -1,26 +1,23 @@
-import * as z from 'zod';
-
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { watch } from 'node:fs';
+import { readdir } from 'node:fs/promises';
+import * as path from 'node:path';
+import * as z from 'zod';
 
+import type { FirebatConfig } from '../../firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
+import type { FirebatLogger } from '../../ports/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
 
-import { scanUseCase } from '../../application/scan/scan.usecase';
-import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
+import {
+  insertAfterSymbolUseCase,
+  insertBeforeSymbolUseCase,
+  replaceRangeUseCase,
+  replaceRegexUseCase,
+  replaceSymbolBodyUseCase,
+} from '../../application/editor/edit.usecases';
 import { findPatternUseCase } from '../../application/find-pattern/find-pattern.usecase';
-import {
-  deleteMemoryUseCase,
-  listMemoriesUseCase,
-  readMemoryUseCase,
-  writeMemoryUseCase,
-} from '../../application/memory/memory.usecases';
-import {
-  clearIndexUseCase,
-  getIndexStatsFromIndexUseCase,
-  indexSymbolsUseCase,
-  searchSymbolFromIndexUseCase,
-} from '../../application/symbol-index/symbol-index.usecases';
 import {
   checkCapabilitiesUseCase,
   deleteSymbolUseCase,
@@ -43,22 +40,24 @@ import {
   searchExternalLibrarySymbolsUseCase,
 } from '../../application/lsp/lsp.usecases';
 import {
-  insertAfterSymbolUseCase,
-  insertBeforeSymbolUseCase,
-  replaceRangeUseCase,
-  replaceRegexUseCase,
-  replaceSymbolBodyUseCase,
-} from '../../application/editor/edit.usecases';
+  deleteMemoryUseCase,
+  listMemoriesUseCase,
+  readMemoryUseCase,
+  writeMemoryUseCase,
+} from '../../application/memory/memory.usecases';
+import { scanUseCase } from '../../application/scan/scan.usecase';
+import {
+  clearIndexUseCase,
+  getIndexStatsFromIndexUseCase,
+  indexSymbolsUseCase,
+  searchSymbolFromIndexUseCase,
+} from '../../application/symbol-index/symbol-index.usecases';
 import { traceSymbolUseCase } from '../../application/trace/trace-symbol.usecase';
-import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
-import { readdir } from 'node:fs/promises';
-import { watch } from 'node:fs';
-import * as path from 'node:path';
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { loadFirebatConfigFile } from '../../firebat-config.loader';
-import type { FirebatConfig } from '../../firebat-config';
-import type { FirebatLogger } from '../../ports/logger';
 import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
+import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
+import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
 
 const JsonValueSchema = z.json();
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
@@ -108,7 +107,9 @@ const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefi
   const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
 
   if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
-    throw new Error("[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize");
+    throw new Error(
+      '[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize',
+    );
   }
 
   return exactSize ?? structuralSize;
@@ -141,9 +142,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
   if (typeof value === 'object' && value !== null) {
     const boundaryGlobs = (value as any).boundaryGlobs;
 
-    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
-      ? boundaryGlobs
-      : undefined;
+    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string') ? boundaryGlobs : undefined;
   }
 
   return undefined;
@@ -211,14 +210,8 @@ const safeTool = <TArgs>(handler: (args: TArgs) => Promise<any>) => {
     try {
       return await handler(args);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? `${err.name}: ${err.message}`
-          : String(err);
-      const stack =
-        err instanceof Error && err.stack
-          ? `\n${err.stack}`
-          : '';
+      const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      const stack = err instanceof Error && err.stack ? `\n${err.stack}` : '';
 
       process.stderr.write(`[firebat] tool error: ${message}${stack}\n`);
 
@@ -238,7 +231,6 @@ export const createFirebatMcpServer = async (options: {
   const rootAbs = options.rootAbs;
   const config = options.config ?? null;
   const logger = options.logger;
-
   const server: any = new McpServer({
     name: 'firebat',
     version: '2.0.0-strict',
@@ -260,8 +252,13 @@ export const createFirebatMcpServer = async (options: {
     return path.isAbsolute(trimmed) ? trimmed : path.resolve(rootAbs, trimmed);
   };
 
-  const diffReports = (prev: FirebatReport | null, next: FirebatReport): { newFindings: number; resolvedFindings: number; unchangedFindings: number } => {
-    if (!prev) {return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };}
+  const diffReports = (
+    prev: FirebatReport | null,
+    next: FirebatReport,
+  ): { newFindings: number; resolvedFindings: number; unchangedFindings: number } => {
+    if (!prev) {
+      return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };
+    }
 
     const countFindings = (r: FirebatReport): number => {
       let total = 0;
@@ -270,15 +267,24 @@ export const createFirebatMcpServer = async (options: {
       for (const key of Object.keys(a)) {
         const v = a[key];
 
-        if (Array.isArray(v)) { total += v.length; }
-        else if (v && typeof v === 'object') {
-          if (Array.isArray(v.items)) {total += v.items.length;}
-          else if (Array.isArray(v.findings)) {total += v.findings.length;}
-          else if (Array.isArray(v.cloneClasses)) {total += v.cloneClasses.length;}
-          else if (Array.isArray(v.groups)) {total += v.groups.length;}
-          else if (Array.isArray(v.hotspots)) {total += v.hotspots.length;}
-          else if (Array.isArray(v.diagnostics)) {total += v.diagnostics.length;}
-          else if (Array.isArray(v.cycles)) {total += v.cycles.length;}
+        if (Array.isArray(v)) {
+          total += v.length;
+        } else if (v && typeof v === 'object') {
+          if (Array.isArray(v.items)) {
+            total += v.items.length;
+          } else if (Array.isArray(v.findings)) {
+            total += v.findings.length;
+          } else if (Array.isArray(v.cloneClasses)) {
+            total += v.cloneClasses.length;
+          } else if (Array.isArray(v.groups)) {
+            total += v.groups.length;
+          } else if (Array.isArray(v.hotspots)) {
+            total += v.hotspots.length;
+          } else if (Array.isArray(v.diagnostics)) {
+            total += v.diagnostics.length;
+          } else if (Array.isArray(v.cycles)) {
+            total += v.cycles.length;
+          }
         }
       }
 
@@ -347,7 +353,7 @@ export const createFirebatMcpServer = async (options: {
       const t0 = nowMs();
       const rawTargets =
         args.targets !== undefined && args.targets.length > 0
-          ? args.targets.map(t => path.isAbsolute(t) ? t : path.resolve(rootAbs, t))
+          ? args.targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)))
           : await discoverDefaultTargets(rootAbs);
       const targets = await expandTargets(rawTargets);
       const effectiveFeatures = resolveMcpFeatures(config);
@@ -386,7 +392,10 @@ export const createFirebatMcpServer = async (options: {
 
   const FindPatternInputSchema = z
     .object({
-      targets: z.array(z.string()).optional().describe('File or directory paths to search. If omitted, default project sources are used.'),
+      targets: z
+        .array(z.string())
+        .optional()
+        .describe('File or directory paths to search. If omitted, default project sources are used.'),
       rule: JsonValueSchema.optional().describe('ast-grep YAML rule object.'),
       matcher: JsonValueSchema.optional().describe('Pattern string to match.'),
       ruleName: z.string().optional().describe('Name of the rule when using rule.'),
@@ -609,7 +618,8 @@ export const createFirebatMcpServer = async (options: {
     'list_memories',
     {
       title: 'List Memories',
-      description: 'List all memory record keys stored for this project. Memories persist across MCP sessions in SQLite — useful for caching analysis notes, decisions, or intermediate results.',
+      description:
+        'List all memory record keys stored for this project. Memories persist across MCP sessions in SQLite — useful for caching analysis notes, decisions, or intermediate results.',
       inputSchema: ListMemoriesInputSchema,
       outputSchema: z
         .object({
@@ -618,7 +628,7 @@ export const createFirebatMcpServer = async (options: {
         .strict(),
     },
     safeTool(async (args: z.infer<typeof ListMemoriesInputSchema>) => {
-      const memories = await listMemoriesUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
+      const memories = await listMemoriesUseCase(args.root !== undefined ? { root: args.root, logger } : { logger });
       const structured = { memories };
 
       return {
@@ -639,7 +649,8 @@ export const createFirebatMcpServer = async (options: {
     'read_memory',
     {
       title: 'Read Memory',
-      description: 'Read a previously stored memory record by its key. Returns the JSON value if found, or found=false if the key does not exist.',
+      description:
+        'Read a previously stored memory record by its key. Returns the JSON value if found, or found=false if the key does not exist.',
       inputSchema: ReadMemoryInputSchema,
       outputSchema: z
         .object({
@@ -655,7 +666,9 @@ export const createFirebatMcpServer = async (options: {
         memoryKey: args.memoryKey,
         logger,
       });
-      const structured = rec ? { found: true, memoryKey: args.memoryKey, value: rec.value } : { found: false, memoryKey: args.memoryKey };
+      const structured = rec
+        ? { found: true, memoryKey: args.memoryKey, value: rec.value }
+        : { found: false, memoryKey: args.memoryKey };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
@@ -679,9 +692,7 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Write or overwrite a memory record with an arbitrary JSON value. The record persists in SQLite across sessions. Use memoryKey as a unique identifier.',
       inputSchema: WriteMemoryInputSchema,
-      outputSchema: z
-        .object({ ok: z.boolean(), memoryKey: z.string() })
-        .strict(),
+      outputSchema: z.object({ ok: z.boolean(), memoryKey: z.string() }).strict(),
     },
     safeTool(async (args: z.infer<typeof WriteMemoryInputSchema>) => {
       await writeMemoryUseCase({
@@ -713,9 +724,7 @@ export const createFirebatMcpServer = async (options: {
       title: 'Delete Memory',
       description: 'Delete a memory record by its key. Returns ok=true even if the key did not exist.',
       inputSchema: DeleteMemoryInputSchema,
-      outputSchema: z
-        .object({ ok: z.boolean(), memoryKey: z.string() })
-        .strict(),
+      outputSchema: z.object({ ok: z.boolean(), memoryKey: z.string() }).strict(),
     },
     safeTool(async (args: z.infer<typeof DeleteMemoryInputSchema>) => {
       await deleteMemoryUseCase({
@@ -740,7 +749,10 @@ export const createFirebatMcpServer = async (options: {
   const IndexSymbolsInputSchema = z
     .object({
       root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
-      targets: z.array(z.string()).optional().describe('File or directory paths to index. If omitted, default project sources are used.'),
+      targets: z
+        .array(z.string())
+        .optional()
+        .describe('File or directory paths to index. If omitted, default project sources are used.'),
     })
     .strict();
 
@@ -783,7 +795,10 @@ export const createFirebatMcpServer = async (options: {
     .object({
       root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
       query: z.string().describe('Substring to match symbol names.'),
-      kind: z.union([z.string(), z.array(z.string())]).optional().describe('Filter by kind (e.g. "function", "class", "type").'),
+      kind: z
+        .union([z.string(), z.array(z.string())])
+        .optional()
+        .describe('Filter by kind (e.g. "function", "class", "type").'),
       file: z.string().optional().describe('Filter by file path substring.'),
       limit: z.number().int().positive().optional().describe('Maximum number of matches to return.'),
     })
@@ -824,9 +839,13 @@ export const createFirebatMcpServer = async (options: {
       const kinds = new Set(kindsRaw.map(k => k.toLowerCase()));
       const fileNeedle = (args.file ?? '').trim().toLowerCase();
       const filtered = matches.filter(m => {
-        if (kinds.size > 0 && !kinds.has(m.kind.toLowerCase())) { return false; }
+        if (kinds.size > 0 && !kinds.has(m.kind.toLowerCase())) {
+          return false;
+        }
 
-        if (fileNeedle && !m.filePath.toLowerCase().includes(fileNeedle)) { return false; }
+        if (fileNeedle && !m.filePath.toLowerCase().includes(fileNeedle)) {
+          return false;
+        }
 
         return true;
       });
@@ -849,12 +868,10 @@ export const createFirebatMcpServer = async (options: {
       title: 'Clear Index',
       description: 'Delete all symbol index data for the given project root. Use to force a full re-index.',
       inputSchema: ClearIndexInputSchema,
-      outputSchema: z
-        .object({ ok: z.boolean() })
-        .strict(),
+      outputSchema: z.object({ ok: z.boolean() }).strict(),
     },
     safeTool(async (args: z.infer<typeof ClearIndexInputSchema>) => {
-      await clearIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
+      await clearIndexUseCase(args.root !== undefined ? { root: args.root, logger } : { logger });
 
       const structured = { ok: true };
 
@@ -893,14 +910,16 @@ export const createFirebatMcpServer = async (options: {
         .strict(),
     },
     safeTool(async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
-      const symbolIndex = await getIndexStatsFromIndexUseCase((args.root !== undefined ? { root: args.root, logger } : { logger }));
+      const symbolIndex = await getIndexStatsFromIndexUseCase(args.root !== undefined ? { root: args.root, logger } : { logger });
       // Best-effort tool availability check
       const tsgoAvailable = await (async () => {
         try {
           const r = await checkCapabilitiesUseCase({ root: rootAbs, logger });
 
           return r.ok === true;
-        } catch { return false; }
+        } catch {
+          return false;
+        }
       })();
       const oxlintAvailable = await (async () => {
         try {
@@ -908,7 +927,9 @@ export const createFirebatMcpServer = async (options: {
 
           // If targets is empty, oxlint may still report ok=false for "no targets" but the tool itself is found.
           return r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
-        } catch { return false; }
+        } catch {
+          return false;
+        }
       })();
       const structured = {
         root: rootAbs,
@@ -937,7 +958,12 @@ export const createFirebatMcpServer = async (options: {
         .describe(
           '1-based line number (number or numeric string). A non-numeric string is treated as content search (first line containing that text).',
         ),
-      character: z.number().int().nonnegative().optional().describe('0-based column. Optional; used with line for exact position.'),
+      character: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('0-based column. Optional; used with line for exact position.'),
       target: z.string().optional().describe('Optional substring to auto-locate the symbol on the line.'),
       tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
@@ -950,7 +976,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Get type information and documentation for a symbol at a specific position via tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. Provide line + character for exact position, or use target to auto-locate the symbol in the line.',
       inputSchema: GetHoverInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), hover: z.any().optional(), error: z.string().optional(), note: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), hover: z.any().optional(), error: z.string().optional(), note: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof GetHoverInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1012,9 +1040,7 @@ export const createFirebatMcpServer = async (options: {
       filePath: z.string().describe('Path to the file, relative to root or absolute.'),
       line: z
         .union([z.number(), z.string()])
-        .describe(
-          '1-based line number (number or numeric string). A non-numeric string is treated as content search.',
-        ),
+        .describe('1-based line number (number or numeric string). A non-numeric string is treated as content search.'),
       symbolName: z.string().describe('Name of the symbol to jump to.'),
       before: z.number().int().nonnegative().optional().describe('Number of context lines before the definition. Default 2.'),
       after: z.number().int().nonnegative().optional().describe('Number of context lines after the definition. Default 2.'),
@@ -1030,7 +1056,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Jump to the definition of a symbol via tsgo LSP and return a source preview. Root defaults to process.cwd(); filePath is relative to root or absolute. Use before/after (default 2) to control context lines. Set include_body=true to get the full function/class body.',
       inputSchema: GetDefinitionsInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), definitions: z.array(z.any()).optional(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), definitions: z.array(z.any()).optional(), error: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof GetDefinitionsInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1145,7 +1173,10 @@ export const createFirebatMcpServer = async (options: {
   const GetWorkspaceSymbolsInputSchema = z
     .object({
       root: z.string().optional().describe('Project root; defaults to process.cwd() if omitted.'),
-      query: z.string().optional().describe('Filter symbols by name substring. If omitted, behavior is implementation-dependent.'),
+      query: z
+        .string()
+        .optional()
+        .describe('Filter symbols by name substring. If omitted, behavior is implementation-dependent.'),
       tsconfigPath: z.string().optional().describe('Optional path to tsconfig.json; used by tsgo.'),
     })
     .strict();
@@ -1263,7 +1294,14 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Auto-format TypeScript/JavaScript files using tsgo LSP. Root defaults to process.cwd(); filePath is relative to root or absolute. If filePath is a directory, formats all .ts/.tsx files under it recursively. Returns changed=true and changedCount for the number of modified files.',
       inputSchema: FormatDocumentInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), changed: z.boolean().optional(), changedCount: z.number().optional(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({
+          ok: z.boolean(),
+          changed: z.boolean().optional(),
+          changedCount: z.number().optional(),
+          error: z.string().optional(),
+        })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof FormatDocumentInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1275,7 +1313,9 @@ export const createFirebatMcpServer = async (options: {
         const stat = await Bun.file(fileAbs).stat();
 
         isDir = typeof (stat as any)?.isDirectory === 'function' && (stat as any).isDirectory();
-      } catch { /* not found */ }
+      } catch {
+        /* not found */
+      }
 
       if (isDir) {
         const files = await expandTargets([fileAbs]);
@@ -1289,7 +1329,9 @@ export const createFirebatMcpServer = async (options: {
             logger,
           });
 
-          if (r.changed) {changedCount++;}
+          if (r.changed) {
+            changedCount++;
+          }
         }
 
         const structured = { ok: true, changed: changedCount > 0, changedCount };
@@ -1442,7 +1484,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Report which LSP capabilities the tsgo server supports (hover, references, definition, formatting, etc.). Root defaults to process.cwd(). Useful to check feature availability before calling other LSP tools.',
       inputSchema: CheckCapabilitiesInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), capabilities: z.any().optional(), error: z.string().optional(), note: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), capabilities: z.any().optional(), error: z.string().optional(), note: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof CheckCapabilitiesInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1479,7 +1523,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Replace text in a specific 1-based line/column range within a file. All coordinates are 1-based. relativePath is relative to root. Provide startLine, startColumn, endLine, endColumn and newText.',
       inputSchema: ReplaceRangeInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof ReplaceRangeInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1507,7 +1553,13 @@ export const createFirebatMcpServer = async (options: {
         'Apply a regex-based text replacement across a file using global/multiline/dotAll flags (gms). By default replaces only the first match; set allowMultipleOccurrences=true to replace all matches. relativePath is relative to root.',
       inputSchema: ReplaceRegexInputSchema,
       outputSchema: z
-        .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), matchCount: z.number().optional(), error: z.string().optional() })
+        .object({
+          ok: z.boolean(),
+          filePath: z.string(),
+          changed: z.boolean(),
+          matchCount: z.number().optional(),
+          error: z.string().optional(),
+        })
         .strict(),
     },
     safeTool(async (args: z.infer<typeof ReplaceRegexInputSchema>) => {
@@ -1517,9 +1569,7 @@ export const createFirebatMcpServer = async (options: {
         relativePath: args.relativePath,
         regex: args.regex,
         repl: args.repl,
-        ...(args.allowMultipleOccurrences !== undefined
-          ? { allowMultipleOccurrences: args.allowMultipleOccurrences }
-          : {}),
+        ...(args.allowMultipleOccurrences !== undefined ? { allowMultipleOccurrences: args.allowMultipleOccurrences } : {}),
         logger,
       });
 
@@ -1543,7 +1593,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Replace the entire block body of a function, method, or class identified by namePath (e.g. "MyClass.myMethod" or "myFunction"). The body parameter should contain the new implementation without outer braces.',
       inputSchema: ReplaceSymbolBodyInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof ReplaceSymbolBodyInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1569,7 +1621,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Insert text immediately before a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding imports, comments, decorators, or new declarations above a symbol. relativePath is relative to root. When supported, insertion is on a new line above the symbol.',
       inputSchema: InsertBeforeSymbolInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof InsertBeforeSymbolInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1595,7 +1649,9 @@ export const createFirebatMcpServer = async (options: {
       description:
         'Insert text immediately after a symbol definition identified by namePath (e.g. "MyClass" or "myFunction"). Useful for adding related functions, exports, or test scaffolding below a symbol. relativePath is relative to root.',
       inputSchema: InsertAfterSymbolInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({ ok: z.boolean(), filePath: z.string(), changed: z.boolean(), error: z.string().optional() })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof InsertAfterSymbolInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1654,7 +1710,13 @@ export const createFirebatMcpServer = async (options: {
       description:
         'List all npm dependencies (from package.json) that provide TypeScript type declarations. Checks for bundled types and @types/* packages. Useful for deciding which libraries to index with index_external_libraries.',
       inputSchema: GetTypescriptDependenciesInputSchema,
-      outputSchema: z.object({ ok: z.boolean(), dependencies: z.array(z.object({ name: z.string(), version: z.string(), hasTypes: z.boolean() })).optional(), error: z.string().optional() }).strict(),
+      outputSchema: z
+        .object({
+          ok: z.boolean(),
+          dependencies: z.array(z.object({ name: z.string(), version: z.string(), hasTypes: z.boolean() })).optional(),
+          error: z.string().optional(),
+        })
+        .strict(),
     },
     safeTool(async (args: z.infer<typeof GetTypescriptDependenciesInputSchema>) => {
       const rootAbs = resolveRootAbs(args.root);
@@ -1774,7 +1836,9 @@ export const createFirebatMcpServer = async (options: {
           const r = await checkCapabilitiesUseCase({ root: rootAbs, logger });
 
           return { available: r.ok === true, ...(r.note ? { note: r.note } : {}) };
-        } catch { return { available: false, note: 'check failed' }; }
+        } catch {
+          return { available: false, note: 'check failed' };
+        }
       })();
       const oxlint = await (async () => {
         try {
@@ -1782,7 +1846,9 @@ export const createFirebatMcpServer = async (options: {
           const available = r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
 
           return { available, ...(r.error && !available ? { note: r.error } : {}) };
-        } catch { return { available: false, note: 'check failed' }; }
+        } catch {
+          return { available: false, note: 'check failed' };
+        }
       })();
       const astGrep = { available: true }; // ast-grep/napi is a bundled dependency, always available.
       const structured = { tsgo, oxlint, astGrep };
@@ -1892,7 +1958,6 @@ export const runMcpServer = async (): Promise<void> => {
   const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs }).catch(() => null);
   const config = loaded?.config ?? null;
   const logger = createPrettyConsoleLogger({ level: 'warn' });
-
   const server = await createFirebatMcpServer({ rootAbs: ctx.rootAbs, config, logger });
 
   // Bootstrap: ensure symbol index is up-to-date once on server start.
@@ -1997,8 +2062,12 @@ export const runMcpServer = async (): Promise<void> => {
     }
   };
 
-  process.on('SIGTERM', () => { void cleanup('SIGTERM'); });
-  process.on('SIGINT', () => { void cleanup('SIGINT'); });
+  process.on('SIGTERM', () => {
+    void cleanup('SIGTERM');
+  });
+  process.on('SIGINT', () => {
+    void cleanup('SIGINT');
+  });
 
   try {
     await server.connect(transport);

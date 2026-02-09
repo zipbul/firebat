@@ -1,5 +1,5 @@
-import type { FirebatLogFields, FirebatLogger } from '../../ports/logger';
 import type { FirebatLogLevel } from '../../firebat-config';
+import type { FirebatLogFields, FirebatLogger } from '../../ports/logger';
 
 interface PrettyConsoleLoggerOptions {
   readonly level: FirebatLogLevel;
@@ -32,7 +32,9 @@ const ANSI = {
 } as const;
 
 const c = (text: string, color: string, enabled: boolean): string => {
-  if (!enabled) {return text;}
+  if (!enabled) {
+    return text;
+  }
 
   return `${color}${text}${ANSI.reset}`;
 };
@@ -53,20 +55,28 @@ const levelStyle = (level: FirebatLogLevel): { emoji: string; color: string } =>
 };
 
 const formatDuration = (ms: number | undefined): string => {
-  if (ms === undefined) {return '';}
+  if (ms === undefined) {
+    return '';
+  }
 
-  if (ms < 1000) {return `${ms}ms`;}
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
 
   return `${(ms / 1000).toFixed(2)}s`;
 };
 
 const formatFields = (fields: FirebatLogFields | undefined, useColor: boolean): string => {
-  if (!fields) {return '';}
+  if (!fields) {
+    return '';
+  }
 
   const parts: string[] = [];
 
   for (const [key, value] of Object.entries(fields)) {
-    if (value === undefined) {continue;}
+    if (value === undefined) {
+      continue;
+    }
 
     if (key === 'durationMs') {
       parts.push(c(formatDuration(value as number), ANSI.dim, useColor));
@@ -75,7 +85,9 @@ const formatFields = (fields: FirebatLogFields | undefined, useColor: boolean): 
     }
   }
 
-  if (parts.length === 0) {return '';}
+  if (parts.length === 0) {
+    return '';
+  }
 
   return ` ${parts.join(' ')}`;
 };
@@ -90,13 +102,13 @@ export const createPrettyConsoleLogger = (options: PrettyConsoleLoggerOptions): 
   };
 
   const emit = (level: FirebatLogLevel, message: string, fields?: FirebatLogFields, error?: unknown): void => {
-    if (!isEnabled(level)) {return;}
+    if (!isEnabled(level)) {
+      return;
+    }
 
     const style = levelStyle(level);
     const dot = c(style.emoji, style.color, useColor);
-    const msg = level === 'error' || level === 'warn'
-      ? c(message, style.color, useColor)
-      : message;
+    const msg = level === 'error' || level === 'warn' ? c(message, style.color, useColor) : message;
     let line = `  ${dot}  ${msg}${formatFields(fields, useColor)}`;
 
     if (includeStack && error instanceof Error && error.stack) {

@@ -47,6 +47,18 @@ Usage of reasoning, assumptions, simulation, memory, or experience to substitute
 | Type/signature check | `get_hover` |
 | External library API | `index_external_libraries` → `search_external_library_symbols` |
 
+### MCP verification before value/judgment answers
+
+Before answering questions about MCP usefulness, availability, efficiency, or CLI-vs-MCP trade-offs:
+
+1. MUST verify current MCP capability/state first.
+2. MUST run at least:
+   - `check_capabilities`
+   - `check_tool_availability`
+   - `get_project_overview`
+3. MUST NOT claim "MCP is unnecessary/less useful/unavailable" without those checks.
+4. After verification, compare CLI vs MCP with task-specific reasoning.
+
 ### On MCP failure:
 
 1. STOP immediately

@@ -97,9 +97,13 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
   for (const candidate of candidates) {
     const result = await safeRemoveFile(candidate);
 
-    if (result === 'removed') {removed.push(candidate);}
-    else if (result === 'missing') {missing.push(candidate);}
-    else {failed.push(candidate);}
+    if (result === 'removed') {
+      removed.push(candidate);
+    } else if (result === 'missing') {
+      missing.push(candidate);
+    } else {
+      failed.push(candidate);
+    }
   }
 
   if (failed.length > 0) {

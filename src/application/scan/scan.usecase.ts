@@ -2,41 +2,41 @@
 import * as path from 'node:path';
 
 import type { FirebatCliOptions } from '../../interfaces';
+import type { FirebatLogger } from '../../ports/logger';
 import type { FirebatReport } from '../../types';
 
+import { computeAutoMinSize } from '../../engine/auto-min-size';
+import { initHasher } from '../../engine/hasher';
 import { analyzeApiDrift, createEmptyApiDrift } from '../../features/api-drift';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
-import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
-import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
+import { detectExactDuplicates } from '../../features/exact-duplicates';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
+import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
 import { analyzeNoop, createEmptyNoop } from '../../features/noop';
+import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
 import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
-import { detectExactDuplicates } from '../../features/exact-duplicates';
 import { detectWaste } from '../../features/waste';
-import { computeAutoMinSize } from '../../engine/auto-min-size';
-import { initHasher } from '../../engine/hasher';
-import { createFirebatProgram } from '../../ts-program';
+import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
+import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
+import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
+import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
+import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
+import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { computeToolVersion } from '../../tool-version';
-import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
-import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
-import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
-import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
-import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
+import { createFirebatProgram } from '../../ts-program';
 import { indexTargets } from '../indexing/file-indexer';
-import { computeInputsDigest } from './inputs-digest';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
+import { computeInputsDigest } from './inputs-digest';
 import { computeProjectInputsDigest } from './project-inputs-digest';
-import type { FirebatLogger } from '../../ports/logger';
 
 const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -57,7 +57,9 @@ const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<str
 const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: FirebatLogger }): Promise<FirebatReport> => {
   const logger = deps.logger;
 
-  logger.info(`Scanning ${options.targets.length} files with ${options.detectors.length} detectors${options.fix ? ' (fix mode)' : ''}`);
+  logger.info(
+    `Scanning ${options.targets.length} files with ${options.detectors.length} detectors${options.fix ? ' (fix mode)' : ''}`,
+  );
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
 
   const tHasher0 = nowMs();
@@ -138,9 +140,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
     ...(options.detectors.includes('unknown-proof')
       ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
       : {}),
-    ...(options.detectors.includes('barrel-policy')
-      ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] }
-      : {}),
+    ...(options.detectors.includes('barrel-policy') ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] } : {}),
   });
 
   logger.trace('Artifact key computed', { artifactKey });
@@ -213,9 +213,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
     const fixDur = Math.round(nowMs() - tFix0);
 
-    if (shouldRunFormat) {fixTimings.format = nowMs() - tFix0;}
+    if (shouldRunFormat) {
+      fixTimings.format = nowMs() - tFix0;
+    }
 
-    if (shouldRunLint) {fixTimings.lint = nowMs() - tFix0;}
+    if (shouldRunLint) {
+      fixTimings.lint = nowMs() - tFix0;
+    }
 
     logger.debug('Fix-mode tools complete', { durationMs: fixDur });
   } else {
@@ -223,28 +227,40 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
       const tFormat0 = nowMs();
 
       formatPromise = resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc')
-        .then(oxfmtConfigPath => analyzeFormat({
-          targets: options.targets,
-          fix: false,
-          cwd: ctx.rootAbs,
-          ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
-          logger,
-        }))
-        .then(r => { fixTimings.format = nowMs() - tFormat0; return r; });
+        .then(oxfmtConfigPath =>
+          analyzeFormat({
+            targets: options.targets,
+            fix: false,
+            cwd: ctx.rootAbs,
+            ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
+            logger,
+          }),
+        )
+        .then(r => {
+          fixTimings.format = nowMs() - tFormat0;
+
+          return r;
+        });
     }
 
     if (shouldRunLint) {
       const tLint0 = nowMs();
 
       lintPromise = resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc')
-        .then(oxlintConfigPath => analyzeLint({
-          targets: options.targets,
-          fix: false,
-          cwd: ctx.rootAbs,
-          ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
-          logger,
-        }))
-        .then(r => { fixTimings.lint = nowMs() - tLint0; return r; });
+        .then(oxlintConfigPath =>
+          analyzeLint({
+            targets: options.targets,
+            fix: false,
+            cwd: ctx.rootAbs,
+            ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
+            logger,
+          }),
+        )
+        .then(r => {
+          fixTimings.lint = nowMs() - tLint0;
+
+          return r;
+        });
     }
   }
 
@@ -256,8 +272,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   logger.info(`Parsed ${program.length} files`, { durationMs: Math.round(nowMs() - tProgram0) });
 
-  const resolvedMinSize =
-    options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
+  const resolvedMinSize = options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
 
   logger.debug(`Resolved minSize=${resolvedMinSize} (input=${String(options.minSize)})`);
 
@@ -289,20 +304,50 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   }
 
   const barrelPolicyPromise = options.detectors.includes('barrel-policy')
-    ? ((): Promise<any> => { const t0 = nowMs(); return analyzeBarrelPolicy(program, {
-        rootAbs: ctx.rootAbs,
-        ...(options.barrelPolicyIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelPolicyIgnoreGlobs } : {}),
-      }).then(r => { detectorTimings['barrel-policy'] = nowMs() - t0; logger.debug('barrel-policy', { durationMs: detectorTimings['barrel-policy'] }); return r; }); })()
+    ? ((): Promise<any> => {
+        const t0 = nowMs();
+
+        return analyzeBarrelPolicy(program, {
+          rootAbs: ctx.rootAbs,
+          ...(options.barrelPolicyIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelPolicyIgnoreGlobs } : {}),
+        }).then(r => {
+          detectorTimings['barrel-policy'] = nowMs() - t0;
+
+          logger.debug('barrel-policy', { durationMs: detectorTimings['barrel-policy'] });
+
+          return r;
+        });
+      })()
     : Promise.resolve(createEmptyBarrelPolicy());
   const unknownProofPromise = options.detectors.includes('unknown-proof')
-    ? ((): Promise<any> => { const t0 = nowMs(); return analyzeUnknownProof(program, {
-        rootAbs: ctx.rootAbs,
-        ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
-        logger,
-      }).then(r => { detectorTimings['unknown-proof'] = nowMs() - t0; logger.debug('unknown-proof', { durationMs: detectorTimings['unknown-proof'] }); return r; }); })()
+    ? ((): Promise<any> => {
+        const t0 = nowMs();
+
+        return analyzeUnknownProof(program, {
+          rootAbs: ctx.rootAbs,
+          ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
+          logger,
+        }).then(r => {
+          detectorTimings['unknown-proof'] = nowMs() - t0;
+
+          logger.debug('unknown-proof', { durationMs: detectorTimings['unknown-proof'] });
+
+          return r;
+        });
+      })()
     : Promise.resolve(createEmptyUnknownProof());
   const typecheckPromise = options.detectors.includes('typecheck')
-    ? ((): Promise<any> => { const t0 = nowMs(); return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger }).then(r => { detectorTimings.typecheck = nowMs() - t0; logger.debug('typecheck', { durationMs: detectorTimings.typecheck }); return r; }); })()
+    ? ((): Promise<any> => {
+        const t0 = nowMs();
+
+        return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger }).then(r => {
+          detectorTimings.typecheck = nowMs() - t0;
+
+          logger.debug('typecheck', { durationMs: detectorTimings.typecheck });
+
+          return r;
+        });
+      })()
     : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
   let dependencies: ReturnType<typeof analyzeDependencies>;
@@ -431,20 +476,20 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
     },
     analyses: {
       ...(selectedDetectors.has('exact-duplicates') ? { 'exact-duplicates': exactDuplicates } : {}),
-      ...(selectedDetectors.has('waste') ? { 'waste': waste } : {}),
+      ...(selectedDetectors.has('waste') ? { waste: waste } : {}),
       ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': barrelPolicy } : {}),
       ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': unknownProof } : {}),
-      ...(selectedDetectors.has('format') ? { 'format': format } : {}),
-      ...(selectedDetectors.has('lint') ? { 'lint': lint } : {}),
-      ...(selectedDetectors.has('typecheck') ? { 'typecheck': typecheck } : {}),
-      ...(selectedDetectors.has('dependencies') ? { 'dependencies': dependencies } : {}),
-      ...(selectedDetectors.has('coupling') ? { 'coupling': coupling } : {}),
+      ...(selectedDetectors.has('format') ? { format: format } : {}),
+      ...(selectedDetectors.has('lint') ? { lint: lint } : {}),
+      ...(selectedDetectors.has('typecheck') ? { typecheck: typecheck } : {}),
+      ...(selectedDetectors.has('dependencies') ? { dependencies: dependencies } : {}),
+      ...(selectedDetectors.has('coupling') ? { coupling: coupling } : {}),
       ...(selectedDetectors.has('structural-duplicates') ? { 'structural-duplicates': structuralDuplicates } : {}),
-      ...(selectedDetectors.has('nesting') ? { 'nesting': nesting } : {}),
+      ...(selectedDetectors.has('nesting') ? { nesting: nesting } : {}),
       ...(selectedDetectors.has('early-return') ? { 'early-return': earlyReturn } : {}),
-      ...(selectedDetectors.has('noop') ? { 'noop': noop } : {}),
+      ...(selectedDetectors.has('noop') ? { noop: noop } : {}),
       ...(selectedDetectors.has('api-drift') ? { 'api-drift': apiDrift } : {}),
-      ...(selectedDetectors.has('forwarding') ? { 'forwarding': forwarding } : {}),
+      ...(selectedDetectors.has('forwarding') ? { forwarding: forwarding } : {}),
     },
   };
 
@@ -464,6 +509,5 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   return report;
 };
-
 
 export { scanUseCase };

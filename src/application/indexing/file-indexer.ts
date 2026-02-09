@@ -1,7 +1,8 @@
-import { hashString } from '../../engine/hasher';
-import { runWithConcurrency } from '../../engine/promise-pool';
 import type { FileIndexRepository } from '../../ports/file-index.repository';
 import type { FirebatLogger } from '../../ports/logger';
+
+import { hashString } from '../../engine/hasher';
+import { runWithConcurrency } from '../../engine/promise-pool';
 
 interface IndexTargetsInput {
   readonly projectKey: string;

@@ -1,12 +1,12 @@
+import { Database } from 'bun:sqlite';
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 // MUST: MUST-2
 import { mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { Database } from 'bun:sqlite';
+import type { FirebatLogger } from '../../ports/logger';
 
 import { createDrizzleDb, type FirebatDrizzleDb } from './drizzle-db';
-import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
-import type { FirebatLogger } from '../../ports/logger';
 
 const DB_RELATIVE_PATH = '.firebat/firebat.sqlite';
 
@@ -75,9 +75,7 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
 
     const hasMemoriesTable = (): boolean => {
       try {
-        const row = sqlite
-          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'")
-          .get();
+        const row = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='memories'").get();
 
         return row !== null && row !== undefined;
       } catch {

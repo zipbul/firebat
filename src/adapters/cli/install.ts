@@ -1,12 +1,11 @@
-import * as path from 'node:path';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import * as path from 'node:path';
 
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import type { FirebatLogger } from '../../ports/logger';
 
+import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
-
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { readonly [key: string]: JsonValue };
@@ -51,9 +50,13 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 };
 
 const toJsonValue = (value: unknown): JsonValue => {
-  if (value === null) {return null;}
+  if (value === null) {
+    return null;
+  }
 
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {return value;}
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
 
   if (Array.isArray(value)) {
     return value.map(item => toJsonValue(item));
@@ -73,36 +76,54 @@ const toJsonValue = (value: unknown): JsonValue => {
 };
 
 const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
-  if (a === b) {return true;}
+  if (a === b) {
+    return true;
+  }
 
-  if (a === null || b === null) {return false;}
+  if (a === null || b === null) {
+    return false;
+  }
 
   if (Array.isArray(a)) {
-    if (!Array.isArray(b)) {return false;}
+    if (!Array.isArray(b)) {
+      return false;
+    }
 
-    if (a.length !== b.length) {return false;}
+    if (a.length !== b.length) {
+      return false;
+    }
     for (let i = 0; i < a.length; i += 1) {
-      if (!deepEqual(a[i]!, b[i]!)) {return false;}
+      if (!deepEqual(a[i]!, b[i]!)) {
+        return false;
+      }
     }
 
     return true;
   }
 
   if (typeof a === 'object') {
-    if (typeof b !== 'object' || Array.isArray(b)) {return false;}
+    if (typeof b !== 'object' || Array.isArray(b)) {
+      return false;
+    }
 
     const aKeys = Object.keys(a as any).sort();
     const bKeys = Object.keys(b as any).sort();
 
-    if (aKeys.length !== bKeys.length) {return false;}
+    if (aKeys.length !== bKeys.length) {
+      return false;
+    }
     for (let i = 0; i < aKeys.length; i += 1) {
-      if (aKeys[i] !== bKeys[i]) {return false;}
+      if (aKeys[i] !== bKeys[i]) {
+        return false;
+      }
     }
     for (const k of aKeys) {
       const av = (a as any)[k] as JsonValue;
       const bv = (b as any)[k] as JsonValue;
 
-      if (!deepEqual(av, bv)) {return false;}
+      if (!deepEqual(av, bv)) {
+        return false;
+      }
     }
 
     return true;
@@ -112,11 +133,17 @@ const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
 };
 
 const sortJsonValue = (value: JsonValue): JsonValue => {
-  if (value === null) {return null;}
+  if (value === null) {
+    return null;
+  }
 
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {return value;}
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
 
-  if (Array.isArray(value)) {return value.map(v => sortJsonValue(v));}
+  if (Array.isArray(value)) {
+    return value.map(v => sortJsonValue(v));
+  }
 
   const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
   const out: Record<string, JsonValue> = {};
@@ -257,7 +284,7 @@ const H = {
   white: '\x1b[37m',
 } as const;
 
-const hc = (text: string, code: string, color: boolean): string => color ? `${code}${text}${H.reset}` : text;
+const hc = (text: string, code: string, color: boolean): string => (color ? `${code}${text}${H.reset}` : text);
 
 const writeStdout = (text: string): void => {
   process.stdout.write(text + '\n');
@@ -334,7 +361,7 @@ const AGENT_PROMPT_BLOCK = [
   'Firebat provides both a CLI and an MCP server for code quality analysis and refactoring support.',
   '',
   '### What to do (for your AI agent)',
-  '- Use MCP to discover all available firebat tools and prompts (via your client\'s MCP tooling or `check_capabilities`).',
+  "- Use MCP to discover all available firebat tools and prompts (via your client's MCP tooling or `check_capabilities`).",
   '- Ask the user about their project constraints (stack, CI, coding conventions, risk tolerance).',
   '- Propose a project-specific workflow that uses firebat to prevent regressions and keep code style consistent.',
   '- When suggesting or making code changes, validate with the appropriate tools (e.g. `scan`, `lint`, typecheck).',
@@ -356,9 +383,13 @@ const printAgentPromptGuide = (): void => {
   const promptLines = AGENT_PROMPT_BLOCK.split('\n');
 
   const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+
   const getBoxInnerWidth = (): number => {
     const columns = (process as any)?.stdout?.columns;
-    if (typeof columns !== 'number' || !Number.isFinite(columns)) return 72;
+
+    if (typeof columns !== 'number' || !Number.isFinite(columns)) {
+      return 72;
+    }
 
     // Layout: "  " + "│ " + content + "" (we print the right border separately).
     // Keep it within a readable range even on very wide terminals.
@@ -381,6 +412,7 @@ const printAgentPromptGuide = (): void => {
       }
 
       out.push(rest.slice(0, cut).trimEnd());
+
       rest = rest.slice(cut).trimStart();
     }
 
@@ -390,7 +422,7 @@ const printAgentPromptGuide = (): void => {
   };
 
   const boxWidth = getBoxInnerWidth();
-  const boxedPromptLines = promptLines.flatMap((line) => wrapLine(line, boxWidth));
+  const boxedPromptLines = promptLines.flatMap(line => wrapLine(line, boxWidth));
   const guideLines = [
     '',
     `  ${hc('🤖 Agent Integration', `${H.bold}${H.cyan}`, c)}`,
@@ -399,7 +431,7 @@ const printAgentPromptGuide = (): void => {
     `  so it can discover firebat capabilities and tailor a workflow for this project:`,
     '',
     `  ${hc('┌' + '─'.repeat(boxWidth + 2) + '┐', H.dim, c)}`,
-    ...boxedPromptLines.map((line) => {
+    ...boxedPromptLines.map(line => {
       const padded = line.padEnd(boxWidth, ' ');
 
       return `  ${hc(border, H.dim, c)} ${padded} ${hc(border, H.dim, c)}`;
@@ -419,8 +451,11 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     logger.debug(`${mode}: starting`, { args: argv.join(' ') });
 
     if (help) {
-      if (mode === 'install') {printInstallHelp();}
-      else {printUpdateHelp();}
+      if (mode === 'install') {
+        printInstallHelp();
+      } else {
+        printUpdateHelp();
+      }
 
       return 0;
     }
@@ -602,9 +637,13 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
       const diffs = assetResults.filter(r => r.kind === 'skipped-exists-different');
 
       for (const r of assetResults) {
-        if (r.kind === 'installed') { logger.info(`installed ${r.filePath}`); }
-        else if (r.kind === 'skipped-exists-same') { logger.debug(`kept existing (same) ${r.filePath}`); }
-        else { logger.warn(`kept existing (DIFFERENT) ${r.filePath}`); }
+        if (r.kind === 'installed') {
+          logger.info(`installed ${r.filePath}`);
+        } else if (r.kind === 'skipped-exists-same') {
+          logger.debug(`kept existing (same) ${r.filePath}`);
+        } else {
+          logger.warn(`kept existing (DIFFERENT) ${r.filePath}`);
+        }
       }
       if (diffs.length > 0) {
         logger.warn('Some files differ from the current templates. Per policy, install never overwrites.');

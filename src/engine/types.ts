@@ -1,7 +1,6 @@
 import type { Comment, Node, OxcError, Program } from 'oxc-parser';
 
 import type { FirebatItemKind } from '../types';
-
 import type { IntegerCFG } from './cfg';
 import type { NodeId } from './cfg-types';
 
@@ -21,7 +20,6 @@ export interface BitSet {
   equals(other: BitSet): boolean;
   array(): number[];
 }
-
 
 export interface VariableUsage {
   name: string;

@@ -106,11 +106,11 @@ export function earlyReturnCandidate(x: number): string {
     if (x > 10) {
       return 'big';
     }
-      return 'small';
-    
+
+    return 'small';
   }
-    return 'negative';
-  
+
+  return 'negative';
 }
 
 // Noop block

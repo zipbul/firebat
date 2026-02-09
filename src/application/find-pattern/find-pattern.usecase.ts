@@ -1,20 +1,15 @@
 import * as path from 'node:path';
 
-import { discoverDefaultTargets } from '../../target-discovery';
-import { findPatternInFiles, type AstGrepMatch } from '../../infrastructure/ast-grep/find-pattern';
 import type { FirebatLogger } from '../../ports/logger';
+
+import { findPatternInFiles, type AstGrepMatch } from '../../infrastructure/ast-grep/find-pattern';
+import { discoverDefaultTargets } from '../../target-discovery';
 
 interface JsonObject {
   readonly [k: string]: JsonValue;
 }
 
-type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | ReadonlyArray<JsonValue>
-  | JsonObject;
+type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
 
 interface FindPatternInput {
   readonly targets?: ReadonlyArray<string>;
@@ -24,15 +19,18 @@ interface FindPatternInput {
   readonly logger: FirebatLogger;
 }
 
-const uniqueSorted = (values: ReadonlyArray<string>): string[] =>
-  Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
+const uniqueSorted = (values: ReadonlyArray<string>): string[] => Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 
 const shouldIncludeSourceFile = (filePath: string): boolean => {
   const normalized = filePath.replaceAll('\\', '/');
 
-  if (normalized.includes('node_modules')) {return false;}
+  if (normalized.includes('node_modules')) {
+    return false;
+  }
 
-  if (normalized.endsWith('.d.ts')) {return false;}
+  if (normalized.endsWith('.d.ts')) {
+    return false;
+  }
 
   return normalized.endsWith('.ts') || normalized.endsWith('.tsx') || normalized.endsWith('.js') || normalized.endsWith('.jsx');
 };

@@ -1,766 +1,810 @@
-import * as path from 'node:path';
-
 import type { Node } from 'oxc-parser';
+
+import * as path from 'node:path';
 
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
 
-import { getLineColumn } from '../../engine/source-position';
 import { isNodeRecord, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { getLineColumn } from '../../engine/source-position';
 
 export const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
 
 type BindingCandidate = {
-	readonly name: string;
-	readonly offset: number;
-	readonly span: SourceSpan;
+  readonly name: string;
+  readonly offset: number;
+  readonly span: SourceSpan;
 };
 
 type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
 
 type BoundaryUsageCandidate = {
-	readonly name: string;
-	readonly offset: number;
-	readonly span: SourceSpan;
-	readonly usageKind: BoundaryUsageKind;
+  readonly name: string;
+  readonly offset: number;
+  readonly span: SourceSpan;
+  readonly usageKind: BoundaryUsageKind;
 };
 
+type NodeLike = Record<string, unknown>;
+
 export type UnknownProofCandidates = {
-	readonly typeAssertionFindings: ReadonlyArray<UnknownProofFinding>;
-	readonly nonBoundaryBindings: ReadonlyArray<BindingCandidate>;
-	readonly boundaryUnknownUsages: ReadonlyArray<BoundaryUsageCandidate>;
+  readonly typeAssertionFindings: ReadonlyArray<UnknownProofFinding>;
+  readonly nonBoundaryBindings: ReadonlyArray<BindingCandidate>;
+  readonly boundaryUnknownUsages: ReadonlyArray<BoundaryUsageCandidate>;
 };
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const toRelPath = (rootAbs: string, fileAbs: string): string => {
-	const rel = path.relative(rootAbs, fileAbs);
+  const rel = path.relative(rootAbs, fileAbs);
 
-	return normalizePath(rel);
+  return normalizePath(rel);
 };
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const globToRegExp = (pattern: string): RegExp => {
-	// Supports: **, *, ?, and path separators '/'.
-	// - ** matches any characters including '/'
-	// - * matches any characters except '/'
-	let out = '^';
-	let i = 0;
+  // Supports: **, *, ?, and path separators '/'.
+  // - ** matches any characters including '/'
+  // - * matches any characters except '/'
+  let out = '^';
+  let i = 0;
 
-	while (i < pattern.length) {
-		const ch = pattern[i] ?? '';
+  while (i < pattern.length) {
+    const ch = pattern[i] ?? '';
 
-		if (ch === '*') {
-			const next = pattern[i + 1];
+    if (ch === '*') {
+      const next = pattern[i + 1];
 
-			if (next === '*') {
-				out += '.*';
-				i += 2;
+      if (next === '*') {
+        out += '.*';
+        i += 2;
 
-				continue;
-			}
+        continue;
+      }
 
-			out += '[^/]*';
-			i += 1;
+      out += '[^/]*';
+      i += 1;
 
-			continue;
-		}
+      continue;
+    }
 
-		if (ch === '?') {
-			out += '[^/]';
-			i += 1;
+    if (ch === '?') {
+      out += '[^/]';
+      i += 1;
 
-			continue;
-		}
+      continue;
+    }
 
-		out += escapeRegex(ch);
-		i += 1;
-	}
+    out += escapeRegex(ch);
+    i += 1;
+  }
 
-	out += '$';
+  out += '$';
 
-	return new RegExp(out);
+  return new RegExp(out);
 };
 
 const compileGlobs = (patterns: ReadonlyArray<string>): ReadonlyArray<RegExp> => {
-	return patterns
-		.map(p => p.trim())
-		.filter(p => p.length > 0)
-		.map(p => globToRegExp(normalizePath(p)));
+  return patterns
+    .map(p => p.trim())
+    .filter(p => p.length > 0)
+    .map(p => globToRegExp(normalizePath(p)));
 };
 
 const isBoundaryFile = (rootAbs: string, fileAbs: string, boundaryGlobs: ReadonlyArray<RegExp>): boolean => {
-	const rel = toRelPath(rootAbs, fileAbs);
+  const rel = toRelPath(rootAbs, fileAbs);
 
-	if (rel.startsWith('..')) {
-		return false;
-	}
+  if (rel.startsWith('..')) {
+    return false;
+  }
 
-	return boundaryGlobs.some(re => re.test(rel));
+  return boundaryGlobs.some(re => re.test(rel));
 };
 
 const toSpanFromOffsets = (sourceText: string, startOffset: number, endOffset: number): SourceSpan => {
-	const start = getLineColumn(sourceText, Math.max(0, startOffset));
-	const end = getLineColumn(sourceText, Math.max(0, endOffset));
+  const start = getLineColumn(sourceText, Math.max(0, startOffset));
+  const end = getLineColumn(sourceText, Math.max(0, endOffset));
 
-	return { start, end };
+  return { start, end };
+};
+
+const asNodeLike = (value: unknown): NodeLike | null => {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+
+  return value as NodeLike;
 };
 
 const collectStringsFromNode = (node: unknown): string[] => {
-	const out: string[] = [];
+  const out: string[] = [];
 
-	const visit = (value: any): void => {
-		if (value === null || value === undefined) {
-			return;
-		}
+  const visit = (value: unknown): void => {
+    if (value === null || value === undefined) {
+      return;
+    }
 
-		if (typeof value === 'string') {
-			out.push(value);
+    if (typeof value === 'string') {
+      out.push(value);
 
-			return;
-		}
+      return;
+    }
 
-		if (Array.isArray(value)) {
-			for (const entry of value) {
-				visit(entry);
-			}
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        visit(entry);
+      }
 
-			return;
-		}
+      return;
+    }
 
-		if (typeof value === 'object') {
-			for (const v of Object.values(value)) {
-				visit(v);
-			}
-		}
-	};
+    if (typeof value === 'object') {
+      for (const v of Object.values(value)) {
+        visit(v);
+      }
+    }
+  };
 
-	visit(node);
+  visit(node);
 
-	return out;
+  return out;
 };
 
 const containsTsKeyword = (node: unknown, keywordType: 'TSUnknownKeyword' | 'TSAnyKeyword'): boolean => {
-	let found = false;
+  let found = false;
 
-	walkOxcTree(node as any, (n: Node) => {
-		if (n.type === keywordType) {
-			found = true;
+  walkOxcTree(node as Node, (n: Node) => {
+    if (n.type === keywordType) {
+      found = true;
 
-			return false;
-		}
+      return false;
+    }
 
-		return true;
-	});
+    return true;
+  });
 
-	return found;
+  return found;
 };
 
-const extractBindingIdentifiers = (pattern: any): ReadonlyArray<any> => {
-	if (!pattern || typeof pattern !== 'object') {
-		return [];
-	}
+const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> => {
+  const patternNode = asNodeLike(pattern);
 
-	if (pattern.type === 'Identifier') {
-		return [pattern];
-	}
+  if (!patternNode) {
+    return [];
+  }
 
-	if (pattern.type === 'AssignmentPattern') {
-		return extractBindingIdentifiers((pattern as any).left);
-	}
+  if (patternNode.type === 'Identifier') {
+    return [patternNode];
+  }
 
-	if (pattern.type === 'RestElement') {
-		return extractBindingIdentifiers((pattern as any).argument);
-	}
+  if (patternNode.type === 'AssignmentPattern') {
+    return extractBindingIdentifiers(patternNode.left);
+  }
 
-	return [];
+  if (patternNode.type === 'RestElement') {
+    return extractBindingIdentifiers(patternNode.argument);
+  }
+
+  return [];
 };
 
-const collectUnknownAnnotatedBindings = (program: any, sourceText: string): ReadonlyArray<BindingCandidate> => {
-	const out: BindingCandidate[] = [];
+const collectUnknownAnnotatedBindings = (program: unknown, sourceText: string): ReadonlyArray<BindingCandidate> => {
+  const out: BindingCandidate[] = [];
 
-	const addIfUnknown = (id: any): void => {
-		if (!id || typeof id !== 'object' || id.type !== 'Identifier' || typeof id.name !== 'string') {
-			return;
-		}
+  const addIfUnknown = (id: unknown): void => {
+    const idNode = asNodeLike(id);
 
-		const typeAnn = (id as any).typeAnnotation;
+    if (!idNode || idNode.type !== 'Identifier' || typeof idNode.name !== 'string') {
+      return;
+    }
 
-		if (!typeAnn || !containsTsKeyword(typeAnn, 'TSUnknownKeyword')) {
-			return;
-		}
+    const typeAnn = idNode.typeAnnotation;
 
-		const startOffset = typeof id.start === 'number' ? id.start : 0;
-		const endOffset = typeof id.end === 'number' ? id.end : startOffset;
+    if (!typeAnn || !containsTsKeyword(typeAnn, 'TSUnknownKeyword')) {
+      return;
+    }
 
-		out.push({ name: id.name, offset: startOffset, span: toSpanFromOffsets(sourceText, startOffset, endOffset) });
-	};
+    const startOffset = typeof idNode.start === 'number' ? idNode.start : 0;
+    const endOffset = typeof idNode.end === 'number' ? idNode.end : startOffset;
 
-	walkOxcTree(program as any, (node: Node) => {
-		if (!isNodeRecord(node)) {
-			return true;
-		}
+    out.push({ name: idNode.name, offset: startOffset, span: toSpanFromOffsets(sourceText, startOffset, endOffset) });
+  };
 
-		if (node.type === 'VariableDeclarator') {
-			const ids = extractBindingIdentifiers((node as any).id);
+  walkOxcTree(program as Node, (node: Node) => {
+    if (!isNodeRecord(node)) {
+      return true;
+    }
 
-			for (const id of ids) {
-				addIfUnknown(id);
-			}
-		}
+    if (node.type === 'VariableDeclarator') {
+      const ids = extractBindingIdentifiers(asNodeLike(node)?.id);
 
-		if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
-			const params = (node as any).params;
+      for (const id of ids) {
+        addIfUnknown(id);
+      }
+    }
 
-			if (Array.isArray(params)) {
-				for (const p of params) {
-					const ids = extractBindingIdentifiers(p);
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+      const params = asNodeLike(node)?.params;
 
-					for (const id of ids) {
-						addIfUnknown(id);
-					}
-				}
-			}
-		}
+      if (Array.isArray(params)) {
+        for (const p of params) {
+          const ids = extractBindingIdentifiers(p);
 
-		return true;
-	});
+          for (const id of ids) {
+            addIfUnknown(id);
+          }
+        }
+      }
+    }
 
-	return out;
+    return true;
+  });
+
+  return out;
 };
 
-type WalkStackEntry = { readonly node: any; readonly keyInParent: string | null };
+type WalkStackEntry = { readonly node: unknown; readonly keyInParent: string | null };
 
-const walkOxcTreeWithStack = (root: unknown, visit: (node: any, stack: ReadonlyArray<WalkStackEntry>) => void): void => {
-	const seen = new Set<object>();
+const walkOxcTreeWithStack = (root: unknown, visit: (node: unknown, stack: ReadonlyArray<WalkStackEntry>) => void): void => {
+  const seen = new Set<object>();
 
-	const rec = (value: any, keyInParent: string | null, stack: ReadonlyArray<WalkStackEntry>): void => {
-		if (value === null || value === undefined) {
-			return;
-		}
+  const rec = (value: unknown, keyInParent: string | null, stack: ReadonlyArray<WalkStackEntry>): void => {
+    if (value === null || value === undefined) {
+      return;
+    }
 
-		if (Array.isArray(value)) {
-			for (const entry of value) {
-				rec(entry, keyInParent, stack);
-			}
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        rec(entry, keyInParent, stack);
+      }
 
-			return;
-		}
+      return;
+    }
 
-		if (typeof value !== 'object') {
-			return;
-		}
+    if (typeof value !== 'object') {
+      return;
+    }
 
-		if (!isNodeRecord(value)) {
-			for (const [k, v] of Object.entries(value)) {
-				rec(v, k, stack);
-			}
+    if (!isNodeRecord(value as Node)) {
+      for (const [k, v] of Object.entries(value)) {
+        rec(v, k, stack);
+      }
 
-			return;
-		}
+      return;
+    }
 
-		if (seen.has(value)) {
-			return;
-		}
+    if (seen.has(value)) {
+      return;
+    }
 
-		seen.add(value);
+    seen.add(value);
 
-		const nextStack = [...stack, { node: value, keyInParent }];
+    const nextStack = [...stack, { node: value, keyInParent }];
 
-		visit(value, nextStack);
+    visit(value, nextStack);
 
-		for (const [k, v] of Object.entries(value)) {
-			rec(v, k, nextStack);
-		}
-	};
+    for (const [k, v] of Object.entries(value)) {
+      rec(v, k, nextStack);
+    }
+  };
 
-	rec(root as any, null, []);
+  rec(root, null, []);
 };
 
 const isInMemberPropertyPosition = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	const self = stack[stack.length - 1]?.node;
-	const parent = stack[stack.length - 2]?.node;
+  const self = stack[stack.length - 1]?.node;
+  const parent = stack[stack.length - 2]?.node;
 
-	if (!self || !parent || !isNodeRecord(parent)) {
-		return false;
-	}
+  if (!self || !parent || !isNodeRecord(parent as Node)) {
+    return false;
+  }
 
-	return parent.type === 'MemberExpression' && (parent as any).property === self;
+  const parentNode = parent as NodeLike;
+
+  return parentNode.type === 'MemberExpression' && parentNode.property === self;
 };
 
 const isInTestPosition = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = 0; i < stack.length - 1; i++) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = 0; i < stack.length - 1; i++) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (
-			(n.type === 'IfStatement' && childKey === 'test') ||
-			(n.type === 'WhileStatement' && childKey === 'test') ||
-			(n.type === 'DoWhileStatement' && childKey === 'test') ||
-			(n.type === 'ForStatement' && childKey === 'test') ||
-			(n.type === 'ConditionalExpression' && childKey === 'test')
-		) {
-			return true;
-		}
-	}
+    const nodeRecord = n as NodeLike;
 
-	return false;
+    if (
+      (nodeRecord.type === 'IfStatement' && childKey === 'test') ||
+      (nodeRecord.type === 'WhileStatement' && childKey === 'test') ||
+      (nodeRecord.type === 'DoWhileStatement' && childKey === 'test') ||
+      (nodeRecord.type === 'ForStatement' && childKey === 'test') ||
+      (nodeRecord.type === 'ConditionalExpression' && childKey === 'test')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const isInCallArguments = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'CallExpression' && childKey === 'arguments') {
-			return true;
-		}
-	}
+    if ((n as NodeLike).type === 'CallExpression' && childKey === 'arguments') {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 const isInNewArguments = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'NewExpression' && childKey === 'arguments') {
-			return true;
-		}
-	}
+    if ((n as NodeLike).type === 'NewExpression' && childKey === 'arguments') {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 const isInReturnArgument = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'ReturnStatement' && childKey === 'argument') {
-			return true;
-		}
-	}
+    if ((n as NodeLike).type === 'ReturnStatement' && childKey === 'argument') {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 const isInThrowArgument = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'ThrowStatement' && childKey === 'argument') {
-			return true;
-		}
-	}
+    if ((n as NodeLike).type === 'ThrowStatement' && childKey === 'argument') {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 const isInForwardingAssignment = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'VariableDeclarator' && childKey === 'init') {
-			return true;
-		}
+    const nodeRecord = n as NodeLike;
 
-		if (n.type === 'AssignmentExpression' && childKey === 'right') {
-			return true;
-		}
-	}
+    if (nodeRecord.type === 'VariableDeclarator' && childKey === 'init') {
+      return true;
+    }
 
-	return false;
+    if (nodeRecord.type === 'AssignmentExpression' && childKey === 'right') {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const isInPropertyValue = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'Property' && childKey === 'value') {
-			return true;
-		}
-	}
+    if ((n as NodeLike).type === 'Property' && childKey === 'value') {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 const isInArrayElement = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	for (let i = stack.length - 2; i >= 0; i--) {
-		const n = stack[i]?.node;
-		const childKey = stack[i + 1]?.keyInParent;
+  for (let i = stack.length - 2; i >= 0; i--) {
+    const n = stack[i]?.node;
+    const childKey = stack[i + 1]?.keyInParent;
 
-		if (!n || !isNodeRecord(n) || typeof childKey !== 'string') {
-			continue;
-		}
+    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
+      continue;
+    }
 
-		if (n.type === 'ArrayExpression' && childKey === 'elements') {
-			return true;
-		}
-	}
+    if ((n as NodeLike).type === 'ArrayExpression' && childKey === 'elements') {
+      return true;
+    }
+  }
 
-	return false;
+  return false;
 };
 
 const isAllowedNarrowingContext = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-	const self = stack[stack.length - 1]?.node;
-	const parent = stack[stack.length - 2]?.node;
+  const self = stack[stack.length - 1]?.node;
+  const parent = stack[stack.length - 2]?.node;
 
-	if (!self || !parent || !isNodeRecord(parent)) {
-		return false;
-	}
+  if (!self || !parent || !isNodeRecord(parent as Node)) {
+    return false;
+  }
 
-	if (parent.type === 'UnaryExpression' && (parent as any).operator === 'typeof') {
-		return true;
-	}
+  const parentNode = parent as NodeLike;
 
-	if (parent.type === 'BinaryExpression') {
-		const op = (parent as any).operator;
+  if (parentNode.type === 'UnaryExpression' && parentNode.operator === 'typeof') {
+    return true;
+  }
 
-		if (op === 'instanceof' && (parent as any).left === self) {
-			return true;
-		}
+  if (parentNode.type === 'BinaryExpression') {
+    const op = parentNode.operator;
 
-		if (op === 'in' && (parent as any).right === self) {
-			return true;
-		}
+    if (op === 'instanceof' && parentNode.left === self) {
+      return true;
+    }
 
-		if (op === '===' || op === '!==' || op === '==' || op === '!=') {
-			const left = (parent as any).left;
-			const right = (parent as any).right;
-			const other = left === self ? right : right === self ? left : null;
+    if (op === 'in' && parentNode.right === self) {
+      return true;
+    }
 
-			if (
-				other &&
-				isNodeRecord(other) &&
-				((other.type === 'Literal' && (other as any).value === null) ||
-					(other.type === 'Identifier' && (other as any).name === 'undefined'))
-			) {
-				return true;
-			}
-		}
-	}
+    if (op === '===' || op === '!==' || op === '==' || op === '!=') {
+      const left = parentNode.left;
+      const right = parentNode.right;
+      const other = left === self ? right : right === self ? left : null;
+      const otherNode = asNodeLike(other);
 
-	// Allow calling guard functions in conditional test positions (e.g., Array.isArray(x), isFoo(x)).
-		if (isInTestPosition(stack) && (isInCallArguments(stack) || isInNewArguments(stack))) {
-		return true;
-	}
+      if (
+        otherNode &&
+        ((otherNode.type === 'Literal' && otherNode.value === null) ||
+          (otherNode.type === 'Identifier' && otherNode.name === 'undefined'))
+      ) {
+        return true;
+      }
+    }
+  }
 
-	return false;
+  // Allow calling guard functions in conditional test positions (e.g., Array.isArray(x), isFoo(x)).
+  if (isInTestPosition(stack) && (isInCallArguments(stack) || isInNewArguments(stack))) {
+    return true;
+  }
+
+  return false;
 };
 
 const collectBoundaryUnknownUsages = (input: {
-	program: any;
-	sourceText: string;
-	unknownBindings: ReadonlyArray<BindingCandidate>;
+  program: unknown;
+  sourceText: string;
+  unknownBindings: ReadonlyArray<BindingCandidate>;
 }): ReadonlyArray<BoundaryUsageCandidate> => {
-	const declaredOffsets = new Set<number>(input.unknownBindings.map(b => b.offset));
-	const unknownNames = new Set<string>(input.unknownBindings.map(b => b.name));
-	const out: BoundaryUsageCandidate[] = [];
+  const declaredOffsets = new Set<number>(input.unknownBindings.map(b => b.offset));
+  const unknownNames = new Set<string>(input.unknownBindings.map(b => b.name));
+  const out: BoundaryUsageCandidate[] = [];
 
-	if (unknownNames.size === 0) {
-		return out;
-	}
+  if (unknownNames.size === 0) {
+    return out;
+  }
 
-	walkOxcTreeWithStack(input.program, (node, stack) => {
-		if (!isNodeRecord(node) || node.type !== 'Identifier') {
-			return;
-		}
+  walkOxcTreeWithStack(input.program, (node, stack) => {
+    if (!isNodeRecord(node as Node)) {
+      return;
+    }
 
-		const name = typeof (node as any).name === 'string' ? (node as any).name : '';
+    const nodeRecord = node as NodeLike;
 
-		if (name.length === 0 || !unknownNames.has(name)) {
-			return;
-		}
+    if (nodeRecord.type !== 'Identifier') {
+      return;
+    }
 
-		const startOffset = typeof (node as any).start === 'number' ? (node as any).start : 0;
-		const endOffset = typeof (node as any).end === 'number' ? (node as any).end : startOffset;
+    const name = typeof nodeRecord.name === 'string' ? nodeRecord.name : '';
 
-		// Skip the declaration identifier itself.
-		if (declaredOffsets.has(startOffset)) {
-			return;
-		}
+    if (name.length === 0 || !unknownNames.has(name)) {
+      return;
+    }
 
-		// Skip property name in member access: obj.prop (the `prop` identifier).
-		if (isInMemberPropertyPosition(stack)) {
-			return;
-		}
+    const startOffset = typeof nodeRecord.start === 'number' ? nodeRecord.start : 0;
+    const endOffset = typeof nodeRecord.end === 'number' ? nodeRecord.end : startOffset;
 
-		// Allow explicit narrowing contexts.
-		if (isAllowedNarrowingContext(stack)) {
-			return;
-		}
+    // Skip the declaration identifier itself.
+    if (declaredOffsets.has(startOffset)) {
+      return;
+    }
 
-		let usageKind: BoundaryUsageKind | null = null;
+    // Skip property name in member access: obj.prop (the `prop` identifier).
+    if (isInMemberPropertyPosition(stack)) {
+      return;
+    }
 
-		if (isInReturnArgument(stack)) {
-			usageKind = 'return';
-		} else if (isInThrowArgument(stack)) {
-			usageKind = 'throw';
-		} else if (isInCallArguments(stack) || isInNewArguments(stack)) {
-			usageKind = 'call';
-		} else if (isInForwardingAssignment(stack)) {
-			usageKind = 'assign';
-		} else if (isInPropertyValue(stack) || isInArrayElement(stack)) {
-			usageKind = 'store';
-		}
+    // Allow explicit narrowing contexts.
+    if (isAllowedNarrowingContext(stack)) {
+      return;
+    }
 
-		if (usageKind === null) {
-			return;
-		}
+    let usageKind: BoundaryUsageKind | null = null;
 
-		out.push({
-			name,
-			offset: startOffset,
-			span: toSpanFromOffsets(input.sourceText, startOffset, endOffset),
-			usageKind,
-		});
-	});
+    if (isInReturnArgument(stack)) {
+      usageKind = 'return';
+    } else if (isInThrowArgument(stack)) {
+      usageKind = 'throw';
+    } else if (isInCallArguments(stack) || isInNewArguments(stack)) {
+      usageKind = 'call';
+    } else if (isInForwardingAssignment(stack)) {
+      usageKind = 'assign';
+    } else if (isInPropertyValue(stack) || isInArrayElement(stack)) {
+      usageKind = 'store';
+    }
 
-	return out;
+    if (usageKind === null) {
+      return;
+    }
+
+    out.push({
+      name,
+      offset: startOffset,
+      span: toSpanFromOffsets(input.sourceText, startOffset, endOffset),
+      usageKind,
+    });
+  });
+
+  return out;
 };
 
 export const collectUnknownProofCandidates = (input: {
-	program: ReadonlyArray<ParsedFile>;
-	rootAbs: string;
-	boundaryGlobs?: ReadonlyArray<string>;
+  program: ReadonlyArray<ParsedFile>;
+  rootAbs: string;
+  boundaryGlobs?: ReadonlyArray<string>;
 }): {
-	readonly boundaryGlobs: ReadonlyArray<string>;
-	readonly perFile: ReadonlyMap<string, UnknownProofCandidates>;
+  readonly boundaryGlobs: ReadonlyArray<string>;
+  readonly perFile: ReadonlyMap<string, UnknownProofCandidates>;
 } => {
-	const boundaryGlobs = (input.boundaryGlobs ?? [])
-		.map(p => normalizePath(p).trim())
-		.filter(p => p.length > 0);
-	const boundaryMatchers = compileGlobs(boundaryGlobs);
-	const perFile = new Map<string, UnknownProofCandidates>();
+  const boundaryGlobs = (input.boundaryGlobs ?? []).map(p => normalizePath(p).trim()).filter(p => p.length > 0);
+  const boundaryMatchers = compileGlobs(boundaryGlobs);
+  const perFile = new Map<string, UnknownProofCandidates>();
 
-	for (const file of input.program) {
-		const filePath = file.filePath;
-		const boundary = boundaryGlobs.length > 0
-			? isBoundaryFile(input.rootAbs, filePath, boundaryMatchers)
-			: false;
-		const typeAssertionFindings: UnknownProofFinding[] = [];
-		const nonBoundaryBindings: BindingCandidate[] = [];
-		const boundaryUnknownUsages: BoundaryUsageCandidate[] = [];
+  for (const file of input.program) {
+    const filePath = file.filePath;
+    const boundary = boundaryGlobs.length > 0 ? isBoundaryFile(input.rootAbs, filePath, boundaryMatchers) : false;
+    const typeAssertionFindings: UnknownProofFinding[] = [];
+    const nonBoundaryBindings: BindingCandidate[] = [];
+    const boundaryUnknownUsages: BoundaryUsageCandidate[] = [];
 
-		const pushTypeAssertion = (node: any, message: string): void => {
-			const startOffset = typeof node.start === 'number' ? node.start : 0;
-			const endOffset = typeof node.end === 'number' ? node.end : startOffset;
-			const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
+    const pushTypeAssertion = (node: unknown, message: string): void => {
+      const nodeRecord = asNodeLike(node);
+      const startOffset = typeof nodeRecord?.start === 'number' ? nodeRecord.start : 0;
+      const endOffset = typeof nodeRecord?.end === 'number' ? nodeRecord.end : startOffset;
+      const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
 
-			typeAssertionFindings.push({
-				kind: 'type-assertion',
-				message,
-				filePath,
-				span,
-			});
-		};
+      typeAssertionFindings.push({
+        kind: 'type-assertion',
+        message,
+        filePath,
+        span,
+      });
+    };
 
-		walkOxcTree(file.program as any, (node: Node) => {
-			// Ban type assertions everywhere.
-			if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
-				pushTypeAssertion(node as any, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
+    walkOxcTree(file.program as Node, (node: Node) => {
+      // Ban type assertions everywhere.
+      if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
+        pushTypeAssertion(node, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
 
-				return true;
-			}
+        return true;
+      }
 
-			if (!isNodeRecord(node)) {
-				return true;
-			}
+      if (!isNodeRecord(node)) {
+        return true;
+      }
 
-			// Collect binding identifiers for tsgo proof checks.
-			if (!boundary) {
-				if (node.type === 'VariableDeclarator') {
-					const ids = extractBindingIdentifiers((node as any).id);
+      // Collect binding identifiers for tsgo proof checks.
+      if (!boundary) {
+        if (node.type === 'VariableDeclarator') {
+          const ids = extractBindingIdentifiers(asNodeLike(node)?.id);
 
-					for (const id of ids) {
-						const name = typeof id?.name === 'string' ? id.name : '';
+          for (const id of ids) {
+            const name = typeof id?.name === 'string' ? id.name : '';
 
-						if (name.length === 0) {
-							continue;
-						}
+            if (name.length === 0) {
+              continue;
+            }
 
-						const startOffset = typeof id.start === 'number' ? id.start : (typeof node.start === 'number' ? node.start : 0);
-						const endOffset = typeof id.end === 'number' ? id.end : startOffset;
+            const startOffset = typeof id.start === 'number' ? id.start : typeof node.start === 'number' ? node.start : 0;
+            const endOffset = typeof id.end === 'number' ? id.end : startOffset;
 
-						nonBoundaryBindings.push({ name, offset: startOffset, span: toSpanFromOffsets(file.sourceText, startOffset, endOffset) });
-					}
-				}
+            nonBoundaryBindings.push({
+              name,
+              offset: startOffset,
+              span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
+            });
+          }
+        }
 
-				if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
-					const params = (node as any).params;
+        if (
+          node.type === 'FunctionDeclaration' ||
+          node.type === 'FunctionExpression' ||
+          node.type === 'ArrowFunctionExpression'
+        ) {
+          const params = asNodeLike(node)?.params;
 
-					if (Array.isArray(params)) {
-						for (const p of params) {
-							const ids = extractBindingIdentifiers(p);
+          if (Array.isArray(params)) {
+            for (const p of params) {
+              const ids = extractBindingIdentifiers(p);
 
-							for (const id of ids) {
-								const name = typeof id?.name === 'string' ? id.name : '';
+              for (const id of ids) {
+                const name = typeof id?.name === 'string' ? id.name : '';
 
-								if (name.length === 0) {
-									continue;
-								}
+                if (name.length === 0) {
+                  continue;
+                }
 
-								const startOffset = typeof id.start === 'number' ? id.start : (typeof node.start === 'number' ? node.start : 0);
-								const endOffset = typeof id.end === 'number' ? id.end : startOffset;
+                const startOffset = typeof id.start === 'number' ? id.start : typeof node.start === 'number' ? node.start : 0;
+                const endOffset = typeof id.end === 'number' ? id.end : startOffset;
 
-								nonBoundaryBindings.push({ name, offset: startOffset, span: toSpanFromOffsets(file.sourceText, startOffset, endOffset) });
-							}
-						}
-					}
-				}
-			}
+                nonBoundaryBindings.push({
+                  name,
+                  offset: startOffset,
+                  span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
+                });
+              }
+            }
+          }
+        }
+      }
 
-			// unknown type annotations
-			if (node.type === 'Identifier') {
-				const id = node as any;
-				const name = typeof id.name === 'string' ? id.name : '';
-				const typeAnn = id.typeAnnotation;
+      // unknown type annotations
+      if (node.type === 'Identifier') {
+        const id = asNodeLike(node);
 
-				if (!typeAnn || name.length === 0) {
-					return true;
-				}
+        if (!id) {
+          return true;
+        }
 
-				const hasUnknown = containsTsKeyword(typeAnn, 'TSUnknownKeyword');
+        const name = typeof id.name === 'string' ? id.name : '';
+        const typeAnn = id.typeAnnotation;
 
-				if (!hasUnknown) {
-					return true;
-				}
+        if (!typeAnn || name.length === 0) {
+          return true;
+        }
 
-				const startOffset = typeof id.start === 'number' ? id.start : 0;
-				const endOffset = typeof id.end === 'number' ? id.end : startOffset;
-				const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
+        const hasUnknown = containsTsKeyword(typeAnn, 'TSUnknownKeyword');
 
-				if (!boundary) {
-					typeAssertionFindings.push({
-						kind: 'unknown-type',
-						message: 'Explicit `unknown` type is forbidden outside boundary files',
-						filePath,
-						span,
-						symbol: name,
-					});
-				}
-			}
+        if (!hasUnknown) {
+          return true;
+        }
 
-			return true;
-		});
+        const startOffset = typeof id.start === 'number' ? id.start : 0;
+        const endOffset = typeof id.end === 'number' ? id.end : startOffset;
+        const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
 
-		if (boundary) {
-			const unknownBindings = collectUnknownAnnotatedBindings(file.program, file.sourceText);
+        if (!boundary) {
+          typeAssertionFindings.push({
+            kind: 'unknown-type',
+            message: 'Explicit `unknown` type is forbidden outside boundary files',
+            filePath,
+            span,
+            symbol: name,
+          });
+        }
+      }
 
-			boundaryUnknownUsages.push(
-				...collectBoundaryUnknownUsages({
-					program: file.program,
-					sourceText: file.sourceText,
-					unknownBindings,
-				}),
-			);
-		}
+      return true;
+    });
 
-		// De-dupe bindings by offset.
-		const seenOffsets = new Set<number>();
+    if (boundary) {
+      const unknownBindings = collectUnknownAnnotatedBindings(file.program, file.sourceText);
 
-		const dedupBindings = (items: ReadonlyArray<BindingCandidate>): BindingCandidate[] => {
-			const out: BindingCandidate[] = [];
+      boundaryUnknownUsages.push(
+        ...collectBoundaryUnknownUsages({
+          program: file.program,
+          sourceText: file.sourceText,
+          unknownBindings,
+        }),
+      );
+    }
 
-			for (const item of items) {
-				if (seenOffsets.has(item.offset)) {
-					continue;
-				}
+    // De-dupe bindings by offset.
+    const seenOffsets = new Set<number>();
 
-				seenOffsets.add(item.offset);
-				out.push(item);
-			}
+    const dedupBindings = (items: ReadonlyArray<BindingCandidate>): BindingCandidate[] => {
+      const out: BindingCandidate[] = [];
 
-			return out;
-		};
+      for (const item of items) {
+        if (seenOffsets.has(item.offset)) {
+          continue;
+        }
 
-		perFile.set(filePath, {
-			typeAssertionFindings,
-			nonBoundaryBindings: dedupBindings(nonBoundaryBindings),
-			boundaryUnknownUsages,
-		});
-	}
+        seenOffsets.add(item.offset);
+        out.push(item);
+      }
 
-	return { boundaryGlobs, perFile };
+      return out;
+    };
+
+    perFile.set(filePath, {
+      typeAssertionFindings,
+      nonBoundaryBindings: dedupBindings(nonBoundaryBindings),
+      boundaryUnknownUsages,
+    });
+  }
+
+  return { boundaryGlobs, perFile };
 };
 
 export const stringifyHover = (hover: unknown): string => {
-	if (!hover || typeof hover !== 'object') {
-		return '';
-	}
+  if (!hover || typeof hover !== 'object') {
+    return '';
+  }
 
-	const contents = (hover as any).contents;
-	const raw = contents !== undefined ? contents : hover;
+  const contents = asNodeLike(hover)?.contents;
+  const raw = contents !== undefined ? contents : hover;
 
-	const extract = (value: any): string[] => {
-		if (value === null || value === undefined) {
-			return [];
-		}
+  const extract = (value: unknown): string[] => {
+    if (value === null || value === undefined) {
+      return [];
+    }
 
-		if (typeof value === 'string') {
-			return [value];
-		}
+    if (typeof value === 'string') {
+      return [value];
+    }
 
-		if (Array.isArray(value)) {
-			return value.flatMap(v => extract(v));
-		}
+    if (Array.isArray(value)) {
+      return value.flatMap(v => extract(v));
+    }
 
-		if (typeof value === 'object') {
-			// MarkupContent: { kind: 'plaintext'|'markdown', value: string }
-			if (typeof (value as any).value === 'string') {
-				return [(value as any).value];
-			}
+    if (typeof value === 'object') {
+      // MarkupContent: { kind: 'plaintext'|'markdown', value: string }
+      const valueRecord = asNodeLike(value);
 
-			// MarkedString: { language: string, value: string }
-			if (typeof (value as any).language === 'string' && typeof (value as any).value === 'string') {
-				return [(value as any).value];
-			}
-		}
+      if (typeof valueRecord?.value === 'string') {
+        return [valueRecord.value];
+      }
 
-		return [];
-	};
+      // MarkedString: { language: string, value: string }
+      if (typeof valueRecord?.language === 'string' && typeof valueRecord.value === 'string') {
+        return [valueRecord.value];
+      }
+    }
 
-	// LSP Hover.contents can be (string | MarkupContent | MarkedString | (string|MarkedString)[])
-	const parts = extract(raw);
+    return [];
+  };
 
-	if (parts.length > 0) {
-		return parts.join('\n');
-	}
+  // LSP Hover.contents can be (string | MarkupContent | MarkedString | (string|MarkedString)[])
+  const parts = extract(raw);
 
-	// Fallback for odd server shapes.
-	return collectStringsFromNode(raw).join('\n');
+  if (parts.length > 0) {
+    return parts.join('\n');
+  }
+
+  // Fallback for odd server shapes.
+  return collectStringsFromNode(raw).join('\n');
 };

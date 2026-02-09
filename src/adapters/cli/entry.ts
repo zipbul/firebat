@@ -1,19 +1,21 @@
-import type { FirebatDetector, FirebatReport } from '../../types';
-import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatConfig } from '../../firebat-config';
-
-import { parseArgs } from '../../arg-parse';
-import { formatReport } from '../../report';
-import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
-import { scanUseCase } from '../../application/scan/scan.usecase';
-import { appendFirebatLog } from '../../infra/logging';
-import { resolveFirebatRootFromCwd } from '../../root-resolver';
-import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
-import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
-
+import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatDetector, FirebatReport } from '../../types';
 
-const createCliLogger = (input: { level: FirebatCliOptions['logLevel']; logStack: FirebatCliOptions['logStack'] }): FirebatLogger => {
+import { scanUseCase } from '../../application/scan/scan.usecase';
+import { parseArgs } from '../../arg-parse';
+import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../firebat-config.loader';
+import { appendFirebatLog } from '../../infra/logging';
+import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
+import { formatReport } from '../../report';
+import { resolveFirebatRootFromCwd } from '../../root-resolver';
+import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
+
+const createCliLogger = (input: {
+  level: FirebatCliOptions['logLevel'];
+  logStack: FirebatCliOptions['logStack'];
+}): FirebatLogger => {
   return createPrettyConsoleLogger({
     level: input.level ?? 'info',
     includeStack: input.logStack ?? false,
@@ -33,7 +35,7 @@ const H = {
   white: '\x1b[37m',
 } as const;
 
-const hc = (text: string, code: string, color: boolean): string => color ? `${code}${text}${H.reset}` : text;
+const hc = (text: string, code: string, color: boolean): string => (color ? `${code}${text}${H.reset}` : text);
 
 const writeStdout = (text: string): void => {
   process.stdout.write(text + '\n');
@@ -165,9 +167,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
   if (typeof value === 'object' && value !== null) {
     const boundaryGlobs = (value as any).boundaryGlobs;
 
-    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string')
-      ? boundaryGlobs
-      : undefined;
+    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((e: any) => typeof e === 'string') ? boundaryGlobs : undefined;
   }
 
   return undefined;
@@ -195,14 +195,18 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
   return undefined;
 };
 
-const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): FirebatCliOptions['minSize'] | undefined => {
+const resolveMinSizeFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): FirebatCliOptions['minSize'] | undefined => {
   const exact = features?.['exact-duplicates'];
   const structural = features?.['structural-duplicates'];
   const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
   const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
 
   if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
-    throw new Error("[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize");
+    throw new Error(
+      '[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize',
+    );
   }
 
   return exactSize ?? structuralSize;
@@ -246,7 +250,11 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(featuresCfg);
   const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
 
-  logger.trace('Features resolved from config', { detectors: cfgDetectors.length, minSize: cfgMinSize, maxForwardDepth: cfgMaxForwardDepth });
+  logger.trace('Features resolved from config', {
+    detectors: cfgDetectors.length,
+    minSize: cfgMinSize,
+    maxForwardDepth: cfgMaxForwardDepth,
+  });
 
   const merged: FirebatCliOptions = {
     ...options,
@@ -308,7 +316,9 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
 
   const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
 
-  logger.debug(`Options resolved: ${options.targets.length} targets, ${options.detectors.length} detectors, format=${options.format}`);
+  logger.debug(
+    `Options resolved: ${options.targets.length} targets, ${options.detectors.length} detectors, format=${options.format}`,
+  );
 
   if (options.help) {
     printHelp();
@@ -351,6 +361,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   logger.debug(`Blocking findings: ${findingCount}`);
 
   const exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
+
   return exitCode;
 };
 

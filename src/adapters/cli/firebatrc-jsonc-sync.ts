@@ -5,7 +5,12 @@ type Edit = { readonly start: number; readonly end: number; readonly text: strin
 type NodeBase = { readonly start: number; readonly end: number };
 
 type ValueNode =
-  | (NodeBase & { readonly kind: 'object'; readonly openBrace: number; readonly closeBrace: number; readonly props: readonly PropNode[] })
+  | (NodeBase & {
+      readonly kind: 'object';
+      readonly openBrace: number;
+      readonly closeBrace: number;
+      readonly props: readonly PropNode[];
+    })
   | (NodeBase & { readonly kind: 'array' })
   | (NodeBase & { readonly kind: 'string' })
   | (NodeBase & { readonly kind: 'number' })
@@ -456,9 +461,7 @@ const collectEditsForObjectSync = (input: {
   }
 
   // Determine anchor: first property that survives deletion.
-  const keptProps = userProps
-    .filter(p => templateKeySet.has(p.key))
-    .sort((a, b) => a.keyStart - b.keyStart);
+  const keptProps = userProps.filter(p => templateKeySet.has(p.key)).sort((a, b) => a.keyStart - b.keyStart);
   const missingKeys = templateKeys.filter(k => !userPropsByKey.has(k));
   const insertions: Edit[] = [];
 
@@ -473,7 +476,7 @@ const collectEditsForObjectSync = (input: {
         const v = (templateValue as any)[k] as JsonValue;
         const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
 
-        blockLines.push(rendered + ',' );
+        blockLines.push(rendered + ',');
       }
 
       const block = blockLines.join(newline) + newline;
@@ -491,7 +494,7 @@ const collectEditsForObjectSync = (input: {
         const v = (templateValue as any)[k] as JsonValue;
         const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
 
-        blockLines.push(rendered + ',' );
+        blockLines.push(rendered + ',');
       }
 
       const block = newline + blockLines.join(newline) + newline + baseIndent;

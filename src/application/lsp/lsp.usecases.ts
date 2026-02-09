@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import type { TsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
 import type { FirebatLogger } from '../../ports/logger';
 
 import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../infrastructure/tsgo/tsgo-runner';
@@ -15,8 +16,100 @@ type LspTextEdit = { range: LspRange; newText: string };
 
 type WorkspaceEdit = {
   changes?: Record<string, LspTextEdit[]>;
-  documentChanges?: any;
+  documentChanges?: unknown;
 };
+
+type LspLocation = { uri: string; range: LspRange };
+
+type LspReference = { filePath: string; range: LspRange; snippet?: string };
+
+type LspDefinition = { filePath: string; range: LspRange; preview?: string };
+
+type ParsedImport = { kind: string; specifier: string; raw: string; resolvedPath?: string | null };
+
+type TypedDependency = { name: string; version: string; hasTypes: boolean };
+
+type ExternalLibrarySymbol = { library: string; symbolName: string; kind: string; filePath: string; line: number };
+
+type LspClient = TsgoLspSession['lsp'];
+
+type BaseInput = { root: string; logger: FirebatLogger; tsconfigPath?: string };
+
+type FileInput = BaseInput & { filePath: string };
+
+type HoverInput = FileInput & { line: LineParam; character?: number; target?: string };
+
+type SymbolAtLineInput = FileInput & { line: LineParam; symbolName: string };
+
+type DiagnosticsInput = FileInput & { timeoutMs?: number; forceRefresh?: boolean };
+
+type CompletionInput = FileInput & { line: LineParam; character?: number };
+
+type SignatureHelpInput = FileInput & { line: LineParam; character?: number };
+
+type CodeActionsInput = FileInput & { startLine: LineParam; endLine?: LineParam; includeKinds?: ReadonlyArray<string> };
+
+type RenameInput = FileInput & { line?: LineParam; symbolName: string; newName: string };
+
+type DeleteInput = FileInput & { line: LineParam; symbolName: string };
+
+type RootInput = BaseInput;
+
+type ExternalSymbolsInput = { root: string; filePath: string };
+
+type ParseImportsInput = { root: string; filePath: string };
+
+type TypeDepsInput = { root: string; logger: FirebatLogger };
+
+type ExternalIndexInput = {
+  root: string;
+  maxFiles?: number;
+  includePatterns?: ReadonlyArray<string>;
+  excludePatterns?: ReadonlyArray<string>;
+  logger: FirebatLogger;
+};
+
+type ExternalSearchInput = { root: string; libraryName?: string; symbolName?: string; kind?: string; limit?: number };
+
+type ResultWithError<T extends Record<string, unknown>> = T & { ok: boolean; error?: string };
+
+type OpenDocumentInput = { lsp: LspClient; fileAbs: string; languageId?: string };
+
+type OpenedDocument = { uri: string; text: string; lines: string[] };
+
+type HoverResult = ResultWithError<{ hover?: unknown; note?: string }>;
+
+type ReferencesResult = ResultWithError<{ references?: LspReference[] }>;
+
+type DefinitionsResult = ResultWithError<{ definitions?: LspDefinition[] }>;
+
+type DiagnosticsResult = ResultWithError<{ diagnostics?: unknown }>;
+
+type SymbolsResult = ResultWithError<{ symbols?: unknown }>;
+
+type CompletionResult = ResultWithError<{ completion?: unknown }>;
+
+type SignatureHelpResult = ResultWithError<{ signatureHelp?: unknown }>;
+
+type FormatResult = ResultWithError<{ changed?: boolean }>;
+
+type CodeActionsResult = ResultWithError<{ actions?: unknown }>;
+
+type RenameResult = ResultWithError<{ changedFiles?: string[] }>;
+
+type DeleteResult = ResultWithError<{ changed?: boolean }>;
+
+type CapabilitiesResult = ResultWithError<{ capabilities?: unknown; note?: string }>;
+
+type ExternalSymbolsResult = ResultWithError<{ symbols: string[] }>;
+
+type ParseImportsResult = ResultWithError<{ imports?: ParsedImport[] }>;
+
+type TypeDepsResult = ResultWithError<{ dependencies?: TypedDependency[] }>;
+
+type ExternalIndexResult = ResultWithError<{ indexedFiles: number; symbols: number }>;
+
+type ExternalSearchResult = ResultWithError<{ matches?: ExternalLibrarySymbol[] }>;
 
 const resolveRootAbs = (root: string | undefined): string => {
   const cwd = process.cwd();
@@ -134,10 +227,7 @@ const readWithFallback = async (filePath: string): Promise<string> => {
   }
 };
 
-const withOpenDocument = async <T>(
-  input: { lsp: any; fileAbs: string; languageId?: string },
-  fn: (doc: { uri: string; text: string; lines: string[] }) => Promise<T>,
-): Promise<T> => {
+const withOpenDocument = async <T>(input: OpenDocumentInput, fn: (doc: OpenedDocument) => Promise<T>): Promise<T> => {
   const text = await readFile(input.fileAbs, 'utf8');
   const { uri } = await openTsDocument({
     lsp: input.lsp,
@@ -153,13 +243,23 @@ const withOpenDocument = async <T>(
   }
 };
 
-const normalizeLocations = (value: unknown): Array<{ uri: string; range: LspRange }> => {
+const isLspLocation = (value: unknown): value is LspLocation => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const record = value as { uri?: unknown; range?: unknown };
+
+  return typeof record.uri === 'string' && typeof record.range === 'object' && record.range !== null;
+};
+
+const normalizeLocations = (value: unknown): LspLocation[] => {
   if (!value) {
     return [];
   }
 
   if (Array.isArray(value)) {
-    const out: Array<{ uri: string; range: LspRange }> = [];
+    const out: LspLocation[] = [];
 
     for (const item of value) {
       if (!item || typeof item !== 'object') {
@@ -176,8 +276,8 @@ const normalizeLocations = (value: unknown): Array<{ uri: string; range: LspRang
     return out;
   }
 
-  if (typeof value === 'object' && value && 'uri' in (value as any) && 'range' in (value as any)) {
-    return [value as any];
+  if (isLspLocation(value)) {
+    return [value];
   }
 
   return [];
@@ -194,15 +294,7 @@ const previewRange = async (filePath: string, range: LspRange, before = 2, after
   return snippet;
 };
 
-export const getHoverUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line: LineParam;
-  character?: number;
-  target?: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; hover?: unknown; error?: string; note?: string }> => {
+const getHoverUseCase = async (input: HoverInput): Promise<HoverResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -234,37 +326,41 @@ export const getHoverUseCase = async (input: {
   return { ok: true, hover: result.value, ...(result.note !== undefined ? { note: result.note } : {}) };
 };
 
-export const findReferencesUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line: LineParam;
-  symbolName: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; references?: Array<{ filePath: string; range: LspRange; snippet?: string }>; error?: string }> => {
+const findReferencesUseCase = async (input: SymbolAtLineInput): Promise<ReferencesResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
   input.logger.debug('lsp:references', { filePath: input.filePath, symbolName: input.symbolName });
 
-  const result = await withTsgoLspSession<Array<{ filePath: string; range: LspRange; snippet?: string }>>(
+  const result = await withTsgoLspSession<LspReference[]>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
         const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
         const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
-        const refs = await session.lsp.request<any[]>('textDocument/references', {
+        const refs = await session.lsp.request<unknown>('textDocument/references', {
           textDocument: { uri: doc.uri },
           position: { line: pos.line, character: pos.character },
           context: { includeDeclaration: true },
         });
-        const mapped: Array<{ filePath: string; range: LspRange; snippet?: string }> = [];
+        const mapped: LspReference[] = [];
+        const refItems = Array.isArray(refs) ? refs : [];
 
-        for (const r of refs ?? []) {
-          const refPath = lspUriToFilePath(r.uri);
-          const snippet = await previewRange(refPath, r.range, 0, 0);
+        for (const r of refItems) {
+          if (!r || typeof r !== 'object') {
+            continue;
+          }
 
-          mapped.push({ filePath: refPath, range: r.range, ...(snippet.length > 0 ? { snippet: snippet.trim() } : {}) });
+          const item = r as { uri?: string; range?: LspRange };
+
+          if (typeof item.uri !== 'string' || item.range === undefined) {
+            continue;
+          }
+
+          const refPath = lspUriToFilePath(item.uri);
+          const snippet = await previewRange(refPath, item.range, 0, 0);
+
+          mapped.push({ filePath: refPath, range: item.range, ...(snippet.length > 0 ? { snippet: snippet.trim() } : {}) });
         }
 
         return mapped;
@@ -279,23 +375,15 @@ export const findReferencesUseCase = async (input: {
   return { ok: true, references: result.value };
 };
 
-export const getDefinitionsUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line: LineParam;
-  symbolName: string;
-  before?: number;
-  after?: number;
-  include_body?: boolean;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; definitions?: Array<{ filePath: string; range: LspRange; preview?: string }>; error?: string }> => {
+const getDefinitionsUseCase = async (
+  input: SymbolAtLineInput & { before?: number; after?: number; include_body?: boolean },
+): Promise<DefinitionsResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
   input.logger.debug('lsp:definitions', { filePath: input.filePath, symbolName: input.symbolName });
 
-  const result = await withTsgoLspSession<Array<{ filePath: string; range: LspRange; preview?: string }>>(
+  const result = await withTsgoLspSession<LspDefinition[]>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
@@ -308,7 +396,7 @@ export const getDefinitionsUseCase = async (input: {
         const locs = normalizeLocations(raw);
         const before = input.before ?? 2;
         const after = input.after ?? 2;
-        const defs: Array<{ filePath: string; range: LspRange; preview?: string }> = [];
+        const defs: LspDefinition[] = [];
 
         for (const loc of locs) {
           const defPath = lspUriToFilePath(loc.uri);
@@ -329,14 +417,7 @@ export const getDefinitionsUseCase = async (input: {
   return { ok: true, definitions: result.value };
 };
 
-export const getDiagnosticsUseCase = async (input: {
-  root: string;
-  filePath: string;
-  timeoutMs?: number;
-  forceRefresh?: boolean;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; diagnostics?: unknown; error?: string }> => {
+const getDiagnosticsUseCase = async (input: DiagnosticsInput): Promise<DiagnosticsResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -366,11 +447,7 @@ export const getDiagnosticsUseCase = async (input: {
   return { ok: true, diagnostics: result.value ?? [] };
 };
 
-export const getAllDiagnosticsUseCase = async (input: {
-  root: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; diagnostics?: unknown; error?: string }> => {
+const getAllDiagnosticsUseCase = async (input: RootInput): Promise<DiagnosticsResult> => {
   const rootAbs = resolveRootAbs(input.root);
 
   input.logger.debug('lsp:workspace-diagnostics');
@@ -379,7 +456,9 @@ export const getAllDiagnosticsUseCase = async (input: {
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       // Check capabilities first — tsgo may not support workspace diagnostics.
-      const init = session.initializeResult as any;
+      const init = session.initializeResult as {
+        capabilities?: { diagnosticProvider?: { workspaceDiagnostics?: boolean } };
+      };
       const diagCap = init?.capabilities?.diagnosticProvider;
 
       if (diagCap && diagCap.workspaceDiagnostics === false) {
@@ -397,7 +476,7 @@ export const getAllDiagnosticsUseCase = async (input: {
     return { ok: false, error: result.error };
   }
 
-  const value = result.value as any;
+  const value = result.value as { __unsupported?: boolean } | null;
 
   if (value && value.__unsupported) {
     return {
@@ -410,12 +489,7 @@ export const getAllDiagnosticsUseCase = async (input: {
   return { ok: true, diagnostics: value ?? [] };
 };
 
-export const getDocumentSymbolsUseCase = async (input: {
-  root: string;
-  filePath: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; symbols?: unknown; error?: string }> => {
+const getDocumentSymbolsUseCase = async (input: FileInput): Promise<SymbolsResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -437,12 +511,7 @@ export const getDocumentSymbolsUseCase = async (input: {
   return { ok: true, symbols: result.value };
 };
 
-export const getWorkspaceSymbolsUseCase = async (input: {
-  root: string;
-  query?: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; symbols?: unknown; error?: string }> => {
+const getWorkspaceSymbolsUseCase = async (input: RootInput & { query?: string }): Promise<SymbolsResult> => {
   const rootAbs = resolveRootAbs(input.root);
 
   input.logger.debug('lsp:workspaceSymbols', { query: input.query });
@@ -461,14 +530,7 @@ export const getWorkspaceSymbolsUseCase = async (input: {
   return { ok: true, symbols: result.value };
 };
 
-export const getCompletionUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line: LineParam;
-  character?: number;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; completion?: unknown; error?: string }> => {
+const getCompletionUseCase = async (input: CompletionInput): Promise<CompletionResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -497,14 +559,7 @@ export const getCompletionUseCase = async (input: {
   return { ok: true, completion: result.value };
 };
 
-export const getSignatureHelpUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line: LineParam;
-  character?: number;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; signatureHelp?: unknown; error?: string }> => {
+const getSignatureHelpUseCase = async (input: SignatureHelpInput): Promise<SignatureHelpResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -533,12 +588,7 @@ export const getSignatureHelpUseCase = async (input: {
   return { ok: true, signatureHelp: result.value };
 };
 
-export const formatDocumentUseCase = async (input: {
-  root: string;
-  filePath: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; changed?: boolean; error?: string }> => {
+const formatDocumentUseCase = async (input: FileInput): Promise<FormatResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -579,15 +629,7 @@ export const formatDocumentUseCase = async (input: {
   return { ok: true, changed: result.value.changed };
 };
 
-export const getCodeActionsUseCase = async (input: {
-  root: string;
-  filePath: string;
-  startLine: LineParam;
-  endLine?: LineParam;
-  includeKinds?: ReadonlyArray<string>;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; actions?: unknown; error?: string }> => {
+const getCodeActionsUseCase = async (input: CodeActionsInput): Promise<CodeActionsResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -618,10 +660,19 @@ export const getCodeActionsUseCase = async (input: {
           return actions;
         }
 
-        return actions.filter((a: any) => {
-          const kind = typeof a?.kind === 'string' ? a.kind : '';
+        return actions.filter(action => {
+          if (!action || typeof action !== 'object') {
+            return false;
+          }
 
-          return input.includeKinds!.some(k => kind.startsWith(k));
+          const kind = typeof (action as { kind?: unknown }).kind === 'string' ? ((action as { kind?: string }).kind ?? '') : '';
+          const includeKinds = input.includeKinds;
+
+          if (!includeKinds) {
+            return false;
+          }
+
+          return includeKinds.some(k => kind.startsWith(k));
         });
       });
     },
@@ -652,15 +703,7 @@ const applyWorkspaceEditToDisk = async (edit: WorkspaceEdit): Promise<{ changedF
   return { changedFiles };
 };
 
-export const renameSymbolUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line?: LineParam;
-  symbolName: string;
-  newName: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; changedFiles?: string[]; error?: string }> => {
+const renameSymbolUseCase = async (input: RenameInput): Promise<RenameResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -711,14 +754,7 @@ export const renameSymbolUseCase = async (input: {
   return { ok: true, changedFiles: result.value.changedFiles };
 };
 
-export const deleteSymbolUseCase = async (input: {
-  root: string;
-  filePath: string;
-  line: LineParam;
-  symbolName: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; changed?: boolean; error?: string }> => {
+const deleteSymbolUseCase = async (input: DeleteInput): Promise<DeleteResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -742,7 +778,12 @@ export const deleteSymbolUseCase = async (input: {
           return { changed: false };
         }
 
-        const loc = locs[0]!;
+        const loc = locs[0];
+
+        if (!loc) {
+          return { changed: false };
+        }
+
         const defPath = lspUriToFilePath(loc.uri);
         const defText = await readFile(defPath, 'utf8');
         // Coarse delete: remove the full lines covered by the definition range.
@@ -770,11 +811,7 @@ export const deleteSymbolUseCase = async (input: {
   return { ok: true, changed: result.value.changed };
 };
 
-export const checkCapabilitiesUseCase = async (input: {
-  root: string;
-  tsconfigPath?: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; capabilities?: unknown; error?: string; note?: string }> => {
+const checkCapabilitiesUseCase = async (input: RootInput): Promise<CapabilitiesResult> => {
   const rootAbs = resolveRootAbs(input.root);
 
   input.logger.debug('lsp:checkCapabilities');
@@ -782,7 +819,7 @@ export const checkCapabilitiesUseCase = async (input: {
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-      const init = session.initializeResult as any;
+      const init = session.initializeResult as { capabilities?: unknown } | null;
 
       return init?.capabilities ?? init ?? null;
     },
@@ -795,10 +832,7 @@ export const checkCapabilitiesUseCase = async (input: {
   return { ok: true, capabilities: result.value, ...(result.note ? { note: result.note } : {}) };
 };
 
-export const getAvailableExternalSymbolsInFileUseCase = async (input: {
-  root: string;
-  filePath: string;
-}): Promise<{ ok: boolean; symbols: string[]; error?: string }> => {
+const getAvailableExternalSymbolsInFileUseCase = async (input: ExternalSymbolsInput): Promise<ExternalSymbolsResult> => {
   try {
     const rootAbs = resolveRootAbs(input.root);
     const fileAbs = resolveFileAbs(rootAbs, input.filePath);
@@ -850,15 +884,12 @@ export const getAvailableExternalSymbolsInFileUseCase = async (input: {
   }
 };
 
-export const parseImportsUseCase = async (input: {
-  root: string;
-  filePath: string;
-}): Promise<{ ok: boolean; imports?: any; error?: string }> => {
+const parseImportsUseCase = async (input: ParseImportsInput): Promise<ParseImportsResult> => {
   try {
     const rootAbs = resolveRootAbs(input.root);
     const fileAbs = resolveFileAbs(rootAbs, input.filePath);
     const text = await readFile(fileAbs, 'utf8');
-    const imports: Array<{ kind: string; specifier: string; raw: string; resolvedPath?: string | null }> = [];
+    const imports: ParsedImport[] = [];
     const re = /(import|export)\s+(?:type\s+)?[^;\n]*?from\s*['"]([^'"]+)['"][^\n;]*;?/g;
 
     for (const m of text.matchAll(re)) {
@@ -884,10 +915,7 @@ export const parseImportsUseCase = async (input: {
   }
 };
 
-export const getTypescriptDependenciesUseCase = async (input: {
-  root: string;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; dependencies?: Array<{ name: string; version: string; hasTypes: boolean }>; error?: string }> => {
+const getTypescriptDependenciesUseCase = async (input: TypeDepsInput): Promise<TypeDepsResult> => {
   try {
     const rootAbs = resolveRootAbs(input.root);
 
@@ -898,7 +926,7 @@ export const getTypescriptDependenciesUseCase = async (input: {
     const pkg = JSON.parse(pkgText);
     const deps = { ...pkg.dependencies, ...pkg.devDependencies } as Record<string, string>;
     const names = Object.keys(deps).sort((a, b) => a.localeCompare(b));
-    const withTypes: Array<{ name: string; version: string; hasTypes: boolean }> = [];
+    const withTypes: TypedDependency[] = [];
 
     for (const name of names) {
       const depPkgPath = path.resolve(rootAbs, 'node_modules', name, 'package.json');
@@ -939,18 +967,9 @@ export const getTypescriptDependenciesUseCase = async (input: {
   }
 };
 
-const externalIndex = new Map<
-  string,
-  Array<{ library: string; symbolName: string; kind: string; filePath: string; line: number }>
->();
+const externalIndex = new Map<string, ExternalLibrarySymbol[]>();
 
-export const indexExternalLibrariesUseCase = async (input: {
-  root: string;
-  maxFiles?: number;
-  includePatterns?: ReadonlyArray<string>;
-  excludePatterns?: ReadonlyArray<string>;
-  logger: FirebatLogger;
-}): Promise<{ ok: boolean; indexedFiles: number; symbols: number; error?: string }> => {
+const indexExternalLibrariesUseCase = async (input: ExternalIndexInput): Promise<ExternalIndexResult> => {
   try {
     const rootAbs = resolveRootAbs(input.root);
     const maxFiles = input.maxFiles && input.maxFiles > 0 ? Math.min(50_000, Math.floor(input.maxFiles)) : 10_000;
@@ -960,7 +979,7 @@ export const indexExternalLibrariesUseCase = async (input: {
     const include =
       input.includePatterns && input.includePatterns.length > 0 ? input.includePatterns : ['node_modules/**/*.d.ts'];
     const exclude = new Set(input.excludePatterns ?? ['**/node_modules/**/node_modules/**']);
-    const entries: Array<{ library: string; symbolName: string; kind: string; filePath: string; line: number }> = [];
+    const entries: ExternalLibrarySymbol[] = [];
     let seenFiles = 0;
 
     for (const pattern of include) {
@@ -1014,13 +1033,7 @@ export const indexExternalLibrariesUseCase = async (input: {
   }
 };
 
-export const searchExternalLibrarySymbolsUseCase = async (input: {
-  root: string;
-  libraryName?: string;
-  symbolName?: string;
-  kind?: string;
-  limit?: number;
-}): Promise<{ ok: boolean; matches?: any; error?: string }> => {
+const searchExternalLibrarySymbolsUseCase = async (input: ExternalSearchInput): Promise<ExternalSearchResult> => {
   try {
     const rootAbs = resolveRootAbs(input.root);
     const entries = externalIndex.get(rootAbs) ?? [];
@@ -1048,4 +1061,26 @@ export const searchExternalLibrarySymbolsUseCase = async (input: {
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+};
+
+export {
+  checkCapabilitiesUseCase,
+  deleteSymbolUseCase,
+  findReferencesUseCase,
+  formatDocumentUseCase,
+  getAllDiagnosticsUseCase,
+  getAvailableExternalSymbolsInFileUseCase,
+  getCodeActionsUseCase,
+  getCompletionUseCase,
+  getDefinitionsUseCase,
+  getDiagnosticsUseCase,
+  getDocumentSymbolsUseCase,
+  getHoverUseCase,
+  getSignatureHelpUseCase,
+  getTypescriptDependenciesUseCase,
+  getWorkspaceSymbolsUseCase,
+  indexExternalLibrariesUseCase,
+  parseImportsUseCase,
+  renameSymbolUseCase,
+  searchExternalLibrarySymbolsUseCase,
 };

@@ -5,7 +5,6 @@ import type { BarrelPolicyAnalysis, BarrelPolicyFinding, SourceSpan } from '../.
 
 import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
-
 import { createImportResolver, createWorkspacePackageMap } from './resolver';
 
 export interface BarrelPolicyOptions {
@@ -30,9 +29,20 @@ const toSpan = (sourceText: string, startOffset: number, endOffset: number): Sou
   return { start, end };
 };
 
-const toNodeSpan = (file: ParsedFile, node: any): SourceSpan => {
-  const startOffset = typeof node?.start === 'number' ? node.start : 0;
-  const endOffset = typeof node?.end === 'number' ? node.end : startOffset;
+type NodeLike = Record<string, unknown>;
+
+const asNodeLike = (value: unknown): NodeLike | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return value as NodeLike;
+};
+
+const toNodeSpan = (file: ParsedFile, node: unknown): SourceSpan => {
+  const nodeRecord = asNodeLike(node);
+  const startOffset = typeof nodeRecord?.start === 'number' ? nodeRecord.start : 0;
+  const endOffset = typeof nodeRecord?.end === 'number' ? nodeRecord.end : startOffset;
 
   return toSpan(file.sourceText, startOffset, endOffset);
 };
@@ -90,7 +100,9 @@ const isIgnored = (rootAbs: string, fileAbs: string, matchers: ReadonlyArray<Reg
   const rel = normalizePath(path.relative(rootAbs, fileAbs));
 
   // Outside root -> don't ignore here (treat as external)
-  if (rel.startsWith('..')) {return false;}
+  if (rel.startsWith('..')) {
+    return false;
+  }
 
   return matchers.some(re => re.test(rel));
 };
@@ -101,13 +113,13 @@ type ImportLike = {
   readonly kind: ImportLikeKind;
   readonly specifier: string;
   readonly span: SourceSpan;
-  readonly rawNode: any;
+  readonly rawNode: unknown;
 };
 
 const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
   const items: ImportLike[] = [];
 
-  walkOxcTree(file.program as any, node => {
+  walkOxcTree(file.program, node => {
     if (!isOxcNode(node)) {
       return false;
     }
@@ -117,7 +129,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
     }
 
     if (node.type === 'ImportDeclaration') {
-      const spec = getLiteralString((node as any).source);
+      const spec = getLiteralString(asNodeLike(node)?.source);
 
       if (typeof spec === 'string') {
         items.push({
@@ -132,7 +144,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
     }
 
     if (node.type === 'ExportNamedDeclaration') {
-      const spec = getLiteralString((node as any).source);
+      const spec = getLiteralString(asNodeLike(node)?.source);
 
       if (typeof spec === 'string') {
         items.push({
@@ -147,7 +159,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
     }
 
     if (node.type === 'ExportAllDeclaration') {
-      const spec = getLiteralString((node as any).source);
+      const spec = getLiteralString(asNodeLike(node)?.source);
 
       if (typeof spec === 'string') {
         items.push({
@@ -183,10 +195,14 @@ const isExplicitIndexSpecifier = (specifier: string): boolean => {
 export const createEmptyBarrelPolicy = (): BarrelPolicyAnalysis => ({ findings: [] });
 
 const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): void => {
-  walkOxcTree(file.program as any, node => {
-    if (!isOxcNode(node)) {return false;}
+  walkOxcTree(file.program, node => {
+    if (!isOxcNode(node)) {
+      return false;
+    }
 
-    if (!isNodeRecord(node)) {return true;}
+    if (!isNodeRecord(node)) {
+      return true;
+    }
 
     if (node.type === 'ExportAllDeclaration') {
       findings.push({
@@ -206,7 +222,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
     return;
   }
 
-  const body = (file.program as any)?.body;
+  const body = asNodeLike(file.program)?.body;
 
   if (!Array.isArray(body)) {
     return;
@@ -217,11 +233,12 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
       continue;
     }
 
-    const type = (stmt as any).type;
+    const stmtRecord = asNodeLike(stmt);
+    const type = stmtRecord?.type;
 
     if (type === 'ExportNamedDeclaration') {
-      const source = getLiteralString((stmt as any).source);
-      const declaration = (stmt as any).declaration;
+      const source = getLiteralString(stmtRecord?.source);
+      const declaration = stmtRecord?.declaration;
 
       if (typeof source === 'string' && (declaration === null || declaration === undefined)) {
         // Allow only: export { ... } from '...'; / export type { ... } from '...';
@@ -261,7 +278,11 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
   }
 };
 
-const checkMissingIndex = (activeFiles: ReadonlyArray<ParsedFile>, fileSet: ReadonlySet<string>, findings: BarrelPolicyFinding[]): void => {
+const checkMissingIndex = (
+  activeFiles: ReadonlyArray<ParsedFile>,
+  fileSet: ReadonlySet<string>,
+  findings: BarrelPolicyFinding[],
+): void => {
   const dirs = new Set<string>();
 
   for (const file of activeFiles) {

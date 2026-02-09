@@ -1,6 +1,5 @@
-import * as path from 'node:path';
-
 import { Glob } from 'bun';
+import * as path from 'node:path';
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error';
 
@@ -22,7 +21,6 @@ const ANSI = {
   magenta: '\x1b[35m',
   gray: '\x1b[90m',
 } as const;
-
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
   trace: 0,
   debug: 1,
@@ -30,7 +28,6 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   warn: 3,
   error: 4,
 };
-
 const LEVEL_EMOJI: Record<LogLevel, string> = {
   trace: '🔍',
   debug: '🐛',
@@ -38,7 +35,6 @@ const LEVEL_EMOJI: Record<LogLevel, string> = {
   warn: '⚠️',
   error: '❌',
 };
-
 const LEVEL_COLOR: Record<LogLevel, string> = {
   trace: ANSI.gray,
   debug: ANSI.cyan,
@@ -51,7 +47,9 @@ const createLogger = (minLevel: LogLevel): Logger => {
   const minPriority = LEVEL_PRIORITY[minLevel];
 
   const log = (level: LogLevel, message: string, meta?: Record<string, unknown>): void => {
-    if (LEVEL_PRIORITY[level] < minPriority) return;
+    if (LEVEL_PRIORITY[level] < minPriority) {
+      return;
+    }
 
     const emoji = LEVEL_EMOJI[level];
     const color = LEVEL_COLOR[level];
@@ -72,10 +70,16 @@ const createLogger = (minLevel: LogLevel): Logger => {
 
 const parseLogLevel = (args: string[]): LogLevel => {
   const idx = args.indexOf('--log-level');
-  if (idx === -1 || idx === args.length - 1) return 'info';
+
+  if (idx === -1 || idx === args.length - 1) {
+    return 'info';
+  }
 
   const value = args[idx + 1];
-  if (!value || !(value in LEVEL_PRIORITY)) return 'info';
+
+  if (!value || !(value in LEVEL_PRIORITY)) {
+    return 'info';
+  }
 
   return value as LogLevel;
 };
@@ -91,10 +95,16 @@ type ThirdPartyPackageInfo = {
 };
 
 const resolveRepositoryUrl = (repository: unknown): string | null => {
-  if (typeof repository === 'string') return repository;
-  if (!repository || typeof repository !== 'object') return null;
+  if (typeof repository === 'string') {
+    return repository;
+  }
+
+  if (!repository || typeof repository !== 'object') {
+    return null;
+  }
 
   const url = (repository as { url?: unknown }).url;
+
   return typeof url === 'string' ? url : null;
 };
 
@@ -109,8 +119,10 @@ const readTextFile = async (filePath: string): Promise<string> => {
 const findFileByPrefix = async (dirPath: string, prefixUppercase: string): Promise<string | null> => {
   try {
     const glob = new Glob('*');
+
     for await (const entry of glob.scan(dirPath)) {
       const base = path.basename(entry);
+
       if (base.toUpperCase().startsWith(prefixUppercase)) {
         return entry;
       }
@@ -123,7 +135,10 @@ const findFileByPrefix = async (dirPath: string, prefixUppercase: string): Promi
 };
 
 const tryReadText = async (filePath: string | null): Promise<string | null> => {
-  if (!filePath) return null;
+  if (!filePath) {
+    return null;
+  }
+
   try {
     return await readTextFile(filePath);
   } catch {
@@ -132,14 +147,14 @@ const tryReadText = async (filePath: string | null): Promise<string | null> => {
 };
 
 const getApache20TextFromInstalledDeps = async (): Promise<string | null> => {
-  const candidates = [
-    'node_modules/@typescript/native-preview/LICENSE',
-    'node_modules/fastbitset/LICENSE',
-  ];
+  const candidates = ['node_modules/@typescript/native-preview/LICENSE', 'node_modules/fastbitset/LICENSE'];
 
   for (const candidate of candidates) {
     const text = await tryReadText(candidate);
-    if (text && text.trim().startsWith('Apache License')) return text;
+
+    if (text && text.trim().startsWith('Apache License')) {
+      return text;
+    }
   }
 
   return null;
@@ -150,8 +165,8 @@ const collectThirdPartyNotices = async (): Promise<{ packages: ThirdPartyPackage
     dependencies?: Record<string, string>;
   };
   const dependencyNames = Object.keys(rootPackageJson.dependencies ?? {}).sort();
-
   const packages: ThirdPartyPackageInfo[] = [];
+
   for (const name of dependencyNames) {
     const pkgDir = path.join('node_modules', ...name.split('/'));
     const pkgJsonPath = path.join(pkgDir, 'package.json');
@@ -163,35 +178,39 @@ const collectThirdPartyNotices = async (): Promise<{ packages: ThirdPartyPackage
           repository?: unknown;
         })
       : null;
-
-    const licenseCandidates = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'LICENCE.md', 'LICENCE.txt', 'COPYING'].map((n) =>
+    const licenseCandidates = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'LICENCE.md', 'LICENCE.txt', 'COPYING'].map(n =>
       path.join(pkgDir, n),
     );
-    const noticeCandidates = ['NOTICE', 'NOTICE.txt', 'NOTICE.md'].map((n) => path.join(pkgDir, n));
-
+    const noticeCandidates = ['NOTICE', 'NOTICE.txt', 'NOTICE.md'].map(n => path.join(pkgDir, n));
     let licenseFilePath: string | null = null;
+
     for (const candidate of licenseCandidates) {
       if (await fileExists(candidate)) {
         licenseFilePath = candidate;
+
         break;
       }
     }
     if (!licenseFilePath) {
       licenseFilePath = await findFileByPrefix(pkgDir, 'LICENSE');
+
       if (licenseFilePath && !(await fileExists(licenseFilePath))) {
         licenseFilePath = null;
       }
     }
 
     let noticeFilePath: string | null = null;
+
     for (const candidate of noticeCandidates) {
       if (await fileExists(candidate)) {
         noticeFilePath = candidate;
+
         break;
       }
     }
     if (!noticeFilePath) {
       noticeFilePath = await findFileByPrefix(pkgDir, 'NOTICE');
+
       if (noticeFilePath && !(await fileExists(noticeFilePath))) {
         noticeFilePath = null;
       }
@@ -216,6 +235,7 @@ const formatThirdPartyNotices = async (input: {
   apache20Text: string | null;
 }): Promise<string> => {
   const lines: string[] = [];
+
   lines.push('THIRD-PARTY NOTICES');
   lines.push('');
   lines.push('Generated by scripts/build.ts at build time.');
@@ -226,11 +246,19 @@ const formatThirdPartyNotices = async (input: {
     lines.push('='.repeat(80));
     lines.push(`PACKAGE: ${pkg.name}${pkg.version ? `@${pkg.version}` : ''}`);
     lines.push(`DECLARED LICENSE: ${pkg.declaredLicense ?? '<missing>'}`);
-    if (pkg.homepage) lines.push(`HOMEPAGE: ${pkg.homepage}`);
-    if (pkg.repositoryUrl) lines.push(`REPOSITORY: ${pkg.repositoryUrl}`);
+
+    if (pkg.homepage) {
+      lines.push(`HOMEPAGE: ${pkg.homepage}`);
+    }
+
+    if (pkg.repositoryUrl) {
+      lines.push(`REPOSITORY: ${pkg.repositoryUrl}`);
+    }
+
     lines.push('-'.repeat(80));
 
     const licenseText = await tryReadText(pkg.licenseFilePath);
+
     if (licenseText) {
       lines.push(`LICENSE FILE: ${pkg.licenseFilePath}`);
       lines.push(licenseText.trimEnd());
@@ -253,6 +281,7 @@ const formatThirdPartyNotices = async (input: {
     }
 
     const noticeText = await tryReadText(pkg.noticeFilePath);
+
     if (noticeText) {
       lines.push(`NOTICE FILE: ${pkg.noticeFilePath}`);
       lines.push(noticeText.trimEnd());
@@ -273,6 +302,7 @@ const runBuild = async (logger: Logger): Promise<void> => {
   const cliDistFilePath = `${outdir}/${cliNaming}`;
 
   logger.trace('Building CLI entrypoint', { entry: 'index.ts', output: cliDistFilePath });
+
   const cliBuildResult = await Bun.build({
     entrypoints: ['index.ts'],
     outdir,
@@ -290,6 +320,7 @@ const runBuild = async (logger: Logger): Promise<void> => {
 
   logger.debug('CLI build completed', { success: cliBuildResult.success, outputs: cliBuildResult.outputs.length });
   logger.trace('Building oxlint plugin', { entry: 'oxlint-plugin.ts' });
+
   const pluginBuildResult = await Bun.build({
     entrypoints: ['oxlint-plugin.ts'],
     outdir,
@@ -308,7 +339,9 @@ const runBuild = async (logger: Logger): Promise<void> => {
 
   if (!cliBuildResult.success || !pluginBuildResult.success) {
     logger.error('Build failed', { cliSuccess: cliBuildResult.success, pluginSuccess: pluginBuildResult.success });
+
     const allLogs = [...cliBuildResult.logs, ...pluginBuildResult.logs];
+
     if (allLogs.length > 0) {
       logger.error('Build logs:', { logs: allLogs });
     }
@@ -319,6 +352,7 @@ const runBuild = async (logger: Logger): Promise<void> => {
   logger.info('Build artifacts created successfully');
 
   logger.trace('Setting executable permissions', { file: cliDistFilePath });
+
   const chmodResult = Bun.spawnSync(['chmod', '755', cliDistFilePath]);
 
   if (chmodResult.exitCode !== 0) {
@@ -332,6 +366,7 @@ const runBuild = async (logger: Logger): Promise<void> => {
   // NOTE: Drizzle migrator expects migrationsFolder/meta/_journal.json at runtime.
   // We ship migrations as packaged, read-only assets next to dist/*.js.
   logger.trace('Copying migrations to dist');
+
   try {
     const migrationsSrcDirPath = 'src/infrastructure/sqlite/migrations';
     const migrationsDistDirPath = `${outdir}/migrations`;
@@ -350,14 +385,17 @@ const runBuild = async (logger: Logger): Promise<void> => {
   }
 
   logger.trace('Generating THIRD_PARTY_NOTICES.txt');
+
   try {
     const { packages, apache20Text } = await collectThirdPartyNotices();
+
     logger.debug('Collected third-party package info', { packagesCount: packages.length });
 
     const content = await formatThirdPartyNotices({ packages, apache20Text });
     const outPath = `${outdir}/THIRD_PARTY_NOTICES.txt`;
 
     await Bun.write(outPath, content);
+
     logger.debug('THIRD_PARTY_NOTICES.txt written', { path: outPath, size: content.length });
   } catch (error) {
     logger.error('Failed to generate THIRD_PARTY_NOTICES.txt', { error: String(error) });

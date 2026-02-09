@@ -1,6 +1,6 @@
-import { runMcpServer } from './server';
 import { appendFirebatLog } from '../../infra/logging';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
+import { runMcpServer } from './server';
 
 const installMcpErrorHandlers = (): void => {
   const append = async (message: string): Promise<void> => {

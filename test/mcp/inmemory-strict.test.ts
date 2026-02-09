@@ -133,20 +133,23 @@ describe('InMemory MCP strict (protocol / init)', () => {
       it('should write then read then delete', async () => {
         const key = `inmemory-strict-${Date.now()}`;
         const value = { foo: 'bar', n: 1 };
-
         const w = await callToolSafe(ctx.client, 'write_memory', { root: ctx.rootAbs, memoryKey: key, value });
+
         expect(w.isError).toBe(false);
 
         const r = await callToolSafe(ctx.client, 'read_memory', { root: ctx.rootAbs, memoryKey: key });
+
         expect(r.isError).toBe(false);
         expect(r.structured?.found).toBe(true);
         expect(r.structured?.value).toEqual(value);
 
         const d = await callToolSafe(ctx.client, 'delete_memory', { root: ctx.rootAbs, memoryKey: key });
+
         expect(d.isError).toBe(false);
         expect(d.structured?.ok).toBe(true);
 
         const r2 = await callToolSafe(ctx.client, 'read_memory', { root: ctx.rootAbs, memoryKey: key });
+
         expect(r2.structured?.found).toBe(false);
       });
 
@@ -176,6 +179,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
     describe('index_symbols and search_symbol_from_index', () => {
       it('should index then search', async () => {
         const idx = await callToolSafe(ctx.client, 'index_symbols', { root: ctx.rootAbs });
+
         expect(idx.isError).toBe(false);
 
         const search = await callToolSafe(ctx.client, 'search_symbol_from_index', {
@@ -183,6 +187,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
           query: 'create',
           limit: 5,
         });
+
         expect(search.isError).toBe(false);
         expect(Array.isArray(search.structured?.matches) || search.structured?.matches === undefined).toBe(true);
       });
@@ -218,21 +223,27 @@ describe('InMemory MCP strict (protocol / init)', () => {
       const content = result.contents?.[0];
 
       expect(content).toBeDefined();
+
       if (content?.type === 'text') {
         const data = JSON.parse(content.text ?? '{}');
+
         expect(data !== undefined).toBe(true);
       }
     });
 
     it('should have report with meta after one scan', async () => {
       await callToolSafe(ctx.client, 'scan', { targets: [ctx.rootAbs] });
+
       const result = await ctx.client.readResource({ uri: 'report://last' });
       const content = result.contents?.[0];
 
       expect(content).toBeDefined();
+
       const text = content && 'text' in content ? (content as { text?: string }).text : undefined;
+
       if (text) {
         const data = JSON.parse(text) as Record<string, unknown>;
+
         expect(typeof data).toBe('object');
         expect(data.meta).toBeDefined();
       }
@@ -245,9 +256,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
       const messages = result.messages ?? [];
 
       expect(messages.length).toBeGreaterThan(0);
-      expect(messages.some(m => 'content' in m && typeof (m.content as { text?: string }).text === 'string')).toBe(
-        true,
-      );
+      expect(messages.some(m => 'content' in m && typeof (m.content as { text?: string }).text === 'string')).toBe(true);
     });
 
     it('should get workflow prompt with no args', async () => {
@@ -264,18 +273,18 @@ describe('InMemory MCP strict (protocol / init)', () => {
       const results = await Promise.all(promises);
 
       expect(results.length).toBe(10);
+
       for (const r of results) {
         expect(r.tools?.length).toBeGreaterThanOrEqual(35);
       }
     });
 
     it('should handle concurrent get_project_overview calls', async () => {
-      const promises = Array.from({ length: 5 }, () =>
-        callToolSafe(ctx.client, 'get_project_overview', { root: ctx.rootAbs }),
-      );
+      const promises = Array.from({ length: 5 }, () => callToolSafe(ctx.client, 'get_project_overview', { root: ctx.rootAbs }));
       const results = await Promise.all(promises);
 
       expect(results.length).toBe(5);
+
       for (const r of results) {
         expect(r.isError).toBe(false);
         expect(r.structured?.root).toBeDefined();
@@ -284,6 +293,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
 
     it('close should be idempotent (double close)', async () => {
       const c = await createInMemoryMcpContext();
+
       await c.close();
       await c.close();
     });

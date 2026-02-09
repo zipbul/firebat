@@ -1,23 +1,24 @@
 // MUST: MUST-1
 import * as path from 'node:path';
 
+import type { FirebatLogger } from '../../ports/logger';
+import type { SourceSpan } from '../../types';
+
 import { initHasher } from '../../engine/hasher';
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
-import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
-import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
-import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
 import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
 import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
+import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
+import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
+import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
+import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
+import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { runTsgoTraceSymbol } from '../../infrastructure/tsgo/tsgo-runner';
-import type { SourceSpan } from '../../types';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { computeToolVersion } from '../../tool-version';
 import { indexTargets } from '../indexing/file-indexer';
-import { computeInputsDigest } from '../scan/inputs-digest';
-import { computeCacheNamespace } from '../scan/cache-namespace';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
-import type { FirebatLogger } from '../../ports/logger';
+import { computeCacheNamespace } from '../scan/cache-namespace';
+import { computeInputsDigest } from '../scan/inputs-digest';
 
 type TraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
 
@@ -224,7 +225,9 @@ const normalizeTrace = (input: NormalizeTraceInput): NormalizeTraceResult => {
   const empty: TraceGraph = { nodes: [], edges: [] };
 
   if (!isObject(input.structured)) {
-    return input.structured === undefined ? { graph: empty, evidence: [] } : { graph: empty, evidence: [], raw: input.structured };
+    return input.structured === undefined
+      ? { graph: empty, evidence: [] }
+      : { graph: empty, evidence: [], raw: input.structured };
   }
 
   const structured = input.structured as StructuredTrace;

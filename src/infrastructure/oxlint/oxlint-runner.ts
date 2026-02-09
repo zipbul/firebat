@@ -1,9 +1,8 @@
 import * as path from 'node:path';
-
 import * as z from 'zod';
 
-import type { SourceSpan } from '../../types';
 import type { FirebatLogger } from '../../ports/logger';
+import type { SourceSpan } from '../../types';
 
 import { tryResolveLocalBin } from '../tooling/resolve-bin';
 
@@ -126,7 +125,11 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   // but if stdout is valid JSON, attempt best-effort normalization.
   args.push(...input.targets);
 
-  logger.debug('oxlint: spawning process', { targetCount: input.targets.length, fix: input.fix ?? false, configPath: input.configPath });
+  logger.debug('oxlint: spawning process', {
+    targetCount: input.targets.length,
+    fix: input.fix ?? false,
+    configPath: input.configPath,
+  });
 
   const proc = Bun.spawn({
     cmd: [resolved, ...args],

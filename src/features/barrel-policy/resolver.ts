@@ -16,6 +16,14 @@ type ResolverInput = {
   readonly workspacePackages: WorkspacePackages;
 };
 
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+};
+
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const isWithinRoot = (rootAbs: string, fileAbs: string): boolean => {
@@ -28,7 +36,9 @@ const readJsoncFile = async (filePathAbs: string): Promise<unknown | null> => {
   try {
     const file = Bun.file(filePathAbs);
 
-    if (!(await file.exists())) {return null;}
+    if (!(await file.exists())) {
+      return null;
+    }
 
     const text = await file.text();
 
@@ -41,14 +51,20 @@ const readJsoncFile = async (filePathAbs: string): Promise<unknown | null> => {
 const resolveExtendsPath = (fromDirAbs: string, extendsValue: string): string | null => {
   const trimmed = extendsValue.trim();
 
-  if (trimmed.length === 0) {return null;}
+  if (trimmed.length === 0) {
+    return null;
+  }
 
   // We intentionally do not guess package-based extends (e.g. "@tsconfig/node18/tsconfig.json").
-  if (!trimmed.startsWith('.') && !trimmed.startsWith('/')) {return null;}
+  if (!trimmed.startsWith('.') && !trimmed.startsWith('/')) {
+    return null;
+  }
 
   const abs = path.resolve(fromDirAbs, trimmed);
 
-  if (abs.endsWith('.json')) {return abs;}
+  if (abs.endsWith('.json')) {
+    return abs;
+  }
 
   return `${abs}.json`;
 };
@@ -66,22 +82,31 @@ const loadTsconfigOptions = async (
 ): Promise<{ baseUrl?: string; paths?: TsconfigPaths } | null> => {
   const normalized = normalizePath(tsconfigPathAbs);
 
-  if (seen.has(normalized)) {return null;}
+  if (seen.has(normalized)) {
+    return null;
+  }
 
   seen.add(normalized);
 
   const parsed = await readJsoncFile(tsconfigPathAbs);
 
-  if (!parsed || typeof parsed !== 'object') {return null;}
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
 
-  const rawExtends = (parsed as any).extends;
-  const rawCompilerOptions = (parsed as any).compilerOptions;
+  const parsedRecord = asRecord(parsed);
+  const rawExtends = parsedRecord?.extends;
+  const rawCompilerOptions = parsedRecord?.compilerOptions;
   const compilerOptions = rawCompilerOptions && typeof rawCompilerOptions === 'object' ? rawCompilerOptions : null;
-  const baseUrl = compilerOptions && typeof (compilerOptions as any).baseUrl === 'string' ? (compilerOptions as any).baseUrl : undefined;
-  const rawPaths = compilerOptions && typeof (compilerOptions as any).paths === 'object' ? (compilerOptions as any).paths : undefined;
+  const baseUrl =
+    compilerOptions && typeof asRecord(compilerOptions)?.baseUrl === 'string'
+      ? (asRecord(compilerOptions)?.baseUrl as string)
+      : undefined;
+  const rawPaths =
+    compilerOptions && typeof asRecord(compilerOptions)?.paths === 'object' ? asRecord(compilerOptions)?.paths : undefined;
   const pathsValue: TsconfigPaths | undefined = rawPaths
     ? Object.fromEntries(
-        Object.entries(rawPaths as any)
+        Object.entries(asRecord(rawPaths) ?? {})
           .filter(([key, value]) => typeof key === 'string' && Array.isArray(value) && value.every(v => typeof v === 'string'))
           .map(([key, value]) => [key, value as ReadonlyArray<string>]),
       )
@@ -121,7 +146,9 @@ const findNearestTsconfig = async (rootAbs: string, fromDirAbs: string): Promise
 
     const parent = path.dirname(current);
 
-    if (parent === current) {break;}
+    if (parent === current) {
+      break;
+    }
 
     current = parent;
   }
@@ -129,15 +156,22 @@ const findNearestTsconfig = async (rootAbs: string, fromDirAbs: string): Promise
   return null;
 };
 
-const compileTsconfigResolveOptions = async (rootAbs: string, importerFileAbs: string): Promise<TsconfigResolveOptions | null> => {
+const compileTsconfigResolveOptions = async (
+  rootAbs: string,
+  importerFileAbs: string,
+): Promise<TsconfigResolveOptions | null> => {
   const importerDirAbs = path.dirname(importerFileAbs);
   const tsconfigPathAbs = await findNearestTsconfig(rootAbs, importerDirAbs);
 
-  if (!tsconfigPathAbs) {return null;}
+  if (!tsconfigPathAbs) {
+    return null;
+  }
 
   const opts = await loadTsconfigOptions(tsconfigPathAbs, new Set());
 
-  if (!opts) {return null;}
+  if (!opts) {
+    return null;
+  }
 
   const tsconfigDirAbs = path.dirname(tsconfigPathAbs);
   const baseUrlAbs = path.resolve(tsconfigDirAbs, opts.baseUrl ?? '.');
@@ -158,9 +192,13 @@ const matchStarPattern = (pattern: string, specifier: string): { star: string } 
   const prefix = pattern.slice(0, starIndex);
   const suffix = pattern.slice(starIndex + 1);
 
-  if (!specifier.startsWith(prefix)) {return null;}
+  if (!specifier.startsWith(prefix)) {
+    return null;
+  }
 
-  if (!specifier.endsWith(suffix)) {return null;}
+  if (!specifier.endsWith(suffix)) {
+    return null;
+  }
 
   const middle = specifier.slice(prefix.length, specifier.length - suffix.length);
 
@@ -168,7 +206,9 @@ const matchStarPattern = (pattern: string, specifier: string): { star: string } 
 };
 
 const applyStarPattern = (pattern: string, star: string): string => {
-  if (!pattern.includes('*')) {return pattern;}
+  if (!pattern.includes('*')) {
+    return pattern;
+  }
 
   return pattern.replace('*', star);
 };
@@ -185,26 +225,36 @@ const resolveFromFileSet = (baseAbs: string, fileSet: ReadonlySet<string>): stri
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
 
-    if (fileSet.has(normalized)) {return normalized;}
+    if (fileSet.has(normalized)) {
+      return normalized;
+    }
   }
 
   return null;
 };
 
 const resolveRelative = (importerFileAbs: string, specifier: string, fileSet: ReadonlySet<string>): string | null => {
-  if (!specifier.startsWith('.')) {return null;}
+  if (!specifier.startsWith('.')) {
+    return null;
+  }
 
   const base = path.resolve(path.dirname(importerFileAbs), specifier);
 
   return resolveFromFileSet(base, fileSet);
 };
 
-const resolveWorkspace = (specifier: string, workspacePackages: WorkspacePackages, fileSet: ReadonlySet<string>): string | null => {
+const resolveWorkspace = (
+  specifier: string,
+  workspacePackages: WorkspacePackages,
+  fileSet: ReadonlySet<string>,
+): string | null => {
   for (const [pkgName, pkgRootAbs] of workspacePackages.entries()) {
     if (specifier === pkgName) {
       const resolved = resolveFromFileSet(pkgRootAbs, fileSet);
 
-      if (resolved) {return resolved;}
+      if (resolved) {
+        return resolved;
+      }
       continue;
     }
 
@@ -213,7 +263,9 @@ const resolveWorkspace = (specifier: string, workspacePackages: WorkspacePackage
       const base = path.join(pkgRootAbs, rest);
       const resolved = resolveFromFileSet(base, fileSet);
 
-      if (resolved) {return resolved;}
+      if (resolved) {
+        return resolved;
+      }
       continue;
     }
   }
@@ -237,21 +289,27 @@ const resolveAlias = async (
     cache.set(cacheKey, compiled);
   }
 
-  if (!compiled) {return null;}
+  if (!compiled) {
+    return null;
+  }
 
   const entries = Object.entries(compiled.paths);
 
   for (const [keyPattern, targets] of entries) {
     const match = matchStarPattern(keyPattern, specifier);
 
-    if (!match) {continue;}
+    if (!match) {
+      continue;
+    }
 
     for (const targetPattern of targets) {
       const replaced = applyStarPattern(targetPattern, match.star);
       const base = path.resolve(compiled.baseUrlAbs, replaced);
       const resolved = resolveFromFileSet(base, fileSet);
 
-      if (resolved) {return resolved;}
+      if (resolved) {
+        return resolved;
+      }
     }
   }
 
@@ -270,15 +328,21 @@ export const createImportResolver = (input: ResolverInput): ImportResolver => {
       const normalizedImporter = normalizePath(importerFileAbs);
       const relResolved = resolveRelative(normalizedImporter, specifier, input.fileSet);
 
-      if (relResolved) {return relResolved;}
+      if (relResolved) {
+        return relResolved;
+      }
 
       const wsResolved = resolveWorkspace(specifier, input.workspacePackages, input.fileSet);
 
-      if (wsResolved) {return wsResolved;}
+      if (wsResolved) {
+        return wsResolved;
+      }
 
       const aliasResolved = await resolveAlias(input.rootAbs, normalizedImporter, specifier, input.fileSet, tsconfigCache);
 
-      if (aliasResolved) {return aliasResolved;}
+      if (aliasResolved) {
+        return aliasResolved;
+      }
 
       return null;
     },
@@ -293,15 +357,16 @@ export const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<st
     return new Map();
   }
 
-  const workspacesRaw = (parsed as any).workspaces;
+  const parsedRecord = asRecord(parsed);
+  const workspacesRaw = parsedRecord?.workspaces;
   let patterns: string[] = [];
 
   if (Array.isArray(workspacesRaw) && workspacesRaw.every(v => typeof v === 'string')) {
     patterns = workspacesRaw as string[];
   } else if (workspacesRaw && typeof workspacesRaw === 'object') {
-    const packages = (workspacesRaw as any).packages;
+    const packages = asRecord(workspacesRaw)?.packages;
 
-    if (Array.isArray(packages) && packages.every((v: any) => typeof v === 'string')) {
+    if (Array.isArray(packages) && packages.every(v => typeof v === 'string')) {
       patterns = packages as string[];
     }
   }
@@ -324,9 +389,11 @@ export const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<st
 
   for (const p of packageJsonPaths) {
     const pkg = await readJsoncFile(p);
-    const name = pkg && typeof pkg === 'object' && typeof (pkg as any).name === 'string' ? String((pkg as any).name) : '';
+    const name = typeof asRecord(pkg)?.name === 'string' ? String(asRecord(pkg)?.name) : '';
 
-    if (name.length === 0) {continue;}
+    if (name.length === 0) {
+      continue;
+    }
 
     map.set(name, path.dirname(p));
   }

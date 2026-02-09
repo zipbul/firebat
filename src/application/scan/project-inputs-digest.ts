@@ -1,9 +1,10 @@
-import * as path from 'node:path';
 import { readdir } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import type { FileIndexRepository } from '../../ports/file-index.repository';
 
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
-import type { FileIndexRepository } from '../../ports/file-index.repository';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
