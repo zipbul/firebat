@@ -110,6 +110,7 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
         }
 
         await sleep(100);
+
         hasTable = hasMemoriesTable();
       }
     }

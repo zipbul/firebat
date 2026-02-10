@@ -8,11 +8,15 @@ import * as path from 'node:path';
 // Result parsing helpers
 // ---------------------------------------------------------------------------
 
-export type ToolResultLike = {
+export interface ToolResultContentItem {
+  readonly text?: string;
+}
+
+export interface ToolResultLike {
   readonly structuredContent?: unknown;
-  readonly content?: ReadonlyArray<{ readonly text?: string }>;
+  readonly content?: ReadonlyArray<ToolResultContentItem>;
   readonly isError?: boolean;
-};
+}
 
 export const parseJsonText = (text: string | undefined): unknown => {
   if (text === undefined || text.length === 0) {
@@ -26,7 +30,7 @@ export const parseJsonText = (text: string | undefined): unknown => {
   }
 };
 
-export const getStructuredContent = (result: ToolResultLike): any => {
+export const getStructuredContent = (result: ToolResultLike): unknown => {
   if (result.structuredContent !== undefined) {
     return result.structuredContent;
   }
@@ -56,16 +60,18 @@ export interface McpTestContext {
 const FIXTURES_SRC = path.resolve(import.meta.dir, '../fixtures');
 const SERVER_ENTRY = path.resolve(import.meta.dir, '../../../index.ts');
 
+export interface CreateMcpTestContextOptions {
+  readonly copyFixtures?: boolean;
+  readonly extraFiles?: Record<string, string>;
+}
+
 /**
  * Create an isolated MCP test context with a temp directory and connected client.
  *
  * - `copyFixtures` copies `test/mcp/fixtures/` into `<tmpRoot>/fixtures/`
  * - `extraFiles` creates additional files inside `<tmpRoot>` (key = relative path, value = content)
  */
-export const createMcpTestContext = async (opts?: {
-  copyFixtures?: boolean;
-  extraFiles?: Record<string, string>;
-}): Promise<McpTestContext> => {
+export const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): Promise<McpTestContext> => {
   const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-mcp-test-'));
   const firebatDir = path.join(tmpRootAbs, '.firebat');
 
@@ -121,11 +127,13 @@ export const createMcpTestContext = async (opts?: {
 // Convenience: call a tool and return structured content
 // ---------------------------------------------------------------------------
 
-export const callTool = async (
-  client: Client,
-  name: string,
-  args: Record<string, unknown> = {},
-): Promise<{ structured: any; raw: ToolResultLike; isError: boolean }> => {
+export interface CallToolResult {
+  readonly structured: unknown;
+  readonly raw: ToolResultLike;
+  readonly isError: boolean;
+}
+
+export const callTool = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
   const raw = (await client.callTool({ name, arguments: args })) as ToolResultLike;
 
   return { structured: getStructuredContent(raw), raw, isError: raw.isError === true };
@@ -134,11 +142,7 @@ export const callTool = async (
 /**
  * Like callTool but never throws – captures transport/protocol errors as `isError: true`.
  */
-export const callToolSafe = async (
-  client: Client,
-  name: string,
-  args: Record<string, unknown> = {},
-): Promise<{ structured: any; raw: ToolResultLike; isError: boolean }> => {
+export const callToolSafe = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
   try {
     return await callTool(client, name, args);
   } catch (err) {

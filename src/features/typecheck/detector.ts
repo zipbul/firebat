@@ -1,5 +1,3 @@
-import * as path from 'node:path';
-
 import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan, TypecheckAnalysis, TypecheckItem } from '../../types';
@@ -8,16 +6,6 @@ import { lspUriToFilePath, openTsDocument, withTsgoLspSession } from '../../infr
 import { createNoopLogger } from '../../ports/logger';
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
-
-const toAbsolutePath = (cwd: string, raw: string): string => {
-  const normalized = normalizePath(raw);
-
-  if (path.isAbsolute(normalized)) {
-    return normalized;
-  }
-
-  return normalizePath(path.resolve(cwd, normalized));
-};
 
 const createEmptySpan = (): SourceSpan => ({
   start: {

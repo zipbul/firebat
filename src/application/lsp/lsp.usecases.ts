@@ -66,6 +66,32 @@ interface ExternalLibrarySymbol {
   line: number;
 }
 
+interface UriRangeUnknownRecord {
+  uri?: unknown;
+  range?: unknown;
+}
+
+interface LocationLikeRecord {
+  uri?: string;
+  range?: LspRange;
+}
+
+interface ActionKindRecord {
+  kind?: unknown;
+}
+
+interface InitializeResultLike {
+  capabilities?: unknown;
+}
+
+interface LspChangedResult {
+  changed: boolean;
+}
+
+interface LspChangedFilesResult {
+  changedFiles: string[];
+}
+
 type LspClient = TsgoLspSession['lsp'];
 
 interface BaseInput {
@@ -176,7 +202,7 @@ interface ResultStatus {
   error?: string;
 }
 
-type ResultWithError<T extends Record<string, unknown>> = T & ResultStatus;
+type ResultWithError<T extends object> = T & ResultStatus;
 
 interface OpenDocumentInput {
   lsp: LspClient;
@@ -428,6 +454,10 @@ const applyTextEdits = (text: string, edits: ReadonlyArray<LspTextEdit>): string
 };
 
 const readWithFallback = async (filePath: string): Promise<string> => {
+  if (filePath.trim().length === 0) {
+    return '';
+  }
+
   try {
     return await readFile(filePath, 'utf8');
   } catch {
@@ -456,19 +486,19 @@ const isLspLocation = (value: unknown): value is LspLocation => {
     return false;
   }
 
-  const record = value as { uri?: unknown; range?: unknown };
+  const record = value as UriRangeUnknownRecord;
 
   return typeof record.uri === 'string' && typeof record.range === 'object' && record.range !== null;
 };
 
 const normalizeLocations = (value: unknown): LspLocation[] => {
+  const out: LspLocation[] = [];
+
   if (!value) {
-    return [];
+    return out;
   }
 
   if (Array.isArray(value)) {
-    const out: LspLocation[] = [];
-
     for (const item of value) {
       if (!item || typeof item !== 'object') {
         continue;
@@ -480,15 +510,11 @@ const normalizeLocations = (value: unknown): LspLocation[] => {
         out.push({ uri: item.targetUri, range: item.targetRange });
       }
     }
-
-    return out;
+  } else if (isLspLocation(value)) {
+    out.push(value);
   }
 
-  if (isLspLocation(value)) {
-    return [value];
-  }
-
-  return [];
+  return out;
 };
 
 const previewRange = async (filePath: string, range: LspRange, before = 2, after = 2): Promise<string> => {
@@ -512,6 +538,10 @@ const getHoverUseCase = async (input: HoverInput): Promise<HoverResult> => {
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        if (doc.lines.length === 0) {
+          return null;
+        }
+
         const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
         const pos =
           input.target !== undefined
@@ -544,6 +574,10 @@ const findReferencesUseCase = async (input: SymbolAtLineInput): Promise<Referenc
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
+        if (doc.lines.length === 0) {
+          return [];
+        }
+
         const baseLineIdx = resolveLineNumber0(doc.lines, input.line);
         const pos = findSymbolPosition(doc.lines, baseLineIdx, input.symbolName);
         const refs = await session.lsp.request<unknown>('textDocument/references', {
@@ -559,7 +593,7 @@ const findReferencesUseCase = async (input: SymbolAtLineInput): Promise<Referenc
             continue;
           }
 
-          const item = r as { uri?: string; range?: LspRange };
+          const item = r as LocationLikeRecord;
 
           if (typeof item.uri !== 'string' || item.range === undefined) {
             continue;
@@ -583,9 +617,7 @@ const findReferencesUseCase = async (input: SymbolAtLineInput): Promise<Referenc
   return { ok: true, references: result.value };
 };
 
-const getDefinitionsUseCase = async (
-  input: SymbolAtLineInput & DefinitionPreviewOptions,
-): Promise<DefinitionsResult> => {
+const getDefinitionsUseCase = async (input: SymbolAtLineInput & DefinitionPreviewOptions): Promise<DefinitionsResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.filePath);
 
@@ -800,7 +832,7 @@ const formatDocumentUseCase = async (input: FileInput): Promise<FormatResult> =>
 
   input.logger.debug('lsp:formatDocument', { filePath: input.filePath });
 
-  const result = await withTsgoLspSession<{ changed: boolean }>(
+  const result = await withTsgoLspSession<LspChangedResult>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
@@ -871,7 +903,8 @@ const getCodeActionsUseCase = async (input: CodeActionsInput): Promise<CodeActio
             return false;
           }
 
-          const kind = typeof (action as { kind?: unknown }).kind === 'string' ? ((action as { kind?: string }).kind ?? '') : '';
+          const record = action as ActionKindRecord;
+          const kind = typeof record.kind === 'string' ? record.kind : '';
           const includeKinds = input.includeKinds;
 
           if (!includeKinds) {
@@ -891,9 +924,13 @@ const getCodeActionsUseCase = async (input: CodeActionsInput): Promise<CodeActio
   return { ok: true, actions: result.value };
 };
 
-const applyWorkspaceEditToDisk = async (edit: WorkspaceEdit): Promise<{ changedFiles: string[] }> => {
+const applyWorkspaceEditToDisk = async (edit: WorkspaceEdit): Promise<LspChangedFilesResult> => {
   const changedFiles: string[] = [];
   const changes = edit.changes ?? {};
+
+  if (Object.keys(changes).length === 0) {
+    return { changedFiles };
+  }
 
   for (const [uri, edits] of Object.entries(changes)) {
     const filePath = lspUriToFilePath(uri);
@@ -915,7 +952,7 @@ const renameSymbolUseCase = async (input: RenameInput): Promise<RenameResult> =>
 
   input.logger.debug('lsp:rename', { filePath: input.filePath, symbolName: input.symbolName, newName: input.newName });
 
-  const result = await withTsgoLspSession<{ changedFiles: string[] }>(
+  const result = await withTsgoLspSession<LspChangedFilesResult>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
@@ -966,7 +1003,7 @@ const deleteSymbolUseCase = async (input: DeleteInput): Promise<DeleteResult> =>
 
   input.logger.debug('lsp:deleteSymbol', { filePath: input.filePath, symbolName: input.symbolName });
 
-  const result = await withTsgoLspSession<{ changed: boolean }>(
+  const result = await withTsgoLspSession<LspChangedResult>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
       return withOpenDocument({ lsp: session.lsp, fileAbs }, async doc => {
@@ -979,11 +1016,6 @@ const deleteSymbolUseCase = async (input: DeleteInput): Promise<DeleteResult> =>
           })
           .catch(() => null);
         const locs = normalizeLocations(raw);
-
-        if (locs.length === 0) {
-          return { changed: false };
-        }
-
         const loc = locs[0];
 
         if (!loc) {
@@ -1025,7 +1057,7 @@ const checkCapabilitiesUseCase = async (input: RootInput): Promise<CapabilitiesR
   const result = await withTsgoLspSession<unknown>(
     { root: rootAbs, logger: input.logger, ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}) },
     async session => {
-      const init = session.initializeResult as { capabilities?: unknown } | null;
+      const init = session.initializeResult as InitializeResultLike | null;
 
       return init?.capabilities ?? init ?? null;
     },
@@ -1039,6 +1071,10 @@ const checkCapabilitiesUseCase = async (input: RootInput): Promise<CapabilitiesR
 };
 
 const getAvailableExternalSymbolsInFileUseCase = async (input: ExternalSymbolsInput): Promise<ExternalSymbolsResult> => {
+  if (input.filePath.trim().length === 0) {
+    return { ok: false, symbols: [], error: 'File path is required' };
+  }
+
   try {
     const rootAbs = resolveRootAbs(input.root);
     const fileAbs = resolveFileAbs(rootAbs, input.filePath);
@@ -1091,6 +1127,10 @@ const getAvailableExternalSymbolsInFileUseCase = async (input: ExternalSymbolsIn
 };
 
 const parseImportsUseCase = async (input: ParseImportsInput): Promise<ParseImportsResult> => {
+  if (input.filePath.trim().length === 0) {
+    return { ok: false, error: 'File path is required' };
+  }
+
   try {
     const rootAbs = resolveRootAbs(input.root);
     const fileAbs = resolveFileAbs(rootAbs, input.filePath);
@@ -1122,13 +1162,18 @@ const parseImportsUseCase = async (input: ParseImportsInput): Promise<ParseImpor
 };
 
 const getTypescriptDependenciesUseCase = async (input: TypeDepsInput): Promise<TypeDepsResult> => {
+  const rootAbs = resolveRootAbs(input.root);
+
+  input.logger.debug('lsp:typescriptDependencies', { root: rootAbs });
+
+  const pkgPath = path.resolve(rootAbs, 'package.json');
+  const pkgText = await readWithFallback(pkgPath);
+
+  if (pkgText.length === 0) {
+    return { ok: false, error: `package.json not found at ${pkgPath}` };
+  }
+
   try {
-    const rootAbs = resolveRootAbs(input.root);
-
-    input.logger.debug('lsp:typescriptDependencies', { root: rootAbs });
-
-    const pkgPath = path.resolve(rootAbs, 'package.json');
-    const pkgText = await readFile(pkgPath, 'utf8');
     const pkg = JSON.parse(pkgText);
     const deps = { ...pkg.dependencies, ...pkg.devDependencies } as Record<string, string>;
     const names = Object.keys(deps).sort((a, b) => a.localeCompare(b));
@@ -1176,8 +1221,13 @@ const getTypescriptDependenciesUseCase = async (input: TypeDepsInput): Promise<T
 const externalIndex = new Map<string, ExternalLibrarySymbol[]>();
 
 const indexExternalLibrariesUseCase = async (input: ExternalIndexInput): Promise<ExternalIndexResult> => {
+  const rootAbs = resolveRootAbs(input.root);
+
+  if (rootAbs.trim().length === 0) {
+    return { ok: false, indexedFiles: 0, symbols: 0, error: 'Root is required' };
+  }
+
   try {
-    const rootAbs = resolveRootAbs(input.root);
     const maxFiles = input.maxFiles && input.maxFiles > 0 ? Math.min(50_000, Math.floor(input.maxFiles)) : 10_000;
 
     input.logger.debug('lsp:indexExternalLibraries', { root: rootAbs, maxFiles });
@@ -1240,27 +1290,24 @@ const indexExternalLibrariesUseCase = async (input: ExternalIndexInput): Promise
 };
 
 const searchExternalLibrarySymbolsUseCase = async (input: ExternalSearchInput): Promise<ExternalSearchResult> => {
+  const rootAbs = resolveRootAbs(input.root);
+  const entries = externalIndex.get(rootAbs) ?? [];
+
+  if (entries.length === 0) {
+    return { ok: true, matches: [] };
+  }
+
   try {
-    const rootAbs = resolveRootAbs(input.root);
-    const entries = externalIndex.get(rootAbs) ?? [];
     const limit = input.limit && input.limit > 0 ? Math.min(500, Math.floor(input.limit)) : 50;
     const lib = (input.libraryName ?? '').toLowerCase();
     const sym = (input.symbolName ?? '').toLowerCase();
     const kind = (input.kind ?? '').toLowerCase();
     const filtered = entries.filter(e => {
-      if (lib && !e.library.toLowerCase().includes(lib)) {
-        return false;
-      }
+      const libOk = !lib || e.library.toLowerCase().includes(lib);
+      const symOk = !sym || e.symbolName.toLowerCase().includes(sym);
+      const kindOk = !kind || e.kind.toLowerCase().includes(kind);
 
-      if (sym && !e.symbolName.toLowerCase().includes(sym)) {
-        return false;
-      }
-
-      if (kind && !e.kind.toLowerCase().includes(kind)) {
-        return false;
-      }
-
-      return true;
+      return libOk && symOk && kindOk;
     });
 
     return { ok: true, matches: filtered.slice(0, limit) };

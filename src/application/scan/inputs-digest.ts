@@ -15,6 +15,11 @@ interface ComputeInputsDigestInput {
 const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<string> => {
   const normalizedTargets = [...input.targets].map(normalizePath).sort();
   const parts: string[] = [...(input.extraParts ?? [])];
+
+  if (normalizedTargets.length === 0) {
+    return hashString(parts.join('|'));
+  }
+
   const partsByIndex: string[] = new Array<string>(normalizedTargets.length);
   const concurrency = Math.max(1, Math.min(16, normalizedTargets.length));
 
@@ -23,6 +28,15 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
     concurrency,
     async item => {
       const { filePath, index } = item;
+      const isEmptyPath = filePath.trim().length === 0;
+
+      if (isEmptyPath) {
+        partsByIndex[index] = `missing:${filePath}`;
+      }
+
+      if (isEmptyPath) {
+        return;
+      }
 
       try {
         const entry = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });

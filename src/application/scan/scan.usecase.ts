@@ -46,17 +46,62 @@ const nowMs = (): number => {
 
 const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<string | undefined> => {
   const candidate = path.join(rootAbs, basename);
+  let exists = false;
 
   try {
     const file = Bun.file(candidate);
 
-    return (await file.exists()) ? candidate : undefined;
+    exists = await file.exists();
   } catch {
     return undefined;
   }
+
+  if (!exists) {
+    return undefined;
+  }
+
+  return candidate;
 };
 
-const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: FirebatLogger }): Promise<FirebatReport> => {
+interface LoadCachedReportParams {
+  readonly allowCache: boolean;
+  readonly artifactRepository: ReturnType<typeof createHybridArtifactRepository>;
+  readonly projectKey: string;
+  readonly artifactKey: string;
+  readonly inputsDigest: string;
+  readonly logger: FirebatLogger;
+}
+
+const loadCachedReport = async (params: LoadCachedReportParams): Promise<FirebatReport | undefined> => {
+  if (!params.allowCache) {
+    return undefined;
+  }
+
+  const tCache0 = nowMs();
+  const cached = await params.artifactRepository.getArtifact<FirebatReport>({
+    projectKey: params.projectKey,
+    kind: 'firebat:report',
+    artifactKey: params.artifactKey,
+    inputsDigest: params.inputsDigest,
+  });
+
+  if (cached) {
+    params.logger.info('Cache hit — skipping analysis', { durationMs: Math.round(nowMs() - tCache0) });
+    params.logger.info('Analysis complete', { durationMs: 0 });
+
+    return cached;
+  }
+
+  params.logger.info('Cache miss — running full analysis', { durationMs: Math.round(nowMs() - tCache0) });
+
+  return undefined;
+};
+
+interface ScanUseCaseDeps {
+  readonly logger: FirebatLogger;
+}
+
+const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): Promise<FirebatReport> => {
   const logger = deps.logger;
 
   logger.info(
@@ -151,23 +196,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   logger.debug(`Cache strategy: ${allowCache ? 'enabled' : 'disabled (fix mode)'}`);
 
-  if (allowCache) {
-    const tCache0 = nowMs();
-    const cached = await artifactRepository.getArtifact<FirebatReport>({
-      projectKey,
-      kind: 'firebat:report',
-      artifactKey,
-      inputsDigest,
-    });
+  const cached = await loadCachedReport({
+    allowCache,
+    artifactRepository,
+    projectKey,
+    artifactKey,
+    inputsDigest,
+    logger,
+  });
 
-    if (cached) {
-      logger.info('Cache hit — skipping analysis', { durationMs: Math.round(nowMs() - tCache0) });
-      logger.info('Analysis complete', { durationMs: 0 });
-
-      return cached;
-    }
-
-    logger.info('Cache miss — running full analysis', { durationMs: Math.round(nowMs() - tCache0) });
+  if (cached !== undefined) {
+    return cached;
   }
 
   // Note: in fix mode, prefer to run fixable tools before parsing the program
@@ -178,9 +217,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   logger.debug(`Fix mode: format=${shouldRunFormat} lint=${shouldRunLint}`);
 
   type FormatResult = ReturnType<typeof createEmptyFormat>;
+
   type LintResult = ReturnType<typeof createEmptyLint>;
+
   type BarrelPolicyResult = ReturnType<typeof createEmptyBarrelPolicy>;
+
   type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
+
   type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
 
   let formatPromise: Promise<FormatResult> | null = null;
@@ -293,11 +336,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   if (options.detectors.includes('exact-duplicates')) {
     const t0 = nowMs();
+    const detectorKey = 'exact-duplicates';
 
     exactDuplicates = detectExactDuplicates(program, resolvedMinSize);
-    detectorTimings['exact-duplicates'] = nowMs() - t0;
 
-    logger.debug('exact-duplicates', { durationMs: detectorTimings['exact-duplicates'] });
+    const durationMs = nowMs() - t0;
+
+    detectorTimings[detectorKey] = durationMs;
+
+    logger.debug(detectorKey, { durationMs });
   }
 
   let waste: ReturnType<typeof detectWaste> = [];
@@ -314,14 +361,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   const barrelPolicyPromise = options.detectors.includes('barrel-policy')
     ? ((): Promise<BarrelPolicyResult> => {
         const t0 = nowMs();
+        const detectorKey = 'barrel-policy';
 
         return analyzeBarrelPolicy(program, {
           rootAbs: ctx.rootAbs,
           ...(options.barrelPolicyIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelPolicyIgnoreGlobs } : {}),
         }).then(r => {
-          detectorTimings['barrel-policy'] = nowMs() - t0;
+          const durationMs = nowMs() - t0;
 
-          logger.debug('barrel-policy', { durationMs: detectorTimings['barrel-policy'] });
+          detectorTimings[detectorKey] = durationMs;
+
+          logger.debug(detectorKey, { durationMs });
 
           return r;
         });
@@ -330,15 +380,18 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
   const unknownProofPromise = options.detectors.includes('unknown-proof')
     ? ((): Promise<UnknownProofResult> => {
         const t0 = nowMs();
+        const detectorKey = 'unknown-proof';
 
         return analyzeUnknownProof(program, {
           rootAbs: ctx.rootAbs,
           ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
           logger,
         }).then(r => {
-          detectorTimings['unknown-proof'] = nowMs() - t0;
+          const durationMs = nowMs() - t0;
 
-          logger.debug('unknown-proof', { durationMs: detectorTimings['unknown-proof'] });
+          detectorTimings[detectorKey] = durationMs;
+
+          logger.debug(detectorKey, { durationMs });
 
           return r;
         });
@@ -388,11 +441,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   if (options.detectors.includes('structural-duplicates')) {
     const t0 = nowMs();
+    const detectorKey = 'structural-duplicates';
 
     structuralDuplicates = analyzeStructuralDuplicates(program, resolvedMinSize);
-    detectorTimings['structural-duplicates'] = nowMs() - t0;
 
-    logger.debug('structural-duplicates', { durationMs: detectorTimings['structural-duplicates'] });
+    const durationMs = nowMs() - t0;
+
+    detectorTimings[detectorKey] = durationMs;
+
+    logger.debug(detectorKey, { durationMs });
   } else {
     structuralDuplicates = createEmptyStructuralDuplicates();
   }
@@ -414,11 +471,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   if (options.detectors.includes('early-return')) {
     const t0 = nowMs();
+    const detectorKey = 'early-return';
 
     earlyReturn = analyzeEarlyReturn(program);
-    detectorTimings['early-return'] = nowMs() - t0;
 
-    logger.debug('early-return', { durationMs: detectorTimings['early-return'] });
+    const durationMs = nowMs() - t0;
+
+    detectorTimings[detectorKey] = durationMs;
+
+    logger.debug(detectorKey, { durationMs });
   } else {
     earlyReturn = createEmptyEarlyReturn();
   }
@@ -427,11 +488,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   if (options.detectors.includes('exception-hygiene')) {
     const t0 = nowMs();
+    const detectorKey = 'exception-hygiene';
 
     exceptionHygiene = analyzeExceptionHygiene(program);
-    detectorTimings['exception-hygiene'] = nowMs() - t0;
 
-    logger.debug('exception-hygiene', { durationMs: detectorTimings['exception-hygiene'] });
+    const durationMs = nowMs() - t0;
+
+    detectorTimings[detectorKey] = durationMs;
+
+    logger.debug(detectorKey, { durationMs });
   } else {
     exceptionHygiene = createEmptyExceptionHygiene();
   }
@@ -465,11 +530,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: { readonly logger: 
 
   if (options.detectors.includes('api-drift')) {
     const t0 = nowMs();
+    const detectorKey = 'api-drift';
 
     apiDrift = analyzeApiDrift(program);
-    detectorTimings['api-drift'] = nowMs() - t0;
 
-    logger.debug('api-drift', { durationMs: detectorTimings['api-drift'] });
+    const durationMs = nowMs() - t0;
+
+    detectorTimings[detectorKey] = durationMs;
+
+    logger.debug(detectorKey, { durationMs });
   } else {
     apiDrift = createEmptyApiDrift();
   }

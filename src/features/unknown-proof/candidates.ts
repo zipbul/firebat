@@ -8,30 +8,47 @@ import type { SourceSpan, UnknownProofFinding } from '../../types';
 import { isNodeRecord, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
-export const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
+const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
 
-type BindingCandidate = {
+interface BindingCandidate {
   readonly name: string;
   readonly offset: number;
   readonly span: SourceSpan;
-};
+}
 
 type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
 
-type BoundaryUsageCandidate = {
+interface BoundaryUsageCandidate {
   readonly name: string;
   readonly offset: number;
   readonly span: SourceSpan;
   readonly usageKind: BoundaryUsageKind;
-};
+}
 
 type NodeLike = Record<string, unknown>;
 
-export type UnknownProofCandidates = {
+interface UnknownProofCandidates {
   readonly typeAssertionFindings: ReadonlyArray<UnknownProofFinding>;
   readonly nonBoundaryBindings: ReadonlyArray<BindingCandidate>;
   readonly boundaryUnknownUsages: ReadonlyArray<BoundaryUsageCandidate>;
-};
+}
+
+interface CollectUnknownProofCandidatesInput {
+  readonly program: ReadonlyArray<ParsedFile>;
+  readonly rootAbs: string;
+  readonly boundaryGlobs?: ReadonlyArray<string>;
+}
+
+interface CollectUnknownProofCandidatesOutput {
+  readonly boundaryGlobs: ReadonlyArray<string>;
+  readonly perFile: ReadonlyMap<string, UnknownProofCandidates>;
+}
+
+interface CollectBoundaryUnknownUsagesInput {
+  readonly program: unknown;
+  readonly sourceText: string;
+  readonly unknownBindings: ReadonlyArray<BindingCandidate>;
+}
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
@@ -244,10 +261,13 @@ const collectUnknownAnnotatedBindings = (program: unknown, sourceText: string): 
   return out;
 };
 
-type WalkStackEntry = { readonly node: unknown; readonly keyInParent: string | null };
+interface WalkStackEntry {
+  readonly node: unknown;
+  readonly keyInParent: string | null;
+}
 
 const walkOxcTreeWithStack = (root: unknown, visit: (node: unknown, stack: ReadonlyArray<WalkStackEntry>) => void): void => {
-  const seen = new Set<object>();
+  const seen = new Set<NodeLike>();
 
   const rec = (value: unknown, keyInParent: string | null, stack: ReadonlyArray<WalkStackEntry>): void => {
     if (value === null || value === undefined) {
@@ -274,11 +294,11 @@ const walkOxcTreeWithStack = (root: unknown, visit: (node: unknown, stack: Reado
       return;
     }
 
-    if (seen.has(value)) {
+    if (seen.has(value as NodeLike)) {
       return;
     }
 
-    seen.add(value);
+    seen.add(value as NodeLike);
 
     const nextStack = [...stack, { node: value, keyInParent }];
 
@@ -504,11 +524,7 @@ const isAllowedNarrowingContext = (stack: ReadonlyArray<WalkStackEntry>): boolea
   return false;
 };
 
-const collectBoundaryUnknownUsages = (input: {
-  program: unknown;
-  sourceText: string;
-  unknownBindings: ReadonlyArray<BindingCandidate>;
-}): ReadonlyArray<BoundaryUsageCandidate> => {
+const collectBoundaryUnknownUsages = (input: CollectBoundaryUnknownUsagesInput): ReadonlyArray<BoundaryUsageCandidate> => {
   const declaredOffsets = new Set<number>(input.unknownBindings.map(b => b.offset));
   const unknownNames = new Set<string>(input.unknownBindings.map(b => b.name));
   const out: BoundaryUsageCandidate[] = [];
@@ -581,14 +597,7 @@ const collectBoundaryUnknownUsages = (input: {
   return out;
 };
 
-export const collectUnknownProofCandidates = (input: {
-  program: ReadonlyArray<ParsedFile>;
-  rootAbs: string;
-  boundaryGlobs?: ReadonlyArray<string>;
-}): {
-  readonly boundaryGlobs: ReadonlyArray<string>;
-  readonly perFile: ReadonlyMap<string, UnknownProofCandidates>;
-} => {
+const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput): CollectUnknownProofCandidatesOutput => {
   const boundaryGlobs = (input.boundaryGlobs ?? []).map(p => normalizePath(p).trim()).filter(p => p.length > 0);
   const boundaryMatchers = compileGlobs(boundaryGlobs);
   const perFile = new Map<string, UnknownProofCandidates>();
@@ -760,7 +769,7 @@ export const collectUnknownProofCandidates = (input: {
   return { boundaryGlobs, perFile };
 };
 
-export const stringifyHover = (hover: unknown): string => {
+const stringifyHover = (hover: unknown): string => {
   if (!hover || typeof hover !== 'object') {
     return '';
   }
@@ -808,3 +817,6 @@ export const stringifyHover = (hover: unknown): string => {
   // Fallback for odd server shapes.
   return collectStringsFromNode(raw).join('\n');
 };
+
+export { DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS, collectUnknownProofCandidates, stringifyHover };
+export type { UnknownProofCandidates };

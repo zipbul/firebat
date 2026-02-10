@@ -5,6 +5,28 @@ import type { SourceSpan, UnknownProofAnalysis, UnknownProofFinding } from '../.
 import { collectUnknownProofCandidates } from './candidates';
 import { runTsgoUnknownProofChecks } from './tsgo-checks';
 
+interface AnalyzeUnknownProofInput {
+  readonly rootAbs?: string;
+  readonly boundaryGlobs?: ReadonlyArray<string>;
+  readonly tsconfigPath?: string;
+  readonly logger?: FirebatLogger;
+}
+
+interface TsgoUnknownProofCandidate {
+  readonly name: string;
+  readonly offset: number;
+  readonly span: SourceSpan;
+}
+
+type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
+
+interface BoundaryUsageCandidate {
+  readonly name: string;
+  readonly offset: number;
+  readonly span: SourceSpan;
+  readonly usageKind: BoundaryUsageKind;
+}
+
 export const createEmptyUnknownProof = (): UnknownProofAnalysis => ({
   status: 'ok',
   tool: 'tsgo',
@@ -13,12 +35,7 @@ export const createEmptyUnknownProof = (): UnknownProofAnalysis => ({
 
 export const analyzeUnknownProof = async (
   program: ReadonlyArray<ParsedFile>,
-  input?: {
-    rootAbs?: string;
-    boundaryGlobs?: ReadonlyArray<string>;
-    tsconfigPath?: string;
-    logger?: FirebatLogger;
-  },
+  input?: AnalyzeUnknownProofInput,
 ): Promise<UnknownProofAnalysis> => {
   const rootAbs = input?.rootAbs ?? process.cwd();
   const boundaryGlobs = input?.boundaryGlobs;
@@ -28,11 +45,8 @@ export const analyzeUnknownProof = async (
     ...(boundaryGlobs !== undefined ? { boundaryGlobs } : {}),
   });
   const findings: UnknownProofFinding[] = [];
-  const tsgoCandidatesByFile = new Map<string, ReadonlyArray<{ name: string; offset: number; span: SourceSpan }>>();
-  const boundaryUsageCandidatesByFile = new Map<
-    string,
-    ReadonlyArray<{ name: string; offset: number; span: SourceSpan; usageKind: 'call' | 'assign' | 'store' | 'return' | 'throw' }>
-  >();
+  const tsgoCandidatesByFile = new Map<string, ReadonlyArray<TsgoUnknownProofCandidate>>();
+  const boundaryUsageCandidatesByFile = new Map<string, ReadonlyArray<BoundaryUsageCandidate>>();
 
   for (const [filePath, perFile] of collected.perFile.entries()) {
     findings.push(...perFile.typeAssertionFindings);

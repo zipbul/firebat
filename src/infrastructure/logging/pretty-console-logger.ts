@@ -56,11 +56,8 @@ const levelStyle = (level: FirebatLogLevel): LevelStyle => {
       return { emoji: '◆', color: ANSI.magenta };
     case 'trace':
       return { emoji: '·', color: ANSI.gray };
-    default: {
-      const _exhaustive: never = level;
-
+    default:
       return { emoji: '·', color: ANSI.gray };
-    }
   }
 };
 

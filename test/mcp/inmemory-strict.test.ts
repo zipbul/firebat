@@ -3,6 +3,61 @@ import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { createInMemoryMcpContext, type InMemoryMcpContext } from './helpers/inmemory-server';
 import { callToolSafe } from './helpers/mcp-client';
 
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const asRecordOrThrow = (value: unknown, message: string): Record<string, unknown> => {
+  if (!isRecord(value)) {
+    throw new Error(message);
+  }
+
+  return value;
+};
+
+const asArrayOrEmpty = <T>(value: ReadonlyArray<T> | undefined): ReadonlyArray<T> => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return [];
+};
+
+const parseJsonOrEmptyObject = (text: string): Record<string, unknown> => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+
+    return asRecordOrThrow(parsed, 'Expected parsed JSON to be an object');
+  } catch {
+    return {};
+  }
+};
+
+const requireTextResourceContent = (content: unknown): string => {
+  const record = asRecordOrThrow(content, 'Expected resource content object');
+  const text = record.text;
+
+  if (typeof text !== 'string') {
+    throw new Error('Expected resource content to have text');
+  }
+
+  return text;
+};
+
+const messageHasTextContent = (message: unknown): boolean => {
+  if (!isRecord(message)) {
+    return false;
+  }
+
+  const content = message.content;
+
+  if (!isRecord(content)) {
+    return false;
+  }
+
+  return typeof content.text === 'string';
+};
+
 describe('InMemory MCP strict (protocol / init)', () => {
   let ctx: InMemoryMcpContext;
 
@@ -32,7 +87,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
   describe('tools/list', () => {
     it('should list all registered tools with name, description, inputSchema', async () => {
       const result = await ctx.client.listTools();
-      const tools = result.tools ?? [];
+      const tools = asArrayOrEmpty(result.tools);
 
       expect(tools.length).toBeGreaterThanOrEqual(35);
 
@@ -49,7 +104,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
   describe('resources/list', () => {
     it('should list expected resource URIs including report://last', async () => {
       const result = await ctx.client.listResources();
-      const resources = result.resources ?? [];
+      const resources = asArrayOrEmpty(result.resources);
       const uris = resources.map(r => r.uri);
 
       expect(uris).toContain('report://last');
@@ -59,7 +114,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
   describe('prompts/list', () => {
     it('should list expected prompts including review and workflow', async () => {
       const result = await ctx.client.listPrompts();
-      const prompts = result.prompts ?? [];
+      const prompts = asArrayOrEmpty(result.prompts);
       const names = prompts.map(p => p.name);
 
       expect(names).toContain('review');
@@ -94,7 +149,8 @@ describe('InMemory MCP strict (protocol / init)', () => {
           detectors: ['invalid-detector-name'],
         });
 
-        expect(isError === true || structured !== undefined).toBe(true);
+        expect(typeof isError).toBe('boolean');
+        expect(structured).toBeDefined();
       });
     });
 
@@ -106,8 +162,11 @@ describe('InMemory MCP strict (protocol / init)', () => {
         });
 
         expect(isError).toBe(false);
-        expect(structured?.entries).toBeDefined();
-        expect(Array.isArray(structured?.entries)).toBe(true);
+
+        const record = asRecordOrThrow(structured, 'Expected list_dir structured result');
+
+        expect(record.entries).toBeDefined();
+        expect(Array.isArray(record.entries)).toBe(true);
       });
 
       it('should succeed with recursive true', async () => {
@@ -118,7 +177,10 @@ describe('InMemory MCP strict (protocol / init)', () => {
         });
 
         expect(isError).toBe(false);
-        expect(Array.isArray(structured?.entries)).toBe(true);
+
+        const record = asRecordOrThrow(structured, 'Expected list_dir structured result');
+
+        expect(Array.isArray(record.entries)).toBe(true);
       });
     });
 
@@ -127,7 +189,10 @@ describe('InMemory MCP strict (protocol / init)', () => {
         const { structured, isError } = await callToolSafe(ctx.client, 'list_memories', { root: ctx.rootAbs });
 
         expect(isError).toBe(false);
-        expect(structured?.memories !== undefined && Array.isArray(structured.memories)).toBe(true);
+
+        const record = asRecordOrThrow(structured, 'Expected list_memories structured result');
+
+        expect(Array.isArray(record.memories)).toBe(true);
       });
 
       it('should write then read then delete', async () => {
@@ -149,8 +214,9 @@ describe('InMemory MCP strict (protocol / init)', () => {
         expect(d.structured?.ok).toBe(true);
 
         const r2 = await callToolSafe(ctx.client, 'read_memory', { root: ctx.rootAbs, memoryKey: key });
+        const r2Record = asRecordOrThrow(r2.structured, 'Expected read_memory structured result');
 
-        expect(r2.structured?.found).toBe(false);
+        expect(r2Record.found).toBe(false);
       });
 
       it('should return found false for non-existent key', async () => {
@@ -160,7 +226,10 @@ describe('InMemory MCP strict (protocol / init)', () => {
         });
 
         expect(isError).toBe(false);
-        expect(structured?.found).toBe(false);
+
+        const record = asRecordOrThrow(structured, 'Expected read_memory structured result');
+
+        expect(record.found).toBe(false);
       });
     });
 
@@ -189,7 +258,10 @@ describe('InMemory MCP strict (protocol / init)', () => {
         });
 
         expect(search.isError).toBe(false);
-        expect(Array.isArray(search.structured?.matches) || search.structured?.matches === undefined).toBe(true);
+
+        const record = asRecordOrThrow(search.structured, 'Expected search_symbol_from_index structured result');
+
+        expect(Array.isArray(record.matches)).toBe(true);
       });
     });
 
@@ -203,7 +275,7 @@ describe('InMemory MCP strict (protocol / init)', () => {
         });
 
         expect(isError).toBe(false);
-        expect(structured !== undefined).toBe(true);
+        expect(structured).toBeDefined();
       });
     });
 
@@ -212,7 +284,10 @@ describe('InMemory MCP strict (protocol / init)', () => {
         const { structured, isError } = await callToolSafe(ctx.client, 'list_dir', { relativePath: '.' });
 
         expect(isError).toBe(false);
-        expect(structured?.entries).toBeDefined();
+
+        const record = asRecordOrThrow(structured, 'Expected list_dir structured result');
+
+        expect(record.entries).toBeDefined();
       });
     });
   });
@@ -220,48 +295,46 @@ describe('InMemory MCP strict (protocol / init)', () => {
   describe('Resources (4.3)', () => {
     it('should read report://last (empty or with report after scan)', async () => {
       const result = await ctx.client.readResource({ uri: 'report://last' });
-      const content = result.contents?.[0];
+      const contents = asArrayOrEmpty(result.contents);
+      const content = contents[0];
 
       expect(content).toBeDefined();
 
-      if (content?.type === 'text') {
-        const data = JSON.parse(content.text ?? '{}');
+      const text = requireTextResourceContent(content);
+      const data = parseJsonOrEmptyObject(text);
 
-        expect(data !== undefined).toBe(true);
-      }
+      expect(data).toBeDefined();
     });
 
     it('should have report with meta after one scan', async () => {
       await callToolSafe(ctx.client, 'scan', { targets: [ctx.rootAbs] });
 
       const result = await ctx.client.readResource({ uri: 'report://last' });
-      const content = result.contents?.[0];
+      const contents = asArrayOrEmpty(result.contents);
+      const content = contents[0];
 
       expect(content).toBeDefined();
 
-      const text = content && 'text' in content ? (content as { text?: string }).text : undefined;
+      const text = requireTextResourceContent(content);
+      const data = parseJsonOrEmptyObject(text);
 
-      if (text) {
-        const data = JSON.parse(text) as Record<string, unknown>;
-
-        expect(typeof data).toBe('object');
-        expect(data.meta).toBeDefined();
-      }
+      expect(typeof data).toBe('object');
+      expect(data.meta).toBeDefined();
     });
   });
 
   describe('Prompts (4.4)', () => {
     it('should get review prompt with reportJson', async () => {
       const result = await ctx.client.getPrompt({ name: 'review', arguments: { reportJson: '{}' } });
-      const messages = result.messages ?? [];
+      const messages = asArrayOrEmpty(result.messages);
 
       expect(messages.length).toBeGreaterThan(0);
-      expect(messages.some(m => 'content' in m && typeof (m.content as { text?: string }).text === 'string')).toBe(true);
+      expect(messages.some(messageHasTextContent)).toBe(true);
     });
 
     it('should get workflow prompt with no args', async () => {
       const result = await ctx.client.getPrompt({ name: 'workflow' });
-      const messages = result.messages ?? [];
+      const messages = asArrayOrEmpty(result.messages);
 
       expect(messages.length).toBeGreaterThan(0);
     });

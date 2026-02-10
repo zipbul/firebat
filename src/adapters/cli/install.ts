@@ -49,30 +49,36 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
+const failJsonValue = (message: string): never => {
+  throw new Error(message);
+};
+
 const toJsonValue = (value: unknown): JsonValue => {
+  if (value === undefined) {
+    return failJsonValue('[firebat] Invalid JSON value (undefined)');
+  }
+
+  let out: JsonValue;
+
   if (value === null) {
-    return null;
-  }
-
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(item => toJsonValue(item));
-  }
-
-  if (isPlainObject(value)) {
-    const out: Record<string, JsonValue> = {};
+    out = null;
+  } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    out = value;
+  } else if (Array.isArray(value)) {
+    out = value.map(item => toJsonValue(item));
+  } else if (isPlainObject(value)) {
+    const obj: Record<string, JsonValue> = {};
 
     for (const [k, v] of Object.entries(value)) {
-      out[k] = toJsonValue(v);
+      obj[k] = toJsonValue(v);
     }
 
-    return out;
+    out = obj;
+  } else {
+    return failJsonValue('[firebat] Invalid JSON value (non-JSON type encountered)');
   }
 
-  throw new Error('[firebat] Invalid JSON value (non-JSON type encountered)');
+  return out;
 };
 
 const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
@@ -80,58 +86,57 @@ const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
     return true;
   }
 
+  let result = false;
+
   if (a === null || b === null) {
-    return false;
-  }
+    result = false;
+  } else if (Array.isArray(a)) {
+    if (Array.isArray(b) && a.length === b.length) {
+      result = true;
 
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b)) {
-      return false;
-    }
+      for (let i = 0; i < a.length; i += 1) {
+        if (!deepEqual(a[i]!, b[i]!)) {
+          result = false;
 
-    if (a.length !== b.length) {
-      return false;
-    }
-    for (let i = 0; i < a.length; i += 1) {
-      if (!deepEqual(a[i]!, b[i]!)) {
-        return false;
+          break;
+        }
       }
     }
+  } else if (typeof a === 'object') {
+    if (typeof b === 'object' && !Array.isArray(b)) {
+      const aObj = a as Record<string, JsonValue>;
+      const bObj = b as Record<string, JsonValue>;
+      const aKeys = Object.keys(aObj).sort();
+      const bKeys = Object.keys(bObj).sort();
 
-    return true;
-  }
+      if (aKeys.length === bKeys.length) {
+        result = true;
 
-  if (typeof a === 'object') {
-    if (typeof b !== 'object' || Array.isArray(b)) {
-      return false;
-    }
+        for (let i = 0; i < aKeys.length; i += 1) {
+          if (aKeys[i] !== bKeys[i]) {
+            result = false;
 
-    const aObj = a as Record<string, JsonValue>;
-    const bObj = b as Record<string, JsonValue>;
-    const aKeys = Object.keys(aObj).sort();
-    const bKeys = Object.keys(bObj).sort();
+            break;
+          }
+        }
 
-    if (aKeys.length !== bKeys.length) {
-      return false;
-    }
-    for (let i = 0; i < aKeys.length; i += 1) {
-      if (aKeys[i] !== bKeys[i]) {
-        return false;
+        if (result) {
+          for (const k of aKeys) {
+            const av = aObj[k] as JsonValue;
+            const bv = bObj[k] as JsonValue;
+
+            if (!deepEqual(av, bv)) {
+              result = false;
+
+              break;
+            }
+          }
+        }
       }
     }
-    for (const k of aKeys) {
-      const av = aObj[k] as JsonValue;
-      const bv = bObj[k] as JsonValue;
-
-      if (!deepEqual(av, bv)) {
-        return false;
-      }
-    }
-
-    return true;
   }
 
-  return false;
+  return result;
 };
 
 const sortJsonValue = (value: JsonValue): JsonValue => {
@@ -139,19 +144,21 @@ const sortJsonValue = (value: JsonValue): JsonValue => {
     return null;
   }
 
+  let out: JsonValue;
+
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return value;
-  }
+    out = value;
+  } else if (Array.isArray(value)) {
+    out = value.map(v => sortJsonValue(v));
+  } else {
+    const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
+    const obj: Record<string, JsonValue> = {};
 
-  if (Array.isArray(value)) {
-    return value.map(v => sortJsonValue(v));
-  }
+    for (const [k, v] of entries) {
+      obj[k] = sortJsonValue(v);
+    }
 
-  const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
-  const out: Record<string, JsonValue> = {};
-
-  for (const [k, v] of entries) {
-    out[k] = sortJsonValue(v);
+    out = obj;
   }
 
   return out;
@@ -169,6 +176,10 @@ const writeFileAtomic = async (filePath: string, text: string): Promise<void> =>
 };
 
 const parseJsoncOrThrow = (filePath: string, text: string): JsonValue => {
+  if (text.trim().length === 0) {
+    return failJsonValue(`[firebat] Failed to parse JSONC: ${filePath}: empty input`);
+  }
+
   try {
     return toJsonValue(Bun.JSONC.parse(text));
   } catch (err) {
@@ -218,6 +229,10 @@ interface BaseWrite extends PlannedWrite {
 }
 
 const parseYesFlag = (argv: readonly string[]): ParseYesResult => {
+  if (argv.length === 0) {
+    return { yes: false, help: false };
+  }
+
   let yes = false;
   let help = false;
 
@@ -243,31 +258,39 @@ const parseYesFlag = (argv: readonly string[]): ParseYesResult => {
 };
 
 const ensureGitignoreHasFirebat = async (rootAbs: string): Promise<boolean> => {
+  if (rootAbs.trim().length === 0) {
+    return false;
+  }
+
   const gitignorePath = path.join(rootAbs, '.gitignore');
   const entry = '.firebat/';
+  let updated = true;
 
   try {
     const current = await readFile(gitignorePath, 'utf8');
 
     if (current.split(/\r?\n/).some(line => line.trim() === entry)) {
-      return false;
+      updated = false;
+    } else {
+      const next = current.endsWith('\n') ? `${current}${entry}\n` : `${current}\n${entry}\n`;
+
+      await writeFile(gitignorePath, next, 'utf8');
     }
-
-    const next = current.endsWith('\n') ? `${current}${entry}\n` : `${current}\n${entry}\n`;
-
-    await writeFile(gitignorePath, next, 'utf8');
-
-    return true;
   } catch {
     await writeFile(gitignorePath, `${entry}\n`, 'utf8');
-
-    return true;
   }
+
+  return updated;
 };
 
 const installTextFileNoOverwrite = async (destPath: string, desiredText: string): Promise<AssetInstallResult> => {
   const dest = Bun.file(destPath);
   const desiredSha256 = await sha256Hex(desiredText);
+  let result: AssetInstallResult = { kind: 'installed', filePath: destPath, desiredSha256 };
+
+  if (destPath.trim().length === 0) {
+    return { kind: 'skipped-exists-different', filePath: destPath, desiredSha256, existingSha256: 'invalid-path' };
+  }
 
   if (await dest.exists()) {
     try {
@@ -275,18 +298,20 @@ const installTextFileNoOverwrite = async (destPath: string, desiredText: string)
       const existingSha256 = await sha256Hex(existingText);
 
       if (existingText === desiredText) {
-        return { kind: 'skipped-exists-same', filePath: destPath, desiredSha256, existingSha256 };
+        result = { kind: 'skipped-exists-same', filePath: destPath, desiredSha256, existingSha256 };
       }
 
-      return { kind: 'skipped-exists-different', filePath: destPath, desiredSha256, existingSha256 };
+      if (existingText !== desiredText) {
+        result = { kind: 'skipped-exists-different', filePath: destPath, desiredSha256, existingSha256 };
+      }
     } catch {
-      return { kind: 'skipped-exists-different', filePath: destPath, desiredSha256, existingSha256: 'unreadable' };
+      result = { kind: 'skipped-exists-different', filePath: destPath, desiredSha256, existingSha256: 'unreadable' };
     }
+  } else {
+    await Bun.write(destPath, desiredText);
   }
 
-  await Bun.write(destPath, desiredText);
-
-  return { kind: 'installed', filePath: destPath, desiredSha256 };
+  return result;
 };
 
 const ensureBaseSnapshot = async (input: EnsureBaseSnapshotInput): Promise<EnsureBaseSnapshotResult> => {
@@ -426,17 +451,17 @@ const AGENT_PROMPT_BLOCK = [
 
 const printAgentPromptGuide = (): void => {
   const c = isTty();
-  const border = '│';
   const promptLines = AGENT_PROMPT_BLOCK.split('\n');
-
-  const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
   const getBoxInnerWidth = (): number => {
     const stdout = process.stdout;
+
+    if (stdout === undefined || stdout === null) {
+      return 72;
+    }
+
     const columns =
-      typeof stdout === 'object' && stdout !== null && 'columns' in stdout
-        ? (stdout as { columns?: number }).columns
-        : undefined;
+      typeof stdout === 'object' && stdout !== null && 'columns' in stdout ? (stdout as { columns?: number }).columns : undefined;
 
     if (typeof columns !== 'number' || !Number.isFinite(columns)) {
       return 72;
@@ -446,20 +471,21 @@ const printAgentPromptGuide = (): void => {
     // Keep it within a readable range even on very wide terminals.
     const available = columns - 2 /* leading indent */ - 2 /* left border + space */ - 2 /* space + right border */;
 
-    return clamp(available, 48, 100);
+    return Math.max(48, Math.min(100, available));
   };
 
-  const wrapLine = (line: string, width: number): string[] => {
+  const boxWidth = getBoxInnerWidth();
+  const boxedPromptLines = promptLines.flatMap(line => {
     const out: string[] = [];
     let rest = line;
 
-    while (rest.length > width) {
-      const slice = rest.slice(0, width + 1);
+    while (rest.length > boxWidth) {
+      const slice = rest.slice(0, boxWidth + 1);
       let cut = slice.lastIndexOf(' ');
 
       if (cut <= 0) {
         // No whitespace to break on.
-        cut = width;
+        cut = boxWidth;
       }
 
       out.push(rest.slice(0, cut).trimEnd());
@@ -470,10 +496,7 @@ const printAgentPromptGuide = (): void => {
     out.push(rest);
 
     return out;
-  };
-
-  const boxWidth = getBoxInnerWidth();
-  const boxedPromptLines = promptLines.flatMap(line => wrapLine(line, boxWidth));
+  });
   const guideLines = [
     '',
     `  ${hc('🤖 Agent Integration', `${H.bold}${H.cyan}`, c)}`,
@@ -485,7 +508,7 @@ const printAgentPromptGuide = (): void => {
     ...boxedPromptLines.map(line => {
       const padded = line.padEnd(boxWidth, ' ');
 
-      return `  ${hc(border, H.dim, c)} ${padded} ${hc(border, H.dim, c)}`;
+      return `  ${hc('│', H.dim, c)} ${padded} ${hc('│', H.dim, c)}`;
     }),
     `  ${hc('└' + '─'.repeat(boxWidth + 2) + '┘', H.dim, c)}`,
     '',
@@ -495,6 +518,10 @@ const printAgentPromptGuide = (): void => {
 };
 
 const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[], logger: FirebatLogger): Promise<number> => {
+  if (mode !== 'install' && mode !== 'update') {
+    return (logger.error(`Unknown install mode: ${mode}`), 1);
+  }
+
   try {
     const { yes, help } = parseYesFlag(argv);
 

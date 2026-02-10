@@ -117,6 +117,10 @@ const isTraceEdgeKind = (value: JsonValue | undefined): value is TraceEdgeKind =
     value === 'unknown');
 
 const toTraceNodes = (value: ReadonlyArray<JsonValue>): TraceNode[] => {
+  if (value.length === 0) {
+    return [];
+  }
+
   const out: TraceNode[] = [];
 
   for (const item of value) {
@@ -142,6 +146,10 @@ const toTraceNodes = (value: ReadonlyArray<JsonValue>): TraceNode[] => {
 };
 
 const toTraceEdges = (value: ReadonlyArray<JsonValue>): TraceEdge[] => {
+  if (value.length === 0) {
+    return [];
+  }
+
   const out: TraceEdge[] = [];
 
   for (const item of value) {
@@ -171,34 +179,37 @@ const toSourceSpan = (value: JsonValue | undefined): SourceSpan | null => {
     return null;
   }
 
+  let span: SourceSpan | null = null;
   const start = value.start;
   const end = value.end;
 
-  if (!isObject(start) || !isObject(end)) {
-    return null;
+  if (isObject(start) && isObject(end)) {
+    const startLine = start.line;
+    const startColumn = start.column;
+    const endLine = end.line;
+    const endColumn = end.column;
+
+    if (
+      typeof startLine === 'number' &&
+      typeof startColumn === 'number' &&
+      typeof endLine === 'number' &&
+      typeof endColumn === 'number'
+    ) {
+      span = {
+        start: { line: startLine, column: startColumn },
+        end: { line: endLine, column: endColumn },
+      };
+    }
   }
 
-  const startLine = start.line;
-  const startColumn = start.column;
-  const endLine = end.line;
-  const endColumn = end.column;
-
-  if (
-    typeof startLine !== 'number' ||
-    typeof startColumn !== 'number' ||
-    typeof endLine !== 'number' ||
-    typeof endColumn !== 'number'
-  ) {
-    return null;
-  }
-
-  return {
-    start: { line: startLine, column: startColumn },
-    end: { line: endLine, column: endColumn },
-  };
+  return span;
 };
 
 const toEvidenceSpans = (value: ReadonlyArray<JsonValue>): TraceEvidenceSpan[] => {
+  if (value.length === 0) {
+    return [];
+  }
+
   const out: TraceEvidenceSpan[] = [];
 
   for (const item of value) {
@@ -250,15 +261,15 @@ const normalizeTrace = (input: NormalizeTraceInput): NormalizeTraceResult => {
 const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> => {
   const files: string[] = [path.resolve(process.cwd(), input.entryFile)];
 
-  if (input.tsconfigPath !== undefined && input.tsconfigPath.trim().length > 0) {
-    const tsconfig = path.resolve(process.cwd(), input.tsconfigPath);
+  if (input.tsconfigPath === undefined || input.tsconfigPath.trim().length === 0) {
+    return files;
+  }
 
-    try {
-      await Bun.file(tsconfig).stat();
-      files.push(tsconfig);
-    } catch {
-      // ignore
-    }
+  const tsconfig = path.resolve(process.cwd(), input.tsconfigPath);
+  const exists = await Bun.file(tsconfig).exists();
+
+  if (exists) {
+    files.push(tsconfig);
   }
 
   return files;

@@ -1,5 +1,4 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import * as path from 'node:path';
 
 import { createMcpTestContext, callTool, type McpTestContext } from './helpers/mcp-client';
 

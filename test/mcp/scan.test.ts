@@ -233,7 +233,7 @@ describe('scan', () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'does-not-exist.ts');
     // Act
-    const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
+    const { structured } = await callToolSafe(ctx.client, 'scan', {
       targets: [bogus],
       detectors: ['waste'],
     });

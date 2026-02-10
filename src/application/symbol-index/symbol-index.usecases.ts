@@ -98,6 +98,16 @@ export const indexSymbolsUseCase = async (input: IndexSymbolsInput): Promise<Ind
   const { fileIndexRepository, symbolIndexRepository } = await getRepositories({ rootAbs: ctx.rootAbs, logger });
   const targets = await toAbsoluteTargets(rootAbs, input.targets);
 
+  if (targets.length === 0) {
+    return {
+      ok: true,
+      indexedFiles: 0,
+      skippedFiles: 0,
+      symbolsIndexed: 0,
+      parseErrors: 0,
+    };
+  }
+
   logger.trace('symbol-index: indexing targets', { count: targets.length });
 
   await indexTargets({ projectKey, targets, repository: fileIndexRepository, concurrency: 8, logger });

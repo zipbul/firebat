@@ -6,20 +6,59 @@ import { withTsgoLspSession, openTsDocument } from '../../infrastructure/tsgo/ts
 import { createNoopLogger } from '../../ports/logger';
 import { stringifyHover } from './candidates';
 
-type BindingCandidate = {
+interface BindingCandidate {
   readonly name: string;
   readonly offset: number;
   readonly span: SourceSpan;
-};
+}
 
 type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
 
-type BoundaryUsageCandidate = {
+interface BoundaryUsageCandidate {
   readonly name: string;
   readonly offset: number;
   readonly span: SourceSpan;
   readonly usageKind: BoundaryUsageKind;
-};
+}
+
+interface UnknownOrAnyFlag {
+  readonly unknown: boolean;
+  readonly any: boolean;
+  readonly typeSnippet: string;
+}
+
+interface BoundaryUnknownMessage {
+  readonly message: string;
+  readonly evidence: string;
+}
+
+interface HoverRequestArgs {
+  readonly uri: string;
+  readonly line: number;
+  readonly character: number;
+}
+
+interface RunTsgoUnknownProofChecksInput {
+  readonly program: ReadonlyArray<ParsedFile>;
+  readonly rootAbs: string;
+  readonly candidatesByFile: ReadonlyMap<string, ReadonlyArray<BindingCandidate>>;
+  readonly boundaryUsageCandidatesByFile?: ReadonlyMap<string, ReadonlyArray<BoundaryUsageCandidate>>;
+  readonly tsconfigPath?: string;
+  readonly logger?: FirebatLogger;
+}
+
+interface RunTsgoUnknownProofChecksOk {
+  readonly ok: true;
+  readonly findings: ReadonlyArray<UnknownProofFinding>;
+}
+
+interface RunTsgoUnknownProofChecksFail {
+  readonly ok: false;
+  readonly error: string;
+  readonly findings: ReadonlyArray<UnknownProofFinding>;
+}
+
+type RunTsgoUnknownProofChecksResult = RunTsgoUnknownProofChecksOk | RunTsgoUnknownProofChecksFail;
 
 const createEmptySpan = (): SourceSpan => ({
   start: { line: 1, column: 1 },
@@ -43,7 +82,7 @@ const pickTypeSnippetFromHoverText = (text: string): string => {
 
 const hasWord = (text: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(text);
 
-const shouldFlagUnknownOrAny = (hoverText: string): { unknown: boolean; any: boolean; typeSnippet: string } => {
+const shouldFlagUnknownOrAny = (hoverText: string): UnknownOrAnyFlag => {
   const snippet = pickTypeSnippetFromHoverText(hoverText);
   const haystack = snippet.length > 0 ? snippet : hoverText;
 
@@ -54,7 +93,7 @@ const shouldFlagUnknownOrAny = (hoverText: string): { unknown: boolean; any: boo
   };
 };
 
-const formatBoundaryUnknownMessage = (kind: BoundaryUsageKind): { message: string; evidence: string } => {
+const formatBoundaryUnknownMessage = (kind: BoundaryUsageKind): BoundaryUnknownMessage => {
   if (kind === 'call') {
     return { message: 'Boundary `unknown` is passed without narrowing', evidence: 'propagation=call' };
   }
@@ -74,17 +113,9 @@ const formatBoundaryUnknownMessage = (kind: BoundaryUsageKind): { message: strin
   return { message: 'Boundary `unknown` is thrown without narrowing', evidence: 'propagation=throw' };
 };
 
-export const runTsgoUnknownProofChecks = async (input: {
-  program: ReadonlyArray<ParsedFile>;
-  rootAbs: string;
-  candidatesByFile: ReadonlyMap<string, ReadonlyArray<BindingCandidate>>;
-  boundaryUsageCandidatesByFile?: ReadonlyMap<string, ReadonlyArray<BoundaryUsageCandidate>>;
-  tsconfigPath?: string;
-  logger?: FirebatLogger;
-}): Promise<
-  | { ok: true; findings: ReadonlyArray<UnknownProofFinding> }
-  | { ok: false; error: string; findings: ReadonlyArray<UnknownProofFinding> }
-> => {
+export const runTsgoUnknownProofChecks = async (
+  input: RunTsgoUnknownProofChecksInput,
+): Promise<RunTsgoUnknownProofChecksResult> => {
   const rootAbs = input.rootAbs;
   const fileByPath = new Map<string, ParsedFile>();
 
@@ -101,7 +132,7 @@ export const runTsgoUnknownProofChecks = async (input: {
     async session => {
       const findings: UnknownProofFinding[] = [];
 
-      const requestHoverOnce = async (args: { uri: string; line: number; character: number }) => {
+      const requestHoverOnce = async (args: HoverRequestArgs) => {
         return session.lsp
           .request('textDocument/hover', {
             textDocument: { uri: args.uri },
@@ -110,7 +141,7 @@ export const runTsgoUnknownProofChecks = async (input: {
           .catch(() => null);
       };
 
-      const requestHover = async (args: { uri: string; line: number; character: number }) => {
+      const requestHover = async (args: HoverRequestArgs) => {
         const first = await requestHoverOnce(args);
 
         if (first !== null) {

@@ -21,7 +21,23 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
   logger.debug(`Indexing ${input.targets.length} files`, { concurrency });
 
+  if (input.targets.length === 0) {
+    logger.debug('Indexing done', { updated, skipped, failed });
+
+    return;
+  }
+
   await runWithConcurrency(input.targets, concurrency, async filePath => {
+    const isEmptyPath = filePath.trim().length === 0;
+
+    if (isEmptyPath) {
+      failed += 1;
+    }
+
+    if (isEmptyPath) {
+      return;
+    }
+
     try {
       const file = Bun.file(filePath);
       const [stats, existing] = await Promise.all([
@@ -33,24 +49,22 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
       if (existing && existing.mtimeMs === mtimeMs && existing.size === size) {
         skipped += 1;
+      } else {
+        const content = await file.text();
+        const contentHash = hashString(content);
 
-        return;
+        await input.repository.upsertFile({
+          projectKey: input.projectKey,
+          filePath,
+          mtimeMs,
+          size,
+          contentHash,
+        });
+
+        updated += 1;
+
+        logger.trace(`Index upsert: ${filePath}`, { size, mtimeMs });
       }
-
-      const content = await file.text();
-      const contentHash = hashString(content);
-
-      await input.repository.upsertFile({
-        projectKey: input.projectKey,
-        filePath,
-        mtimeMs,
-        size,
-        contentHash,
-      });
-
-      updated += 1;
-
-      logger.trace(`Index upsert: ${filePath}`, { size, mtimeMs });
     } catch {
       failed += 1;
 

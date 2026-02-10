@@ -105,7 +105,9 @@ const isIdentPart = (ch: string): boolean => {
 class Scanner {
   public i = 0;
 
-  public constructor(public readonly text: string) {}
+  public constructor(public readonly text: string) {
+    void this.text;
+  }
 
   public eof(): boolean {
     return this.i >= this.text.length;
@@ -127,7 +129,15 @@ class Scanner {
     return new Error(message);
   }
 
+  private fail<T>(message: string): T {
+    throw this.error(message);
+  }
+
   public skipWhitespaceAndComments(): void {
+    if (this.eof()) {
+      return;
+    }
+
     while (!this.eof()) {
       const ch = this.peek();
       const next = this.peek(1);
@@ -183,7 +193,7 @@ class Scanner {
     const quote = this.next();
 
     if (quote !== '"' && quote !== "'") {
-      throw this.error('Expected string');
+      return this.fail('Expected string');
     }
 
     let out = '';
@@ -226,7 +236,7 @@ class Scanner {
     const first = this.peek();
 
     if (!isIdentStart(first)) {
-      throw this.error('Expected identifier');
+      return this.fail('Expected identifier');
     }
 
     let out = '';
@@ -249,6 +259,10 @@ class Scanner {
   public parseNumberLike(): ValueNode {
     const start = this.i;
 
+    if (this.eof()) {
+      return this.fail('Expected number');
+    }
+
     while (!this.eof()) {
       const ch = this.peek();
 
@@ -266,26 +280,27 @@ class Scanner {
   public parseLiteral(): ValueNode {
     const start = this.i;
     const ch = this.peek();
+    let matched = false;
 
     if (ch === 't' && this.text.slice(this.i, this.i + 4) === 'true') {
       this.i += 4;
 
-      return { kind: 'literal', start, end: this.i };
-    }
-
-    if (ch === 'f' && this.text.slice(this.i, this.i + 5) === 'false') {
+      matched = true;
+    } else if (ch === 'f' && this.text.slice(this.i, this.i + 5) === 'false') {
       this.i += 5;
 
-      return { kind: 'literal', start, end: this.i };
-    }
-
-    if (ch === 'n' && this.text.slice(this.i, this.i + 4) === 'null') {
+      matched = true;
+    } else if (ch === 'n' && this.text.slice(this.i, this.i + 4) === 'null') {
       this.i += 4;
 
-      return { kind: 'literal', start, end: this.i };
+      matched = true;
     }
 
-    throw this.error('Expected literal');
+    if (!matched) {
+      return this.fail('Expected literal');
+    }
+
+    return { kind: 'literal', start, end: this.i };
   }
 
   public parseArray(): ValueNode {
@@ -293,7 +308,7 @@ class Scanner {
     const open = this.next();
 
     if (open !== '[') {
-      throw this.error('Expected [');
+      return this.fail('Expected [');
     }
 
     while (!this.eof()) {
@@ -327,7 +342,7 @@ class Scanner {
       // Allow trailing commas + comments; keep going.
     }
 
-    throw this.error('Unterminated array');
+    return this.fail('Unterminated array');
   }
 
   public parseObject(): ValueNode {
@@ -336,10 +351,11 @@ class Scanner {
     const open = this.next();
 
     if (open !== '{') {
-      throw this.error('Expected {');
+      this.fail('Expected {');
     }
 
     const props: PropNode[] = [];
+    let result: ValueNode | null = null;
 
     while (!this.eof()) {
       this.skipWhitespaceAndComments();
@@ -351,7 +367,9 @@ class Scanner {
 
         this.i += 1;
 
-        return { kind: 'object', start, end: this.i, openBrace, closeBrace, props };
+        result = { kind: 'object', start, end: this.i, openBrace, closeBrace, props };
+
+        break;
       }
 
       let keyTok: TokenRange;
@@ -361,13 +379,13 @@ class Scanner {
       } else if (isIdentStart(ch)) {
         keyTok = this.parseIdentifier();
       } else {
-        throw this.error('Expected object key');
+        this.fail('Expected object key');
       }
 
       this.skipWhitespaceAndComments();
 
       if (this.peek() !== ':') {
-        throw this.error('Expected :');
+        this.fail('Expected :');
       }
 
       this.i += 1;
@@ -398,7 +416,11 @@ class Scanner {
       // Allow trailing commas/comments; object end handled at top.
     }
 
-    throw this.error('Unterminated object');
+    if (!result) {
+      this.fail('Unterminated object');
+    }
+
+    return result;
   }
 
   public parseValue(): ValueNode {
@@ -406,30 +428,35 @@ class Scanner {
 
     const start = this.i;
     const ch = this.peek();
+    let value: ValueNode | null = null;
 
     if (ch === '{') {
-      return this.parseObject();
+      value = this.parseObject();
     }
 
     if (ch === '[') {
-      return this.parseArray();
+      value = this.parseArray();
     }
 
     if (ch === '"' || ch === "'") {
       const s = this.parseString();
 
-      return { kind: 'string', start: s.start, end: s.end };
+      value = { kind: 'string', start: s.start, end: s.end };
     }
 
     if (ch === '-' || ch === '+' || /[0-9]/.test(ch)) {
-      return this.parseNumberLike();
+      value = this.parseNumberLike();
     }
 
     if (ch === 't' || ch === 'f' || ch === 'n') {
-      return this.parseLiteral();
+      value = this.parseLiteral();
     }
 
-    throw this.error(`Unexpected token at ${start}`);
+    if (!value) {
+      return this.fail(`Unexpected token at ${start}`);
+    }
+
+    return value;
   }
 }
 
@@ -474,10 +501,7 @@ const renderInsertedProperty = (input: RenderInsertedPropertyInput): string => {
   const wrapper = JSON.stringify({ [input.key]: input.value }, null, 2);
   const lines = wrapper.split('\n');
   const inner = lines.slice(1, -1); // drop { and }
-
-  const strip2 = (line: string): string => (line.startsWith('  ') ? line.slice(2) : line);
-
-  const adjusted = inner.map(l => input.indent + strip2(l));
+  const adjusted = inner.map(l => input.indent + (l.startsWith('  ') ? l.slice(2) : l));
 
   return adjusted.join(input.newline);
 };
@@ -490,7 +514,6 @@ const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
   }
 
   const templateObject = templateValue as JsonObject;
-
   const newline = detectNewline(userText);
   const templateKeys = Object.keys(templateValue);
   const templateKeySet = new Set(templateKeys);
@@ -589,6 +612,12 @@ const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
 };
 
 export const syncJsoncTextToTemplateKeys = (input: SyncInput): SyncResult => {
+  if (!isPlainObject(input.templateJson)) {
+    return { ok: true, text: input.userText, changed: false };
+  }
+
+  let result: SyncResult = { ok: true, text: input.userText, changed: false };
+
   try {
     const root = parseRootObjectOrThrow(input.userText);
     const edits = collectEditsForObjectSync({
@@ -597,18 +626,18 @@ export const syncJsoncTextToTemplateKeys = (input: SyncInput): SyncResult => {
       templateValue: input.templateJson,
     });
 
-    if (edits.length === 0) {
-      return { ok: true, text: input.userText, changed: false };
+    if (edits.length > 0) {
+      const next = applyEditsDescending(input.userText, edits);
+
+      result = { ok: true, text: next, changed: next !== input.userText };
     }
-
-    const next = applyEditsDescending(input.userText, edits);
-
-    return { ok: true, text: next, changed: next !== input.userText };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
 
-    return { ok: false, error: msg };
+    result = { ok: false, error: msg };
   }
+
+  return result;
 };
 
 // Backward-compatible alias (historical name).

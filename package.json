@@ -16,7 +16,7 @@
   "scripts": {
     "build": "bun run scripts/build.ts",
     "deps": "bunx depcruise -c ./.dependency-cruiser.cjs src index.ts oxlint-plugin.ts",
-    "firebat": "bun dist/firebat.js --log-level trace",
+    "firebat": "bun dist/firebat.js",
     "firebat:fix": "bun firebat --fix --log-level trace",
     "firebat:agent": "bun firebat --format json --no-exit --log-level error --fix",
     "firebat:ci": "bun firebat --format json --log-level error",

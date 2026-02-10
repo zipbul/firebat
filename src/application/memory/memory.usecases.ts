@@ -77,7 +77,8 @@ const getRepository = async (input: { readonly root?: string; readonly logger: F
 const listMemoriesUseCase = async (input: RootInput) => {
   input.logger.debug('memory:list');
 
-  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
+  const repoInput = input.root === undefined ? { logger: input.logger } : { root: input.root, logger: input.logger };
+  const { projectKey, repo } = await getRepository(repoInput);
 
   return repo.listKeys({ projectKey });
 };
@@ -85,7 +86,8 @@ const listMemoriesUseCase = async (input: RootInput) => {
 const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutput | null> => {
   input.logger.debug('memory:read', { memoryKey: input.memoryKey });
 
-  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
+  const repoInput = input.root === undefined ? { logger: input.logger } : { root: input.root, logger: input.logger };
+  const { projectKey, repo } = await getRepository(repoInput);
   const rec = await repo.read({ projectKey, memoryKey: input.memoryKey });
 
   if (!rec) {
@@ -102,7 +104,8 @@ const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutp
 const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
   input.logger.debug('memory:write', { memoryKey: input.memoryKey });
 
-  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
+  const repoInput = input.root === undefined ? { logger: input.logger } : { root: input.root, logger: input.logger };
+  const { projectKey, repo } = await getRepository(repoInput);
   const payloadJson = JSON.stringify(input.value);
 
   await repo.write({ projectKey, memoryKey: input.memoryKey, payloadJson });
@@ -111,7 +114,8 @@ const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
 const deleteMemoryUseCase = async (input: DeleteMemoryInput): Promise<void> => {
   input.logger.debug('memory:delete', { memoryKey: input.memoryKey });
 
-  const { projectKey, repo } = await getRepository({ root: input.root, logger: input.logger });
+  const repoInput = input.root === undefined ? { logger: input.logger } : { root: input.root, logger: input.logger };
+  const { projectKey, repo } = await getRepository(repoInput);
 
   await repo.delete({ projectKey, memoryKey: input.memoryKey });
 };

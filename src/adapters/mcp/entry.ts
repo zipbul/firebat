@@ -2,22 +2,26 @@ import { appendFirebatLog } from '../../infra/logging';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
 import { runMcpServer } from './server';
 
+const appendMcpErrorLog = async (message: string): Promise<void> => {
+  if (message.trim().length === 0) {
+    return;
+  }
+
+  try {
+    const { rootAbs } = await resolveFirebatRootFromCwd();
+
+    await appendFirebatLog(rootAbs, '.firebat/mcp-error.log', message);
+  } catch (err) {
+    process.stderr.write(`[firebat] Failed to append MCP error log: ${String(err)}\n`);
+  }
+};
+
 const installMcpErrorHandlers = (): void => {
-  const append = async (message: string): Promise<void> => {
-    try {
-      const { rootAbs } = await resolveFirebatRootFromCwd();
-
-      await appendFirebatLog(rootAbs, '.firebat/mcp-error.log', message);
-    } catch {
-      // ignore
-    }
-  };
-
   process.on('uncaughtException', err => {
     const msg = `[firebat] uncaughtException: ${err.name}: ${err.message}\n${err.stack ?? ''}`;
 
     process.stderr.write(msg + '\n');
-    void append(`uncaughtException\n${err.name}: ${err.message}\n${err.stack ?? ''}`);
+    void appendMcpErrorLog(`uncaughtException\n${err.name}: ${err.message}\n${err.stack ?? ''}`);
   });
 
   process.on('unhandledRejection', reason => {
@@ -31,7 +35,7 @@ const installMcpErrorHandlers = (): void => {
             : '[firebat] non-Error rejection reason';
 
     process.stderr.write(`[firebat] unhandledRejection: ${message}\n`);
-    void append(`unhandledRejection\n${message}`);
+    void appendMcpErrorLog(`unhandledRejection\n${message}`);
   });
 };
 

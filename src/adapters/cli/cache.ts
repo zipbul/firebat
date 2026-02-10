@@ -50,35 +50,57 @@ const printCacheHelp = (): void => {
   writeStdout(lines.join('\n'));
 };
 
+const printCacheAndExit = (code: number): number => {
+  printCacheHelp();
+
+  return code;
+};
+
 const safeRemoveFile = async (filePath: string): Promise<'removed' | 'missing' | 'failed'> => {
-  try {
-    const file = Bun.file(filePath);
+  let result: 'removed' | 'missing' | 'failed' = 'missing';
+  const hasPath = filePath.trim().length > 0;
 
-    if (!(await file.exists())) {
-      return 'missing';
-    }
-
-    await rm(filePath);
-
-    return 'removed';
-  } catch {
-    return 'failed';
+  if (!hasPath) {
+    return result;
   }
+
+  if (hasPath) {
+    try {
+      const file = Bun.file(filePath);
+
+      if (await file.exists()) {
+        await rm(filePath);
+
+        result = 'removed';
+      }
+    } catch (err) {
+      process.stderr.write(`[firebat] cache clean failed to remove ${filePath}: ${String(err)}\n`);
+
+      result = 'failed';
+    }
+  }
+
+  return result;
 };
 
 export const runCache = async (argv: readonly string[], logger: FirebatLogger): Promise<number> => {
   const sub = argv[0] ?? '';
+  let exitCode: number | null = null;
 
-  if (sub === '--help' || sub === '-h' || sub.length === 0) {
-    printCacheHelp();
+  if (sub === '--help' || sub === '-h') {
+    exitCode = 0;
+  }
 
-    return sub.length === 0 ? 1 : 0;
+  if (sub.length === 0) {
+    exitCode = 1;
   }
 
   if (sub !== 'clean') {
-    printCacheHelp();
+    exitCode = 1;
+  }
 
-    return 1;
+  if (exitCode !== null) {
+    return printCacheAndExit(exitCode);
   }
 
   logger.debug('cache clean: resolving root');
@@ -113,7 +135,7 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
       logger.error(`  - ${item}`);
     }
 
-    return 1;
+    exitCode = 1;
   }
 
   logger.info('cache clean done');
@@ -126,5 +148,5 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
     logger.info('cache already clean');
   }
 
-  return 0;
+  return exitCode ?? 0;
 };

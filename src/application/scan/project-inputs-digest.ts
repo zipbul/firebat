@@ -9,6 +9,10 @@ import { runWithConcurrency } from '../../engine/promise-pool';
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 const listRootTsconfigs = async (rootAbs: string): Promise<string[]> => {
+  if (rootAbs.trim().length === 0) {
+    return [];
+  }
+
   try {
     const entries = await readdir(rootAbs, { withFileTypes: true });
 
@@ -39,6 +43,11 @@ const computeProjectInputsDigest = async (input: {
   fileIndexRepository: FileIndexRepository;
 }): Promise<string> => {
   const files = await listProjectInputFiles(input.rootAbs);
+
+  if (files.length === 0) {
+    return hashString('');
+  }
+
   const partsByIndex: string[] = new Array<string>(files.length);
   const concurrency = Math.max(1, Math.min(16, files.length));
 
@@ -47,6 +56,15 @@ const computeProjectInputsDigest = async (input: {
     concurrency,
     async item => {
       const filePath = normalizePath(item.filePathAbs);
+      const isEmptyPath = filePath.trim().length === 0;
+
+      if (isEmptyPath) {
+        partsByIndex[item.index] = `project:missing:${filePath}`;
+      }
+
+      if (isEmptyPath) {
+        return;
+      }
 
       try {
         const existing = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });

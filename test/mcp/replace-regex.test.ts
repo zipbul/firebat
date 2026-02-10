@@ -1,5 +1,4 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import * as path from 'node:path';
 
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
@@ -159,7 +158,7 @@ describe('replace_regex', () => {
 
   test('should handle invalid regex gracefully', async () => {
     // Arrange & Act
-    const { structured, isError } = await callToolSafe(ctx.client, 'replace_regex', {
+    const { structured } = await callToolSafe(ctx.client, 'replace_regex', {
       root: ctx.tmpRootAbs,
       relativePath: 'src/rx4.ts',
       regex: '[invalid(regex',

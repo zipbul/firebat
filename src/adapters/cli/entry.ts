@@ -45,6 +45,12 @@ const writeStdout = (text: string): void => {
   process.stdout.write(text + '\n');
 };
 
+const printHelpAndExit = (): number => {
+  printHelp();
+
+  return 0;
+};
+
 const printHelp = (): void => {
   const c = isTty();
   const lines = [
@@ -112,7 +118,6 @@ const countBlockingFindings = (report: FirebatReport): number => {
     'exception-hygiene': exceptionHygiene,
     'barrel-policy': barrelPolicy,
   } = analyses;
-
   const typecheckErrors = analyses.typecheck?.items?.filter(item => item.severity === 'error').length ?? 0;
   const forwardingFindings = analyses.forwarding?.findings?.length ?? 0;
   const lintErrors = analyses.lint?.diagnostics?.filter(item => item.severity === 'error').length ?? 0;
@@ -177,27 +182,91 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'api-drift': apiDrift,
     forwarding,
   } = features;
+  const disabled = new Set<FirebatDetector>();
 
-  const enabled: Record<FirebatDetector, boolean> = {
-    'exact-duplicates': exactDuplicates !== false,
-    waste: waste !== false,
-    'barrel-policy': barrelPolicy !== false,
-    'unknown-proof': unknownProof !== false,
-    'exception-hygiene': exceptionHygiene !== false,
-    format: format !== false,
-    lint: lint !== false,
-    typecheck: typecheck !== false,
-    dependencies: dependencies !== false,
-    coupling: coupling !== false,
-    'structural-duplicates': structuralDuplicates !== false,
-    nesting: nesting !== false,
-    'early-return': earlyReturn !== false,
-    noop: noop !== false,
-    'api-drift': apiDrift !== false,
-    forwarding: forwarding !== false,
-  };
+  if (exactDuplicates === false) {
+    disabled.add('exact-duplicates');
+  }
 
-  return all.filter(detector => enabled[detector]);
+  if (waste === false) {
+    disabled.add('waste');
+  }
+
+  if (barrelPolicy === false) {
+    disabled.add('barrel-policy');
+  }
+
+  if (unknownProof === false) {
+    disabled.add('unknown-proof');
+  }
+
+  if (exceptionHygiene === false) {
+    disabled.add('exception-hygiene');
+  }
+
+  if (format === false) {
+    disabled.add('format');
+  }
+
+  if (lint === false) {
+    disabled.add('lint');
+  }
+
+  if (typecheck === false) {
+    disabled.add('typecheck');
+  }
+
+  if (dependencies === false) {
+    disabled.add('dependencies');
+  }
+
+  if (coupling === false) {
+    disabled.add('coupling');
+  }
+
+  if (structuralDuplicates === false) {
+    disabled.add('structural-duplicates');
+  }
+
+  if (nesting === false) {
+    disabled.add('nesting');
+  }
+
+  if (earlyReturn === false) {
+    disabled.add('early-return');
+  }
+
+  if (noop === false) {
+    disabled.add('noop');
+  }
+
+  if (apiDrift === false) {
+    disabled.add('api-drift');
+  }
+
+  if (forwarding === false) {
+    disabled.add('forwarding');
+  }
+
+  return all.filter(detector => !disabled.has(detector));
+};
+
+const appendCliErrorLog = async (err: unknown): Promise<void> => {
+  if (err === undefined || err === null) {
+    return;
+  }
+
+  try {
+    const { rootAbs } = await resolveFirebatRootFromCwd();
+
+    await appendFirebatLog(
+      rootAbs,
+      '.firebat/cli-error.log',
+      err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err),
+    );
+  } catch (logErr) {
+    process.stderr.write(`[firebat] Failed to append CLI error log: ${String(logErr)}\n`);
+  }
 };
 
 const resolveUnknownProofBoundaryGlobsFromFeatures = (
@@ -205,23 +274,15 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 ): ReadonlyArray<string> | undefined => {
   const { 'unknown-proof': value } = features ?? {};
 
-  if (value === undefined || value === false) {
+  if (!value || value === true || typeof value !== 'object') {
     return undefined;
   }
 
-  if (value === true) {
-    return undefined;
-  }
+  const boundaryGlobs = (value as { boundaryGlobs?: unknown }).boundaryGlobs;
 
-  if (typeof value === 'object' && value !== null) {
-    const boundaryGlobs = value.boundaryGlobs;
-
-    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
-      ? boundaryGlobs
-      : undefined;
-  }
-
-  return undefined;
+  return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
+    ? boundaryGlobs
+    : undefined;
 };
 
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
@@ -229,23 +290,15 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
 ): ReadonlyArray<string> | undefined => {
   const { 'barrel-policy': value } = features ?? {};
 
-  if (value === undefined || value === false) {
+  if (!value || value === true || typeof value !== 'object') {
     return undefined;
   }
 
-  if (value === true) {
-    return undefined;
-  }
+  const ignoreGlobs = (value as { ignoreGlobs?: unknown }).ignoreGlobs;
 
-  if (typeof value === 'object' && value !== null) {
-    const ignoreGlobs = value.ignoreGlobs;
-
-    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
-      ? ignoreGlobs
-      : undefined;
-  }
-
-  return undefined;
+  return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
+    ? ignoreGlobs
+    : undefined;
 };
 
 const resolveMinSizeFromFeatures = (
@@ -340,7 +393,8 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 };
 
 const runCli = async (argv: readonly string[]): Promise<number> => {
-  let options: FirebatCliOptions;
+  let exitCode = 0;
+  let options: FirebatCliOptions | null = null;
   // Create early logger for resolveOptions; upgraded after options are known.
   const earlyLogger = createCliLogger({ level: undefined, logStack: undefined });
 
@@ -349,70 +403,53 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    try {
-      const { rootAbs } = await resolveFirebatRootFromCwd();
-
-      await appendFirebatLog(
-        rootAbs,
-        '.firebat/cli-error.log',
-        err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err),
-      );
-    } catch {
-      // ignore
-    }
-
+    await appendCliErrorLog(err);
     createPrettyConsoleLogger({ level: 'error', includeStack: false }).error(message);
 
-    return 1;
+    exitCode = 1;
   }
 
-  const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
-
-  logger.debug(
-    `Options resolved: ${options.targets.length} targets, ${options.detectors.length} detectors, format=${options.format}`,
-  );
-
-  if (options.help) {
-    printHelp();
-
-    return 0;
+  if (options?.help) {
+    return printHelpAndExit();
   }
 
-  let report: FirebatReport;
+  if (exitCode === 0 && options) {
+    const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
 
-  try {
-    report = await scanUseCase(options, { logger });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    logger.debug(
+      `Options resolved: ${options.targets.length} targets, ${options.detectors.length} detectors, format=${options.format}`,
+    );
 
-    try {
-      const { rootAbs } = await resolveFirebatRootFromCwd();
+    if (exitCode === 0) {
+      let report: FirebatReport | null = null;
 
-      await appendFirebatLog(
-        rootAbs,
-        '.firebat/cli-error.log',
-        err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ''}` : String(err),
-      );
-    } catch {
-      // ignore
+      try {
+        report = await scanUseCase(options, { logger });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+
+        await appendCliErrorLog(err);
+
+        logger.error('Failed', { message }, err);
+
+        exitCode = 1;
+      }
+
+      if (report) {
+        const output = formatReport(report, options.format);
+
+        logger.trace(`Report formatted (${options.format}), length=${output.length}`);
+
+        process.stdout.write(output + '\n');
+
+        const findingCount = countBlockingFindings(report);
+
+        logger.debug(`Blocking findings: ${findingCount}`);
+
+        exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
+      }
     }
-
-    logger.error('Failed', { message }, err);
-
-    return 1;
   }
-
-  const output = formatReport(report, options.format);
-
-  logger.trace(`Report formatted (${options.format}), length=${output.length}`);
-
-  process.stdout.write(output + '\n');
-
-  const findingCount = countBlockingFindings(report);
-
-  logger.debug(`Blocking findings: ${findingCount}`);
-
-  const exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
 
   return exitCode;
 };

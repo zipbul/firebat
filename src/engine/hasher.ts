@@ -1,5 +1,6 @@
 const initHasher = async (): Promise<void> => {
   // No-op: Bun.hash is always available at runtime.
+  void 0;
 };
 
 const toU64Hex = (value: bigint): string => {

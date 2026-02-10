@@ -21,6 +21,28 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 };
 
+const asRecordOrThrow = (value: unknown, message: string): Record<string, unknown> => {
+  if (!isRecord(value)) {
+    throw new Error(message);
+  }
+
+  return value;
+};
+
+const ensureRecordProperty = (obj: Record<string, unknown>, key: string): Record<string, unknown> => {
+  const current = obj[key];
+
+  if (isRecord(current)) {
+    return current;
+  }
+
+  const created: Record<string, unknown> = {};
+
+  obj[key] = created;
+
+  return created;
+};
+
 const jsonText = (value: unknown): string => {
   return JSON.stringify(value, null, 2) + '\n';
 };
@@ -67,6 +89,35 @@ const readJsonFile = async (filePath: string): Promise<unknown> => {
   const text = await Bun.file(filePath).text();
 
   return Bun.JSONC.parse(text) as unknown;
+};
+
+type InstallManifestBaseSnapshot = {
+  readonly sha256: string;
+  readonly filePath: string;
+};
+
+type InstallManifest = {
+  baseSnapshots: Record<string, InstallManifestBaseSnapshot>;
+};
+
+const asInstallManifest = (value: unknown): InstallManifest => {
+  if (!isRecord(value)) {
+    throw new Error('Expected install manifest to be an object');
+  }
+
+  const baseSnapshots = value.baseSnapshots;
+
+  if (!isRecord(baseSnapshots)) {
+    throw new Error('Expected install manifest to have baseSnapshots object');
+  }
+
+  return {
+    baseSnapshots: baseSnapshots as Record<string, InstallManifestBaseSnapshot>,
+  };
+};
+
+const setBaseSnapshot = (manifest: InstallManifest, fileName: string, snapshot: InstallManifestBaseSnapshot): void => {
+  manifest.baseSnapshots[fileName] = snapshot;
 };
 
 const writeJsonFile = async (filePath: string, value: unknown): Promise<void> => {
@@ -119,6 +170,16 @@ const findFirstPrimitivePath = (value: unknown): { path: string[]; value: Primit
   };
 
   return visit(value, []);
+};
+
+const requireFirstPrimitivePath = (value: unknown): { path: string[]; value: Primitive } => {
+  const leaf = findFirstPrimitivePath(value);
+
+  if (!leaf) {
+    throw new Error('Expected at least one primitive path');
+  }
+
+  return leaf;
 };
 
 const setAtPath = (root: unknown, pathItems: readonly string[], nextValue: unknown): void => {
@@ -195,24 +256,25 @@ test('should apply template changes when user matches base', async () => {
     expect(installResult.result).toBe(0);
 
     const manifestPath = path.join(tmpRootAbs, '.firebat', 'install-manifest.json');
-    const manifest = (await readJsonFile(manifestPath)) as any;
+    const manifest = asInstallManifest(await readJsonFile(manifestPath));
     const templatePath = path.resolve(import.meta.dir, '../../../assets/.firebatrc.jsonc');
     const templateText = await Bun.file(templatePath).text();
-    const templateParsed = Bun.JSONC.parse(templateText);
+    const templateParsed = Bun.JSONC.parse(templateText) as unknown;
     const keyToRemove = findFirstKey(templateParsed);
-    const baseParsed = cloneJson(templateParsed) as any;
+    const baseParsed = cloneJson(templateParsed);
+    const baseParsedRecord = asRecordOrThrow(baseParsed, 'Expected template JSON to be an object');
 
-    delete baseParsed[keyToRemove];
+    delete baseParsedRecord[keyToRemove];
 
     const userParsed = cloneJson(baseParsed);
-    const baseText = jsonText(baseParsed);
+    const baseText = jsonText(baseParsedRecord);
     const baseSha = sha256Hex(baseText);
     const baseSnapshotPath = path.join(tmpRootAbs, '.firebat', 'install-bases', `.firebatrc.jsonc.${baseSha}.json`);
 
     await mkdir(path.dirname(baseSnapshotPath), { recursive: true });
     await Bun.write(baseSnapshotPath, baseText);
 
-    manifest.baseSnapshots['.firebatrc.jsonc'] = { sha256: baseSha, filePath: baseSnapshotPath };
+    setBaseSnapshot(manifest, '.firebatrc.jsonc', { sha256: baseSha, filePath: baseSnapshotPath });
 
     await Bun.write(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
@@ -253,16 +315,11 @@ test('should not overwrite user-edited existing keys', async () => {
 
     const manifestPath = path.join(tmpRootAbs, '.firebat', 'install-manifest.json');
     const manifestBeforeText = await Bun.file(manifestPath).text();
-    const manifest = JSON.parse(manifestBeforeText) as any;
+    const manifest = asInstallManifest(JSON.parse(manifestBeforeText) as unknown);
     const templatePath = path.resolve(import.meta.dir, '../../../assets/.firebatrc.jsonc');
     const templateText = await Bun.file(templatePath).text();
-    const templateParsed = Bun.JSONC.parse(templateText);
-    const leaf = findFirstPrimitivePath(templateParsed);
-
-    if (!leaf) {
-      throw new Error('Expected at least one primitive path in template');
-    }
-
+    const templateParsed = Bun.JSONC.parse(templateText) as unknown;
+    const leaf = requireFirstPrimitivePath(templateParsed);
     const baseParsed = cloneJson(templateParsed);
     const userParsed = cloneJson(templateParsed);
 
@@ -278,7 +335,7 @@ test('should not overwrite user-edited existing keys', async () => {
     await mkdir(path.dirname(baseSnapshotPath), { recursive: true });
     await Bun.write(baseSnapshotPath, baseText);
 
-    manifest.baseSnapshots['.firebatrc.jsonc'] = { sha256: baseSha, filePath: baseSnapshotPath };
+    setBaseSnapshot(manifest, '.firebatrc.jsonc', { sha256: baseSha, filePath: baseSnapshotPath });
 
     await Bun.write(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
@@ -302,11 +359,10 @@ test('should not overwrite user-edited existing keys', async () => {
     // No key additions/removals => file should not be rewritten (comments preserved).
     expect(afterRcText).toBe(beforeRcText);
 
-    const afterParsed = Bun.JSONC.parse(afterRcText) as any;
-    // User value should remain.
-    const afterLeaf = findFirstPrimitivePath(afterParsed);
+    const afterParsed = Bun.JSONC.parse(afterRcText) as unknown;
+    const afterLeaf = requireFirstPrimitivePath(afterParsed);
 
-    expect(afterLeaf?.value).toBe('USER');
+    expect(afterLeaf.value).toBe('USER');
   } finally {
     process.chdir(originalCwd);
     await rm(tmpRootAbs, { recursive: true, force: true });
@@ -329,14 +385,15 @@ test('should delete keys missing from template even if user added them', async (
 
     const rcPath = path.join(tmpRootAbs, '.firebatrc.jsonc');
     const rcText = await Bun.file(rcPath).text();
-    const parsed = Bun.JSONC.parse(rcText) as any;
+    const parsedRaw = Bun.JSONC.parse(rcText) as unknown;
+    const parsed = asRecordOrThrow(parsedRaw, 'Expected parsed .firebatrc.jsonc to be an object');
 
     // Inject extra keys (root + nested) that are not present in the template.
     parsed.__extraRootKey = 123;
 
-    if (parsed.features && typeof parsed.features === 'object') {
-      parsed.features.__extraFeatureKey = true;
-    }
+    const features = ensureRecordProperty(parsed, 'features');
+
+    features.__extraFeatureKey = true;
 
     await Bun.write(rcPath, `// keep me\n${jsonText(parsed)}`);
 
@@ -349,7 +406,8 @@ test('should delete keys missing from template even if user added them', async (
     expect(updateResult.result).toBe(0);
 
     const afterText = await Bun.file(rcPath).text();
-    const after = Bun.JSONC.parse(afterText) as any;
+    const afterRaw = Bun.JSONC.parse(afterText) as unknown;
+    const after = asRecordOrThrow(afterRaw, 'Expected updated .firebatrc.jsonc to be an object');
 
     expect(after.__extraRootKey).toBeUndefined();
     expect(after.features?.__extraFeatureKey).toBeUndefined();
@@ -377,7 +435,7 @@ test('should not rewrite .oxfmtrc.jsonc when keyset is unchanged (comments prese
 
     const templatePath = path.resolve(import.meta.dir, '../../../assets/.oxfmtrc.jsonc');
     const templateText = await Bun.file(templatePath).text();
-    const templateParsed = Bun.JSONC.parse(templateText) as any;
+    const templateParsed = Bun.JSONC.parse(templateText) as unknown;
     const cfgPath = path.join(tmpRootAbs, '.oxfmtrc.jsonc');
     const userText = `// keep me\n${jsonText(templateParsed)}`;
 
@@ -418,7 +476,8 @@ test('should delete keys missing from template in .oxlintrc.jsonc', async () => 
 
     const cfgPath = path.join(tmpRootAbs, '.oxlintrc.jsonc');
     const beforeText = await Bun.file(cfgPath).text();
-    const parsed = Bun.JSONC.parse(beforeText) as any;
+    const parsedRaw = Bun.JSONC.parse(beforeText) as unknown;
+    const parsed = asRecordOrThrow(parsedRaw, 'Expected parsed .oxlintrc.jsonc to be an object');
 
     parsed.__extraRootKey = 123;
 
@@ -433,7 +492,8 @@ test('should delete keys missing from template in .oxlintrc.jsonc', async () => 
     expect(updateResult.result).toBe(0);
 
     const afterText = await Bun.file(cfgPath).text();
-    const after = Bun.JSONC.parse(afterText) as any;
+    const afterRaw = Bun.JSONC.parse(afterText) as unknown;
+    const after = asRecordOrThrow(afterRaw, 'Expected updated .oxlintrc.jsonc to be an object');
 
     expect(after.__extraRootKey).toBeUndefined();
     expect(afterText).toContain('// keep me');

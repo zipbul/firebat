@@ -141,7 +141,15 @@ interface LoadedTextFile {
   readonly text: string;
 }
 
+const failLoadText = (message: string): never => {
+  throw new Error(message);
+};
+
 export const loadFirstExistingText = async (candidates: ReadonlyArray<string>): Promise<LoadedTextFile> => {
+  if (candidates.length === 0) {
+    return failLoadText('[firebat] No asset candidates provided. Ensure the firebat package includes assets/.');
+  }
+
   for (const filePath of candidates) {
     try {
       const file = Bun.file(filePath);
@@ -156,7 +164,7 @@ export const loadFirstExistingText = async (candidates: ReadonlyArray<string>): 
     }
   }
 
-  throw new Error('[firebat] Could not locate packaged assets/. Ensure the firebat package includes assets/.');
+  return failLoadText('[firebat] Could not locate packaged assets/. Ensure the firebat package includes assets/.');
 };
 
 export const resolveAssetCandidates = (assetFileName: string): string[] => {

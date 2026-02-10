@@ -44,27 +44,30 @@ const LEVEL_COLOR: Record<LogLevel, string> = {
 };
 
 const createLogger = (minLevel: LogLevel): Logger => {
-  const minPriority = LEVEL_PRIORITY[minLevel];
+  const shouldLog = (level: LogLevel): boolean => LEVEL_PRIORITY[level] >= LEVEL_PRIORITY[minLevel];
 
-  const log = (level: LogLevel, message: string, meta?: Record<string, unknown>): void => {
-    if (LEVEL_PRIORITY[level] < minPriority) {
+  const formatMeta = (meta?: Record<string, unknown>): string =>
+    meta && Object.keys(meta).length > 0 ? ` ${ANSI.dim}${JSON.stringify(meta)}${ANSI.reset}` : '';
+
+  const emit = (level: LogLevel, message: string, meta?: Record<string, unknown>): void => {
+    if (!shouldLog(level)) {
       return;
     }
 
     const emoji = LEVEL_EMOJI[level];
     const color = LEVEL_COLOR[level];
     const levelLabel = level.toUpperCase().padEnd(5);
-    const metaStr = meta && Object.keys(meta).length > 0 ? ` ${ANSI.dim}${JSON.stringify(meta)}${ANSI.reset}` : '';
+    const metaStr = formatMeta(meta);
 
     console.log(`${emoji}  ${color}${ANSI.bold}${levelLabel}${ANSI.reset} ${color}${message}${ANSI.reset}${metaStr}`);
   };
 
   return {
-    trace: (msg, meta) => log('trace', msg, meta),
-    debug: (msg, meta) => log('debug', msg, meta),
-    info: (msg, meta) => log('info', msg, meta),
-    warn: (msg, meta) => log('warn', msg, meta),
-    error: (msg, meta) => log('error', msg, meta),
+    trace: (msg, meta) => emit('trace', msg, meta),
+    debug: (msg, meta) => emit('debug', msg, meta),
+    info: (msg, meta) => emit('info', msg, meta),
+    warn: (msg, meta) => emit('warn', msg, meta),
+    error: (msg, meta) => emit('error', msg, meta),
   };
 };
 
@@ -129,7 +132,9 @@ const findFileByPrefix = async (dirPath: string, prefixUppercase: string): Promi
     }
 
     return null;
-  } catch {
+  } catch (err) {
+    process.stderr.write(`[firebat] findFileByPrefix failed: ${String(err)}\n`);
+
     return null;
   }
 };
@@ -139,11 +144,11 @@ const tryReadText = async (filePath: string | null): Promise<string | null> => {
     return null;
   }
 
-  try {
-    return await readTextFile(filePath);
-  } catch {
+  if (!(await fileExists(filePath))) {
     return null;
   }
+
+  return readTextFile(filePath);
 };
 
 const getApache20TextFromInstalledDeps = async (): Promise<string | null> => {

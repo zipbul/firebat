@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
 
-import { createMcpTestContext, callTool, getTextContent, type McpTestContext } from './helpers/mcp-client';
+import { createMcpTestContext, callTool, type McpTestContext } from './helpers/mcp-client';
 
 let ctx: McpTestContext;
 
@@ -33,7 +33,8 @@ describe('resource: report://last', () => {
     expect(result.contents).toBeDefined();
     expect(result.contents.length).toBeGreaterThan(0);
 
-    const text = result.contents[0]?.text ?? (result.contents[0] as any)?.blob ?? '';
+    const content = result.contents[0];
+    const text = content && 'text' in content ? content.text : content && 'blob' in content ? content.blob : '';
 
     expect(typeof text).toBe('string');
     expect(text.length).toBeGreaterThan(0);
@@ -43,7 +44,8 @@ describe('resource: report://last', () => {
     // Act
     const result = await ctx.client.readResource({ uri: 'report://last' });
     // Assert
-    const text = result.contents[0]?.text ?? '';
+    const content = result.contents[0];
+    const text = content && 'text' in content ? content.text : '';
 
     expect(text.length).toBeGreaterThan(0);
   }, 30_000);

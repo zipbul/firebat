@@ -19,75 +19,165 @@ interface TsgoTraceResult {
   readonly structured?: unknown;
 }
 
-type SourcePosition = { readonly line: number; readonly column: number };
+interface SourcePosition {
+  readonly line: number;
+  readonly column: number;
+}
 
-type SourceSpan = {
+interface SourceSpan {
   readonly start: SourcePosition;
   readonly end: SourcePosition;
-};
+}
 
-type TraceNode = {
+interface TraceNode {
   readonly id: string;
   readonly kind: 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
   readonly label: string;
   readonly filePath?: string;
   readonly span?: SourceSpan;
-};
+}
 
-type TraceEdge = {
+interface TraceEdge {
   readonly from: string;
   readonly to: string;
   readonly kind: 'references' | 'imports' | 'exports' | 'calls' | 'type-of' | 'unknown';
   readonly label?: string;
-};
+}
 
-type TraceGraph = {
+interface TraceGraph {
   readonly nodes: ReadonlyArray<TraceNode>;
   readonly edges: ReadonlyArray<TraceEdge>;
-};
+}
 
-type TraceEvidenceSpan = {
+interface TraceEvidenceSpan {
   readonly filePath: string;
   readonly span: SourceSpan;
   readonly text?: string;
-};
+}
 
-type LspPosition = { readonly line: number; readonly character: number };
+interface LspPosition {
+  readonly line: number;
+  readonly character: number;
+}
 
-type LspRange = { readonly start: LspPosition; readonly end: LspPosition };
+interface LspRange {
+  readonly start: LspPosition;
+  readonly end: LspPosition;
+}
 
-type LspLocation = { readonly uri: string; readonly range: LspRange };
+interface LspLocation {
+  readonly uri: string;
+  readonly range: LspRange;
+}
 
-type LspLocationLink = {
+interface LspLocationLink {
   readonly targetUri: string;
   readonly targetRange: LspRange;
   readonly targetSelectionRange?: LspRange;
   readonly originSelectionRange?: LspRange;
-};
+}
 
-type LspRequestPayload = { id: string | number; method: string; params: unknown };
+interface LspRequestPayload {
+  readonly id: string | number;
+  readonly method: string;
+  readonly params: unknown;
+}
 
-type StdinWriter = { write: (chunk: Uint8Array) => unknown; flush?: () => unknown; end?: () => unknown };
+interface LspPendingRequest {
+  readonly resolve: (value: unknown) => void;
+  readonly reject: (error: Error) => void;
+}
 
-type LspErrorPayload = { message?: string };
+interface LspConfigurationItemsParams {
+  readonly items?: unknown;
+}
 
-type LspInboundMessage = { id?: unknown; error?: LspErrorPayload; result?: unknown };
+interface LspInboundRequestJson {
+  readonly id?: unknown;
+  readonly method?: unknown;
+  readonly params?: unknown;
+}
 
-type LspConnectionStartOptions = { cwd: string; command: string; args: string[] };
+interface LspInboundNotificationJson {
+  readonly method?: unknown;
+  readonly params?: unknown;
+}
 
-type LspSessionInput = { root: string; tsconfigPath?: string; logger: FirebatLogger };
+interface SymbolPositionCandidate {
+  readonly score: number;
+  readonly line: number;
+  readonly character: number;
+}
 
-type OpenTsDocumentInput = { lsp: LspConnection; filePath: string; languageId?: string; version?: number; text?: string };
+interface ResolvedTsgoCommand {
+  readonly command: string;
+  readonly args: string[];
+  readonly note?: string;
+}
 
-type TsgoLspSession = {
+interface WithTsgoSessionOk<T> {
+  readonly ok: true;
+  readonly value: T;
+  readonly note?: string;
+}
+
+interface WithTsgoSessionFail {
+  readonly ok: false;
+  readonly error: string;
+}
+
+type WithTsgoSessionResult<T> = WithTsgoSessionOk<T> | WithTsgoSessionFail;
+
+interface OpenTsDocumentResult {
+  readonly uri: string;
+  readonly text: string;
+}
+
+interface StdinWriter {
+  write: (chunk: Uint8Array) => unknown;
+  flush?: () => unknown;
+  end?: () => unknown;
+}
+
+interface LspErrorPayload {
+  readonly message?: string;
+}
+
+interface LspInboundMessage {
+  readonly id?: unknown;
+  readonly error?: LspErrorPayload;
+  readonly result?: unknown;
+}
+
+interface LspConnectionStartOptions {
+  readonly cwd: string;
+  readonly command: string;
+  readonly args: string[];
+}
+
+interface LspSessionInput {
+  readonly root: string;
+  readonly tsconfigPath?: string;
+  readonly logger: FirebatLogger;
+}
+
+interface OpenTsDocumentInput {
+  readonly lsp: LspConnection;
+  readonly filePath: string;
+  readonly languageId?: string;
+  readonly version?: number;
+  readonly text?: string;
+}
+
+interface TsgoLspSession {
   readonly lsp: LspConnection;
   readonly cwd: string;
   readonly rootUri: string;
   readonly initializeResult: unknown;
   readonly note?: string;
-};
+}
 
-type SharedTsgoSessionEntry = {
+interface SharedTsgoSessionEntry {
   readonly key: string;
   readonly session: TsgoLspSession;
   readonly lsp: LspConnection;
@@ -95,12 +185,16 @@ type SharedTsgoSessionEntry = {
   queue: Promise<unknown>;
   idleTimer: Timer | null;
   note?: string;
-};
+}
 
 const sharedTsgoSessions = new Map<string, SharedTsgoSessionEntry>();
 const DEFAULT_SHARED_IDLE_MS = 5_000;
 
-type SharedKeyInput = { cwd: string; command: string; args: string[] };
+interface SharedKeyInput {
+  readonly cwd: string;
+  readonly command: string;
+  readonly args: string[];
+}
 
 const makeSharedKey = (input: SharedKeyInput): string => {
   return `${input.command}\n${input.args.join('\u0000')}\n${input.cwd}`;
@@ -139,9 +233,22 @@ const scheduleSharedIdleClose = (entry: SharedTsgoSessionEntry): void => {
   }, DEFAULT_SHARED_IDLE_MS);
 };
 
-type SharedTsgoSessionInput = { root: string; tsconfigPath?: string };
+interface SharedTsgoSessionInput {
+  readonly root: string;
+  readonly tsconfigPath?: string;
+}
 
-type SharedTsgoSessionResult = { ok: true; entry: SharedTsgoSessionEntry } | { ok: false; error: string };
+interface SharedTsgoSessionOk {
+  readonly ok: true;
+  readonly entry: SharedTsgoSessionEntry;
+}
+
+interface SharedTsgoSessionFail {
+  readonly ok: false;
+  readonly error: string;
+}
+
+type SharedTsgoSessionResult = SharedTsgoSessionOk | SharedTsgoSessionFail;
 
 const acquireSharedTsgoSession = async (input: SharedTsgoSessionInput): Promise<SharedTsgoSessionResult> => {
   const cwd = input.tsconfigPath
@@ -272,7 +379,7 @@ const splitLines = (text: string): string[] => text.split(/\r?\n/);
 const findSymbolPositionInText = (text: string, symbol: string): LspPosition | null => {
   const lines = splitLines(text);
   const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const candidates: Array<{ score: number; line: number; character: number }> = [];
+  const candidates: Array<SymbolPositionCandidate> = [];
   // Prefer likely declarations.
   const declPatterns = [
     new RegExp(`\\b(class|interface|type|enum|function)\\s+${escaped}\\b`),
@@ -362,10 +469,22 @@ class LspConnection {
   private readonly proc: ReturnType<typeof Bun.spawn>;
   private readonly stdin: StdinWriter;
   private nextId = 1;
-  private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  private readonly pending = new Map<number, LspPendingRequest>();
   private readonly notificationHandlers = new Map<string, Set<(params: unknown) => void>>();
   private readonly anyNotificationHandlers = new Set<(method: string, params: unknown) => void>();
   private readonly readerLoop: Promise<void>;
+
+  static async start(opts: LspConnectionStartOptions): Promise<LspConnection> {
+    const proc = Bun.spawn({
+      cmd: [opts.command, ...opts.args],
+      cwd: opts.cwd,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'pipe',
+    });
+
+    return new LspConnection(proc);
+  }
 
   private constructor(proc: ReturnType<typeof Bun.spawn>) {
     this.proc = proc;
@@ -383,18 +502,6 @@ class LspConnection {
 
     this.stdin = stdin as StdinWriter;
     this.readerLoop = this.startReadLoop();
-  }
-
-  static async start(opts: LspConnectionStartOptions): Promise<LspConnection> {
-    const proc = Bun.spawn({
-      cmd: [opts.command, ...opts.args],
-      cwd: opts.cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      stdin: 'pipe',
-    });
-
-    return new LspConnection(proc);
   }
 
   private writeToStdin(payload: Uint8Array): void {
@@ -442,7 +549,8 @@ class LspConnection {
 
       // Some servers request configuration values after initialization.
       if (method === 'workspace/configuration') {
-        const items = Array.isArray(params?.items) ? params.items : [];
+        const paramsRecord = params && typeof params === 'object' ? (params as LspConfigurationItemsParams) : undefined;
+        const items = Array.isArray(paramsRecord?.items) ? paramsRecord.items : [];
 
         ok(items.map(() => null));
 
@@ -543,7 +651,7 @@ class LspConnection {
 
       while (msg) {
         if (msg && typeof msg === 'object' && 'id' in msg && 'method' in msg) {
-          const json = msg as { id?: unknown; method?: unknown; params?: unknown };
+          const json = msg as LspInboundRequestJson;
           const id = json.id;
           const method = typeof json.method === 'string' ? json.method : '';
           const params = json.params;
@@ -571,7 +679,7 @@ class LspConnection {
 
         // Notifications (JSON-RPC: method without id)
         if (msg && typeof msg === 'object' && 'method' in msg && !('id' in msg)) {
-          const json = msg as { method?: unknown; params?: unknown };
+          const json = msg as LspInboundNotificationJson;
           const method = typeof json.method === 'string' ? json.method : '';
           const params = json.params;
 
@@ -753,11 +861,11 @@ class LspConnection {
       return '';
     }
 
-    return new Response(this.proc.stderr as BodyInit).text();
+    return new Response(this.proc.stderr).text();
   }
 }
 
-const tryResolveTsgoCommand = async (cwd: string): Promise<{ command: string; args: string[]; note?: string } | null> => {
+const tryResolveTsgoCommand = async (cwd: string): Promise<ResolvedTsgoCommand | null> => {
   const resolved = await tryResolveLocalBin({ cwd, binName: 'tsgo', callerDir: import.meta.dir });
 
   if (resolved) {
@@ -924,27 +1032,30 @@ const runTsgoTraceSymbol = async (req: TsgoTraceRequest): Promise<TsgoTraceResul
 
       if (defLocations.length > 0) {
         const def = defLocations[0];
-        const defPath = fileUrlToPathSafe(def.uri);
-        const defSpan = toSpanFromRange(def.range);
-        const defNodeId = `ref:def:${defPath}:${def.range.start.line}:${def.range.start.character}`;
 
-        addNode({
-          id: defNodeId,
-          kind: 'reference',
-          label: `definition:${path.basename(defPath)}:${defSpan.start.line}`,
-          filePath: defPath,
-          span: defSpan,
-        });
-        addEdge({ from: symbolNodeId, to: defNodeId, kind: 'references', label: 'definition' });
+        if (def) {
+          const defPath = fileUrlToPathSafe(def.uri);
+          const defSpan = toSpanFromRange(def.range);
+          const defNodeId = `ref:def:${defPath}:${def.range.start.line}:${def.range.start.character}`;
 
-        const defFileNodeId = `file:${defPath}`;
+          addNode({
+            id: defNodeId,
+            kind: 'reference',
+            label: `definition:${path.basename(defPath)}:${defSpan.start.line}`,
+            filePath: defPath,
+            span: defSpan,
+          });
+          addEdge({ from: symbolNodeId, to: defNodeId, kind: 'references', label: 'definition' });
 
-        addNode({ id: defFileNodeId, kind: 'file', label: path.basename(defPath), filePath: defPath });
-        addEdge({ from: defNodeId, to: defFileNodeId, kind: 'references' });
+          const defFileNodeId = `file:${defPath}`;
 
-        const text = await extractEvidenceText(defPath, defSpan);
+          addNode({ id: defFileNodeId, kind: 'file', label: path.basename(defPath), filePath: defPath });
+          addEdge({ from: defNodeId, to: defFileNodeId, kind: 'references' });
 
-        evidence.push({ filePath: defPath, span: defSpan, ...(text !== undefined ? { text } : {}) });
+          const text = await extractEvidenceText(defPath, defSpan);
+
+          evidence.push({ filePath: defPath, span: defSpan, ...(text !== undefined ? { text } : {}) });
+        }
       }
 
       const maxRefs = Math.max(1, req.maxDepth ?? 200);
@@ -990,7 +1101,7 @@ export type { LspPosition, LspRange, LspLocation, LspLocationLink, TsgoLspSessio
 export const withTsgoLspSession = async <T>(
   input: LspSessionInput,
   fn: (session: TsgoLspSession) => Promise<T>,
-): Promise<{ ok: true; value: T; note?: string } | { ok: false; error: string }> => {
+): Promise<WithTsgoSessionResult<T>> => {
   try {
     input.logger.debug('Acquiring tsgo LSP session', { root: input.root, tsconfigPath: input.tsconfigPath });
 
@@ -1022,7 +1133,7 @@ export const withTsgoLspSession = async <T>(
   }
 };
 
-export const openTsDocument = async (input: OpenTsDocumentInput): Promise<{ uri: string; text: string }> => {
+export const openTsDocument = async (input: OpenTsDocumentInput): Promise<OpenTsDocumentResult> => {
   const text = input.text ?? (await readFileText(input.filePath));
   const uri = pathToFileURL(input.filePath).toString();
 

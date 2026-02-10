@@ -1,3 +1,6 @@
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { CallToolResult, ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { watch } from 'node:fs';
@@ -130,24 +133,15 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 ): ReadonlyArray<string> | undefined => {
   const value = features?.['unknown-proof'];
 
-  if (value === undefined || value === false) {
+  if (!value || value === true || typeof value !== 'object') {
     return undefined;
   }
 
-  if (value === true) {
-    // Global by default: do not apply boundary matching unless explicitly configured.
-    return undefined;
-  }
+  const boundaryGlobs = value.boundaryGlobs;
 
-  if (typeof value === 'object' && value !== null) {
-    const boundaryGlobs = value.boundaryGlobs;
-
-    return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
-      ? boundaryGlobs
-      : undefined;
-  }
-
-  return undefined;
+  return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
+    ? boundaryGlobs
+    : undefined;
 };
 
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
@@ -155,23 +149,15 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
 ): ReadonlyArray<string> | undefined => {
   const value = features?.['barrel-policy'];
 
-  if (value === undefined || value === false) {
+  if (!value || value === true || typeof value !== 'object') {
     return undefined;
   }
 
-  if (value === true) {
-    return undefined;
-  }
+  const ignoreGlobs = value.ignoreGlobs;
 
-  if (typeof value === 'object' && value !== null) {
-    const ignoreGlobs = value.ignoreGlobs;
-
-    return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
-      ? ignoreGlobs
-      : undefined;
-  }
-
-  return undefined;
+  return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
+    ? ignoreGlobs
+    : undefined;
 };
 
 const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['features'] | undefined => {
@@ -188,7 +174,7 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
     return root;
   }
 
-  const out: NonNullable<FirebatConfig['features']> = { ...(root ?? {}) };
+  const out: Record<string, unknown> = { ...root };
 
   for (const detector of ALL_DETECTORS) {
     const override = overrides[detector as keyof typeof overrides];
@@ -200,7 +186,7 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
     out[detector] = override;
   }
 
-  return out;
+  return out as NonNullable<FirebatConfig['features']>;
 };
 
 const nowMs = (): number => {
@@ -221,10 +207,15 @@ interface DiffCounts {
 }
 
 /** Wrap a tool handler so that any thrown error becomes a proper MCP error response instead of an unhandled rejection. */
-const safeTool = <TArgs>(handler: (args: TArgs) => Promise<unknown>) => {
-  return async (args: TArgs): Promise<unknown> => {
+const safeTool = <TArgs>(
+  handler: (
+    args: TArgs,
+    extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+  ) => CallToolResult | Promise<CallToolResult>,
+) => {
+  return async (args: TArgs, extra: RequestHandlerExtra<ServerRequest, ServerNotification>): Promise<CallToolResult> => {
     try {
-      return await handler(args);
+      return await handler(args, extra);
     } catch (err: unknown) {
       const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       const stack = err instanceof Error && err.stack ? `\n${err.stack}` : '';
@@ -239,10 +230,20 @@ const safeTool = <TArgs>(handler: (args: TArgs) => Promise<unknown>) => {
   };
 };
 
+const toStructured = (value: object): Record<string, unknown> => value as Record<string, unknown>;
+
+const toToolResult = (structured: object): CallToolResult => ({
+  content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
+  structuredContent: toStructured(structured),
+});
+
 export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): Promise<McpServer> => {
   const rootAbs = options.rootAbs;
   const config = options.config ?? null;
   const logger = options.logger;
+
+  logger.debug('MCP server: init', { rootAbs, hasConfig: config !== null });
+
   const server = new McpServer({
     name: 'firebat',
     version: '2.0.0-strict',
@@ -270,6 +271,10 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     }
 
     const countFindings = (r: FirebatReport): number => {
+      if (!r.analyses) {
+        return 0;
+      }
+
       let total = 0;
       const a = r.analyses as Record<string, unknown>;
 
@@ -396,7 +401,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -456,7 +461,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -500,7 +505,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -545,7 +550,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -588,6 +593,10 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         const walk = async (dir: string, prefix: string): Promise<void> => {
           const dirents = await readdir(dir, { withFileTypes: true });
 
+          if (dirents.length === 0) {
+            return;
+          }
+
           for (const d of dirents) {
             const rel = prefix ? `${prefix}/${d.name}` : d.name;
             const isDir = d.isDirectory();
@@ -606,7 +615,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-          structuredContent: structured,
+          structuredContent: toStructured(structured),
         };
       }
 
@@ -616,7 +625,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -644,7 +653,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -683,7 +692,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -717,7 +726,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -748,7 +757,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -797,7 +806,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -864,7 +873,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -888,7 +897,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -921,9 +930,23 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         .strict(),
     },
     safeTool(async (args: z.infer<typeof GetProjectOverviewInputSchema>) => {
+      if (rootAbs.trim().length === 0) {
+        return toToolResult({
+          root: rootAbs,
+          symbolIndex: { indexedFileCount: 0, symbolCount: 0, lastIndexedAt: null },
+          tools: { tsgo: false, oxlint: false },
+          lastScanAt: null,
+          error: 'Project root is not set',
+        });
+      }
+
       const symbolIndex = await getIndexStatsFromIndexUseCase(args.root !== undefined ? { root: args.root, logger } : { logger });
       // Best-effort tool availability check
       const tsgoAvailable = await (async () => {
+        if (rootAbs.trim().length === 0) {
+          return false;
+        }
+
         try {
           const r = await checkCapabilitiesUseCase({ root: rootAbs, logger });
 
@@ -933,6 +956,10 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         }
       })();
       const oxlintAvailable = await (async () => {
+        if (rootAbs.trim().length === 0) {
+          return false;
+        }
+
         try {
           const r = await runOxlint({ targets: [], cwd: rootAbs, logger });
 
@@ -951,7 +978,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -1003,7 +1030,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1041,7 +1068,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1085,7 +1112,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1119,7 +1146,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1147,7 +1174,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1177,7 +1204,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1210,7 +1237,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1248,7 +1275,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1286,7 +1313,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1315,6 +1342,10 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         .strict(),
     },
     safeTool(async (args: z.infer<typeof FormatDocumentInputSchema>) => {
+      if (args.filePath.trim().length === 0) {
+        return toToolResult({ ok: false, error: 'filePath is required' });
+      }
+
       const rootAbs = resolveRootAbs(args.root);
       const fileAbs = path.isAbsolute(args.filePath) ? args.filePath : path.resolve(rootAbs, args.filePath);
       // Check if filePath is a directory
@@ -1325,7 +1356,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
         isDir = typeof stat.isDirectory === 'function' && stat.isDirectory();
       } catch {
-        /* not found */
+        isDir = false;
       }
 
       if (isDir) {
@@ -1347,7 +1378,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
         const structured = { ok: true, changed: changedCount > 0, changedCount };
 
-        return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+        return toToolResult(structured);
       }
 
       const structured = await formatDocumentUseCase({
@@ -1357,7 +1388,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1398,7 +1429,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1439,7 +1470,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1477,7 +1508,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1507,7 +1538,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1542,7 +1573,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await replaceRangeUseCase({ ...args, root: rootAbs, logger });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1584,7 +1615,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1612,7 +1643,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await replaceSymbolBodyUseCase({ ...args, root: rootAbs, logger });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1640,7 +1671,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await insertBeforeSymbolUseCase({ ...args, root: rootAbs, logger });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1668,7 +1699,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await insertAfterSymbolUseCase({ ...args, root: rootAbs, logger });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1706,7 +1737,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         logger,
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1733,7 +1764,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await getTypescriptDependenciesUseCase({ root: rootAbs, logger });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1766,7 +1797,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         ...(args.limit !== undefined ? { limit: args.limit } : {}),
       });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1790,7 +1821,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await getAvailableExternalSymbolsInFileUseCase({ ...args, root: rootAbs });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1814,7 +1845,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const rootAbs = resolveRootAbs(args.root);
       const structured = await parseImportsUseCase({ ...args, root: rootAbs });
 
-      return { content: [{ type: 'text' as const, text: JSON.stringify(structured) }], structuredContent: structured };
+      return toToolResult(structured);
     }),
   );
 
@@ -1843,6 +1874,10 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (_args: z.infer<typeof CheckToolAvailabilityInputSchema>) => {
       const tsgo = await (async () => {
+        if (rootAbs.trim().length === 0) {
+          return { available: false, note: 'root missing' };
+        }
+
         try {
           const r = await checkCapabilitiesUseCase({ root: rootAbs, logger });
 
@@ -1852,6 +1887,10 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         }
       })();
       const oxlint = await (async () => {
+        if (rootAbs.trim().length === 0) {
+          return { available: false, note: 'root missing' };
+        }
+
         try {
           const r = await runOxlint({ targets: [], cwd: rootAbs, logger });
           const available = r.ok === true || (r.error !== undefined && !r.error.includes('not available'));
@@ -1866,7 +1905,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: structured,
+        structuredContent: toStructured(structured),
       };
     }),
   );
@@ -1966,6 +2005,11 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
 export const runMcpServer = async (): Promise<void> => {
   const ctx = await resolveRuntimeContextFromCwd();
+
+  if (ctx.rootAbs.trim().length === 0) {
+    return;
+  }
+
   const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs }).catch(() => null);
   const config = loaded?.config ?? null;
   const logger = createPrettyConsoleLogger({ level: 'warn' });
@@ -2029,7 +2073,8 @@ export const runMcpServer = async (): Promise<void> => {
 
             // Prevent the watcher from keeping large resources if closed.
             w.on('error', () => undefined);
-          } catch {
+          } catch (err) {
+            logger.warn('MCP server: watch failed', { dirAbs, error: String(err) });
             continue;
           }
         }

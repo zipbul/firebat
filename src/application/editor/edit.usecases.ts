@@ -12,11 +12,6 @@ interface SourcePosition {
   column: number;
 }
 
-interface SourceSpan {
-  start: SourcePosition;
-  end: SourcePosition;
-}
-
 type Extracted = ReturnType<typeof extractSymbolsOxc>[number];
 
 interface EditResult {
@@ -158,6 +153,10 @@ export const replaceRangeUseCase = async (input: ReplaceRangeInput): Promise<Edi
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
+  if (input.relativePath.trim().length === 0) {
+    return { ok: false, filePath: fileAbs, changed: false, error: 'Relative path is required' };
+  }
+
   input.logger.debug('edit:replaceRange', { filePath: input.relativePath, startLine: input.startLine, endLine: input.endLine });
 
   try {
@@ -187,6 +186,10 @@ export const replaceRangeUseCase = async (input: ReplaceRangeInput): Promise<Edi
 export const replaceRegexUseCase = async (input: ReplaceRegexInput): Promise<EditResultWithCount> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  if (input.relativePath.trim().length === 0) {
+    return { ok: false, filePath: fileAbs, changed: false, error: 'Relative path is required' };
+  }
 
   input.logger.debug('edit:replaceRegex', { filePath: input.relativePath, regex: input.regex });
 
@@ -219,6 +222,10 @@ export const replaceRegexUseCase = async (input: ReplaceRegexInput): Promise<Edi
 export const insertBeforeSymbolUseCase = async (input: InsertBeforeSymbolInput): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  if (input.namePath.trim().length === 0) {
+    return { ok: false, filePath: fileAbs, changed: false, error: `Symbol not found: ${input.namePath}` };
+  }
 
   input.logger.debug('edit:insertBefore', { filePath: input.relativePath, namePath: input.namePath });
 
@@ -253,6 +260,10 @@ export const insertAfterSymbolUseCase = async (input: InsertAfterSymbolInput): P
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
 
+  if (input.namePath.trim().length === 0) {
+    return { ok: false, filePath: fileAbs, changed: false, error: `Symbol not found: ${input.namePath}` };
+  }
+
   input.logger.debug('edit:insertAfter', { filePath: input.relativePath, namePath: input.namePath });
 
   try {
@@ -283,6 +294,10 @@ export const insertAfterSymbolUseCase = async (input: InsertAfterSymbolInput): P
 export const replaceSymbolBodyUseCase = async (input: ReplaceSymbolBodyInput): Promise<EditResult> => {
   const rootAbs = resolveRootAbs(input.root);
   const fileAbs = resolveFileAbs(rootAbs, input.relativePath);
+
+  if (input.namePath.trim().length === 0) {
+    return { ok: false, filePath: fileAbs, changed: false, error: `Symbol not found: ${input.namePath}` };
+  }
 
   input.logger.debug('edit:replaceSymbolBody', { filePath: input.relativePath, namePath: input.namePath });
 

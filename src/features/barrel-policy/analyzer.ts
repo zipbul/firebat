@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import type { ParsedFile } from '../../engine/types';
+import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { BarrelPolicyAnalysis, BarrelPolicyFinding, SourceSpan } from '../../types';
 
 import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
@@ -129,7 +129,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
     }
 
     if (node.type === 'ImportDeclaration') {
-      const spec = getLiteralString(asNodeLike(node)?.source);
+      const spec = getLiteralString(asNodeLike(node)?.source as NodeValue);
 
       if (typeof spec === 'string') {
         items.push({
@@ -144,7 +144,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
     }
 
     if (node.type === 'ExportNamedDeclaration') {
-      const spec = getLiteralString(asNodeLike(node)?.source);
+      const spec = getLiteralString(asNodeLike(node)?.source as NodeValue);
 
       if (typeof spec === 'string') {
         items.push({
@@ -159,7 +159,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
     }
 
     if (node.type === 'ExportAllDeclaration') {
-      const spec = getLiteralString(asNodeLike(node)?.source);
+      const spec = getLiteralString(asNodeLike(node)?.source as NodeValue);
 
       if (typeof spec === 'string') {
         items.push({
@@ -237,7 +237,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
     const type = stmtRecord?.type;
 
     if (type === 'ExportNamedDeclaration') {
-      const source = getLiteralString(stmtRecord?.source);
+      const source = getLiteralString(stmtRecord?.source as NodeValue);
       const declaration = stmtRecord?.declaration;
 
       if (typeof source === 'string' && (declaration === null || declaration === undefined)) {

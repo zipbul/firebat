@@ -36,6 +36,10 @@ const shouldIncludeSourceFile = (filePath: string): boolean => {
 };
 
 const scanDirForSourceFiles = async (dirAbs: string): Promise<string[]> => {
+  if (dirAbs.trim().length === 0) {
+    return [];
+  }
+
   const out: string[] = [];
 
   for (const pattern of ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx']) {
@@ -50,13 +54,18 @@ const scanDirForSourceFiles = async (dirAbs: string): Promise<string[]> => {
 };
 
 const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promise<string[]> => {
+  if (targets.length === 0) {
+    return [];
+  }
+
   const results: string[] = [];
 
   for (const raw of targets) {
     const abs = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
-
     // Check if it's a directory
-    try {
+    const exists = await Bun.file(abs).exists();
+
+    if (exists) {
       const stat = await Bun.file(abs).stat();
 
       if (stat.isDirectory()) {
@@ -66,8 +75,6 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
 
         continue;
       }
-    } catch {
-      // not a file/dir — might be a glob pattern
     }
 
     // Glob pattern

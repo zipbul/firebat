@@ -1,8 +1,5 @@
 {
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
-
-
-
   "features": {
     "exception-hygiene": true,
     "barrel-policy": true,
@@ -21,6 +18,5 @@
     "api-drift": true,
     "forwarding": { "maxForwardDepth": 0 }
   },
-
   "mcp": "inherit"
 }

@@ -1,32 +1,32 @@
 // Rich fixture for analysis tools: scan, find_pattern, lint
 // Contains intentional patterns for various detectors.
 
-export const hello = () => {
+const hello = () => {
   console.log('hello');
 
   return 123;
 };
 
 // Intentional duplicate of hello (exact-duplicates detector)
-export const hello2 = () => {
+const hello2 = () => {
   console.log('hello');
 
   return 123;
 };
 
-export function add(a: number, b: number): number {
+function add(a: number, b: number): number {
   return a + b;
 }
 
-export function subtract(a: number, b: number): number {
+function subtract(a: number, b: number): number {
   return a - b;
 }
 
-export function multiply(a: number, b: number): number {
+function multiply(a: number, b: number): number {
   return a * b;
 }
 
-export class Calculator {
+class Calculator {
   value: number = 0;
 
   add(n: number): this {
@@ -56,22 +56,30 @@ export class Calculator {
   }
 }
 
-export interface Shape {
+void Calculator;
+
+interface Shape {
   area(): number;
   perimeter(): number;
 }
 
-export type Point = { x: number; y: number };
+interface Point {
+  x: number;
+  y: number;
+}
 
-export type Rectangle = { topLeft: Point; bottomRight: Point };
+interface Rectangle {
+  topLeft: Point;
+  bottomRight: Point;
+}
 
-export enum Color {
+enum Color {
   Red = 'red',
   Green = 'green',
   Blue = 'blue',
 }
 
-export enum Direction {
+enum Direction {
   Up,
   Down,
   Left,
@@ -84,7 +92,7 @@ const unused = 42;
 void unused;
 
 // Nesting: deeply nested
-export function deepNest(a: boolean, b: boolean, c: boolean): string {
+function deepNest(a: boolean, b: boolean, c: boolean): string {
   if (a) {
     if (b) {
       if (c) {
@@ -101,7 +109,7 @@ export function deepNest(a: boolean, b: boolean, c: boolean): string {
 }
 
 // Early return candidate
-export function earlyReturnCandidate(x: number): string {
+function earlyReturnCandidate(x: number): string {
   if (x > 0) {
     if (x > 10) {
       return 'big';
@@ -114,16 +122,20 @@ export function earlyReturnCandidate(x: number): string {
 }
 
 // Noop block
-export function withNoop(flag: boolean): void {
+function withNoop(flag: boolean): void {
   if (flag) {
     // intentionally empty
   }
 }
 
 // Multiple console.log for find_pattern
-export function logMany(): void {
+function logMany(): void {
   console.log('one');
   console.log('two');
   console.log('three');
   console.error('not a log');
 }
+
+export { hello, hello2, add, subtract, multiply, deepNest, earlyReturnCandidate, withNoop, logMany, Color, Direction };
+
+export type { Rectangle, Point, Shape };

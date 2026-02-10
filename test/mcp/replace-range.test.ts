@@ -1,5 +1,4 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
-import * as path from 'node:path';
 
 import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } from './helpers/mcp-client';
 
@@ -116,7 +115,7 @@ describe('replace_range', () => {
 
   test('should handle non-existent file', async () => {
     // Arrange & Act
-    const { structured, isError } = await callToolSafe(ctx.client, 'replace_range', {
+    const { structured } = await callToolSafe(ctx.client, 'replace_range', {
       root: ctx.tmpRootAbs,
       relativePath: 'src/nope.ts',
       startLine: 1,
