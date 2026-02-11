@@ -4,6 +4,40 @@ import { createMcpTestContext, callTool, type McpTestContext } from './helpers/m
 
 let ctx: McpTestContext;
 
+interface ResourceContentText {
+  readonly text: string;
+}
+
+interface ResourceContentBlob {
+  readonly blob: string;
+}
+
+type ResourceContent = ResourceContentText | ResourceContentBlob;
+
+interface PromptMessage {
+  readonly role: string;
+  readonly content: unknown;
+}
+
+const extractResourceText = (content: ResourceContent | undefined): string => {
+  if (!content) {
+    return '';
+  }
+
+  if ('text' in content) {
+    return content.text;
+  }
+
+  return 'blob' in content ? content.blob : '';
+};
+
+const assertMessagesHaveContent = (messages: ReadonlyArray<PromptMessage>): void => {
+  messages.forEach(message => {
+    expect(message.role).toBeDefined();
+    expect(message.content).toBeDefined();
+  });
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({ copyFixtures: true });
 }, 30_000);
@@ -33,8 +67,7 @@ describe('resource: report://last', () => {
     expect(result.contents).toBeDefined();
     expect(result.contents.length).toBeGreaterThan(0);
 
-    const content = result.contents[0];
-    const text = content && 'text' in content ? content.text : content && 'blob' in content ? content.blob : '';
+    const text = extractResourceText(result.contents[0] as ResourceContent | undefined);
 
     expect(typeof text).toBe('string');
     expect(text.length).toBeGreaterThan(0);
@@ -44,8 +77,7 @@ describe('resource: report://last', () => {
     // Act
     const result = await ctx.client.readResource({ uri: 'report://last' });
     // Assert
-    const content = result.contents[0];
-    const text = content && 'text' in content ? content.text : '';
+    const text = extractResourceText(result.contents[0] as ResourceContent | undefined);
 
     expect(text.length).toBeGreaterThan(0);
   }, 30_000);
@@ -78,22 +110,23 @@ describe('prompt: review', () => {
     });
 
     // Assert
-    for (const msg of result.messages) {
-      expect(msg.role).toBeDefined();
-      expect(msg.content).toBeDefined();
-    }
+    assertMessagesHaveContent(result.messages as ReadonlyArray<PromptMessage>);
   }, 30_000);
 
   test('should handle repeated calls', async () => {
     // Act & Assert
-    for (let i = 0; i < 3; i++) {
-      const result = await ctx.client.getPrompt({
-        name: 'review',
-        arguments: { reportJson: JSON.stringify({ meta: {}, analyses: {} }) },
-      });
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        ctx.client.getPrompt({
+          name: 'review',
+          arguments: { reportJson: JSON.stringify({ meta: {}, analyses: {} }) },
+        }),
+      ),
+    );
 
+    results.forEach(result => {
       expect(result.messages.length).toBeGreaterThan(0);
-    }
+    });
   }, 60_000);
 });
 
@@ -114,19 +147,16 @@ describe('prompt: workflow', () => {
     const result = await ctx.client.getPrompt({ name: 'workflow' });
 
     // Assert
-    for (const msg of result.messages) {
-      expect(msg.role).toBeDefined();
-      expect(msg.content).toBeDefined();
-    }
+    assertMessagesHaveContent(result.messages as ReadonlyArray<PromptMessage>);
   }, 30_000);
 
   test('should handle repeated calls', async () => {
     // Act & Assert
-    for (let i = 0; i < 3; i++) {
-      const result = await ctx.client.getPrompt({ name: 'workflow' });
+    const results = await Promise.all(Array.from({ length: 3 }, () => ctx.client.getPrompt({ name: 'workflow' })));
 
+    results.forEach(result => {
       expect(result.messages.length).toBeGreaterThan(0);
-    }
+    });
   }, 60_000);
 });
 
@@ -137,21 +167,11 @@ describe('prompt: workflow', () => {
 describe('error handling', () => {
   test('should fail gracefully for non-existent resource', async () => {
     // Act & Assert
-    try {
-      await ctx.client.readResource({ uri: 'report://nonexistent' });
-      // If it doesn't throw, that's also fine – just verify it returns something
-    } catch (err: any) {
-      expect(err).toBeDefined();
-    }
+    await expect(ctx.client.readResource({ uri: 'report://nonexistent' })).rejects.toBeDefined();
   }, 30_000);
 
   test('should fail gracefully for non-existent prompt', async () => {
     // Act & Assert
-    try {
-      await ctx.client.getPrompt({ name: 'nonexistent-prompt' });
-      // If it doesn't throw, that's also fine
-    } catch (err: any) {
-      expect(err).toBeDefined();
-    }
+    await expect(ctx.client.getPrompt({ name: 'nonexistent-prompt' })).rejects.toBeDefined();
   }, 30_000);
 });

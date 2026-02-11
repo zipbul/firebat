@@ -27,11 +27,9 @@ describe('get_definitions', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.definitions)).toBe(true);
-      expect(structured.definitions.length).toBeGreaterThan(0);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.definitions)).toBe(true);
+    expect(structured.definitions.length).toBeGreaterThan(0);
   }, 30_000);
 
   test('should get definition with include_body=true', async () => {
@@ -48,10 +46,8 @@ describe('get_definitions', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.definitions)).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.definitions)).toBe(true);
   }, 30_000);
 
   test('should get definition with custom before/after context', async () => {

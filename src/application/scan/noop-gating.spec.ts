@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { shouldIncludeNoopEmptyCatch } from './noop-gating';
 
-describe('scan/noop-gating', () => {
+describe('noop-gating', () => {
   it('should include noop empty-catch when exception-hygiene is not selected', () => {
     // Arrange
     const exceptionHygieneSelected = false;

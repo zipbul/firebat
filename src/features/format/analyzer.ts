@@ -4,18 +4,20 @@ import type { FormatAnalysis } from '../../types';
 import { runOxfmt } from '../../infrastructure/oxfmt/oxfmt-runner';
 import { createNoopLogger } from '../../ports/logger';
 
-export const createEmptyFormat = (): FormatAnalysis => ({
+const createEmptyFormat = (): FormatAnalysis => ({
   status: 'ok',
   tool: 'oxfmt',
 });
 
-export const analyzeFormat = async (input: {
+interface AnalyzeFormatInput {
   readonly targets: ReadonlyArray<string>;
   readonly fix: boolean;
   readonly configPath?: string;
   readonly cwd?: string;
   readonly logger?: FirebatLogger;
-}): Promise<FormatAnalysis> => {
+}
+
+export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<FormatAnalysis> => {
   const logger = input.logger ?? createNoopLogger();
   const result = await runOxfmt({
     targets: input.targets,
@@ -56,3 +58,5 @@ export const analyzeFormat = async (input: {
     ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
   };
 };
+
+export { analyzeFormat, createEmptyFormat };

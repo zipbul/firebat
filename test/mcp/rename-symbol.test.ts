@@ -35,11 +35,9 @@ describe('rename_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.changedFiles)).toBe(true);
-      expect(structured.changedFiles.length).toBeGreaterThan(0);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.changedFiles)).toBe(true);
+    expect(structured.changedFiles.length).toBeGreaterThan(0);
   }, 30_000);
 
   test('should rename a class', async () => {

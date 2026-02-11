@@ -25,12 +25,10 @@ describe('get_document_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.symbols).toBeDefined();
-      expect(Array.isArray(structured.symbols)).toBe(true);
-      expect(structured.symbols.length).toBeGreaterThan(0);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.symbols).toBeDefined();
+    expect(Array.isArray(structured.symbols)).toBe(true);
+    expect(structured.symbols.length).toBeGreaterThan(0);
   }, 30_000);
 
   test('should return symbols for the sample fixture', async () => {
@@ -44,10 +42,8 @@ describe('get_document_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.symbols)).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.symbols)).toBe(true);
   }, 30_000);
 
   test('should return symbols for the editable fixture', async () => {

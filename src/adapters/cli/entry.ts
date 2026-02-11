@@ -17,6 +17,14 @@ interface CliLoggerInput {
   readonly logStack: FirebatCliOptions['logStack'];
 }
 
+interface UnknownProofFeatureValue {
+  readonly boundaryGlobs?: unknown;
+}
+
+interface BarrelPolicyFeatureValue {
+  readonly ignoreGlobs?: unknown;
+}
+
 const createCliLogger = (input: CliLoggerInput): FirebatLogger => {
   return createPrettyConsoleLogger({
     level: input.level ?? 'info',
@@ -278,7 +286,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
     return undefined;
   }
 
-  const boundaryGlobs = (value as { boundaryGlobs?: unknown }).boundaryGlobs;
+  const boundaryGlobs = (value as UnknownProofFeatureValue).boundaryGlobs;
 
   return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
     ? boundaryGlobs
@@ -294,7 +302,7 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
     return undefined;
   }
 
-  const ignoreGlobs = (value as { ignoreGlobs?: unknown }).ignoreGlobs;
+  const ignoreGlobs = (value as BarrelPolicyFeatureValue).ignoreGlobs;
 
   return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
     ? ignoreGlobs

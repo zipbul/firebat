@@ -48,10 +48,8 @@ describe('replace_symbol_body', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
   }, 30_000);
 
   test('should replace a method body using dot notation', async () => {

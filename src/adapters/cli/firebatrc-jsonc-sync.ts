@@ -64,7 +64,7 @@ interface RenderInsertedPropertyInput {
 
 interface CollectEditsInput {
   readonly userText: string;
-  readonly userNode: Extract<ValueNode, { kind: 'object' }>;
+  readonly userNode: Extract<ValueNode, ObjectKindSelector>;
   readonly templateValue: JsonValue;
 }
 
@@ -85,6 +85,10 @@ interface SyncFailure {
 }
 
 type SyncResult = SyncSuccess | SyncFailure;
+
+interface ObjectKindSelector {
+  readonly kind: 'object';
+}
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -127,10 +131,6 @@ class Scanner {
 
   public error(message: string): Error {
     return new Error(message);
-  }
-
-  private fail<T>(message: string): T {
-    throw this.error(message);
   }
 
   public skipWhitespaceAndComments(): void {
@@ -458,9 +458,13 @@ class Scanner {
 
     return value;
   }
+
+  private fail<T>(message: string): T {
+    throw this.error(message);
+  }
 }
 
-const parseRootObjectOrThrow = (text: string): Extract<ValueNode, { kind: 'object' }> => {
+const parseRootObjectOrThrow = (text: string): Extract<ValueNode, ObjectKindSelector> => {
   const s = new Scanner(text);
   const node = s.parseValue();
 
@@ -544,7 +548,12 @@ const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
 
   if (missingKeys.length > 0) {
     if (keptProps.length > 0) {
-      const first = keptProps[0]!;
+      const first = keptProps[0];
+
+      if (!first) {
+        return [...nestedEdits, ...deletions, ...insertions];
+      }
+
       const firstLineStart = lineStartAt(userText, first.keyStart);
       const indent = userText.slice(firstLineStart, first.keyStart);
       const blockLines: string[] = [];

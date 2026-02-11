@@ -22,10 +22,8 @@ describe('check_capabilities', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.capabilities).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.capabilities).toBeDefined();
   }, 30_000);
 
   test('should accept tsconfigPath', async () => {

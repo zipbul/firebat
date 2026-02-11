@@ -26,10 +26,8 @@ describe('get_code_actions', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.actions).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.actions).toBeDefined();
   }, 30_000);
 
   test('should accept startLine and endLine', async () => {

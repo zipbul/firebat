@@ -5,9 +5,9 @@ import type { BarrelPolicyAnalysis, BarrelPolicyFinding, SourceSpan } from '../.
 
 import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
-import { createImportResolver, createWorkspacePackageMap } from './resolver';
+import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
 
-export interface BarrelPolicyOptions {
+interface BarrelPolicyOptions {
   readonly rootAbs: string;
   readonly ignoreGlobs?: ReadonlyArray<string>;
 }
@@ -109,12 +109,12 @@ const isIgnored = (rootAbs: string, fileAbs: string, matchers: ReadonlyArray<Reg
 
 type ImportLikeKind = 'import' | 'export-named' | 'export-all';
 
-type ImportLike = {
+interface ImportLike {
   readonly kind: ImportLikeKind;
   readonly specifier: string;
   readonly span: SourceSpan;
   readonly rawNode: unknown;
-};
+}
 
 const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
   const items: ImportLike[] = [];
@@ -192,7 +192,7 @@ const isExplicitIndexSpecifier = (specifier: string): boolean => {
   );
 };
 
-export const createEmptyBarrelPolicy = (): BarrelPolicyAnalysis => ({ findings: [] });
+const createEmptyBarrelPolicy = (): BarrelPolicyAnalysis => ({ findings: [] });
 
 const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): void => {
   walkOxcTree(file.program, node => {
@@ -343,7 +343,7 @@ const toAllowedBarrelSpecifier = (
 
 const checkDeepImports = async (
   activeFiles: ReadonlyArray<ParsedFile>,
-  resolver: { readonly resolve: (importerFileAbs: string, specifier: string) => Promise<string | null> },
+  resolver: ImportResolver,
   workspacePackages: ReadonlyMap<string, string>,
   fileSet: ReadonlySet<string>,
   findings: BarrelPolicyFinding[],
@@ -404,7 +404,7 @@ const checkDeepImports = async (
   }
 };
 
-export const analyzeBarrelPolicy = async (
+const analyzeBarrelPolicy = async (
   program: ReadonlyArray<ParsedFile>,
   options: BarrelPolicyOptions,
 ): Promise<BarrelPolicyAnalysis> => {
@@ -441,3 +441,6 @@ export const analyzeBarrelPolicy = async (
     findings,
   };
 };
+
+export { analyzeBarrelPolicy, createEmptyBarrelPolicy };
+export type { BarrelPolicyOptions };

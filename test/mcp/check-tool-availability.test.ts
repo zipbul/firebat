@@ -4,6 +4,20 @@ import { createMcpTestContext, callTool, type McpTestContext } from './helpers/m
 
 let ctx: McpTestContext;
 
+const assertOptionalNote = (note: unknown, requireNonEmpty: boolean): void => {
+  if (note === undefined) {
+    expect(note).toBeUndefined();
+
+    return;
+  }
+
+  expect(typeof note).toBe('string');
+
+  if (requireNonEmpty) {
+    expect((note as string).length).toBeGreaterThan(0);
+  }
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({});
 }, 30_000);
@@ -32,14 +46,8 @@ describe('check_tool_availability', () => {
     });
 
     // Assert — note is optional string
-    if (structured.tsgo.note !== undefined) {
-      expect(typeof structured.tsgo.note).toBe('string');
-      expect(structured.tsgo.note.length).toBeGreaterThan(0);
-    }
-
-    if (structured.oxlint.note !== undefined) {
-      expect(typeof structured.oxlint.note).toBe('string');
-    }
+    assertOptionalNote(structured.tsgo.note, true);
+    assertOptionalNote(structured.oxlint.note, false);
 
     // astGrep is bundled – always available, no note expected
     expect(structured.astGrep.available).toBe(true);
@@ -57,15 +65,19 @@ describe('check_tool_availability', () => {
 
   test('should be idempotent (3 rapid calls)', async () => {
     // Act & Assert
-    for (let i = 0; i < 3; i++) {
-      const { structured } = await callTool(ctx.client, 'check_tool_availability', {
-        root: ctx.tmpRootAbs,
-      });
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        callTool(ctx.client, 'check_tool_availability', {
+          root: ctx.tmpRootAbs,
+        }),
+      ),
+    );
 
+    results.forEach(({ structured }) => {
       expect(typeof structured.tsgo.available).toBe('boolean');
       expect(typeof structured.oxlint.available).toBe('boolean');
       expect(typeof structured.astGrep.available).toBe('boolean');
-    }
+    });
   }, 60_000);
 
   test('should return consistent results across calls', async () => {

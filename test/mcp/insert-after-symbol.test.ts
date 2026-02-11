@@ -43,10 +43,8 @@ describe('insert_after_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
   }, 30_000);
 
   test('should insert text after a class', async () => {

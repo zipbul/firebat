@@ -48,11 +48,9 @@ describe('replace_range', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-      expect(structured.filePath).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
+    expect(structured.filePath).toBeDefined();
   }, 30_000);
 
   test('should replace a multi-line range', async () => {
@@ -71,10 +69,8 @@ describe('replace_range', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
   }, 30_000);
 
   test('should replace with empty text (deletion)', async () => {

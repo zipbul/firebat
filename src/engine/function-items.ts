@@ -4,7 +4,7 @@ import type { ParsedFile } from './types';
 
 import { collectFunctionNodesWithParent } from './oxc-ast-utils';
 
-export type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string, parent: Node | null) => TItem | null;
+type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string, parent: Node | null) => TItem | null;
 
 const collectFunctionItems = <TItem>(
   files: ReadonlyArray<ParsedFile>,
@@ -34,3 +34,4 @@ const collectFunctionItems = <TItem>(
 };
 
 export { collectFunctionItems };
+export type { FunctionNodeAnalyzer };

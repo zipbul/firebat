@@ -87,7 +87,7 @@ const parseLogLevel = (args: string[]): LogLevel => {
   return value as LogLevel;
 };
 
-type ThirdPartyPackageInfo = {
+interface ThirdPartyPackageInfo {
   name: string;
   version: string | null;
   declaredLicense: string | null;
@@ -95,7 +95,32 @@ type ThirdPartyPackageInfo = {
   noticeFilePath: string | null;
   homepage: string | null;
   repositoryUrl: string | null;
-};
+}
+
+interface ThirdPartyNotices {
+  packages: ThirdPartyPackageInfo[];
+  apache20Text: string | null;
+}
+
+interface FormatThirdPartyNoticesInput {
+  packages: ThirdPartyPackageInfo[];
+  apache20Text: string | null;
+}
+
+interface RootPackageJson {
+  dependencies?: Record<string, string>;
+}
+
+interface PackageJsonMeta {
+  version?: string;
+  license?: string;
+  homepage?: string;
+  repository?: unknown;
+}
+
+interface RepositoryLike {
+  url?: unknown;
+}
 
 const resolveRepositoryUrl = (repository: unknown): string | null => {
   if (typeof repository === 'string') {
@@ -106,7 +131,7 @@ const resolveRepositoryUrl = (repository: unknown): string | null => {
     return null;
   }
 
-  const url = (repository as { url?: unknown }).url;
+  const url = (repository as RepositoryLike).url;
 
   return typeof url === 'string' ? url : null;
 };
@@ -165,24 +190,15 @@ const getApache20TextFromInstalledDeps = async (): Promise<string | null> => {
   return null;
 };
 
-const collectThirdPartyNotices = async (): Promise<{ packages: ThirdPartyPackageInfo[]; apache20Text: string | null }> => {
-  const rootPackageJson = (await Bun.file('package.json').json()) as {
-    dependencies?: Record<string, string>;
-  };
+const collectThirdPartyNotices = async (): Promise<ThirdPartyNotices> => {
+  const rootPackageJson = (await Bun.file('package.json').json()) as RootPackageJson;
   const dependencyNames = Object.keys(rootPackageJson.dependencies ?? {}).sort();
   const packages: ThirdPartyPackageInfo[] = [];
 
   for (const name of dependencyNames) {
     const pkgDir = path.join('node_modules', ...name.split('/'));
     const pkgJsonPath = path.join(pkgDir, 'package.json');
-    const meta = (await fileExists(pkgJsonPath))
-      ? ((await Bun.file(pkgJsonPath).json()) as {
-          version?: string;
-          license?: string;
-          homepage?: string;
-          repository?: unknown;
-        })
-      : null;
+    const meta = (await fileExists(pkgJsonPath)) ? ((await Bun.file(pkgJsonPath).json()) as PackageJsonMeta) : null;
     const licenseCandidates = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'LICENCE', 'LICENCE.md', 'LICENCE.txt', 'COPYING'].map(n =>
       path.join(pkgDir, n),
     );
@@ -235,10 +251,7 @@ const collectThirdPartyNotices = async (): Promise<{ packages: ThirdPartyPackage
   return { packages, apache20Text: await getApache20TextFromInstalledDeps() };
 };
 
-const formatThirdPartyNotices = async (input: {
-  packages: ThirdPartyPackageInfo[];
-  apache20Text: string | null;
-}): Promise<string> => {
+const formatThirdPartyNotices = async (input: FormatThirdPartyNoticesInput): Promise<string> => {
   const lines: string[] = [];
 
   lines.push('THIRD-PARTY NOTICES');

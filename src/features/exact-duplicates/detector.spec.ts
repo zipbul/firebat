@@ -6,7 +6,7 @@ import type { DuplicateGroup } from '../../types';
 import { parseSource } from '../../engine/parse-source';
 import { detectExactDuplicates } from './detector';
 
-describe('exact-duplicates detector', () => {
+describe('detector', () => {
   it('should report at least one duplicate group when identical functions exist', () => {
     // Arrange
     let sources = new Map<string, string>();

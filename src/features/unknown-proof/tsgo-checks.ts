@@ -72,12 +72,13 @@ const pickTypeSnippetFromHoverText = (text: string): string => {
 
   const block = /```(?:typescript|ts)?\s*([\s\S]*?)```/m.exec(text);
   const body = (block?.[1] ?? text).trim();
-  const lines = body
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
+  const firstLine =
+    body
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .find(l => l.length > 0) ?? '';
 
-  return (lines[0] ?? '').slice(0, 200);
+  return firstLine.slice(0, 200);
 };
 
 const hasWord = (text: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(text);

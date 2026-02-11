@@ -45,22 +45,53 @@ const buildCodeFrame = (
   };
 };
 
-type LspPosition = { readonly line: number; readonly character: number };
+interface LspPosition {
+  readonly line: number;
+  readonly character: number;
+}
 
-type LspRange = { readonly start: LspPosition; readonly end: LspPosition };
+interface LspRange {
+  readonly start: LspPosition;
+  readonly end: LspPosition;
+}
 
-type LspDiagnostic = {
+interface LspDiagnostic {
   readonly range: LspRange;
   readonly severity?: number;
   readonly code?: string | number;
   readonly message: string;
   readonly source?: string;
-};
+}
 
-type PublishDiagnosticsParams = {
+interface PublishDiagnosticsParams {
   readonly uri: string;
   readonly diagnostics: ReadonlyArray<LspDiagnostic>;
-};
+}
+
+interface LspRangeLike {
+  readonly start?: unknown;
+  readonly end?: unknown;
+}
+
+interface LspPositionLike {
+  readonly line?: unknown;
+  readonly character?: unknown;
+}
+
+interface LspDiagnosticLike {
+  readonly range?: unknown;
+  readonly message?: unknown;
+}
+
+interface PublishDiagnosticsParamsLike {
+  readonly uri?: unknown;
+  readonly diagnostics?: unknown;
+}
+
+interface AnalyzeTypecheckInput {
+  readonly rootAbs?: string;
+  readonly logger?: FirebatLogger;
+}
 
 const toSpanFromRange = (range: LspRange): SourceSpan => {
   return {
@@ -149,10 +180,7 @@ const attachCodeFrames = (
 
 const analyzeTypecheck = async (
   program: ReadonlyArray<ParsedFile>,
-  input?: {
-    readonly rootAbs?: string;
-    readonly logger?: FirebatLogger;
-  },
+  input?: AnalyzeTypecheckInput,
 ): Promise<TypecheckAnalysis> => {
   const root = input?.rootAbs ?? process.cwd();
   const logger = input?.logger ?? createNoopLogger();
@@ -165,13 +193,66 @@ const analyzeTypecheck = async (
         const openUris: string[] = [];
         const seenByUri = new Map<string, ReadonlyArray<LspDiagnostic>>();
         let lastUpdateAt = 0;
-        const dispose = session.lsp.onNotification('textDocument/publishDiagnostics', (raw: any) => {
-          if (!raw || typeof raw !== 'object') {
+
+        const isLspRange = (value: unknown): value is LspRange => {
+          if (!value || typeof value !== 'object') {
+            return false;
+          }
+
+          const shape = value as LspRangeLike;
+          const start = shape.start;
+          const end = shape.end;
+
+          if (!start || typeof start !== 'object' || !end || typeof end !== 'object') {
+            return false;
+          }
+
+          const startPosition = start as LspPositionLike;
+          const endPosition = end as LspPositionLike;
+          const startLine = startPosition.line;
+          const startChar = startPosition.character;
+          const endLine = endPosition.line;
+          const endChar = endPosition.character;
+
+          return (
+            typeof startLine === 'number' &&
+            typeof startChar === 'number' &&
+            typeof endLine === 'number' &&
+            typeof endChar === 'number'
+          );
+        };
+
+        const isLspDiagnostic = (value: unknown): value is LspDiagnostic => {
+          if (!value || typeof value !== 'object') {
+            return false;
+          }
+
+          const shape = value as LspDiagnosticLike;
+          const range = shape.range;
+          const message = shape.message;
+
+          return typeof message === 'string' && isLspRange(range);
+        };
+
+        const isPublishDiagnosticsParams = (value: unknown): value is PublishDiagnosticsParams => {
+          if (!value || typeof value !== 'object') {
+            return false;
+          }
+
+          const shape = value as PublishDiagnosticsParamsLike;
+          const uri = shape.uri;
+          const diagnostics = shape.diagnostics;
+
+          return typeof uri === 'string' && Array.isArray(diagnostics);
+        };
+
+        const dispose = session.lsp.onNotification('textDocument/publishDiagnostics', (raw: unknown) => {
+          if (!isPublishDiagnosticsParams(raw)) {
             return;
           }
 
-          const uri = typeof raw.uri === 'string' ? raw.uri : '';
-          const diagnostics = Array.isArray(raw.diagnostics) ? (raw.diagnostics as ReadonlyArray<LspDiagnostic>) : [];
+          const uri = raw.uri;
+          const diagnostics = raw.diagnostics.filter(isLspDiagnostic);
 
           if (uri.length === 0) {
             return;
@@ -193,13 +274,16 @@ const analyzeTypecheck = async (
           const settleMs = 200;
           const maxWaitMs = Math.min(10_000, Math.max(500, program.length * 3));
           const start = Date.now();
+          let remainingMs = maxWaitMs;
           const expectedUriCount = openUris.length;
 
           // Wait until diagnostics stop changing (or a max timeout).
-          while (Date.now() - start < maxWaitMs) {
+          while (remainingMs > 0) {
             if (lastUpdateAt === 0) {
               // No diagnostics yet; wait a short baseline.
               await new Promise<void>(r => setTimeout(r, 25));
+
+              remainingMs = maxWaitMs - (Date.now() - start);
 
               continue;
             }
@@ -207,11 +291,15 @@ const analyzeTypecheck = async (
             const stableForMs = Date.now() - lastUpdateAt;
             const gotAllUris = expectedUriCount > 0 && seenByUri.size >= expectedUriCount;
 
-            if (stableForMs >= settleMs && (gotAllUris || Date.now() - start >= 250)) {
+            remainingMs = maxWaitMs - (Date.now() - start);
+
+            if (stableForMs >= settleMs && (gotAllUris || maxWaitMs - remainingMs >= 250)) {
               break;
             }
 
             await new Promise<void>(r => setTimeout(r, 25));
+
+            remainingMs = maxWaitMs - (Date.now() - start);
           }
 
           for (const [uri, diagnostics] of seenByUri) {

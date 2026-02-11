@@ -7,13 +7,7 @@ const toPos = (line: number, column: number): string => `${line}:${column}`;
 
 // ── Color helpers (stdout TTY-aware) ────────────────────────────────
 const isStdoutTty = (): boolean => {
-  const stdout = process.stdout;
-
-  if (typeof stdout !== 'object' || stdout === null || !('isTTY' in stdout)) {
-    return false;
-  }
-
-  return Boolean((stdout as { isTTY?: boolean }).isTTY);
+  return Boolean(process.stdout?.isTTY);
 };
 
 const A = {
@@ -159,22 +153,25 @@ const formatText = (report: FirebatReport): string => {
 
   const lines: string[] = [];
   const selectedDetectors = new Set(report.meta.detectors);
-  const duplicates = report.analyses['exact-duplicates'] ?? [];
-  const waste = report.analyses.waste ?? [];
-  const barrelPolicy = report.analyses['barrel-policy'] ?? { findings: [] };
-  const unknownProof = report.analyses['unknown-proof'] ?? { status: 'ok' as const, tool: 'tsgo' as const, findings: [] };
-  const lint = report.analyses.lint ?? { status: 'ok' as const, tool: 'oxlint' as const, diagnostics: [] };
-  const format = report.analyses.format ?? { status: 'ok' as const, tool: 'oxfmt' as const };
-  const typecheck = report.analyses.typecheck ?? { status: 'ok' as const, tool: 'tsgo' as const, exitCode: 0, items: [] };
-  const deps = report.analyses.dependencies ?? { cycles: [], fanInTop: [], fanOutTop: [], edgeCutHints: [] };
-  const coupling = report.analyses.coupling ?? { hotspots: [] };
-  const structDups = report.analyses['structural-duplicates'] ?? { cloneClasses: [] };
-  const nesting = report.analyses.nesting ?? { items: [] };
-  const earlyReturn = report.analyses['early-return'] ?? { items: [] };
-  const exceptionHygiene = report.analyses['exception-hygiene'] ?? { status: 'ok' as const, tool: 'oxc' as const, findings: [] };
-  const noop = report.analyses.noop ?? { findings: [] };
-  const apiDrift = report.analyses['api-drift'] ?? { groups: [] };
-  const forwarding = report.analyses.forwarding ?? { findings: [] };
+  const analyses = report.analyses;
+  const {
+    'exact-duplicates': duplicates = [],
+    'barrel-policy': barrelPolicy = { findings: [] },
+    'unknown-proof': unknownProof = { status: 'ok' as const, tool: 'tsgo' as const, findings: [] },
+    'exception-hygiene': exceptionHygiene = { status: 'ok' as const, tool: 'oxc' as const, findings: [] },
+    'structural-duplicates': structDups = { cloneClasses: [] },
+    'early-return': earlyReturn = { items: [] },
+    'api-drift': apiDrift = { groups: [] },
+  } = analyses;
+  const waste = analyses.waste ?? [];
+  const lint = analyses.lint ?? { status: 'ok' as const, tool: 'oxlint' as const, diagnostics: [] };
+  const format = analyses.format ?? { status: 'ok' as const, tool: 'oxfmt' as const };
+  const typecheck = analyses.typecheck ?? { status: 'ok' as const, tool: 'tsgo' as const, exitCode: 0, items: [] };
+  const deps = analyses.dependencies ?? { cycles: [], fanInTop: [], fanOutTop: [], edgeCutHints: [] };
+  const coupling = analyses.coupling ?? { hotspots: [] };
+  const nesting = analyses.nesting ?? { items: [] };
+  const noop = analyses.noop ?? { findings: [] };
+  const forwarding = analyses.forwarding ?? { findings: [] };
   const lintErrors = lint.diagnostics.filter(d => d.severity === 'error').length;
   const typecheckErrors = typecheck.items.filter(i => i.severity === 'error').length;
   const formatFindings = format.status === 'needs-formatting' || format.status === 'failed' ? 1 : 0;

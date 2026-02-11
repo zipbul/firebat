@@ -27,10 +27,8 @@ describe('get_signature_help', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.signatureHelp).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.signatureHelp).toBeDefined();
   }, 30_000);
 
   test('should accept line as string', async () => {

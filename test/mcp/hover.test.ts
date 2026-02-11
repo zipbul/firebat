@@ -31,10 +31,8 @@ describe('get_hover', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.hover).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.hover).toBeDefined();
   }, 30_000);
 
   test('should return hover info for a class name', async () => {

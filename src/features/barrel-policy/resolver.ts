@@ -2,19 +2,28 @@ import * as path from 'node:path';
 
 type TsconfigPaths = Record<string, ReadonlyArray<string>>;
 
-type TsconfigResolveOptions = {
+interface TsconfigResolveOptions {
   readonly tsconfigDirAbs: string;
   readonly baseUrlAbs: string;
   readonly paths: TsconfigPaths;
-};
+}
 
 type WorkspacePackages = ReadonlyMap<string, string>; // name -> rootAbs
 
-type ResolverInput = {
+interface ResolverInput {
   readonly rootAbs: string;
   readonly fileSet: ReadonlySet<string>; // normalized absolute
   readonly workspacePackages: WorkspacePackages;
-};
+}
+
+interface TsconfigOptions {
+  readonly baseUrl?: string;
+  readonly paths?: TsconfigPaths;
+}
+
+interface StarMatch {
+  readonly star: string;
+}
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object') {
@@ -76,10 +85,7 @@ const mergePaths = (base: TsconfigPaths, override: TsconfigPaths): TsconfigPaths
   };
 };
 
-const loadTsconfigOptions = async (
-  tsconfigPathAbs: string,
-  seen: Set<string>,
-): Promise<{ baseUrl?: string; paths?: TsconfigPaths } | null> => {
+const loadTsconfigOptions = async (tsconfigPathAbs: string, seen: Set<string>): Promise<TsconfigOptions | null> => {
   const normalized = normalizePath(tsconfigPathAbs);
 
   if (seen.has(normalized)) {
@@ -111,7 +117,7 @@ const loadTsconfigOptions = async (
           .map(([key, value]) => [key, value as ReadonlyArray<string>]),
       )
     : undefined;
-  let inherited: { baseUrl?: string; paths?: TsconfigPaths } | null = null;
+  let inherited: TsconfigOptions | null = null;
 
   if (typeof rawExtends === 'string') {
     const parentPath = resolveExtendsPath(path.dirname(tsconfigPathAbs), rawExtends);
@@ -183,7 +189,7 @@ const compileTsconfigResolveOptions = async (
   };
 };
 
-const matchStarPattern = (pattern: string, specifier: string): { star: string } | null => {
+const matchStarPattern = (pattern: string, specifier: string): StarMatch | null => {
   if (!pattern.includes('*')) {
     return pattern === specifier ? { star: '' } : null;
   }
@@ -316,11 +322,11 @@ const resolveAlias = async (
   return null;
 };
 
-export type ImportResolver = {
+interface ImportResolver {
   readonly resolve: (importerFileAbs: string, specifier: string) => Promise<string | null>;
-};
+}
 
-export const createImportResolver = (input: ResolverInput): ImportResolver => {
+const createImportResolver = (input: ResolverInput): ImportResolver => {
   const tsconfigCache = new Map<string, TsconfigResolveOptions | null>();
 
   return {
@@ -349,7 +355,7 @@ export const createImportResolver = (input: ResolverInput): ImportResolver => {
   };
 };
 
-export const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, string>> => {
+const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, string>> => {
   const pkgJsonPath = path.join(rootAbs, 'package.json');
   const parsed = await readJsoncFile(pkgJsonPath);
 
@@ -400,3 +406,6 @@ export const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<st
 
   return map;
 };
+
+export { createImportResolver, createWorkspacePackageMap };
+export type { ImportResolver };

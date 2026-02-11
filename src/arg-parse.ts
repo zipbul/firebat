@@ -1,8 +1,7 @@
 import * as path from 'node:path';
 
 import type { FirebatLogLevel } from './firebat-config';
-import type { FirebatCliOptions } from './interfaces';
-import type { FirebatCliExplicitFlags } from './interfaces';
+import type { FirebatCliExplicitFlags, FirebatCliOptions } from './interfaces';
 import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
@@ -122,6 +121,18 @@ const normalizeTarget = (raw: string): string => {
   return path.resolve(trimmed);
 };
 
+interface ExplicitMutable {
+  format: boolean;
+  minSize: boolean;
+  maxForwardDepth: boolean;
+  exitOnFindings: boolean;
+  detectors: boolean;
+  fix: boolean;
+  configPath: boolean;
+  logLevel: boolean;
+  logStack: boolean;
+}
+
 const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   const targets: string[] = [];
   let format: OutputFormat = 'text';
@@ -133,18 +144,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let configPath: string | undefined;
   let logLevel: FirebatLogLevel | undefined;
   let logStack: boolean | undefined;
-
-  type ExplicitMutable = {
-    format: boolean;
-    minSize: boolean;
-    maxForwardDepth: boolean;
-    exitOnFindings: boolean;
-    detectors: boolean;
-    fix: boolean;
-    configPath: boolean;
-    logLevel: boolean;
-    logStack: boolean;
-  };
 
   const toExplicitFlags = (input: ExplicitMutable): FirebatCliExplicitFlags => {
     return {

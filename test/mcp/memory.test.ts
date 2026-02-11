@@ -4,6 +4,25 @@ import { createMcpTestContext, callTool, type McpTestContext } from './helpers/m
 
 let ctx: McpTestContext;
 
+interface MemoryEntry {
+  readonly memoryKey: string;
+  readonly updatedAt: number;
+}
+
+interface ListMemoriesStructured {
+  readonly memories: ReadonlyArray<MemoryEntry>;
+}
+
+const getMemories = (structured: unknown): ReadonlyArray<MemoryEntry> => {
+  if (!structured || typeof structured !== 'object') {
+    return [];
+  }
+
+  const record = structured as ListMemoriesStructured;
+
+  return Array.isArray(record.memories) ? record.memories : [];
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({});
 }, 30_000);
@@ -230,12 +249,12 @@ describe('memory tools (write → read → list → delete)', () => {
   test('should list all written memory keys', async () => {
     // Act
     const { structured } = await callTool(ctx.client, 'list_memories', {});
-
     // Assert
-    expect(Array.isArray(structured.memories)).toBe(true);
-    expect(structured.memories.length).toBeGreaterThan(0);
+    const memories = getMemories(structured);
 
-    const keys = structured.memories.map((m: any) => m.memoryKey);
+    expect(memories.length).toBeGreaterThan(0);
+
+    const keys = memories.map(memory => memory.memoryKey);
 
     expect(keys).toContain('test-string');
     expect(keys).toContain('test-number');
@@ -245,9 +264,10 @@ describe('memory tools (write → read → list → delete)', () => {
   test('should include updatedAt in list results', async () => {
     // Act
     const { structured } = await callTool(ctx.client, 'list_memories', {});
-
     // Assert
-    for (const memory of structured.memories) {
+    const memories = getMemories(structured);
+
+    for (const memory of memories) {
       expect(typeof memory.memoryKey).toBe('string');
       expect(typeof memory.updatedAt).toBe('number');
     }

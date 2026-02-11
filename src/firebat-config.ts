@@ -2,33 +2,33 @@ import * as z from 'zod';
 
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const;
 
-export type FirebatLogLevel = (typeof LOG_LEVELS)[number];
+type FirebatLogLevel = (typeof LOG_LEVELS)[number];
 
-type FeatureToggle<TOptions extends object> = false | true | TOptions;
+type FeatureToggle<TOptions extends Record<string, unknown>> = false | true | TOptions;
 
-type InheritableFeatureToggle<TOptions extends object> = false | 'inherit' | true | TOptions;
+type InheritableFeatureToggle<TOptions extends Record<string, unknown>> = false | 'inherit' | true | TOptions;
 
-export interface FirebatExactDuplicatesConfig {
+interface FirebatExactDuplicatesConfig {
   readonly minSize?: number | 'auto' | undefined;
 }
 
-export interface FirebatStructuralDuplicatesConfig {
+interface FirebatStructuralDuplicatesConfig {
   readonly minSize?: number | 'auto' | undefined;
 }
 
-export interface FirebatForwardingConfig {
+interface FirebatForwardingConfig {
   readonly maxForwardDepth?: number | undefined;
 }
 
-export interface FirebatUnknownProofConfig {
+interface FirebatUnknownProofConfig {
   readonly boundaryGlobs?: ReadonlyArray<string> | undefined;
 }
 
-export interface FirebatBarrelPolicyConfig {
+interface FirebatBarrelPolicyConfig {
   readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
 }
 
-export interface FirebatFeaturesConfig {
+interface FirebatFeaturesConfig {
   readonly 'exact-duplicates'?: FeatureToggle<FirebatExactDuplicatesConfig> | undefined;
   readonly waste?: boolean | undefined;
   readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
@@ -47,7 +47,7 @@ export interface FirebatFeaturesConfig {
   readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
 }
 
-export interface FirebatMcpFeaturesConfig {
+interface FirebatMcpFeaturesConfig {
   readonly 'exact-duplicates'?: InheritableFeatureToggle<FirebatExactDuplicatesConfig> | undefined;
   readonly waste?: boolean | 'inherit' | undefined;
   readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
@@ -66,19 +66,19 @@ export interface FirebatMcpFeaturesConfig {
   readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
 }
 
-export interface FirebatMcpConfigObject {
+interface FirebatMcpConfigObject {
   readonly features?: FirebatMcpFeaturesConfig | undefined;
 }
 
-export type FirebatMcpConfig = 'inherit' | FirebatMcpConfigObject;
+type FirebatMcpConfig = 'inherit' | FirebatMcpConfigObject;
 
-export interface FirebatConfig {
+interface FirebatConfig {
   readonly $schema?: string | undefined;
   readonly features?: FirebatFeaturesConfig | undefined;
   readonly mcp?: FirebatMcpConfig | undefined;
 }
 
-export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
+const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
   .object({
     $schema: z.string().optional(),
     features: z
@@ -240,8 +240,7 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
   })
   .strict()
   .superRefine((cfg, ctx) => {
-    const exact = cfg.features?.['exact-duplicates'];
-    const structural = cfg.features?.['structural-duplicates'];
+    const { 'exact-duplicates': exact, 'structural-duplicates': structural } = cfg.features ?? {};
     const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
     const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
 
@@ -253,3 +252,18 @@ export const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
       });
     }
   });
+
+export type {
+  FirebatBarrelPolicyConfig,
+  FirebatConfig,
+  FirebatExactDuplicatesConfig,
+  FirebatFeaturesConfig,
+  FirebatForwardingConfig,
+  FirebatLogLevel,
+  FirebatMcpConfig,
+  FirebatMcpConfigObject,
+  FirebatMcpFeaturesConfig,
+  FirebatStructuralDuplicatesConfig,
+  FirebatUnknownProofConfig,
+};
+export { FirebatConfigSchema };

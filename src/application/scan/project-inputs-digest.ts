@@ -37,11 +37,13 @@ const listProjectInputFiles = async (rootAbs: string): Promise<string[]> => {
   return [...new Set([...candidates, ...tsconfigs])];
 };
 
-const computeProjectInputsDigest = async (input: {
-  projectKey: string;
-  rootAbs: string;
-  fileIndexRepository: FileIndexRepository;
-}): Promise<string> => {
+interface ProjectInputsDigestInput {
+  readonly projectKey: string;
+  readonly rootAbs: string;
+  readonly fileIndexRepository: FileIndexRepository;
+}
+
+const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Promise<string> => {
   const files = await listProjectInputFiles(input.rootAbs);
 
   if (files.length === 0) {

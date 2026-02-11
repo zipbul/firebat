@@ -19,6 +19,55 @@ const shouldIncludeFile = (filePath: string): boolean => {
   return true;
 };
 
+interface EligibleFile {
+  readonly filePath: string;
+  readonly index: number;
+}
+
+interface ParseWorkerRequest {
+  readonly filePath: string;
+}
+
+interface ParseWorkerResponseOk {
+  readonly ok: true;
+  readonly filePath: string;
+  readonly sourceText: string;
+  readonly program: ParsedFile['program'];
+  readonly errors: ReadonlyArray<unknown>;
+}
+
+interface ParseWorkerResponseFail {
+  readonly ok: false;
+  readonly filePath: string;
+  readonly error: string;
+}
+
+type ParseWorkerResponse = ParseWorkerResponseOk | ParseWorkerResponseFail;
+
+interface WorkerHandlers {
+  onmessage: ((event: MessageEvent<ParseWorkerResponse>) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
+}
+
+interface ParseWorkerResponseShape {
+  readonly ok?: unknown;
+  readonly filePath?: unknown;
+}
+
+const isParseWorkerResponse = (value: unknown): value is ParseWorkerResponse => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const shape = value as ParseWorkerResponseShape;
+  const ok = shape.ok;
+  const filePath = shape.filePath;
+
+  return typeof ok === 'boolean' && typeof filePath === 'string';
+};
+
+const isParseWorkerOk = (value: ParseWorkerResponse): value is ParseWorkerResponseOk => value.ok === true;
+
 // Replaces createFirebatProgram to return ParsedFile[]
 export const createFirebatProgram = async (config: FirebatProgramConfig): Promise<ParsedFile[]> => {
   const fileNames = config.targets;
@@ -26,7 +75,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
     typeof navigator === 'object' && typeof navigator.hardwareConcurrency === 'number'
       ? Math.max(1, Math.floor(navigator.hardwareConcurrency))
       : 4;
-  const eligible: Array<{ filePath: string; index: number }> = [];
+  const eligible: EligibleFile[] = [];
 
   for (let i = 0; i < fileNames.length; i += 1) {
     const filePath = fileNames[i];
@@ -88,27 +137,29 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
     const resultsByIndex: Array<ParsedFile | undefined> = new Array<ParsedFile | undefined>(fileNames.length);
     let cursor = 0;
 
-    const requestParse = async (worker: Worker, filePath: string): Promise<any> => {
+    const requestParse = async (worker: Worker, filePath: string): Promise<ParseWorkerResponse> => {
       return new Promise((resolve, reject) => {
-        const w: any = worker as any;
+        const w = worker as WorkerHandlers;
         const prevOnMessage = w.onmessage;
         const prevOnError = w.onerror;
 
-        w.onmessage = (event: any) => {
+        w.onmessage = (event: MessageEvent<ParseWorkerResponse>) => {
           w.onmessage = prevOnMessage;
           w.onerror = prevOnError;
 
-          resolve(event?.data);
+          resolve(event.data);
         };
 
-        w.onerror = (event: any) => {
+        w.onerror = (event: ErrorEvent) => {
           w.onmessage = prevOnMessage;
           w.onerror = prevOnError;
 
           reject(event);
         };
 
-        worker.postMessage({ filePath });
+        const payload: ParseWorkerRequest = { filePath };
+
+        worker.postMessage(payload);
       });
     };
 
@@ -128,8 +179,11 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
           try {
             const data = await requestParse(worker, item.filePath);
 
-            if (!data || typeof data !== 'object' || data.ok !== true) {
-              const errText = typeof data?.error === 'string' ? data.error : 'unknown error';
+            if (!isParseWorkerResponse(data) || !isParseWorkerOk(data)) {
+              const errText =
+                isParseWorkerResponse(data) && typeof (data as ParseWorkerResponseFail).error === 'string'
+                  ? (data as ParseWorkerResponseFail).error
+                  : 'unknown error';
 
               config.logger.warn(`Parse failed: ${item.filePath}: ${errText}`);
 

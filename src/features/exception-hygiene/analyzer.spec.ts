@@ -36,7 +36,7 @@ const assertFindingShape = (analysis: ReturnType<typeof analyzeSingle>) => {
   }
 };
 
-describe('exception-hygiene/analyzer', () => {
+describe('analyzer', () => {
   it('should return no findings when input is empty', () => {
     // Arrange
     const program: ReturnType<typeof parseSource>[] = [];

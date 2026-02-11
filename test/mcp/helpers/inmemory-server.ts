@@ -8,6 +8,12 @@ import { InMemoryTransport } from '../../../node_modules/@modelcontextprotocol/s
 import { createFirebatMcpServer } from '../../../src/adapters/mcp/server';
 import { createNoopLogger } from '../../../src/ports/logger';
 
+type McpServerInstance = Awaited<ReturnType<typeof createFirebatMcpServer>>;
+
+type ServerTransport = Parameters<McpServerInstance['connect']>[0];
+
+type ClientTransport = Parameters<Client['connect']>[0];
+
 export interface InMemoryMcpContext {
   readonly client: Client;
   readonly server: Awaited<ReturnType<typeof createFirebatMcpServer>>;
@@ -34,13 +40,13 @@ export const createInMemoryMcpContext = async (): Promise<InMemoryMcpContext> =>
 
   const logger = createNoopLogger();
   const server = await createFirebatMcpServer({ rootAbs: tmpDir, config: null, logger });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair() as [ClientTransport, ServerTransport];
 
-  await server.connect(serverTransport as any);
+  await server.connect(serverTransport);
 
   const client = new Client({ name: 'firebat-inmemory-test-client', version: '0.0.0' });
 
-  await client.connect(clientTransport as any);
+  await client.connect(clientTransport);
 
   const close = async (): Promise<void> => {
     try {

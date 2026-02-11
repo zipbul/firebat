@@ -8,7 +8,11 @@ import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
-type JsonValue = null | boolean | number | string | JsonValue[] | { readonly [key: string]: JsonValue };
+interface JsonObject {
+  readonly [key: string]: JsonValue;
+}
+
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
 interface AssetTemplateMeta {
   readonly sourcePath: string;
@@ -79,64 +83,6 @@ const toJsonValue = (value: unknown): JsonValue => {
   }
 
   return out;
-};
-
-const deepEqual = (a: JsonValue, b: JsonValue): boolean => {
-  if (a === b) {
-    return true;
-  }
-
-  let result = false;
-
-  if (a === null || b === null) {
-    result = false;
-  } else if (Array.isArray(a)) {
-    if (Array.isArray(b) && a.length === b.length) {
-      result = true;
-
-      for (let i = 0; i < a.length; i += 1) {
-        if (!deepEqual(a[i]!, b[i]!)) {
-          result = false;
-
-          break;
-        }
-      }
-    }
-  } else if (typeof a === 'object') {
-    if (typeof b === 'object' && !Array.isArray(b)) {
-      const aObj = a as Record<string, JsonValue>;
-      const bObj = b as Record<string, JsonValue>;
-      const aKeys = Object.keys(aObj).sort();
-      const bKeys = Object.keys(bObj).sort();
-
-      if (aKeys.length === bKeys.length) {
-        result = true;
-
-        for (let i = 0; i < aKeys.length; i += 1) {
-          if (aKeys[i] !== bKeys[i]) {
-            result = false;
-
-            break;
-          }
-        }
-
-        if (result) {
-          for (const k of aKeys) {
-            const av = aObj[k] as JsonValue;
-            const bv = bObj[k] as JsonValue;
-
-            if (!deepEqual(av, bv)) {
-              result = false;
-
-              break;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return result;
 };
 
 const sortJsonValue = (value: JsonValue): JsonValue => {
@@ -332,14 +278,12 @@ const ensureBaseSnapshot = async (input: EnsureBaseSnapshotInput): Promise<Ensur
   return { sha256, filePath };
 };
 
+interface StdoutColumns {
+  readonly columns?: number;
+}
+
 const isTty = (): boolean => {
-  const stdout = process.stdout;
-
-  if (typeof stdout !== 'object' || stdout === null || !('isTTY' in stdout)) {
-    return false;
-  }
-
-  return Boolean((stdout as { isTTY?: boolean }).isTTY);
+  return Boolean(process.stdout?.isTTY);
 };
 
 const H = {
@@ -461,7 +405,7 @@ const printAgentPromptGuide = (): void => {
     }
 
     const columns =
-      typeof stdout === 'object' && stdout !== null && 'columns' in stdout ? (stdout as { columns?: number }).columns : undefined;
+      typeof stdout === 'object' && stdout !== null && 'columns' in stdout ? (stdout as StdoutColumns).columns : undefined;
 
     if (typeof columns !== 'number' || !Number.isFinite(columns)) {
       return 72;
@@ -752,10 +696,14 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
   }
 };
 
-export const runInstall = async (argv: readonly string[] = [], logger: FirebatLogger): Promise<number> => {
-  return runInstallLike('install', argv, logger);
+export const runInstall = async (argv: readonly string[] | undefined, logger: FirebatLogger): Promise<number> => {
+  const safeArgv = argv ?? [];
+
+  return runInstallLike('install', safeArgv, logger);
 };
 
-export const runUpdate = async (argv: readonly string[] = [], logger: FirebatLogger): Promise<number> => {
-  return runInstallLike('update', argv, logger);
+export const runUpdate = async (argv: readonly string[] | undefined, logger: FirebatLogger): Promise<number> => {
+  const safeArgv = argv ?? [];
+
+  return runInstallLike('update', safeArgv, logger);
 };

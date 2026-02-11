@@ -4,6 +4,25 @@ import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } fro
 
 let ctx: McpTestContext;
 
+interface ListDirEntry {
+  readonly name: string;
+  readonly isDir: boolean;
+}
+
+interface ListDirStructured {
+  readonly entries: ReadonlyArray<ListDirEntry>;
+}
+
+const getEntries = (structured: unknown): ReadonlyArray<ListDirEntry> => {
+  if (!structured || typeof structured !== 'object') {
+    return [];
+  }
+
+  const record = structured as ListDirStructured;
+
+  return Array.isArray(record.entries) ? record.entries : [];
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({ copyFixtures: true });
 }, 30_000);
@@ -24,17 +43,17 @@ describe('list_dir', () => {
     const { structured } = await callTool(ctx.client, 'list_dir', {
       relativePath: relPath,
     });
-
     // Assert
-    expect(Array.isArray(structured.entries)).toBe(true);
-    expect(structured.entries.length).toBeGreaterThan(0);
+    const entries = getEntries(structured);
 
-    const names = structured.entries.map((e: any) => e.name);
+    expect(entries.length).toBeGreaterThan(0);
+
+    const names = entries.map(entry => entry.name);
 
     expect(names).toContain('sample.ts');
     expect(names).toContain('editable.ts');
 
-    for (const entry of structured.entries) {
+    for (const entry of entries) {
       expect(typeof entry.name).toBe('string');
       expect(typeof entry.isDir).toBe('boolean');
     }
@@ -46,7 +65,8 @@ describe('list_dir', () => {
       relativePath: '.',
     });
     // Assert
-    const names = structured.entries.map((e: any) => e.name);
+    const entries = getEntries(structured);
+    const names = entries.map(entry => entry.name);
 
     expect(names).toContain('package.json');
     expect(names).toContain('fixtures');
@@ -62,11 +82,9 @@ describe('list_dir', () => {
       relativePath: '.',
       recursive: true,
     });
-
     // Assert
-    expect(Array.isArray(structured.entries)).toBe(true);
-
-    const names = structured.entries.map((e: any) => e.name);
+    const entries = getEntries(structured);
+    const names = entries.map(entry => entry.name);
 
     // Should include nested files like fixtures/sample.ts
     expect(names.some((n: string) => n.includes('sample.ts'))).toBe(true);
@@ -79,7 +97,8 @@ describe('list_dir', () => {
       recursive: true,
     });
     // Assert
-    const fixturesEntry = structured.entries.find((e: any) => e.name === 'fixtures');
+    const entries = getEntries(structured);
+    const fixturesEntry = entries.find(entry => entry.name === 'fixtures');
 
     expect(fixturesEntry).toBeDefined();
     expect(fixturesEntry.isDir).toBe(true);
@@ -95,10 +114,10 @@ describe('list_dir', () => {
       root: ctx.tmpRootAbs,
       relativePath: 'fixtures',
     });
-
     // Assert
-    expect(Array.isArray(structured.entries)).toBe(true);
-    expect(structured.entries.length).toBeGreaterThan(0);
+    const entries = getEntries(structured);
+
+    expect(entries.length).toBeGreaterThan(0);
   }, 30_000);
 
   // -----------------------------------------------------------------------
@@ -110,9 +129,10 @@ describe('list_dir', () => {
     const { structured } = await callTool(ctx.client, 'list_dir', {
       relativePath: '.firebat',
     });
-
     // Assert
-    expect(Array.isArray(structured.entries)).toBe(true);
+    const entries = getEntries(structured);
+
+    expect(Array.isArray(entries)).toBe(true);
   }, 30_000);
 
   test('should handle non-existent directory gracefully', async () => {
@@ -133,9 +153,11 @@ describe('list_dir', () => {
     });
 
     // Assert
-    if (!isError) {
-      expect(Array.isArray(structured.entries)).toBe(true);
-    }
+    expect(isError).toBe(false);
+
+    const entries = getEntries(structured);
+
+    expect(Array.isArray(entries)).toBe(true);
   }, 30_000);
 
   // -----------------------------------------------------------------------
@@ -150,7 +172,10 @@ describe('list_dir', () => {
       });
 
       expect(isError).toBe(false);
-      expect(Array.isArray(structured.entries)).toBe(true);
+
+      const entries = getEntries(structured);
+
+      expect(Array.isArray(entries)).toBe(true);
     }
   }, 30_000);
 });

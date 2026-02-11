@@ -4,19 +4,21 @@ import type { LintAnalysis } from '../../types';
 import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
 import { createNoopLogger } from '../../ports/logger';
 
-export const createEmptyLint = (): LintAnalysis => ({
+const createEmptyLint = (): LintAnalysis => ({
   status: 'ok',
   tool: 'oxlint',
   diagnostics: [],
 });
 
-export const analyzeLint = async (input: {
+interface AnalyzeLintInput {
   readonly targets: ReadonlyArray<string>;
   readonly fix: boolean;
   readonly configPath?: string;
   readonly cwd?: string;
   readonly logger?: FirebatLogger;
-}): Promise<LintAnalysis> => {
+}
+
+export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis> => {
   const logger = input.logger ?? createNoopLogger();
   const result = await runOxlint({
     targets: input.targets,
@@ -46,3 +48,5 @@ export const analyzeLint = async (input: {
     diagnostics: result.diagnostics ?? [],
   };
 };
+
+export { analyzeLint, createEmptyLint };

@@ -5,6 +5,24 @@ import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } fro
 
 let ctx: McpTestContext;
 
+interface PatternMatch {
+  readonly filePath: string;
+}
+
+interface PatternStructured {
+  readonly matches: ReadonlyArray<PatternMatch>;
+}
+
+const getMatches = (structured: unknown): ReadonlyArray<PatternMatch> => {
+  if (!structured || typeof structured !== 'object') {
+    return [];
+  }
+
+  const record = structured as PatternStructured;
+
+  return Array.isArray(record.matches) ? record.matches : [];
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({ copyFixtures: true });
 }, 30_000);
@@ -84,12 +102,13 @@ describe('find_pattern', () => {
       targets,
       rule: { pattern: 'return $X' },
     });
-
     // Assert
-    expect(Array.isArray(structured.matches)).toBe(true);
+    const matches = getMatches(structured);
+
+    expect(Array.isArray(matches)).toBe(true);
 
     // Should find return statements across both files
-    const files = new Set(structured.matches.map((m: any) => m.filePath));
+    const files = new Set(matches.map(match => match.filePath));
 
     expect(files.size).toBeGreaterThanOrEqual(1);
   }, 30_000);

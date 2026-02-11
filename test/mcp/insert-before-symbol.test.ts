@@ -43,10 +43,8 @@ describe('insert_before_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
   }, 30_000);
 
   test('should insert text before a class', async () => {

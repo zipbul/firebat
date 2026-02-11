@@ -8,17 +8,17 @@ import * as path from 'node:path';
 // Result parsing helpers
 // ---------------------------------------------------------------------------
 
-export interface ToolResultContentItem {
+interface ToolResultContentItem {
   readonly text?: string;
 }
 
-export interface ToolResultLike {
+interface ToolResultLike {
   readonly structuredContent?: unknown;
   readonly content?: ReadonlyArray<ToolResultContentItem>;
   readonly isError?: boolean;
 }
 
-export const parseJsonText = (text: string | undefined): unknown => {
+const parseJsonText = (text: string | undefined): unknown => {
   if (text === undefined || text.length === 0) {
     return {};
   }
@@ -30,7 +30,7 @@ export const parseJsonText = (text: string | undefined): unknown => {
   }
 };
 
-export const getStructuredContent = (result: ToolResultLike): unknown => {
+const getStructuredContent = (result: ToolResultLike): unknown => {
   if (result.structuredContent !== undefined) {
     return result.structuredContent;
   }
@@ -40,7 +40,7 @@ export const getStructuredContent = (result: ToolResultLike): unknown => {
   return parseJsonText(first?.text);
 };
 
-export const getTextContent = (result: ToolResultLike): string => {
+const getTextContent = (result: ToolResultLike): string => {
   const first = result.content?.[0];
 
   return first?.text ?? '';
@@ -50,7 +50,7 @@ export const getTextContent = (result: ToolResultLike): string => {
 // MCP test context
 // ---------------------------------------------------------------------------
 
-export interface McpTestContext {
+interface McpTestContext {
   readonly client: Client;
   readonly tmpRootAbs: string;
   readonly fixturesAbs: string;
@@ -60,7 +60,7 @@ export interface McpTestContext {
 const FIXTURES_SRC = path.resolve(import.meta.dir, '../fixtures');
 const SERVER_ENTRY = path.resolve(import.meta.dir, '../../../index.ts');
 
-export interface CreateMcpTestContextOptions {
+interface CreateMcpTestContextOptions {
   readonly copyFixtures?: boolean;
   readonly extraFiles?: Record<string, string>;
 }
@@ -71,7 +71,7 @@ export interface CreateMcpTestContextOptions {
  * - `copyFixtures` copies `test/mcp/fixtures/` into `<tmpRoot>/fixtures/`
  * - `extraFiles` creates additional files inside `<tmpRoot>` (key = relative path, value = content)
  */
-export const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): Promise<McpTestContext> => {
+const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): Promise<McpTestContext> => {
   const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-mcp-test-'));
   const firebatDir = path.join(tmpRootAbs, '.firebat');
 
@@ -127,13 +127,13 @@ export const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): 
 // Convenience: call a tool and return structured content
 // ---------------------------------------------------------------------------
 
-export interface CallToolResult {
+interface CallToolResult {
   readonly structured: unknown;
   readonly raw: ToolResultLike;
   readonly isError: boolean;
 }
 
-export const callTool = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
+const callTool = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
   const raw = (await client.callTool({ name, arguments: args })) as ToolResultLike;
 
   return { structured: getStructuredContent(raw), raw, isError: raw.isError === true };
@@ -142,7 +142,7 @@ export const callTool = async (client: Client, name: string, args: Record<string
 /**
  * Like callTool but never throws – captures transport/protocol errors as `isError: true`.
  */
-export const callToolSafe = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
+const callToolSafe = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
   try {
     return await callTool(client, name, args);
   } catch (err) {
@@ -155,3 +155,6 @@ export const callToolSafe = async (client: Client, name: string, args: Record<st
     };
   }
 };
+
+export type { CallToolResult, CreateMcpTestContextOptions, McpTestContext, ToolResultContentItem, ToolResultLike };
+export { callTool, callToolSafe, createMcpTestContext, getStructuredContent, getTextContent, parseJsonText };

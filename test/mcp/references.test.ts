@@ -27,11 +27,9 @@ describe('find_references', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.references)).toBe(true);
-      expect(structured.references.length).toBeGreaterThan(0);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.references)).toBe(true);
+    expect(structured.references.length).toBeGreaterThan(0);
   }, 30_000);
 
   test('should find references to an interface', async () => {
@@ -47,12 +45,10 @@ describe('find_references', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.references)).toBe(true);
-      // User is used in many places
-      expect(structured.references.length).toBeGreaterThan(0);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.references)).toBe(true);
+    // User is used in many places
+    expect(structured.references.length).toBeGreaterThan(0);
   }, 30_000);
 
   test('should find references to a class', async () => {

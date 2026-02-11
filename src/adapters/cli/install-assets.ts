@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-export const OXLINT_RC_JSONC = `{
+const OXLINT_RC_JSONC = `{
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "jsdoc", "jest"],
   "jsPlugins": ["firebat/oxlint-plugin"],
@@ -145,7 +145,7 @@ const failLoadText = (message: string): never => {
   throw new Error(message);
 };
 
-export const loadFirstExistingText = async (candidates: ReadonlyArray<string>): Promise<LoadedTextFile> => {
+const loadFirstExistingText = async (candidates: ReadonlyArray<string>): Promise<LoadedTextFile> => {
   if (candidates.length === 0) {
     return failLoadText('[firebat] No asset candidates provided. Ensure the firebat package includes assets/.');
   }
@@ -167,7 +167,7 @@ export const loadFirstExistingText = async (candidates: ReadonlyArray<string>): 
   return failLoadText('[firebat] Could not locate packaged assets/. Ensure the firebat package includes assets/.');
 };
 
-export const resolveAssetCandidates = (assetFileName: string): string[] => {
+const resolveAssetCandidates = (assetFileName: string): string[] => {
   // Works in both repo (src/* sibling to assets/*) and published package (dist/* sibling to assets/*)
   return [
     path.resolve(import.meta.dir, '../../../assets', assetFileName),
@@ -177,7 +177,7 @@ export const resolveAssetCandidates = (assetFileName: string): string[] => {
   ];
 };
 
-export const OXFMT_RC_JSONC = `{
+const OXFMT_RC_JSONC = `{
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
 
   "printWidth": 130,
@@ -221,3 +221,5 @@ export const OXFMT_RC_JSONC = `{
   };
 
 `;
+
+export { OXLINT_RC_JSONC, OXFMT_RC_JSONC, loadFirstExistingText, resolveAssetCandidates };

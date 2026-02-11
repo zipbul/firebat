@@ -90,10 +90,8 @@ describe('search_external_library_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.matches).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.matches).toBeDefined();
   }, 120_000);
 
   test('should search by symbolName', async () => {
@@ -138,10 +136,9 @@ describe('search_external_library_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok && Array.isArray(structured.matches)) {
-      expect(structured.matches.length).toBeLessThanOrEqual(5);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.matches)).toBe(true);
+    expect(structured.matches.length).toBeLessThanOrEqual(5);
   }, 30_000);
 
   test('should return empty for nonsense query', async () => {
@@ -153,10 +150,9 @@ describe('search_external_library_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok && Array.isArray(structured.matches)) {
-      expect(structured.matches.length).toBe(0);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.matches)).toBe(true);
+    expect(structured.matches.length).toBe(0);
   }, 30_000);
 });
 
@@ -169,10 +165,8 @@ describe('get_typescript_dependencies', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(Array.isArray(structured.dependencies)).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.dependencies)).toBe(true);
   }, 30_000);
 
   test('should include type info for each dependency', async () => {
@@ -182,11 +176,12 @@ describe('get_typescript_dependencies', () => {
     });
 
     // Assert
-    if (structured.ok && Array.isArray(structured.dependencies)) {
-      for (const dep of structured.dependencies) {
-        expect(typeof dep.name).toBe('string');
-        expect(typeof dep.hasTypes).toBe('boolean');
-      }
+    expect(structured.ok).toBe(true);
+    expect(Array.isArray(structured.dependencies)).toBe(true);
+
+    for (const dep of structured.dependencies) {
+      expect(typeof dep.name).toBe('string');
+      expect(typeof dep.hasTypes).toBe('boolean');
     }
   }, 30_000);
 

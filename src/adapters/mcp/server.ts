@@ -63,6 +63,16 @@ import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
 
 const JsonValueSchema = z.json();
+
+interface ListDirEntry {
+  readonly name: string;
+  readonly isDir: boolean;
+}
+
+interface ReviewPromptArgs {
+  readonly reportJson: string;
+}
+
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
   'waste',
@@ -96,16 +106,48 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     return ALL_DETECTORS;
   }
 
-  return ALL_DETECTORS.filter(detector => {
-    const value = features?.[detector as keyof NonNullable<FirebatConfig['features']>];
+  const {
+    'exact-duplicates': exactDuplicates,
+    waste,
+    'barrel-policy': barrelPolicy,
+    'unknown-proof': unknownProof,
+    'exception-hygiene': exceptionHygiene,
+    format,
+    lint,
+    typecheck,
+    dependencies,
+    coupling,
+    'structural-duplicates': structuralDuplicates,
+    nesting,
+    'early-return': earlyReturn,
+    noop,
+    'api-drift': apiDrift,
+    forwarding,
+  } = features;
+  const enabled: Record<FirebatDetector, boolean> = {
+    'exact-duplicates': exactDuplicates !== false,
+    waste: waste !== false,
+    'barrel-policy': barrelPolicy !== false,
+    'unknown-proof': unknownProof !== false,
+    'exception-hygiene': exceptionHygiene !== false,
+    format: format !== false,
+    lint: lint !== false,
+    typecheck: typecheck !== false,
+    dependencies: dependencies !== false,
+    coupling: coupling !== false,
+    'structural-duplicates': structuralDuplicates !== false,
+    nesting: nesting !== false,
+    'early-return': earlyReturn !== false,
+    noop: noop !== false,
+    'api-drift': apiDrift !== false,
+    forwarding: forwarding !== false,
+  };
 
-    return value !== false;
-  });
+  return ALL_DETECTORS.filter(detector => enabled[detector]);
 };
 
 const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): number | 'auto' | undefined => {
-  const exact = features?.['exact-duplicates'];
-  const structural = features?.['structural-duplicates'];
+  const { 'exact-duplicates': exact, 'structural-duplicates': structural } = features ?? {};
   const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
   const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
 
@@ -131,7 +173,7 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
 const resolveUnknownProofBoundaryGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const value = features?.['unknown-proof'];
+  const { 'unknown-proof': value } = features ?? {};
 
   if (!value || value === true || typeof value !== 'object') {
     return undefined;
@@ -147,7 +189,7 @@ const resolveUnknownProofBoundaryGlobsFromFeatures = (
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const value = features?.['barrel-policy'];
+  const { 'barrel-policy': value } = features ?? {};
 
   if (!value || value === true || typeof value !== 'object') {
     return undefined;
@@ -175,9 +217,45 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
   }
 
   const out: Record<string, unknown> = { ...root };
+  const {
+    'exact-duplicates': exactDuplicates,
+    waste,
+    'barrel-policy': barrelPolicy,
+    'unknown-proof': unknownProof,
+    'exception-hygiene': exceptionHygiene,
+    format,
+    lint,
+    typecheck,
+    dependencies,
+    coupling,
+    'structural-duplicates': structuralDuplicates,
+    nesting,
+    'early-return': earlyReturn,
+    noop,
+    'api-drift': apiDrift,
+    forwarding,
+  } = overrides;
+  const overrideMap: Record<FirebatDetector, unknown> = {
+    'exact-duplicates': exactDuplicates,
+    waste,
+    'barrel-policy': barrelPolicy,
+    'unknown-proof': unknownProof,
+    'exception-hygiene': exceptionHygiene,
+    format,
+    lint,
+    typecheck,
+    dependencies,
+    coupling,
+    'structural-duplicates': structuralDuplicates,
+    nesting,
+    'early-return': earlyReturn,
+    noop,
+    'api-drift': apiDrift,
+    forwarding,
+  };
 
   for (const detector of ALL_DETECTORS) {
-    const override = overrides[detector as keyof typeof overrides];
+    const override = overrideMap[detector];
 
     if (override === undefined || override === 'inherit') {
       continue;
@@ -230,9 +308,11 @@ const safeTool = <TArgs>(
   };
 };
 
-const toStructured = (value: object): Record<string, unknown> => value as Record<string, unknown>;
+type StructuredRecord = Record<string, unknown>;
 
-const toToolResult = (structured: object): CallToolResult => ({
+const toStructured = (value: StructuredRecord): StructuredRecord => value;
+
+const toToolResult = (structured: StructuredRecord): CallToolResult => ({
   content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
   structuredContent: toStructured(structured),
 });
@@ -588,7 +668,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const absPath = path.resolve(absRoot, args.relativePath);
 
       if (args.recursive) {
-        const entries: Array<{ name: string; isDir: boolean }> = [];
+        const entries: Array<ListDirEntry> = [];
 
         const walk = async (dir: string, prefix: string): Promise<void> => {
           const dirents = await readdir(dir, { withFileTypes: true });
@@ -1938,7 +2018,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         reportJson: z.string().describe('JSON string of FirebatReport'),
       },
     },
-    (args: { reportJson: string }) => {
+    (args: ReviewPromptArgs) => {
       const { reportJson } = args;
 
       return {

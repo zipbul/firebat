@@ -6,6 +6,26 @@ import { createMcpTestContext, callTool, type McpTestContext } from './helpers/m
 
 let ctx: McpTestContext;
 
+interface SymbolMatch {
+  readonly name: string;
+  readonly kind: string;
+  readonly filePath: string;
+}
+
+interface SymbolSearchStructured {
+  readonly matches: ReadonlyArray<SymbolMatch>;
+}
+
+const getSymbolMatches = (structured: unknown): ReadonlyArray<SymbolMatch> => {
+  if (!structured || typeof structured !== 'object') {
+    return [];
+  }
+
+  const record = structured as SymbolSearchStructured;
+
+  return Array.isArray(record.matches) ? record.matches : [];
+};
+
 /** Enumerate all .ts files under a directory (non-recursive). */
 const listTsFiles = async (dir: string): Promise<string[]> => {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -106,7 +126,7 @@ describe('search_symbol_from_index', () => {
     expect(Array.isArray(structured.matches)).toBe(true);
     expect(structured.matches.length).toBeGreaterThan(0);
 
-    const names = structured.matches.map((s: any) => s.name);
+    const names = getSymbolMatches(structured).map(match => match.name);
 
     expect(names.some((n: string) => n.includes('add'))).toBe(true);
   }, 60_000);

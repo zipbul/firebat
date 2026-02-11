@@ -35,7 +35,10 @@ const getImportsArray = (structured: unknown): unknown[] => {
   return asArrayOrEmpty(record.imports);
 };
 
-const findImportBySpecifier = (imports: ReadonlyArray<unknown>, specifiers: ReadonlyArray<string>): Record<string, unknown> | undefined => {
+const findImportBySpecifier = (
+  imports: ReadonlyArray<unknown>,
+  specifiers: ReadonlyArray<string>,
+): Record<string, unknown> | undefined => {
   for (const entry of imports) {
     if (!isRecord(entry)) {
       continue;

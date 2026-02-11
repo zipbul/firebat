@@ -1,14 +1,18 @@
-export // Demo function below
+// Demo function below
 
 // verified insert_before
 function demo(x: number): number {
   return x + 10;
 }
 
-export const LABEL = 'verified';
+const LABEL = 'verified';
 
-export class Helper {
+class Helper {
   run(): string {
     return 'ok';
   }
 }
+
+const _Helper = Helper;
+
+export { LABEL, demo };

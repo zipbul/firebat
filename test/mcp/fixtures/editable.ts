@@ -1,14 +1,14 @@
 // Fixture for edit tools – will be COPIED to tmpdir before modification.
 
-export function greet(name: string): string {
+function greet(name: string): string {
   return `Hello, ${name}!`;
 }
 
-export function farewell(name: string): string {
+function farewell(name: string): string {
   return `Goodbye, ${name}!`;
 }
 
-export class Greeter {
+class Greeter {
   private name: string;
 
   constructor(name: string) {
@@ -24,16 +24,19 @@ export class Greeter {
   }
 }
 
-export const GREETING_PREFIX = 'Hello';
+const GREETING_PREFIX = 'Hello';
+const FAREWELL_PREFIX = 'Goodbye';
 
-export const FAREWELL_PREFIX = 'Goodbye';
-
-export function formatMessage(prefix: string, name: string): string {
+function formatMessage(prefix: string, name: string): string {
   return `${prefix}, ${name}!`;
 }
 
-export function identity<T>(value: T): T {
+function identity<T>(value: T): T {
   return value;
 }
 
-export const arrowFn = (x: number): number => x * 2;
+const arrowFn = (x: number): number => x * 2;
+
+const _Greeter = Greeter;
+
+export { FAREWELL_PREFIX, GREETING_PREFIX, arrowFn, farewell, formatMessage, greet, identity };

@@ -27,10 +27,8 @@ describe('get_completion', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.completion).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.completion).toBeDefined();
   }, 30_000);
 
   test('should return completions at the beginning of a file', async () => {

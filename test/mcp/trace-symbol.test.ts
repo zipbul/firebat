@@ -5,6 +5,30 @@ import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } fro
 
 let ctx: McpTestContext;
 
+interface TraceGraph {
+  readonly nodes: ReadonlyArray<unknown>;
+  readonly edges: ReadonlyArray<unknown>;
+}
+
+interface TraceSymbolStructured {
+  readonly ok: boolean;
+  readonly graph?: TraceGraph;
+  readonly error?: unknown;
+}
+
+const assertTraceResult = (structured: TraceSymbolStructured): void => {
+  if (structured.ok) {
+    expect(structured.graph).toBeDefined();
+    expect(Array.isArray(structured.graph?.nodes)).toBe(true);
+    expect(Array.isArray(structured.graph?.edges)).toBe(true);
+
+    return;
+  }
+
+  // tsgo not available – error structure should still be valid
+  expect(structured.error).toBeDefined();
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({ copyFixtures: true });
 }, 30_000);
@@ -29,15 +53,7 @@ describe('trace_symbol', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.graph).toBeDefined();
-      expect(Array.isArray(structured.graph.nodes)).toBe(true);
-      expect(Array.isArray(structured.graph.edges)).toBe(true);
-    } else {
-      // tsgo not available – error structure should still be valid
-      expect(structured.error).toBeDefined();
-    }
+    assertTraceResult(structured as TraceSymbolStructured);
   }, 60_000);
 
   test('should trace a class symbol', async () => {
@@ -168,16 +184,19 @@ describe('trace_symbol', () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'lsp-target.ts');
     const symbols = ['User', 'createUser', 'UserService', 'greetUser', 'DEFAULT_USER'];
-
     // Act & Assert
-    for (const sym of symbols) {
-      const { structured } = await callToolSafe(ctx.client, 'trace_symbol', {
-        entryFile: fixture,
-        symbol: sym,
-      });
+    const results = await Promise.all(
+      symbols.map(symbol =>
+        callToolSafe(ctx.client, 'trace_symbol', {
+          entryFile: fixture,
+          symbol,
+        }),
+      ),
+    );
 
+    results.forEach(({ structured }) => {
       expect(structured).toBeDefined();
       expect(typeof structured.ok).toBe('boolean');
-    }
+    });
   }, 120_000);
 });

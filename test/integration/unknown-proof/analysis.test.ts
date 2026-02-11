@@ -13,6 +13,39 @@ const writeText = async (filePath: string, text: string): Promise<void> => {
   await writeFile(filePath, text, 'utf8');
 };
 
+interface UnknownProofStatus {
+  readonly status: string;
+}
+
+interface UnknownProofWithFindings {
+  readonly status: string;
+  readonly findings: ReadonlyArray<UnknownProofFinding>;
+}
+
+interface UnknownProofFindingsOnly {
+  readonly findings: ReadonlyArray<UnknownProofFinding>;
+}
+
+const assertOkOrUnavailable = (analysis: UnknownProofStatus): void => {
+  expect(['ok', 'unavailable']).toContain(analysis.status);
+};
+
+const assertOkOrToolUnavailable = (analysis: UnknownProofWithFindings, okPredicate: () => boolean): void => {
+  const okSatisfied = analysis.status === 'ok' && okPredicate();
+  const unavailableSatisfied =
+    analysis.status === 'unavailable' &&
+    analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'tool-unavailable');
+
+  expect(okSatisfied || unavailableSatisfied).toBe(true);
+};
+
+const assertAnyOrToolUnavailable = (analysis: UnknownProofFindingsOnly): void => {
+  const hasAny = analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'any-inferred');
+  const hasToolUnavailable = analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'tool-unavailable');
+
+  expect(hasAny || hasToolUnavailable).toBe(true);
+};
+
 describe('integration/unknown-proof', () => {
   it('should allow boundary unknown when narrowed before propagation', async () => {
     // Arrange
@@ -55,13 +88,8 @@ describe('integration/unknown-proof', () => {
     });
 
     // Assert
-    expect(analysis.status === 'ok' || analysis.status === 'unavailable').toBe(true);
-
-    if (analysis.status === 'ok') {
-      expect(analysis.findings.length).toBe(0);
-    } else {
-      expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'tool-unavailable')).toBe(true);
-    }
+    assertOkOrUnavailable(analysis);
+    assertOkOrToolUnavailable(analysis, () => analysis.findings.length === 0);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -106,13 +134,10 @@ describe('integration/unknown-proof', () => {
     });
 
     // Assert
-    expect(analysis.status === 'ok' || analysis.status === 'unavailable').toBe(true);
-
-    if (analysis.status === 'ok') {
-      expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'unvalidated-unknown')).toBe(true);
-    } else {
-      expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'tool-unavailable')).toBe(true);
-    }
+    assertOkOrUnavailable(analysis);
+    assertOkOrToolUnavailable(analysis, () =>
+      analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'unvalidated-unknown'),
+    );
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -179,12 +204,10 @@ describe('integration/unknown-proof', () => {
       rootAbs,
       tsconfigPath,
     });
+
     // Assert
     // If tsgo is unavailable in this environment, the detector should still be blocking via tool-unavailable finding.
-    const hasAny = analysis.findings.some((f: UnknownProofFinding) => f.kind === 'any-inferred');
-    const hasToolUnavailable = analysis.findings.some((f: UnknownProofFinding) => f.kind === 'tool-unavailable');
-
-    expect(hasAny || hasToolUnavailable).toBe(true);
+    assertAnyOrToolUnavailable(analysis);
 
     await rm(rootAbs, { recursive: true, force: true });
   });

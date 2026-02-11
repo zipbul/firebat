@@ -5,6 +5,25 @@ import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } fro
 
 let ctx: McpTestContext;
 
+interface WorkspaceSymbolItem {
+  readonly name: string;
+}
+
+interface WorkspaceSymbolsStructured {
+  readonly ok: boolean;
+  readonly symbols?: ReadonlyArray<WorkspaceSymbolItem>;
+}
+
+const getSymbols = (structured: unknown): ReadonlyArray<WorkspaceSymbolItem> => {
+  if (!structured || typeof structured !== 'object') {
+    return [];
+  }
+
+  const record = structured as WorkspaceSymbolsStructured;
+
+  return Array.isArray(record.symbols) ? record.symbols : [];
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({ copyFixtures: true });
 }, 30_000);
@@ -23,11 +42,11 @@ describe('get_workspace_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+    expect(structured.ok).toBe(true);
 
-    if (structured.ok) {
-      expect(structured.symbols).toBeDefined();
-      expect(Array.isArray(structured.symbols)).toBe(true);
-    }
+    const symbols = getSymbols(structured);
+
+    expect(Array.isArray(symbols)).toBe(true);
   }, 30_000);
 
   test('should return symbols without a query (list all)', async () => {
@@ -60,10 +79,11 @@ describe('get_workspace_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+    expect(structured.ok).toBe(true);
 
-    if (structured.ok && Array.isArray(structured.symbols)) {
-      expect(structured.symbols.length).toBe(0);
-    }
+    const symbols = getSymbols(structured);
+
+    expect(symbols.length).toBe(0);
   }, 30_000);
 
   test('should find Calculator class from sample', async () => {
@@ -75,12 +95,12 @@ describe('get_workspace_symbols', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+    expect(structured.ok).toBe(true);
 
-    if (structured.ok && Array.isArray(structured.symbols) && structured.symbols.length > 0) {
-      const names = structured.symbols.map((s: any) => s.name);
+    const symbols = getSymbols(structured);
+    const names = symbols.map(symbol => symbol.name);
 
-      expect(names).toContain('Calculator');
-    }
+    expect(names).toContain('Calculator');
   }, 30_000);
 
   test('should accept tsconfigPath', async () => {

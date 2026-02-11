@@ -30,10 +30,8 @@ describe('format_document', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(typeof structured.changed).toBe('boolean');
-    }
+    expect(structured.ok).toBe(true);
+    expect(typeof structured.changed).toBe('boolean');
   }, 30_000);
 
   test('should format a directory of files', async () => {
@@ -47,10 +45,8 @@ describe('format_document', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(typeof structured.changedCount).toBe('number');
-    }
+    expect(structured.ok).toBe(true);
+    expect(typeof structured.changedCount).toBe('number');
   }, 60_000);
 
   test('should handle non-existent file', async () => {

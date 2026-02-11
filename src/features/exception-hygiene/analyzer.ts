@@ -184,6 +184,15 @@ const containsThrowStatement = (node: NodeValue): boolean => {
   return found;
 };
 
+interface TryBlockRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+interface TryCatchEntry {
+  readonly hasCatch: boolean;
+}
+
 const containsIdentifierUse = (node: NodeValue, name: string): boolean => {
   let found = false;
 
@@ -290,8 +299,8 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
 const collectFindings = (program: NodeValue, sourceText: string, filePath: string): ExceptionHygieneFinding[] => {
   const findings: ExceptionHygieneFinding[] = [];
   const boundaryRole = inferBoundaryRole(filePath);
-  const tryBlockRanges: Array<{ readonly start: number; readonly end: number }> = [];
-  const tryCatchStack: Array<{ readonly hasCatch: boolean }> = [];
+  const tryBlockRanges: TryBlockRange[] = [];
+  const tryCatchStack: TryCatchEntry[] = [];
 
   const reportOverscopedTryIfNeeded = (node: NodeValue): void => {
     if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'TryStatement') {

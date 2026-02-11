@@ -2,14 +2,22 @@ import * as path from 'node:path';
 
 import { FirebatConfigSchema, type FirebatConfig } from './firebat-config';
 
-export const DEFAULT_FIREBAT_RC_BASENAME = '.firebatrc.jsonc';
+const DEFAULT_FIREBAT_RC_BASENAME = '.firebatrc.jsonc';
 
-export const resolveDefaultFirebatRcPath = (rootAbs: string): string => path.join(rootAbs, DEFAULT_FIREBAT_RC_BASENAME);
+const resolveDefaultFirebatRcPath = (rootAbs: string): string => path.join(rootAbs, DEFAULT_FIREBAT_RC_BASENAME);
 
-export const loadFirebatConfigFile = async (params: {
+interface LoadFirebatConfigParams {
   readonly rootAbs: string;
   readonly configPath?: string;
-}): Promise<{ config: FirebatConfig | null; resolvedPath: string; exists: boolean }> => {
+}
+
+interface LoadFirebatConfigResult {
+  readonly config: FirebatConfig | null;
+  readonly resolvedPath: string;
+  readonly exists: boolean;
+}
+
+const loadFirebatConfigFile = async (params: LoadFirebatConfigParams): Promise<LoadFirebatConfigResult> => {
   const resolvedPath =
     params.configPath !== undefined ? path.resolve(params.configPath) : resolveDefaultFirebatRcPath(params.rootAbs);
   const file = Bun.file(resolvedPath);
@@ -37,3 +45,5 @@ export const loadFirebatConfigFile = async (params: {
 
   return { config: validated.data, resolvedPath, exists: true };
 };
+
+export { DEFAULT_FIREBAT_RC_BASENAME, loadFirebatConfigFile, resolveDefaultFirebatRcPath };

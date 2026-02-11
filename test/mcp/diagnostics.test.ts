@@ -34,11 +34,9 @@ describe('get_diagnostics', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      // diagnostics may be an empty array for a clean file
-      expect(structured.diagnostics).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    // diagnostics may be an empty array for a clean file
+    expect(structured.diagnostics).toBeDefined();
   }, 30_000);
 
   test('should accept forceRefresh=true', async () => {
@@ -126,10 +124,8 @@ describe('get_all_diagnostics', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.diagnostics).toBeDefined();
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.diagnostics).toBeDefined();
   }, 60_000);
 
   test('should accept tsconfigPath', async () => {

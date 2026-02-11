@@ -92,7 +92,7 @@ describe('scan', () => {
     'api-drift',
   ] as const;
 
-  for (const detector of pureDetectors) {
+  pureDetectors.forEach(detector => {
     test(`should succeed with detector=${detector}`, async () => {
       // Arrange
       const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
@@ -109,7 +109,7 @@ describe('scan', () => {
       expect(structured.report).toBeTruthy();
       expect(structured.report.analyses).toBeDefined();
     }, 60_000);
-  }
+  });
 
   // -----------------------------------------------------------------------
   // minSize variations

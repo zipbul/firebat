@@ -1,15 +1,15 @@
 // Rich types for LSP tool testing (hover, references, definitions, diagnostics, etc.)
 
-export interface User {
+interface User {
   id: number;
   name: string;
   email: string;
   createdAt: Date;
 }
 
-export type UserCreateInput = Omit<User, 'id' | 'createdAt'>;
+type UserCreateInput = Omit<User, 'id' | 'createdAt'>;
 
-export function createUser(input: UserCreateInput): User {
+function createUser(input: UserCreateInput): User {
   return {
     ...input,
     id: Math.floor(Math.random() * 1000),
@@ -17,17 +17,17 @@ export function createUser(input: UserCreateInput): User {
   };
 }
 
-export function getUserName(user: User): string {
+function getUserName(user: User): string {
   return user.name;
 }
 
-export function greetUser(user: User): string {
+function greetUser(user: User): string {
   const name = getUserName(user);
 
   return `Hello, ${name}!`;
 }
 
-export class UserService {
+class UserService {
   private users: User[] = [];
 
   add(input: UserCreateInput): User {
@@ -51,36 +51,43 @@ export class UserService {
   }
 }
 
-export const DEFAULT_USER: User = {
+const DEFAULT_USER: User = {
   id: 0,
   name: 'Anonymous',
   email: 'anon@example.com',
   createdAt: new Date(0),
 };
 
-export type Callback<T> = (value: T) => void;
+type Callback<T> = (value: T) => void;
 
-export type AsyncCallback<T> = (value: T) => Promise<void>;
+type AsyncCallback<T> = (value: T) => Promise<void>;
 
-export function processItems<T>(items: T[], cb: Callback<T>): void {
+function processItems<T>(items: T[], cb: Callback<T>): void {
   for (const item of items) {
     cb(item);
   }
 }
 
-export async function processItemsAsync<T>(items: T[], cb: AsyncCallback<T>): Promise<void> {
+async function processItemsAsync<T>(items: T[], cb: AsyncCallback<T>): Promise<void> {
   for (const item of items) {
     await cb(item);
   }
 }
 
 // Overloaded function for signature help testing
-export function format(value: string): string;
-export function format(value: number, decimals?: number): string;
-export function format(value: string | number, decimals?: number): string {
+function format(value: string): string;
+
+function format(value: number, decimals?: number): string;
+
+function format(value: string | number, decimals?: number): string {
   if (typeof value === 'string') {
     return value.trim();
   }
 
   return value.toFixed(decimals ?? 2);
 }
+
+const _UserService = UserService;
+
+export type { AsyncCallback, Callback, User, UserCreateInput };
+export { DEFAULT_USER, createUser, format, getUserName, greetUser, processItems, processItemsAsync };

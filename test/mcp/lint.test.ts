@@ -5,6 +5,32 @@ import { createMcpTestContext, callTool, callToolSafe, type McpTestContext } fro
 
 let ctx: McpTestContext;
 
+interface LintDiagnostic {
+  readonly message: string;
+  readonly severity: string;
+}
+
+interface LintStructured {
+  readonly diagnostics?: ReadonlyArray<LintDiagnostic>;
+}
+
+const assertDiagnosticsShape = (diagnostics: ReadonlyArray<LintDiagnostic>): void => {
+  diagnostics.forEach(diagnostic => {
+    expect(typeof diagnostic.message).toBe('string');
+    expect(typeof diagnostic.severity).toBe('string');
+  });
+};
+
+const getDiagnostics = (structured: unknown): ReadonlyArray<LintDiagnostic> => {
+  if (!structured || typeof structured !== 'object') {
+    return [];
+  }
+
+  const record = structured as LintStructured;
+
+  return Array.isArray(record.diagnostics) ? record.diagnostics : [];
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({ copyFixtures: true });
 }, 30_000);
@@ -118,14 +144,10 @@ describe('lint', () => {
     const { structured } = await callTool(ctx.client, 'lint', {
       targets: [fixture],
     });
-
     // Assert – if there are diagnostics, validate shape
-    if (structured.diagnostics && structured.diagnostics.length > 0) {
-      for (const diag of structured.diagnostics) {
-        expect(typeof diag.message).toBe('string');
-        expect(typeof diag.severity).toBe('string');
-      }
-    }
+    const diagnostics = getDiagnostics(structured);
+
+    assertDiagnosticsShape(diagnostics);
   }, 30_000);
 
   // -----------------------------------------------------------------------
@@ -135,15 +157,18 @@ describe('lint', () => {
   test('should handle 5 rapid sequential lint calls', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act & Assert
-    for (let i = 0; i < 5; i++) {
-      const { structured } = await callToolSafe(ctx.client, 'lint', {
-        targets: [fixture],
-      });
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        callToolSafe(ctx.client, 'lint', {
+          targets: [fixture],
+        }),
+      ),
+    );
 
+    results.forEach(({ structured }) => {
       expect(structured).toBeDefined();
       expect(structured.tool).toBe('oxlint');
-    }
+    });
   }, 60_000);
 });

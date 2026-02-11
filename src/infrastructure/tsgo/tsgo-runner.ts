@@ -474,18 +474,6 @@ class LspConnection {
   private readonly anyNotificationHandlers = new Set<(method: string, params: unknown) => void>();
   private readonly readerLoop: Promise<void>;
 
-  static async start(opts: LspConnectionStartOptions): Promise<LspConnection> {
-    const proc = Bun.spawn({
-      cmd: [opts.command, ...opts.args],
-      cwd: opts.cwd,
-      stdout: 'pipe',
-      stderr: 'pipe',
-      stdin: 'pipe',
-    });
-
-    return new LspConnection(proc);
-  }
-
   private constructor(proc: ReturnType<typeof Bun.spawn>) {
     this.proc = proc;
 
@@ -504,224 +492,16 @@ class LspConnection {
     this.readerLoop = this.startReadLoop();
   }
 
-  private writeToStdin(payload: Uint8Array): void {
-    try {
-      this.stdin.write(payload);
+  static async start(opts: LspConnectionStartOptions): Promise<LspConnection> {
+    const proc = Bun.spawn({
+      cmd: [opts.command, ...opts.args],
+      cwd: opts.cwd,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      stdin: 'pipe',
+    });
 
-      if (typeof this.stdin.flush === 'function') {
-        this.stdin.flush();
-      }
-    } catch {
-      // ignore write failures; the request will eventually fail when the connection closes
-    }
-  }
-
-  private respondToServerRequest(input: LspRequestPayload): void {
-    const { id, method, params } = input;
-
-    const ok = (result: unknown): void => {
-      this.writeToStdin(
-        buildLspMessage({
-          jsonrpc: '2.0',
-          id,
-          result,
-        }),
-      );
-    };
-
-    const err = (code: number, message: string): void => {
-      this.writeToStdin(
-        buildLspMessage({
-          jsonrpc: '2.0',
-          id,
-          error: { code, message },
-        }),
-      );
-    };
-
-    try {
-      // tsgo uses client/registerCapability early and will block if we don't respond.
-      if (method === 'client/registerCapability' || method === 'client/unregisterCapability') {
-        ok(null);
-
-        return;
-      }
-
-      // Some servers request configuration values after initialization.
-      if (method === 'workspace/configuration') {
-        const paramsRecord = params && typeof params === 'object' ? (params as LspConfigurationItemsParams) : undefined;
-        const items = Array.isArray(paramsRecord?.items) ? paramsRecord.items : [];
-
-        ok(items.map(() => null));
-
-        return;
-      }
-
-      if (method === 'workspace/workspaceFolders') {
-        ok(null);
-
-        return;
-      }
-
-      if (method === 'window/workDoneProgress/create') {
-        ok(null);
-
-        return;
-      }
-
-      if (method === 'window/showMessageRequest') {
-        ok(null);
-
-        return;
-      }
-
-      // Best-effort fallback: for common LSP "client-side" request namespaces, respond with null.
-      if (method.startsWith('client/') || method.startsWith('workspace/') || method.startsWith('window/')) {
-        ok(null);
-
-        return;
-      }
-
-      err(-32601, `Method not found: ${method}`);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-
-      err(-32603, message.length > 0 ? message : 'Internal error');
-    }
-  }
-
-  private async startReadLoop(): Promise<void> {
-    if (!this.proc.stdout || typeof this.proc.stdout === 'number') {
-      throw new Error('tsgo stdout is not available');
-    }
-
-    const stream = this.proc.stdout as unknown as ReadableStream<Uint8Array>;
-    const reader = stream.getReader();
-    let buffer = Buffer.alloc(0);
-
-    const readMore = async (): Promise<boolean> => {
-      const { value, done } = await reader.read();
-
-      if (done) {
-        return false;
-      }
-
-      buffer = Buffer.concat([buffer, Buffer.from(value)]);
-
-      return true;
-    };
-
-    const parseOne = (): unknown | null => {
-      const headerEnd = buffer.indexOf('\r\n\r\n');
-
-      if (headerEnd === -1) {
-        return null;
-      }
-
-      const header = buffer.subarray(0, headerEnd).toString('utf8');
-      const m = /Content-Length:\s*(\d+)/i.exec(header);
-
-      if (!m) {
-        // Can't parse header; drop until after headerEnd.
-        buffer = Buffer.from(buffer.subarray(headerEnd + 4));
-
-        return null;
-      }
-
-      const len = Number(m[1]);
-      const bodyStart = headerEnd + 4;
-
-      if (buffer.length < bodyStart + len) {
-        return null;
-      }
-
-      const body = buffer.subarray(bodyStart, bodyStart + len).toString('utf8');
-
-      buffer = Buffer.from(buffer.subarray(bodyStart + len));
-
-      try {
-        return JSON.parse(body);
-      } catch {
-        return null;
-      }
-    };
-
-    while (true) {
-      let msg = parseOne();
-
-      while (msg) {
-        if (msg && typeof msg === 'object' && 'id' in msg && 'method' in msg) {
-          const json = msg as LspInboundRequestJson;
-          const id = json.id;
-          const method = typeof json.method === 'string' ? json.method : '';
-          const params = json.params;
-
-          if ((typeof id === 'string' || typeof id === 'number') && method.length > 0) {
-            this.respondToServerRequest({ id, method, params });
-          }
-        } else if (msg && typeof msg === 'object' && 'id' in msg) {
-          const json = msg as LspInboundMessage;
-          const id = Number(json.id);
-          const pending = this.pending.get(id);
-
-          if (pending) {
-            this.pending.delete(id);
-
-            if (json.error) {
-              const err = json.error;
-
-              pending.reject(new Error(typeof err?.message === 'string' ? err.message : 'LSP error'));
-            } else {
-              pending.resolve(json.result);
-            }
-          }
-        }
-
-        // Notifications (JSON-RPC: method without id)
-        if (msg && typeof msg === 'object' && 'method' in msg && !('id' in msg)) {
-          const json = msg as LspInboundNotificationJson;
-          const method = typeof json.method === 'string' ? json.method : '';
-          const params = json.params;
-
-          if (method.length > 0) {
-            for (const handler of this.anyNotificationHandlers) {
-              try {
-                handler(method, params);
-              } catch {
-                // ignore
-              }
-            }
-
-            const handlers = this.notificationHandlers.get(method);
-
-            if (handlers) {
-              for (const handler of handlers) {
-                try {
-                  handler(params);
-                } catch {
-                  // ignore
-                }
-              }
-            }
-          }
-        }
-
-        msg = parseOne();
-      }
-
-      const ok = await readMore();
-
-      if (!ok) {
-        break;
-      }
-    }
-
-    // Process ended; reject pending requests.
-    for (const [, pending] of this.pending) {
-      pending.reject(new Error('LSP connection closed'));
-    }
-
-    this.pending.clear();
+    return new LspConnection(proc);
   }
 
   async request<T = unknown>(method: string, params?: unknown, timeoutMs = 30_000): Promise<T> {
@@ -862,6 +642,226 @@ class LspConnection {
     }
 
     return new Response(this.proc.stderr).text();
+  }
+
+  private writeToStdin(payload: Uint8Array): void {
+    try {
+      this.stdin.write(payload);
+
+      if (typeof this.stdin.flush === 'function') {
+        this.stdin.flush();
+      }
+    } catch {
+      // ignore write failures; the request will eventually fail when the connection closes
+    }
+  }
+
+  private respondToServerRequest(input: LspRequestPayload): void {
+    const { id, method, params } = input;
+
+    const ok = (result: unknown): void => {
+      this.writeToStdin(
+        buildLspMessage({
+          jsonrpc: '2.0',
+          id,
+          result,
+        }),
+      );
+    };
+
+    const err = (code: number, message: string): void => {
+      this.writeToStdin(
+        buildLspMessage({
+          jsonrpc: '2.0',
+          id,
+          error: { code, message },
+        }),
+      );
+    };
+
+    try {
+      // tsgo uses client/registerCapability early and will block if we don't respond.
+      if (method === 'client/registerCapability' || method === 'client/unregisterCapability') {
+        ok(null);
+
+        return;
+      }
+
+      // Some servers request configuration values after initialization.
+      if (method === 'workspace/configuration') {
+        const paramsRecord = params && typeof params === 'object' ? (params as LspConfigurationItemsParams) : undefined;
+        const items = Array.isArray(paramsRecord?.items) ? paramsRecord.items : [];
+
+        ok(items.map(() => null));
+
+        return;
+      }
+
+      if (method === 'workspace/workspaceFolders') {
+        ok(null);
+
+        return;
+      }
+
+      if (method === 'window/workDoneProgress/create') {
+        ok(null);
+
+        return;
+      }
+
+      if (method === 'window/showMessageRequest') {
+        ok(null);
+
+        return;
+      }
+
+      // Best-effort fallback: for common LSP "client-side" request namespaces, respond with null.
+      if (method.startsWith('client/') || method.startsWith('workspace/') || method.startsWith('window/')) {
+        ok(null);
+
+        return;
+      }
+
+      err(-32601, `Method not found: ${method}`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+
+      err(-32603, message.length > 0 ? message : 'Internal error');
+    }
+  }
+
+  private async startReadLoop(): Promise<void> {
+    if (!this.proc.stdout || typeof this.proc.stdout === 'number') {
+      throw new Error('tsgo stdout is not available');
+    }
+
+    const stream = this.proc.stdout as ReadableStream<Uint8Array>;
+    const reader = stream.getReader();
+    let buffer = Buffer.alloc(0);
+
+    const readMore = async (): Promise<boolean> => {
+      const { value, done } = await reader.read();
+
+      if (done) {
+        return false;
+      }
+
+      buffer = Buffer.concat([buffer, Buffer.from(value)]);
+
+      return true;
+    };
+
+    const parseOne = (): unknown | null => {
+      const headerEnd = buffer.indexOf('\r\n\r\n');
+
+      if (headerEnd === -1) {
+        return null;
+      }
+
+      const header = buffer.subarray(0, headerEnd).toString('utf8');
+      const m = /Content-Length:\s*(\d+)/i.exec(header);
+
+      if (!m) {
+        // Can't parse header; drop until after headerEnd.
+        buffer = Buffer.from(buffer.subarray(headerEnd + 4));
+
+        return null;
+      }
+
+      const len = Number(m[1]);
+      const bodyStart = headerEnd + 4;
+
+      if (buffer.length < bodyStart + len) {
+        return null;
+      }
+
+      const body = buffer.subarray(bodyStart, bodyStart + len).toString('utf8');
+
+      buffer = Buffer.from(buffer.subarray(bodyStart + len));
+
+      try {
+        return JSON.parse(body);
+      } catch {
+        return null;
+      }
+    };
+
+    while (true) {
+      let msg = parseOne();
+
+      while (msg) {
+        if (msg && typeof msg === 'object' && 'id' in msg && 'method' in msg) {
+          const json = msg as LspInboundRequestJson;
+          const id = json.id;
+          const method = typeof json.method === 'string' ? json.method : '';
+          const params = json.params;
+
+          if ((typeof id === 'string' || typeof id === 'number') && method.length > 0) {
+            this.respondToServerRequest({ id, method, params });
+          }
+        } else if (msg && typeof msg === 'object' && 'id' in msg) {
+          const json = msg as LspInboundMessage;
+          const id = Number(json.id);
+          const pending = this.pending.get(id);
+
+          if (pending) {
+            this.pending.delete(id);
+
+            if (json.error) {
+              const err = json.error;
+
+              pending.reject(new Error(typeof err?.message === 'string' ? err.message : 'LSP error'));
+            } else {
+              pending.resolve(json.result);
+            }
+          }
+        }
+
+        // Notifications (JSON-RPC: method without id)
+        if (msg && typeof msg === 'object' && 'method' in msg && !('id' in msg)) {
+          const json = msg as LspInboundNotificationJson;
+          const method = typeof json.method === 'string' ? json.method : '';
+          const params = json.params;
+
+          if (method.length > 0) {
+            for (const handler of this.anyNotificationHandlers) {
+              try {
+                handler(method, params);
+              } catch {
+                // ignore
+              }
+            }
+
+            const handlers = this.notificationHandlers.get(method);
+
+            if (handlers) {
+              for (const handler of handlers) {
+                try {
+                  handler(params);
+                } catch {
+                  // ignore
+                }
+              }
+            }
+          }
+        }
+
+        msg = parseOne();
+      }
+
+      const ok = await readMore();
+
+      if (!ok) {
+        break;
+      }
+    }
+
+    // Process ended; reject pending requests.
+    for (const [, pending] of this.pending) {
+      pending.reject(new Error('LSP connection closed'));
+    }
+
+    this.pending.clear();
   }
 }
 

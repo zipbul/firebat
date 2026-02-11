@@ -55,7 +55,12 @@ const resolveProjectKey = (root: string | undefined): string => {
 
 const repoPromisesByProjectKey = new Map<string, Promise<MemoryRepository>>();
 
-const getRepository = async (input: { readonly root?: string; readonly logger: FirebatLogger }) => {
+interface RepositoryInput {
+  readonly root?: string;
+  readonly logger: FirebatLogger;
+}
+
+const getRepository = async (input: RepositoryInput) => {
   const projectKey = resolveProjectKey(input.root);
   const existing = repoPromisesByProjectKey.get(projectKey);
 

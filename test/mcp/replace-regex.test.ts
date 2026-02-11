@@ -18,6 +18,17 @@ const REGEX_FIXTURE = [
 ].join('\n');
 let ctx: McpTestContext;
 
+const assertMatchCount = (value: unknown): void => {
+  if (value === undefined) {
+    expect(value).toBeUndefined();
+
+    return;
+  }
+
+  expect(typeof value).toBe('number');
+  expect(value).toBeGreaterThan(1);
+};
+
 beforeAll(async () => {
   ctx = await createMcpTestContext({
     extraFiles: {
@@ -48,10 +59,8 @@ describe('replace_regex', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
   }, 30_000);
 
   test('should replace all matches when allowMultipleOccurrences=true', async () => {
@@ -68,14 +77,10 @@ describe('replace_regex', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(true);
 
-    if (structured.ok) {
-      expect(structured.changed).toBe(true);
-
-      if (structured.matchCount !== undefined) {
-        expect(structured.matchCount).toBeGreaterThan(1);
-      }
-    }
+    assertMatchCount(structured.matchCount);
   }, 30_000);
 
   test('should handle regex with capture groups', async () => {
@@ -107,10 +112,8 @@ describe('replace_regex', () => {
 
     // Assert
     expect(typeof structured.ok).toBe('boolean');
-
-    if (structured.ok) {
-      expect(structured.changed).toBe(false);
-    }
+    expect(structured.ok).toBe(true);
+    expect(structured.changed).toBe(false);
   }, 30_000);
 
   test('should handle multiline regex', async () => {

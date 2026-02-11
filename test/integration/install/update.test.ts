@@ -47,7 +47,13 @@ const jsonText = (value: unknown): string => {
   return JSON.stringify(value, null, 2) + '\n';
 };
 
-const withCapturedConsole = async <T>(fn: () => Promise<T>): Promise<{ result: T; logs: string[]; errors: string[] }> => {
+interface CapturedConsoleResult<T> {
+  readonly result: T;
+  readonly logs: string[];
+  readonly errors: string[];
+}
+
+const withCapturedConsole = async <T>(fn: () => Promise<T>): Promise<CapturedConsoleResult<T>> => {
   const originalLog = console.log;
   const originalError = console.error;
   const logs: string[] = [];
@@ -91,14 +97,14 @@ const readJsonFile = async (filePath: string): Promise<unknown> => {
   return Bun.JSONC.parse(text) as unknown;
 };
 
-type InstallManifestBaseSnapshot = {
+interface InstallManifestBaseSnapshot {
   readonly sha256: string;
   readonly filePath: string;
-};
+}
 
-type InstallManifest = {
+interface InstallManifest {
   baseSnapshots: Record<string, InstallManifestBaseSnapshot>;
-};
+}
 
 const asInstallManifest = (value: unknown): InstallManifest => {
   if (!isRecord(value)) {
@@ -146,8 +152,13 @@ const findFirstKey = (value: unknown): string => {
 
 type Primitive = string | number | boolean | null;
 
-const findFirstPrimitivePath = (value: unknown): { path: string[]; value: Primitive } | null => {
-  const visit = (node: unknown, prefix: string[]): { path: string[]; value: Primitive } | null => {
+interface PrimitivePath {
+  readonly path: string[];
+  readonly value: Primitive;
+}
+
+const findFirstPrimitivePath = (value: unknown): PrimitivePath | null => {
+  const visit = (node: unknown, prefix: string[]): PrimitivePath | null => {
     if (node === null || typeof node === 'string' || typeof node === 'number' || typeof node === 'boolean') {
       return { path: prefix, value: node };
     }
@@ -172,7 +183,7 @@ const findFirstPrimitivePath = (value: unknown): { path: string[]; value: Primit
   return visit(value, []);
 };
 
-const requireFirstPrimitivePath = (value: unknown): { path: string[]; value: Primitive } => {
+const requireFirstPrimitivePath = (value: unknown): PrimitivePath => {
   const leaf = findFirstPrimitivePath(value);
 
   if (!leaf) {
