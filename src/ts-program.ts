@@ -125,7 +125,9 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
   const workerCount = Math.max(1, Math.min(hardware, eligible.length));
   const workers: Worker[] = [];
 
-  config.logger.debug(`Spawning ${workerCount} parse workers for ${eligible.length} eligible files`, {
+  config.logger.debug('Spawning parse workers', {
+    workerCount,
+    eligibleCount: eligible.length,
     hardwareConcurrency: hardware,
   });
 
@@ -185,7 +187,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
                   ? (data as ParseWorkerResponseFail).error
                   : 'unknown error';
 
-              config.logger.warn(`Parse failed: ${item.filePath}: ${errText}`);
+              config.logger.warn('Parse failed', { filePath: item.filePath, error: errText });
 
               continue;
             }
@@ -200,7 +202,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
 
-            config.logger.warn(`Parse failed: ${item.filePath}: ${message}`);
+            config.logger.warn('Parse failed', { filePath: item.filePath, error: message }, error);
           }
         }
       })(),
@@ -210,7 +212,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 
     const results = resultsByIndex.filter((v): v is ParsedFile => v !== undefined);
 
-    config.logger.trace(`Parse complete: ${results.length}/${eligible.length} files succeeded`);
+    config.logger.trace('Parse complete', { okCount: results.length, eligibleCount: eligible.length });
 
     return results;
   } finally {

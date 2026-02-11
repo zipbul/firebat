@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "jsdoc", "jest"],
-  "jsPlugins": ["firebat/oxlint-plugin"],
+  "jsPlugins": ["./dist/oxlint-plugin.js"],
   "rules": {
     "unicorn/no-new-array": "off",
     "unicorn/no-null": "off",
@@ -226,6 +226,12 @@
     "firebat/single-exported-class": "error",
   },
   "overrides": [
+    {
+      "files": ["oxlint-plugin.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    },
     {
       "files": ["**/*.spec.ts", "**/*.test.ts", "**/*.e2e.test.ts"],
       "rules": {

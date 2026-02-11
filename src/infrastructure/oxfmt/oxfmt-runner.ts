@@ -83,7 +83,7 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    logger.error(`oxfmt: spawn failed: ${message}`, undefined, err);
+    logger.error('oxfmt: spawn failed', { message }, err);
 
     return {
       ok: false,

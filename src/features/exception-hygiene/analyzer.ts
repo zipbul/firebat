@@ -1,12 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type {
-  ExceptionHygieneAnalysis,
-  ExceptionHygieneFinding,
-  ExceptionHygieneFindingKind,
-  SourceSpan,
-} from './types';
+import type { ExceptionHygieneAnalysis, ExceptionHygieneFinding, ExceptionHygieneFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';

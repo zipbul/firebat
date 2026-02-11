@@ -74,8 +74,6 @@ const safeRemoveFile = async (filePath: string): Promise<'removed' | 'missing' |
         result = 'removed';
       }
     } catch (err) {
-      process.stderr.write(`[firebat] cache clean failed to remove ${filePath}: ${String(err)}\n`);
-
       result = 'failed';
     }
   }
@@ -110,7 +108,7 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
   const base = path.join(rootAbs, '.firebat', 'firebat.sqlite');
   const candidates = [base, `${base}-wal`, `${base}-shm`];
 
-  logger.trace(`Cache files to check: ${candidates.join(', ')}`);
+  logger.trace('Cache files to check', { candidateCount: candidates.length });
 
   const removed: string[] = [];
   const missing: string[] = [];
@@ -132,7 +130,7 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
     logger.error('cache clean failed: could not remove some cache files (are they in use?)');
 
     for (const item of failed) {
-      logger.error(`  - ${item}`);
+      logger.error('cache clean failed: remove failed', { filePath: item });
     }
 
     exitCode = 1;
@@ -141,7 +139,7 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
   logger.info('cache clean done');
 
   for (const item of removed) {
-    logger.info(`removed ${item}`);
+    logger.info('cache removed', { filePath: item });
   }
 
   if (removed.length === 0 && missing.length > 0) {

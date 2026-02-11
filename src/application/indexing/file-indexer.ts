@@ -19,7 +19,7 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
   let skipped = 0;
   let failed = 0;
 
-  logger.debug(`Indexing ${input.targets.length} files`, { concurrency });
+  logger.debug('Indexing files', { targetCount: input.targets.length, concurrency });
 
   if (input.targets.length === 0) {
     logger.debug('Indexing done', { updated, skipped, failed });
@@ -63,21 +63,21 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
         updated += 1;
 
-        logger.trace(`Index upsert: ${filePath}`, { size, mtimeMs });
+        logger.trace('Index upsert', { filePath, size, mtimeMs });
       }
     } catch {
       failed += 1;
 
-      logger.warn(`Index failed, entry removed: ${filePath}`);
+      logger.warn('Index failed, entry removed', { filePath });
 
       await input.repository.deleteFile({ projectKey: input.projectKey, filePath });
     }
   });
 
-  logger.debug(`Indexing done`, { updated, skipped, failed });
+  logger.debug('Indexing done', { updated, skipped, failed });
 
   if (skipped > 0) {
-    logger.trace(`Index skip: ${skipped} files unchanged`);
+    logger.trace('Index skip', { skipped });
   }
 };
 

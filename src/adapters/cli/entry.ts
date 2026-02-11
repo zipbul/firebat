@@ -1,9 +1,9 @@
+import * as path from 'node:path';
+
 import type { FirebatConfig } from '../../firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
-
-import * as path from 'node:path';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { parseArgs } from '../../arg-parse';
@@ -348,7 +348,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 
   const { rootAbs } = await resolveFirebatRootFromCwd();
 
-  logger.debug(`Project root: ${rootAbs}`);
+  logger.debug('Project root resolved', { rootAbs });
 
   let config: FirebatConfig | null = null;
   const configPath = options.configPath ?? resolveDefaultFirebatRcPath(rootAbs);
@@ -356,7 +356,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 
   config = loaded.config;
 
-  logger.debug(`Config loaded from ${loaded.resolvedPath}`, { hasConfig: config !== null });
+  logger.debug('Config loaded', { resolvedPath: loaded.resolvedPath, hasConfig: config !== null });
 
   const featuresCfg = config?.features;
   const cfgDetectors = resolveEnabledDetectorsFromFeatures(featuresCfg);
@@ -385,7 +385,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     const rawTargets = merged.targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)));
     const targets = await expandTargets(rawTargets);
 
-    logger.debug(`Expanded ${merged.targets.length} explicit targets to ${targets.length} files`);
+    logger.debug('Targets expanded', { inputTargetCount: merged.targets.length, expandedTargetCount: targets.length });
 
     return {
       ...merged,
@@ -395,7 +395,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 
   const targets = await discoverDefaultTargets(rootAbs);
 
-  logger.debug(`Auto-discovered ${targets.length} files from ${rootAbs}`);
+  logger.debug('Targets auto-discovered', { discoveredTargetCount: targets.length, rootAbs });
 
   return {
     ...merged,
@@ -427,9 +427,11 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   if (exitCode === 0 && options) {
     const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
 
-    logger.debug(
-      `Options resolved: ${options.targets.length} targets, ${options.detectors.length} detectors, format=${options.format}`,
-    );
+    logger.debug('Options resolved', {
+      targetCount: options.targets.length,
+      detectorCount: options.detectors.length,
+      format: options.format,
+    });
 
     if (exitCode === 0) {
       let report: FirebatReport | null = null;
@@ -449,13 +451,13 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
       if (report) {
         const output = formatReport(report, options.format);
 
-        logger.trace(`Report formatted (${options.format}), length=${output.length}`);
+        logger.trace('Report formatted', { format: options.format, length: output.length });
 
         process.stdout.write(output + '\n');
 
         const findingCount = countBlockingFindings(report);
 
-        logger.debug(`Blocking findings: ${findingCount}`);
+        logger.debug('Blocking findings counted', { blockingFindingCount: findingCount });
 
         exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
       }

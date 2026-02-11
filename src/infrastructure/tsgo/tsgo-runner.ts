@@ -1108,7 +1108,7 @@ export const withTsgoLspSession = async <T>(
     const acquired = await acquireSharedTsgoSession(input);
 
     if (!acquired.ok) {
-      input.logger.warn(`tsgo LSP session unavailable: ${acquired.error}`);
+      input.logger.warn('tsgo LSP session unavailable', { error: acquired.error });
 
       return { ok: false, error: acquired.error };
     }
@@ -1127,7 +1127,7 @@ export const withTsgoLspSession = async <T>(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    input.logger.error(`tsgo LSP session error: ${message}`, undefined, error);
+    input.logger.error('tsgo LSP session error', { message }, error);
 
     return { ok: false, error: message };
   }

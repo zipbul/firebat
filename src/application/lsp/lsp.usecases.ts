@@ -777,6 +777,7 @@ const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput
     }
 
     await indexSymbolsUseCase({ root: rootAbs, logger: input.logger });
+
     const matches = await searchSymbolFromIndexUseCase({ root: rootAbs, query, logger: input.logger });
 
     return { ok: true, symbols: matches.map(toWorkspaceSymbol) };
@@ -1208,7 +1209,6 @@ const parseImportsUseCase = async (input: ParseImportsInput): Promise<ParseImpor
     for (const m of text.matchAll(re)) {
       const spec = m[2] ?? '';
       const raw = m[0] ?? '';
-
       const names = extractNames(raw);
 
       imports.push({ kind: m[1] ?? 'import', specifier: spec, raw, names, resolvedPath: null });

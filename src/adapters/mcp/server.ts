@@ -270,6 +270,7 @@ const diffReports = (prev: FirebatReport | null, next: FirebatReport): DiffCount
     const record = value as Record<string, unknown>;
     const keys = Object.keys(record).sort();
     const entries = keys.map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`);
+
     return `{${entries.join(',')}}`;
   };
 
@@ -311,7 +312,6 @@ const diffReports = (prev: FirebatReport | null, next: FirebatReport): DiffCount
 
   const prevKeys = new Set(findingKeys(prev));
   const nextKeys = new Set(findingKeys(next));
-
   let newFindings = 0;
   let resolvedFindings = 0;
   let unchangedFindings = 0;
@@ -335,14 +335,11 @@ const diffReports = (prev: FirebatReport | null, next: FirebatReport): DiffCount
 
 export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): Promise<McpServer> => {
   const { rootAbs, config, logger } = options;
-
   const server = new McpServer({
     name: 'firebat',
     version: '2.0.0-scan-only',
   });
-
   let lastReport: FirebatReport | null = null;
-
   const ScanInputSchema = z
     .object({
       targets: z
@@ -390,9 +387,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         ),
     })
     .strict();
-
   const FirebatDetectorSchema = z.enum([...ALL_DETECTORS] as [FirebatDetector, ...Array<FirebatDetector>]);
-
   const FirebatMetaSchema = z
     .object({
       engine: z.literal('oxc'),
@@ -403,7 +398,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       detectorTimings: z.record(z.string(), z.number()).optional(),
     })
     .strict();
-
   const FirebatReportSchema = z
     .object({
       meta: FirebatMetaSchema,
@@ -451,20 +445,17 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof ScanInputSchema>) => {
       const t0 = nowMs();
-
       const rawTargets =
         args.targets !== undefined && args.targets.length > 0
           ? args.targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)))
           : await discoverDefaultTargets(rootAbs);
       const targets = await expandTargets(rawTargets);
-
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
       const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
       const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(effectiveFeatures);
       const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(effectiveFeatures);
-
       const cliOptions: FirebatCliOptions = {
         targets,
         format: 'json',
@@ -477,9 +468,9 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
         help: false,
       };
-
       const report = await scanUseCase(cliOptions, { logger });
       const diff = diffReports(lastReport, report);
+
       lastReport = report;
 
       const totalMs = nowMs() - t0;
@@ -508,9 +499,8 @@ export const runMcpServer = async (): Promise<void> => {
 
   const loaded = await loadFirebatConfigFile({ rootAbs: ctx.rootAbs }).catch(() => null);
   const config = loaded?.config ?? null;
-  const logger = createPrettyConsoleLogger({ level: 'warn' });
+  const logger = createPrettyConsoleLogger({ level: 'info' });
   const server = await createFirebatMcpServer({ rootAbs: ctx.rootAbs, config, logger });
-
   const transport = new StdioServerTransport();
 
   logger.info('MCP server: connecting transport');
@@ -528,17 +518,20 @@ export const runMcpServer = async (): Promise<void> => {
 
     try {
       const { closeAll } = await import('../../infrastructure/sqlite/firebat.db');
+
       await closeAll();
+
       logger.trace('MCP server: DB connections closed');
     } catch (err) {
-      logger.warn('MCP server: cleanup error', { error: String(err) });
+      logger.warn('MCP server: cleanup error', undefined, err);
     }
 
     try {
       await transport.close();
+
       logger.debug('MCP server: transport closed');
     } catch (err) {
-      logger.warn('MCP server: transport close error', { error: String(err) });
+      logger.warn('MCP server: transport close error', undefined, err);
     }
   };
 
@@ -552,7 +545,7 @@ export const runMcpServer = async (): Promise<void> => {
   try {
     await server.connect(transport);
   } catch (err) {
-    logger.error('MCP server: connection failed', { error: String(err) });
+    logger.error('MCP server: connection failed', undefined, err);
 
     await cleanup('connect-error');
 
@@ -560,12 +553,14 @@ export const runMcpServer = async (): Promise<void> => {
   }
 
   transport.onerror = (error: Error) => {
-    logger.warn('MCP server: transport error', { error: String(error) });
+    logger.warn('MCP server: transport error', undefined, error);
+
     void cleanup('transport-error');
   };
 
   transport.onclose = () => {
     logger.debug('MCP server: transport closed');
+
     void cleanup('transport-close');
   };
 

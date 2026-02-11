@@ -62,7 +62,9 @@ const expandTargets = async (cwd: string, targets: ReadonlyArray<string>): Promi
 
   for (const raw of targets) {
     const abs = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
-    const stat = await Bun.file(abs).stat().catch(() => null);
+    const stat = await Bun.file(abs)
+      .stat()
+      .catch(() => null);
 
     if (stat?.isDirectory()) {
       const files = await scanDirForSourceFiles(abs);

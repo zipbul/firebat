@@ -456,14 +456,16 @@ const printAgentPromptGuide = (): void => {
 
 const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[], logger: FirebatLogger): Promise<number> => {
   if (mode !== 'install' && mode !== 'update') {
-    return (logger.error(`Unknown install mode: ${mode}`), 1);
+    logger.error('Unknown install mode', { mode });
+
+    return 1;
   }
 
   try {
     const { yes, help } = parseYesFlag(argv);
 
     void yes;
-    logger.debug(`${mode}: starting`, { args: argv.join(' ') });
+    logger.debug('install: starting', { mode, args: argv.join(' ') });
 
     if (help) {
       if (mode === 'install') {
@@ -479,7 +481,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     const rootAbs = ctx.rootAbs;
     const firebatDir = path.join(rootAbs, '.firebat');
 
-    logger.debug(`${mode} root: ${rootAbs}`);
+    logger.debug('install: root resolved', { mode, rootAbs });
 
     await mkdir(firebatDir, { recursive: true });
 
@@ -498,7 +500,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         templatePath: loaded.filePath,
       });
 
-      logger.trace(`Template loaded: ${item.asset} from ${loaded.filePath}`);
+      logger.trace('Template loaded', { asset: item.asset, filePath: loaded.filePath });
     }
 
     if (mode === 'update') {
@@ -539,7 +541,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         const basePath = typeof baseMeta?.filePath === 'string' ? baseMeta.filePath : null;
 
         if (!basePath) {
-          logger.error(`update aborted: missing base snapshot for ${tpl.asset}. Run \`firebat install\` first.`);
+          logger.error('update aborted: missing base snapshot. Run `firebat install` first.', { asset: tpl.asset });
 
           return 1;
         }
@@ -547,7 +549,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         const baseFile = Bun.file(basePath);
 
         if (!(await baseFile.exists())) {
-          logger.error(`update aborted: base snapshot not found for ${tpl.asset}. Run \`firebat install\` first.`);
+          logger.error('update aborted: base snapshot not found. Run `firebat install` first.', { asset: tpl.asset });
 
           return 1;
         }
@@ -565,7 +567,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
           const synced = syncJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
 
           if (!synced.ok) {
-            logger.error(`update aborted: failed to patch JSONC for ${tpl.destAbs}: ${synced.error}`);
+            logger.error('update aborted: failed to patch JSONC', { filePath: tpl.destAbs, error: synced.error });
 
             return 1;
           }
@@ -642,8 +644,8 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     await Bun.write(installManifestPath, JSON.stringify(manifestOut, null, 2) + '\n');
 
-    logger.info(`${mode} root: ${rootAbs}`);
-    logger.debug(`created/verified: ${firebatDir}`);
+    logger.info('install: complete', { mode, rootAbs });
+    logger.debug('install: created/verified directory', { firebatDir });
 
     if (gitignoreUpdated) {
       logger.info('updated .gitignore: added .firebat/');
@@ -654,23 +656,23 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
       for (const r of assetResults) {
         if (r.kind === 'installed') {
-          logger.info(`installed ${r.filePath}`);
+          logger.info('installed', { filePath: r.filePath });
         } else if (r.kind === 'skipped-exists-same') {
-          logger.debug(`kept existing (same) ${r.filePath}`);
+          logger.debug('kept existing (same)', { filePath: r.filePath });
         } else {
-          logger.warn(`kept existing (DIFFERENT) ${r.filePath}`);
+          logger.warn('kept existing (DIFFERENT)', { filePath: r.filePath });
         }
       }
       if (diffs.length > 0) {
         logger.warn('Some files differ from the current templates. Per policy, install never overwrites.');
-        logger.info(`See ${installManifestPath} for template hashes and paths.`);
+        logger.info('See install manifest for template hashes and paths', { installManifestPath });
       }
     } else {
       if (assetResults.length === 0) {
         logger.info('update: no changes');
       } else {
         for (const r of assetResults) {
-          logger.info(`updated ${r.filePath}`);
+          logger.info('updated', { filePath: r.filePath });
         }
       }
     }
