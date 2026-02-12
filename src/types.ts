@@ -152,6 +152,7 @@ export interface NestingAnalysis {
 export interface EarlyReturnMetrics {
   readonly earlyReturnCount: number;
   readonly hasGuardClauses: boolean;
+  readonly guardClauseCount: number;
 }
 
 export interface EarlyReturnItem {
