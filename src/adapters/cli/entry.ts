@@ -27,6 +27,10 @@ interface BarrelPolicyFeatureValue {
   readonly ignoreGlobs?: unknown;
 }
 
+interface WasteFeatureValue {
+  readonly memoryRetentionThreshold?: unknown;
+}
+
 const createCliLogger = (input: CliLoggerInput): FirebatLogger => {
   return createPrettyConsoleLogger({
     level: input.level ?? 'info',
@@ -337,6 +341,18 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
   return forwarding.maxForwardDepth;
 };
 
+const resolveWasteMemoryRetentionThresholdFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
+  const waste = features?.waste;
+
+  if (waste === undefined || waste === null || typeof waste !== 'object') {
+    return undefined;
+  }
+
+  const threshold = (waste as WasteFeatureValue).memoryRetentionThreshold;
+
+  return typeof threshold === 'number' && Number.isFinite(threshold) ? Math.max(0, Math.round(threshold)) : undefined;
+};
+
 const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): Promise<FirebatCliOptions> => {
   const options = parseArgs(argv);
 
@@ -362,6 +378,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgDetectors = resolveEnabledDetectorsFromFeatures(featuresCfg);
   const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
+  const cfgWasteMemoryRetentionThreshold = resolveWasteMemoryRetentionThresholdFromFeatures(featuresCfg);
   const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(featuresCfg);
   const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
 
@@ -376,6 +393,9 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     ...(options.explicit?.minSize ? {} : cfgMinSize !== undefined ? { minSize: cfgMinSize } : {}),
     ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
     ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
+    ...(cfgWasteMemoryRetentionThreshold !== undefined
+      ? { wasteMemoryRetentionThreshold: cfgWasteMemoryRetentionThreshold }
+      : {}),
     ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
     ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
     configPath: loaded.resolvedPath,

@@ -45,6 +45,52 @@ describe('integration/forwarding', () => {
     expect(thinWrappers[0]?.header).toBe('wrapper');
   });
 
+  it('should report thin wrappers when destructured params are forwarded', () => {
+    // Arrange
+    const sources = new Map<string, string>();
+    const source = [
+      'function target(a, b) {',
+      '  return a + b;',
+      '}',
+      'export function wrapper({ a, b }) {',
+      '  return target(a, b);',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/forwarding/object-pattern.ts', source);
+
+    // Act
+    const program = createProgramFromMap(sources);
+    const analysis = analyzeForwarding(program, 0);
+    const thinWrappers = analysis.findings.filter(finding => finding.kind === 'thin-wrapper');
+
+    // Assert
+    expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
+  });
+
+  it('should report thin wrappers when destructured rest params are forwarded', () => {
+    // Arrange
+    const sources = new Map<string, string>();
+    const source = [
+      'function target(a, ...rest) {',
+      '  return [a, ...rest].length;',
+      '}',
+      'export function wrapper({ a, ...rest }) {',
+      '  return target(a, ...rest);',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/forwarding/object-pattern-rest.ts', source);
+
+    // Act
+    const program = createProgramFromMap(sources);
+    const analysis = analyzeForwarding(program, 0);
+    const thinWrappers = analysis.findings.filter(finding => finding.kind === 'thin-wrapper');
+
+    // Assert
+    expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
+  });
+
   it('should report chain depth when it exceeds max', () => {
     // Arrange
     const sources = new Map<string, string>();

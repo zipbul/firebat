@@ -1,27 +1,127 @@
 import type { Node } from 'oxc-parser';
 
 import type { WasteFinding } from '../types';
-import type { BitSet, DefMeta, FunctionBodyAnalysis, ParsedFile } from './types';
+import type { BitSet, DefMeta, FunctionBodyAnalysis, NodeValue, ParsedFile } from './types';
 
 import { OxcCFGBuilder } from './cfg-builder';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
-import { getNodeName, getNodeType, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
+import { collectOxcNodes, getNodeName, getNodeType, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
 import { getLineColumn } from './source-position';
 import { collectVariables } from './variable-collector';
 
-const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
-  const names = new Set<string>();
+interface WasteDetectorOptions {
+  readonly memoryRetentionThreshold?: number;
+}
+
+interface BindingName {
+  readonly name: string;
+  readonly location: number;
+}
+
+const extractBindingNames = (node: Node, out: BindingName[]): void => {
+  const nodeType = getNodeType(node);
+
+  if (nodeType === 'Identifier') {
+    const name = getNodeName(node);
+
+    if (name !== null) {
+      out.push({ name, location: node.start });
+    }
+
+    return;
+  }
+
+  if (nodeType === 'ObjectPattern' && isNodeRecord(node)) {
+    const properties = node.properties;
+
+    if (!Array.isArray(properties)) {
+      return;
+    }
+
+    for (const prop of properties) {
+      if (!isOxcNode(prop)) {
+        continue;
+      }
+
+      if (getNodeType(prop) === 'Property' && isNodeRecord(prop)) {
+        const value = prop.value ?? prop.key;
+
+        if (isOxcNode(value)) {
+          extractBindingNames(value, out);
+        }
+
+        continue;
+      }
+
+      if (getNodeType(prop) === 'RestElement' && isNodeRecord(prop)) {
+        const argument = prop.argument;
+
+        if (isOxcNode(argument)) {
+          extractBindingNames(argument, out);
+        }
+      }
+    }
+
+    return;
+  }
+
+  if (nodeType === 'ArrayPattern' && isNodeRecord(node)) {
+    const elements = node.elements;
+
+    if (!Array.isArray(elements)) {
+      return;
+    }
+
+    for (const element of elements) {
+      if (isOxcNode(element)) {
+        extractBindingNames(element, out);
+      }
+    }
+
+    return;
+  }
+
+  if (nodeType === 'AssignmentPattern' && isNodeRecord(node)) {
+    const left = node.left;
+
+    if (isOxcNode(left)) {
+      extractBindingNames(left, out);
+    }
+
+    return;
+  }
+
+  if (nodeType === 'RestElement' && isNodeRecord(node)) {
+    const argument = node.argument;
+
+    if (isOxcNode(argument)) {
+      extractBindingNames(argument, out);
+    }
+  }
+};
+
+const collectParameterBindings = (functionNode: Node): ReadonlyArray<BindingName> => {
+  const bindings: BindingName[] = [];
   const paramsValue = isNodeRecord(functionNode) ? functionNode.params : undefined;
   const params = isOxcNodeArray(paramsValue) ? paramsValue : [];
 
   for (const param of params) {
-    if (isOxcNode(param) && getNodeType(param) === 'Identifier') {
-      const name = getNodeName(param);
-
-      if (name !== null) {
-        names.add(name);
-      }
+    if (!isOxcNode(param)) {
+      continue;
     }
+
+    extractBindingNames(param, bindings);
+  }
+
+  return bindings;
+};
+
+const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
+  const names = new Set<string>();
+  const parameterBindings = collectParameterBindings(functionNode);
+
+  for (const binding of parameterBindings) {
+    names.add(binding.name);
   }
 
   const bodyNode = isNodeRecord(functionNode) ? functionNode.body : undefined;
@@ -58,16 +158,34 @@ const unionAll = (sets: readonly BitSet[], empty: BitSet): BitSet => {
 const analyzeFunctionBody = (
   bodyNode: Node | ReadonlyArray<Node> | undefined,
   localIndexByName: Map<string, number>,
+  parameterBindings: ReadonlyArray<BindingName>,
 ): FunctionBodyAnalysis => {
   const cfgBuilder = new OxcCFGBuilder();
   const built = cfgBuilder.buildFunctionBody(bodyNode);
   const nodeCount = built.cfg.nodeCount;
   const nodePayloads = built.nodePayloads;
+  const entryId = built.entryId;
   const defsByVarIndex: number[][] = Array.from({ length: localIndexByName.size }, () => []);
   const defMetaById: DefMeta[] = [];
   const genDefIdsByNode: number[][] = Array.from({ length: nodeCount }, () => []);
   const useVarIndexesByNode: number[][] = Array.from({ length: nodeCount }, () => []);
   const writeVarIndexesByNode: number[][] = Array.from({ length: nodeCount }, () => []);
+  const defNodeIdByDefId: number[] = [];
+
+  // Seed parameter bindings as definitions at CFG entry so unused params can be detected.
+  for (const binding of parameterBindings) {
+    const varIndex = localIndexByName.get(binding.name);
+
+    if (typeof varIndex !== 'number') {
+      continue;
+    }
+
+    const defId = defMetaById.length;
+    defMetaById.push({ name: binding.name, varIndex, location: binding.location, writeKind: 'declaration' });
+    defsByVarIndex[varIndex]?.push(defId);
+    genDefIdsByNode[entryId]?.push(defId);
+    defNodeIdByDefId[defId] = entryId;
+  }
 
   for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
     const payload = nodePayloads[nodeId];
@@ -109,6 +227,8 @@ const analyzeFunctionBody = (
             };
 
         defMetaById.push(meta);
+
+        defNodeIdByDefId[defId] = nodeId;
 
         defsByVarIndex[varIndex]?.push(defId);
         genDefIdsByNode[nodeId]?.push(defId);
@@ -252,11 +372,78 @@ const analyzeFunctionBody = (
     usedDefs,
     overwrittenDefIds,
     defs: defMetaById,
+    reachingInByNode: inByNode,
+    defNodeIdByDefId,
+    nodePayloads,
+    cfg: built.cfg,
+    exitId: built.exitId,
+    useVarIndexesByNode,
+    writeVarIndexesByNode,
   };
 };
 
-export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
+const computeMinPayloadStepsToExit = (
+  cfg: FunctionBodyAnalysis['cfg'],
+  nodePayloads: ReadonlyArray<FunctionBodyAnalysis['nodePayloads'][number]>,
+  fromNodeId: number,
+  exitId: number,
+): number | null => {
+  const nodeCount = nodePayloads.length;
+
+  if (fromNodeId < 0 || fromNodeId >= nodeCount) {
+    return null;
+  }
+
+  if (exitId < 0 || exitId >= nodeCount) {
+    return null;
+  }
+
+  const succ = cfg.buildAdjacency('forward');
+  const INF = Number.POSITIVE_INFINITY;
+  const dist: number[] = Array.from({ length: nodeCount }, () => INF);
+  const deque: number[] = [];
+
+  dist[fromNodeId] = 0;
+  deque.push(fromNodeId);
+
+  while (deque.length > 0) {
+    const current = deque.shift();
+
+    if (typeof current !== 'number') {
+      break;
+    }
+
+    if (current === exitId) {
+      break;
+    }
+
+    const nextIds = succ[current] ?? new Int32Array();
+
+    for (const next of nextIds) {
+      const payloadCost = nodePayloads[next] ? 1 : 0;
+      const nextDist = (dist[current] ?? INF) + payloadCost;
+
+      if (nextDist < (dist[next] ?? INF)) {
+        dist[next] = nextDist;
+
+        if (payloadCost === 0) {
+          deque.unshift(next);
+        } else {
+          deque.push(next);
+        }
+      }
+    }
+  }
+
+  const result = dist[exitId] ?? INF;
+
+  return Number.isFinite(result) ? result : null;
+};
+
+export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptions): WasteFinding[] => {
   const findings: WasteFinding[] = [];
+
+  const memoryRetentionThreshold = Math.max(0, Math.round(options?.memoryRetentionThreshold ?? 10));
 
   if (!Array.isArray(files)) {
     return [];
@@ -287,16 +474,72 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
 
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
         const localIndexByName = collectLocalVarIndexes(node);
+        const parameterBindings = collectParameterBindings(node);
 
         if (localIndexByName.size === 0) {
           return;
         }
 
-        const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName);
+        const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName, parameterBindings);
         const defs = analysis.defs;
         const usedDefs = analysis.usedDefs;
         const overwrittenDefIds = analysis.overwrittenDefIds;
+        const reachingInByNode = analysis.reachingInByNode;
+        const nodePayloads = analysis.nodePayloads;
+        const exitId = analysis.exitId;
+        const cfg = analysis.cfg;
         const varHasAnyUsedDef: boolean[] = Array.from({ length: localIndexByName.size }, () => false);
+
+        const nameByVarIndex: string[] = Array.from({ length: localIndexByName.size }, () => '');
+
+        for (const [name, index] of localIndexByName.entries()) {
+          nameByVarIndex[index] = name;
+        }
+
+        const allReads = collectVariables(functionBodyNode, { includeNestedFunctions: true }).filter(u => u.isRead);
+        const outerReads = collectVariables(functionBodyNode, { includeNestedFunctions: false }).filter(u => u.isRead);
+        const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
+        const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
+        const outerReadNames = new Set(outerReads.map(u => u.name));
+
+        const nestedFunctionEntryNodeIds: number[] = [];
+
+        for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
+          const payload = nodePayloads[nodeId];
+
+          if (!payload) {
+            continue;
+          }
+
+          const nested = collectOxcNodes(payload as unknown as NodeValue, n => isFunctionNode(n));
+
+          if (nested.length === 0) {
+            continue;
+          }
+
+          let hasRelevantNested = false;
+
+          for (const nestedFunction of nested) {
+            const nestedType = getNodeType(nestedFunction);
+
+            // If a nested FunctionDeclaration is never referenced in the outer body,
+            // treat its closure reads as non-executed to enable dead-store detection.
+            if (nestedType === 'FunctionDeclaration' && isNodeRecord(nestedFunction)) {
+              const declName = getNodeName(nestedFunction.id);
+
+              if (declName !== null && !outerReadNames.has(declName)) {
+                continue;
+              }
+            }
+
+            hasRelevantNested = true;
+            break;
+          }
+
+          if (hasRelevantNested) {
+            nestedFunctionEntryNodeIds.push(nodeId);
+          }
+        }
 
         for (let defId = 0; defId < defs.length; defId += 1) {
           if (!usedDefs.has(defId)) {
@@ -327,6 +570,24 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
             continue;
           }
 
+          // P2-4: suppress dead-store if this def reaches a nested function and the variable is read in a closure.
+          let isClosureCaptured = false;
+
+          if (closureReadNames.has(meta.name)) {
+            for (const entryNodeId of nestedFunctionEntryNodeIds) {
+              const reaching = reachingInByNode[entryNodeId];
+
+              if (reaching && reaching.has(defId)) {
+                isClosureCaptured = true;
+                break;
+              }
+            }
+          }
+
+          if (isClosureCaptured) {
+            continue;
+          }
+
           const loc = getLineColumn(file.sourceText, meta.location);
           const isOverwritten = overwrittenDefIds[defId] === true;
           const kind = isOverwritten && meta.writeKind !== 'declaration' ? 'dead-store-overwrite' : 'dead-store';
@@ -348,6 +609,103 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               },
             },
           });
+        }
+
+        if (memoryRetentionThreshold >= 1) {
+          const parameterVarIndexes = new Set<number>();
+
+          for (const binding of parameterBindings) {
+            const varIndex = localIndexByName.get(binding.name);
+
+            if (typeof varIndex === 'number') {
+              parameterVarIndexes.add(varIndex);
+            }
+          }
+
+          const lastReadLocationByVarIndex: number[] = Array.from({ length: localIndexByName.size }, () => -1);
+          const lastReadNodeIdByVarIndex: number[] = Array.from({ length: localIndexByName.size }, () => -1);
+          const lastWriteLocationByVarIndex: number[] = Array.from({ length: localIndexByName.size }, () => -1);
+
+          for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
+            const payload = nodePayloads[nodeId];
+
+            if (!payload) {
+              continue;
+            }
+
+            const usages = collectVariables(payload, { includeNestedFunctions: false });
+
+            for (const usage of usages) {
+              const varIndex = localIndexByName.get(usage.name);
+
+              if (typeof varIndex !== 'number') {
+                continue;
+              }
+
+              if (usage.isRead) {
+                if (usage.location > (lastReadLocationByVarIndex[varIndex] ?? -1)) {
+                  lastReadLocationByVarIndex[varIndex] = usage.location;
+                  lastReadNodeIdByVarIndex[varIndex] = nodeId;
+                }
+              }
+
+              if (usage.isWrite) {
+                if (usage.location > (lastWriteLocationByVarIndex[varIndex] ?? -1)) {
+                  lastWriteLocationByVarIndex[varIndex] = usage.location;
+                }
+              }
+            }
+          }
+
+          const scopeEndLoc = getLineColumn(file.sourceText, node.end);
+
+          for (let varIndex = 0; varIndex < localIndexByName.size; varIndex += 1) {
+            if (parameterVarIndexes.has(varIndex)) {
+              continue;
+            }
+
+            const lastReadLocRaw = lastReadLocationByVarIndex[varIndex] ?? -1;
+            const lastReadNodeId = lastReadNodeIdByVarIndex[varIndex] ?? -1;
+            const lastWriteLocRaw = lastWriteLocationByVarIndex[varIndex] ?? -1;
+            const name = nameByVarIndex[varIndex] ?? '';
+
+            if (name.length === 0) {
+              continue;
+            }
+
+            // Ignore variables that are never read.
+            if (lastReadLocRaw < 0 || lastReadNodeId < 0) {
+              continue;
+            }
+
+            // If the variable is written after its last read, it likely releases the previous value.
+            if (lastWriteLocRaw > lastReadLocRaw) {
+              continue;
+            }
+
+            const steps = computeMinPayloadStepsToExit(cfg, nodePayloads, lastReadNodeId, exitId);
+
+            if (steps === null || steps < memoryRetentionThreshold) {
+              continue;
+            }
+
+            const lastUseLoc = getLineColumn(file.sourceText, lastReadLocRaw);
+
+            findings.push({
+              kind: 'memory-retention',
+              label: name,
+              message: `Variable '${name}' is last used at line ${lastUseLoc.line} but scope ends at line ${scopeEndLoc.line}. Consider nullifying or restructuring to allow GC.`,
+              filePath: file.filePath,
+              confidence: 0.5,
+              span: {
+                start: lastUseLoc,
+                end: {
+                  line: lastUseLoc.line,
+                  column: lastUseLoc.column + name.length,
+                },
+              },
+            });
+          }
         }
       }
 

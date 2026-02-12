@@ -5,7 +5,7 @@ import type { ParsedFile } from './types';
 
 import { collectDuplicateGroups } from './duplicate-collector';
 import { getNodeType } from './oxc-ast-utils';
-import { createOxcFingerprint, createOxcFingerprintExact, createOxcFingerprintShape } from './oxc-fingerprint';
+import { createOxcFingerprint, createOxcFingerprintExact, createOxcFingerprintNormalized, createOxcFingerprintShape } from './oxc-fingerprint';
 
 const isCloneTarget = (node: Node): boolean => {
   const type = getNodeType(node);
@@ -51,6 +51,10 @@ const resolveFingerprint = (cloneType: DuplicateCloneType) => {
 
   if (cloneType === 'type-2') {
     return createOxcFingerprint;
+  }
+
+  if (cloneType === 'type-3-normalized') {
+    return createOxcFingerprintNormalized;
   }
 
   return createOxcFingerprintShape;

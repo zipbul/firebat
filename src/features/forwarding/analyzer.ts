@@ -1,10 +1,267 @@
 import type { Node } from 'oxc-parser';
 
+import * as path from 'node:path';
+
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { ForwardingAnalysis, ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
 
 import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
+
+const normalizePath = (value: string): string => value.replaceAll('\\', '/');
+
+const isStringLiteral = (value: NodeValue): value is NodeRecord => {
+  if (!isOxcNode(value)) {
+    return false;
+  }
+
+  if (!isNodeRecord(value)) {
+    return false;
+  }
+
+  if (value.type !== 'Literal') {
+    return false;
+  }
+
+  const literalValue = value.value;
+
+  return typeof literalValue === 'string';
+};
+
+const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<unknown> } => {
+  return !!value && typeof value === 'object' && Array.isArray((value as { body?: unknown }).body);
+};
+
+const buildFileMap = (files: ReadonlyArray<ParsedFile>): Map<string, ParsedFile> => {
+  const map = new Map<string, ParsedFile>();
+
+  for (const file of files) {
+    map.set(normalizePath(file.filePath), file);
+  }
+
+  return map;
+};
+
+const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string, ParsedFile>): string | null => {
+  if (!specifier.startsWith('.')) {
+    return null;
+  }
+
+  const base = path.resolve(path.dirname(fromPath), specifier);
+  const candidates = [
+    base,
+    `${base}.ts`,
+    `${base}.tsx`,
+    `${base}.js`,
+    `${base}.mjs`,
+    `${base}.cjs`,
+    path.join(base, 'index.ts'),
+    path.join(base, 'index.tsx'),
+    path.join(base, 'index.js'),
+    path.join(base, 'index.mjs'),
+    path.join(base, 'index.cjs'),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePath(candidate);
+
+    if (fileMap.has(normalized)) {
+      return normalized;
+    }
+  }
+
+  return null;
+};
+
+type ImportBinding =
+  | {
+      readonly kind: 'named';
+      readonly targetFilePath: string;
+      readonly importedName: string;
+    }
+  | {
+      readonly kind: 'default';
+      readonly targetFilePath: string;
+    }
+  | {
+      readonly kind: 'namespace';
+      readonly targetFilePath: string;
+    };
+
+const collectImportBindings = (
+  program: NodeValue,
+  fromFilePath: string,
+  fileMap: Map<string, ParsedFile>,
+): Map<string, ImportBinding> => {
+  const out = new Map<string, ImportBinding>();
+
+  const p = program as unknown;
+
+  if (!isProgramBody(p)) {
+    return out;
+  }
+
+  for (const stmt of p.body) {
+    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
+      continue;
+    }
+
+    if (stmt.type !== 'ImportDeclaration') {
+      continue;
+    }
+
+    const source = stmt.source;
+
+    if (!isStringLiteral(source)) {
+      continue;
+    }
+
+    const specifier = source.value;
+    const resolved = resolveImport(fromFilePath, specifier, fileMap);
+
+    if (!resolved) {
+      continue;
+    }
+
+    const specifiers = Array.isArray(stmt.specifiers) ? stmt.specifiers : [];
+
+    for (const spec of specifiers) {
+      if (!isOxcNode(spec) || !isNodeRecord(spec)) {
+        continue;
+      }
+
+      if (spec.type === 'ImportSpecifier') {
+        const local = spec.local;
+        const imported = spec.imported;
+
+        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
+          continue;
+        }
+
+        if (!isOxcNode(imported)) {
+          continue;
+        }
+
+        if (imported.type === 'Identifier' && typeof imported.name === 'string') {
+          out.set(local.name, { kind: 'named', targetFilePath: resolved, importedName: imported.name });
+          continue;
+        }
+
+        if (imported.type === 'Literal' && typeof (imported as unknown as { value?: unknown }).value === 'string') {
+          const name = (imported as unknown as { value: string }).value;
+          out.set(local.name, { kind: 'named', targetFilePath: resolved, importedName: name });
+          continue;
+        }
+
+        continue;
+      }
+
+      if (spec.type === 'ImportDefaultSpecifier') {
+        const local = spec.local;
+
+        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
+          continue;
+        }
+
+        out.set(local.name, { kind: 'default', targetFilePath: resolved });
+
+        continue;
+      }
+
+      if (spec.type === 'ImportNamespaceSpecifier') {
+        const local = spec.local;
+
+        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
+          continue;
+        }
+
+        out.set(local.name, { kind: 'namespace', targetFilePath: resolved });
+
+        continue;
+      }
+    }
+  }
+
+  return out;
+};
+
+const collectExportedNameByLocal = (program: NodeValue): Map<string, string> => {
+  const out = new Map<string, string>();
+
+  const p = program as unknown;
+
+  if (!isProgramBody(p)) {
+    return out;
+  }
+
+  for (const stmt of p.body) {
+    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
+      continue;
+    }
+
+    if (stmt.type === 'ExportNamedDeclaration') {
+      const declaration = stmt.declaration;
+      const specifiers = Array.isArray(stmt.specifiers) ? stmt.specifiers : [];
+
+      if (isOxcNode(declaration) && isNodeRecord(declaration)) {
+        if (declaration.type === 'FunctionDeclaration') {
+          const id = declaration.id;
+
+          if (isOxcNode(id) && id.type === 'Identifier' && typeof id.name === 'string') {
+            out.set(id.name, id.name);
+          }
+        }
+
+        if (declaration.type === 'VariableDeclaration') {
+          const declarations = Array.isArray(declaration.declarations) ? declaration.declarations : [];
+
+          for (const decl of declarations) {
+            if (!isOxcNode(decl) || !isNodeRecord(decl) || decl.type !== 'VariableDeclarator') {
+              continue;
+            }
+
+            const id = decl.id;
+
+            if (isOxcNode(id) && id.type === 'Identifier' && typeof id.name === 'string') {
+              out.set(id.name, id.name);
+            }
+          }
+        }
+      }
+
+      for (const spec of specifiers) {
+        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
+          continue;
+        }
+
+        if (spec.type !== 'ExportSpecifier') {
+          continue;
+        }
+
+        const local = spec.local;
+        const exported = spec.exported;
+
+        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
+          continue;
+        }
+
+        if (!isOxcNode(exported) || exported.type !== 'Identifier' || typeof exported.name !== 'string') {
+          continue;
+        }
+
+        out.set(local.name, exported.name);
+      }
+
+      continue;
+    }
+
+    if (stmt.type === 'ExportDefaultDeclaration') {
+      continue;
+    }
+  }
+
+  return out;
+};
 
 const createEmptyForwarding = (): ForwardingAnalysis => ({
   findings: [],
@@ -107,6 +364,49 @@ const getParams = (node: Node): ForwardingParamsInfo | null => {
 
     if (paramNode.type === 'Identifier' && 'name' in paramNode && typeof paramNode.name === 'string') {
       params.push(paramNode.name);
+
+      continue;
+    }
+
+    if (paramNode.type === 'ObjectPattern' && isNodeRecord(paramNode)) {
+      const properties = paramNode.properties;
+
+      if (!Array.isArray(properties)) {
+        return null;
+      }
+
+      for (const prop of properties) {
+        if (!isOxcNode(prop)) {
+          return null;
+        }
+
+        if (prop.type === 'Property' && isNodeRecord(prop)) {
+          const value = prop.value ?? prop.key;
+
+          if (!isOxcNode(value) || value.type !== 'Identifier' || typeof value.name !== 'string') {
+            return null;
+          }
+
+          params.push(value.name);
+
+          continue;
+        }
+
+        if (prop.type === 'RestElement' && isNodeRecord(prop)) {
+          const argument = prop.argument;
+
+          if (!isOxcNode(argument) || argument.type !== 'Identifier' || typeof argument.name !== 'string') {
+            return null;
+          }
+
+          restParam = argument.name;
+          params.push(argument.name);
+
+          continue;
+        }
+
+        return null;
+      }
 
       continue;
     }
@@ -260,6 +560,80 @@ const resolveCalleeName = (callExpression: Node): string | null => {
   return null;
 };
 
+type CalleeRef =
+  | { readonly kind: 'local'; readonly name: string }
+  | { readonly kind: 'namespace'; readonly namespace: string; readonly name: string }
+  | { readonly kind: 'this'; readonly name: string }
+  | { readonly kind: 'unknown' };
+
+const resolveCalleeRef = (callExpression: Node): CalleeRef => {
+  if (!isNodeRecord(callExpression)) {
+    return { kind: 'unknown' };
+  }
+
+  const callee = callExpression.callee;
+
+  if (!isOxcNode(callee)) {
+    return { kind: 'unknown' };
+  }
+
+  if (callee.type === 'Identifier' && 'name' in callee && typeof callee.name === 'string') {
+    return { kind: 'local', name: callee.name };
+  }
+
+  if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+    const object = callee.object;
+    const property = callee.property;
+
+    if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && property.type === 'Identifier') {
+      return { kind: 'this', name: property.name };
+    }
+
+    if (isOxcNode(object) && object.type === 'Identifier' && typeof object.name === 'string') {
+      if (isOxcNode(property) && property.type === 'Identifier' && typeof property.name === 'string') {
+        return { kind: 'namespace', namespace: object.name, name: property.name };
+      }
+    }
+  }
+
+  return { kind: 'unknown' };
+};
+
+const resolveImportedTarget = (
+  callee: CalleeRef,
+  imports: Map<string, ImportBinding>,
+): { readonly targetFilePath: string; readonly exportedName: string } | null => {
+  if (callee.kind === 'local') {
+    const binding = imports.get(callee.name);
+
+    if (!binding) {
+      return null;
+    }
+
+    if (binding.kind === 'named') {
+      return { targetFilePath: binding.targetFilePath, exportedName: binding.importedName };
+    }
+
+    if (binding.kind === 'default') {
+      return { targetFilePath: binding.targetFilePath, exportedName: 'default' };
+    }
+
+    return null;
+  }
+
+  if (callee.kind === 'namespace') {
+    const binding = imports.get(callee.namespace);
+
+    if (!binding || binding.kind !== 'namespace') {
+      return null;
+    }
+
+    return { targetFilePath: binding.targetFilePath, exportedName: callee.name };
+  }
+
+  return null;
+};
+
 const collectFunctionNames = (program: NodeValue): Map<Node, string> => {
   const namesByNode = new Map<Node, string>();
 
@@ -376,14 +750,30 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
 
   const findings: ForwardingFinding[] = [];
 
+  const fileMap = buildFileMap(files);
+  const crossFileWrappers = new Map<
+    string,
+    {
+      node: Node;
+      file: ParsedFile;
+      header: string;
+      depth: number;
+      targetKey: string | null;
+    }
+  >();
+
   for (const file of files) {
     if (file.errors.length > 0) {
       continue;
     }
 
+    const normalizedFilePath = normalizePath(file.filePath);
     const namesByNode = collectFunctionNames(file.program);
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
+
+    const exportsByLocal = collectExportedNameByLocal(file.program as NodeValue);
+    const importsByLocal = collectImportBindings(file.program as NodeValue, normalizedFilePath, fileMap);
 
     walkOxcTree(file.program, node => {
       if (!isFunctionNode(node)) {
@@ -405,6 +795,23 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
       if (header.length > 0 && header !== 'anonymous') {
         calleeByName.set(header, calleeName);
         wrapperNodeByName.set(header, node);
+
+        const exportedName = exportsByLocal.get(header);
+
+        if (exportedName && exportedName.length > 0) {
+          const calleeRef = resolveCalleeRef(wrapperCall);
+          const importedTarget = resolveImportedTarget(calleeRef, importsByLocal);
+          const targetKey = importedTarget ? `${importedTarget.targetFilePath}:${importedTarget.exportedName}` : null;
+          const key = `${normalizedFilePath}:${exportedName}`;
+
+          crossFileWrappers.set(key, {
+            node,
+            file,
+            header,
+            depth: 0,
+            targetKey,
+          });
+        }
       }
 
       return true;
@@ -421,6 +828,57 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
           addFinding(findings, 'forward-chain', node, file.filePath, file.sourceText, header, depth, evidence);
         }
       }
+    }
+  }
+
+  // Pass 2: Resolve cross-file forwarding chains (fixpoint)
+  if (crossFileWrappers.size > 0) {
+    const maxIterations = crossFileWrappers.size + 1;
+
+    for (let iter = 0; iter < maxIterations; iter += 1) {
+      let changed = false;
+
+      for (const entry of crossFileWrappers.values()) {
+        if (!entry.targetKey) {
+          continue;
+        }
+
+        const next = crossFileWrappers.get(entry.targetKey);
+
+        if (!next) {
+          continue;
+        }
+
+        const candidate = 1 + next.depth;
+
+        if (candidate > entry.depth) {
+          entry.depth = candidate;
+          changed = true;
+        }
+      }
+
+      if (!changed) {
+        break;
+      }
+    }
+
+    for (const entry of crossFileWrappers.values()) {
+      if (entry.depth < 2) {
+        continue;
+      }
+
+      const evidence = `cross-file forwarding chain depth ${entry.depth}`;
+
+      addFinding(
+        findings,
+        'cross-file-forwarding-chain',
+        entry.node,
+        entry.file.filePath,
+        entry.file.sourceText,
+        entry.header,
+        entry.depth,
+        evidence,
+      );
     }
   }
 

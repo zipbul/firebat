@@ -2,6 +2,7 @@ import type { Node } from 'oxc-parser';
 
 import type { NodeRecord, NodeValue, NodeWithValue } from './types';
 
+import { normalizeForFingerprint } from './ast-normalizer';
 import { hashString } from './hasher';
 
 const isOxcNode = (value: NodeValue): value is Node =>
@@ -69,7 +70,33 @@ const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boo
 interface OxcFingerprintOptions {
   readonly includeLiteralValues: boolean;
   readonly includeIdentifierNames: boolean;
+  readonly ignoredKeys?: ReadonlySet<string>;
 }
+
+const NORMALIZED_IGNORED_KEYS: ReadonlySet<string> = new Set([
+  // TypeScript / declaration noise
+  'typeAnnotation',
+  'typeParameters',
+  'typeArguments',
+  'returnType',
+  'implements',
+  'declare',
+  'definite',
+  // Decorators / modifiers
+  'decorators',
+  'accessibility',
+  'abstract',
+  'override',
+  'readonly',
+  // Literal representation / directives
+  'raw',
+  'directive',
+  // Export metadata
+  'exportKind',
+  'attributes',
+  'specifiers',
+  'source',
+]);
 
 const escapeFingerprintToken = (token: string): string => {
   // We use '\x00' as a join separator, so ensure tokens cannot contain it.
@@ -126,6 +153,10 @@ const createOxcFingerprintCore = (node: NodeValue, options: OxcFingerprintOption
         continue;
       }
 
+      if (options.ignoredKeys?.has(key)) {
+        continue;
+      }
+
       // Skip identifiers names to allow renaming-robust detection?
       // User said "strict". Usually strict means "exact match".
       // But renaming robust is "Type-2".
@@ -167,3 +198,13 @@ export const createOxcFingerprint = (node: NodeValue): string =>
 
 export const createOxcFingerprintShape = (node: NodeValue): string =>
   createOxcFingerprintCore(node, { includeLiteralValues: false, includeIdentifierNames: false });
+
+export const createOxcFingerprintNormalized = (node: NodeValue): string => {
+  const normalized = normalizeForFingerprint(node);
+
+  return createOxcFingerprintCore(normalized, {
+    includeLiteralValues: false,
+    includeIdentifierNames: false,
+    ignoredKeys: NORMALIZED_IGNORED_KEYS,
+  });
+};

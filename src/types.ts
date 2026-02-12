@@ -26,7 +26,7 @@ export type FirebatDetector =
 
 export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'node';
 
-export type WasteKind = 'dead-store' | 'dead-store-overwrite';
+export type WasteKind = 'dead-store' | 'dead-store-overwrite' | 'memory-retention';
 
 export interface SourcePosition {
   readonly line: number;
@@ -75,7 +75,7 @@ export interface DuplicateItem {
   readonly span: SourceSpan;
 }
 
-export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape';
+export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape' | 'type-3-normalized';
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
@@ -199,7 +199,7 @@ export interface BarrelPolicyAnalysis {
   readonly findings: ReadonlyArray<BarrelPolicyFinding>;
 }
 
-export type ForwardingFindingKind = 'thin-wrapper' | 'forward-chain';
+export type ForwardingFindingKind = 'thin-wrapper' | 'forward-chain' | 'cross-file-forwarding-chain';
 
 export interface ForwardingFinding {
   readonly kind: ForwardingFindingKind;
@@ -248,6 +248,7 @@ export interface WasteFinding {
   readonly message: string;
   readonly filePath: string;
   readonly span: SourceSpan;
+  readonly confidence?: number;
 }
 
 export type TypecheckSeverity = 'error' | 'warning';

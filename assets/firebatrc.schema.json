@@ -26,7 +26,7 @@
         "forwarding": {
           "$ref": "#/$defs/forwardingToggle"
         },
-        "waste": { "$ref": "#/$defs/emptyToggle" },
+        "waste": { "$ref": "#/$defs/wasteToggle" },
         "lint": { "$ref": "#/$defs/emptyToggle" },
         "typecheck": { "$ref": "#/$defs/emptyToggle" },
         "dependencies": { "$ref": "#/$defs/emptyToggle" },
@@ -56,7 +56,7 @@
                 "format": { "$ref": "#/$defs/emptyInheritable" },
                 "structural-duplicates": { "$ref": "#/$defs/structuralDuplicatesInheritable" },
                 "forwarding": { "$ref": "#/$defs/forwardingInheritable" },
-                "waste": { "$ref": "#/$defs/emptyInheritable" },
+                "waste": { "$ref": "#/$defs/wasteInheritable" },
                 "lint": { "$ref": "#/$defs/emptyInheritable" },
                 "typecheck": { "$ref": "#/$defs/emptyInheritable" },
                 "dependencies": { "$ref": "#/$defs/emptyInheritable" },
@@ -84,6 +84,35 @@
     "emptyInheritable": {
       "description": "false disables; true enables; 'inherit' uses root.",
       "oneOf": [{ "type": "boolean" }, { "type": "string", "const": "inherit" }]
+    },
+    "wasteToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "memoryRetentionThreshold": { "type": "integer", "minimum": 0, "default": 10 }
+          },
+          "minProperties": 1
+        }
+      ]
+    },
+    "wasteInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        { "type": "string", "const": "inherit" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "memoryRetentionThreshold": { "type": "integer", "minimum": 0, "default": 10 }
+          },
+          "minProperties": 1
+        }
+      ]
     },
     "exactDuplicatesToggle": {
       "oneOf": [

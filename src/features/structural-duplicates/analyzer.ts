@@ -1,5 +1,5 @@
 import type { ParsedFile } from '../../engine/types';
-import type { DuplicateGroup, StructuralDuplicatesAnalysis } from '../../types';
+import type { StructuralDuplicatesAnalysis } from '../../types';
 
 import { detectClones } from '../../engine/duplicate-detector';
 
@@ -13,7 +13,9 @@ const analyzeStructuralDuplicates = (files: ReadonlyArray<ParsedFile>, minSize: 
   }
 
   return {
-    cloneClasses: detectClones(files, minSize, 'type-2-shape'),
+    cloneClasses: [...detectClones(files, minSize, 'type-2-shape'), ...detectClones(files, minSize, 'type-3-normalized')].sort(
+      (left, right) => right.items.length - left.items.length || left.cloneType.localeCompare(right.cloneType),
+    ),
   };
 };
 

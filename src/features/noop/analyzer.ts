@@ -3,6 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { NoopAnalysis, NoopFinding } from '../../types';
 
+import { evalStaticTruthiness } from '../../engine/oxc-expression-utils';
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
@@ -33,16 +34,41 @@ const isNoopExpressionType = (nodeType: string): boolean => {
   );
 };
 
-const isBooleanLiteral = (value: NodeValue): boolean => {
-  if (!isOxcNode(value)) {
+const isSameExpression = (left: Node, right: Node): boolean => {
+  if (left.type !== right.type) {
     return false;
   }
 
-  if (value.type !== 'Literal') {
-    return false;
+  if (left.type === 'Identifier' && right.type === 'Identifier') {
+    return left.name === right.name;
   }
 
-  return 'value' in value && typeof value.value === 'boolean';
+  if (left.type === 'ThisExpression' && right.type === 'ThisExpression') {
+    return true;
+  }
+
+  if (left.type === 'MemberExpression' && right.type === 'MemberExpression') {
+    if (!isNodeRecord(left) || !isNodeRecord(right)) {
+      return false;
+    }
+
+    if (left.computed !== right.computed) {
+      return false;
+    }
+
+    const leftObject = left.object;
+    const rightObject = right.object;
+    const leftProperty = left.property;
+    const rightProperty = right.property;
+
+    if (!isOxcNode(leftObject) || !isOxcNode(rightObject) || !isOxcNode(leftProperty) || !isOxcNode(rightProperty)) {
+      return false;
+    }
+
+    return isSameExpression(leftObject, rightObject) && isSameExpression(leftProperty, rightProperty);
+  }
+
+  return false;
 };
 
 const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: string): NoopFinding[] => {
@@ -70,13 +96,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
         if (
           isOxcNode(left) &&
           isOxcNode(right) &&
-          left.type === 'Identifier' &&
-          right.type === 'Identifier' &&
-          isNodeRecord(left) &&
-          isNodeRecord(right) &&
-          typeof left.name === 'string' &&
-          typeof right.name === 'string' &&
-          left.name === right.name &&
+          isSameExpression(left, right) &&
           (expression.operator === '=' || expression.operator === undefined)
         ) {
           findings.push({
@@ -84,7 +104,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
             filePath,
             span: getSpan(node, sourceText),
             confidence: 0.9,
-            evidence: `variable '${left.name}' is assigned to itself`,
+            evidence: 'left-hand side is assigned to itself',
           });
         }
       }
@@ -93,13 +113,15 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
     if (node.type === 'IfStatement' && isNodeRecord(node)) {
       const test = node.test;
 
-      if (isBooleanLiteral(test)) {
+      const truthiness = evalStaticTruthiness(test);
+
+      if (truthiness !== null) {
         findings.push({
           kind: 'constant-condition',
           filePath,
           span: getSpan(node, sourceText),
-          confidence: 0.7,
-          evidence: 'if condition is a constant boolean literal',
+          confidence: 0.8,
+          evidence: `if condition is always ${truthiness ? 'truthy' : 'falsy'}`,
         });
       }
     }

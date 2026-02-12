@@ -186,6 +186,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     detectors: options.detectors,
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
     maxForwardDepth: options.maxForwardDepth,
+    ...(options.detectors.includes('waste') ? { wasteMemoryRetentionThreshold: options.wasteMemoryRetentionThreshold } : {}),
     ...(options.detectors.includes('unknown-proof')
       ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
       : {}),
@@ -370,7 +371,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    waste = detectWaste(program);
+    waste = detectWaste(program, {
+      ...(options.wasteMemoryRetentionThreshold !== undefined
+        ? { memoryRetentionThreshold: options.wasteMemoryRetentionThreshold }
+        : {}),
+    });
     detectorTimings.waste = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.waste) });

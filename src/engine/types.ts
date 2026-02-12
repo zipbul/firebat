@@ -44,6 +44,13 @@ export interface FunctionBodyAnalysis {
   readonly usedDefs: BitSet;
   readonly overwrittenDefIds: ReadonlyArray<boolean>;
   readonly defs: ReadonlyArray<DefMeta>;
+  readonly reachingInByNode: ReadonlyArray<BitSet>;
+  readonly defNodeIdByDefId: ReadonlyArray<number>;
+  readonly nodePayloads: ReadonlyArray<CfgNodePayload | null>;
+  readonly cfg: IntegerCFG;
+  readonly exitId: NodeId;
+  readonly useVarIndexesByNode: ReadonlyArray<ReadonlyArray<number>>;
+  readonly writeVarIndexesByNode: ReadonlyArray<ReadonlyArray<number>>;
 }
 
 export type NodeValue = Node | ReadonlyArray<NodeValue> | string | number | boolean | null | undefined;

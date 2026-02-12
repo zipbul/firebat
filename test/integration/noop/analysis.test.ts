@@ -119,7 +119,78 @@ describe('integration/noop', () => {
 
     // Assert
     expect(selfAssigns.length).toBe(1);
-    expect(selfAssigns[0]?.evidence).toContain('assigned to itself');
+    expect(selfAssigns[0]?.confidence).toBe(0.9);
+  });
+
+  it('should report self-assignment when member expression is assigned to itself', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = [
+      'export function selfAssignMember() {',
+      '  const obj = { a: 1 };',
+      '  obj.a = obj.a;',
+      '  this.x = this.x;',
+      '  return obj.a;',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/noop/self-assign-member.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let selfAssigns = analysis.findings.filter(finding => finding.kind === 'self-assignment');
+
+    // Assert
+    expect(selfAssigns.length).toBe(2);
+  });
+
+  it('should report constant-condition when if condition is statically truthy or falsy', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = [
+      'export function constantConditionVariants() {',
+      '  if (0) {',
+      '    return 1;',
+      '  }',
+      '  if ("") {',
+      '    return 2;',
+      '  }',
+      '  if (null) {',
+      '    return 3;',
+      '  }',
+      '  if (void 0) {',
+      '    return 4;',
+      '  }',
+      '  return 0;',
+      '}',
+    ].join('\n');
+
+    sources.set('/virtual/noop/constant-condition-variants.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let constantConditions = analysis.findings.filter(finding => finding.kind === 'constant-condition');
+
+    // Assert
+    expect(constantConditions.length).toBe(4);
+  });
+
+  it('should not report constant-condition when condition is while(true)', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let source = ['export function whileTrue() {', '  while (true) {', '    break;', '  }', '  return 0;', '}'].join('\n');
+
+    sources.set('/virtual/noop/while-true.ts', source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeNoop(program);
+    let constantConditions = analysis.findings.filter(finding => finding.kind === 'constant-condition');
+
+    // Assert
+    expect(constantConditions.length).toBe(0);
   });
 
   it('should report empty-function-body when function has no statements', () => {

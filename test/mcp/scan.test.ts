@@ -49,7 +49,7 @@ describe('scan', () => {
     expect(typeof structured.report.analyses).toBe('object');
   }, 120_000);
 
-  test('should produce a diff object on subsequent scans', async () => {
+  test('should produce a diff object when scanning the same target twice', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
 
@@ -115,7 +115,7 @@ describe('scan', () => {
   // minSize variations
   // -----------------------------------------------------------------------
 
-  test('should scan with minSize=0 (smallest possible)', async () => {
+  test('should scan when minSize=0 (smallest possible)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
     // Act
@@ -129,7 +129,7 @@ describe('scan', () => {
     expect(structured.report).toBeTruthy();
   }, 60_000);
 
-  test('should scan with minSize=9999 (very large – should find nothing)', async () => {
+  test('should scan when minSize=9999 (very large – should find nothing)', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
     // Act
@@ -143,7 +143,7 @@ describe('scan', () => {
     expect(structured.report).toBeTruthy();
   }, 60_000);
 
-  test('should scan with minSize="auto"', async () => {
+  test('should scan when minSize is "auto"', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
     // Act
@@ -161,7 +161,7 @@ describe('scan', () => {
   // maxForwardDepth
   // -----------------------------------------------------------------------
 
-  test('should scan with maxForwardDepth=0', async () => {
+  test('should scan when maxForwardDepth=0', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
     // Act
@@ -175,7 +175,7 @@ describe('scan', () => {
     expect(structured.report).toBeTruthy();
   }, 60_000);
 
-  test('should scan with maxForwardDepth=10', async () => {
+  test('should scan when maxForwardDepth=10', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
     // Act
@@ -193,7 +193,7 @@ describe('scan', () => {
   // Multiple files
   // -----------------------------------------------------------------------
 
-  test('should scan multiple files at once', async () => {
+  test('should scan successfully when given multiple files at once', async () => {
     // Arrange
     const targets = [
       path.join(ctx.fixturesAbs, 'sample.ts'),
@@ -215,7 +215,7 @@ describe('scan', () => {
   // Edge cases
   // -----------------------------------------------------------------------
 
-  test('should handle scanning an empty targets array (defaults to project discovery)', async () => {
+  test('should handle scanning when targets are omitted (defaults to project discovery)', async () => {
     // Arrange – no targets
 
     // Act
@@ -229,7 +229,7 @@ describe('scan', () => {
     expect(structured.report).toBeTruthy();
   }, 60_000);
 
-  test('should handle scanning a non-existent file gracefully', async () => {
+  test('should handle scanning when a target file does not exist', async () => {
     // Arrange
     const bogus = path.join(ctx.tmpRootAbs, 'does-not-exist.ts');
     // Act
@@ -242,7 +242,7 @@ describe('scan', () => {
     expect(structured).toBeDefined();
   }, 60_000);
 
-  test('should handle scanning a directory path', async () => {
+  test('should handle scanning when a directory path is provided', async () => {
     // Arrange
     const dir = ctx.fixturesAbs;
     // Act
@@ -261,18 +261,23 @@ describe('scan', () => {
   // Stress: rapid repeated scans
   // -----------------------------------------------------------------------
 
-  test('should handle 5 rapid sequential scans without crashing', async () => {
+  test('should handle 5 rapid sequential scans when invoked repeatedly', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
 
     // Act & Assert
     for (let i = 0; i < 5; i++) {
+      // Arrange
       const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
         targets: [fixture],
         detectors: ['noop'],
         minSize: 'auto',
       });
 
+      // Act
+      // (tool call already performed above)
+
+      // Assert
       expect(isError).toBe(false);
       expect(structured.report).toBeTruthy();
     }
