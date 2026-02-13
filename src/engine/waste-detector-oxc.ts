@@ -511,6 +511,7 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
         const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
         const outerReadNames = new Set(outerReads.map(u => u.name));
         const nestedFunctionEntryNodeIds: number[] = [];
+        const closureReadNamesByEntryNodeId = new Map<number, Set<string>>();
 
         for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
           const payload = nodePayloads[nodeId];
@@ -526,6 +527,7 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
           }
 
           let hasRelevantNested = false;
+          const entryReadNames = new Set<string>();
 
           for (const nestedFunction of nested) {
             const nestedType = getNodeType(nestedFunction);
@@ -542,11 +544,21 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
 
             hasRelevantNested = true;
 
-            break;
+            // Collect read names specific to this nested function for per-entry precision.
+            const nestedReads = collectVariables(nestedFunction as unknown as NodeValue, { includeNestedFunctions: true }).filter(
+              u => u.isRead,
+            );
+
+            for (const r of nestedReads) {
+              if (closureReadNames.has(r.name)) {
+                entryReadNames.add(r.name);
+              }
+            }
           }
 
           if (hasRelevantNested) {
             nestedFunctionEntryNodeIds.push(nodeId);
+            closureReadNamesByEntryNodeId.set(nodeId, entryReadNames);
           }
         }
 
@@ -582,15 +594,19 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
           // P2-4: suppress dead-store if this def reaches a nested function and the variable is read in a closure.
           let isClosureCaptured = false;
 
-          if (closureReadNames.has(meta.name)) {
-            for (const entryNodeId of nestedFunctionEntryNodeIds) {
-              const reaching = reachingInByNode[entryNodeId];
+          for (const entryNodeId of nestedFunctionEntryNodeIds) {
+            const entryReadNames = closureReadNamesByEntryNodeId.get(entryNodeId);
 
-              if (reaching && reaching.has(defId)) {
-                isClosureCaptured = true;
+            if (!entryReadNames || !entryReadNames.has(meta.name)) {
+              continue;
+            }
 
-                break;
-              }
+            const reaching = reachingInByNode[entryNodeId];
+
+            if (reaching && reaching.has(defId)) {
+              isClosureCaptured = true;
+
+              break;
             }
           }
 

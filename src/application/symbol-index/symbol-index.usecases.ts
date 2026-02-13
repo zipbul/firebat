@@ -14,7 +14,7 @@ import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/fil
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { createSqliteSymbolIndexRepository } from '../../infrastructure/sqlite/symbol-index.repository';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { discoverDefaultTargets } from '../../target-discovery';
+import { resolveTargets } from '../../target-discovery';
 import { computeToolVersion } from '../../tool-version';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey } from '../scan/cache-keys';
@@ -32,11 +32,7 @@ const resolveRoot = (root: string | undefined): string => {
 };
 
 const toAbsoluteTargets = async (rootAbs: string, targets: ReadonlyArray<string> | undefined): Promise<string[]> => {
-  if (!targets || targets.length === 0) {
-    return discoverDefaultTargets(rootAbs);
-  }
-
-  return targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)));
+  return resolveTargets(rootAbs, targets);
 };
 
 interface RepositoryContext {

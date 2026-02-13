@@ -2,7 +2,7 @@ import type { Node } from 'oxc-parser';
 
 import * as path from 'node:path';
 
-import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type { ForwardingAnalysis, ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
 
 import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/oxc-ast-utils';
@@ -28,7 +28,7 @@ const isStringLiteral = (value: NodeValue): value is NodeRecord => {
   return typeof literalValue === 'string';
 };
 
-const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<unknown> } => {
+const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<NodeValue> } => {
   return !!value && typeof value === 'object' && Array.isArray((value as { body?: unknown }).body);
 };
 
@@ -51,15 +51,7 @@ const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string,
   const candidates = [
     base,
     `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.js`,
-    `${base}.mjs`,
-    `${base}.cjs`,
     path.join(base, 'index.ts'),
-    path.join(base, 'index.tsx'),
-    path.join(base, 'index.js'),
-    path.join(base, 'index.mjs'),
-    path.join(base, 'index.cjs'),
   ];
 
   for (const candidate of candidates) {
@@ -752,16 +744,15 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
 
   const findings: ForwardingFinding[] = [];
   const fileMap = buildFileMap(files);
-  const crossFileWrappers = new Map<
-    string,
-    {
-      node: Node;
-      file: ParsedFile;
-      header: string;
-      depth: number;
-      targetKey: string | null;
-    }
-  >();
+  type CrossFileWrapper = {
+    node: Node;
+    file: ParsedFile;
+    header: string;
+    depth: number;
+    targetKey: string | null;
+  };
+
+  const crossFileWrappers = new Map<string, CrossFileWrapper>();
 
   for (const file of files) {
     if (file.errors.length > 0) {
@@ -833,19 +824,53 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
 
   // Pass 2: Resolve cross-file forwarding chains (fixpoint)
   if (crossFileWrappers.size > 0) {
+    // Detect cycles in the forwarding graph to prevent inflated depth values.
+    const inCycle = new Set<string>();
+
+    for (const [key] of crossFileWrappers) {
+      if (inCycle.has(key)) {
+        continue;
+      }
+
+      const visited = new Set<string>();
+      let cursor: string | null = key;
+
+      while (cursor !== null && !visited.has(cursor)) {
+        visited.add(cursor);
+        const entry = crossFileWrappers.get(cursor);
+        cursor = entry?.targetKey ?? null;
+      }
+
+      if (cursor !== null && visited.has(cursor)) {
+        // Found a cycle — mark all nodes in the cycle.
+        let mark: string | null = cursor;
+        const cycleStart = cursor;
+
+        do {
+          if (mark !== null) {
+            inCycle.add(mark);
+          }
+
+          const entryInCycle: CrossFileWrapper | undefined = mark !== null ? crossFileWrappers.get(mark) : undefined;
+          mark = entryInCycle?.targetKey ?? null;
+        } while (mark !== null && mark !== cycleStart);
+      }
+    }
+
+    // Fixpoint iteration: only resolve non-cyclic entries.
     const maxIterations = crossFileWrappers.size + 1;
 
     for (let iter = 0; iter < maxIterations; iter += 1) {
       let changed = false;
 
-      for (const entry of crossFileWrappers.values()) {
-        if (!entry.targetKey) {
+      for (const [key, entry] of crossFileWrappers.entries()) {
+        if (!entry.targetKey || inCycle.has(key)) {
           continue;
         }
 
         const next = crossFileWrappers.get(entry.targetKey);
 
-        if (!next) {
+        if (!next || inCycle.has(entry.targetKey)) {
           continue;
         }
 
@@ -862,7 +887,25 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
       }
     }
 
-    for (const entry of crossFileWrappers.values()) {
+    for (const [key, entry] of crossFileWrappers.entries()) {
+      if (inCycle.has(key)) {
+        // Report circular forwarding as a distinct finding.
+        const evidence = 'circular forwarding chain detected';
+
+        addFinding(
+          findings,
+          'cross-file-forwarding-chain',
+          entry.node,
+          entry.file.filePath,
+          entry.file.sourceText,
+          entry.header,
+          -1,
+          evidence,
+        );
+
+        continue;
+      }
+
       if (entry.depth < 2) {
         continue;
       }

@@ -184,16 +184,15 @@ const isTestLikePath = (value: string): boolean => {
     normalized.includes('/test/') ||
     normalized.includes('/tests/') ||
     normalized.endsWith('.test.ts') ||
-    normalized.endsWith('.test.tsx') ||
     normalized.endsWith('.spec.ts') ||
-    normalized.endsWith('.spec.tsx')
+    normalized.endsWith('.spec.ts')
   );
 };
 
 const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
   try {
     const raw = readFileSync(path.join(rootAbs, 'package.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { main?: unknown; exports?: unknown };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     const out: string[] = [];
 
     const collectStrings = (node: unknown): void => {
@@ -220,10 +219,19 @@ const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
       }
     };
 
-    if (typeof parsed.main === 'string') {
-      out.push(parsed.main);
+    // Standard entry point fields
+    const scalarFields = ['main', 'module', 'browser', 'types', 'typings'] as const;
+
+    for (const field of scalarFields) {
+      if (typeof parsed[field] === 'string') {
+        out.push(parsed[field] as string);
+      }
     }
 
+    // bin can be a string or an object of strings
+    collectStrings(parsed.bin);
+
+    // exports can be a complex conditional exports map
     collectStrings(parsed.exports);
 
     return out;
@@ -243,15 +251,7 @@ const resolveEntrypointToFile = (rootAbs: string, spec: string, fileMap: Map<str
   const candidates = [
     abs,
     `${abs}.ts`,
-    `${abs}.tsx`,
-    `${abs}.js`,
-    `${abs}.mjs`,
-    `${abs}.cjs`,
     path.join(abs, 'index.ts'),
-    path.join(abs, 'index.tsx'),
-    path.join(abs, 'index.js'),
-    path.join(abs, 'index.mjs'),
-    path.join(abs, 'index.cjs'),
   ];
 
   for (const candidate of candidates) {
@@ -501,15 +501,7 @@ const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string,
   const candidates = [
     base,
     `${base}.ts`,
-    `${base}.tsx`,
-    `${base}.js`,
-    `${base}.mjs`,
-    `${base}.cjs`,
     path.join(base, 'index.ts'),
-    path.join(base, 'index.tsx'),
-    path.join(base, 'index.js'),
-    path.join(base, 'index.mjs'),
-    path.join(base, 'index.cjs'),
   ];
 
   for (const candidate of candidates) {

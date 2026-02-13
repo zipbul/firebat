@@ -699,7 +699,20 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
   );
 };
 
+let normalizationCache = new WeakMap<Node, NormalizedValue>();
+
 const normalizeNode = (node: Node, functionDepth: number): NormalizedValue => {
+  // Memoize: if this exact node reference was already normalized at the same semantic level, reuse.
+  // functionDepth only distinguishes 0 vs >0, and at >0 function nodes are returned early in the
+  // caller, so caching by node alone is safe for non-function nodes.
+  if (!isFunctionNode(node)) {
+    const cached = normalizationCache.get(node);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
+
   if (!isNodeRecord(node)) {
     return node;
   }
@@ -771,6 +784,10 @@ const normalizeNode = (node: Node, functionDepth: number): NormalizedValue => {
     return normalizeForFingerprintInternal(forEach, functionDepth);
   }
 
+  if (!isFunctionNode(node)) {
+    normalizationCache.set(node, normalized);
+  }
+
   return normalized;
 };
 
@@ -807,5 +824,7 @@ const normalizeForFingerprintInternal = (value: NodeValue, functionDepth: number
 };
 
 export const normalizeForFingerprint = (value: NodeValue): NormalizedValue => {
+  normalizationCache = new WeakMap();
+
   return normalizeForFingerprintInternal(value, 0);
 };

@@ -47,6 +47,14 @@ const isSameExpression = (left: Node, right: Node): boolean => {
     return true;
   }
 
+  if (left.type === 'Literal' && right.type === 'Literal') {
+    if (!isNodeRecord(left) || !isNodeRecord(right)) {
+      return false;
+    }
+
+    return left.value === right.value;
+  }
+
   if (left.type === 'MemberExpression' && right.type === 'MemberExpression') {
     if (!isNodeRecord(left) || !isNodeRecord(right)) {
       return false;

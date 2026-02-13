@@ -1,6 +1,7 @@
 import { runCache } from './src/adapters/cli/cache';
 import { runCli } from './src/adapters/cli/entry';
 import { runInstall, runUpdate } from './src/adapters/cli/install';
+import { routeFirebatArgv } from './src/adapters/cli/argv-router';
 import { runMcp } from './src/adapters/mcp/entry';
 import { appendFirebatLog } from './src/infra/logging';
 import { createPrettyConsoleLogger } from './src/infrastructure/logging/pretty-console-logger';
@@ -25,41 +26,43 @@ const appendErrorLogSafe = async (subcommand: string | undefined, message: strin
   });
 };
 
-const runSubcommand = async (
-  subcommand: string | undefined,
-  argv: string[],
-  logger: ReturnType<typeof createPrettyConsoleLogger>,
-): Promise<number | null> => {
-  if (subcommand === 'install' || subcommand === 'i') {
-    return runInstall(argv.slice(1), logger);
-  }
-
-  if (subcommand === 'update' || subcommand === 'u') {
-    return runUpdate(argv.slice(1), logger);
-  }
-
-  if (subcommand === 'cache') {
-    return runCache(argv.slice(1), logger);
-  }
-
-  if (subcommand === 'mcp') {
-    await runMcp();
-
+const resolveLogLevel = (value: string | undefined): 'error' | 'warn' | 'info' | 'debug' | 'trace' | null => {
+  if (value === undefined) {
     return null;
   }
 
-  const scanArgv = subcommand === 'scan' ? argv.slice(1) : argv;
+  if (value === 'error' || value === 'warn' || value === 'info' || value === 'debug' || value === 'trace') {
+    return value;
+  }
 
-  return runCli(scanArgv);
+  return null;
 };
 
 const main = async (): Promise<void> => {
-  const argv = Bun.argv.slice(2);
-  const subcommand = argv[0];
-  const logger = createPrettyConsoleLogger({ level: 'info', includeStack: false });
+  const rawArgv = Bun.argv.slice(2);
+  const routed = routeFirebatArgv(rawArgv);
+  const logLevel = resolveLogLevel(routed.global.logLevel);
+
+  if (routed.global.logLevel !== undefined && logLevel === null) {
+    process.stderr.write(`[firebat] Invalid --log-level: ${routed.global.logLevel}\n`);
+    process.exit(1);
+  }
+
+  const logger = createPrettyConsoleLogger({ level: logLevel ?? 'info', includeStack: routed.global.logStack });
+
+  const subcommand = routed.subcommand;
 
   try {
-    const exitCode = await runSubcommand(subcommand, argv, logger);
+    const exitCode =
+      subcommand === 'install'
+        ? await runInstall(routed.subcommandArgv, logger)
+        : subcommand === 'update'
+          ? await runUpdate(routed.subcommandArgv, logger)
+          : subcommand === 'cache'
+            ? await runCache(routed.subcommandArgv, logger)
+            : subcommand === 'mcp'
+              ? (await runMcp(), null)
+              : await runCli(routed.scanArgv);
 
     if (exitCode !== null) {
       process.exit(exitCode);

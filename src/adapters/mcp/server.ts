@@ -3,8 +3,8 @@ import type { CallToolResult, ServerNotification, ServerRequest } from '@modelco
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import * as path from 'node:path';
-import * as z from 'zod';
+
+import { z } from 'zod';
 
 import type { FirebatConfig } from '../../firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
@@ -15,7 +15,7 @@ import { scanUseCase } from '../../application/scan/scan.usecase';
 import { loadFirebatConfigFile } from '../../firebat-config.loader';
 import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
+import { resolveTargets } from '../../target-discovery';
 
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
@@ -496,11 +496,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof ScanInputSchema>) => {
       const t0 = nowMs();
-      const rawTargets =
-        args.targets !== undefined && args.targets.length > 0
-          ? args.targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)))
-          : await discoverDefaultTargets(rootAbs);
-      const targets = await expandTargets(rawTargets);
+      const targets = await resolveTargets(rootAbs, args.targets);
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);

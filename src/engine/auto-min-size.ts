@@ -1,24 +1,8 @@
-import type { Node } from 'oxc-parser';
-
 import type { ParsedFile } from './types';
 
+import { isCloneTarget } from './duplicate-detector';
 import { collectOxcNodes } from './oxc-ast-utils';
 import { countOxcSize } from './oxc-size-count';
-
-const isDuplicationTarget = (node: Node): boolean => {
-  const nodeType = node.type;
-
-  return (
-    nodeType === 'FunctionDeclaration' ||
-    nodeType === 'ClassDeclaration' ||
-    nodeType === 'ClassExpression' ||
-    nodeType === 'MethodDefinition' ||
-    nodeType === 'FunctionExpression' ||
-    nodeType === 'ArrowFunctionExpression' ||
-    nodeType === 'TSTypeAliasDeclaration' ||
-    nodeType === 'TSInterfaceDeclaration'
-  );
-};
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
@@ -30,7 +14,7 @@ export const computeAutoMinSize = (files: ReadonlyArray<ParsedFile>): number => 
       continue;
     }
 
-    const targets = collectOxcNodes(file.program, isDuplicationTarget);
+    const targets = collectOxcNodes(file.program, isCloneTarget);
 
     for (const node of targets) {
       counts.push(countOxcSize(node));

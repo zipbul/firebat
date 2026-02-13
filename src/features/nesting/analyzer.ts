@@ -125,6 +125,98 @@ const getIterationTarget = (node: NodeValue): string | null => {
   return null;
 };
 
+const measureMaxCallbackDepth = (value: NodeValue, depth: number = 0): number => {
+  if (isOxcNodeArray(value)) {
+    let max = depth;
+
+    for (const entry of value) {
+      const d = measureMaxCallbackDepth(entry, depth);
+
+      if (d > max) {
+        max = d;
+      }
+    }
+
+    return max;
+  }
+
+  if (!isOxcNode(value) || !isNodeRecord(value)) {
+    return depth;
+  }
+
+  // Do not descend into nested function declarations / expressions that are not callback arguments.
+  if (isFunctionNode(value) && depth === 0) {
+    // Top-level body — scan children normally.
+    let max = depth;
+
+    visitOxcChildren(value, entry => {
+      const d = measureMaxCallbackDepth(entry, depth);
+
+      if (d > max) {
+        max = d;
+      }
+    });
+
+    return max;
+  }
+
+  if (value.type === 'CallExpression') {
+    const args = Array.isArray(value.arguments) ? (value.arguments as ReadonlyArray<NodeValue>) : [];
+    let max = depth;
+
+    // Scan non-callback arguments at current depth.
+    const callee = value.callee;
+
+    if (isOxcNode(callee)) {
+      const d = measureMaxCallbackDepth(callee as NodeValue, depth);
+
+      if (d > max) {
+        max = d;
+      }
+    }
+
+    for (const arg of args) {
+      if (isOxcNode(arg) && isFunctionNode(arg)) {
+        // Callback argument — increase depth.
+        const callbackBody = resolveFunctionBody(arg as unknown as Node);
+
+        if (callbackBody !== null && callbackBody !== undefined) {
+          const d = measureMaxCallbackDepth(callbackBody as NodeValue, depth + 1);
+
+          if (d > max) {
+            max = d;
+          }
+        }
+      } else {
+        const d = measureMaxCallbackDepth(arg, depth);
+
+        if (d > max) {
+          max = d;
+        }
+      }
+    }
+
+    return max;
+  }
+
+  // Skip other nested functions (standalone, not callback arguments).
+  if (isFunctionNode(value)) {
+    return depth;
+  }
+
+  let max = depth;
+
+  visitOxcChildren(value, entry => {
+    const d = measureMaxCallbackDepth(entry, depth);
+
+    if (d > max) {
+      max = d;
+    }
+  });
+
+  return max;
+};
+
 const analyzeFunctionNode = (
   functionNode: Node,
   filePath: string,
@@ -308,6 +400,12 @@ const analyzeFunctionNode = (
         .map(t => `\`${t}\``)
         .join(', ')}`,
     );
+  }
+
+  const callbackDepth = measureMaxCallbackDepth(bodyValue as NodeValue);
+
+  if (callbackDepth >= 3) {
+    nestingSuggestions.push('callback-depth: deeply nested callbacks reduce readability');
   }
 
   return {

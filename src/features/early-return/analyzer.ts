@@ -93,6 +93,15 @@ export const countStatements = (node: NodeValue): number => {
   }
 
   if (node.type !== 'BlockStatement') {
+    // For else-if chains: when alternate is an IfStatement, recursively
+    // count all statements across the entire chain to get a true total.
+    if (node.type === 'IfStatement' && isNodeRecord(node)) {
+      const consequentCount = countStatements(node.consequent as NodeValue);
+      const alternateCount = node.alternate != null ? countStatements(node.alternate as NodeValue) : 0;
+
+      return consequentCount + alternateCount + 1; // +1 for the if-statement itself
+    }
+
     return 1;
   }
 

@@ -73,6 +73,12 @@ const getMemberPropertyName = (callee: NodeValue): string | null => {
   return null;
 };
 
+const knownPrimitiveWrappers = new Set([
+  'String', 'Number', 'Boolean', 'Symbol', 'BigInt',
+]);
+
+const isPrimitiveWrapperName = (name: string): boolean => knownPrimitiveWrappers.has(name);
+
 const isErrorConstructor = (callee: NodeValue): boolean => {
   if (!isOxcNode(callee) || !isNodeRecord(callee) || callee.type !== 'Identifier') {
     return false;
@@ -470,6 +476,22 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       const usesIdentifier = containsIdentifierUse(arg, name);
       const hasCause = hasCausePropertyWithIdentifier(arg, name);
 
+      // Custom error class: catch param is used but cause is not preserved.
+      // Lower confidence since we cannot statically verify it extends Error.
+      if (usesIdentifier && !hasCause) {
+        pushFinding(findings, {
+          kind: 'missing-error-cause',
+          node,
+          filePath,
+          sourceText,
+          message: `new expression in catch block uses '${name}' but may not preserve { cause: ${name} }`,
+          evidence: getEvidenceLineAt(sourceText, node.start),
+          recipes: [],
+        });
+
+        return true;
+      }
+
       // If identifier only appears as catch parameter but not in thrown expression, it's information loss
       if (!usesIdentifier && !hasCause) {
         pushFinding(findings, {
@@ -657,10 +679,22 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         const isLikelyError =
           arg.type === 'NewExpression' ||
           arg.type === 'Identifier' ||
-          arg.type === 'CallExpression' ||
-          arg.type === 'AwaitExpression';
+          arg.type === 'AwaitExpression' ||
+          arg.type === 'ChainExpression';
 
-        if (!isLikelyError) {
+        // CallExpression is allowed in general (e.g. createError()),
+        // but reject known primitive wrappers that never produce Error instances.
+        const isCallButPrimitiveWrapper =
+          arg.type === 'CallExpression' &&
+          isNodeRecord(arg) &&
+          isOxcNode(arg.callee) &&
+          arg.callee.type === 'Identifier' &&
+          isNodeRecord(arg.callee) &&
+          isPrimitiveWrapperName(arg.callee.name as string);
+
+        const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
+
+        if (!isLikelyError && !isAllowedCall) {
           pushFinding(findings, {
             kind: 'throw-non-error',
             node,
@@ -677,8 +711,23 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     // P3-2 async-promise-executor
     if (node.type === 'NewExpression' && isNodeRecord(node)) {
       const callee = node.callee;
+      const isPromiseIdent =
+        isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && callee.name === 'Promise';
+      const isPromiseMember =
+        !isPromiseIdent &&
+        isOxcNode(callee) &&
+        callee.type === 'MemberExpression' &&
+        isNodeRecord(callee) &&
+        isOxcNode(callee.object) &&
+        callee.object.type === 'Identifier' &&
+        isNodeRecord(callee.object) &&
+        (callee.object.name === 'globalThis' || callee.object.name === 'window' || callee.object.name === 'self') &&
+        isOxcNode(callee.property) &&
+        callee.property.type === 'Identifier' &&
+        isNodeRecord(callee.property) &&
+        callee.property.name === 'Promise';
 
-      if (isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && callee.name === 'Promise') {
+      if (isPromiseIdent || isPromiseMember) {
         const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const executor = args[0];
         const isAsyncExecutor =

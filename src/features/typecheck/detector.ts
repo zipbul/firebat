@@ -63,6 +63,23 @@ interface LspDiagnostic {
   readonly source?: string;
 }
 
+interface PullDiagnosticsFullReport {
+  readonly kind: 'full';
+  readonly items?: ReadonlyArray<LspDiagnostic>;
+}
+
+interface PullDiagnosticsUnchangedReport {
+  readonly kind: 'unchanged';
+  readonly resultId?: string;
+}
+
+type PullDiagnosticsReport = PullDiagnosticsFullReport | PullDiagnosticsUnchangedReport;
+
+interface PullDiagnosticsFullReportLike {
+  readonly kind?: unknown;
+  readonly items?: unknown;
+}
+
 interface PublishDiagnosticsParams {
   readonly uri: string;
   readonly diagnostics: ReadonlyArray<LspDiagnostic>;
@@ -87,6 +104,37 @@ interface PublishDiagnosticsParamsLike {
   readonly uri?: unknown;
   readonly diagnostics?: unknown;
 }
+
+const isPullDiagnosticsFullReport = (value: unknown): value is PullDiagnosticsFullReport => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const shape = value as PullDiagnosticsFullReportLike;
+
+  return shape.kind === 'full' && (shape.items === undefined || Array.isArray(shape.items));
+};
+
+const pullDiagnosticsToItems = (raw: unknown): ReadonlyArray<LspDiagnostic> => {
+  if (Array.isArray(raw)) {
+    return raw as ReadonlyArray<LspDiagnostic>;
+  }
+
+  if (isPullDiagnosticsFullReport(raw)) {
+    return (raw.items ?? []) as ReadonlyArray<LspDiagnostic>;
+  }
+
+  // Some servers return `{ items: [...] }` without `kind`.
+  if (raw && typeof raw === 'object') {
+    const items = (raw as { items?: unknown }).items;
+
+    if (Array.isArray(items)) {
+      return items as ReadonlyArray<LspDiagnostic>;
+    }
+  }
+
+  return [];
+};
 
 interface AnalyzeTypecheckInput {
   readonly rootAbs?: string;
@@ -271,12 +319,39 @@ const analyzeTypecheck = async (
           seenByUri.set(uri, diagnostics);
         });
 
+        const requestDocumentDiagnosticsOnce = async (uri: string) => {
+          return session.lsp
+            .request('textDocument/diagnostic', { textDocument: { uri }, previousResultId: null }, 10_000)
+            .catch(() => null);
+        };
+
+        const requestDocumentDiagnostics = async (uri: string) => {
+          const first = await requestDocumentDiagnosticsOnce(uri);
+
+          if (first !== null) {
+            return first;
+          }
+
+          // tsgo can occasionally need a brief warm-up right after didOpen.
+          await new Promise<void>(r => setTimeout(r, 30));
+
+          return requestDocumentDiagnosticsOnce(uri);
+        };
+
         try {
           // Open all program files so tsgo can compute diagnostics.
           for (const file of program) {
             const opened = await openTsDocument({ lsp: session.lsp, filePath: file.filePath, text: file.sourceText });
 
             openUris.push(opened.uri);
+
+            const pulled = await requestDocumentDiagnostics(opened.uri);
+            const pulledDiagnostics = pullDiagnosticsToItems(pulled).filter(isLspDiagnostic);
+
+            if (pulledDiagnostics.length > 0) {
+              seenByUri.set(opened.uri, pulledDiagnostics);
+              lastUpdateAt = Date.now();
+            }
           }
 
           const settleMs = 200;
@@ -371,3 +446,7 @@ const analyzeTypecheck = async (
 };
 
 export { analyzeTypecheck, createEmptyTypecheck, convertPublishDiagnosticsToTypecheckItems };
+
+export const __test__ = {
+  pullDiagnosticsToItems,
+};

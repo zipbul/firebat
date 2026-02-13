@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { TypecheckItem } from '../../types';
 
-import { convertPublishDiagnosticsToTypecheckItems } from './detector';
+import { convertPublishDiagnosticsToTypecheckItems, __test__ } from './detector';
 
 describe('detector', () => {
   it('should convert LSP publishDiagnostics items into typecheck items', () => {
@@ -72,5 +72,51 @@ describe('detector', () => {
 
     expect(items[0]).toMatchObject(expectedError);
     expect(items[1]).toMatchObject(expectedWarning);
+  });
+
+  it('should extract diagnostics from pull full report', () => {
+    // Arrange
+    const raw = {
+      kind: 'full',
+      items: [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 1 },
+          },
+          severity: 1,
+          message: 'x',
+        },
+      ],
+    };
+
+    // Act
+    const items = __test__.pullDiagnosticsToItems(raw);
+
+    // Assert
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ message: 'x' });
+  });
+
+  it('should extract diagnostics from pull report items without kind', () => {
+    // Arrange
+    const raw = {
+      items: [
+        {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 1 },
+          },
+          message: 'y',
+        },
+      ],
+    };
+
+    // Act
+    const items = __test__.pullDiagnosticsToItems(raw);
+
+    // Assert
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ message: 'y' });
   });
 });

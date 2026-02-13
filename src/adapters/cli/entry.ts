@@ -1,5 +1,3 @@
-import * as path from 'node:path';
-
 import type { FirebatConfig } from '../../firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
@@ -12,7 +10,7 @@ import { appendFirebatLog } from '../../infra/logging';
 import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
 import { formatReport } from '../../report';
 import { resolveFirebatRootFromCwd } from '../../root-resolver';
-import { discoverDefaultTargets, expandTargets } from '../../target-discovery';
+import { resolveTargets } from '../../target-discovery';
 
 interface CliLoggerInput {
   readonly level: FirebatCliOptions['logLevel'];
@@ -459,8 +457,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   };
 
   if (merged.targets.length > 0) {
-    const rawTargets = merged.targets.map(t => (path.isAbsolute(t) ? t : path.resolve(rootAbs, t)));
-    const targets = await expandTargets(rawTargets);
+    const targets = await resolveTargets(rootAbs, merged.targets);
 
     logger.debug('Targets expanded', { inputTargetCount: merged.targets.length, expandedTargetCount: targets.length });
 
@@ -470,7 +467,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     };
   }
 
-  const targets = await discoverDefaultTargets(rootAbs);
+  const targets = await resolveTargets(rootAbs);
 
   logger.debug('Targets auto-discovered', { discoveredTargetCount: targets.length, rootAbs });
 

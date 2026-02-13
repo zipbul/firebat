@@ -311,9 +311,9 @@ module.exports = {
       // The extensions, by default are the same as the ones dependency-cruiser
       // can access (run `bunx depcruise --info` to see which ones that are in
       // _your_ environment). If that list is larger than you need you can pass
-      // the extensions you actually use (e.g. ['.js', '.jsx']). This can speed
+      // the extensions you actually use (e.g. ['.ts']). This can speed
       // up module resolution, which is the most expensive step.
-      // extensions: [".js", ".jsx", ".ts", ".tsx", ".d.ts"],
+      // extensions: [".ts", ".d.ts"],
 
       // What to consider a 'main' field in package.json
       mainFields: ['module', 'main', 'types', 'typings'],

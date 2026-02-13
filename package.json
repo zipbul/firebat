@@ -33,12 +33,12 @@
   "dependencies": {
     "@ast-grep/napi": "^0.40.5",
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@typescript/native-preview": "^7.0.0-dev.20260211.1",
+    "@typescript/native-preview": "^7.0.0-dev.20260213.1",
     "drizzle-orm": "^0.45.1",
     "fastbitset": "^0.4.1",
     "oxc-parser": "^0.112.0",
-    "oxfmt": "^0.26.0",
-    "oxlint": "^1.46.0",
+    "oxfmt": "^0.32.0",
+    "oxlint": "^1.47.0",
     "oxlint-tsgolint": "^0.11.5",
     "table": "^6.9.0",
     "zod": "^4.3.6"

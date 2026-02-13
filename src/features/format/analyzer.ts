@@ -51,7 +51,7 @@ const parseOxfmtFileCount = (rawStdout: unknown): number | undefined => {
       return true;
     }
 
-    return /\.(ts|tsx|js|jsx|mjs|cjs|json|md|css|scss|html)$/i.test(value);
+    return /\.(ts|json|md|css|scss|html)$/i.test(value);
   };
 
   const pathLines = lines.filter(looksLikePath);

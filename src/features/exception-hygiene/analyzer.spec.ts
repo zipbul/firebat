@@ -710,4 +710,96 @@ describe('analyzer', () => {
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
+
+  // --- P3-1 throw-non-error ---
+
+  it('should report throw-non-error for string literal throw', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/throw-string.ts';
+    const source = 'export function f() { throw "boom"; }';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('throw-non-error');
+  });
+
+  it('should report throw-non-error for numeric literal throw', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/throw-number.ts';
+    const source = 'export function f() { throw 42; }';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('throw-non-error');
+  });
+
+  it('should report throw-non-error for primitive wrapper call (String)', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/throw-wrapper.ts';
+    const source = 'export function f() { throw String("hello"); }';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for new Error()', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/throw-error.ts';
+    const source = 'export function f() { throw new Error("x"); }';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for factory call', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/throw-factory.ts';
+    const source = 'export function f() { throw createError(); }';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
+  // --- P3-2 async-promise-executor ---
+
+  it('should report async-promise-executor for async executor', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/async-executor.ts';
+    const source = 'export const p = new Promise(async () => { await fetch("/"); });';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('async-promise-executor');
+  });
+
+  it('should report async-promise-executor for globalThis.Promise', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/async-executor-global.ts';
+    const source = 'export const p = new globalThis.Promise(async () => { await fetch("/"); });';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('async-promise-executor');
+  });
+
+  it('should not report async-promise-executor for sync executor', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/sync-executor.ts';
+    const source = 'export const p = new Promise((resolve) => { resolve(42); });';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('async-promise-executor');
+  });
 });

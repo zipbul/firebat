@@ -19,7 +19,7 @@ const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 const isIndexFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
 
-  return normalized.endsWith('/index.ts') || normalized.endsWith('/index.tsx');
+  return normalized.endsWith('/index.ts');
 };
 
 const toSpan = (sourceText: string, startOffset: number, endOffset: number): SourceSpan => {
@@ -185,10 +185,8 @@ const isExplicitIndexSpecifier = (specifier: string): boolean => {
   return (
     normalized.endsWith('/index') ||
     normalized.endsWith('/index.ts') ||
-    normalized.endsWith('/index.tsx') ||
     normalized === 'index' ||
-    normalized === 'index.ts' ||
-    normalized === 'index.tsx'
+    normalized === 'index.ts'
   );
 };
 
@@ -306,7 +304,7 @@ const checkMissingIndex = (
   for (const file of activeFiles) {
     const normalized = normalizePath(file.filePath);
 
-    if (!normalized.endsWith('.ts') && !normalized.endsWith('.tsx')) {
+    if (!normalized.endsWith('.ts')) {
       continue;
     }
 
@@ -317,15 +315,14 @@ const checkMissingIndex = (
 
   for (const dir of dirs) {
     const indexTs = normalizePath(path.join(dir, 'index.ts'));
-    const indexTsx = normalizePath(path.join(dir, 'index.tsx'));
 
-    if (fileSet.has(indexTs) || fileSet.has(indexTsx)) {
+    if (fileSet.has(indexTs)) {
       continue;
     }
 
     findings.push({
       kind: 'missing-index',
-      message: 'directory must contain index.ts or index.tsx (strict barrel required)',
+      message: 'directory must contain index.ts (strict barrel required)',
       filePath: dir,
       span: {
         start: { line: 1, column: 1 },

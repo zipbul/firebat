@@ -83,13 +83,15 @@ const pickTypeSnippetFromHoverText = (text: string): string => {
   }
 
   const pick = (body: string): string => {
-    const firstLine =
-      body
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .find(l => l.length > 0) ?? '';
+    // Join all non-empty lines into a single line to handle multiline types
+    // like `{ data: unknown; error: string; }` spread across lines.
+    const joined = body
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0)
+      .join(' ');
 
-    return firstLine.slice(0, 200);
+    return joined.slice(0, 500);
   };
 
   if (blocks.length > 0) {
@@ -101,7 +103,9 @@ const pickTypeSnippetFromHoverText = (text: string): string => {
   return pick(text.trim());
 };
 
-const hasWord = (text: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(text);
+const escapeRegExpWord = (word: string): string => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const hasWord = (text: string, word: string): boolean => new RegExp(`\\b${escapeRegExpWord(word)}\\b`).test(text);
 
 const hasWordInType = (typeSnippet: string, word: string): boolean => {
   const colonIndex = typeSnippet.indexOf(':');

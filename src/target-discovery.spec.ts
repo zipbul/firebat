@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { expandTargets } from './target-discovery';
 
 describe('target-discovery', () => {
-  it('should expand directory targets into ts/tsx files', async () => {
+  it('should expand directory targets into ts files', async () => {
     // Arrange
     let input = ['src'];
     // Act

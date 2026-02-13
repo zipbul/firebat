@@ -161,7 +161,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                       .strict(),
                   )
                   .nonempty(),
-                allowedDependencies: z.record(z.array(z.string()).nonempty()),
+                allowedDependencies: z.record(z.string(), z.array(z.string())),
               })
               .strict(),
           ])
@@ -272,7 +272,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                               .strict(),
                           )
                           .nonempty(),
-                        allowedDependencies: z.record(z.array(z.string()).nonempty()),
+                        allowedDependencies: z.record(z.string(), z.array(z.string())),
                       })
                       .strict(),
                   ])

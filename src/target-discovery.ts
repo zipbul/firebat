@@ -58,11 +58,11 @@ const shouldIncludeSourceFile = (filePath: string): boolean => {
     return false;
   }
 
-  return normalized.endsWith('.ts') || normalized.endsWith('.tsx');
+  return normalized.endsWith('.ts');
 };
 
 const scanDirForSources = async (dirAbs: string): Promise<string[]> => {
-  const patterns: ReadonlyArray<string> = ['**/*.ts', '**/*.tsx'];
+  const patterns: ReadonlyArray<string> = ['**/*.ts'];
   const out: string[] = [];
 
   for (const pattern of patterns) {
@@ -112,7 +112,19 @@ export const discoverDefaultTargets = async (cwd: string = process.cwd()): Promi
     return toAbsolutePaths(cwd, gitAll).filter(shouldIncludeSourceFile);
   }
 
-  const globMatches = await scanWithGlob(cwd, ['**/*.ts', '**/*.tsx']);
+  const globMatches = await scanWithGlob(cwd, ['**/*.ts']);
 
   return toAbsolutePaths(cwd, globMatches).filter(shouldIncludeSourceFile);
+};
+
+export const resolveTargets = async (cwd: string, targets?: ReadonlyArray<string>): Promise<string[]> => {
+  if (targets && targets.length > 0) {
+    const absTargets = targets.map(t => (path.isAbsolute(t) ? t : path.resolve(cwd, t)));
+
+    return expandTargets(absTargets);
+  }
+
+  const discovered = await discoverDefaultTargets(cwd);
+
+  return expandTargets(discovered);
 };

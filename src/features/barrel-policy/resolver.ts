@@ -223,9 +223,7 @@ const resolveFromFileSet = (baseAbs: string, fileSet: ReadonlySet<string>): stri
   const candidates = [
     baseAbs,
     `${baseAbs}.ts`,
-    `${baseAbs}.tsx`,
     path.join(baseAbs, 'index.ts'),
-    path.join(baseAbs, 'index.tsx'),
   ];
 
   for (const candidate of candidates) {
