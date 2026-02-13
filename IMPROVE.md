@@ -1217,7 +1217,9 @@ Stage 0: Init (병렬)
   ├── resolveRuntimeContextFromCwd()
   └── getOrmDb()
 
-Stage 1: Indexing + Cache Check
+Stage 1: Indexing + Cache Check (Section 1.4 워처 기반 증분 캐싱 참조)
+  ├── [bunner 실행 중] changeset 읽기 → 변경 파일만 re-index → digest 증분 계산
+  └── [bunner 미실행] 기존 full stat() → indexTargets → computeInputsDigest
 
 Stage 2: Pre-Parse (fix mode, 병렬)
   ├── analyzeFormat(fix=true)
@@ -1267,6 +1269,366 @@ Stage 5: Aggregate + Cache
 ### 1.3 `forwarding` cross-file chain 깊이
 
 fixpoint iteration: 최악 O(N²). 위상 정렬(topological sort) 적용 시 O(N).
+
+### 1.4 워처 기반 증분 캐싱
+
+#### 1.4.1 문제 정의
+
+현재 `scan.usecase.ts`의 `indexTargets`는 매 scan 호출마다 **모든 타겟 파일에 `stat()`을 호출**하여 변경 여부를 확인한다. MCP 서버는 장시간 실행되면서 에이전트가 "1파일 수정 → scan → 1파일 수정 → scan"을 반복하는 워크플로를 지원하는데, 파일 1개 변경에도 N개 전부 stat()하는 것은 낭비다.
+
+| 시나리오 | 현재 비용 | 개선 목표 |
+|---------|----------|----------|
+| MCP: 변경 없이 반복 scan | N×stat() ≈ 70-400ms | **<1ms** |
+| MCP: 1파일 변경 + cache hit | N×stat() + digest ≈ 70-400ms | **2-5ms** |
+| CLI + bunner 실행 중 | N×stat() ≈ 250ms | **<5ms** |
+| CLI 완전 독립 | N×stat() ≈ 250ms | 250ms (변경 없음) |
+
+#### 1.4.2 워처 아키텍처: 단방향 소비 + 독립 모드
+
+firebat은 **두 가지 모드**로 동작하며, scan 호출 시점에 자동으로 결정한다.
+
+```
+firebat은 bunner의 watcher 인프라를 소비만 한다. 역방향 의존은 없다.
+bunner가 없을 때는 자체 @parcel/watcher로 독립 동작한다.
+두 모드의 전환은 scan 호출마다 lazy하게 판정한다.
+```
+
+**소비자 모드 (bunner 실행 중):**
+bunner가 이미 프로젝트 루트에서 `@parcel/watcher`를 구독하고, `.bunner/cache/changeset.jsonl`에 변경 이력을 기록하고 있다. firebat은 이 changeset을 **읽기만** 한다. firebat이 OwnerElection이나 ChangesetWriter를 구현할 필요가 없다 — 이 복잡한 로직(lock 파일 관리, PID 선출, JSONL rotation, event 판정)은 전부 bunner 쪽 책임이다.
+
+**독립 모드 (bunner 미실행):**
+firebat MCP 서버가 자체적으로 `@parcel/watcher.subscribe()`를 호출하여 파일 변경을 감시한다. 변경된 파일 경로를 **메모리 내 `Set<string>`에만 누적**한다. JSONL 파일 기록, rotation, lock 파일 — 전부 없다. MCP 프로세스 수명 동안 메모리에만 존재하고, 프로세스 종료 시 사라진다.
+
+**모드별 역할:**
+
+| 환경 | 워처 | 변경 추적 | 복잡도 |
+|------|------|----------|--------|
+| MCP + bunner 실행 중 | 없음 (bunner 것을 소비) | changeset.jsonl 읽기 | JSONL reader ~15줄 |
+| MCP 단독 | 자체 @parcel/watcher | 메모리 `Set<string>` | subscribe ~20줄 |
+| CLI + bunner 실행 중 | 없음 | changeset.jsonl 읽기 (opportunistic) | JSONL reader ~15줄 |
+| CLI 완전 독립 | 없음 | 없음 → full stat() | 변경 없음 (기존 코드) |
+
+**핵심 원칙: firebat은 changeset writer가 아니다.** bunner가 기록한 changeset을 읽거나, 자체 watcher로 메모리에 누적하거나, full stat() fallback. 이 세 가지뿐이다.
+
+#### 1.4.3 Lazy 모드 전환 (상태 머신)
+
+firebat MCP 서버는 프로세스 시작 시 모드를 고정하지 않는다. **매 scan 호출마다** bunner 존재 여부를 확인하고 모드를 전환한다.
+
+**판정 기준:** `.bunner/cache/watcher.owner.lock` 파일 존재 + 기록된 PID 생존 여부.
+
+```
+[scan 호출]
+  watcher.owner.lock 존재?
+  ├─ NO → 독립 모드
+  └─ YES → PID 읽기 → process.kill(pid, 0)
+            ├─ 살아있음 → 소비자 모드
+            └─ 죽어있음 → 독립 모드
+```
+
+**상태 전이:**
+
+| 현재 모드 | 판정 결과 | 동작 |
+|----------|----------|------|
+| 독립 → 소비자 | bunner가 나중에 시작됨 | 자체 watcher unsubscribe, 메모리 Set 비우기, 1회 full stat()로 기준선 재설정 |
+| 소비자 → 독립 | bunner가 종료됨 | 자체 watcher subscribe 시작, 1회 full stat()로 기준선 재설정 |
+| 독립 → 독립 | 변화 없음 | 유지 |
+| 소비자 → 소비자 | 변화 없음 | 유지 |
+
+**전환 시 full stat() 1회는 불가피하다.** changeset 공백 기간에 발생한 변경을 놓칠 수 없으므로, 모드 전환 시 1회 전체 stat()으로 안전하게 기준선을 재설정한다. 이후부터 증분.
+
+**판정 비용:** `stat()` 1회 + `readFileSync()` + `process.kill(pid, 0)` ≈ 0.1ms. scan마다 호출해도 무시할 수 있는 수준.
+
+```typescript
+// 의사 코드 — 실제 구현은 infrastructure 계층
+type WatcherMode = 'independent' | 'consumer';
+
+interface ModeCheckResult {
+  mode: WatcherMode;
+  changed: boolean;  // 이전 scan 대비 모드가 바뀌었는가
+}
+
+function checkMode(lockPath: string, prevMode: WatcherMode): ModeCheckResult {
+  try {
+    const pid = parseInt(readFileSync(lockPath, 'utf8').trim(), 10);
+    process.kill(pid, 0);  // 신호 안 보냄, 존재 확인만
+    return { mode: 'consumer', changed: prevMode !== 'consumer' };
+  } catch (e: any) {
+    if (e?.code === 'EPERM') {
+      // 권한 없음 = 프로세스 살아있음 → 소비자 모드
+      return { mode: 'consumer', changed: prevMode !== 'consumer' };
+    }
+    // ENOENT (파일 없음) 또는 ESRCH (프로세스 죽음) → 독립 모드
+    return { mode: 'independent', changed: prevMode !== 'independent' };
+  }
+}
+```
+
+#### 1.4.4 bunner changeset 프로토콜 (양측 합의 확정)
+
+bunner가 기록하는 changeset의 형식. firebat은 이 프로토콜을 **소비만** 한다. 아래 내용은 bunner 측 회신으로 **전 항목 수용 확인** 완료.
+
+**파일 경로 (bunner 소유):**
+
+| 파일 | 경로 | 소유자 |
+|------|------|--------|
+| 워처 락 | `.bunner/cache/watcher.owner.lock` | bunner |
+| changeset | `.bunner/cache/changeset.jsonl` | bunner |
+| rotation | `.bunner/cache/changeset.jsonl.1` | bunner |
+
+**changeset JSONL 레코드 (bunner가 기록):**
+
+```jsonl
+{"ts":1739500000000,"event":"change","file":"src/foo.ts"}
+{"ts":1739500000100,"event":"rename","file":"src/bar.ts"}
+{"ts":1739500000200,"event":"delete","file":"src/baz.ts"}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `ts` | `number` | epoch ms |
+| `event` | `"change" \| "rename" \| "delete"` | 변경 종류 |
+| `file` | `string` | 프로젝트 루트 기준 상대 경로, `/` 구분자 |
+
+**event 판정 (bunner 책임, firebat은 관여하지 않음):**
+- `type === "update"` → `event: "change"`
+- `type === "delete"` → `event: "delete"` (직접 매핑, 존재 확인 불필요)
+- 그 외 (`create`, rename-ish 등) → 대상 파일 존재 확인 → 존재 시 `"rename"`, 미존재 시 `"delete"`
+- firebat은 레코드의 `event` 값을 그대로 신뢰한다.
+
+**워처 필터 (bunner `PROJECT_WATCHER_IGNORE_GLOBS` 규약):**
+
+```
+포함: *.ts (*.d.ts 제외)
+무시: **/.git/**, **/.bunner/**, **/dist/**, **/node_modules/**
+```
+
+**rotation (bunner 책임):** 1000줄 도달/초과 시 append 전에 rotate 체크 → rename, 2세대 유지. firebat reader는 `.jsonl.1` → `.jsonl` 순서로 읽고 `ts >= lastSeenTs` 필터로 중복/누락 방지 (동일 ms 이벤트 누락 방지를 위해 `>` 대신 `>=` 사용, Set이라 중복 무해).
+
+**경로 정규화:** bunner가 Windows 경로(`\`)를 `/`로 정규화하여 기록. firebat은 `/` 기준으로 처리.
+
+**설정 파일:** `package.json`, `tsconfig*.json`, lockfile은 워처 범위 밖(`*.ts`만). firebat이 scan마다 직접 stat() (5개 미만, <1ms). bunner에 추가 요구 없음.
+
+#### 1.4.5 3-tier 캐시 구조
+
+```
+Tier 1 — 변경 감지 (워처가 최적화하는 유일한 계층)
+  ↓
+Tier 2 — 리포트 캐시 (기존 SQLite artifact, 변경 없음)
+  ↓
+Tier 3 — 분석 실행 (16 디텍터 전체, 변경 없음)
+```
+
+**워처는 Tier 1만 최적화한다.** Tier 2, Tier 3은 기존과 100% 동일.
+
+**Tier 1: 변경 감지 — 모드별 동작**
+
+CLI 모드 (one-shot):
+```
+watcher.owner.lock 존재 + PID 생존?
+├─ YES (bunner가 watcher owner)
+│   └─ changeset.jsonl 읽기
+│       → 변경 파일만 stat+hash → fileIndex 갱신
+│       → 나머지 파일은 SQLite fileIndex 신뢰
+│       → 설정파일 stat() (<1ms)
+│       → digest 계산 → Tier 2로
+│       → 비용: O(K)
+│
+└─ NO (bunner 미실행)
+    → 기존 full stat() flow (indexTargets → computeInputsDigest)
+    → 비용: O(N) — 현재 코드와 동일
+```
+
+MCP 소비자 모드 (bunner 실행 중):
+```
+[scan 호출 — zero-change path]
+  changeset.jsonl 읽기 → lastSeenTs 이후 이벤트 없음
+  + 설정파일 stat() → 변경 없음
+  → lastReport 즉시 반환
+  → 비용: <1ms
+
+[scan 호출 — K파일 변경 path]
+  changeset.jsonl 읽기 → K개 변경 파일 추출
+  → K개만 stat+hash → fileIndex 갱신
+  + 설정파일 stat()
+  → digestParts 맵에서 K개만 교체 → digest 재계산
+  → Tier 2 cache check
+  → 비용: O(K)
+```
+
+MCP 독립 모드 (bunner 미실행):
+```
+[프로세스 내부]
+  @parcel/watcher.subscribe(projectRoot, callback)
+  callback: (err, events) => events.forEach(e => changedFiles.add(e.path))
+
+[scan 호출 — zero-change path]
+  changedFiles.size === 0
+  + 설정파일 stat() → 변경 없음
+  → lastReport 즉시 반환
+  → 비용: <1ms
+
+[scan 호출 — K파일 변경 path]
+  changedFiles에서 K개 추출 → Set 비우기
+  → K개만 stat+hash → fileIndex 갱신
+  + 설정파일 stat()
+  → digestParts 맵에서 K개만 교체 → digest 재계산
+  → Tier 2 cache check
+  → 비용: O(K)
+```
+
+**모드 전환 시 (양방향):** 1회 full stat()로 기준선 재설정 → 이후 증분.
+
+**Tier 2: 리포트 캐시 (기존 유지, 변경 없음)**
+
+| 항목 | 값 |
+|------|-----|
+| 저장소 | SQLite `artifactRepository` + in-memory hybrid |
+| 캐시 키 | `projectKey` + `artifactKey` + `inputsDigest` |
+| `projectKey` | `toolVersion + cwd + Bun.version + schemaVersion` |
+| `artifactKey` | `detectors + minSize + maxForwardDepth + 디텍터별 옵션` |
+| `inputsDigest` | 모든 타겟 파일 contentHash + cacheNamespace + projectInputsDigest |
+| 캐시 단위 | **전체 `FirebatReport`** (all-or-nothing) |
+| Fix 모드 | 캐시 비활성 (`allowCache = options.fix === false`) |
+
+digest가 일치하면 저장된 리포트 반환, 불일치하면 Tier 3.
+
+**Tier 3: 분석 실행 (기존 유지, 변경 없음)**
+
+cache miss → 16개 디텍터 ALL 파일에 전체 실행 → 결과 저장. 파일 1개 변경이든 100개 변경이든, miss면 전체 재분석. 워처는 이 계층에 영향을 주지 않는다.
+
+#### 1.4.6 MCP 프로세스 내 상태
+
+```typescript
+// MCP 서버 어댑터가 프로세스 수명 동안 메모리에 유지하는 상태
+interface McpWatcherState {
+  mode: 'independent' | 'consumer';  // 현재 모드 (scan마다 재판정)
+  subscription: AsyncSubscription | null;  // 독립 모드일 때만 non-null
+  changedFiles: Set<string>;         // 독립 모드: watcher 이벤트 누적 (절대 경로)
+  lastSeenTs: number;                // 소비자 모드: changeset cursor
+  lastDigest: string | null;         // 마지막 inputsDigest
+  lastReport: FirebatReport | null;  // zero-change 반환 + diff용
+  digestParts: Map<string, string>;  // filePath → "file:{path}:{hash}" (증분 digest)
+}
+```
+
+**`lastSeenTs` 생명주기:**
+- **초기값:** `0` (프로세스 시작 시). 첫 scan은 어차피 full stat()이므로 changeset 전체를 읽어도 무해.
+- **모드 전환 시 (independent → consumer):** full stat() 완료 직후 `Date.now()`로 리셋. 이전 이벤트는 full stat()이 모두 반영했으므로 이후 이벤트만 소비.
+- **이벤트 소비 후:** 소비한 레코드 중 최대 `ts` 값으로 갱신. 이벤트가 없으면 유지.
+
+**독립 모드 watcher 코드 (전체):**
+
+```typescript
+import { subscribe, type AsyncSubscription } from '@parcel/watcher';
+
+// 구독 시작 (~20줄)
+const changedFiles = new Set<string>();
+const subscription = await subscribe(projectRoot, (err, events) => {
+  if (err) return;
+  for (const event of events) {
+    // *.ts만, *.d.ts 제외
+    if (event.path.endsWith('.ts') && !event.path.endsWith('.d.ts')) {
+      changedFiles.add(event.path);
+    }
+  }
+}, {
+  ignore: ['.git', '.bunner', 'dist', 'node_modules'],
+});
+
+// scan 시점에 소비
+const changed = [...changedFiles];
+changedFiles.clear();
+// → changed 파일만 stat+hash → fileIndex 갱신
+```
+
+JSONL 파일 기록, rotation, lock 파일 관리 — 전부 없다. 메모리 `Set`에 누적하고, scan 시점에 비우는 것이 전부.
+
+**소비자 모드 changeset reader (전체):**
+
+```typescript
+// JSONL 읽기 (~15줄, 크래시 내성 + 경로 변환 포함)
+function readChangeset(jsonlPath: string, since: number, projectRoot: string): { files: string[]; maxTs: number } {
+  const files = new Set<string>();
+  let maxTs = since;
+  try {
+    const lines = readFileSync(jsonlPath, 'utf8').split('\n');
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        const record = JSON.parse(line);
+        if (record.ts >= since) {
+          files.add(join(projectRoot, record.file));  // 상대 → 절대 변환
+          if (record.ts > maxTs) maxTs = record.ts;
+        }
+      } catch { /* 깨진 줄(프로세스 크래시 등) 무시 — 관용 파싱 */ }
+    }
+  } catch { /* ENOENT → 빈 Set */ }
+  return { files: [...files], maxTs };
+}
+
+// rotation 대응: .jsonl.1 먼저 읽고 .jsonl 읽기
+const r1 = readChangeset(jsonlPath + '.1', lastSeenTs, projectRoot);
+const r2 = readChangeset(jsonlPath, lastSeenTs, projectRoot);
+const changed = [...new Set([...r1.files, ...r2.files])];  // 중복 제거
+state.lastSeenTs = Math.max(r1.maxTs, r2.maxTs);  // cursor 갱신
+```
+
+**`digestParts` 증분 계산:**
+- 현재 `computeInputsDigest`는 매번 N개 파일의 hash를 fileIndex에서 읽어 `parts.join('|')` → `hashString()`.
+- 워처 도입 후: `digestParts` 맵을 메모리에 유지. 변경 파일 K개의 hash만 교체 → parts 재조합 → `hashString(sorted.join('|'))`.
+- 결과: 동일한 digest 값. 계산 비용만 O(N) → O(K) + O(N log N) sort.
+- 프로세스 재시작 시 `digestParts` 소실 → 첫 scan에서 full stat()로 재구성.
+
+#### 1.4.7 엣지 케이스
+
+| 상황 | 처리 |
+|------|------|
+| MCP 서버 재시작 | `digestParts`/`changedFiles` 소실 → 첫 scan에서 full stat() 1회 → 재구성 → 이후 증분 |
+| bunner 나중에 시작 (독립→소비자 전환) | lock 감지 → 자체 watcher unsubscribe → full stat() 1회 → changeset reader 모드로 전환 |
+| bunner 종료 (소비자→독립 전환) | lock의 PID 죽음 감지 → 자체 watcher subscribe → full stat() 1회 → Set 추적 모드로 전환 |
+| changeset rotation 중 이벤트 누락 (소비자 모드) | `.jsonl.1` + `.jsonl` 둘 다 읽기, `ts >= lastSeenTs` 필터 (Set이라 중복 무해) |
+| firebat CLI + bunner 실행 중 | lock 파일 존재 + PID 생존 → changeset 읽기 → O(K) |
+| firebat CLI 완전 독립 (bunner 없음) | lock 파일 없음 → full stat() fallback → **현재 코드와 100% 동일** |
+| Fix 모드 | 캐시 비활성 (기존 `allowCache = options.fix === false`), 워처 상태와 무관하게 항상 전체 분석 |
+| 설정 파일 변경 (tsconfig, package.json, lockfile) | 워처 범위 밖 → scan마다 직접 stat() (5개 미만, <1ms) |
+| changeset 공백 기간 (bunner 재시작 등) | 모드 전환 감지 시 full stat() 1회로 안전하게 기준선 재설정 |
+| inotify 중복 문제 | bunner 실행 중이면 firebat은 자체 watcher 끔 → 동일 디렉토리에 최대 1개 구독 |
+| 동일 ms에 복수 이벤트 (ts 충돌) | `ts >= lastSeenTs` 필터 사용 → 중복 재처리는 발생하나 Set + stat()이므로 무해. 관측 빈도가 높아지면 프로토콜 v2에서 `seq` 필드 추가 검토 |
+| JSONL 마지막 줄 깨짐 (프로세스 크래시) | reader가 줄 단위 `JSON.parse` 실패 시 해당 줄 무시 (관용 파싱) |
+
+#### 1.4.8 구현 위치 (Ports & Adapters 기준)
+
+| 컴포넌트 | 위치 | 설명 |
+|---------|------|------|
+| `SimpleWatcher` | `src/infrastructure/watcher/simple-watcher.ts` | @parcel/watcher subscribe → Set 누적 (독립 모드) |
+| `ChangesetReader` | `src/infrastructure/watcher/changeset-reader.ts` | JSONL 파일 읽기 + 파싱 (소비자 모드) |
+| `LockChecker` | `src/infrastructure/watcher/lock-checker.ts` | lock 파일 PID 생존 확인 (모드 판정) |
+| `WatcherPort` (인터페이스) | `src/ports/watcher.ts` | 아래 인터페이스 참조 |
+| `McpWatcherState` 관리 | `src/adapters/mcp/server.ts` | 프로세스 수명 상태 + 모드 전환 로직 |
+| CLI opportunistic reader 분기 | `src/application/scan/scan.usecase.ts` | `indexTargets` 호출 전 changeset 분기 |
+
+**firebat이 구현하지 않는 것:**
+- `OwnerElection` — bunner 전용. firebat은 lock 파일을 읽기만 한다.
+- `ChangesetWriter` — bunner 전용. firebat은 changeset을 기록하지 않는다.
+- `ProjectWatcher` (bunner의 것) — firebat의 `SimpleWatcher`는 Set 누적만 하는 최소 구현.
+- JSONL rotation — bunner 전용. firebat은 rotation 결과물을 읽기만 한다.
+
+**의존성 추가:** `package.json`에 `@parcel/watcher` 추가 (dependencies). bunner와 npm 의존성 없음. firebat이 구현하는 것은 `SimpleWatcher` (~20줄), `ChangesetReader` (~15줄), `LockChecker` (~10줄) — 합계 약 50줄의 인프라 코드.
+
+**`WatcherPort` 인터페이스:**
+
+```typescript
+interface WatcherPort {
+  /** 지난 scan 이후 변경된 파일 경로 반환 (절대 경로). 빈 배열 = 변경 없음. */
+  getChangedFiles(): string[];
+  /** 현재 모드 반환 */
+  getMode(): 'independent' | 'consumer';
+  /** 모드 전환이 필요한지 판정 (매 scan 호출 전 호출) */
+  checkAndSwitch(): { modeChanged: boolean; requiresFullStat: boolean };
+  /** 독립 모드 watcher 정리 (프로세스 종료 시) */
+  dispose(): Promise<void>;
+}
+```
 
 ---
 
@@ -1691,7 +2053,7 @@ PLAN.md의 Tier A-C 디텍터(giant-file, export-kind-mix, scatter-of-exports �
 | **3 (변환 처방)** | (1) Blueprint/Transformation/Deletion 각각 end-to-end 테스트 (2) 생성된 RefactoringPlan을 에이전트가 실행 시 finding 수 감소 검증 |
 | **4 (컨텍스트)** | (1) B-II-1~2, B-V-3 디텍터 integration test (2) assess-impact MCP 도구 호출당 ≤ 500ms |
 | **5 (엔트로피)** | (1) B-IV-1~3 디텍터 integration test |
-| **6 (개선)** | (1) 변경 대상 디텍터의 기존 테스트 전량 통과 (2) 성능 회귀 없음 |
+| **6 (개선)** | (1) 변경 대상 디텍터의 기존 테스트 전량 통과 (2) 성능 회귀 없음 (3) 워처 통합 시: MCP zero-change scan <1ms, CLI+bunner scan <5ms |
 
 ### Phase 의존 그래프
 
@@ -1803,6 +2165,9 @@ Phase 5 — 구조적 엔트로피 (Phase 0 직후, 독립 가능)
   □ Modification Trap (B-V-2) — 수정 함정 예측
 
 Phase 6 — 기존 디텍터 개선 + 성능 최적화 (모든 Phase와 병렬 가능)
+  ★ 워처 기반 증분 캐싱 (Section 1.4)
+    └── bunner changeset 단방향 소비 + 독립 모드(@parcel/watcher → Set) → Tier 1 최적화
+    └── lazy 모드 전환 상태 머신 (scan마다 bunner 존재 여부 판정)
   □ nesting + early-return 내부 패스 통합
   □ exception-hygiene 이중 순회 → 단일 순회
   □ finding 형식 표준화 (metrics + why + suggestedRefactor)
