@@ -259,6 +259,57 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBe(0);
   });
 
+  it('should report throw-non-error when throwing a non-Error value', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/throw-non-error.ts';
+    let source = ['export function f() {', '  throw "boom";', '}'].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeExceptionHygiene(program);
+    let hits = analysis.findings.filter(f => f.kind === 'throw-non-error');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report throw-non-error when throwing an identifier', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/throw-non-error-ok.ts';
+    let source = ['export function f(err: unknown) {', '  throw err;', '}'].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeExceptionHygiene(program);
+    let hits = analysis.findings.filter(f => f.kind === 'throw-non-error');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should report async-promise-executor when Promise executor is async', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/async-promise-executor.ts';
+    let source = ['export function f() {', '  return new Promise(async resolve => {', '    resolve(1);', '  });', '}'].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeExceptionHygiene(program);
+    let hits = analysis.findings.filter(f => f.kind === 'async-promise-executor');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('should not report misused-promises when callback is sync', () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -510,7 +561,7 @@ describe('integration/exception-hygiene', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report catch-transform-hygiene when cause is lost', () => {
+  it('should report missing-error-cause when catch throws a new Error without { cause }', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/transform-bad.ts';
@@ -529,13 +580,13 @@ describe('integration/exception-hygiene', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeExceptionHygiene(program);
-    let hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
+    let hits = analysis.findings.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report catch-transform-hygiene when cause is preserved', () => {
+  it('should not report missing-error-cause when cause is preserved', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/transform-ok-cause.ts';
@@ -554,10 +605,35 @@ describe('integration/exception-hygiene', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeExceptionHygiene(program);
-    let hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
+    let hits = analysis.findings.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBe(0);
+  });
+
+  it('should report catch-transform-hygiene when cause/context is lost for non-Error constructors', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/transform-custom.ts';
+    let source = [
+      'export function f() {',
+      '  try {',
+      '    throw new Error("x");',
+      '  } catch (e) {',
+      '    throw new WrapError("wrap");',
+      '  }',
+      '}',
+    ].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeExceptionHygiene(program);
+    let hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should report redundant-nested-catch when inner useless catch exists under an outer catch', () => {

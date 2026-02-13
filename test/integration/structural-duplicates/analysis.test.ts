@@ -30,6 +30,25 @@ describe('integration/structural-duplicates', () => {
     expect(hasCloneClass).toBe(true);
   });
 
+  it('should attach suggestedParams diff pairs', () => {
+    // Arrange
+    const sources = new Map<string, string>();
+
+    sources.set('/virtual/dup/one.ts', createFunctionSource('createUser', 1));
+    sources.set('/virtual/dup/two.ts', createFunctionSource('createOrder', 1));
+
+    // Act
+    const program = createProgramFromMap(sources);
+    const structural = analyzeStructuralDuplicates(program, 1);
+    const group = structural.cloneClasses.find(g => g.items.length >= 2);
+
+    // Assert
+    expect(group).toBeDefined();
+    expect(group?.suggestedParams).toBeDefined();
+    expect(group?.suggestedParams?.kind).toBe('identifier');
+    expect(group?.suggestedParams?.pairs.some(p => p.left === 'createUser' && p.right === 'createOrder')).toBe(true);
+  });
+
   it('should not create clone classes when shapes differ', () => {
     // Arrange
     let sources = new Map<string, string>();

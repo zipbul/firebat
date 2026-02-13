@@ -167,7 +167,18 @@ const formatText = (report: FirebatReport): string => {
   const lint = analyses.lint ?? { status: 'ok' as const, tool: 'oxlint' as const, diagnostics: [] };
   const format = analyses.format ?? { status: 'ok' as const, tool: 'oxfmt' as const };
   const typecheck = analyses.typecheck ?? { status: 'ok' as const, tool: 'tsgo' as const, exitCode: 0, items: [] };
-  const deps = analyses.dependencies ?? { cycles: [], fanInTop: [], fanOutTop: [], edgeCutHints: [] };
+  const deps =
+    analyses.dependencies ??
+    ({
+      cycles: [],
+      adjacency: {},
+      exportStats: {},
+      fanInTop: [],
+      fanOutTop: [],
+      edgeCutHints: [],
+      layerViolations: [],
+      deadExports: [],
+    } as const);
   const coupling = analyses.coupling ?? { hotspots: [] };
   const nesting = analyses.nesting ?? { items: [] };
   const noop = analyses.noop ?? { findings: [] };
@@ -523,8 +534,33 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('dependencies') && (deps.cycles.length > 0 || deps.edgeCutHints.length > 0)) {
-    lines.push(sectionHeader('🔗', 'Dependencies', `${deps.cycles.length} cycles · ${deps.edgeCutHints.length} cut hints`));
+  if (
+    selectedDetectors.has('dependencies') &&
+    (deps.cycles.length > 0 || deps.edgeCutHints.length > 0 || deps.layerViolations.length > 0 || deps.deadExports.length > 0)
+  ) {
+    lines.push(
+      sectionHeader(
+        '🔗',
+        'Dependencies',
+        `${deps.cycles.length} cycles · ${deps.edgeCutHints.length} cut hints · ${deps.layerViolations.length} layer violations · ${deps.deadExports.length} dead exports`,
+      ),
+    );
+
+    if (deps.deadExports.length > 0) {
+      lines.push(`    ${cc('dead exports:', A.yellow)}`);
+
+      for (const finding of deps.deadExports) {
+        lines.push(`      ${cc('·', A.dim)} ${finding.kind}: ${finding.module}#${finding.exportName}`);
+      }
+    }
+
+    if (deps.layerViolations.length > 0) {
+      lines.push(`    ${cc('layer violations:', A.yellow)}`);
+
+      for (const finding of deps.layerViolations) {
+        lines.push(`      ${cc('·', A.dim)} ${finding.message} ${cc(`(${finding.from} → ${finding.to})`, A.dim)}`);
+      }
+    }
 
     if (deps.cycles.length > 0) {
       lines.push(`    ${cc('cycles:', A.yellow)}`);

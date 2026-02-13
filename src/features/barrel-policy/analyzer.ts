@@ -236,6 +236,24 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
     const stmtRecord = asNodeLike(stmt);
     const type = stmtRecord?.type;
 
+    if (type === 'ImportDeclaration') {
+      const specifiers = stmtRecord?.specifiers;
+
+      if (!Array.isArray(specifiers) || specifiers.length === 0) {
+        const source = getLiteralString(stmtRecord?.source as NodeValue);
+
+        findings.push({
+          kind: 'barrel-side-effect-import',
+          message: 'Side-effect import in barrel file may cause unexpected behavior for consumers',
+          filePath: file.filePath,
+          span: toNodeSpan(file, stmt),
+          ...(typeof source === 'string' ? { evidence: source } : {}),
+        });
+
+        continue;
+      }
+    }
+
     if (type === 'ExportNamedDeclaration') {
       const source = getLiteralString(stmtRecord?.source as NodeValue);
       const declaration = stmtRecord?.declaration;

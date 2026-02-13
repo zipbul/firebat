@@ -100,9 +100,15 @@ const toSpanFromRange = (range: LspRange): SourceSpan => {
   };
 };
 
-const toSeverity = (severity: number | undefined): 'error' | 'warning' => {
+const shouldIncludeDiagnostic = (severity: number | undefined): boolean => {
   // LSP DiagnosticSeverity: 1=Error, 2=Warning, 3=Information, 4=Hint
-  return severity === 2 ? 'warning' : 'error';
+  // Policy: error-only output; warnings are promoted to error; info/hint are dropped.
+  return severity !== 3 && severity !== 4;
+};
+
+const toSeverity = (severity: number | undefined): 'error' => {
+  // Policy: treat warnings as errors.
+  return 'error';
 };
 
 const toCodeText = (code: string | number | undefined, source: string | undefined): string => {
@@ -126,7 +132,9 @@ const convertPublishDiagnosticsToTypecheckItems = (
 ): ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> => {
   const filePath = lspUriToFilePath(params.uri);
 
-  return (params.diagnostics ?? []).map(diag => {
+  return (params.diagnostics ?? [])
+    .filter(diag => shouldIncludeDiagnostic(diag.severity))
+    .map(diag => {
     return {
       severity: toSeverity(diag.severity),
       code: toCodeText(diag.code, diag.source),
@@ -134,7 +142,7 @@ const convertPublishDiagnosticsToTypecheckItems = (
       filePath,
       span: toSpanFromRange(diag.range),
     };
-  });
+    });
 };
 
 const attachCodeFrames = (

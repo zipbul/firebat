@@ -607,14 +607,40 @@ const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput
     const nonBoundaryBindings: BindingCandidate[] = [];
     const boundaryUnknownUsages: BoundaryUsageCandidate[] = [];
 
-    const pushTypeAssertion = (node: unknown, message: string): void => {
+    const unwrapAssertionInner = (value: unknown): NodeLike | null => {
+      let current = asNodeLike(value);
+
+      while (current && current.type === 'ParenthesizedExpression') {
+        current = asNodeLike(current.expression);
+      }
+
+      return current;
+    };
+
+    const isConstAssertion = (value: NodeLike | null): boolean => {
+      if (!value || value.type !== 'TSAsExpression') {
+        return false;
+      }
+
+      const typeAnn = asNodeLike(value.typeAnnotation);
+
+      if (!typeAnn || typeAnn.type !== 'TSTypeReference') {
+        return false;
+      }
+
+      const typeName = asNodeLike(typeAnn.typeName);
+
+      return !!(typeName && typeName.type === 'Identifier' && typeName.name === 'const');
+    };
+
+    const pushTypeAssertion = (kind: 'type-assertion' | 'double-assertion', node: unknown, message: string): void => {
       const nodeRecord = asNodeLike(node);
       const startOffset = typeof nodeRecord?.start === 'number' ? nodeRecord.start : 0;
       const endOffset = typeof nodeRecord?.end === 'number' ? nodeRecord.end : startOffset;
       const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
 
       typeAssertionFindings.push({
-        kind: 'type-assertion',
+        kind,
         message,
         filePath,
         span,
@@ -622,9 +648,24 @@ const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput
     };
 
     walkOxcTree(file.program as Node, (node: Node) => {
+      // satisfies only checks types and does not narrow; it is safe.
+      if (node.type === 'TSSatisfiesExpression') {
+        return true;
+      }
+
       // Ban type assertions everywhere, except const assertions.
       if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
         if (node.type === 'TSAsExpression') {
+          const record = isNodeRecord(node) ? (node as unknown as NodeLike) : null;
+          const inner = record ? unwrapAssertionInner(record.expression) : null;
+
+          if (inner && (inner.type === 'TSAsExpression' || inner.type === 'TSTypeAssertion') && !isConstAssertion(inner)) {
+            pushTypeAssertion('double-assertion', node, 'Double type assertion bypasses type safety entirely');
+
+            // Don't report the inner assertion too.
+            return false;
+          }
+
           const typeAnn = isNodeRecord(node) ? node.typeAnnotation : undefined;
 
           if (isNodeRecord(typeAnn) && typeAnn.type === 'TSTypeReference') {
@@ -636,7 +677,7 @@ const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput
           }
         }
 
-        pushTypeAssertion(node, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
+        pushTypeAssertion('type-assertion', node, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
 
         return true;
       }

@@ -147,6 +147,57 @@ const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
     : undefined;
 };
 
+type DependenciesFeatureValue = {
+  readonly layers: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
+  readonly allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
+};
+
+const resolveDependenciesLayersFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): ReadonlyArray<{ readonly name: string; readonly glob: string }> | undefined => {
+  const value = features?.dependencies;
+
+  if (!value || value === true || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const layers = (value as DependenciesFeatureValue).layers;
+
+  return Array.isArray(layers) && layers.every(layer => typeof layer?.name === 'string' && typeof layer?.glob === 'string')
+    ? layers
+    : undefined;
+};
+
+const resolveDependenciesAllowedDependenciesFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): Readonly<Record<string, ReadonlyArray<string>>> | undefined => {
+  const value = features?.dependencies;
+
+  if (!value || value === true || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const allowed = (value as DependenciesFeatureValue).allowedDependencies;
+
+  if (!allowed || typeof allowed !== 'object') {
+    return undefined;
+  }
+
+  const entries = Object.entries(allowed as Record<string, unknown>);
+
+  for (const [key, list] of entries) {
+    if (typeof key !== 'string' || key.length === 0) {
+      return undefined;
+    }
+
+    if (!Array.isArray(list) || !list.every(item => typeof item === 'string')) {
+      return undefined;
+    }
+  }
+
+  return allowed as Readonly<Record<string, ReadonlyArray<string>>>;
+};
+
 const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['features'] | undefined => {
   const root = config?.features;
   const mcp = config?.mcp;
@@ -456,6 +507,8 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
       const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(effectiveFeatures);
       const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(effectiveFeatures);
+      const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(effectiveFeatures);
+      const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(effectiveFeatures);
       const cliOptions: FirebatCliOptions = {
         targets,
         format: 'json',
@@ -466,6 +519,8 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         fix: false,
         ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
         ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
+        ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
+        ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
         help: false,
       };
       const report = await scanUseCase(cliOptions, { logger });

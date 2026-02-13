@@ -27,7 +27,20 @@
     "typecheck": true,
 
     // Build dependency graph analysis.
-    "dependencies": true,
+    "dependencies": {
+      "layers": [
+        { "name": "adapters", "glob": "src/adapters/**" },
+        { "name": "application", "glob": "src/application/**" },
+        { "name": "engine", "glob": "src/engine/**" },
+        { "name": "infrastructure", "glob": "src/infrastructure/**" }
+      ],
+      "allowedDependencies": {
+        "adapters": ["application"],
+        "application": ["engine", "infrastructure"],
+        "engine": [],
+        "infrastructure": []
+      }
+    },
 
     // Coupling hotspots based on dependency graph.
     "coupling": true,

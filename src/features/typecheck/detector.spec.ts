@@ -31,6 +31,16 @@ describe('detector', () => {
           message: "'unused' is declared but its value is never read.",
           source: 'tsgo',
         },
+        {
+          range: {
+            start: { line: 12, character: 0 },
+            end: { line: 12, character: 1 },
+          },
+          severity: 3,
+          code: 'TS9999',
+          message: 'informational',
+          source: 'tsgo',
+        },
       ],
     };
     // Act
@@ -50,7 +60,7 @@ describe('detector', () => {
       },
     } satisfies Partial<TypecheckItem>;
     const expectedWarning = {
-      severity: 'warning',
+      severity: 'error',
       code: 'TS6133',
       message: "'unused' is declared but its value is never read.",
       filePath: '/repo/src/a.ts',

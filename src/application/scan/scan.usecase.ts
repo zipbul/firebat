@@ -191,6 +191,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
       : {}),
     ...(options.detectors.includes('barrel-policy') ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] } : {}),
+    ...((options.detectors.includes('dependencies') || options.detectors.includes('coupling'))
+      ? {
+          dependenciesLayers: options.dependenciesLayers,
+          dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
+        }
+      : {}),
   });
 
   logger.trace('Artifact key computed', { artifactKey });
@@ -450,7 +456,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    dependencies = analyzeDependencies(program);
+    dependencies = analyzeDependencies(program, {
+      rootAbs: ctx.rootAbs,
+      layers: options.dependenciesLayers,
+      allowedDependencies: options.dependenciesAllowedDependencies,
+    });
     detectorTimings.dependencies = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.dependencies) });

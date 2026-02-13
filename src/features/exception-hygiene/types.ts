@@ -1,5 +1,8 @@
 export type ExceptionHygieneFindingKind =
   | 'tool-unavailable'
+  | 'throw-non-error'
+  | 'async-promise-executor'
+  | 'missing-error-cause'
   | 'useless-catch'
   | 'unsafe-finally'
   | 'return-in-finally'

@@ -284,6 +284,87 @@ describe('integration/unknown-proof', () => {
     await rm(rootAbs, { recursive: true, force: true });
   });
 
+  it('should skip satisfies expressions when collecting type assertion candidates', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'features', 'satisfies.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      [
+        'type Config = { a?: number };',
+        'export function ok() {',
+        '  const cfg = { a: 1 } satisfies Config;',
+        '  return cfg.a ?? 0;',
+        '}',
+      ].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+    });
+
+    // Assert
+    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
+  it('should report double-assertion for x as unknown as T and avoid duplicate single assertions', async () => {
+    // Arrange
+    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
+    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
+    const filePath = path.join(rootAbs, 'src', 'features', 'double.ts');
+
+    await writeText(
+      tsconfigPath,
+      JSON.stringify(
+        {
+          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
+          include: ['src/**/*.ts'],
+        },
+        null,
+        2,
+      ),
+    );
+
+    await writeText(
+      filePath,
+      ['export function bad() {', '  const x = (1 as unknown) as string;', '  return x;', '}'].join('\n'),
+    );
+
+    const program = [parseSource(filePath, await Bun.file(filePath).text())];
+
+    // Act
+    const analysis = await analyzeUnknownProof(program, {
+      rootAbs,
+      tsconfigPath,
+    });
+
+    // Assert
+    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'double-assertion')).toBe(true);
+    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
+
+    await rm(rootAbs, { recursive: true, force: true });
+  });
+
   it('should report unknown-type findings when explicit unknown appears outside boundary files', async () => {
     // Arrange
     const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));

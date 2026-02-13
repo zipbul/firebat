@@ -89,6 +89,22 @@ describe('integration/barrel-policy', () => {
     expect(analysis.findings.some(f => f.kind === 'invalid-index-statement')).toBe(true);
   });
 
+  it("should report barrel-side-effect-import when index.ts contains side-effect imports", async () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/pkg/a/index.ts', ["import './polyfill';", "export { internal } from './internal';"].join('\n'));
+    sources.set('/virtual/pkg/a/polyfill.ts', 'globalThis.__polyfilled = true;\n');
+    sources.set('/virtual/pkg/a/internal.ts', 'export const internal = 1;\n');
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+
+    // Assert
+    expect(analysis.findings.some(f => f.kind === 'barrel-side-effect-import')).toBe(true);
+  });
+
   it('should ignore dist/** by default', async () => {
     // Arrange
     let sources = new Map<string, string>();

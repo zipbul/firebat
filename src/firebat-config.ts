@@ -32,6 +32,16 @@ interface FirebatBarrelPolicyConfig {
   readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
 }
 
+interface FirebatDependencyLayerConfig {
+  readonly name: string;
+  readonly glob: string;
+}
+
+interface FirebatDependenciesConfig {
+  readonly layers: ReadonlyArray<FirebatDependencyLayerConfig>;
+  readonly allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
+}
+
 interface FirebatFeaturesConfig {
   readonly 'exact-duplicates'?: FeatureToggle<FirebatExactDuplicatesConfig> | undefined;
   readonly waste?: FeatureToggle<FirebatWasteConfig> | undefined;
@@ -41,7 +51,7 @@ interface FirebatFeaturesConfig {
   readonly format?: boolean | undefined;
   readonly lint?: boolean | undefined;
   readonly typecheck?: boolean | undefined;
-  readonly dependencies?: boolean | undefined;
+  readonly dependencies?: FeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly coupling?: boolean | undefined;
   readonly 'structural-duplicates'?: FeatureToggle<FirebatStructuralDuplicatesConfig> | undefined;
   readonly nesting?: boolean | undefined;
@@ -60,7 +70,7 @@ interface FirebatMcpFeaturesConfig {
   readonly format?: boolean | 'inherit' | undefined;
   readonly lint?: boolean | 'inherit' | undefined;
   readonly typecheck?: boolean | 'inherit' | undefined;
-  readonly dependencies?: boolean | 'inherit' | undefined;
+  readonly dependencies?: InheritableFeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly coupling?: boolean | 'inherit' | undefined;
   readonly 'structural-duplicates'?: InheritableFeatureToggle<FirebatStructuralDuplicatesConfig> | undefined;
   readonly nesting?: boolean | 'inherit' | undefined;
@@ -135,7 +145,27 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
         format: z.boolean().optional(),
         lint: z.boolean().optional(),
         typecheck: z.boolean().optional(),
-        dependencies: z.boolean().optional(),
+        dependencies: z
+          .union([
+            z.literal(false),
+            z.literal(true),
+            z
+              .object({
+                layers: z
+                  .array(
+                    z
+                      .object({
+                        name: z.string().min(1),
+                        glob: z.string().min(1),
+                      })
+                      .strict(),
+                  )
+                  .nonempty(),
+                allowedDependencies: z.record(z.array(z.string()).nonempty()),
+              })
+              .strict(),
+          ])
+          .optional(),
         coupling: z.boolean().optional(),
         'structural-duplicates': z
           .union([
@@ -225,7 +255,28 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                 format: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 lint: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 typecheck: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
-                dependencies: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
+                dependencies: z
+                  .union([
+                    z.literal(false),
+                    z.literal('inherit'),
+                    z.literal(true),
+                    z
+                      .object({
+                        layers: z
+                          .array(
+                            z
+                              .object({
+                                name: z.string().min(1),
+                                glob: z.string().min(1),
+                              })
+                              .strict(),
+                          )
+                          .nonempty(),
+                        allowedDependencies: z.record(z.array(z.string()).nonempty()),
+                      })
+                      .strict(),
+                  ])
+                  .optional(),
                 coupling: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'structural-duplicates': z
                   .union([

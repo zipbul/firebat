@@ -21,12 +21,24 @@ interface ComputeScanArtifactKeyInput {
   readonly wasteMemoryRetentionThreshold?: number;
   readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
   readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
+  readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
+  readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
 }
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedDetectors = [...input.detectors].sort();
   const normalizedUnknownProofBoundaryGlobs = input.unknownProofBoundaryGlobs ? [...input.unknownProofBoundaryGlobs].sort() : [];
   const normalizedBarrelPolicyIgnoreGlobs = input.barrelPolicyIgnoreGlobs ? [...input.barrelPolicyIgnoreGlobs].sort() : [];
+  const normalizedDependenciesLayers = input.dependenciesLayers
+    ? [...input.dependenciesLayers]
+        .map(layer => ({ name: layer.name, glob: layer.glob }))
+        .sort((a, b) => (a.name === b.name ? a.glob.localeCompare(b.glob) : a.name.localeCompare(b.name)))
+    : [];
+  const normalizedAllowedDepsEntries = input.dependenciesAllowedDependencies
+    ? Object.entries(input.dependenciesAllowedDependencies)
+        .map(([key, value]) => [key, [...value].sort()] as const)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+    : [];
 
   return hashString(
     [
@@ -37,6 +49,8 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `wasteMemoryRetentionThreshold=${String(input.wasteMemoryRetentionThreshold ?? '')}`,
       `unknownProofBoundaryGlobs=${normalizedUnknownProofBoundaryGlobs.join(',')}`,
       `barrelPolicyIgnoreGlobs=${normalizedBarrelPolicyIgnoreGlobs.join(',')}`,
+      `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
+      `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,
     ].join('|'),
   );
 };

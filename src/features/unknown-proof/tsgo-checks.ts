@@ -70,28 +70,60 @@ const pickTypeSnippetFromHoverText = (text: string): string => {
     return '';
   }
 
-  const block = /```(?:typescript|ts)?\s*([\s\S]*?)```/m.exec(text);
-  const body = (block?.[1] ?? text).trim();
-  const firstLine =
-    body
-      .split(/\r?\n/)
-      .map(l => l.trim())
-      .find(l => l.length > 0) ?? '';
+  const blocks: string[] = [];
+  const regex = /```(?:typescript|ts)?\s*([\s\S]*?)```/gm;
+  let match: RegExpExecArray | null;
 
-  return firstLine.slice(0, 200);
+  while ((match = regex.exec(text)) !== null) {
+    const candidate = (match[1] ?? '').trim();
+
+    if (candidate.length > 0) {
+      blocks.push(candidate);
+    }
+  }
+
+  const pick = (body: string): string => {
+    const firstLine =
+      body
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .find(l => l.length > 0) ?? '';
+
+    return firstLine.slice(0, 200);
+  };
+
+  if (blocks.length > 0) {
+    const typeBlock = blocks.find(b => /^(const|let|var|type|interface|function|class)\b/.test(b));
+
+    return pick(typeBlock ?? blocks[0] ?? '');
+  }
+
+  return pick(text.trim());
 };
 
 const hasWord = (text: string, word: string): boolean => new RegExp(`\\b${word}\\b`).test(text);
+
+const hasWordInType = (typeSnippet: string, word: string): boolean => {
+  const colonIndex = typeSnippet.indexOf(':');
+  const typePart = colonIndex >= 0 ? typeSnippet.slice(colonIndex + 1) : typeSnippet;
+
+  return hasWord(typePart, word);
+};
 
 const shouldFlagUnknownOrAny = (hoverText: string): UnknownOrAnyFlag => {
   const snippet = pickTypeSnippetFromHoverText(hoverText);
   const haystack = snippet.length > 0 ? snippet : hoverText;
 
   return {
-    unknown: hasWord(haystack, 'unknown'),
-    any: hasWord(haystack, 'any'),
+    unknown: snippet.length > 0 ? hasWordInType(haystack, 'unknown') : hasWord(haystack, 'unknown'),
+    any: snippet.length > 0 ? hasWordInType(haystack, 'any') : hasWord(haystack, 'any'),
     typeSnippet: snippet,
   };
+};
+
+export const __test__ = {
+  pickTypeSnippetFromHoverText,
+  shouldFlagUnknownOrAny,
 };
 
 const formatBoundaryUnknownMessage = (kind: BoundaryUsageKind): BoundaryUnknownMessage => {

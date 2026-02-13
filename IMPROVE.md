@@ -1360,25 +1360,18 @@ interface DuplicateGroup {
 
 **파일**: `src/features/typecheck/detector.ts` — `toSeverity()`
 
-**현상**: LSP severity 3=Information, 4=Hint도 'error'로 매핑.
+**현상**: LSP DiagnosticSeverity는 1=Error, 2=Warning, 3=Information, 4=Hint로 구분되지만,
+본 프로젝트는 검증 게이트 용도로 사용하므로 결과 출력은 **error-only**로 유지한다.
 
-**수정 방안**:
-
-```
-const toSeverity = (severity: number | undefined): 'error' | 'warning' | 'info' | 'hint' => {
-  if (severity === 1) return 'error';
-  if (severity === 2) return 'warning';
-  if (severity === 3) return 'info';
-  if (severity === 4) return 'hint';
-  return 'error'; // fallback
-};
-```
-
-기본 출력 필터: error/warning만 표시. `--verbose` 또는 config로 info/hint 포함.
-**하위 호환**: TypecheckItem의 `severity` 타입 확장은 breaking change → major version 또는 config gating.
+**정책(현재 기준)**:
+- Warning(2)도 `error`로 **승격**하여 출력
+- Information/Hint(3/4)는 결과에서 **제외(drop)**
+- `TypecheckItem.severity`는 `error`만 사용
 
 **성능 영향**: 없음.
-**테스트**: severity=3 → 'info', severity=4 → 'hint'.
+**테스트**:
+- severity=2 → `error`로 출력
+- severity=3/4 → 결과에서 제외
 
 ---
 

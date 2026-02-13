@@ -75,11 +75,23 @@ export interface DuplicateItem {
   readonly span: SourceSpan;
 }
 
+export interface CloneDiffPair {
+  readonly left: string;
+  readonly right: string;
+  readonly location: string;
+}
+
+export interface CloneDiff {
+  readonly kind: 'identifier' | 'literal' | 'type';
+  readonly pairs: ReadonlyArray<CloneDiffPair>;
+}
+
 export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape' | 'type-3-normalized';
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
   readonly items: ReadonlyArray<DuplicateItem>;
+  readonly suggestedParams?: CloneDiff;
 }
 
 export interface DependencyCycle {
@@ -98,6 +110,22 @@ export interface DependencyEdgeCutHint {
   readonly reason?: string;
 }
 
+export interface DependencyLayerViolation {
+  readonly kind: 'layer-violation';
+  readonly message: string;
+  readonly from: string;
+  readonly to: string;
+  readonly fromLayer: string;
+  readonly toLayer: string;
+}
+
+export interface DependencyDeadExportFinding {
+  readonly kind: 'dead-export' | 'test-only-export';
+  readonly module: string;
+  readonly exportName: string;
+  readonly message: string;
+}
+
 export interface DependencyAnalysis {
   readonly cycles: ReadonlyArray<DependencyCycle>;
   /** Dependency graph adjacency list (module -> direct imports). Keys/values are project-relative paths. */
@@ -107,6 +135,8 @@ export interface DependencyAnalysis {
   readonly fanInTop: ReadonlyArray<DependencyFanStat>;
   readonly fanOutTop: ReadonlyArray<DependencyFanStat>;
   readonly edgeCutHints: ReadonlyArray<DependencyEdgeCutHint>;
+  readonly layerViolations: ReadonlyArray<DependencyLayerViolation>;
+  readonly deadExports: ReadonlyArray<DependencyDeadExportFinding>;
 }
 
 export interface CouplingHotspot {
@@ -134,6 +164,8 @@ export interface StructuralDuplicatesAnalysis {
 
 export interface NestingMetrics {
   readonly depth: number;
+  readonly cognitiveComplexity: number;
+  readonly accidentalQuadraticTargets: ReadonlyArray<string>;
 }
 
 export interface NestingItem {
@@ -185,7 +217,8 @@ export type BarrelPolicyFindingKind =
   | 'deep-import'
   | 'index-deep-import'
   | 'missing-index'
-  | 'invalid-index-statement';
+  | 'invalid-index-statement'
+  | 'barrel-side-effect-import';
 
 export interface BarrelPolicyFinding {
   readonly kind: BarrelPolicyFindingKind;
@@ -314,6 +347,7 @@ export type UnknownProofStatus = 'ok' | 'unavailable' | 'failed';
 export type UnknownProofFindingKind =
   | 'tool-unavailable'
   | 'type-assertion'
+  | 'double-assertion'
   | 'unknown-type'
   | 'unvalidated-unknown'
   | 'unknown-inferred'

@@ -124,4 +124,58 @@ describe('integration/nesting', () => {
     // Assert
     expect(item).toBeUndefined();
   });
+
+  it('should compute cognitive complexity using nesting bonus', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/nesting/cognitive.ts';
+    let source = [
+      'export function c(a, b, c) {',
+      '  if (a) {',
+      '    if (b) {',
+      '      if (c) {',
+      '        return 1;',
+      '      }',
+      '    }',
+      '  }',
+      '  return 0;',
+      '}',
+    ].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let nesting = analyzeNesting(program);
+    let item = nesting.items.find(entry => entry.header === 'c');
+
+    // Assert
+    expect(item).toBeDefined();
+    expect(item?.metrics.cognitiveComplexity).toBe(6);
+  });
+
+  it('should detect accidental quadratic nested iteration over the same collection', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/nesting/quadratic.ts';
+    let source = [
+      'export function q(users) {',
+      '  users.forEach(u => {',
+      '    users.find(other => other.id === u.managerId);',
+      '  });',
+      '}',
+    ].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let nesting = analyzeNesting(program);
+    let item = nesting.items.find(entry => entry.header === 'q');
+
+    // Assert
+    expect(item).toBeDefined();
+    expect(item?.metrics.accidentalQuadraticTargets).toContain('users');
+    expect(item?.suggestions.join(' ')).toContain('accidental-quadratic');
+  });
 });

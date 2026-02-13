@@ -563,7 +563,7 @@ describe('analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report catch-transform-hygiene when catch throws new Error without cause', () => {
+  it('should report missing-error-cause when catch throws new Error without cause', () => {
     // Arrange
     const filePath = '/virtual/src/features/transform-bad.ts';
     const source = [
@@ -577,7 +577,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
+    const hits = analysis.findings.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);

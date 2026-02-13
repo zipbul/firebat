@@ -73,6 +73,24 @@ const getMemberPropertyName = (callee: NodeValue): string | null => {
   return null;
 };
 
+const isErrorConstructor = (callee: NodeValue): boolean => {
+  if (!isOxcNode(callee) || !isNodeRecord(callee) || callee.type !== 'Identifier') {
+    return false;
+  }
+
+  const name = callee.name;
+
+  return (
+    name === 'Error' ||
+    name === 'TypeError' ||
+    name === 'RangeError' ||
+    name === 'ReferenceError' ||
+    name === 'SyntaxError' ||
+    name === 'URIError' ||
+    name === 'EvalError'
+  );
+};
+
 const isPromiseFactoryCall = (expr: NodeValue): boolean => {
   if (!isOxcNode(expr) || expr.type !== 'CallExpression' || !isNodeRecord(expr)) {
     // `new Promise(...)`
@@ -430,6 +448,25 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
+      // Prefer a specific finding for Error constructors without { cause }.
+      if (isErrorConstructor(arg.callee)) {
+        const hasCause = hasCausePropertyWithIdentifier(arg, name);
+
+        if (!hasCause) {
+          pushFinding(findings, {
+            kind: 'missing-error-cause',
+            node,
+            filePath,
+            sourceText,
+            message: `new Error() in catch block without { cause: ${name} }`,
+            evidence: getEvidenceLineAt(sourceText, node.start),
+            recipes: [],
+          });
+        }
+
+        return true;
+      }
+
       const usesIdentifier = containsIdentifierUse(arg, name);
       const hasCause = hasCausePropertyWithIdentifier(arg, name);
 
@@ -609,6 +646,59 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           evidence: getEvidenceLineAt(sourceText, node.start),
           recipes: ['RCP-14', 'RCP-15'],
         });
+      }
+    }
+
+    // P3-1 throw-non-error
+    if (node.type === 'ThrowStatement' && isNodeRecord(node)) {
+      const arg = node.argument;
+
+      if (isOxcNode(arg)) {
+        const isLikelyError =
+          arg.type === 'NewExpression' ||
+          arg.type === 'Identifier' ||
+          arg.type === 'CallExpression' ||
+          arg.type === 'AwaitExpression';
+
+        if (!isLikelyError) {
+          pushFinding(findings, {
+            kind: 'throw-non-error',
+            node,
+            filePath,
+            sourceText,
+            message: 'throw argument is not an Error instance (loses stack trace)',
+            evidence: getEvidenceLineAt(sourceText, node.start),
+            recipes: [],
+          });
+        }
+      }
+    }
+
+    // P3-2 async-promise-executor
+    if (node.type === 'NewExpression' && isNodeRecord(node)) {
+      const callee = node.callee;
+
+      if (isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && callee.name === 'Promise') {
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+        const executor = args[0];
+        const isAsyncExecutor =
+          executor !== undefined &&
+          isOxcNode(executor) &&
+          (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression') &&
+          isNodeRecord(executor) &&
+          executor.async === true;
+
+        if (isAsyncExecutor) {
+          pushFinding(findings, {
+            kind: 'async-promise-executor',
+            node,
+            filePath,
+            sourceText,
+            message: 'Promise executor is async; thrown errors will not reject',
+            evidence: getEvidenceLineAt(sourceText, node.start),
+            recipes: [],
+          });
+        }
       }
     }
 

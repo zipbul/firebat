@@ -10,6 +10,14 @@ const createEmptyLint = (): LintAnalysis => ({
   diagnostics: [],
 });
 
+const normalizeSeverity = (severity: 'error' | 'warning' | 'info'): 'error' | null => {
+  if (severity === 'info') {
+    return null;
+  }
+
+  return 'error';
+};
+
 interface AnalyzeLintInput {
   readonly targets: ReadonlyArray<string>;
   readonly fix: boolean;
@@ -30,6 +38,21 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
     logger,
   });
 
+  const normalizedDiagnostics = (result.diagnostics ?? [])
+    .map(d => {
+      const nextSeverity = normalizeSeverity(d.severity);
+
+      if (nextSeverity === null) {
+        return null;
+      }
+
+      return {
+        ...d,
+        severity: nextSeverity,
+      };
+    })
+    .filter((d): d is NonNullable<typeof d> => d !== null);
+
   if (!result.ok) {
     const error = result.error ?? 'oxlint failed';
     const status = error.includes('not available') ? 'unavailable' : 'failed';
@@ -39,7 +62,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
       tool: 'oxlint',
       ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
       error,
-      diagnostics: result.diagnostics ?? [],
+      diagnostics: normalizedDiagnostics,
     };
   }
 
@@ -47,7 +70,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
     status: 'ok',
     tool: 'oxlint',
     ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-    diagnostics: result.diagnostics ?? [],
+    diagnostics: normalizedDiagnostics,
   };
 };
 

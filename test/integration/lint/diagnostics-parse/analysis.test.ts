@@ -53,7 +53,7 @@ exit 1
 
       expect(diag?.message).toBe('no-unused-vars');
       expect(diag?.code).toBe('no-unused-vars');
-      expect(diag?.severity).toBe('warning');
+      expect(diag?.severity).toBe('error');
       expect(diag?.filePath).toBe('src/a.ts');
       expect(diag?.span.start.line).toBe(3);
       expect(diag?.span.start.column).toBe(4);

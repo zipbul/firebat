@@ -1,7 +1,14 @@
 import * as path from 'node:path';
+import { readFileSync } from 'node:fs';
 
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
-import type { DependencyAnalysis, DependencyEdgeCutHint, DependencyFanStat } from '../../types';
+import type {
+  DependencyAnalysis,
+  DependencyDeadExportFinding,
+  DependencyEdgeCutHint,
+  DependencyFanStat,
+  DependencyLayerViolation,
+} from '../../types';
 
 import { getNodeName, isNodeRecord, isOxcNode } from '../../engine/oxc-ast-utils';
 import { sortDependencyFanStats } from '../../engine/sort-utils';
@@ -13,11 +20,95 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
   fanInTop: [],
   fanOutTop: [],
   edgeCutHints: [],
+  layerViolations: [],
+  deadExports: [],
 });
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
-const toRelativePath = (value: string): string => normalizePath(path.relative(process.cwd(), value));
+const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
+
+interface DependencyLayerRule {
+  readonly name: string;
+  readonly glob: string;
+}
+
+interface AnalyzeDependenciesInput {
+  readonly rootAbs?: string;
+  readonly layers?: ReadonlyArray<DependencyLayerRule>;
+  readonly allowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
+}
+
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const globToRegExp = (pattern: string): RegExp => {
+  // Supports: **, *, ?, and path separators '/'.
+  // - ** matches any characters including '/'
+  // - * matches any characters except '/'
+  const normalized = normalizePath(pattern);
+  let out = '^';
+  let i = 0;
+
+  while (i < normalized.length) {
+    const ch = normalized[i] ?? '';
+
+    if (ch === '*') {
+      const next = normalized[i + 1];
+
+      if (next === '*') {
+        out += '.*';
+        i += 2;
+
+        continue;
+      }
+
+      out += '[^/]*';
+      i += 1;
+
+      continue;
+    }
+
+    if (ch === '?') {
+      out += '[^/]';
+      i += 1;
+
+      continue;
+    }
+
+    out += escapeRegex(ch);
+    i += 1;
+  }
+
+  out += '$';
+
+  return new RegExp(out);
+};
+
+const compileLayerMatchers = (layers: ReadonlyArray<DependencyLayerRule>): ReadonlyArray<{ readonly layer: DependencyLayerRule; readonly re: RegExp }> => {
+  return layers
+    .filter(layer => typeof layer.name === 'string' && layer.name.trim().length > 0 && typeof layer.glob === 'string' && layer.glob.trim().length > 0)
+    .map(layer => ({ layer, re: globToRegExp(layer.glob) }));
+};
+
+const matchLayerName = (
+  rootAbs: string,
+  fileAbs: string,
+  matchers: ReadonlyArray<{ readonly layer: DependencyLayerRule; readonly re: RegExp }>,
+): string | null => {
+  const rel = toRelativePath(rootAbs, fileAbs);
+
+  if (rel.startsWith('..')) {
+    return null;
+  }
+
+  for (const entry of matchers) {
+    if (entry.re.test(rel)) {
+      return entry.layer.name;
+    }
+  }
+
+  return null;
+};
 
 const isNodeValueArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
 
@@ -64,6 +155,15 @@ const collectImportSources = (node: NodeValue, sources: string[]): void => {
     }
   }
 
+  // P3-7 dependencies: dynamic import() edges
+  if (node.type === 'ImportExpression') {
+    const source = (node as unknown as { source?: unknown }).source as NodeValue | undefined;
+
+    if (source && isStringLiteral(source) && typeof source.value === 'string') {
+      sources.push(source.value);
+    }
+  }
+
   for (const value of Object.values(node)) {
     if (value === node || value === null || value === undefined) {
       continue;
@@ -75,6 +175,311 @@ const collectImportSources = (node: NodeValue, sources: string[]): void => {
 
     collectImportSources(value as NodeValue, sources);
   }
+};
+
+const isTestLikePath = (value: string): boolean => {
+  const normalized = normalizePath(value);
+
+  return (
+    normalized.includes('/test/') ||
+    normalized.includes('/tests/') ||
+    normalized.endsWith('.test.ts') ||
+    normalized.endsWith('.test.tsx') ||
+    normalized.endsWith('.spec.ts') ||
+    normalized.endsWith('.spec.tsx')
+  );
+};
+
+const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
+  try {
+    const raw = readFileSync(path.join(rootAbs, 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { main?: unknown; exports?: unknown };
+    const out: string[] = [];
+
+    const collectStrings = (node: unknown): void => {
+      if (typeof node === 'string') {
+        out.push(node);
+
+        return;
+      }
+
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+
+      if (Array.isArray(node)) {
+        for (const entry of node) {
+          collectStrings(entry);
+        }
+
+        return;
+      }
+
+      for (const value of Object.values(node as Record<string, unknown>)) {
+        collectStrings(value);
+      }
+    };
+
+    if (typeof parsed.main === 'string') {
+      out.push(parsed.main);
+    }
+
+    collectStrings(parsed.exports);
+
+    return out;
+  } catch {
+    return [];
+  }
+};
+
+const resolveEntrypointToFile = (rootAbs: string, spec: string, fileMap: Map<string, ParsedFile>): string | null => {
+  if (typeof spec !== 'string' || spec.trim().length === 0) {
+    return null;
+  }
+
+  const trimmed = spec.trim();
+  const rel = trimmed.startsWith('.') ? trimmed : `./${trimmed}`;
+  const abs = path.resolve(rootAbs, rel);
+  const candidates = [
+    abs,
+    `${abs}.ts`,
+    `${abs}.tsx`,
+    `${abs}.js`,
+    `${abs}.mjs`,
+    `${abs}.cjs`,
+    path.join(abs, 'index.ts'),
+    path.join(abs, 'index.tsx'),
+    path.join(abs, 'index.js'),
+    path.join(abs, 'index.mjs'),
+    path.join(abs, 'index.cjs'),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePath(candidate);
+
+    if (fileMap.has(normalized)) {
+      return normalized;
+    }
+  }
+
+  return null;
+};
+
+const collectDeclaredExportNames = (file: ParsedFile): ReadonlyArray<string> => {
+  const program = file.program as unknown;
+
+  if (file.errors.length > 0) {
+    return [];
+  }
+
+  if (!isProgramBody(program)) {
+    return [];
+  }
+
+  const out = new Set<string>();
+
+  const recordName = (name: unknown): void => {
+    if (typeof name === 'string' && name.trim().length > 0) {
+      out.add(name);
+    }
+  };
+
+  const recordDeclarationName = (decl: NodeValue): void => {
+    if (!isOxcNode(decl) || !isNodeRecord(decl)) {
+      return;
+    }
+
+    if (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration' || decl.type === 'TSInterfaceDeclaration') {
+      recordName(getNodeName((decl as unknown as { id?: NodeValue }).id));
+
+      return;
+    }
+
+    if (decl.type === 'TSTypeAliasDeclaration') {
+      recordName(getNodeName((decl as unknown as { id?: NodeValue }).id));
+
+      return;
+    }
+
+    if (decl.type === 'VariableDeclaration') {
+      const declarations = (decl as unknown as { declarations?: unknown }).declarations;
+
+      if (!Array.isArray(declarations)) {
+        return;
+      }
+
+      for (const d of declarations) {
+        if (!isOxcNode(d) || !isNodeRecord(d) || d.type !== 'VariableDeclarator') {
+          continue;
+        }
+
+        const id = (d as unknown as { id?: unknown }).id as NodeValue | undefined;
+
+        if (isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier') {
+          recordName(id.name);
+        }
+      }
+    }
+  };
+
+  for (const stmt of program.body) {
+    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
+      continue;
+    }
+
+    if (stmt.type === 'ExportDefaultDeclaration') {
+      out.add('default');
+
+      continue;
+    }
+
+    if (stmt.type !== 'ExportNamedDeclaration') {
+      continue;
+    }
+
+    const declaration = (stmt as unknown as { declaration?: unknown }).declaration as NodeValue | undefined;
+    const specifiers = (stmt as unknown as { specifiers?: unknown }).specifiers;
+
+    if (declaration) {
+      recordDeclarationName(declaration);
+
+      continue;
+    }
+
+    if (!Array.isArray(specifiers)) {
+      continue;
+    }
+
+    for (const spec of specifiers) {
+      if (!isOxcNode(spec) || !isNodeRecord(spec)) {
+        continue;
+      }
+
+      const exported = (spec as unknown as { exported?: unknown }).exported as NodeValue | undefined;
+      const local = (spec as unknown as { local?: unknown }).local as NodeValue | undefined;
+      const exportedName = getNodeName((exported ?? local) as never);
+
+      recordName(exportedName);
+    }
+  }
+
+  return Array.from(out).sort();
+};
+
+const collectImportConsumers = (
+  file: ParsedFile,
+  fileMap: Map<string, ParsedFile>,
+): ReadonlyArray<{
+  readonly targetFilePath: string;
+  readonly usesAll: boolean;
+  readonly names: ReadonlyArray<string>;
+}> => {
+  const program = file.program as unknown;
+
+  if (file.errors.length > 0) {
+    return [];
+  }
+
+  if (!isProgramBody(program)) {
+    return [];
+  }
+
+  const consumers: Array<{ targetFilePath: string; usesAll: boolean; names: string[] }> = [];
+  const fromFilePath = normalizePath(file.filePath);
+
+  const addUsage = (specifier: string, usesAll: boolean, names: string[]): void => {
+    const resolved = resolveImport(fromFilePath, specifier, fileMap);
+
+    if (!resolved) {
+      return;
+    }
+
+    consumers.push({ targetFilePath: resolved, usesAll, names });
+  };
+
+  for (const stmt of program.body) {
+    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
+      continue;
+    }
+
+    if (stmt.type === 'ImportDeclaration') {
+      const source = stmt.source;
+
+      if (!isStringLiteral(source)) {
+        continue;
+      }
+
+      const specifiers = Array.isArray(stmt.specifiers) ? stmt.specifiers : [];
+      const names: string[] = [];
+      let usesAll = false;
+
+      for (const spec of specifiers) {
+        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
+          continue;
+        }
+
+        if (spec.type === 'ImportNamespaceSpecifier') {
+          usesAll = true;
+        }
+
+        if (spec.type === 'ImportDefaultSpecifier') {
+          names.push('default');
+        }
+
+        if (spec.type === 'ImportSpecifier') {
+          const imported = (spec as unknown as { imported?: unknown }).imported as NodeValue | undefined;
+          const importedName = getNodeName(imported as never);
+
+          if (typeof importedName === 'string' && importedName.trim().length > 0) {
+            names.push(importedName);
+          }
+        }
+      }
+
+      addUsage(source.value, usesAll, names);
+
+      continue;
+    }
+
+    if (stmt.type === 'ExportNamedDeclaration' || stmt.type === 'ExportAllDeclaration') {
+      const source = (stmt as unknown as { source?: unknown }).source;
+
+      if (!isStringLiteral(source as never)) {
+        continue;
+      }
+
+      if (stmt.type === 'ExportAllDeclaration') {
+        addUsage((source as { value: string }).value, true, []);
+
+        continue;
+      }
+
+      const specifiers = (stmt as unknown as { specifiers?: unknown }).specifiers;
+
+      if (!Array.isArray(specifiers)) {
+        continue;
+      }
+
+      const names: string[] = [];
+
+      for (const spec of specifiers) {
+        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
+          continue;
+        }
+
+        const local = (spec as unknown as { local?: unknown }).local as NodeValue | undefined;
+        const importedName = getNodeName(local as never);
+
+        if (typeof importedName === 'string' && importedName.trim().length > 0) {
+          names.push(importedName);
+        }
+      }
+
+      addUsage((source as { value: string }).value, false, names);
+    }
+  }
+
+  return consumers;
 };
 
 const buildFileMap = (files: ReadonlyArray<ParsedFile>): Map<string, ParsedFile> => {
@@ -144,7 +549,7 @@ const buildAdjacency = (files: ReadonlyArray<ParsedFile>): Map<string, ReadonlyA
   return adjacency;
 };
 
-const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<unknown> } => {
+const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<NodeValue> } => {
   return !!value && typeof value === 'object' && Array.isArray((value as { body?: unknown }).body);
 };
 
@@ -173,7 +578,7 @@ const collectExportStats = (
     }
 
     if (stmt.type === 'TSInterfaceDeclaration') {
-      const name = getNodeName((stmt as unknown as { id?: unknown }).id);
+      const name = getNodeName((stmt as unknown as { id?: NodeValue }).id);
 
       if (typeof name === 'string' && name.trim().length > 0) {
         declaredInterfaces.add(name);
@@ -189,7 +594,7 @@ const collectExportStats = (
         continue;
       }
 
-      const name = getNodeName((stmt as unknown as { id?: unknown }).id);
+      const name = getNodeName((stmt as unknown as { id?: NodeValue }).id);
 
       if (typeof name === 'string' && name.trim().length > 0) {
         declaredAbstractClasses.add(name);
@@ -208,7 +613,7 @@ const collectExportStats = (
     }
   };
 
-  const recordDeclaration = (decl: unknown): void => {
+  const recordDeclaration = (decl: NodeValue): void => {
     if (!isOxcNode(decl) || !isNodeRecord(decl)) {
       return;
     }
@@ -247,7 +652,7 @@ const collectExportStats = (
       const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
 
       if (declaration != null) {
-        recordDeclaration(declaration);
+        recordDeclaration(declaration as NodeValue);
 
         continue;
       }
@@ -287,7 +692,7 @@ const collectExportStats = (
     if (stmt.type === 'ExportDefaultDeclaration') {
       const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
 
-      recordDeclaration(declaration);
+      recordDeclaration(declaration as NodeValue);
     }
   }
 
@@ -502,15 +907,16 @@ const detectCycles = (adjacency: Map<string, ReadonlyArray<string>>): ReadonlyAr
   return cycles;
 };
 
-const listFanStats = (counts: Map<string, number>, limit: number): ReadonlyArray<DependencyFanStat> => {
+const listFanStats = (rootAbs: string, counts: Map<string, number>, limit: number): ReadonlyArray<DependencyFanStat> => {
   const items = Array.from(counts.entries())
     .filter(([, count]) => count > 0)
-    .map(([module, count]) => ({ module: toRelativePath(module), count }));
+    .map(([module, count]) => ({ module: toRelativePath(rootAbs, module), count }));
 
   return sortDependencyFanStats(items).slice(0, limit);
 };
 
 const buildEdgeCutHints = (
+  rootAbs: string,
   cycles: ReadonlyArray<ReadonlyArray<string>>,
   outDegree: Map<string, number>,
 ): ReadonlyArray<DependencyEdgeCutHint> => {
@@ -545,8 +951,8 @@ const buildEdgeCutHints = (
 
     seen.add(key);
     hints.push({
-      from: toRelativePath(from),
-      to: toRelativePath(to),
+      from: toRelativePath(rootAbs, from),
+      to: toRelativePath(rootAbs, to),
       score: bestScore > 0 ? bestScore : 1,
       reason: 'breaks cycle',
     });
@@ -555,22 +961,27 @@ const buildEdgeCutHints = (
   return hints;
 };
 
-const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalysis => {
+const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDependenciesInput): DependencyAnalysis => {
   const hasInputs = files.length > 0;
   const empty = createEmptyDependencies();
+
+  const rootAbs = input?.rootAbs ?? process.cwd();
+  const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
+  const allowedDependencies = input?.allowedDependencies ?? {};
 
   if (!hasInputs) {
     return empty;
   }
 
   const adjacency = buildAdjacency(files);
+  const fileMap = buildFileMap(files);
   const adjacencyOut: Record<string, ReadonlyArray<string>> = {};
   const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
   const inDegree = new Map<string, number>();
   const outDegree = new Map<string, number>();
 
   for (const [from, targets] of adjacency.entries()) {
-    adjacencyOut[toRelativePath(from)] = targets.map(toRelativePath);
+    adjacencyOut[toRelativePath(rootAbs, from)] = targets.map(target => toRelativePath(rootAbs, target));
 
     outDegree.set(from, targets.length);
 
@@ -586,15 +997,190 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalys
   }
 
   const cyclePaths = detectCycles(adjacency);
-  const cycles = cyclePaths.map(path => ({ path: path.map(toRelativePath) }));
-  const fanInTop = listFanStats(inDegree, 10);
-  const fanOutTop = listFanStats(outDegree, 10);
-  const edgeCutHints = buildEdgeCutHints(cyclePaths, outDegree);
+  const cycles = cyclePaths.map(path => ({ path: path.map(entry => toRelativePath(rootAbs, entry)) }));
+  const fanInTop = listFanStats(rootAbs, inDegree, 10);
+  const fanOutTop = listFanStats(rootAbs, outDegree, 10);
+  const edgeCutHints = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
+  const layerViolations: DependencyLayerViolation[] = [];
+  const deadExports: DependencyDeadExportFinding[] = [];
+
+  if (layerMatchers.length > 0) {
+    for (const [from, targets] of adjacency.entries()) {
+      const fromLayer = matchLayerName(rootAbs, from, layerMatchers);
+
+      if (!fromLayer) {
+        continue;
+      }
+
+      const allowed = allowedDependencies[fromLayer] ?? [];
+
+      for (const target of targets) {
+        const toLayer = matchLayerName(rootAbs, target, layerMatchers);
+
+        if (!toLayer) {
+          continue;
+        }
+
+        if (fromLayer === toLayer) {
+          continue;
+        }
+
+        if (allowed.includes(toLayer)) {
+          continue;
+        }
+
+        layerViolations.push({
+          kind: 'layer-violation',
+          message: `${fromLayer} → ${toLayer} is not allowed`,
+          from: toRelativePath(rootAbs, from),
+          to: toRelativePath(rootAbs, target),
+          fromLayer,
+          toLayer,
+        });
+      }
+    }
+  }
 
   for (const file of files) {
-    const key = toRelativePath(normalizePath(file.filePath));
+    const key = toRelativePath(rootAbs, normalizePath(file.filePath));
 
     exportStats[key] = collectExportStats(file);
+  }
+
+  // P3-6 dependencies: dead export detection (best-effort)
+  {
+    const exportsByModule = new Map<string, ReadonlyArray<string>>();
+    const usageByModule = new Map<
+      string,
+      {
+        readonly usesAll: boolean;
+        readonly names: Set<string>;
+        readonly consumers: Set<string>;
+        readonly perNameConsumerKinds: Map<string, Set<'test' | 'prod'>>;
+      }
+    >();
+
+    for (const file of files) {
+      const moduleAbs = normalizePath(file.filePath);
+      exportsByModule.set(moduleAbs, collectDeclaredExportNames(file));
+    }
+
+    for (const file of files) {
+      const consumerAbs = normalizePath(file.filePath);
+      const isTestConsumer = isTestLikePath(consumerAbs);
+      const consumers = collectImportConsumers(file, fileMap);
+
+      for (const entry of consumers) {
+        const state =
+          usageByModule.get(entry.targetFilePath) ??
+          ({ usesAll: false, names: new Set<string>(), consumers: new Set<string>(), perNameConsumerKinds: new Map() } as const);
+
+        const mergedUsesAll = state.usesAll || entry.usesAll;
+        const mergedNames = new Set(state.names);
+
+        for (const n of entry.names) {
+          mergedNames.add(n);
+        }
+
+        const mergedConsumers = new Set(state.consumers);
+        mergedConsumers.add(`${consumerAbs}::${isTestConsumer ? 'test' : 'prod'}`);
+
+        const mergedPerName = new Map(state.perNameConsumerKinds);
+
+        for (const n of entry.names) {
+          const prev = mergedPerName.get(n) ?? new Set<'test' | 'prod'>();
+          const next = new Set(prev);
+          next.add(isTestConsumer ? 'test' : 'prod');
+          mergedPerName.set(n, next);
+        }
+
+        usageByModule.set(entry.targetFilePath, {
+          usesAll: mergedUsesAll,
+          names: mergedNames,
+          consumers: mergedConsumers,
+          perNameConsumerKinds: mergedPerName,
+        });
+      }
+    }
+
+    const entrySpecs = readPackageEntrypoints(rootAbs);
+    const entryModules = new Set<string>();
+
+    for (const spec of entrySpecs) {
+      const resolved = resolveEntrypointToFile(rootAbs, spec, fileMap);
+
+      if (resolved) {
+        entryModules.add(resolved);
+      }
+    }
+
+    const reachable = new Set<string>();
+    const queue: string[] = [];
+
+    for (const entry of entryModules) {
+      reachable.add(entry);
+      queue.push(entry);
+    }
+
+    while (queue.length > 0) {
+      const current = queue.shift() ?? '';
+
+      for (const next of adjacency.get(current) ?? []) {
+        if (reachable.has(next)) {
+          continue;
+        }
+
+        reachable.add(next);
+        queue.push(next);
+      }
+    }
+
+    for (const [moduleAbs, exportedNames] of exportsByModule.entries()) {
+      if (exportedNames.length === 0) {
+        continue;
+      }
+
+      // Skip exports reachable from package entrypoints (public API surface).
+      if (reachable.has(moduleAbs)) {
+        continue;
+      }
+
+      const usage = usageByModule.get(moduleAbs);
+
+      if (usage?.usesAll) {
+        continue;
+      }
+
+      const usedNames = usage?.names ?? new Set<string>();
+      const perNameConsumerKinds = usage?.perNameConsumerKinds ?? new Map<string, Set<'test' | 'prod'>>();
+
+      for (const exportName of exportedNames) {
+        const relModule = toRelativePath(rootAbs, moduleAbs);
+
+        if (usedNames.has(exportName)) {
+          const kinds = perNameConsumerKinds.get(exportName) ?? new Set<'test' | 'prod'>();
+          const isTestOnly = kinds.size > 0 && !kinds.has('prod');
+
+          if (isTestOnly) {
+            deadExports.push({
+              kind: 'test-only-export',
+              module: relModule,
+              exportName,
+              message: `export \`${exportName}\` is only imported from tests`,
+            });
+          }
+
+          continue;
+        }
+
+        deadExports.push({
+          kind: 'dead-export',
+          module: relModule,
+          exportName,
+          message: `export \`${exportName}\` is not imported anywhere`,
+        });
+      }
+    }
   }
 
   return {
@@ -604,6 +1190,8 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>): DependencyAnalys
     fanInTop,
     fanOutTop,
     edgeCutHints,
+    layerViolations,
+    deadExports,
   };
 };
 

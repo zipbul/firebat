@@ -29,7 +29,7 @@
         "waste": { "$ref": "#/$defs/wasteToggle" },
         "lint": { "$ref": "#/$defs/emptyToggle" },
         "typecheck": { "$ref": "#/$defs/emptyToggle" },
-        "dependencies": { "$ref": "#/$defs/emptyToggle" },
+        "dependencies": { "$ref": "#/$defs/dependenciesToggle" },
         "coupling": { "$ref": "#/$defs/emptyToggle" },
         "nesting": { "$ref": "#/$defs/emptyToggle" },
         "early-return": { "$ref": "#/$defs/emptyToggle" },
@@ -59,7 +59,7 @@
                 "waste": { "$ref": "#/$defs/wasteInheritable" },
                 "lint": { "$ref": "#/$defs/emptyInheritable" },
                 "typecheck": { "$ref": "#/$defs/emptyInheritable" },
-                "dependencies": { "$ref": "#/$defs/emptyInheritable" },
+                "dependencies": { "$ref": "#/$defs/dependenciesInheritable" },
                 "coupling": { "$ref": "#/$defs/emptyInheritable" },
                 "nesting": { "$ref": "#/$defs/emptyInheritable" },
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
@@ -84,6 +84,50 @@
     "emptyInheritable": {
       "description": "false disables; true enables; 'inherit' uses root.",
       "oneOf": [{ "type": "boolean" }, { "type": "string", "const": "inherit" }]
+    },
+    "dependenciesOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "glob": { "type": "string", "minLength": 1 }
+            },
+            "required": ["name", "glob"]
+          }
+        },
+        "allowedDependencies": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "required": ["layers", "allowedDependencies"],
+      "minProperties": 2
+    },
+    "dependenciesToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        { "$ref": "#/$defs/dependenciesOptions" }
+      ]
+    },
+    "dependenciesInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        { "$ref": "#/$defs/dependenciesOptions" }
+      ]
     },
     "wasteToggle": {
       "oneOf": [

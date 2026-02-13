@@ -34,6 +34,38 @@ describe('integration/dependencies', () => {
     expect(dependencies.edgeCutHints.length).toBeGreaterThan(0);
   });
 
+  it('should detect layer violations when disallowed imports cross layers', () => {
+    // Arrange
+    const rootAbs = '/repo';
+    const layers = [
+      { name: 'adapters', glob: 'src/adapters/**' },
+      { name: 'application', glob: 'src/application/**' },
+      { name: 'engine', glob: 'src/engine/**' },
+      { name: 'infrastructure', glob: 'src/infrastructure/**' },
+    ] as const;
+    const allowedDependencies = {
+      adapters: ['application'],
+      application: ['engine', 'infrastructure'],
+      engine: [],
+      infrastructure: [],
+    } as const;
+    let sources = new Map<string, string>();
+
+    sources.set(`${rootAbs}/src/adapters/cli/foo.ts`, `import { x } from '../../engine/x';\nexport const foo = x;`);
+    sources.set(`${rootAbs}/src/application/scan/bar.ts`, `import { x } from '../../engine/x';\nexport const bar = x;`);
+    sources.set(`${rootAbs}/src/engine/x.ts`, `export const x = 1;`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let dependencies = analyzeDependencies(program, { rootAbs, layers, allowedDependencies });
+
+    // Assert
+    expect(dependencies.layerViolations.length).toBe(1);
+    expect(dependencies.layerViolations[0]?.kind).toBe('layer-violation');
+    expect(dependencies.layerViolations[0]?.fromLayer).toBe('adapters');
+    expect(dependencies.layerViolations[0]?.toLayer).toBe('engine');
+  });
+
   it('should detect self-loop cycles when a module imports itself', () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -144,6 +176,57 @@ describe('integration/dependencies', () => {
 
     // Assert
     expect(cycleKeys.has(['a.ts', 'b.ts'].sort().join('|'))).toBe(true);
+  });
+
+  it('should include dynamic import() edges when building the graph', () => {
+    // Arrange
+    const rootAbs = '/virtual';
+    let sources = new Map<string, string>();
+
+    sources.set(`${rootAbs}/deps/a.ts`, `export async function f() { await import('./b'); }`);
+    sources.set(`${rootAbs}/deps/b.ts`, `export const x = 1;`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let dependencies = analyzeDependencies(program, { rootAbs });
+    let aEdges = dependencies.adjacency['deps/a.ts'] ?? [];
+
+    // Assert
+    expect(aEdges).toContain('deps/b.ts');
+  });
+
+  it('should report dead exports when an exported symbol is never imported', () => {
+    // Arrange
+    const rootAbs = '/virtual';
+    let sources = new Map<string, string>();
+
+    sources.set(`${rootAbs}/dead/a.ts`, `export const unused = 1;\nexport const used = 2;`);
+    sources.set(`${rootAbs}/dead/b.ts`, `import { used } from './a';\nexport const x = used;`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let dependencies = analyzeDependencies(program, { rootAbs });
+    let hits = dependencies.deadExports.filter(f => f.kind === 'dead-export');
+
+    // Assert
+    expect(hits.some(f => f.module === 'dead/a.ts' && f.exportName === 'unused')).toBe(true);
+  });
+
+  it('should report test-only-export when an export is only imported from test files', () => {
+    // Arrange
+    const rootAbs = '/virtual';
+    let sources = new Map<string, string>();
+
+    sources.set(`${rootAbs}/dead/a.ts`, `export const onlyTest = 1;`);
+    sources.set(`${rootAbs}/dead/a.spec.ts`, `import { onlyTest } from './a';\nexport const x = onlyTest;`);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let dependencies = analyzeDependencies(program, { rootAbs });
+    let hits = dependencies.deadExports.filter(f => f.kind === 'test-only-export');
+
+    // Assert
+    expect(hits.some(f => f.module === 'dead/a.ts' && f.exportName === 'onlyTest')).toBe(true);
   });
 
   it('should detect all cycles when multiple paths converge', () => {
