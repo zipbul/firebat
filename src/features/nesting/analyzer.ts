@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { NestingAnalysis, NestingItem } from '../../types';
+import type { NestingItem, NestingKind } from '../../types';
 
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
@@ -15,9 +15,7 @@ import {
   visitOxcChildren,
 } from '../../engine/oxc-ast-utils';
 
-const createEmptyNesting = (): NestingAnalysis => ({
-  items: [],
-});
+const createEmptyNesting = (): ReadonlyArray<NestingItem> => [];
 
 const isDecisionPoint = (nodeType: string): boolean => {
   return (
@@ -379,57 +377,57 @@ const analyzeFunctionNode = (
   const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
   const nestingScore = Math.max(0, cognitiveComplexity);
-  const nestingSuggestions: string[] = [];
-
-  if (maxDepth >= 3) {
-    nestingSuggestions.push('consider guard clauses to reduce nesting');
-  }
-
-  if (cognitiveComplexity >= 15) {
-    nestingSuggestions.push('consider simplifying; cognitive complexity is high');
-  }
-
-  if (maxDepth >= 4) {
-    nestingSuggestions.push('reduce nesting depth to improve readability');
-  }
-
-  if (accidentalQuadraticTargets.size > 0) {
-    nestingSuggestions.push(
-      `accidental-quadratic: nested iteration over ${Array.from(accidentalQuadraticTargets)
-        .sort()
-        .map(t => `\`${t}\``)
-        .join(', ')}`,
-    );
-  }
 
   const callbackDepth = measureMaxCallbackDepth(bodyValue as NodeValue);
+  const quadraticTargets = Array.from(accidentalQuadraticTargets).sort();
 
-  if (callbackDepth >= 3) {
-    nestingSuggestions.push('callback-depth: deeply nested callbacks reduce readability');
+  const pickKind = (): NestingKind | null => {
+    if (quadraticTargets.length > 0) {
+      return 'accidental-quadratic';
+    }
+
+    if (cognitiveComplexity >= 15) {
+      return 'high-cognitive-complexity';
+    }
+
+    if (callbackDepth >= 3) {
+      return 'callback-depth';
+    }
+
+    if (maxDepth >= 3) {
+      return 'deep-nesting';
+    }
+
+    return null;
+  };
+
+  const kind = pickKind();
+
+  if (kind === null) {
+    return null;
   }
 
   return {
-    filePath,
+    kind,
+    file: filePath,
     header,
     span,
     metrics: {
       depth: maxDepth,
       cognitiveComplexity,
-      accidentalQuadraticTargets: Array.from(accidentalQuadraticTargets).sort(),
+      callbackDepth,
+      quadraticTargets,
     },
     score: nestingScore,
-    suggestions: nestingSuggestions,
   };
 };
 
-const analyzeNesting = (files: ReadonlyArray<ParsedFile>): NestingAnalysis => {
+const analyzeNesting = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<NestingItem> => {
   if (files.length === 0) {
     return createEmptyNesting();
   }
 
-  return {
-    items: collectFunctionItems(files, analyzeFunctionNode).filter(item => item.suggestions.length > 0),
-  };
+  return collectFunctionItems(files, analyzeFunctionNode).filter((item): item is NestingItem => item !== null);
 };
 
 export { analyzeNesting, createEmptyNesting };

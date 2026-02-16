@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../ports/logger';
-import type { ApiDriftAnalysis, ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
+import type { ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
 
 import {
   getLiteralString,
@@ -20,9 +20,7 @@ import { getLineColumn } from '../../engine/source-position';
 import { createNoopLogger } from '../../ports/logger';
 import { runTsgoApiDriftChecks, type ApiDriftInterfaceMethodCandidate, type ApiDriftInterfaceToken } from './tsgo-checks';
 
-const createEmptyApiDrift = (): ApiDriftAnalysis => ({
-  groups: [],
-});
+const createEmptyApiDrift = (): ReadonlyArray<ApiDriftGroup> => [];
 
 interface AnalyzeApiDriftInput {
   readonly rootAbs?: string;
@@ -115,6 +113,12 @@ const buildShape = (node: Node): ApiDriftShape => {
 interface ShapeLocation {
   readonly filePath: string;
   readonly span: SourceSpan;
+}
+
+interface PrefixEntry {
+  readonly prefix: string;
+  readonly shape: ApiDriftShape;
+  readonly location: ShapeLocation;
 }
 
 interface GroupAccumulator {
@@ -297,9 +301,8 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
       return true;
     }
 
-    const implementsNodes = Array.isArray((node as unknown as { implements?: unknown }).implements)
-      ? (node as unknown as { implements: unknown[] }).implements
-      : [];
+    const implementsValue = node.implements;
+    const implementsNodes = Array.isArray(implementsValue) ? implementsValue : [];
 
     if (implementsNodes.length === 0) {
       return true;
@@ -312,7 +315,7 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
         continue;
       }
 
-      const expr = (impl as unknown as { expression?: unknown }).expression;
+      const expr = impl.expression;
 
       if (!isOxcNode(expr)) {
         continue;
@@ -324,8 +327,8 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
         continue;
       }
 
-      const start = getLineColumn(file.sourceText, (expr as Node).start);
-      const end = getLineColumn(file.sourceText, (expr as Node).end);
+      const start = getLineColumn(file.sourceText, expr.start);
+      const end = getLineColumn(file.sourceText, expr.end);
 
       interfaceTokens.push({ name, span: { start, end } });
     }
@@ -334,33 +337,30 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
       return true;
     }
 
-    const body = (node as unknown as { body?: unknown }).body;
-    const bodyNodes =
-      body && typeof body === 'object' && Array.isArray((body as { body?: unknown }).body)
-        ? (body as { body: unknown[] }).body
-        : [];
+    const bodyValue = node.body;
+    const bodyNodes = isOxcNode(bodyValue) && isNodeRecord(bodyValue) && Array.isArray(bodyValue.body) ? bodyValue.body : [];
 
     for (const element of bodyNodes) {
       if (!isOxcNode(element) || !isNodeRecord(element) || element.type !== 'MethodDefinition') {
         continue;
       }
 
-      const methodKey = (element as unknown as { key?: unknown }).key;
-      const methodName = methodKey != null ? (getLiteralString(methodKey) ?? getNodeName(methodKey as Node)) : null;
+      const methodKey = element.key;
+      const methodName = methodKey != null ? (getLiteralString(methodKey) ?? getNodeName(methodKey)) : null;
 
       if (typeof methodName !== 'string' || methodName.trim().length === 0 || methodName === 'constructor') {
         continue;
       }
 
-      const valueNode = (element as unknown as { value?: unknown }).value;
+      const valueNode = element.value;
 
       if (!isOxcNode(valueNode)) {
         continue;
       }
 
-      const shape = buildShape(valueNode as unknown as Node);
-      const start = getLineColumn(file.sourceText, (element as Node).start);
-      const end = getLineColumn(file.sourceText, (element as Node).end);
+      const shape = buildShape(valueNode);
+      const start = getLineColumn(file.sourceText, element.start);
+      const end = getLineColumn(file.sourceText, element.end);
       const span = { start, end };
 
       for (const interfaceToken of interfaceTokens) {
@@ -380,14 +380,17 @@ const collectInterfaceMethodCandidatesForFile = (file: ParsedFile): ReadonlyArra
   return candidates;
 };
 
-const analyzeApiDrift = async (files: ReadonlyArray<ParsedFile>, input?: AnalyzeApiDriftInput): Promise<ApiDriftAnalysis> => {
+const analyzeApiDrift = async (
+  files: ReadonlyArray<ParsedFile>,
+  input?: AnalyzeApiDriftInput,
+): Promise<ReadonlyArray<ApiDriftGroup>> => {
   if (files.length === 0) {
     return createEmptyApiDrift();
   }
 
   const groupsByKey = new Map<string, GroupAccumulator>();
   const prefixCounts = new Map<string, number>();
-  const prefixEntries: Array<{ prefix: string; shape: ApiDriftShape; location: ShapeLocation }> = [];
+  const prefixEntries: PrefixEntry[] = [];
   const interfaceCandidatesByFile = new Map<string, ReadonlyArray<ApiDriftInterfaceMethodCandidate>>();
 
   for (const file of files) {
@@ -472,9 +475,7 @@ const analyzeApiDrift = async (files: ReadonlyArray<ParsedFile>, input?: Analyze
     }
   }
 
-  return {
-    groups: [...buildGroups(groupsByKey), ...interfaceGroups],
-  };
+  return [...buildGroups(groupsByKey), ...interfaceGroups];
 };
 
 export { analyzeApiDrift, createEmptyApiDrift };

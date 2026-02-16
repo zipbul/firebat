@@ -62,7 +62,7 @@ describe('integration/nesting', () => {
     // Act
     let program = createProgramFromMap(sources);
     let nesting = analyzeNesting(program);
-    let nestingItem = nesting.items.find(entry => entry.header === 'complex');
+    let nestingItem = nesting.find(entry => entry.header === 'complex');
 
     // Assert
     expect(nestingItem).toBeDefined();
@@ -78,7 +78,7 @@ describe('integration/nesting', () => {
     // Act
     let program = createProgramFromMap(sources);
     let nesting = analyzeNesting(program);
-    let nestingItem = nesting.items.find(entry => entry.header === 'simple');
+    let nestingItem = nesting.find(entry => entry.header === 'simple');
 
     // Assert
     expect(nestingItem).toBeUndefined();
@@ -92,7 +92,7 @@ describe('integration/nesting', () => {
     let nesting = analyzeNesting(program);
 
     // Assert
-    expect(nesting.items.length).toBe(0);
+    expect(nesting.length).toBe(0);
   });
 
   it('should exclude low-complexity switch functions when no suggestions exist', () => {
@@ -104,7 +104,7 @@ describe('integration/nesting', () => {
     // Act
     let program = createProgramFromMap(sources);
     let nesting = analyzeNesting(program);
-    let item = nesting.items.find(entry => entry.header === 'decision');
+    let item = nesting.find(entry => entry.header === 'decision');
 
     // Assert
     expect(item).toBeUndefined();
@@ -119,7 +119,7 @@ describe('integration/nesting', () => {
     // Act
     let program = createProgramFromMap(sources);
     let nesting = analyzeNesting(program);
-    let item = nesting.items.find(entry => entry.header === 'outer');
+    let item = nesting.find(entry => entry.header === 'outer');
 
     // Assert
     expect(item).toBeUndefined();
@@ -147,7 +147,7 @@ describe('integration/nesting', () => {
     // Act
     let program = createProgramFromMap(sources);
     let nesting = analyzeNesting(program);
-    let item = nesting.items.find(entry => entry.header === 'c');
+    let item = nesting.find(entry => entry.header === 'c');
 
     // Assert
     expect(item).toBeDefined();
@@ -171,11 +171,11 @@ describe('integration/nesting', () => {
     // Act
     let program = createProgramFromMap(sources);
     let nesting = analyzeNesting(program);
-    let item = nesting.items.find(entry => entry.header === 'q');
+    let item = nesting.find(entry => entry.header === 'q');
 
     // Assert
     expect(item).toBeDefined();
-    expect(item?.metrics.accidentalQuadraticTargets).toContain('users');
-    expect(item?.suggestions.join(' ')).toContain('accidental-quadratic');
+    expect(item?.kind).toBe('accidental-quadratic');
+    expect(item?.metrics.quadraticTargets).toContain('users');
   });
 });

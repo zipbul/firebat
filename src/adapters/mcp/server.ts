@@ -447,12 +447,31 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       maxForwardDepth: z.number().int().nonnegative(),
       detectors: z.array(FirebatDetectorSchema),
       detectorTimings: z.record(z.string(), z.number()).optional(),
+      errors: z.record(z.string(), z.string()).optional(),
     })
     .strict();
+
+  const FirebatTopItemSchema = z
+    .object({
+      pattern: z.string(),
+      detector: z.string(),
+      resolves: z.number().int().nonnegative(),
+    })
+    .strict();
+
+  const FirebatCatalogEntrySchema = z
+    .object({
+      cause: z.string(),
+      approach: z.string(),
+    })
+    .strict();
+
   const FirebatReportSchema = z
     .object({
       meta: FirebatMetaSchema,
       analyses: z.record(z.string(), z.unknown()),
+      top: z.array(FirebatTopItemSchema),
+      catalog: z.record(z.string(), FirebatCatalogEntrySchema),
     })
     .strict();
 
@@ -470,7 +489,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         '- maxForwardDepth: max re-export depth for the forwarding detector (0 disables forwarding analysis).',
         '',
         'Outputs:',
-        '- report: the Firebat report as JSON (includes `meta` and `analyses`).',
+        '- report: the Firebat report as JSON (includes `meta`, `analyses`, `top`, and `catalog`).',
         '- timings.totalMs: total wall time for this scan call.',
         '- diff (optional): comparison to the previous `scan` call in the same server process.',
         '',

@@ -9,8 +9,8 @@ const createProgram = (filePath: string, sourceText: string): ParsedFile[] => {
   return [parseSource(filePath, sourceText)];
 };
 
-const findKinds = (analysis: ReturnType<typeof analyzeForwarding>, kind: string) => {
-  return analysis.findings.filter(finding => finding.kind === kind);
+const findKinds = (findings: ReturnType<typeof analyzeForwarding>, kind: string) => {
+  return findings.filter(finding => finding.kind === kind);
 };
 
 describe('analyzer', () => {

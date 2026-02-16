@@ -1,4 +1,4 @@
-import type { ExceptionHygieneAnalysis } from './features/exception-hygiene/types';
+import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
 
 export type OutputFormat = 'text' | 'json';
 
@@ -122,8 +122,12 @@ export interface DependencyLayerViolation {
 export interface DependencyDeadExportFinding {
   readonly kind: 'dead-export' | 'test-only-export';
   readonly module: string;
-  readonly exportName: string;
-  readonly message: string;
+  readonly name: string;
+}
+
+export interface DependencyExportStats {
+  readonly total: number;
+  readonly abstract: number;
 }
 
 export interface DependencyAnalysis {
@@ -131,25 +135,27 @@ export interface DependencyAnalysis {
   /** Dependency graph adjacency list (module -> direct imports). Keys/values are project-relative paths. */
   readonly adjacency: Readonly<Record<string, ReadonlyArray<string>>>;
   /** Export counts used for coupling abstractness calculation. Keys are project-relative module paths. */
-  readonly exportStats: Readonly<Record<string, { readonly total: number; readonly abstract: number }>>;
-  readonly fanInTop: ReadonlyArray<DependencyFanStat>;
-  readonly fanOutTop: ReadonlyArray<DependencyFanStat>;
-  readonly edgeCutHints: ReadonlyArray<DependencyEdgeCutHint>;
+  readonly exportStats: Readonly<Record<string, DependencyExportStats>>;
+  readonly fanIn: ReadonlyArray<DependencyFanStat>;
+  readonly fanOut: ReadonlyArray<DependencyFanStat>;
+  readonly cuts: ReadonlyArray<DependencyEdgeCutHint>;
   readonly layerViolations: ReadonlyArray<DependencyLayerViolation>;
   readonly deadExports: ReadonlyArray<DependencyDeadExportFinding>;
+}
+
+export interface CouplingMetrics {
+  readonly fanIn: number;
+  readonly fanOut: number;
+  readonly instability: number;
+  readonly abstractness: number;
+  readonly distance: number;
 }
 
 export interface CouplingHotspot {
   readonly module: string;
   readonly score: number;
   readonly signals: ReadonlyArray<string>;
-  readonly metrics: {
-    readonly fanIn: number;
-    readonly fanOut: number;
-    readonly instability: number;
-    readonly abstractness: number;
-    readonly distance: number;
-  };
+  readonly metrics: CouplingMetrics;
   readonly why: string;
   readonly suggestedRefactor: string;
 }
@@ -158,58 +164,50 @@ export interface CouplingAnalysis {
   readonly hotspots: ReadonlyArray<CouplingHotspot>;
 }
 
-export interface StructuralDuplicatesAnalysis {
-  readonly cloneClasses: ReadonlyArray<DuplicateGroup>;
-}
-
 export interface NestingMetrics {
   readonly depth: number;
   readonly cognitiveComplexity: number;
-  readonly accidentalQuadraticTargets: ReadonlyArray<string>;
+  readonly callbackDepth: number;
+  readonly quadraticTargets: ReadonlyArray<string>;
 }
 
+export type NestingKind = 'deep-nesting' | 'high-cognitive-complexity' | 'accidental-quadratic' | 'callback-depth';
+
 export interface NestingItem {
-  readonly filePath: string;
+  readonly kind: NestingKind;
+  readonly file: string;
+  readonly code?: string;
   readonly header: string;
   readonly span: SourceSpan;
   readonly metrics: NestingMetrics;
   readonly score: number;
-  readonly suggestions: ReadonlyArray<string>;
-}
-
-export interface NestingAnalysis {
-  readonly items: ReadonlyArray<NestingItem>;
 }
 
 export interface EarlyReturnMetrics {
-  readonly earlyReturnCount: number;
-  readonly hasGuardClauses: boolean;
-  readonly guardClauseCount: number;
+  readonly returns: number;
+  readonly hasGuards: boolean;
+  readonly guards: number;
 }
 
+export type EarlyReturnKind = 'invertible-if-else' | 'missing-guard';
+
 export interface EarlyReturnItem {
-  readonly filePath: string;
+  readonly kind: EarlyReturnKind;
+  readonly file: string;
+  readonly code?: string;
   readonly header: string;
   readonly span: SourceSpan;
   readonly metrics: EarlyReturnMetrics;
   readonly score: number;
-  readonly suggestions: ReadonlyArray<string>;
-}
-
-export interface EarlyReturnAnalysis {
-  readonly items: ReadonlyArray<EarlyReturnItem>;
 }
 
 export interface NoopFinding {
   readonly kind: string;
-  readonly filePath: string;
+  readonly file: string;
   readonly span: SourceSpan;
+  readonly code?: string;
   readonly confidence: number;
   readonly evidence: string;
-}
-
-export interface NoopAnalysis {
-  readonly findings: ReadonlyArray<NoopFinding>;
 }
 
 export type BarrelPolicyFindingKind =
@@ -222,14 +220,10 @@ export type BarrelPolicyFindingKind =
 
 export interface BarrelPolicyFinding {
   readonly kind: BarrelPolicyFindingKind;
-  readonly message: string;
-  readonly filePath: string;
+  readonly file: string;
   readonly span: SourceSpan;
+  readonly code?: string;
   readonly evidence?: string;
-}
-
-export interface BarrelPolicyAnalysis {
-  readonly findings: ReadonlyArray<BarrelPolicyFinding>;
 }
 
 export type ForwardingFindingKind = 'thin-wrapper' | 'forward-chain' | 'cross-file-forwarding-chain';
@@ -253,6 +247,10 @@ export interface ForwardingAnalysis {
 }
 
 export interface ApiDriftShape {
+  /** Phase 0 normalized field name (legacy alias of paramsCount). */
+  readonly params?: number;
+  /** Phase 0 normalized field name (legacy alias of optionalCount). */
+  readonly optionals?: number;
   readonly paramsCount: number;
   readonly optionalCount: number;
   readonly returnKind: string;
@@ -295,8 +293,8 @@ export type FormatStatus = 'ok' | 'unavailable' | 'needs-formatting' | 'failed';
 export type LintSeverity = 'error' | 'warning' | 'info';
 
 export interface LintDiagnostic {
-  readonly filePath?: string;
-  readonly message: string;
+  readonly file?: string;
+  readonly msg: string;
   readonly code?: string;
   readonly severity: LintSeverity;
   readonly span: SourceSpan;
@@ -327,19 +325,10 @@ export interface TypecheckRunResult {
 export interface TypecheckItem {
   readonly severity: TypecheckSeverity;
   readonly code: string;
-  readonly message: string;
-  readonly filePath: string;
+  readonly msg: string;
+  readonly file: string;
   readonly span: SourceSpan;
-  readonly lineText: string;
   readonly codeFrame: string;
-}
-
-export interface TypecheckAnalysis {
-  readonly status: TypecheckStatus;
-  readonly tool: 'tsgo';
-  readonly exitCode: number | null;
-  readonly error?: string;
-  readonly items: ReadonlyArray<TypecheckItem>;
 }
 
 export type UnknownProofStatus = 'ok' | 'unavailable' | 'failed';
@@ -370,6 +359,17 @@ export interface UnknownProofAnalysis {
   readonly findings: ReadonlyArray<UnknownProofFinding>;
 }
 
+export interface Priority {
+  readonly pattern: string;
+  readonly detector: string;
+  readonly resolves: number;
+}
+
+export interface CodeEntry {
+  readonly cause: string;
+  readonly approach: string;
+}
+
 export interface FirebatMeta {
   readonly engine: 'oxc';
   readonly targetCount: number;
@@ -377,30 +377,33 @@ export interface FirebatMeta {
   readonly maxForwardDepth: number;
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly detectorTimings?: Readonly<Record<string, number>>;
+  readonly errors?: Readonly<Record<string, string>>;
 }
 
 export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
-  readonly 'barrel-policy': BarrelPolicyAnalysis;
-  readonly 'unknown-proof': UnknownProofAnalysis;
-  readonly 'exception-hygiene': ExceptionHygieneAnalysis;
-  readonly format: FormatAnalysis;
-  readonly lint: LintAnalysis;
-  readonly typecheck: TypecheckAnalysis;
+  readonly 'barrel-policy': ReadonlyArray<BarrelPolicyFinding>;
+  readonly 'unknown-proof': ReadonlyArray<UnknownProofFinding>;
+  readonly 'exception-hygiene': ReadonlyArray<ExceptionHygieneFinding>;
+  readonly format: ReadonlyArray<string>;
+  readonly lint: ReadonlyArray<LintDiagnostic>;
+  readonly typecheck: ReadonlyArray<TypecheckItem>;
   readonly dependencies: DependencyAnalysis;
-  readonly coupling: CouplingAnalysis;
-  readonly 'structural-duplicates': StructuralDuplicatesAnalysis;
-  readonly nesting: NestingAnalysis;
-  readonly 'early-return': EarlyReturnAnalysis;
-  readonly noop: NoopAnalysis;
-  readonly 'api-drift': ApiDriftAnalysis;
-  readonly forwarding: ForwardingAnalysis;
+  readonly coupling: ReadonlyArray<CouplingHotspot>;
+  readonly 'structural-duplicates': ReadonlyArray<DuplicateGroup>;
+  readonly nesting: ReadonlyArray<NestingItem>;
+  readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
+  readonly noop: ReadonlyArray<NoopFinding>;
+  readonly 'api-drift': ReadonlyArray<ApiDriftGroup>;
+  readonly forwarding: ReadonlyArray<ForwardingFinding>;
 }
 
 export interface FirebatReport {
   readonly meta: FirebatMeta;
   readonly analyses: Partial<FirebatAnalyses>;
+  readonly top: ReadonlyArray<Priority>;
+  readonly catalog: Readonly<Record<string, CodeEntry>>;
 }
 
 export interface NodeHeader {

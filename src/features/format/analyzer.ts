@@ -1,13 +1,9 @@
 import type { FirebatLogger } from '../../ports/logger';
-import type { FormatAnalysis } from '../../types';
 
 import { runOxfmt } from '../../infrastructure/oxfmt/oxfmt-runner';
 import { createNoopLogger } from '../../ports/logger';
 
-const createEmptyFormat = (): FormatAnalysis => ({
-  status: 'ok',
-  tool: 'oxfmt',
-});
+const createEmptyFormat = (): ReadonlyArray<string> => [];
 
 interface AnalyzeFormatInput {
   readonly targets: ReadonlyArray<string>;
@@ -18,23 +14,15 @@ interface AnalyzeFormatInput {
   readonly logger?: FirebatLogger;
 }
 
-const parseOxfmtFileCount = (rawStdout: unknown): number | undefined => {
+const parseOxfmtFiles = (rawStdout: unknown): ReadonlyArray<string> => {
   if (typeof rawStdout !== 'string') {
-    return undefined;
+    return [];
   }
 
   const text = rawStdout.trim();
 
   if (text.length === 0) {
-    return undefined;
-  }
-
-  const numericMatch = /(\d+)\s+files?/i.exec(text);
-
-  if (numericMatch) {
-    const parsed = Number(numericMatch[1]);
-
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+    return [];
   }
 
   const lines = text
@@ -42,24 +30,24 @@ const parseOxfmtFileCount = (rawStdout: unknown): number | undefined => {
     .map(line => line.trim())
     .filter(line => line.length > 0);
 
-  if (lines.length === 0) {
-    return undefined;
-  }
-
   const looksLikePath = (value: string): boolean => {
     if (value.includes('/') || value.includes('\\')) {
       return true;
     }
 
-    return /\.(ts|json|md|css|scss|html)$/i.test(value);
+    return /\.(ts|tsx|js|jsx|json|md|css|scss|html)$/i.test(value);
   };
 
-  const pathLines = lines.filter(looksLikePath);
+  const files = lines.filter(looksLikePath);
 
-  return pathLines.length > 0 ? pathLines.length : undefined;
+  return files;
 };
 
-export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<FormatAnalysis> => {
+export const __testing__ = {
+  parseOxfmtFiles,
+};
+
+export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<ReadonlyArray<string>> => {
   const logger = input.logger ?? createNoopLogger();
   const result = await runOxfmt({
     targets: input.targets,
@@ -72,33 +60,17 @@ export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<FormatAn
 
   if (!result.ok) {
     const error = result.error ?? 'oxfmt failed';
-    const status = error.includes('not available') ? 'unavailable' : 'failed';
-
-    return {
-      status,
-      tool: 'oxfmt',
-      error,
-      ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-    };
+    throw new Error(error);
   }
 
   if (!input.fix) {
     const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 0;
-    const fileCount = parseOxfmtFileCount(result.rawStdout);
+    const files = parseOxfmtFiles(result.rawStdout);
 
-    return {
-      status: exitCode === 0 ? 'ok' : 'needs-formatting',
-      tool: 'oxfmt',
-      ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-      ...(typeof fileCount === 'number' ? { fileCount } : {}),
-    };
+    return exitCode === 0 ? [] : files;
   }
 
-  return {
-    status: 'ok',
-    tool: 'oxfmt',
-    ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-  };
+  return [];
 };
 
 export { createEmptyFormat };

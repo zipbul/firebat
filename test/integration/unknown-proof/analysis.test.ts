@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import type { UnknownProofFinding } from '../../../src/types';
 
 import { parseSource } from '../../../src/engine/parse-source';
+import { PartialResultError } from '../../../src/engine/partial-result-error';
 import { analyzeUnknownProof } from '../../../src/features/unknown-proof';
 
 const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
@@ -28,22 +29,40 @@ interface UnknownProofFindingsOnly {
   readonly findings: ReadonlyArray<UnknownProofFinding>;
 }
 
-const assertOkOrUnavailable = (analysis: UnknownProofStatus): void => {
-  expect(['ok', 'unavailable']).toContain(analysis.status);
+// Phase 0: unknown-proof should become a bare array result, and tool availability/errors
+// should be lifted out of findings at a higher layer (e.g., report.meta.errors).
+type UnknownProofRunResult =
+  | { readonly ok: true; readonly findings: ReadonlyArray<UnknownProofFinding> }
+  | { readonly ok: false; readonly error: unknown; readonly findings: ReadonlyArray<UnknownProofFinding> };
+
+const runUnknownProof = async (fn: () => Promise<ReadonlyArray<UnknownProofFinding>>): Promise<UnknownProofRunResult> => {
+  try {
+    const findings = await fn();
+
+    return { ok: true, findings };
+  } catch (error) {
+    if (error instanceof PartialResultError) {
+      return { ok: false, error, findings: error.partial as ReadonlyArray<UnknownProofFinding> };
+    }
+
+    return { ok: false, error, findings: [] };
+  }
 };
 
-const assertOkOrToolUnavailable = (analysis: UnknownProofWithFindings, okPredicate: () => boolean): void => {
-  const okSatisfied = analysis.status === 'ok' && okPredicate();
-  const unavailableSatisfied =
-    analysis.status === 'unavailable' &&
-    analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'tool-unavailable');
+const assertOkOrFailed = (result: UnknownProofRunResult): void => {
+  expect([true, false]).toContain(result.ok);
+};
+
+const assertOkOrToolUnavailable = (result: UnknownProofRunResult, okPredicate: (findings: ReadonlyArray<UnknownProofFinding>) => boolean): void => {
+  const okSatisfied = result.ok && okPredicate(result.findings);
+  const unavailableSatisfied = result.ok === false;
 
   expect(okSatisfied || unavailableSatisfied).toBe(true);
 };
 
-const assertAnyOrToolUnavailable = (analysis: UnknownProofFindingsOnly): void => {
-  const hasAny = analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'any-inferred');
-  const hasToolUnavailable = analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'tool-unavailable');
+const assertAnyOrToolUnavailable = (result: UnknownProofRunResult): void => {
+  const hasAny = result.findings.some((finding: UnknownProofFinding) => finding.kind === 'any-inferred');
+  const hasToolUnavailable = result.ok === false;
 
   expect(hasAny || hasToolUnavailable).toBe(true);
 };
@@ -83,15 +102,17 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(adapterFile, await Bun.file(adapterFile).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    assertOkOrUnavailable(analysis);
-    assertOkOrToolUnavailable(analysis, () => analysis.findings.length === 0);
+    assertOkOrFailed(result);
+    assertOkOrToolUnavailable(result, findings => findings.length === 0);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -129,16 +150,18 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(adapterFile, await Bun.file(adapterFile).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    assertOkOrUnavailable(analysis);
-    assertOkOrToolUnavailable(analysis, () =>
-      analysis.findings.some((finding: UnknownProofFinding) => finding.kind === 'unvalidated-unknown'),
+    assertOkOrFailed(result);
+    assertOkOrToolUnavailable(result, findings =>
+      findings.some((finding: UnknownProofFinding) => finding.kind === 'unvalidated-unknown'),
     );
 
     await rm(rootAbs, { recursive: true, force: true });
@@ -166,13 +189,15 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
+    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -199,13 +224,15 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
+    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -235,15 +262,15 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    assertOkOrToolUnavailable(analysis, () =>
-      analysis.findings.every((finding: UnknownProofFinding) => finding.kind !== 'type-assertion'),
-    );
+    assertOkOrToolUnavailable(result, findings => findings.every((finding: UnknownProofFinding) => finding.kind !== 'type-assertion'));
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -273,13 +300,15 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
+    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -316,13 +345,15 @@ describe('integration/unknown-proof', () => {
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
+    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -353,14 +384,16 @@ describe('integration/unknown-proof', () => {
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'double-assertion')).toBe(true);
-    expect(analysis.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
+    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'double-assertion')).toBe(true);
+    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -390,15 +423,17 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-      boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+      }),
+    );
 
     // Assert
-    assertOkOrUnavailable(analysis);
-    assertOkOrToolUnavailable(analysis, () => analysis.findings.some((f: UnknownProofFinding) => f.kind === 'unknown-type'));
+    assertOkOrFailed(result);
+    assertOkOrToolUnavailable(result, findings => findings.some((f: UnknownProofFinding) => f.kind === 'unknown-type'));
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -425,15 +460,17 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-      boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
+      }),
+    );
 
     // Assert
-    assertOkOrUnavailable(analysis);
-    assertOkOrToolUnavailable(analysis, () => analysis.findings.every((f: UnknownProofFinding) => f.kind !== 'unknown-type'));
+    assertOkOrFailed(result);
+    assertOkOrToolUnavailable(result, findings => findings.every((f: UnknownProofFinding) => f.kind !== 'unknown-type'));
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -463,14 +500,15 @@ describe('integration/unknown-proof', () => {
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const analysis = await analyzeUnknownProof(program, {
-      rootAbs,
-      tsconfigPath,
-    });
+    const result = await runUnknownProof(() =>
+      analyzeUnknownProof(program, {
+        rootAbs,
+        tsconfigPath,
+      }),
+    );
 
     // Assert
-    // If tsgo is unavailable in this environment, the detector should still be blocking via tool-unavailable finding.
-    assertAnyOrToolUnavailable(analysis);
+    assertAnyOrToolUnavailable(result);
 
     await rm(rootAbs, { recursive: true, force: true });
   });

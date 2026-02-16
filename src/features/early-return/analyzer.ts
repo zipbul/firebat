@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { EarlyReturnAnalysis, EarlyReturnItem } from '../../types';
+import type { EarlyReturnItem, EarlyReturnKind } from '../../types';
 
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
@@ -15,9 +15,7 @@ import {
   visitOxcChildren,
 } from '../../engine/oxc-ast-utils';
 
-const createEmptyEarlyReturn = (): EarlyReturnAnalysis => ({
-  items: [],
-});
+const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 
 export const isExitStatement = (value: NodeValue): boolean => {
   if (!isOxcNode(value)) {
@@ -158,7 +156,7 @@ const analyzeFunctionNode = (
   let earlyReturnCount = 0;
   let hasGuardClauses = false;
   let guardClauseCount = 0;
-  const suggestions: string[] = [];
+  let kind: EarlyReturnKind | null = null;
 
   const visit = (value: NodeValue, depth: number): void => {
     if (isOxcNodeArray(value)) {
@@ -212,7 +210,7 @@ const analyzeFunctionNode = (
           const shortNode = consequentCount <= alternateCount ? consequentValue : alternateNode;
 
           if (shortCount <= 3 && endsWithReturnOrThrow(shortNode) && longCount >= shortCount * 2) {
-            suggestions.push(`invertible-if-else: consequent=${consequentCount}, alternate=${alternateCount}`);
+            kind = 'invertible-if-else';
           }
         }
       }
@@ -229,8 +227,6 @@ const analyzeFunctionNode = (
           hasGuardClauses = true;
 
           guardClauseCount += 1;
-
-          suggestions.push('loop-guard-clause');
         }
       }
     }
@@ -250,32 +246,34 @@ const analyzeFunctionNode = (
   const span = getFunctionSpan(functionNode, sourceText);
   const score = Math.max(0, earlyReturnCount + (hasGuardClauses ? 0 : 1));
 
-  if (!hasGuardClauses && maxDepth >= 2) {
-    suggestions.push('introduce early returns to flatten control flow');
+  if (kind === null) {
+    kind = 'missing-guard';
   }
 
-  if (earlyReturnCount >= 4) {
-    suggestions.push('simplify branching to reduce early return count');
+  if (hasGuardClauses === false && maxDepth < 2 && earlyReturnCount === 0) {
+    return null;
   }
 
   return {
-    filePath,
+    kind,
+    file: filePath,
     header,
     span,
     metrics: {
-      earlyReturnCount,
-      hasGuardClauses,
-      guardClauseCount,
+      returns: earlyReturnCount,
+      hasGuards: hasGuardClauses,
+      guards: guardClauseCount,
     },
     score,
-    suggestions,
   };
 };
 
-const analyzeEarlyReturn = (files: ReadonlyArray<ParsedFile>): EarlyReturnAnalysis => {
-  return {
-    items: collectFunctionItems(files, analyzeFunctionNode).filter(item => item.suggestions.length > 0),
-  };
+const analyzeEarlyReturn = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<EarlyReturnItem> => {
+  if (files.length === 0) {
+    return createEmptyEarlyReturn();
+  }
+
+  return collectFunctionItems(files, analyzeFunctionNode).filter((item): item is EarlyReturnItem => item !== null);
 };
 
 export { analyzeEarlyReturn, createEmptyEarlyReturn };

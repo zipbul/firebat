@@ -278,19 +278,7 @@ export const runTsgoUnknownProofChecks = async (
   );
 
   if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-      findings: [
-        {
-          kind: 'tool-unavailable',
-          message: 'tsgo is unavailable; unknown-proof cannot be proven',
-          filePath: rootAbs,
-          span: createEmptySpan(),
-          ...(result.error.length > 0 ? { evidence: result.error.slice(0, 300) } : {}),
-        },
-      ],
-    };
+    throw new Error(result.error);
   }
 
   return { ok: true, findings: result.value };

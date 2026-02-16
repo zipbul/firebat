@@ -28,10 +28,10 @@ describe('integration/early-return/imbalanced-if-else', () => {
 
     const program = createProgramFromMap(sources);
     const analysis = analyzeEarlyReturn(program);
-    const item = analysis.items.find(entry => entry.header === 'process');
+    const item = analysis.find(entry => entry.header === 'process');
 
     expect(item).toBeDefined();
-    expect(item?.suggestions.some(s => s.startsWith('invertible-if-else:'))).toBe(true);
+    expect(item?.kind).toBe('invertible-if-else');
   });
 
   it("should not report 'invertible-if-else' when branch lengths are similar", () => {
@@ -52,9 +52,9 @@ describe('integration/early-return/imbalanced-if-else', () => {
 
     const program = createProgramFromMap(sources);
     const analysis = analyzeEarlyReturn(program);
-    const item = analysis.items.find(entry => entry.header === 'process');
+    const item = analysis.find(entry => entry.header === 'process');
 
-    // No other early-return suggestions should be emitted for this simple function.
-    expect(item).toBeUndefined();
+    expect(item).toBeDefined();
+    expect(item?.kind).toBe('missing-guard');
   });
 });

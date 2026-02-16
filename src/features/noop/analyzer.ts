@@ -1,15 +1,13 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { NoopAnalysis, NoopFinding } from '../../types';
+import type { NoopFinding } from '../../types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { evalStaticTruthiness } from '../../engine/oxc-expression-utils';
 import { getLineColumn } from '../../engine/source-position';
 
-const createEmptyNoop = (): NoopAnalysis => ({
-  findings: [],
-});
+const createEmptyNoop = (): ReadonlyArray<NoopFinding> => [];
 
 const getSpan = (node: Node, sourceText: string) => {
   const start = getLineColumn(sourceText, node.start);
@@ -79,7 +77,7 @@ const isSameExpression = (left: Node, right: Node): boolean => {
   return false;
 };
 
-const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: string): NoopFinding[] => {
+const collectNoopFindings = (program: NodeValue, sourceText: string, file: string): NoopFinding[] => {
   const findings: NoopFinding[] = [];
 
   walkOxcTree(program, node => {
@@ -89,7 +87,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
       if (isOxcNode(expression) && isNoopExpressionType(expression.type)) {
         findings.push({
           kind: 'expression-noop',
-          filePath,
+          file,
           span: getSpan(node, sourceText),
           confidence: 0.9,
           evidence: `expression statement has no side effects (${expression.type})`,
@@ -109,7 +107,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
         ) {
           findings.push({
             kind: 'self-assignment',
-            filePath,
+            file,
             span: getSpan(node, sourceText),
             confidence: 0.9,
             evidence: 'left-hand side is assigned to itself',
@@ -125,7 +123,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
       if (truthiness !== null) {
         findings.push({
           kind: 'constant-condition',
-          filePath,
+          file,
           span: getSpan(node, sourceText),
           confidence: 0.8,
           evidence: `if condition is always ${truthiness ? 'truthy' : 'falsy'}`,
@@ -143,7 +141,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
         if (bodyArr.length === 0) {
           findings.push({
             kind: 'empty-catch',
-            filePath,
+            file,
             span: getSpan(node, sourceText),
             confidence: 0.8,
             evidence: 'catch block has an empty body',
@@ -165,7 +163,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
         if (bodyArr.length === 0) {
           findings.push({
             kind: 'empty-function-body',
-            filePath,
+            file,
             span: getSpan(node, sourceText),
             confidence: 0.6,
             evidence: 'function has an empty body',
@@ -180,7 +178,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, filePath: s
   return findings;
 };
 
-const analyzeNoop = (files: ReadonlyArray<ParsedFile>): NoopAnalysis => {
+const analyzeNoop = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<NoopFinding> => {
   if (files.length === 0) {
     return createEmptyNoop();
   }
@@ -195,9 +193,7 @@ const analyzeNoop = (files: ReadonlyArray<ParsedFile>): NoopAnalysis => {
     findings.push(...collectNoopFindings(file.program, file.sourceText, file.filePath));
   }
 
-  return {
-    findings,
-  };
+  return findings;
 };
 
 export { analyzeNoop, createEmptyNoop };

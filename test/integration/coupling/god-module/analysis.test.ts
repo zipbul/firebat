@@ -35,8 +35,8 @@ describe('integration/coupling/god-module', () => {
     // Act
     const program = createProgramFromMap(sources);
     const dependencies = analyzeDependencies(program);
-    const coupling = analyzeCoupling(dependencies);
-    const core = coupling.hotspots.find(h => h.module.includes('core'));
+    const hotspots = analyzeCoupling(dependencies);
+    const core = hotspots.find(h => h.module.includes('core'));
 
     // Assert
     expect(core).toBeDefined();

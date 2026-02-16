@@ -19,8 +19,8 @@ describe('integration/coupling/distance', () => {
     // Act
     const program = createProgramFromMap(sources);
     const dependencies = analyzeDependencies(program);
-    const coupling = analyzeCoupling(dependencies);
-    const hotspot = coupling.hotspots.find(h => h.module.includes('pain'));
+    const hotspots = analyzeCoupling(dependencies);
+    const hotspot = hotspots.find(h => h.module.includes('pain'));
 
     // Assert
     expect(hotspot).toBeDefined();
@@ -51,8 +51,8 @@ describe('integration/coupling/distance', () => {
     // Act
     const program = createProgramFromMap(sources);
     const dependencies = analyzeDependencies(program);
-    const coupling = analyzeCoupling(dependencies);
-    const hotspot = coupling.hotspots.find(h => h.module.includes('useless'));
+    const hotspots = analyzeCoupling(dependencies);
+    const hotspot = hotspots.find(h => h.module.includes('useless'));
 
     // Assert
     expect(hotspot).toBeDefined();

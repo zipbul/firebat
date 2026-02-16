@@ -23,8 +23,8 @@ describe('integration/structural-duplicates', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let structural = analyzeStructuralDuplicates(program, 1);
-    let hasCloneClass = structural.cloneClasses.some(group => group.items.length >= 2);
+    let cloneClasses = analyzeStructuralDuplicates(program, 1);
+    let hasCloneClass = cloneClasses.some(group => group.items.length >= 2);
 
     // Assert
     expect(hasCloneClass).toBe(true);
@@ -39,8 +39,8 @@ describe('integration/structural-duplicates', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const structural = analyzeStructuralDuplicates(program, 1);
-    const group = structural.cloneClasses.find(g => g.items.length >= 2);
+    const cloneClasses = analyzeStructuralDuplicates(program, 1);
+    const group = cloneClasses.find(g => g.items.length >= 2);
 
     // Assert
     expect(group).toBeDefined();
@@ -58,10 +58,10 @@ describe('integration/structural-duplicates', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let duplication = analyzeStructuralDuplicates(program, 1);
+    let cloneClasses = analyzeStructuralDuplicates(program, 1);
 
     // Assert
-    expect(duplication.cloneClasses.length).toBe(0);
+    expect(cloneClasses.length).toBe(0);
   });
 
   it('should return no findings when input is empty', () => {
@@ -71,7 +71,7 @@ describe('integration/structural-duplicates', () => {
     let duplication = analyzeStructuralDuplicates(files, 1);
 
     // Assert
-    expect(duplication.cloneClasses.length).toBe(0);
+    expect(duplication.length).toBe(0);
   });
 
   it('should label anonymous functions when headers are missing', () => {
@@ -83,8 +83,8 @@ describe('integration/structural-duplicates', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let structural = analyzeStructuralDuplicates(program, 1);
-    let headers = structural.cloneClasses.flatMap(group => group.items.map(item => item.header));
+    let cloneClasses = analyzeStructuralDuplicates(program, 1);
+    let headers = cloneClasses.flatMap(group => group.items.map(item => item.header));
 
     // Assert
     expect(headers.some(header => header === 'anonymous')).toBe(true);
@@ -100,8 +100,8 @@ describe('integration/structural-duplicates', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let structural = analyzeStructuralDuplicates(program, 1);
-    let groupSize = structural.cloneClasses.reduce((max, group) => Math.max(max, group.items.length), 0);
+    let cloneClasses = analyzeStructuralDuplicates(program, 1);
+    let groupSize = cloneClasses.reduce((max, group) => Math.max(max, group.items.length), 0);
 
     // Assert
     expect(groupSize).toBeGreaterThanOrEqual(3);
@@ -116,8 +116,8 @@ describe('integration/structural-duplicates', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const structural = analyzeStructuralDuplicates(program, 1);
-    const hasInterfaceGroup = structural.cloneClasses.some(group => group.items.some(item => item.kind === 'interface'));
+    const cloneClasses = analyzeStructuralDuplicates(program, 1);
+    const hasInterfaceGroup = cloneClasses.some(group => group.items.some(item => item.kind === 'interface'));
 
     // Assert
     expect(hasInterfaceGroup).toBe(true);

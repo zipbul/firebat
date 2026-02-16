@@ -16,8 +16,8 @@ describe('integration/coupling/instability', () => {
     // Act
     const program = createProgramFromMap(sources);
     const dependencies = analyzeDependencies(program);
-    const coupling = analyzeCoupling(dependencies);
-    const hotspot = coupling.hotspots.find(h => h.module.includes('stable'));
+    const hotspots = analyzeCoupling(dependencies);
+    const hotspot = hotspots.find(h => h.module.includes('stable'));
 
     // Assert
     expect(hotspot).toBeDefined();
@@ -40,8 +40,8 @@ describe('integration/coupling/instability', () => {
     // Act
     const program = createProgramFromMap(sources);
     const dependencies = analyzeDependencies(program);
-    const coupling = analyzeCoupling(dependencies);
-    const hotspot = coupling.hotspots.find(h => h.module.includes('unstable'));
+    const hotspots = analyzeCoupling(dependencies);
+    const hotspot = hotspots.find(h => h.module.includes('unstable'));
 
     // Assert
     expect(hotspot).toBeDefined();
@@ -69,8 +69,8 @@ describe('integration/coupling/instability', () => {
     // Act
     const program = createProgramFromMap(sources);
     const dependencies = analyzeDependencies(program);
-    const coupling = analyzeCoupling(dependencies);
-    const hotspot = coupling.hotspots.find(h => h.module.includes('core'));
+    const hotspots = analyzeCoupling(dependencies);
+    const hotspot = hotspots.find(h => h.module.includes('core'));
 
     // Assert
     expect(hotspot).toBeDefined();

@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { ExceptionHygieneAnalysis, ExceptionHygieneFinding, ExceptionHygieneFindingKind, SourceSpan } from './types';
+import type { ExceptionHygieneFinding, ExceptionHygieneFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
@@ -28,14 +28,11 @@ interface PushFindingInput {
 
 const pushFinding = (findings: ExceptionHygieneFinding[], input: PushFindingInput): void => {
   const evidence = input.evidence.length > 0 ? input.evidence : 'unknown';
-
   findings.push({
     kind: input.kind,
-    message: input.message,
-    filePath: input.filePath,
+    file: input.filePath,
     span: getSpan(input.node, input.sourceText),
     evidence,
-    recipes: input.recipes,
   });
 };
 
@@ -73,9 +70,7 @@ const getMemberPropertyName = (callee: NodeValue): string | null => {
   return null;
 };
 
-const knownPrimitiveWrappers = new Set([
-  'String', 'Number', 'Boolean', 'Symbol', 'BigInt',
-]);
+const knownPrimitiveWrappers = new Set(['String', 'Number', 'Boolean', 'Symbol', 'BigInt']);
 
 const isPrimitiveWrapperName = (name: string): boolean => knownPrimitiveWrappers.has(name);
 
@@ -1005,13 +1000,9 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   return findings;
 };
 
-const createEmptyExceptionHygiene = (): ExceptionHygieneAnalysis => ({
-  status: 'ok',
-  tool: 'oxc',
-  findings: [],
-});
+const createEmptyExceptionHygiene = (): ReadonlyArray<ExceptionHygieneFinding> => [];
 
-const analyzeExceptionHygiene = (files: ReadonlyArray<ParsedFile>): ExceptionHygieneAnalysis => {
+const analyzeExceptionHygiene = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<ExceptionHygieneFinding> => {
   if (files.length === 0) {
     return createEmptyExceptionHygiene();
   }
@@ -1026,11 +1017,7 @@ const analyzeExceptionHygiene = (files: ReadonlyArray<ParsedFile>): ExceptionHyg
     findings.push(...collectFindings(file.program, file.sourceText, file.filePath));
   }
 
-  return {
-    status: 'ok',
-    tool: 'oxc',
-    findings,
-  };
+  return findings;
 };
 
 export { analyzeExceptionHygiene, createEmptyExceptionHygiene };

@@ -30,15 +30,8 @@ export interface SourceSpan {
 
 export interface ExceptionHygieneFinding {
   readonly kind: ExceptionHygieneFindingKind;
-  readonly message: string;
-  readonly filePath: string;
+  readonly file: string;
   readonly span: SourceSpan;
+  readonly code?: string;
   readonly evidence: string;
-  readonly recipes: ReadonlyArray<string>;
-}
-
-export interface ExceptionHygieneAnalysis {
-  readonly status: 'ok' | 'unavailable' | 'failed';
-  readonly tool: 'oxc';
-  readonly findings: ReadonlyArray<ExceptionHygieneFinding>;
 }

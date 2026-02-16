@@ -5,7 +5,7 @@ import { analyzeLint } from '../../../../src/features/lint';
 import { createTempProject, installFakeBin, writeText } from '../../shared/external-tool-test-kit';
 
 describe('integration/lint/diagnostics-parse', () => {
-  it('should parse JSON diagnostics (best-effort normalization)', async () => {
+  it('should parse JSON diagnostics into a bare array (best-effort normalization)', async () => {
     const project = await createTempProject('firebat-lint-diag-parse');
 
     try {
@@ -46,15 +46,15 @@ exit 1
         cwd: project.rootAbs,
       });
 
-      expect(analysis.status).toBe('ok');
-      expect(analysis.diagnostics.length).toBe(1);
+      expect(Array.isArray(analysis)).toBe(true);
+      expect(analysis.length).toBe(1);
 
-      const diag = analysis.diagnostics[0];
+      const diag = analysis[0] as any;
 
-      expect(diag?.message).toBe('no-unused-vars');
+      expect(diag?.msg).toBe('no-unused-vars');
       expect(diag?.code).toBe('no-unused-vars');
       expect(diag?.severity).toBe('error');
-      expect(diag?.filePath).toBe('src/a.ts');
+      expect(diag?.file).toBe('src/a.ts');
       expect(diag?.span.start.line).toBe(3);
       expect(diag?.span.start.column).toBe(4);
     } finally {

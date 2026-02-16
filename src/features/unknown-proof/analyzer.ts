@@ -1,6 +1,8 @@
 import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../ports/logger';
-import type { SourceSpan, UnknownProofAnalysis, UnknownProofFinding } from '../../types';
+import type { SourceSpan, UnknownProofFinding } from '../../types';
+
+import { PartialResultError } from '../../engine/partial-result-error';
 
 import { collectUnknownProofCandidates } from './candidates';
 import { runTsgoUnknownProofChecks } from './tsgo-checks';
@@ -27,16 +29,12 @@ interface BoundaryUsageCandidate {
   readonly usageKind: BoundaryUsageKind;
 }
 
-export const createEmptyUnknownProof = (): UnknownProofAnalysis => ({
-  status: 'ok',
-  tool: 'tsgo',
-  findings: [],
-});
+export const createEmptyUnknownProof = (): ReadonlyArray<UnknownProofFinding> => [];
 
 export const analyzeUnknownProof = async (
   program: ReadonlyArray<ParsedFile>,
   input?: AnalyzeUnknownProofInput,
-): Promise<UnknownProofAnalysis> => {
+): Promise<ReadonlyArray<UnknownProofFinding>> => {
   const rootAbs = input?.rootAbs ?? process.cwd();
   const boundaryGlobs = input?.boundaryGlobs;
   const collected = collectUnknownProofCandidates({
@@ -61,39 +59,29 @@ export const analyzeUnknownProof = async (
   }
 
   if (tsgoCandidatesByFile.size === 0 && boundaryUsageCandidatesByFile.size === 0) {
-    return {
-      status: 'ok',
-      tool: 'tsgo',
-      findings,
-    };
+    return findings;
   }
 
   // Proof phase: ensure no `unknown|any` exists outside boundary files.
-  const tsgoResult = await runTsgoUnknownProofChecks({
-    program,
-    rootAbs,
-    candidatesByFile: tsgoCandidatesByFile,
-    boundaryUsageCandidatesByFile,
-    ...(input?.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
-    ...(input?.logger !== undefined ? { logger: input.logger } : {}),
-  });
+  try {
+    const tsgoResult = await runTsgoUnknownProofChecks({
+      program,
+      rootAbs,
+      candidatesByFile: tsgoCandidatesByFile,
+      boundaryUsageCandidatesByFile,
+      ...(input?.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
+      ...(input?.logger !== undefined ? { logger: input.logger } : {}),
+    });
 
-  if (!tsgoResult.ok) {
-    findings.push(...tsgoResult.findings);
+    if (tsgoResult.ok) {
+      findings.push(...tsgoResult.findings);
 
-    return {
-      status: 'unavailable',
-      tool: 'tsgo',
-      error: tsgoResult.error,
-      findings,
-    };
+      return findings;
+    }
+
+    throw new PartialResultError(tsgoResult.error, [...findings, ...tsgoResult.findings]);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new PartialResultError(message, findings);
   }
-
-  findings.push(...tsgoResult.findings);
-
-  return {
-    status: 'ok',
-    tool: 'tsgo',
-    findings,
-  };
 };

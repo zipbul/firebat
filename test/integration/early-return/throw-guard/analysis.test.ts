@@ -24,10 +24,10 @@ describe('integration/early-return/throw-guard', () => {
 
     const program = createProgramFromMap(sources);
     const analysis = analyzeEarlyReturn(program);
-    const item = analysis.items.find(entry => entry.header === 'guarded');
+    const item = analysis.find(entry => entry.header === 'guarded');
 
     expect(item).toBeDefined();
-    expect(item?.metrics.hasGuardClauses).toBe(true);
-    expect(item?.metrics.guardClauseCount).toBeGreaterThanOrEqual(1);
+    expect(item?.metrics.hasGuards).toBe(true);
+    expect(item?.metrics.guards).toBeGreaterThanOrEqual(1);
   });
 });

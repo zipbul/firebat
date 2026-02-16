@@ -16,8 +16,8 @@ describe('integration/coupling', () => {
     // Act
     let program = createProgramFromMap(sources);
     let dependencies = analyzeDependencies(program);
-    let coupling = analyzeCoupling(dependencies);
-    let hotspot = coupling.hotspots.find(entry => entry.module.includes('shared'));
+    let hotspots = analyzeCoupling(dependencies);
+    let hotspot = hotspots.find(entry => entry.module.includes('shared'));
 
     // Assert
     expect(hotspot).toBeDefined();
@@ -28,10 +28,10 @@ describe('integration/coupling', () => {
     // Arrange
     let dependencies = analyzeDependencies([]);
     // Act
-    let coupling = analyzeCoupling(dependencies);
+    let hotspots = analyzeCoupling(dependencies);
 
     // Assert
-    expect(coupling.hotspots.length).toBe(0);
+    expect(hotspots.length).toBe(0);
   });
 
   it('should include fan-in signals when dependencies are shared', () => {
@@ -45,8 +45,8 @@ describe('integration/coupling', () => {
     // Act
     let program = createProgramFromMap(sources);
     let dependencies = analyzeDependencies(program);
-    let coupling = analyzeCoupling(dependencies);
-    let hotspot = coupling.hotspots.find(entry => entry.module.includes('shared'));
+    let hotspots = analyzeCoupling(dependencies);
+    let hotspot = hotspots.find(entry => entry.module.includes('shared'));
 
     // Assert
     expect(hotspot).toBeDefined();
@@ -65,8 +65,8 @@ describe('integration/coupling', () => {
     // Act
     let program = createProgramFromMap(sources);
     let dependencies = analyzeDependencies(program);
-    let coupling = analyzeCoupling(dependencies);
-    let names = coupling.hotspots.map(entry => entry.module);
+    let hotspots = analyzeCoupling(dependencies);
+    let names = hotspots.map(entry => entry.module);
 
     // Assert
     expect(names.length).toBeGreaterThanOrEqual(2);

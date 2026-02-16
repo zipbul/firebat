@@ -54,7 +54,7 @@ function createTryCatchSource(): string {
 }
 
 describe('integration/early-return', () => {
-  it('should exclude guarded functions when no improvement suggestions exist', () => {
+  it('should include complex functions with guard clauses', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -63,13 +63,15 @@ describe('integration/early-return', () => {
     // Act
     let program = createProgramFromMap(sources);
     let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.items.find(entry => entry.header === 'complex');
+    let item = earlyReturn.find(entry => entry.header === 'complex');
 
     // Assert
-    expect(item).toBeUndefined();
+    expect(item).toBeDefined();
+    expect(item?.metrics.hasGuards).toBe(true);
+    expect(item?.metrics.guards).toBeGreaterThanOrEqual(1);
   });
 
-  it('should exclude simple functions when no suggestions exist', () => {
+  it('should include simple functions with early returns', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -78,10 +80,11 @@ describe('integration/early-return', () => {
     // Act
     let program = createProgramFromMap(sources);
     let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.items.find(entry => entry.header === 'simple');
+    let item = earlyReturn.find(entry => entry.header === 'simple');
 
     // Assert
-    expect(item).toBeUndefined();
+    expect(item).toBeDefined();
+    expect(item?.metrics.returns).toBeGreaterThanOrEqual(1);
   });
 
   it('should return no findings when input is empty', () => {
@@ -92,10 +95,10 @@ describe('integration/early-return', () => {
     let earlyReturn = analyzeEarlyReturn(program);
 
     // Assert
-    expect(earlyReturn.items.length).toBe(0);
+    expect(earlyReturn.length).toBe(0);
   });
 
-  it('should exclude if-else functions when no suggestions exist', () => {
+  it('should include if-else functions and count returns', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -104,10 +107,11 @@ describe('integration/early-return', () => {
     // Act
     let program = createProgramFromMap(sources);
     let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.items.find(entry => entry.header === 'hasElse');
+    let item = earlyReturn.find(entry => entry.header === 'hasElse');
 
     // Assert
-    expect(item).toBeUndefined();
+    expect(item).toBeDefined();
+    expect(item?.metrics.returns).toBeGreaterThanOrEqual(2);
   });
 
   it('should count early returns when try/catch flows exist', () => {
@@ -119,10 +123,10 @@ describe('integration/early-return', () => {
     // Act
     let program = createProgramFromMap(sources);
     let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.items.find(entry => entry.header === 'guarded');
+    let item = earlyReturn.find(entry => entry.header === 'guarded');
 
     // Assert
     expect(item).toBeDefined();
-    expect(item?.metrics.earlyReturnCount).toBeGreaterThanOrEqual(2);
+    expect(item?.metrics.returns).toBeGreaterThanOrEqual(2);
   });
 });

@@ -40,8 +40,8 @@ describe('integration/forwarding/cross-file (fuzz)', () => {
 
       // Act
       const program = createProgramFromMap(sources);
-      const analysis = analyzeForwarding(program, 0);
-      const crossFile = analysis.findings.filter(f => f.kind === 'cross-file-forwarding-chain');
+      const findings = analyzeForwarding(program, 0);
+      const crossFile = findings.filter(f => f.kind === 'cross-file-forwarding-chain');
       const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 
       // Assert

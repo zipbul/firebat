@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import * as path from 'node:path';
 
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
-import type { ForwardingAnalysis, ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
+import type { ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
 
 import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
@@ -256,9 +256,7 @@ const collectExportedNameByLocal = (program: NodeValue): Map<string, string> => 
   return out;
 };
 
-const createEmptyForwarding = (): ForwardingAnalysis => ({
-  findings: [],
-});
+const createEmptyForwarding = (): ReadonlyArray<ForwardingFinding> => [];
 
 const getSpan = (node: Node, sourceText: string) => {
   const start = getLineColumn(sourceText, node.start);
@@ -737,7 +735,7 @@ const computeChainDepth = (name: string, calleeByName: Map<string, string | null
   return 1 + nextDepth;
 };
 
-const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: number): ForwardingAnalysis => {
+const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: number): ReadonlyArray<ForwardingFinding> => {
   if (files.length === 0) {
     return createEmptyForwarding();
   }
@@ -925,9 +923,7 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
     }
   }
 
-  return {
-    findings,
-  };
+  return findings;
 };
 
 export { analyzeForwarding, createEmptyForwarding };

@@ -4,7 +4,7 @@ import { analyzeEarlyReturn } from '../../../../src/features/early-return';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 describe('integration/early-return/loop-guard-clause', () => {
-  it("should detect 'loop-guard-clause' for continue/break guards inside loops", () => {
+  it('should treat continue/break as loop guard clauses', () => {
     const sources = new Map<string, string>();
 
     sources.set(
@@ -29,10 +29,10 @@ describe('integration/early-return/loop-guard-clause', () => {
 
     const program = createProgramFromMap(sources);
     const analysis = analyzeEarlyReturn(program);
-    const item = analysis.items.find(entry => entry.header === 'process');
+    const item = analysis.find(entry => entry.header === 'process');
 
     expect(item).toBeDefined();
-    expect(item?.metrics.hasGuardClauses).toBe(true);
-    expect(item?.suggestions.includes('loop-guard-clause')).toBe(true);
+    expect(item?.metrics.hasGuards).toBe(true);
+    expect(item?.metrics.guards).toBeGreaterThanOrEqual(1);
   });
 });

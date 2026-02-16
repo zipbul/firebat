@@ -42,7 +42,7 @@ exit 0
         cwd: project.rootAbs,
       });
 
-      expect(analysis.status).toBe('ok');
+      expect(analysis).toEqual([]);
 
       const argsText = await readText(argsFileAbs);
 

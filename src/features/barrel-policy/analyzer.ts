@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { BarrelPolicyAnalysis, BarrelPolicyFinding, SourceSpan } from '../../types';
+import type { BarrelPolicyFinding, SourceSpan } from '../../types';
 
 import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
@@ -190,7 +190,7 @@ const isExplicitIndexSpecifier = (specifier: string): boolean => {
   );
 };
 
-const createEmptyBarrelPolicy = (): BarrelPolicyAnalysis => ({ findings: [] });
+const createEmptyBarrelPolicy = (): ReadonlyArray<BarrelPolicyFinding> => [];
 
 const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): void => {
   walkOxcTree(file.program, node => {
@@ -205,8 +205,7 @@ const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): voi
     if (node.type === 'ExportAllDeclaration') {
       findings.push({
         kind: 'export-star',
-        message: 'export * is forbidden (use explicit re-exports only)',
-        filePath: file.filePath,
+        file: file.filePath,
         span: toNodeSpan(file, node),
       });
     }
@@ -242,8 +241,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
 
         findings.push({
           kind: 'barrel-side-effect-import',
-          message: 'Side-effect import in barrel file may cause unexpected behavior for consumers',
-          filePath: file.filePath,
+          file: file.filePath,
           span: toNodeSpan(file, stmt),
           ...(typeof source === 'string' ? { evidence: source } : {}),
         });
@@ -263,8 +261,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
 
       findings.push({
         kind: 'invalid-index-statement',
-        message: 'index barrel must only contain explicit re-exports: `export { .. } from` / `export type { .. } from`',
-        filePath: file.filePath,
+        file: file.filePath,
         span: toNodeSpan(file, stmt),
       });
 
@@ -275,8 +272,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
     if (type === 'ExportAllDeclaration') {
       findings.push({
         kind: 'invalid-index-statement',
-        message: 'index barrel must not contain export * (use explicit re-exports)',
-        filePath: file.filePath,
+        file: file.filePath,
         span: toNodeSpan(file, stmt),
       });
 
@@ -286,8 +282,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
     // Everything else is invalid in a strict index barrel.
     findings.push({
       kind: 'invalid-index-statement',
-      message: 'index barrel must not contain imports, statements, or declarations (explicit re-exports only)',
-      filePath: file.filePath,
+      file: file.filePath,
       span: toNodeSpan(file, stmt),
       evidence: String(type ?? 'unknown'),
     });
@@ -322,8 +317,7 @@ const checkMissingIndex = (
 
     findings.push({
       kind: 'missing-index',
-      message: 'directory must contain index.ts (strict barrel required)',
-      filePath: dir,
+      file: dir,
       span: {
         start: { line: 1, column: 1 },
         end: { line: 1, column: 1 },
@@ -394,8 +388,7 @@ const checkDeepImports = async (
 
         findings.push({
           kind: 'index-deep-import',
-          message: 'imports must go through directory barrel (do not import index file explicitly)',
-          filePath: file.filePath,
+          file: file.filePath,
           span: entry.span,
           ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
         });
@@ -409,8 +402,7 @@ const checkDeepImports = async (
 
         findings.push({
           kind: 'deep-import',
-          message: 'direct imports across directories are forbidden (use the directory index barrel)',
-          filePath: file.filePath,
+          file: file.filePath,
           span: entry.span,
           ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
         });
@@ -422,7 +414,7 @@ const checkDeepImports = async (
 const analyzeBarrelPolicy = async (
   program: ReadonlyArray<ParsedFile>,
   options: BarrelPolicyOptions,
-): Promise<BarrelPolicyAnalysis> => {
+): Promise<ReadonlyArray<BarrelPolicyFinding>> => {
   if (!Array.isArray(program) || program.length === 0) {
     return createEmptyBarrelPolicy();
   }
@@ -452,9 +444,7 @@ const analyzeBarrelPolicy = async (
 
   await checkDeepImports(activeFiles, resolver, workspacePackages, fileSet, findings);
 
-  return {
-    findings,
-  };
+  return findings;
 };
 
 export { analyzeBarrelPolicy, createEmptyBarrelPolicy };

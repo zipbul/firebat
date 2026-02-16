@@ -1,12 +1,10 @@
-import type { CouplingAnalysis, DependencyAnalysis } from '../../types';
+import type { CouplingHotspot, DependencyAnalysis, SourceSpan } from '../../types';
 
 import { sortCouplingHotspots } from '../../engine/sort-utils';
 
-const createEmptyCoupling = (): CouplingAnalysis => ({
-  hotspots: [],
-});
+const createEmptyCoupling = (): ReadonlyArray<CouplingHotspot> => [];
 
-const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => {
+const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<CouplingHotspot> => {
   const adjacency = dependencies.adjacency ?? {};
   const exportStats = dependencies.exportStats ?? {};
   const modules = Object.keys(adjacency).sort((a, b) => a.localeCompare(b));
@@ -94,74 +92,41 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
     return Math.max(...candidates.map(clamp01));
   };
 
-  const buildWhy = (
-    module: string,
-    signals: ReadonlyArray<string>,
-    metrics: { distance: number; instability: number; abstractness: number; fanIn: number; fanOut: number },
-  ): string => {
-    const parts: string[] = [];
-
-    if (signals.includes('off-main-sequence')) {
-      parts.push(`distance from main sequence is high (D=${metrics.distance.toFixed(2)})`);
-    }
-
-    if (signals.includes('unstable-module')) {
-      parts.push(`module is highly unstable (I=${metrics.instability.toFixed(2)}, Ce=${metrics.fanOut})`);
-    }
-
-    if (signals.includes('rigid-module')) {
-      parts.push(`module is very stable but heavily depended on (I=${metrics.instability.toFixed(2)}, Ca=${metrics.fanIn})`);
-    }
-
-    if (signals.includes('god-module')) {
-      parts.push(`module has very high fan-in and fan-out (Ca=${metrics.fanIn}, Ce=${metrics.fanOut})`);
-    }
-
-    if (signals.includes('bidirectional-coupling')) {
-      parts.push('module participates in bidirectional coupling (2-node cycle)');
-    }
-
-    return parts.length > 0 ? `${module}: ${parts.join('; ')}` : module;
+  const kindToCode: Record<string, string> = {
+    'god-module': 'COUPLING_GOD_MODULE',
+    'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
+    'off-main-sequence': 'COUPLING_OFF_MAIN_SEQ',
+    'unstable-module': 'COUPLING_UNSTABLE',
+    'rigid-module': 'COUPLING_RIGID',
   };
 
-  const buildSuggestion = (
-    signals: ReadonlyArray<string>,
-    metrics: { distance: number; instability: number; abstractness: number },
-  ): string => {
-    const suggestions: string[] = [];
+  const pickKind = (signals: ReadonlyArray<string>): string => {
+    const s = new Set(signals);
 
-    if (signals.includes('god-module')) {
-      suggestions.push('split the module into smaller packages and reduce both fan-in and fan-out');
+    if (s.has('god-module')) {
+      return 'god-module';
     }
 
-    if (signals.includes('bidirectional-coupling')) {
-      suggestions.push('break the 2-node cycle by introducing an abstraction or moving shared code');
+    if (s.has('bidirectional-coupling')) {
+      return 'bidirectional-coupling';
     }
 
-    if (signals.includes('unstable-module')) {
-      suggestions.push('reduce outgoing dependencies or introduce stable abstractions (interfaces)');
+    if (s.has('off-main-sequence')) {
+      return 'off-main-sequence';
     }
 
-    if (signals.includes('rigid-module')) {
-      suggestions.push('consider refactoring dependents or extracting stable abstractions to avoid rigidity');
+    if (s.has('unstable-module')) {
+      return 'unstable-module';
     }
 
-    if (signals.includes('off-main-sequence')) {
-      if (metrics.abstractness < 0.2 && metrics.instability < 0.2) {
-        suggestions.push(
-          'either increase abstractness (interfaces/abstract classes) or increase instability by reducing dependents',
-        );
-      } else if (metrics.abstractness > 0.8 && metrics.instability > 0.8) {
-        suggestions.push(
-          'either reduce abstractness (remove unnecessary abstractions) or stabilize by reducing outgoing dependencies',
-        );
-      } else {
-        suggestions.push('move closer to the main sequence by balancing abstractness and instability');
-      }
+    if (s.has('rigid-module')) {
+      return 'rigid-module';
     }
 
-    return suggestions.join('. ');
+    return signals[0] ?? 'coupling';
   };
+
+  const zeroSpan: SourceSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
 
   const hotspotsRaw = modules
     .map(module => {
@@ -213,19 +178,23 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): CouplingAnalysis => 
       });
       const score = Math.round(severity * 100);
 
+      const kind = pickKind(signals);
+
       return {
+        kind,
+        code: kindToCode[kind],
+        file: module,
+        span: zeroSpan,
         module,
         score,
         signals: [...signals].sort(),
         metrics,
-        why: buildWhy(module, signals, metrics),
-        suggestedRefactor: buildSuggestion(signals, metrics),
       };
     })
     .filter((v): v is NonNullable<typeof v> => v !== null);
   const hotspots = sortCouplingHotspots(hotspotsRaw);
 
-  return hotspots.length === 0 ? createEmptyCoupling() : { hotspots };
+  return hotspots.length === 0 ? createEmptyCoupling() : hotspots;
 };
 
 export { analyzeCoupling, createEmptyCoupling };

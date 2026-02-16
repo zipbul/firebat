@@ -5,7 +5,7 @@ import { analyzeFormat } from '../../../../src/features/format';
 import { createTempProject, installFakeBin, writeText } from '../../shared/external-tool-test-kit';
 
 describe('integration/format/check-mode', () => {
-  it('should treat non-zero exit code as needs-formatting (stdout ignored)', async () => {
+  it('should return file paths when exit code is non-zero and stdout contains paths', async () => {
     const project = await createTempProject('firebat-format-check');
 
     try {
@@ -19,7 +19,9 @@ if [[ "\${1-}" == "--version" ]]; then
   exit 0
 fi
 
-# In check mode, exit non-zero but print nothing.
+# In check mode, exit non-zero and print path-like lines.
+target="\${@: -1}"
+echo "\${target}"
 exit 7
 `,
       );
@@ -34,14 +36,15 @@ exit 7
         cwd: project.rootAbs,
       });
 
-      expect(analysis.status).toBe('needs-formatting');
-      expect(typeof analysis.exitCode).toBe('number');
+      expect(Array.isArray(analysis)).toBe(true);
+      expect(analysis.length).toBe(1);
+      expect(analysis[0]).toBe(targetAbs);
     } finally {
       await project.dispose();
     }
   });
 
-  it('should treat exit code 0 as ok (even if stdout has lines)', async () => {
+  it('should return an empty array when exit code is 0 (even if stdout has lines)', async () => {
     const project = await createTempProject('firebat-format-check-ok');
 
     try {
@@ -56,6 +59,7 @@ if [[ "\${1-}" == "--version" ]]; then
 fi
 
 echo "random output that should not flip status"
+echo "src/a.ts"
 exit 0
 `,
       );
@@ -70,7 +74,7 @@ exit 0
         cwd: project.rootAbs,
       });
 
-      expect(analysis.status).toBe('ok');
+      expect(analysis).toEqual([]);
     } finally {
       await project.dispose();
     }

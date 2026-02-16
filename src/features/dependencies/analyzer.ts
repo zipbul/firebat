@@ -17,9 +17,9 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
   cycles: [],
   adjacency: {},
   exportStats: {},
-  fanInTop: [],
-  fanOutTop: [],
-  edgeCutHints: [],
+  fanIn: [],
+  fanOut: [],
+  cuts: [],
   layerViolations: [],
   deadExports: [],
 });
@@ -946,7 +946,6 @@ const buildEdgeCutHints = (
       from: toRelativePath(rootAbs, from),
       to: toRelativePath(rootAbs, to),
       score: bestScore > 0 ? bestScore : 1,
-      reason: 'breaks cycle',
     });
   }
 
@@ -990,9 +989,9 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
 
   const cyclePaths = detectCycles(adjacency);
   const cycles = cyclePaths.map(path => ({ path: path.map(entry => toRelativePath(rootAbs, entry)) }));
-  const fanInTop = listFanStats(rootAbs, inDegree, 10);
-  const fanOutTop = listFanStats(rootAbs, outDegree, 10);
-  const edgeCutHints = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
+  const fanIn = listFanStats(rootAbs, inDegree, 10);
+  const fanOut = listFanStats(rootAbs, outDegree, 10);
+  const cuts = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
   const layerViolations: DependencyLayerViolation[] = [];
   const deadExports: DependencyDeadExportFinding[] = [];
 
@@ -1023,7 +1022,6 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
 
         layerViolations.push({
           kind: 'layer-violation',
-          message: `${fromLayer} → ${toLayer} is not allowed`,
           from: toRelativePath(rootAbs, from),
           to: toRelativePath(rootAbs, target),
           fromLayer,
@@ -1157,8 +1155,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
             deadExports.push({
               kind: 'test-only-export',
               module: relModule,
-              exportName,
-              message: `export \`${exportName}\` is only imported from tests`,
+              name: exportName,
             });
           }
 
@@ -1168,8 +1165,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
         deadExports.push({
           kind: 'dead-export',
           module: relModule,
-          exportName,
-          message: `export \`${exportName}\` is not imported anywhere`,
+          name: exportName,
         });
       }
     }
@@ -1179,9 +1175,9 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
     cycles,
     adjacency: adjacencyOut,
     exportStats,
-    fanInTop,
-    fanOutTop,
-    edgeCutHints,
+    fanIn,
+    fanOut,
+    cuts,
     layerViolations,
     deadExports,
   };

@@ -25,8 +25,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const crossFile = analysis.findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+    const findings = analyzeForwarding(program, 0);
+    const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
     expect(crossFile.length).toBe(1);
@@ -55,8 +55,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const crossFile = analysis.findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+    const findings = analyzeForwarding(program, 0);
+    const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
     expect(crossFile.length).toBe(1);
@@ -85,8 +85,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const crossFile = analysis.findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+    const findings = analyzeForwarding(program, 0);
+    const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
     expect(crossFile.length).toBe(1);
@@ -120,8 +120,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const crossFile = analysis.findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+    const findings = analyzeForwarding(program, 0);
+    const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
     const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 
     // Assert
@@ -141,8 +141,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const crossFile = analysis.findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+    const findings = analyzeForwarding(program, 0);
+    const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
     expect(crossFile.length).toBe(0);

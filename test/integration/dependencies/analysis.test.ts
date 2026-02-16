@@ -29,9 +29,9 @@ describe('integration/dependencies', () => {
 
     // Assert
     expect(dependencies.cycles.length).toBeGreaterThan(0);
-    expect(dependencies.fanInTop.length).toBeGreaterThan(0);
-    expect(dependencies.fanOutTop.length).toBeGreaterThan(0);
-    expect(dependencies.edgeCutHints.length).toBeGreaterThan(0);
+    expect(dependencies.fanIn.length).toBeGreaterThan(0);
+    expect(dependencies.fanOut.length).toBeGreaterThan(0);
+    expect(dependencies.cuts.length).toBeGreaterThan(0);
   });
 
   it('should detect layer violations when disallowed imports cross layers', () => {
@@ -110,9 +110,9 @@ describe('integration/dependencies', () => {
 
     // Assert
     expect(dependencies.cycles.length).toBe(0);
-    expect(dependencies.fanInTop.length).toBe(0);
-    expect(dependencies.fanOutTop.length).toBe(0);
-    expect(dependencies.edgeCutHints.length).toBe(0);
+    expect(dependencies.fanIn.length).toBe(0);
+    expect(dependencies.fanOut.length).toBe(0);
+    expect(dependencies.cuts.length).toBe(0);
   });
 
   it('should return empty stats when input is empty', () => {
@@ -124,9 +124,9 @@ describe('integration/dependencies', () => {
 
     // Assert
     expect(dependencies.cycles.length).toBe(0);
-    expect(dependencies.fanInTop.length).toBe(0);
-    expect(dependencies.fanOutTop.length).toBe(0);
-    expect(dependencies.edgeCutHints.length).toBe(0);
+    expect(dependencies.fanIn.length).toBe(0);
+    expect(dependencies.fanOut.length).toBe(0);
+    expect(dependencies.cuts.length).toBe(0);
   });
 
   it('should resolve index modules when importing a directory', () => {
@@ -139,7 +139,7 @@ describe('integration/dependencies', () => {
     // Act
     let program = createProgramFromMap(sources);
     let dependencies = analyzeDependencies(program);
-    let fanOutModules = dependencies.fanOutTop.map(entry => entry.module);
+    let fanOutModules = dependencies.fanOut.map(entry => entry.module);
 
     // Assert
     expect(fanOutModules.length).toBeGreaterThan(0);
@@ -209,7 +209,7 @@ describe('integration/dependencies', () => {
     let hits = dependencies.deadExports.filter(f => f.kind === 'dead-export');
 
     // Assert
-    expect(hits.some(f => f.module === 'dead/a.ts' && f.exportName === 'unused')).toBe(true);
+    expect(hits.some(f => f.module === 'dead/a.ts' && f.name === 'unused')).toBe(true);
   });
 
   it('should report test-only-export when an export is only imported from test files', () => {
@@ -226,7 +226,7 @@ describe('integration/dependencies', () => {
     let hits = dependencies.deadExports.filter(f => f.kind === 'test-only-export');
 
     // Assert
-    expect(hits.some(f => f.module === 'dead/a.ts' && f.exportName === 'onlyTest')).toBe(true);
+    expect(hits.some(f => f.module === 'dead/a.ts' && f.name === 'onlyTest')).toBe(true);
   });
 
   it('should detect all cycles when multiple paths converge', () => {
@@ -338,7 +338,7 @@ describe('integration/dependencies', () => {
     let dependencies = analyzeDependencies(program);
 
     // Assert
-    expect(dependencies.fanInTop.length).toBe(0);
-    expect(dependencies.fanOutTop.length).toBe(0);
+    expect(dependencies.fanIn.length).toBe(0);
+    expect(dependencies.fanOut.length).toBe(0);
   });
 });

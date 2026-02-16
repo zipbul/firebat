@@ -5,7 +5,7 @@ import { analyzeFormat } from '../../../../src/features/format';
 import { createTempProject, writeText } from '../../shared/external-tool-test-kit';
 
 describe('integration/format/binary-missing', () => {
-  it("should return status='unavailable' when oxfmt binary can't be resolved (project-only)", async () => {
+  it("should throw when oxfmt binary can't be resolved (project-only)", async () => {
     const project = await createTempProject('firebat-format-missing-bin');
 
     try {
@@ -13,15 +13,14 @@ describe('integration/format/binary-missing', () => {
 
       await writeText(targetAbs, 'export const a = 1;');
 
-      const analysis = await analyzeFormat({
-        targets: [targetAbs],
-        fix: false,
-        cwd: project.rootAbs,
-        resolveMode: 'project-only',
-      });
-
-      expect(analysis.status).toBe('unavailable');
-      expect(analysis.error ?? '').toContain('not available');
+      await expect(
+        analyzeFormat({
+          targets: [targetAbs],
+          fix: false,
+          cwd: project.rootAbs,
+          resolveMode: 'project-only',
+        }),
+      ).rejects.toMatchObject({ message: expect.stringContaining('not available') });
     } finally {
       await project.dispose();
     }

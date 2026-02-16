@@ -5,7 +5,7 @@ import { analyzeLint } from '../../../../src/features/lint';
 import { createTempProject, writeText } from '../../shared/external-tool-test-kit';
 
 describe('integration/lint/binary-missing', () => {
-  it("should return status='unavailable' when oxlint binary can't be resolved (project-only)", async () => {
+  it("should throw when oxlint binary can't be resolved (project-only)", async () => {
     const project = await createTempProject('firebat-lint-missing-bin');
 
     try {
@@ -13,15 +13,14 @@ describe('integration/lint/binary-missing', () => {
 
       await writeText(targetAbs, 'export const a = 1;');
 
-      const analysis = await analyzeLint({
-        targets: [targetAbs],
-        fix: false,
-        cwd: project.rootAbs,
-        resolveMode: 'project-only',
-      });
-
-      expect(analysis.status).toBe('unavailable');
-      expect(analysis.error ?? '').toContain('not available');
+      await expect(
+        analyzeLint({
+          targets: [targetAbs],
+          fix: false,
+          cwd: project.rootAbs,
+          resolveMode: 'project-only',
+        }),
+      ).rejects.toMatchObject({ message: expect.stringContaining('not available') });
     } finally {
       await project.dispose();
     }

@@ -37,8 +37,8 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const thinWrappers = analysis.findings.filter(finding => finding.kind === 'thin-wrapper');
+    const findings = analyzeForwarding(program, 0);
+    const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
     expect(thinWrappers.length).toBe(1);
@@ -61,8 +61,8 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const thinWrappers = analysis.findings.filter(finding => finding.kind === 'thin-wrapper');
+    const findings = analyzeForwarding(program, 0);
+    const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
     expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
@@ -84,8 +84,8 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 0);
-    const thinWrappers = analysis.findings.filter(finding => finding.kind === 'thin-wrapper');
+    const findings = analyzeForwarding(program, 0);
+    const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
     expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
@@ -99,8 +99,8 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = analyzeForwarding(program, 1);
-    const chainFindings = analysis.findings.filter(finding => finding.kind === 'forward-chain');
+    const findings = analyzeForwarding(program, 1);
+    const chainFindings = findings.filter(finding => finding.kind === 'forward-chain');
 
     // Assert
     expect(chainFindings.length).toBe(1);

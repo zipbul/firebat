@@ -1,6 +1,8 @@
+import * as path from 'node:path';
+
 import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../ports/logger';
-import type { SourceSpan, TypecheckAnalysis, TypecheckItem } from '../../types';
+import type { SourceSpan, TypecheckItem } from '../../types';
 
 import { lspUriToFilePath, openTsDocument, withTsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
 import { createNoopLogger } from '../../ports/logger';
@@ -18,12 +20,7 @@ const createEmptySpan = (): SourceSpan => ({
   },
 });
 
-const createEmptyTypecheck = (): TypecheckAnalysis => ({
-  status: 'ok',
-  tool: 'tsgo',
-  exitCode: 0,
-  items: [],
-});
+const createEmptyTypecheck = (): ReadonlyArray<TypecheckItem> => [];
 
 const buildLineIndex = (sourceText: string): ReadonlyArray<string> => {
   return sourceText.split(/\r?\n/);
@@ -33,14 +30,13 @@ const buildCodeFrame = (
   lines: ReadonlyArray<string>,
   line: number,
   column: number,
-): Pick<TypecheckItem, 'lineText' | 'codeFrame'> => {
+): Pick<TypecheckItem, 'codeFrame'> => {
   const picked = lines[line - 1] ?? '';
   const safeColumn = Math.max(1, column);
   const caretPrefix = ' '.repeat(Math.max(0, safeColumn - 1));
   const caretLine = `${caretPrefix}^`;
 
   return {
-    lineText: picked,
     codeFrame: picked.length > 0 ? `${picked}\n${caretLine}` : '',
   };
 };
@@ -175,27 +171,27 @@ const toCodeText = (code: string | number | undefined, source: string | undefine
   return 'TS';
 };
 
-const convertPublishDiagnosticsToTypecheckItems = (
-  params: PublishDiagnosticsParams,
-): ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> => {
-  const filePath = lspUriToFilePath(params.uri);
+type TypecheckItemWithoutFrame = Omit<TypecheckItem, 'codeFrame'>;
+
+const convertPublishDiagnosticsToTypecheckItems = (params: PublishDiagnosticsParams): ReadonlyArray<TypecheckItemWithoutFrame> => {
+  const file = lspUriToFilePath(params.uri);
 
   return (params.diagnostics ?? [])
     .filter(diag => shouldIncludeDiagnostic(diag.severity))
     .map(diag => {
-    return {
-      severity: toSeverity(diag.severity),
-      code: toCodeText(diag.code, diag.source),
-      message: typeof diag.message === 'string' ? diag.message.trim() : String(diag.message),
-      filePath,
-      span: toSpanFromRange(diag.range),
-    };
+      return {
+        severity: toSeverity(diag.severity),
+        code: toCodeText(diag.code, diag.source),
+        msg: typeof diag.message === 'string' ? diag.message.trim() : String(diag.message),
+        file,
+        span: toSpanFromRange(diag.range),
+      };
     });
 };
 
 const attachCodeFrames = (
   program: ReadonlyArray<ParsedFile>,
-  items: ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>>,
+  items: ReadonlyArray<TypecheckItemWithoutFrame>,
 ): ReadonlyArray<TypecheckItem> => {
   const sourceByPath = new Map<string, ReadonlyArray<string>>();
 
@@ -204,22 +200,20 @@ const attachCodeFrames = (
   }
 
   return items.map(item => {
-    if (item.filePath.length === 0) {
+    if (item.file.length === 0) {
       return {
         ...item,
         span: createEmptySpan(),
-        lineText: '',
         codeFrame: '',
       };
     }
 
-    const normalized = normalizePath(item.filePath);
+    const normalized = normalizePath(item.file);
     const lines = sourceByPath.get(normalized);
 
     if (!lines) {
       return {
         ...item,
-        lineText: '',
         codeFrame: '',
       };
     }
@@ -228,24 +222,30 @@ const attachCodeFrames = (
 
     return {
       ...item,
-      lineText: frame.lineText,
       codeFrame: frame.codeFrame,
     };
   });
 };
 
+const toProjectRelative = (rootAbs: string, filePath: string): string => {
+  const rel = path.relative(rootAbs, filePath);
+  const normalized = rel.replaceAll('\\', '/');
+
+  return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
+};
+
 const analyzeTypecheck = async (
   program: ReadonlyArray<ParsedFile>,
   input?: AnalyzeTypecheckInput,
-): Promise<TypecheckAnalysis> => {
+): Promise<ReadonlyArray<TypecheckItem>> => {
   const root = input?.rootAbs ?? process.cwd();
   const logger = input?.logger ?? createNoopLogger();
 
   try {
-    const result = await withTsgoLspSession<ReadonlyArray<Omit<TypecheckItem, 'lineText' | 'codeFrame'>>>(
+    const result = await withTsgoLspSession<ReadonlyArray<TypecheckItemWithoutFrame>>(
       { root, logger },
       async session => {
-        const collected: Array<Omit<TypecheckItem, 'lineText' | 'codeFrame'>> = [];
+        const collected: Array<TypecheckItemWithoutFrame> = [];
         const openUris: string[] = [];
         const seenByUri = new Map<string, ReadonlyArray<LspDiagnostic>>();
         let lastUpdateAt = 0;
@@ -405,43 +405,32 @@ const analyzeTypecheck = async (
     );
 
     if (!result.ok) {
-      return {
-        status: 'unavailable',
-        tool: 'tsgo',
-        exitCode: null,
-        items: [],
-      };
+      throw new Error(`tsgo: ${result.error}`);
     }
 
     const itemsWithFrames = attachCodeFrames(program, result.value);
-    const items = [...itemsWithFrames].sort((left: TypecheckItem, right: TypecheckItem) => {
-      if (left.filePath !== right.filePath) {
-        return left.filePath.localeCompare(right.filePath);
-      }
+    const items = itemsWithFrames
+      .map(item => ({
+        ...item,
+        file: item.file.length > 0 ? toProjectRelative(root, item.file) : item.file,
+      }))
+      .sort((left: TypecheckItem, right: TypecheckItem) => {
+        if (left.file !== right.file) {
+          return left.file.localeCompare(right.file);
+        }
 
-      if (left.span.start.line !== right.span.start.line) {
-        return left.span.start.line - right.span.start.line;
-      }
+        if (left.span.start.line !== right.span.start.line) {
+          return left.span.start.line - right.span.start.line;
+        }
 
-      return left.span.start.column - right.span.start.column;
-    });
+        return left.span.start.column - right.span.start.column;
+      });
 
-    return {
-      status: 'ok',
-      tool: 'tsgo',
-      exitCode: 0,
-      items,
-    };
+    return items;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
-    return {
-      status: 'failed',
-      tool: 'tsgo',
-      exitCode: null,
-      error: errorMessage,
-      items: [],
-    };
+    throw new Error(errorMessage.includes('tsgo') ? errorMessage : `tsgo: ${errorMessage}`);
   }
 };
 

@@ -36,6 +36,7 @@ import { createFirebatProgram } from '../../ts-program';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
+import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
 import { computeInputsDigest } from './inputs-digest';
 import { shouldIncludeNoopEmptyCatch } from './noop-gating';
 import { computeProjectInputsDigest } from './project-inputs-digest';
@@ -103,6 +104,7 @@ interface ScanUseCaseDeps {
 
 const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): Promise<FirebatReport> => {
   const logger = deps.logger;
+  const metaErrors: Record<string, string> = {};
 
   logger.info('Scanning', {
     targetCount: options.targets.length,
@@ -191,7 +193,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
       : {}),
     ...(options.detectors.includes('barrel-policy') ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] } : {}),
-    ...((options.detectors.includes('dependencies') || options.detectors.includes('coupling'))
+    ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
       ? {
           dependenciesLayers: options.dependenciesLayers,
           dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
@@ -235,8 +237,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
 
-  let formatPromise: Promise<FormatResult> | null = null;
-  let lintPromise: Promise<LintResult> | null = null;
+  let formatPromise: Promise<FormatResult | null> | null = null;
+  let lintPromise: Promise<LintResult | null> | null = null;
   const fixTimings: Record<string, number> = {};
 
   if (options.fix) {
@@ -256,8 +258,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             targets: options.targets,
             fix: true,
             cwd: ctx.rootAbs,
+            resolveMode: 'project-only',
             ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
             logger,
+          }).catch(err => {
+            const message = err instanceof Error ? err.message : String(err);
+
+            metaErrors.format = message;
+
+            return null;
           })
         : Promise.resolve(createEmptyFormat()),
       shouldRunLint
@@ -265,8 +274,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             targets: options.targets,
             fix: true,
             cwd: ctx.rootAbs,
+            resolveMode: 'project-only',
             ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
             logger,
+          }).catch(err => {
+            const message = err instanceof Error ? err.message : String(err);
+
+            metaErrors.lint = message;
+
+            return null;
           })
         : Promise.resolve(createEmptyLint()),
     ]);
@@ -297,6 +313,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             targets: options.targets,
             fix: false,
             cwd: ctx.rootAbs,
+            resolveMode: 'project-only',
             ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
             logger,
           }),
@@ -307,6 +324,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           logger.debug('format: complete', { durationMs: Math.round(fixTimings.format) });
 
           return r;
+        })
+        .catch(err => {
+          const message = err instanceof Error ? err.message : String(err);
+
+          metaErrors.format = message;
+
+          fixTimings.format = nowMs() - tFormat0;
+
+          logger.debug('format: failed', { durationMs: Math.round(fixTimings.format), message });
+
+          return null;
         });
     }
 
@@ -321,6 +349,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             targets: options.targets,
             fix: false,
             cwd: ctx.rootAbs,
+            resolveMode: 'project-only',
             ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
             logger,
           }),
@@ -331,6 +360,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           logger.debug('lint: complete', { durationMs: Math.round(fixTimings.lint) });
 
           return r;
+        })
+        .catch(err => {
+          const message = err instanceof Error ? err.message : String(err);
+
+          metaErrors.lint = message;
+
+          fixTimings.lint = nowMs() - tLint0;
+
+          logger.debug('lint: failed', { durationMs: Math.round(fixTimings.lint), message });
+
+          return null;
         });
     }
   }
@@ -420,31 +460,65 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           rootAbs: ctx.rootAbs,
           ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
           logger,
-        }).then(r => {
-          const durationMs = nowMs() - t0;
+        })
+          .then(r => {
+            const durationMs = nowMs() - t0;
 
-          detectorTimings[detectorKey] = durationMs;
+            detectorTimings[detectorKey] = durationMs;
 
-          logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
+            logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
 
-          return r;
-        });
+            return r;
+          })
+          .catch(err => {
+            const durationMs = nowMs() - t0;
+
+            detectorTimings[detectorKey] = durationMs;
+
+            const message = err instanceof Error ? err.message : String(err);
+            metaErrors[detectorKey] = message;
+
+            const partial = (err as any)?.partial;
+            if (Array.isArray(partial)) {
+              return partial as UnknownProofResult;
+            }
+
+            return createEmptyUnknownProof();
+          });
       })()
     : Promise.resolve(createEmptyUnknownProof());
-  const typecheckPromise = options.detectors.includes('typecheck')
-    ? ((): Promise<TypecheckResult> => {
+  const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
+    ? ((): Promise<TypecheckResult | null> => {
         const t0 = nowMs();
         const detectorKey = 'typecheck';
 
         logger.info('detector: start', { detector: detectorKey });
 
-        return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger }).then(r => {
-          detectorTimings.typecheck = nowMs() - t0;
+        return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger })
+          .then(r => {
+            detectorTimings.typecheck = nowMs() - t0;
 
-          logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.typecheck) });
+            logger.debug('detector: complete', {
+              detector: detectorKey,
+              durationMs: Math.round(detectorTimings.typecheck),
+            });
 
-          return r;
-        });
+            return r;
+          })
+          .catch(err => {
+            detectorTimings.typecheck = nowMs() - t0;
+
+            const message = err instanceof Error ? err.message : String(err);
+            metaErrors.typecheck = message.includes('tsgo') ? message : `tsgo: ${message}`;
+
+            logger.debug('detector: failed', {
+              detector: detectorKey,
+              durationMs: Math.round(detectorTimings.typecheck),
+              message: metaErrors.typecheck,
+            });
+
+            return null;
+          });
       })()
     : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
@@ -458,8 +532,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     dependencies = analyzeDependencies(program, {
       rootAbs: ctx.rootAbs,
-      layers: options.dependenciesLayers,
-      allowedDependencies: options.dependenciesAllowedDependencies,
+      ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
+      ...(options.dependenciesAllowedDependencies !== undefined
+        ? { allowedDependencies: options.dependenciesAllowedDependencies }
+        : {}),
     });
     detectorTimings.dependencies = nowMs() - t0;
 
@@ -539,6 +615,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 
   let exceptionHygiene: ReturnType<typeof analyzeExceptionHygiene>;
+  let exceptionHygieneStatus: 'ok' | 'failed' = 'ok';
 
   if (options.detectors.includes('exception-hygiene')) {
     const t0 = nowMs();
@@ -546,7 +623,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    exceptionHygiene = analyzeExceptionHygiene(program);
+    try {
+      exceptionHygiene = analyzeExceptionHygiene(program);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      metaErrors[detectorKey] = message;
+      exceptionHygieneStatus = 'failed';
+      exceptionHygiene = createEmptyExceptionHygiene();
+    }
 
     const durationMs = nowMs() - t0;
 
@@ -559,7 +643,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const includeNoopEmptyCatch = shouldIncludeNoopEmptyCatch({
     exceptionHygieneSelected: options.detectors.includes('exception-hygiene'),
-    exceptionHygieneStatus: exceptionHygiene.status,
+    exceptionHygieneStatus,
   });
   let noop: ReturnType<typeof analyzeNoop>;
 
@@ -572,10 +656,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     noop = analyzeNoop(program);
 
     if (!includeNoopEmptyCatch) {
-      noop = {
-        ...noop,
-        findings: noop.findings.filter(f => f.kind !== 'empty-catch'),
-      };
+      noop = noop.filter(f => f.kind !== 'empty-catch');
     }
 
     detectorTimings.noop = nowMs() - t0;
@@ -631,6 +712,511 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 
   const selectedDetectors = new Set(options.detectors);
+
+  const toProjectRelative = (filePath: string): string => {
+    const rel = path.relative(ctx.rootAbs, filePath);
+    const normalized = rel.replaceAll('\\', '/');
+
+    return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
+  };
+
+  const enrichWaste = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'dead-store': 'WASTE_DEAD_STORE',
+      'dead-store-overwrite': 'WASTE_DEAD_STORE_OVERWRITE',
+      'memory-retention': 'WASTE_MEMORY_RETENTION',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: item?.span,
+        label: item?.label,
+        confidence: item?.confidence,
+      };
+    });
+  };
+
+  const enrichNoop = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'expression-noop': 'NOOP_EXPRESSION',
+      'self-assignment': 'NOOP_SELF_ASSIGNMENT',
+      'constant-condition': 'NOOP_CONSTANT_CONDITION',
+      'empty-catch': 'NOOP_EMPTY_CATCH',
+      'empty-function-body': 'NOOP_EMPTY_FUNCTION_BODY',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: item?.span,
+        confidence: item?.confidence,
+        evidence: item?.evidence,
+      };
+    });
+  };
+
+  const enrichBarrelPolicy = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'export-star': 'BARREL_EXPORT_STAR',
+      'deep-import': 'BARREL_DEEP_IMPORT',
+      'index-deep-import': 'BARREL_INDEX_DEEP_IMPORT',
+      'missing-index': 'BARREL_MISSING_INDEX',
+      'invalid-index-statement': 'BARREL_INVALID_INDEX_STMT',
+      'barrel-side-effect-import': 'BARREL_SIDE_EFFECT_IMPORT',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: item?.span,
+        evidence: item?.evidence,
+      };
+    });
+  };
+
+  const enrichNesting = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'deep-nesting': 'NESTING_DEEP',
+      'high-cognitive-complexity': 'NESTING_HIGH_CC',
+      'accidental-quadratic': 'NESTING_ACCIDENTAL_QUADRATIC',
+      'callback-depth': 'NESTING_CALLBACK_DEPTH',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        ...item,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+      };
+    });
+  };
+
+  const enrichEarlyReturn = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'invertible-if-else': 'EARLY_RETURN_INVERTIBLE',
+      'missing-guard': 'EARLY_RETURN_MISSING_GUARD',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        ...item,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+      };
+    });
+  };
+
+  const enrichExceptionHygiene = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'throw-non-error': 'EH_THROW_NON_ERROR',
+      'async-promise-executor': 'EH_ASYNC_PROMISE_EXECUTOR',
+      'missing-error-cause': 'EH_MISSING_ERROR_CAUSE',
+      'useless-catch': 'EH_USELESS_CATCH',
+      'unsafe-finally': 'EH_UNSAFE_FINALLY',
+      'return-in-finally': 'EH_RETURN_IN_FINALLY',
+      'catch-or-return': 'EH_CATCH_OR_RETURN',
+      'prefer-catch': 'EH_PREFER_CATCH',
+      'prefer-await-to-then': 'EH_PREFER_AWAIT_TO_THEN',
+      'floating-promises': 'EH_FLOATING_PROMISES',
+      'misused-promises': 'EH_MISUSED_PROMISES',
+      'return-await-policy': 'EH_RETURN_AWAIT_POLICY',
+      'silent-catch': 'EH_SILENT_CATCH',
+      'catch-transform-hygiene': 'EH_CATCH_TRANSFORM',
+      'redundant-nested-catch': 'EH_REDUNDANT_NESTED_CATCH',
+      'overscoped-try': 'EH_OVERSCOPED_TRY',
+      'exception-control-flow': 'EH_EXCEPTION_CONTROL_FLOW',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: item?.span,
+        evidence: item?.evidence,
+      };
+    });
+  };
+
+  const enrichUnknownProof = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'type-assertion': 'UNKNOWN_TYPE_ASSERTION',
+      'double-assertion': 'UNKNOWN_DOUBLE_ASSERTION',
+      'unknown-type': 'UNKNOWN_UNNARROWED',
+      'unvalidated-unknown': 'UNKNOWN_UNVALIDATED',
+      'unknown-inferred': 'UNKNOWN_INFERRED',
+      'any-inferred': 'UNKNOWN_ANY_INFERRED',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: item?.span,
+        symbol: item?.symbol,
+        evidence: item?.evidence,
+        typeText: item?.typeText,
+      };
+    });
+  };
+
+  const enrichForwarding = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'thin-wrapper': 'FWD_THIN_WRAPPER',
+      'forward-chain': 'FWD_FORWARD_CHAIN',
+      'cross-file-forwarding-chain': 'FWD_CROSS_FILE_CHAIN',
+    };
+
+    return items.map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: item?.span,
+        header: item?.header,
+        depth: item?.depth,
+        evidence: item?.evidence,
+      };
+    });
+  };
+
+  const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'god-module': 'COUPLING_GOD_MODULE',
+      'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
+      'off-main-sequence': 'COUPLING_OFF_MAIN_SEQ',
+      'unstable-module': 'COUPLING_UNSTABLE',
+      'rigid-module': 'COUPLING_RIGID',
+    };
+
+    const pickKind = (signals: ReadonlyArray<string>): string => {
+      const s = new Set(signals);
+
+      if (s.has('god-module')) {
+        return 'god-module';
+      }
+
+      if (s.has('bidirectional-coupling')) {
+        return 'bidirectional-coupling';
+      }
+
+      if (s.has('off-main-sequence')) {
+        return 'off-main-sequence';
+      }
+
+      if (s.has('unstable-module')) {
+        return 'unstable-module';
+      }
+
+      if (s.has('rigid-module')) {
+        return 'rigid-module';
+      }
+
+      return signals[0] ?? 'coupling';
+    };
+
+    const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
+
+    return items.map(item => {
+      const module = String(item?.module ?? '');
+      const signals = Array.isArray(item?.signals) ? (item.signals as string[]) : [];
+      const kind = pickKind(signals);
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        file: module,
+        span: zeroSpan,
+        module,
+        score: item?.score,
+        signals,
+        metrics: item?.metrics,
+      };
+    });
+  };
+
+  const enrichApiDrift = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
+    const kindToCode: Record<string, string> = { signature: 'API_DRIFT_SIGNATURE' };
+
+    const normalizeShape = (shape: any) => {
+      return {
+        params: Number(shape?.paramsCount ?? shape?.params ?? 0),
+        optionals: Number(shape?.optionalCount ?? shape?.optionals ?? 0),
+        returnKind: String(shape?.returnKind ?? ''),
+        async: Boolean(shape?.async),
+      };
+    };
+
+    return groups.map(group => {
+      const standard = normalizeShape(group?.standardCandidate ?? group?.standard);
+      const outliers = Array.isArray(group?.outliers) ? group.outliers : [];
+
+      return {
+        label: String(group?.label ?? ''),
+        standard,
+        outliers: outliers.map((o: any) => {
+          const filePath = String(o?.filePath ?? o?.file ?? '');
+          const kind = 'signature';
+
+          return {
+            kind,
+            code: kindToCode[kind],
+            file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+            span: o?.span ?? zeroSpan,
+            shape: normalizeShape(o?.shape),
+          };
+        }),
+      };
+    });
+  };
+
+  const enrichDependencies = (value: any) => {
+    const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
+    const toCode = (kind: string): string | undefined => {
+      if (kind === 'layer-violation') {
+        return 'DEP_LAYER_VIOLATION';
+      }
+
+      if (kind === 'dead-export') {
+        return 'DEP_DEAD_EXPORT';
+      }
+
+      if (kind === 'test-only-export') {
+        return 'DEP_TEST_ONLY_EXPORT';
+      }
+
+      return undefined;
+    };
+
+    const deadExports = Array.isArray(value?.deadExports) ? value.deadExports : [];
+    const layerViolations = Array.isArray(value?.layerViolations) ? value.layerViolations : [];
+
+    return {
+      cycles: Array.isArray(value?.cycles) ? value.cycles : [],
+      adjacency: value?.adjacency ?? {},
+      exportStats: value?.exportStats ?? {},
+      fanIn: Array.isArray(value?.fanInTop) ? value.fanInTop : Array.isArray(value?.fanIn) ? value.fanIn : [],
+      fanOut: Array.isArray(value?.fanOutTop) ? value.fanOutTop : Array.isArray(value?.fanOut) ? value.fanOut : [],
+      cuts: Array.isArray(value?.edgeCutHints)
+        ? value.edgeCutHints.map((h: any) => ({ from: h?.from, to: h?.to, score: h?.score }))
+        : Array.isArray(value?.cuts)
+          ? value.cuts
+          : [],
+      layerViolations: layerViolations.map((v: any) => {
+        const kind = String(v?.kind ?? 'layer-violation');
+        const from = String(v?.from ?? '');
+
+        return {
+          kind,
+          code: toCode(kind),
+          file: from,
+          span: zeroSpan,
+          from,
+          to: String(v?.to ?? ''),
+          fromLayer: String(v?.fromLayer ?? ''),
+          toLayer: String(v?.toLayer ?? ''),
+        };
+      }),
+      deadExports: deadExports.map((d: any) => {
+        const kind = String(d?.kind ?? 'dead-export');
+        const module = String(d?.module ?? '');
+
+        return {
+          kind,
+          code: toCode(kind),
+          file: module,
+          span: zeroSpan,
+          module,
+          name: String(d?.exportName ?? d?.name ?? ''),
+        };
+      }),
+    };
+  };
+
+  const enrichExactDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'type-1': 'EXACT_DUP_TYPE_1',
+    };
+
+    return groups.map(group => {
+      const kind = String(group?.cloneType ?? group?.kind ?? '');
+      const items = Array.isArray(group?.items) ? group.items : [];
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        items: items.map((item: any) => {
+          const filePath = String(item?.filePath ?? item?.file ?? '');
+
+          return {
+            kind: item?.kind,
+            header: item?.header,
+            file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+            span: item?.span,
+          };
+        }),
+        ...(group?.suggestedParams !== undefined ? { params: group.suggestedParams } : {}),
+      };
+    });
+  };
+
+  const enrichDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<string, string> = {
+      'type-1': 'EXACT_DUP_TYPE_1',
+      'type-2-shape': 'STRUCT_DUP_TYPE_2_SHAPE',
+      'type-3-normalized': 'STRUCT_DUP_TYPE_3_NORMALIZED',
+    };
+
+    return groups.map(group => {
+      const kind = String(group?.cloneType ?? group?.kind ?? '');
+      const items = Array.isArray(group?.items) ? group.items : [];
+
+      return {
+        kind,
+        code: kindToCode[kind] ?? undefined,
+        items: items.map((item: any) => {
+          const filePath = String(item?.filePath ?? item?.file ?? '');
+
+          return {
+            kind: item?.kind,
+            header: item?.header,
+            file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+            span: item?.span,
+          };
+        }),
+        ...(group?.suggestedParams !== undefined ? { suggestedParams: group.suggestedParams } : {}),
+      };
+    });
+  };
+
+  const computeTopAndCatalog = (input: {
+    readonly analyses: FirebatReport['analyses'];
+    readonly diagnostics: ReturnType<typeof aggregateDiagnostics>;
+  }): { readonly top: FirebatReport['top']; readonly catalog: FirebatReport['catalog'] } => {
+    const excludedDetectorsForTop = new Set(['lint', 'format', 'typecheck']);
+    const counts = new Map<string, { count: number; detector: string }>();
+    const seenCodes = new Set<string>();
+
+    const bump = (code: string, detector: string): void => {
+      seenCodes.add(code);
+      const prev = counts.get(code);
+
+      if (!prev) {
+        counts.set(code, { count: 1, detector });
+        return;
+      }
+
+      counts.set(code, { count: prev.count + 1, detector: prev.detector });
+    };
+
+    for (const [detector, value] of Object.entries(input.analyses)) {
+      if (excludedDetectorsForTop.has(detector)) {
+        continue;
+      }
+
+      if (!Array.isArray(value)) {
+        continue;
+      }
+
+      for (const item of value as ReadonlyArray<any>) {
+        const code = item?.code;
+        if (typeof code === 'string' && code.length > 0) {
+          bump(code, detector);
+        }
+
+        const outliers = item?.outliers;
+        if (Array.isArray(outliers)) {
+          for (const outlier of outliers) {
+            const outlierCode = (outlier as any)?.code;
+            if (typeof outlierCode === 'string' && outlierCode.length > 0) {
+              bump(outlierCode, detector);
+            }
+          }
+        }
+      }
+    }
+
+    const topFromFrequency = [...counts.entries()]
+      .map(([pattern, info]) => ({ pattern, detector: info.detector, resolves: info.count }))
+      .sort((a, b) => b.resolves - a.resolves || a.pattern.localeCompare(b.pattern));
+
+    const top = [...topFromFrequency, ...input.diagnostics.top].sort(
+      (a, b) => b.resolves - a.resolves || a.pattern.localeCompare(b.pattern),
+    );
+
+    const catalog: Record<string, any> = { ...input.diagnostics.catalog };
+
+    for (const code of seenCodes) {
+      const entry = (FIREBAT_CODE_CATALOG as any)[code];
+      if (entry !== undefined) {
+        catalog[code] = entry;
+      }
+    }
+
+    return { top, catalog };
+  };
+
+  const analyses: FirebatReport['analyses'] = {
+    ...(selectedDetectors.has('exact-duplicates')
+      ? { 'exact-duplicates': enrichExactDuplicateGroups(exactDuplicates as any) }
+      : {}),
+    ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste) } : {}),
+    ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': enrichBarrelPolicy(barrelPolicy as any) } : {}),
+    ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof as any) } : {}),
+    ...(selectedDetectors.has('exception-hygiene')
+      ? { 'exception-hygiene': enrichExceptionHygiene(exceptionHygiene as any) }
+      : {}),
+    ...(selectedDetectors.has('format') && format !== null ? { format: format } : {}),
+    ...(selectedDetectors.has('lint') && lint !== null ? { lint: lint } : {}),
+    ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: typecheck } : {}),
+    ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies as any) } : {}),
+    ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling as any) } : {}),
+    ...(selectedDetectors.has('structural-duplicates')
+      ? { 'structural-duplicates': enrichDuplicateGroups(structuralDuplicates as any) }
+      : {}),
+    ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
+    ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
+    ...(selectedDetectors.has('noop') ? { noop: enrichNoop(noop as any) } : {}),
+    ...(selectedDetectors.has('api-drift') ? { 'api-drift': enrichApiDrift(apiDrift as any) } : {}),
+    ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
+  };
+
+  const diagnostics = aggregateDiagnostics({ analyses: analyses as any });
+  const topAndCatalog = computeTopAndCatalog({ analyses, diagnostics });
+
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',
@@ -639,25 +1225,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       maxForwardDepth: options.maxForwardDepth,
       detectors: options.detectors,
       detectorTimings: { ...detectorTimings, ...fixTimings },
+      ...(Object.keys(metaErrors).length > 0 ? { errors: metaErrors } : {}),
     },
-    analyses: {
-      ...(selectedDetectors.has('exact-duplicates') ? { 'exact-duplicates': exactDuplicates } : {}),
-      ...(selectedDetectors.has('waste') ? { waste: waste } : {}),
-      ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': barrelPolicy } : {}),
-      ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': unknownProof } : {}),
-      ...(selectedDetectors.has('exception-hygiene') ? { 'exception-hygiene': exceptionHygiene } : {}),
-      ...(selectedDetectors.has('format') ? { format: format } : {}),
-      ...(selectedDetectors.has('lint') ? { lint: lint } : {}),
-      ...(selectedDetectors.has('typecheck') ? { typecheck: typecheck } : {}),
-      ...(selectedDetectors.has('dependencies') ? { dependencies: dependencies } : {}),
-      ...(selectedDetectors.has('coupling') ? { coupling: coupling } : {}),
-      ...(selectedDetectors.has('structural-duplicates') ? { 'structural-duplicates': structuralDuplicates } : {}),
-      ...(selectedDetectors.has('nesting') ? { nesting: nesting } : {}),
-      ...(selectedDetectors.has('early-return') ? { 'early-return': earlyReturn } : {}),
-      ...(selectedDetectors.has('noop') ? { noop: noop } : {}),
-      ...(selectedDetectors.has('api-drift') ? { 'api-drift': apiDrift } : {}),
-      ...(selectedDetectors.has('forwarding') ? { forwarding: forwarding } : {}),
-    },
+    analyses,
+    top: topAndCatalog.top,
+    catalog: topAndCatalog.catalog,
   };
 
   if (allowCache) {

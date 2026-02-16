@@ -15,7 +15,7 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.some(f => f.kind === 'missing-index')).toBe(true);
+    expect(analysis.some(f => f.kind === 'missing-index')).toBe(true);
   });
 
   it('should report export-star when export * is used', async () => {
@@ -31,7 +31,7 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.some(f => f.kind === 'export-star')).toBe(true);
+    expect(analysis.some(f => f.kind === 'export-star')).toBe(true);
   });
 
   it('should report deep-import when importing a file from another directory', async () => {
@@ -51,7 +51,7 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.some(f => f.kind === 'deep-import')).toBe(true);
+    expect(analysis.some(f => f.kind === 'deep-import')).toBe(true);
   });
 
   it('should report index-deep-import when importing /index explicitly from another directory', async () => {
@@ -71,7 +71,7 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.some(f => f.kind === 'index-deep-import')).toBe(true);
+    expect(analysis.some(f => f.kind === 'index-deep-import')).toBe(true);
   });
 
   it('should report invalid-index-statement when index.ts contains imports/statements', async () => {
@@ -86,7 +86,7 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.some(f => f.kind === 'invalid-index-statement')).toBe(true);
+    expect(analysis.some(f => f.kind === 'invalid-index-statement')).toBe(true);
   });
 
   it("should report barrel-side-effect-import when index.ts contains side-effect imports", async () => {
@@ -102,7 +102,7 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.some(f => f.kind === 'barrel-side-effect-import')).toBe(true);
+    expect(analysis.some(f => f.kind === 'barrel-side-effect-import')).toBe(true);
   });
 
   it('should ignore dist/** by default', async () => {
@@ -117,6 +117,6 @@ describe('integration/barrel-policy', () => {
     let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
 
     // Assert
-    expect(analysis.findings.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 });

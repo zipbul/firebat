@@ -1,14 +1,10 @@
 import type { FirebatLogger } from '../../ports/logger';
-import type { LintAnalysis } from '../../types';
+import type { LintDiagnostic } from '../../types';
 
 import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
 import { createNoopLogger } from '../../ports/logger';
 
-const createEmptyLint = (): LintAnalysis => ({
-  status: 'ok',
-  tool: 'oxlint',
-  diagnostics: [],
-});
+const createEmptyLint = (): ReadonlyArray<LintDiagnostic> => [];
 
 const normalizeSeverity = (severity: 'error' | 'warning' | 'info'): 'error' | null => {
   if (severity === 'info') {
@@ -27,7 +23,7 @@ interface AnalyzeLintInput {
   readonly logger?: FirebatLogger;
 }
 
-export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis> => {
+export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArray<LintDiagnostic>> => {
   const logger = input.logger ?? createNoopLogger();
   const result = await runOxlint({
     targets: input.targets,
@@ -38,7 +34,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
     logger,
   });
 
-  const normalizedDiagnostics = (result.diagnostics ?? [])
+  const normalizedDiagnostics: ReadonlyArray<LintDiagnostic> = (result.diagnostics ?? [])
     .map(d => {
       const nextSeverity = normalizeSeverity(d.severity);
 
@@ -47,31 +43,26 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<LintAnalysis
       }
 
       return {
-        ...d,
+        file: d.filePath,
+        msg: d.message,
+        ...(typeof d.code === 'string' ? { code: d.code } : {}),
         severity: nextSeverity,
-      };
+        span: d.span,
+      } satisfies LintDiagnostic;
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 
   if (!result.ok) {
     const error = result.error ?? 'oxlint failed';
-    const status = error.includes('not available') ? 'unavailable' : 'failed';
 
-    return {
-      status,
-      tool: 'oxlint',
-      ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-      error,
-      diagnostics: normalizedDiagnostics,
-    };
+    throw new Error(error);
   }
 
-  return {
-    status: 'ok',
-    tool: 'oxlint',
-    ...(typeof result.exitCode === 'number' ? { exitCode: result.exitCode } : {}),
-    diagnostics: normalizedDiagnostics,
-  };
+  if (input.fix) {
+    return [];
+  }
+
+  return normalizedDiagnostics;
 };
 
 export { createEmptyLint };

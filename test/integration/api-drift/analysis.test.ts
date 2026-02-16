@@ -32,10 +32,10 @@ describe('integration/api-drift', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = await analyzeApiDrift(program);
+    const groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should not report drift when function names are unique', async () => {
@@ -47,10 +47,10 @@ describe('integration/api-drift', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should return no findings when input is empty', async () => {
@@ -58,10 +58,10 @@ describe('integration/api-drift', () => {
     let sources = new Map<string, string>();
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should detect drift within the same file when the same function name has different shapes', async () => {
@@ -90,11 +90,11 @@ describe('integration/api-drift', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(1);
-    expect(analysis.groups[0]?.outliers.length).toBeGreaterThan(0);
+    expect(groups.length).toBe(1);
+    expect(groups[0]?.outliers.length).toBeGreaterThan(0);
   });
 
   it('should avoid drift when arrow bodies return a value expression', async () => {
@@ -106,10 +106,10 @@ describe('integration/api-drift', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should avoid drift when arrow bodies return an object literal expression', async () => {
@@ -121,10 +121,10 @@ describe('integration/api-drift', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should avoid drift when arrow bodies return a void expression explicitly', async () => {
@@ -136,10 +136,10 @@ describe('integration/api-drift', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should ignore nested function return statements when building return kind', async () => {
@@ -154,10 +154,10 @@ describe('integration/api-drift', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeApiDrift(program);
+    let groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(0);
+    expect(groups.length).toBe(0);
   });
 
   it('should detect drift across files for the same class method name', async () => {
@@ -177,11 +177,11 @@ describe('integration/api-drift', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = await analyzeApiDrift(program);
+    const groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(1);
-    expect(analysis.groups[0]?.label).toContain('MyService.get');
+    expect(groups.length).toBe(1);
+    expect(groups[0]?.label).toContain('MyService.get');
   });
 
   it('should group prefix families only when the prefix appears at least 3 times', async () => {
@@ -194,12 +194,12 @@ describe('integration/api-drift', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const analysis = await analyzeApiDrift(program);
+    const groups = await analyzeApiDrift(program);
 
     // Assert
-    expect(analysis.groups.length).toBe(1);
-    expect(analysis.groups[0]?.label).toContain('prefix:create');
-    expect(analysis.groups[0]?.outliers.length).toBe(1);
+    expect(groups.length).toBe(1);
+    expect(groups[0]?.label).toContain('prefix:create');
+    expect(groups[0]?.outliers.length).toBe(1);
   });
 
   it('should compare interface implementers when tsgo is available', async () => {
@@ -250,10 +250,9 @@ describe('integration/api-drift', () => {
 
     const program = [parseSource(onePath, await Bun.file(onePath).text()), parseSource(twoPath, await Bun.file(twoPath).text())];
     // Act
-    const analysis = await analyzeApiDrift(program, { rootAbs, tsconfigPath });
+    const groups = await analyzeApiDrift(program, { rootAbs, tsconfigPath });
     // Assert
     // If tsgo is unavailable in the environment, the detector should degrade gracefully.
-    const groups = analysis.groups;
     const hasInterfaceGroup = groups.some(group => group.label.includes('IService.get'));
 
     expect(hasInterfaceGroup || groups.length === 0).toBe(true);

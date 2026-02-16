@@ -130,14 +130,13 @@ const countBlockingFindings = (report: FirebatReport): number => {
     'exception-hygiene': exceptionHygiene,
     'barrel-policy': barrelPolicy,
   } = analyses;
-  const typecheckErrors = analyses.typecheck?.items?.filter(item => item.severity === 'error').length ?? 0;
-  const forwardingFindings = analyses.forwarding?.findings?.length ?? 0;
-  const lintErrors = analyses.lint?.diagnostics?.filter(item => item.severity === 'error').length ?? 0;
-  const unknownProofFindings = unknownProof?.findings?.length ?? 0;
-  const exceptionHygieneFindings = exceptionHygiene?.findings?.length ?? 0;
-  const formatStatus = analyses.format?.status;
-  const formatFindings = formatStatus === 'needs-formatting' || formatStatus === 'failed' ? 1 : 0;
-  const barrelPolicyFindings = barrelPolicy?.findings?.length ?? 0;
+  const typecheckErrors = analyses.typecheck?.filter(item => item.severity === 'error').length ?? 0;
+  const forwardingFindings = analyses.forwarding?.length ?? 0;
+  const lintErrors = analyses.lint?.filter(item => item.severity === 'error').length ?? 0;
+  const unknownProofFindings = unknownProof?.length ?? 0;
+  const exceptionHygieneFindings = exceptionHygiene?.length ?? 0;
+  const formatFindings = analyses.format?.length ?? 0;
+  const barrelPolicyFindings = barrelPolicy?.length ?? 0;
 
   return (
     (exactDuplicates?.length ?? 0) +

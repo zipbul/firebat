@@ -33,8 +33,8 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let hasExpressionNoop = analysis.findings.some(finding => finding.kind === 'expression-noop');
-    let hasConstantCondition = analysis.findings.some(finding => finding.kind === 'constant-condition');
+    let hasExpressionNoop = analysis.some(finding => finding.kind === 'expression-noop');
+    let hasConstantCondition = analysis.some(finding => finding.kind === 'constant-condition');
 
     // Assert
     expect(hasExpressionNoop).toBe(true);
@@ -52,7 +52,7 @@ describe('integration/noop', () => {
     let analysis = analyzeNoop(program);
 
     // Assert
-    expect(analysis.findings.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should return no findings when input is empty', () => {
@@ -63,7 +63,7 @@ describe('integration/noop', () => {
     let analysis = analyzeNoop(program);
 
     // Assert
-    expect(analysis.findings.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should report expression noops when objects and arrays are unused', () => {
@@ -75,7 +75,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let expressionNoops = analysis.findings.filter(finding => finding.kind === 'expression-noop');
+    let expressionNoops = analysis.filter(finding => finding.kind === 'expression-noop');
 
     // Assert
     expect(expressionNoops.length).toBeGreaterThanOrEqual(1);
@@ -98,7 +98,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let emptyCatches = analysis.findings.filter(finding => finding.kind === 'empty-catch');
+    let emptyCatches = analysis.filter(finding => finding.kind === 'empty-catch');
 
     // Assert
     expect(emptyCatches.length).toBe(1);
@@ -115,7 +115,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let selfAssigns = analysis.findings.filter(finding => finding.kind === 'self-assignment');
+    let selfAssigns = analysis.filter(finding => finding.kind === 'self-assignment');
 
     // Assert
     expect(selfAssigns.length).toBe(1);
@@ -139,7 +139,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let selfAssigns = analysis.findings.filter(finding => finding.kind === 'self-assignment');
+    let selfAssigns = analysis.filter(finding => finding.kind === 'self-assignment');
 
     // Assert
     expect(selfAssigns.length).toBe(2);
@@ -171,7 +171,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let constantConditions = analysis.findings.filter(finding => finding.kind === 'constant-condition');
+    let constantConditions = analysis.filter(finding => finding.kind === 'constant-condition');
 
     // Assert
     expect(constantConditions.length).toBe(4);
@@ -187,7 +187,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let constantConditions = analysis.findings.filter(finding => finding.kind === 'constant-condition');
+    let constantConditions = analysis.filter(finding => finding.kind === 'constant-condition');
 
     // Assert
     expect(constantConditions.length).toBe(0);
@@ -203,7 +203,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let emptyBodies = analysis.findings.filter(finding => finding.kind === 'empty-function-body');
+    let emptyBodies = analysis.filter(finding => finding.kind === 'empty-function-body');
 
     // Assert
     expect(emptyBodies.length).toBeGreaterThanOrEqual(1);
@@ -228,7 +228,7 @@ describe('integration/noop', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeNoop(program);
-    let emptyCatches = analysis.findings.filter(finding => finding.kind === 'empty-catch');
+    let emptyCatches = analysis.filter(finding => finding.kind === 'empty-catch');
 
     // Assert
     expect(emptyCatches.length).toBe(0);
