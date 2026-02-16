@@ -116,7 +116,7 @@ interface FirebatAnalyses {
   'unknown-proof':          ReadonlyArray<UnknownProofFinding>;
   'exception-hygiene':      ReadonlyArray<ExceptionHygieneFinding>;
   lint:                     ReadonlyArray<LintDiagnostic>;
-  typecheck:                ReadonlyArray<TypecheckItem>;
+  typecheck:                ReadonlyArray<TypecheckItem>;  // ⚠ TypecheckItem.code는 TS 에러 코드(e.g., 'TS2322')이며 BaseFinding.code?(catalog 키)와 다른 의미. enrichment 대상에서 제외.
   nesting:                  ReadonlyArray<NestingItem>;
   'early-return':           ReadonlyArray<EarlyReturnItem>;
   noop:                     ReadonlyArray<NoopFinding>;
@@ -358,17 +358,17 @@ DiagnosticAggregator는 개별 finding을 넘어서 **구조적 패턴**을 탐�
 | `DIAG_GOD_FUNCTION` | 같은 함수에서 nesting + waste (또는 C-2 responsibility-boundary) 동시 발생 | 0 |
 | `DIAG_DATA_CLUMP` | 동일 파라미터 조합이 3개 이상 함수에서 반복 (C-3 필요) | 2+ |
 | `DIAG_SHOTGUN_SURGERY` | 동일 개념이 4개 이상 파일에 분산 | 1+ |
-| `DIAG_OVER_INDIRECTION` | forwarding chain + single-impl interface | 1+ |
+| `DIAG_OVER_INDIRECTION` | forwarding chain + single-impl interface (※ single-impl 탐지: dependencies의 export/import 분석으로 인터페이스 export 대비 구현 import 수를 계산. 별도 디텍터 불필요 — dependencies adjacency + symbol-extractor-oxc로 구현) | 1+ |
 | `DIAG_MIXED_ABSTRACTION` | 같은 함수 내 nesting depth 차이 > 2 | 1+ |
-| `DIAG_CIRCULAR_DEPENDENCY` | dependencies.cycle 직접 승격 | 0 |
+| `DIAG_CIRCULAR_DEPENDENCY` | dependencies.cycles 직접 승격 | 0 |
 | `DIAG_GOD_MODULE` | coupling.god-module 직접 승격 | 0 |
 
 **패턴 catalog 예시**:
 ```json
 {
   "DIAG_GOD_FUNCTION": {
-    "cause": "하나의 함수가 여러 독립적인 책임을 수행하여 nesting, waste, coupling finding이 동시에 발생",
-    "approach": "이 함수가 몇 개의 독립적인 관심사를 다루는지 파악하라. 변수 간 의존 관계를 분석하여 서로 독립적인 블록이 있는지 확인하라. 독립 블록이 있다면 각각 별도 함수로 추출할 수 있는지, 아니면 더 상위의 모듈 구조 변경이 필요한지 판단하라"
+    "cause": "A single function triggers multiple finding types simultaneously (nesting + waste, or responsibility-boundary), indicating it handles multiple independent concerns.",
+    "approach": "Determine how many independent concerns this function handles by examining variable clusters. If variables form distinct groups that do not interact, each group likely represents a separable concern. Individual findings (nesting, waste) are symptoms — the root cause is responsibility overload."
   }
 }
 ```
@@ -1870,7 +1870,7 @@ PLAN.md의 Tier A-C 디텍터(giant-file, export-kind-mix, scatter-of-exports �
 
 ## 12. 실행 우선순위
 
-> **용어 구분**: 이 섹션의 "Phase 0-6"은 **개발 로드맵 단계**를 의미한다. Section 1.1의 "Stage 0-5"는 `scan.usecase.ts`의 **런타임 실행 단계**이며 별개의 개념이다.
+> **용어 구분**: 이 섹션의 "Phase 0-3"은 **개발 로드맵 단계**를 의미한다. Section 1.1의 "Stage 0-5"는 `scan.usecase.ts`의 **런타임 실행 단계**이며 별개의 개념이다.
 
 ### Phase별 완료 조건 (DoD)
 
@@ -1878,25 +1878,19 @@ PLAN.md의 Tier A-C 디텍터(giant-file, export-kind-mix, scatter-of-exports �
 
 | Phase | 완료 조건 |
 |-------|----------|
-| **0 (기반)** | (1) `*Analysis` 래퍼 제거, 모든 디텍터가 bare array 반환 (2) `filePath`→`file` 일괄 적용 (3) kind 미존재 디텍터에 kind 부여 완료 (4) 삭제/축약 대상 프로퍼티 정리 완료 (5) kind→code 매핑 로직 동작, 모든 finding에 code 필드 존재 (6) DiagnosticAggregator가 `top` + `catalog` 생성, 3개 패턴(DIAG_GOD_FUNCTION, DIAG_CIRCULAR_DEPENDENCY, DIAG_GOD_MODULE) 매칭 (7) catalog 전수 작성 완료 (8) 기존 테스트 전량 통과 (9) breaking change이므로 MCP 도구 설명 업데이트 |
-| **1 (가시화)** | (1) B-I-1~3, B-IV-1 디텍터 각각 true-positive 5개 이상 integration test (2) precision ≥ 0.8 (OSS 2개 프로젝트 — 소/중 또는 중/대 규모) (3) scan 전체 시간 증가 ≤ 15% |
+| **0 (기반)** | (1) `*Analysis` 래퍼 제거, 모든 디텍터가 bare array 반환 (2) `filePath`→`file` 일괄 적용 (3) kind 미존재 디텍터에 kind 부여 완료 (4) 삭제/축약 대상 프로퍼티 정리 완료 (5) kind→code 매핑 로직 동작, 모든 finding에 code 필드 존재 (6) DiagnosticAggregator가 `top` + `catalog` 생성, 3개 패턴(DIAG_GOD_FUNCTION, DIAG_CIRCULAR_DEPENDENCY, DIAG_GOD_MODULE) 매칭 (7) **Phase 0 필수 catalog 완료**: Phase 0 가용 디텍터(기존 16개)의 code에 대한 catalog entry 전수 작성. Phase 1+ 신규 디텍터(B/C 시리즈)의 catalog entry는 해당 Phase에서 디텍터와 함께 추가 (8) 기존 테스트 전량 통과 (9) breaking change이므로 MCP 도구 설명 업데이트 |
+| **1 (에이전트 실패 모드)** | (1) B 시리즈 디텍터(B-I-1~3, B-II-1~2, B-III-1~3, B-IV-1~3) 각각 true-positive 5개 이상 integration test (2) precision ≥ 0.8 (OSS 2개 프로젝트 — 소/중 또는 중/대 규모) (3) scan 전체 시간 증가 ≤ 15% (4) assess-impact MCP 도구 호출당 ≤ 500ms |
 | **2 (클린코드)** | (1) C-1~7 디텍터 각각 integration test (2) 기존 디텍터 합계 대비 AST 순회 추가 시간 ≤ 20% |
-| **3 (에이전트 실패 예측 확장)** | (1) B-IV-2~3 디텍터 integration test (2) precision ≥ 0.8 (OSS 2개 프로젝트) (3) assess-impact MCP 도구 호출당 ≤ 500ms |
-| **4 (컨텍스트)** | (1) B-II-1~2 디텍터 integration test |
-| **5 (엔트로피)** | (1) B-III-1~3 디텍터 integration test |
-| **6 (개선)** | (1) 변경 대상 디텍터의 기존 테스트 전량 통과 (2) 성능 회귀 없음 (3) 워처 통합 시: MCP zero-change scan <1ms, CLI+bunner scan <5ms |
+| **3 (기존 개선)** | (1) 변경 대상 디텍터의 기존 테스트 전량 통과 (2) 성능 회귀 없음 (3) 워처 통합 시: MCP zero-change scan <1ms, CLI+bunner scan <5ms |
 
 ### Phase 의존 그래프
 
 ```
 Phase 0 (기반)          ← 모든 후속 Phase의 전제
   │
-  ├──→ Phase 1 (가시화)      ← 독립 구현 가능
-  ├──→ Phase 2 (클린코드 위생) ← 독립 구현 가능, Phase 1과 병렬 가능
-  ├──→ Phase 3 (실패 예측 확장) ← Phase 1의 결과를 확장하므로 후행
-  ├──→ Phase 4 (컨텍스트 비용) ← 독립 구현 가능, Phase 1과 병렬 가능
-  ├──→ Phase 5 (구조 엔트로피) ← 독립 구현 가능
-  └──→ Phase 6 (기존 개선)    ← 어느 Phase에서든 병렬 가능
+  ├──→ Phase 1 (에이전트 실패 모드) ← B 시리즈 전체. Phase 0 직후
+  ├──→ Phase 2 (클린코드 위생)      ← C 시리즈 전체. Phase 1과 병렬 가능
+  └──→ Phase 3 (기존 개선 + 성능)   ← 어느 Phase에서든 병렬 가능
 ```
 
 ### Phase 계획
@@ -1910,17 +1904,17 @@ Phase 0 — 기반 (출력 스키마 전환)
   │ bare array (변환 불필요):                                       │
   │   exact-duplicates, waste                                      │
   │                                                                │
-  │ { items/findings/groups } 래퍼 (배열 추출만):                   │
+  │ { items/findings/groups/hotspots/cloneClasses } 래퍼           │
+  │ (배열 추출만):                                                  │
   │   nesting, early-return, noop, barrel-policy, forwarding,      │
-  │   api-drift                                                    │
+  │   api-drift, coupling, structural-duplicates                   │
   │                                                                │
   │ { status, tool, error?, findings/items/diagnostics } 래퍼     │
   │ (배열 추출 + status/tool/error → meta.errors 이동):            │
   │   exception-hygiene, unknown-proof, lint, typecheck, format    │
   │                                                                │
-  │ 복합 구조 (개별 처리):                                          │
-  │   coupling={hotspots}, structural-duplicates={cloneClasses},   │
-  │   dependencies (유일한 복합 객체 — 유지)                        │
+  │ 복합 객체 유지:                                                 │
+  │   dependencies (유일한 예외)                                    │
   └─────────────────────────────────────────────────────────────────┘
 
   Step 1. `*Analysis` 래퍼 제거
@@ -1961,13 +1955,15 @@ Phase 0 — 기반 (출력 스키마 전환)
 
 **NestingItem → kind 추가**:
 ```typescript
-type NestingKind = 'deep-nesting' | 'high-cognitive-complexity' | 'accidental-quadratic';
+type NestingKind = 'deep-nesting' | 'high-cognitive-complexity' | 'accidental-quadratic' | 'callback-depth';
 ```
 판정 규칙:
 - `metrics.accidentalQuadraticTargets.length > 0` → `'accidental-quadratic'`
 - `metrics.cognitiveComplexity >= 15` → `'high-cognitive-complexity'`
+- `metrics.callbackDepth >= 3` → `'callback-depth'`
 - 그 외 (depth 기반) → `'deep-nesting'`
-- 우선순위: accidental-quadratic > high-cognitive-complexity > deep-nesting (첫 매칭)
+- 우선순위: accidental-quadratic > high-cognitive-complexity > callback-depth > deep-nesting (첫 매칭)
+- **참고**: 현재 `NestingMetrics`에 `callbackDepth` 필드가 없다. Step 2에서 `suggestions` 삭제 시 callback-depth 정보가 소실되므로, `NestingMetrics`에 `readonly callbackDepth: number` 필드를 추가하고 analyzer에서 `measureMaxCallbackDepth` 결과를 저장해야 한다.
 
 **EarlyReturnItem → kind 추가**:
 ```typescript
@@ -1996,6 +1992,7 @@ type ApiDriftKind = 'signature-drift';
 **exact-duplicates / structural-duplicates**:
 - `cloneType` 필드가 kind 역할을 한다. `cloneType`을 `kind`로 rename한다.
 - 실제 code 매핑에서는 `kind` 값을 그대로 사용: `type-1` → `EXACT_DUP_TYPE_1`, `type-2-shape` → `STRUCT_DUP_TYPE_2_SHAPE`, `type-3-normalized` → `STRUCT_DUP_TYPE_3_NORMALIZED`.
+- **`type-2` 정리**: 현재 `DuplicateCloneType` union에 `'type-2'`가 포함되어 있으나, 어떤 디텍터도 이 값으로 `detectClones`를 호출하지 않는다 (exact-duplicates는 `type-1`, structural-duplicates는 `type-2-shape` + `type-3-normalized` 사용). `cloneType`→`kind` rename 시 `type-2`를 union에서 제거한다.
 
 #### B. kind → code 완전 매핑 테이블
 
@@ -2085,13 +2082,14 @@ code 명명 규칙: `{DETECTOR}_{KIND}` (대문자, 하이픈→언더스코어)
 
 > dependencies의 `cycles`, `fanInTop`, `fanOutTop`, `edgeCutHints`는 finding이 아닌 분석 데이터이므로 code 매핑 대상이 아니다. 단, DiagnosticAggregator가 `cycles`를 `DIAG_CIRCULAR_DEPENDENCY`로 승격한다.
 
-##### nesting (3개, 신규 kind)
+##### nesting (4개, 신규 kind)
 
 | kind | code |
 |------|------|
 | `deep-nesting` | `NESTING_DEEP` |
 | `high-cognitive-complexity` | `NESTING_HIGH_CC` |
 | `accidental-quadratic` | `NESTING_ACCIDENTAL_QUADRATIC` |
+| `callback-depth` | `NESTING_CALLBACK_DEPTH` |
 
 ##### early-return (2개, 신규 kind)
 
@@ -2136,7 +2134,7 @@ code 명명 규칙: `{DETECTOR}_{KIND}` (대문자, 하이픈→언더스코어)
 | `DIAG_GOD_FUNCTION` | 같은 함수에서 nesting(CC≥15) + waste 동시 발생 |
 | `DIAG_DATA_CLUMP` | C-3(Parameter Object) finding 존재 시 승격 (Phase 2+) |
 | `DIAG_SHOTGUN_SURGERY` | 동일 개념이 4개 이상 파일에 분산 (Phase 1+) |
-| `DIAG_OVER_INDIRECTION` | forwarding chain + single-impl interface (Phase 1+) |
+| `DIAG_OVER_INDIRECTION` | forwarding chain + single-impl interface (Phase 1+). single-impl 탐지: dependencies adjacency + symbol-extractor-oxc로 인터페이스당 구현 수 계산 |
 | `DIAG_MIXED_ABSTRACTION` | 같은 함수 내 nesting depth 차이 > 2 (Phase 1+) |
 | `DIAG_CIRCULAR_DEPENDENCY` | `dependencies.cycles` 직접 승격 |
 | `DIAG_GOD_MODULE` | `coupling` god-module signal 직접 승격 |
@@ -2387,6 +2385,10 @@ code 명명 규칙: `{DETECTOR}_{KIND}` (대문자, 하이픈→언더스코어)
   "NESTING_ACCIDENTAL_QUADRATIC": {
     "cause": "A nested loop or iteration pattern creates O(n²) complexity that may not be intentional.",
     "approach": "Determine whether the quadratic behavior is inherent to the problem or accidental. Common accidental patterns: array.includes() inside a loop (use a Set), nested find/filter, repeated linear scans. If quadratic is inherent, document the expected input size and why it is acceptable."
+  },
+  "NESTING_CALLBACK_DEPTH": {
+    "cause": "A function contains deeply nested callback chains (depth ≥ 3), making control flow hard to follow and error handling fragile.",
+    "approach": "Determine whether the nesting reflects genuine sequential async steps or structural accumulation. If callbacks are chained for sequencing, async/await flattens the structure. If callbacks are nested for event handling, consider extracting each level into a named function to make the flow explicit."
   }
 }
 ```
@@ -2516,17 +2518,35 @@ code 명명 규칙: `{DETECTOR}_{KIND}` (대문자, 하이픈→언더스코어)
     └── 의존: Step 6 (DiagnosticAggregator 출력이 있어야 렌더링 가능)
     └── 검증: 리포트 출력에 top, catalog 섹션 포함 확인
 
-Phase 1 — 보이지 않는 것을 가시화 (최고 우선, Phase 0 직후)
-  ★ Temporal Coupling (B-I-1) — 에이전트가 절대 스스로 발견 못하는 정보
-    └── 엔진: 모듈 레벨 AST 순회 + variable-collector (함수별 read/write 추적)
-  ★ Implicit State Protocol (B-I-2) — import 그래프에 없는 결합
-    └── 엔진: AST traversal (process.env, module-scope let, singleton, event string)
-  ★ Symmetry Breaking (B-I-3) — 에이전트가 가정하고 깨지는 패턴
-    └── config 기반 그룹 정의 + 자동 탐지 하이브리드
-  ★ Invariant Blindspot (B-IV-1) — 타입에 없는 런타임 제약
-    └── 엔진: AST (assert/throw 조건, 주석 패턴)
+Phase 1 — 에이전트 실패 모드 (B 시리즈 전체, Phase 0 직후)
+  내부 우선순위: 서브그룹 A → B → C 순 (단, 독립 구현 가능하므로 순서 강제 아님)
 
-Phase 2 — 클린코드 위생 (Phase 0 직후, Phase 1과 병렬 가능)
+  서브그룹 A — 가시화 + 불변 조건 (에이전트가 절대 못 발견하는 것):
+    ★ Temporal Coupling (B-I-1)
+      └── 엔진: 모듈 레벨 AST 순회 + variable-collector (함수별 read/write 추적)
+    ★ Implicit State Protocol (B-I-2)
+      └── 엔진: AST traversal (process.env, module-scope let, singleton, event string)
+    ★ Symmetry Breaking (B-I-3)
+      └── config 기반 그룹 정의 + 자동 탐지 하이브리드
+    ★ Invariant Blindspot (B-IV-1)
+      └── 엔진: AST (assert/throw 조건, 주석 패턴)
+
+  서브그룹 B — 실패 예측:
+    ★ Modification Trap (B-IV-2) — 수정 함정 예측
+    ★ Modification Impact Radius (B-IV-3) — 수정 영향 반경
+      └── scan 디텍터 + MCP assess-impact 도구 이중 제공
+    □ giant-file (PLAN A1) → DIAG_GOD_FUNCTION 패턴 입력으로 구현
+
+  서브그룹 C — 정량 측정:
+    ★ Variable Lifetime (B-II-1) — 변수 수명 = 컨텍스트 유지 비용
+      └── 엔진: reaching-definitions 모듈 (Phase 0에서 추출) + CFG builder
+    ★ Decision Surface (B-II-2) — 독립 결정 축 → 조합 폭발
+      └── 엔진: AST 조건식 변수 집합 추출
+    ★ Implementation Overhead Ratio (B-III-1) — 인터페이스/구현 복잡도 비율
+    ★ Concept Scatter Index (B-III-2) — 도메인 개념 산재도
+    ★ Abstraction Fitness (B-III-3) — 모듈 경계 적합도
+
+Phase 2 — 클린코드 위생 (C 시리즈 전체, Phase 0 직후, Phase 1과 병렬 가능)
   ★ Dead Code Detection (C-1) — unreachable code, unused internal functions
     └── 엔진: CFG builder (unreachable block), AST (비export 함수 참조 카운트)
   ★ Responsibility Boundary (C-2) — 변수 클러스터링 기반 직접 SRP 탐지
@@ -2539,34 +2559,33 @@ Phase 2 — 클린코드 위생 (Phase 0 직후, Phase 1과 병렬 가능)
   ★ Naming Semantic Drift (C-6) — get* 함수의 부수효과 탐지
   ★ Error Boundary Completeness (C-7) — exception-hygiene 확장
 
-Phase 3 — 에이전트 실패 예측 확장 (Phase 1 결과를 확장)
-  ★ Modification Trap (B-IV-2) — 수정 함정 예측
-  ★ Modification Impact Radius (B-IV-3) — 수정 영향 반경
-    └── scan 디텍터 + MCP assess-impact 도구 이중 제공
-  □ giant-file (PLAN A1) → DIAG_GOD_FUNCTION 패턴 입력으로 구현
-
-Phase 4 — 컨텍스트 비용 모델링 (Phase 0 직후, Phase 1과 병렬 가능)
-  ★ Variable Lifetime (B-II-1) — 변수 수명 = 컨텍스트 유지 비용
-    └── 엔진: reaching-definitions 모듈 (Phase 0에서 추출) + CFG builder
-  ★ Decision Surface (B-II-2) — 독립 결정 축 → 조합 폭발
-    └── 엔진: AST 조건식 변수 집합 추출
-Phase 5 — 구조적 엔트로피 (Phase 0 직후, 독립 가능)
-  ★ Implementation Overhead Ratio (B-III-1) — 인터페이스/구현 복잡도 비율
-  ★ Concept Scatter Index (B-III-2) — 도메인 개념 산재도
-  ★ Abstraction Fitness (B-III-3) — 모듈 경계 적합도
-
-Phase 6 — 기존 디텍터 개선 + 성능 최적화 (모든 Phase와 병렬 가능)
-  ★ 워처 기반 증분 캐싱 (Section 1.4)
-    └── bunner changeset 단방향 소비 + 독립 모드(@parcel/watcher → Set) → Tier 1 최적화
-    └── lazy 모드 전환 상태 머신 (scan마다 bunner 존재 여부 판정)
-  □ nesting + early-return 내부 패스 통합
-  □ exception-hygiene 이중 순회 → 단일 순회
-  □ finding 형식 표준화 (metrics + why + suggestedRefactor)
-  □ tsgo LSP 파일 open/close 최적화
-  □ 매직 넘버 config 노출
-  □ 확장자 지원 (.tsx, .mts, .cts, .jsx)
-  □ dependencies readFileSync → Bun-first 전환
-  □ PLAN.md Tier B/C 디텍터 (DiagnosticAggregator 패턴 입력으로)
+Phase 3 — 기존 디텍터 개선 + 성능 최적화 (모든 Phase와 병렬 가능)
+  성능:
+    ★ 워처 기반 증분 캐싱 (Section 1.4)
+      └── bunner changeset 단방향 소비 + 독립 모드(@parcel/watcher → Set) → Tier 1 최적화
+      └── lazy 모드 전환 상태 머신 (scan마다 bunner 존재 여부 판정)
+    □ scan 실행 순서 재설계 — Stage 구조 전환 (Section 1.1)
+    □ dependencies dead export 복잡도 O(N²)→O(N+M) (Section 1.2)
+    □ forwarding fixpoint O(N²)→O(N) 위상 정렬 (Section 1.3)
+    □ tsgo LSP 파일 open/close 최적화 (Section 7)
+  디텍터 병합:
+    □ nesting + early-return 내부 패스 통합 (Section 4.1)
+    □ exact-duplicates + structural-duplicates 단일 패스 (Section 4.2)
+    □ noop empty-catch → exception-hygiene 완전 이관 (Section 4.3)
+    □ exception-hygiene 이중 순회 → 단일 순회 (Section 3.3)
+  정확도:
+    □ nesting switch case 개선 (Section 2.2)
+    □ unknown-proof hover 파싱 취약성 (Section 3.1)
+    □ noop empty-function-body 오탐 (Section 3.2)
+  견고성:
+    □ Parse 에러 시 건너뛰기 → warning finding 생성 (Section 8.1)
+    □ barrel-policy resolver 실패 로깅 (Section 8.2)
+  설정/호환:
+    □ finding 형식 표준화 (metrics 구조 정규화, 잔존 자유형 프로퍼티 정리)
+    □ 매직 넘버 config 노출 (Section 5)
+    □ 확장자 지원 (.tsx, .mts, .cts, .jsx) (Section 3.4)
+    □ dependencies readFileSync → Bun-first 전환 (Section 3.5)
+    □ PLAN.md Tier B/C 디텍터 (DiagnosticAggregator 패턴 입력으로) (Section 10-11)
 
 [★] = known mainstream tools 기준 firebat 고유 기능
 [□] = 품질/성능 개선
