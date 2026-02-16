@@ -5,293 +5,307 @@
 > 범위: `src/features/` 전체 16개 디텍터 + `src/application/scan/scan.usecase.ts` 실행 흐름 + 출력 아키텍처 + 신규 디텍터/기능 설계
 >
 > 목적:
-> 1. 더 좋은 기능 — 에이전트가 구조적 수정을 할 수 있는 진단/처방 체계 (★ A, B, C)
-> 2. 기존 정확도/품질 — 오탐 감소, 알고리즘 개선 (Section 2-3)
-> 3. 기능 병합 — 중복 순회/중복 탐지 제거 (Section 4)
-> 4. 스캔 순서 최적화 — 병렬화, 단일 패스 (Section 1)
-> 5. 레포트 일관화 — finding 필드 표준화 (Section 6)
-> 6. 구조적 수정 메시지 — 증상이 아닌 진단 기반 수정 유도 (★ A Layer 2-3)
-> 7. 극한 클린코드 유지 — 코드 위생 디텍터 보강 (★ C)
-> 8. 수정 순서 제공 — topPriorities, DiagnosticAggregator (★ A Layer 3)
+> 1. 출력 스키마 개편 — bare array + `top` + `catalog` 체계로 전환 (★ A)
+> 2. 에이전트 실패 모드 기반 분석 — 보이지 않는 것을 가시화 (★ B)
+> 3. 극한 클린코드 — 코드 위생 디텍터 보강 (★ C)
+> 4. 기존 정확도/품질 — 오탐 감소, 알고리즘 개선 (Section 2-3)
+> 5. 기능 병합 — 중복 순회/중복 탐지 제거 (Section 4)
+> 6. 스캔 순서 최적화 — 병렬화, 단일 패스 (Section 1)
+> 7. Finding 형식 통합 — BaseFinding 관례, 프로퍼티 정리 (Section 6)
 >
 > **참고**: 코드 중복(DRY 위반)은 firebat 자체 디텍터로 탐지 → 직접 수정 예정이므로 이 문서에서 제외한다.
 
 ---
 
-## ★ 핵심 과제 A: 에이전트 구조적 수정 유도 아키텍처
+## ★ 핵심 과제 A: 출력 스키마 개편 — 에이전트 구조적 수정 유도
 
 ### 문제 정의
 
-firebat의 주 소비자는 AI 에이전트(MCP 클라이언트)다. 현재 출력은 **개별 finding의 나열**이며, 에이전트는 각 finding을 독립적으로 해석하여 **국소 패치(local patch)** 로 끝낸다.
+firebat의 주 소비자는 AI 에이전트(MCP 클라이언트)다. 현재 출력의 두 가지 문제:
+
+1. **증상 나열**: 개별 finding만 제공. 에이전트가 각 finding을 독립 해석하여 국소 패치로 끝냄. 실제로는 여러 finding이 하나의 구조적 원인에서 비롯되지만, 에이전트는 이를 알 수 없음.
+2. **페이로드 비대**: 각 finding에 자연어 메시지(`message`, `why`, `suggestedRefactor`)가 포함. 대부분 동일 code의 반복. 에이전트 컨텍스트 윈도우를 불필요하게 소비.
 
 ```
-현재 에이전트 동작:
-  scan → finding "nesting depth 5 at line 34" → 에이전트: early return 추가 → 끝
-  scan → finding "dead store at line 42" → 에이전트: 변수 삭제 → 끝
-  scan → finding "duplicate at line 78" → 에이전트: 함수 인라인 → 끝
-  
-실제 필요:
-  scan → "이 3개 finding은 processOrder()가 3개 책임을 한 함수에서 처리하기 때문"
-       → 에이전트: 책임별 함수 추출 → 3개 finding 동시 해소
+현재: scan → finding "nesting depth 5 at line 34" → 에이전트: early return 추가 → 끝
+필요: scan → "이 3개 finding은 processOrder()가 3개 책임을 한 함수에서 처리하기 때문"
+           → 에이전트: 책임별 함수 추출 → 3개 finding 동시 해소
 ```
 
 **핵심**: finding은 증상(symptom)이지 진단(diagnosis)이 아니다. 에이전트에게 증상만 보여주면 증상 치료만 한다.
 
-### 설계: 3-Layer 출력 모델
+### 설계: FirebatReport 출력 구조
 
-현재 `FirebatReport`의 `analyses`는 Layer 1만 존재한다. Layer 2, 3을 추가한다.
+#### 설계 원칙
 
-#### Layer 1: Enriched Findings (기존 finding 강화)
+1. **자연어 제로**: scan 결과에 `message`, `why`, `suggestedRefactor` 등 자연어를 넣지 않는다. 같은 code의 finding이 100개 나오면 같은 문장이 100번 반복 — 컨텍스트 낭비.
+2. **catalog 인라인**: 각 code의 설명(cause/approach)은 scan 결과의 `catalog` 섹션에 **한 번만** 포함. 별도 조회 entry point 없음.
+3. **구조 최소화**: 중복 제거한 최소 필드. 에이전트가 3단계(우선순위→설명→위치)로 필요한 정보에 접근.
+4. **래퍼 폐기**: `*Analysis` 래퍼(각 디텍터별 `LintAnalysis`, `NestingAnalysis` 등) 불필요. status/tool/error는 `meta.errors`로 흡수. 모든 디텍터 결과는 배열.
+5. **self-documenting 프로퍼티명**: 스키마 문서 없이 에이전트가 즉시 이해 가능. 도메인 약어(`cc`, `adj`, `inst` 등) 금지.
 
-모든 finding에 아래 필드를 추가한다. 아래는 **최종형 인터페이스**다. 초기 도입 시에는 `Partial<EnrichedFinding>`을 허용하며, 신규 필드가 없는 finding도 정상 동작해야 한다.
-
-**통합 전략**: 기존 디텍터별 finding 타입(`NoopFinding`, `WasteFinding`, `ForwardingFinding` 등)은 각각 다른 구조를 가진다. `EnrichedFinding`은 이들의 **공통 상위 인터페이스**가 아니라, 각 디텍터 타입에 **optional 필드를 확장**하는 방식으로 적용한다. 구체적으로:
-1. 기존 타입에 `id`, `fixScope`, `diagnosisRef?`, `localFixWarning?`, `metrics?`, `why?`, `suggestedRefactor?` 필드를 optional로 추가
-2. `message` 필드가 없는 타입(`NoopFinding`, `ForwardingFinding`)에는 `message: string` 필드를 추가 (Phase 0 전제 조건)
-3. `kind` 필드는 각 디텍터 타입의 기존 union(`WasteKind`, `BarrelPolicyFindingKind` 등)을 유지 — `string`으로 확장하지 않아 타입 discrimination 보존
-4. Layer 2~3의 `findingIds`는 `string`으로 참조하므로, Layer 1 타입의 다형성과 무관
-
-**TypeScript 적용 패턴**: intersection type으로 기존 타입을 비파괴 확장한다. 기존 인터페이스를 직접 수정하지 않는다.
-```typescript
-// src/types.ts에 추가
-type EnrichedWasteFinding = WasteFinding & Partial<EnrichedFindingFields>;
-type EnrichedNoopFinding = (NoopFinding & { message: string }) & Partial<EnrichedFindingFields>;
-type EnrichedForwardingFinding = (ForwardingFinding & { message: string }) & Partial<EnrichedFindingFields>;
-type EnrichedNestingItem = NestingItem & Partial<EnrichedFindingFields>;
-// ... 각 finding 타입에 대해 동일 패턴
-```
-`FirebatAnalyses`의 각 디텍터 결과 타입을 `Enriched*` 버전으로 교체한다. `Partial<EnrichedFindingFields>`이므로 기존 디텍터가 신규 필드를 생성하지 않아도 타입 호환된다.
+#### FirebatReport
 
 ```typescript
-// 아래는 모든 finding 타입에 공통으로 확장되는 필드의 정의.
-// 기존 디텍터 타입(WasteFinding, NoopFinding 등) 각각에 optional로 추가한다.
-interface EnrichedFindingFields {
-  /**
-   * Finding stable ID — 결정론적 생성.
-   * 형식: F-{detector}-{fileHash4}-{line}
-   * 예: F-NEST-a3f1-34, F-WAST-b2c4-42
-   * fileHash4 = **project root 기준 상대 경로**의 xxHash64 (기존 `hashString()` 사용) 하위 4자리 hex.
-   *   절대 경로를 사용하면 머신 간 결정론이 깨지므로 반드시 상대 경로.
-   *   예: `hashString('src/order/process-order.ts').slice(-4)` → `'a3f1'`
-   * 같은 코드에 같은 디텍터를 돌리면 항상 같은 ID가 나와야 한다 (결정론).
-   * ID는 content-addressed — 리팩토링으로 코드가 변경되면 ID도 변경되며, 이는 의도된 동작이다.
-   */
-  readonly id: string;
-  
-  /** 이 finding이 속하는 진단 그룹 ID. 없으면 독립 finding. */
-  readonly diagnosisRef?: string;
-  
-  /** 수정 범위. 에이전트에게 "이건 줄 단위로 고칠 문제가 아니다"를 알려줌. */
-  readonly fixScope: 'line' | 'function' | 'module' | 'cross-module' | 'architecture';
-  
-  /** 국소 패치 시 발생할 문제. 에이전트가 잘못된 방향으로 가는 것을 명시적으로 차단. */
-  readonly localFixWarning?: string;
-  
-  /** 정량 근거 (PLAN.md §1 준수) */
-  readonly metrics?: Record<string, number>;
-  
-  /** 왜 이 코드가 문제인지 (AX 비용 근거) */
-  readonly why?: string;
-  
-  /** 구조적 수정 제안 */
-  readonly suggestedRefactor?: string;
+interface FirebatReport {
+  readonly meta: FirebatMeta;
+  readonly analyses: Partial<FirebatAnalyses>;   // 디텍터별 raw 결과
+  readonly top: ReadonlyArray<Priority>;         // 패턴별 우선순위 (resolves DESC)
+  readonly catalog: Record<string, CodeEntry>;   // 이 scan에서 등장한 code만
 }
 ```
 
-**신규 타입 배치 규칙** (Ports & Adapters 아키텍처 준수):
-- `EnrichedFindingFields`, `Enriched*Finding` 타입, `Diagnosis`, `DiagnosisPattern`, `RefactoringPlan`, `RefactoringStep`, `CodebaseHealth` → 모두 **`src/types.ts`** 에 정의. 이유: `FirebatReport`의 구성 요소이며, 기존 finding 타입(`NoopFinding`, `WasteFinding` 등)과 같은 파일에 있어야 import path가 일관됨.
-- `DiagnosticAggregatorInput`, `DiagnosticAggregatorOutput` → **`src/features/diagnostic-aggregator/aggregator.ts`** 에서 export. 내부 구현 타입이므로 `src/types.ts`에 넣지 않는다.
-- `engine/` 하위에는 신규 타입 추가 없음. `engine/types.ts`는 엔진 내부(`VariableUsage`, `BitSet` 등)만 담당.
+| 필드 | 역할 |
+|------|------|
+| `meta` | scan 메타정보 + 실패한 디텍터 에러 |
+| `analyses` | 디텍터별 결과. 래퍼 없이 배열. 성공한 디텍터만 포함 |
+| `top` | 패턴별 finding 수 내림차순. 에이전트 행동 우선순위. **lint/format/typecheck 제외** |
+| `catalog` | 각 code의 cause/approach. 이 scan에서 등장한 code만 포함 |
 
-**`fixScope`가 핵심이다.** 에이전트가 `fixScope: 'module'`을 보면 "이 줄만 고쳐서는 안 된다"를 즉시 인식한다.
-
-**fixScope 판정 규칙**:
-
-| fixScope | 판정 기준 |
-|----------|----------|
-| `line` | finding이 단일 statement에 국한. 수정이 해당 줄만 변경 (예: dead store 삭제) |
-| `function` | finding이 함수 내부 구조에 관련. 수정이 함수 본문을 변경하지만 시그니처/호출자는 불변 (예: nesting 리팩토링) |
-| `module` | finding 수정 시 **같은 파일** 내 다른 함수/export도 변경 필요 (예: module-scope 변수 제거) |
-| `cross-module` | finding 수정 시 **다른 파일**의 코드도 변경 필요. 판정 기준: 수정 대상 심볼의 외부 참조가 1개 이상 (예: shared 타입 변경, export 함수 시그니처 변경) |
-| `architecture` | 파일 생성/삭제/이동이 수반되는 구조적 변환 (예: 모듈 분리, 책임 재배치). B-III Blueprint 대상 |
-
-**`localFixWarning`도 핵심이다.** 에이전트에게 "하지 말 것"을 명시적으로 전달한다:
-```
-localFixWarning: "Adding an early return here reduces depth to 4 but leaves the SRP violation. 
-                  The function still handles validation + persistence + notification."
-```
-
-#### Layer 2: Diagnoses (진단 그룹) — 신규 출력 섹션
-
-개별 finding들을 **근본 원인(root cause)** 기준으로 그룹화한다.
+#### FirebatMeta
 
 ```typescript
-interface Diagnosis {
-  readonly id: string;                    // "D-GOD-a3f1-34"
-  // ID 생성식: D-{패턴약어}-{파일해시4자리}-{줄번호}
-  // 예: D-GOD-a3f1-34, D-CLMP-b2c4-0 (줄 0 = 파일/모듈 수준)
-  // 결정론적: 같은 코드 → 같은 ID. 파일해시 = 대상 파일 경로의 CRC32 하위 4자리 hex
-  readonly pattern: DiagnosisPattern;     // 안티패턴 유형
-  readonly severity: 'structural' | 'design' | 'hygiene';
-  
-  /** 한 줄 요약 — 에이전트가 가장 먼저 읽는 문장 */
-  readonly summary: string;
-  
-  /** 이 진단에 묶인 finding ID 목록 */
-  readonly findingIds: ReadonlyArray<string>;
-  
-  /** 근거 수치. string 값은 일관성 지표(예: 패턴명) 등 비수치 근거에 사용. */
-  readonly evidence: Record<string, number | string>;
-  
-  /**
-   * 패턴 매칭 신뢰도 (0-1).
-   * ≥ 0.8: 처방(prescribe) — refactoringPlan 포함, 에이전트 즉시 실행 가능
-   * 0.5~0.79: 제안(suggest) — refactoringPlan 포함하되 검증 후 실행 권고
-   * < 0.5: 관찰(observe) — finding 그룹화만, refactoringPlan 생략
-   */
-  readonly matchConfidence: number;
-  
-  /** 단계별 리팩토링 계획 — 에이전트가 순서대로 실행. matchConfidence < 0.5이면 생략. */
-  readonly refactoringPlan?: RefactoringPlan;
-  
-  /** 이 진단을 해결하면 해소되는 finding 수 */
-  readonly expectedResolutions: number;
-}
-
-type DiagnosisPattern =
-  | 'god-function'           // 함수가 여러 독립 책임 수행
-  | 'god-module'             // 모듈이 너무 많은 심볼 export
-  | 'data-clump'             // 동일 파라미터 그룹 반복
-  | 'primitive-obsession'    // 도메인 타입 없이 원시값 남용
-  | 'shotgun-surgery'        // 한 개념이 여러 파일에 산재
-  | 'mixed-abstraction'      // 고수준/저수준 로직 혼재
-  | 'over-indirection'       // 불필요한 간접 계층
-  | 'circular-dependency'    // 순환 의존
-  | 'leaky-abstraction'      // 추상화 경계 위반
-  | 'missing-type-boundary'; // 타입 안전 경계 부재
-
-interface RefactoringPlan {
-  readonly strategy: string;  // "extract-and-delegate", "introduce-type", "inline-and-simplify"
-  readonly steps: ReadonlyArray<RefactoringStep>;
-  readonly estimatedImpact: string;  // "Resolves 4 findings, reduces complexity by 23 points"
-}
-
-interface RefactoringStep {
-  readonly order: number;
-  readonly action: 'EXTRACT' | 'MOVE' | 'INLINE' | 'INTRODUCE_TYPE' | 'DELETE' | 'RENAME' | 'MERGE';
-  readonly description: string;
-  readonly targetFile?: string;   // 대상 파일 (선택)
-  readonly targetSymbol?: string; // 대상 심볼 (선택)
+interface FirebatMeta {
+  readonly engine: 'oxc';
+  readonly targetCount: number;
+  readonly minSize: number;
+  readonly maxForwardDepth: number;
+  readonly detectors: ReadonlyArray<FirebatDetector>;
+  readonly detectorTimings?: Record<string, number>;
+  readonly errors?: Record<string, string>;  // 실패한 디텍터명 → 에러 메시지
 }
 ```
 
-**예시: god-function 진단**
+- 디텍터 성공 → `analyses`에 결과 존재
+- 디텍터 실패 → `analyses`에 없고 `meta.errors`에 이유
+- 이전의 `status`, `tool`, `error` 필드는 전부 삭제. `meta.errors`로 통합
+
+#### Priority
+
+```typescript
+interface Priority {
+  readonly pattern: string;      // catalog 참조 키 (e.g., "WASTE_DEAD_STORE")
+  readonly detector: string;     // analyses 접근 키 (e.g., "waste")
+  readonly resolves: number;     // 해당 패턴의 finding 수
+}
+```
+
+> **top 생성 대상**: firebat 고유 분석 디텍터만 포함. lint/format/typecheck는 외부 도구 래핑이므로 top에서 **제외**한다. finding 수가 폭발하여 top을 독점하는 정렬 역전을 방지하기 위함. 에이전트가 이 결과를 필요로 하면 `analyses`에서 직접 접근한다.
+```
+
+#### CodeEntry
+
+```typescript
+interface CodeEntry {
+  readonly cause: string;        // 왜 문제인가 (구조적 원인)
+  readonly approach: string;     // 사고 방향 (fix 지시 아님)
+}
+```
+
+> **catalog 언어**: cause/approach는 **영어**로 작성한다. 소비자가 AI 에이전트이므로 token 효율과 일관성을 위함.
+
+#### FirebatAnalyses
+
+`*Analysis` 래퍼 폐기. 모든 디텍터가 배열을 직접 반환.
+
+```typescript
+interface FirebatAnalyses {
+  'exact-duplicates':       ReadonlyArray<DuplicateGroup>;
+  waste:                    ReadonlyArray<WasteFinding>;
+  'barrel-policy':          ReadonlyArray<BarrelPolicyFinding>;
+  'unknown-proof':          ReadonlyArray<UnknownProofFinding>;
+  'exception-hygiene':      ReadonlyArray<ExceptionHygieneFinding>;
+  lint:                     ReadonlyArray<LintDiagnostic>;
+  typecheck:                ReadonlyArray<TypecheckItem>;
+  nesting:                  ReadonlyArray<NestingItem>;
+  'early-return':           ReadonlyArray<EarlyReturnItem>;
+  noop:                     ReadonlyArray<NoopFinding>;
+  'api-drift':              ReadonlyArray<ApiDriftGroup>;
+  forwarding:               ReadonlyArray<ForwardingFinding>;
+  coupling:                 ReadonlyArray<CouplingHotspot>;
+  'structural-duplicates':  ReadonlyArray<DuplicateGroup>;
+  dependencies:             DependencyAnalysis;           // 유일한 복합 객체
+  format:                   ReadonlyArray<string>;        // 포맷 필요 파일 경로
+}
+```
+
+#### BaseFinding 관례
+
+finding 성격의 모든 타입이 이 필드를 보장한다. 나머지는 디텍터별 자유 확장.
+
+```typescript
+interface BaseFinding {
+  readonly kind: string;       // 디텍터 내 분류 (e.g., 'dead-store', 'export-star')
+  readonly file: string;       // 파일 경로 (filePath → file)
+  readonly span: SourceSpan;   // 위치
+  readonly code?: string;      // catalog 참조 키 (e.g., 'WASTE_DEAD_STORE')
+}
+```
+
+- `kind`: 디텍터 내부 분류. 기존 union 타입(`WasteKind`, `BarrelPolicyFindingKind` 등) 유지
+- `code`: enrichment layer가 `kind` → `code` 매핑하여 추가. catalog 조회 키
+
+#### 에이전트 소비 flow
+
+```
+1. top[0] → { pattern: "WASTE_DEAD_STORE", detector: "waste", resolves: 15 }
+2. catalog["WASTE_DEAD_STORE"] → { cause: "...", approach: "..." }
+3. analyses.waste.filter(f => f.code === "WASTE_DEAD_STORE") → 구체적 위치들
+```
+
+3단계. 우선순위 → 설명 → 위치. 이 정보가 본질적으로 다른 종류이므로 더 줄일 수 없는 최소 경로.
+
+### approach 작성 원칙
+
+> **finding 하나는 증상이지 병이 아니다. approach는 에이전트가 병을 찾도록 사고를 유도한다.**
+
+#### 4가지 규칙
+
+1. **질문으로 출발** — "왜 이 상태인가?"부터. 에이전트가 원인을 직접 추론하게 함
+2. **직접 수정 지시 금지** — "삭제하라", "변경하라" 불가. 에이전트가 행위를 스스로 결정
+3. **가능한 근본 원인 나열** — 개별 증상이 아닌 구조적 원인 후보를 제시. 에이전트가 해당 코드베이스에서 어떤 원인인지 판별
+4. **scope 확장 유도** — "같은 패턴이 밀집해 있다면 개별 수정이 아니라 상위 구조를 검토하라"
+
+| | 금지 | 지향 |
+|---|---|---|
+| 톤 | "이 변수를 삭제하라" | "이 할당이 왜 불필요해졌는지 파악하라" |
+| 범위 | 해당 라인만 지목 | "같은 함수/모듈에서 반복되면 구조 재검토" |
+| 원인 | 증상 반복 ("사용되지 않음") | 후보 나열 ("리팩터링 잔재, 로직 변경, 설계 오류") |
+
+#### 예시
 
 ```json
 {
-  "id": "D-GOD-a3f1-34",
-  "pattern": "god-function",
-  "severity": "structural",
-  "summary": "processOrder() in order.ts handles 3 independent concerns: validation (lines 10-25), persistence (lines 26-45), notification (lines 46-70). Each concern shares <12% of variables with others.",
-  "findingIds": ["F-nesting-a3f1-12", "F-nesting-a3f1-28", "F-waste-a3f1-37", "F-coupling-a3f1-50"],
-  "evidence": {
-    "responsibilityClusters": 3,
-    "variableOverlapRatio": 0.12,
-    "totalCognitiveComplexity": 34,
-    "nestingDepth": 5,
-    "dominantClusterName": "validation"
+  "WASTE_DEAD_STORE": {
+    "cause": "값이 할당된 후 읽히기 전에 덮어쓰이거나 스코프를 벗어남",
+    "approach": "이 할당이 왜 불필요해졌는지 경위를 파악하라. 로직 변경의 잔재, 불완전한 리팩터링, 또는 제어 흐름 설계 오류일 수 있다. 같은 함수에서 반복되면 개별 할당이 아니라 함수의 책임과 흐름을 재검토하라"
   },
-  "matchConfidence": 0.85,
-  "refactoringPlan": {
-    "strategy": "extract-and-delegate",
-    "steps": [
-      { "order": 1, "action": "EXTRACT", "description": "Extract validation logic (lines 10-25) into validateOrder(order: Order): ValidationResult", "targetSymbol": "validateOrder" },
-      { "order": 2, "action": "EXTRACT", "description": "Extract persistence logic (lines 26-45) into saveOrder(order: Order): Promise<void>", "targetSymbol": "saveOrder" },
-      { "order": 3, "action": "EXTRACT", "description": "Extract notification logic (lines 46-70) into notifyOrderCreated(order: Order): Promise<void>", "targetSymbol": "notifyOrderCreated" },
-      { "order": 4, "action": "INLINE", "description": "Simplify processOrder to orchestrate: validate → save → notify" }
-    ],
-    "estimatedImpact": "Resolves 4 findings (nesting F-nesting-a3f1-12, nesting F-nesting-a3f1-28, waste F-waste-a3f1-37, coupling F-coupling-a3f1-50). Cognitive complexity drops from 34 to ~8."
-  },
-  "expectedResolutions": 4
+  "NESTING_DEEP": {
+    "cause": "함수 내 제어 구조가 깊게 중첩되어 인지 복잡도가 높음",
+    "approach": "중첩이 깊어진 원인을 파악하라. 여러 관심사가 하나의 함수에 혼재되어 있거나, 예외 경로와 정상 경로가 분리되지 않았을 수 있다. 같은 함수에 다른 finding(waste, coupling 등)이 동반되면 함수 분할을 검토하라"
+  }
 }
 ```
 
-**예시: data-clump 진단**
+### 프로퍼티명 최적화
 
+#### 원칙
+
+> self-documenting 유지. 스키마 문서 없이 에이전트가 즉시 이해 가능해야 한다.
+> 도메인 약어 금지: `cc`(cognitive complexity), `adj`(adjacency), `inst`(instability), `abst`(abstractness), `dist`(distance), `ev`(evidence), `conf`(confidence), `sev`(severity) — 에이전트가 다른 단어로 오인.
+
+허용하는 축약:
+- **보편적 축약**: 개발자/에이전트가 문서 없이 아는 것 (`filePath`→`file`, `message`→`msg`)
+- **상위 컨텍스트 중복 제거**: 디텍터명/타입명이 제공하는 맥락과 겹치는 접두어 제거 (`earlyReturnCount`→`returns`)
+- **의미 동일 짧은 단어**: 같은 뜻의 더 짧은 단어 (`suggestedParams`→`params`, `standardCandidate`→`standard`)
+
+#### 공통 변경
+
+| 현재 | → | 적용 범위 |
+|------|---|----------|
+| `filePath` | `file` | 모든 finding |
+| `message` | `msg` | **외부 도구 래핑만** (lint, typecheck). 자체 생성 message는 `code` 대체 후 삭제 |
+
+#### 삭제 대상
+
+| 프로퍼티 | 디텍터 | 이유 |
+|---------|--------|------|
+| `suggestions` | nesting, early-return | catalog `approach`로 이동 |
+| `why` | coupling | catalog `cause`로 이동 |
+| `suggestedRefactor` | coupling | catalog `approach`로 이동 |
+| `lineText` | typecheck | `codeFrame`과 중복 |
+| `status` | lint, typecheck, unknown-proof, exception-hygiene, format | `meta.errors`로 이동 |
+| `tool` | 동일 | 정적 매핑 (lint=oxlint, typecheck=tsgo). 불필요 |
+| `error` | 동일 | `meta.errors`로 이동 |
+
+#### 디텍터별 축약 (상위 컨텍스트 중복 제거)
+
+| 디텍터 | 현재 → 제안 | 근거 |
+|--------|------------|------|
+| exact-duplicates | `cloneType`→`kind`, `suggestedParams`→`params` | DuplicateGroup에서 clone 자명. BaseFinding 관례 적용 |
+| structural-duplicates | `cloneType`→`kind`, `cloneClasses`→`groups` | clone 중복. BaseFinding 관례 적용 |
+| dependencies | `fanInTop`→`fanIn`, `fanOutTop`→`fanOut`, `edgeCutHints`→`cuts`, `exportName`→`name` | Top/edge 수식어 불필요 |
+| format | `fileCount`→`files` | count 불필요 (number 타입) |
+| nesting | `accidentalQuadraticTargets`→`quadraticTargets` | accidental 수식어 제거 |
+| early-return | `earlyReturnCount`→`returns`, `guardClauseCount`→`guards`, `hasGuardClauses`→`hasGuards` | earlyReturn/clause 상위 컨텍스트 |
+| api-drift | `standardCandidate`→`standard`, `paramsCount`→`params`, `optionalCount`→`optionals` | candidate/count 수식어 불필요 |
+
+### before/after 예시
+
+**Before (현재)**:
 ```json
 {
-  "id": "D-CLMP-b2c4-0",
-  "pattern": "data-clump",
-  "severity": "design",
-  "summary": "Parameters (userId: string, userName: string, userEmail: string) appear together in 7 functions across 4 files.",
-  "findingIds": ["F-paramobj-b2c4-15", "F-paramobj-c7d2-22", "F-paramobj-c7d2-41", "F-paramobj-e1a9-8", "F-paramobj-b2c4-30", "F-paramobj-c7d2-55", "F-paramobj-e1a9-19"],
-  "evidence": {
-    "clumpSize": 3,
-    "occurrences": 7,
-    "filesAffected": 4
-  },
-  "matchConfidence": 0.9,
-  "refactoringPlan": {
-    "strategy": "introduce-type",
-    "steps": [
-      { "order": 1, "action": "INTRODUCE_TYPE", "description": "Create interface UserInfo { userId: string; userName: string; userEmail: string }", "targetFile": "types/user.ts" },
-      { "order": 2, "action": "INLINE", "description": "Replace the 3 parameters with single UserInfo parameter in all 7 functions" }
-    ],
-    "estimatedImpact": "Reduces total parameter count by 14. All 7 functions get simpler signatures."
-  },
-  "expectedResolutions": 7
+  "meta": { "engine": "oxc", "targetCount": 42, "minSize": 20, "maxForwardDepth": 5, "detectors": [...] },
+  "analyses": {
+    "waste": {
+      "status": "ok",
+      "tool": "oxc",
+      "findings": [
+        {
+          "kind": "dead-store",
+          "label": "unusedVar",
+          "message": "Variable 'unusedVar' is assigned but never used after reassignment",
+          "filePath": "src/foo.ts",
+          "span": { "start": { "line": 42, "column": 4 }, "end": { "line": 42, "column": 20 } },
+          "confidence": 0.95
+        }
+      ]
+    }
+  }
 }
 ```
 
-#### Layer 3: Codebase Health (건강도 점수) — 신규 출력 섹션
-
-에이전트가 "뭘 먼저 해야 하는가?"를 판단할 수 있는 전체 점수표.
-
-```typescript
-interface CodebaseHealth {
-  /** 0-100 종합 점수. 가중치 미교정 상태에서는 experimental 표기 */
-  readonly overallScore: number;
-  readonly scoreStatus: 'calibrated' | 'experimental';  // 가중치 교정 전까지 'experimental'
-  
-  readonly dimensions: {
-    readonly simplicity: number;       // 함수 복잡도, 중첩, 코드 길이
-    readonly modularity: number;       // 모듈 경계, 결합도, 응집도
-    readonly consistency: number;      // API 일관성, 네이밍, 형식
-    readonly typeIntegrity: number;    // 타입 안전성, unknown/any 탈출
-    readonly maintainability: number;  // 변경 비용, 산탄총 수술 위험
-  };
-  
-  /**
-   * 영향력 기준 정렬된 최우선 진단 목록.
-   * 정렬 규칙: resolveCount DESC → severity(structural > design > hygiene) → diagnosisId ASC (결정론적 tie-break)
-   */
-  readonly topPriorities: ReadonlyArray<{
-    readonly diagnosisId: string;
-    readonly summary: string;
-    readonly resolveCount: number;     // 해결 시 사라지는 finding 수
-    readonly severity: 'structural' | 'design' | 'hygiene';
-  }>;
+**After (개편 후)**:
+```json
+{
+  "meta": { "engine": "oxc", "targetCount": 42, "minSize": 20, "maxForwardDepth": 5, "detectors": [...] },
+  "analyses": {
+    "waste": [
+      {
+        "kind": "dead-store",
+        "label": "unusedVar",
+        "file": "src/foo.ts",
+        "span": { "start": { "line": 42, "column": 4 }, "end": { "line": 42, "column": 20 } },
+        "confidence": 0.95,
+        "code": "WASTE_DEAD_STORE"
+      }
+    ]
+  },
+  "top": [
+    { "pattern": "WASTE_DEAD_STORE", "detector": "waste", "resolves": 15 },
+    { "pattern": "NESTING_DEEP", "detector": "nesting", "resolves": 8 }
+  ],
+  "catalog": {
+    "WASTE_DEAD_STORE": {
+      "cause": "값이 할당된 후 읽히기 전에 덮어쓰이거나 스코프를 벗어남",
+      "approach": "이 할당이 왜 불필요해졌는지 경위를 파악하라. 로직 변경의 잔재, 불완전한 리팩터링, 또는 제어 흐름 설계 오류일 수 있다. 같은 함수에서 반복되면 개별 할당이 아니라 함수의 책임과 흐름을 재검토하라"
+    },
+    "NESTING_DEEP": {
+      "cause": "함수 내 제어 구조가 깊게 중첩되어 인지 복잡도가 높음",
+      "approach": "중첩이 깊어진 원인을 파악하라. 여러 관심사가 하나의 함수에 혼재되어 있거나, 예외 경로와 정상 경로가 분리되지 않았을 수 있다. 같은 함수에 다른 finding이 동반되면 함수 분할을 검토하라"
+    }
+  }
 }
 ```
 
-**차원별 점수 산출 공식** (Phase 0 — `scoreStatus: 'experimental'`):
+자연어 `message` 제거, `filePath`→`file`, 래퍼(`status`/`tool`) 제거, `code` 추가.
+catalog은 고유 code 수만큼만 (finding 100개여도 code 5종이면 entry 5개).
 
-각 차원은 0-100. 관련 디텍터 finding 수를 입력으로 penalty 방식으로 산출한다. 총 파일 수 `T`로 정규화.
+### 이전 3-Layer 대비 삭제 총괄
 
-| 차원 | 입력 신호 | 공식 (Phase 0) |
-|------|-----------|----------------|
-| simplicity | nesting findings (`N_n`), waste findings (`N_w`), early-return findings (`N_e`) | `max(0, 100 - ((N_n + N_w + N_e) / T) × 200)` |
-| modularity | coupling hotspots (`N_c`), dependency cycles (`N_d`), forwarding findings (`N_f`) | `max(0, 100 - ((N_c + N_d + N_f) / T) × 200)` |
-| consistency | lint findings (`N_l`), format findings (`N_fmt`), api-drift findings (`N_a`) | `max(0, 100 - ((N_l + N_fmt + N_a) / T) × 100)` |
-| typeIntegrity | typecheck findings (`N_t`), unknown-proof findings (`N_u`) | `max(0, 100 - ((N_t + N_u) / T) × 200)` |
-| maintainability | exact-dup findings (`N_ed`), structural-dup findings (`N_sd`), barrel-policy findings (`N_b`) | `max(0, 100 - ((N_ed + N_sd + N_b) / T) × 200)` |
-| **overallScore** | — | `(simplicity + modularity + consistency + typeIntegrity + maintainability) / 5` |
-
-> 가중치 계수(`200`, `100`)는 초기값이다. 실제 프로젝트 데이터로 교정 후 `scoreStatus`를 `'calibrated'`로 전환한다. Phase 0에서는 **`'experimental'` 고정**.
+| 삭제 대상 | 이전 소속 | 대체 |
+|----------|----------|------|
+| message, why, suggestedRefactor, localFixWarning | EnrichedFindingFields (Layer 1) | `code` + `catalog` |
+| id, fixScope, diagnosisRef, metrics | EnrichedFindingFields (Layer 1) | 삭제 (YAGNI) |
+| summary, plan, conf, severity, evidence, expectedResolutions | Diagnosis (Layer 2) | `top`으로 흡수 |
+| Diagnosis 인터페이스 자체 | Layer 2 | `Priority` |
+| dimensions, score, status | CodebaseHealth (Layer 3) | 삭제 |
+| CodebaseHealth 전체 | Layer 3 | `top`으로 대체 |
+| `*Analysis` 래퍼 | 각 디텍터 | `meta.errors`로 이동 |
 
 ### 구현: Diagnostic Aggregator
 
-Layer 2, 3을 생성하는 **메타 분석기**. 모든 디텍터 실행 후 런타임 Stage 5에서 동작.
+`top`과 `catalog`을 생성하는 **메타 분석기**. 모든 디텍터 실행 후 런타임 Stage 5에서 동작.
 
 **모듈 위치**: `src/features/diagnostic-aggregator/aggregator.ts` (순수 계산 — I/O 없음, Ports & Adapters `features/` 레이어). `index.ts`에서 re-export.
 
@@ -299,125 +313,76 @@ Layer 2, 3을 생성하는 **메타 분석기**. 모든 디텍터 실행 후 런
 ```typescript
 // src/features/diagnostic-aggregator/aggregator.ts
 interface DiagnosticAggregatorInput {
-  readonly analyses: Partial<FirebatAnalyses>;   // 기존 16개 디텍터 결과 전체
+  readonly analyses: Partial<FirebatAnalyses>;   // 디텍터 결과 전체
   readonly dependencyGraph?: DependencyAnalysis; // 크로스파일 상관 분석용 (optional)
-  readonly sourceFiles: ReadonlyArray<{          // AST 접근 (data-clump Phase 0 등)
-    readonly relativePath: string;
-    readonly ast: Program;                       // oxc parsed AST
-  }>;
 }
 
 interface DiagnosticAggregatorOutput {
-  readonly diagnoses: ReadonlyArray<Diagnosis>;
-  readonly health: CodebaseHealth;
-  readonly enrichments: ReadonlyMap<string, Partial<EnrichedFindingFields>>;
-  // enrichments: findingId → 추가할 필드. scan.usecase가 이 맵으로 기존 finding에 역주입.
+  readonly top: ReadonlyArray<Priority>;
+  readonly catalog: Record<string, CodeEntry>;
 }
 
 function aggregateDiagnostics(input: DiagnosticAggregatorInput): DiagnosticAggregatorOutput;
 ```
-`scan.usecase.ts`는 Stage 5에서 이 함수를 호출하고, 반환된 `enrichments` 맵을 사용해 Layer 1 finding에 `diagnosisRef`, `localFixWarning` 등을 역주입한다.
+
+> **SRP**: Aggregator는 "finding → pattern 집계"만 담당한다. code 매핑(`kind + detector → code`)은 scan.usecase.ts의 Stage 5 초입에서 Aggregator 호출 전에 수행한다. AST 접근이 필요한 패턴(data-clump 등)은 해당 디텍터(C-3 Parameter Object 등)가 직접 탐지하고, Aggregator는 그 결과만 소비한다.
 
 ```
 scan.usecase.ts 실행 흐름:
-  Stage 1-4: 기존 디텍터 실행 → Layer 1 findings 수집
-  Stage 5 (신규): DiagnosticAggregator
-    ├── 1. Finding 상관관계 분석
-    │   ├── 동일 파일 + 동일 함수 범위의 findings 그룹화
-    │   ├── 동일 심볼/파라미터 패턴의 findings 그룹화
-    │   └── 의존성 그래프 기반 크로스파일 findings 그룹화
+  Stage 1-4: 기존 디텍터 실행 → findings 수집
+  Stage 5 (신규):
+    ├── 5-1. code 매핑 (scan.usecase.ts)
+    │   └── kind + detector → code 변환 (e.g., dead-store + waste → WASTE_DEAD_STORE)
+    │   └── 각 finding에 code 필드 주입
     │
-    ├── 2. 패턴 매칭 → DiagnosisPattern 결정
-    │   ├── (nesting.cognitiveComplexity + C-2 responsibility-boundary) in same function → god-function
-    │   ├── same param group × N functions (C-3) → data-clump
-    │   ├── same concept × N files (B-IV-2 concept-scatter) → shotgun-surgery
-    │   ├── forwarding chains + single-impl interfaces → over-indirection
-    │   ├── (unknown-proof + api-drift) in boundary files → leaky-abstraction
-    │   ├── C-3 primitive param + B-V-1 invariant on same param → primitive-obsession
-    │   ├── nesting depth 차이 > 2 within same function → mixed-abstraction
-    │   ├── export 함수 param/return에 any/unknown 비율 > 50% → missing-type-boundary
-    │   ├── coupling.god-module finding → god-module (기존 coupling 디텍터 결과 직접 승격)
-    │   └── dependencies.cycle finding → circular-dependency (기존 dependencies 디텍터 결과 직접 승격)
-    │
-    ├── 3. RefactoringPlan 생성
-    │   ├── 패턴별 템플릿 기반 step 생성
-    │   └── AST 분석으로 추출 대상 변수/범위 특정
-    │
-    ├── 4. CodebaseHealth 산출
-    │   ├── 차원별 가중 평균
-    │   └── topPriorities = resolveCount DESC 정렬
-    │
-    └── 5. Finding 역참조 주입 (diagnosisRef, localFixWarning)
+    └── 5-2. DiagnosticAggregator
+        ├── 1. code별 finding 수 집계 → top 배열 생성 (resolves DESC, lint/format/typecheck 제외)
+        │
+        ├── 2. 등장한 code의 catalog entry 수집
+        │   └── 정적 catalog 테이블에서 해당 code만 추출
+        │
+        └── 3. 패턴 분석 (god-function, data-clump 등)
+            ├── 동일 파일 + 동일 함수 범위의 findings 그룹화
+            ├── 패턴 매칭 → 상위 구조 진단 code 생성
+            └── catalog에 구조적 진단 approach 포함
 ```
 
-**fixScope 산출 주체**: fixScope는 **각 디텍터가 자기 finding 생성 시 직접 할당**한다. 디텍터만이 자기 finding의 수정 범위를 정확히 판단할 수 있다 (예: waste → `'line'`, nesting → `'function'`, coupling → `'cross-module'`). DiagnosticAggregator는 fixScope를 **상향 조정**(upgrade)할 수 있지만 하향하지 않는다: 예를 들어, finding 단독으로는 `fixScope: 'function'`이지만 Diagnosis로 묶이면 `'module'`이나 `'cross-module'`로 승격. 각 디텍터별 기본 fixScope:
+#### 패턴 매칭
 
-| 디텍터 | 기본 fixScope |
-|--------|---------------|
-| waste (dead-store) | `line` |
-| nesting | `function` |
-| early-return | `function` |
-| noop | `line` |
-| forwarding (thin-wrapper) | `function` |
-| forwarding (cross-file-chain) | `cross-module` |
-| exception-hygiene | `function` |
-| coupling (god-module) | `architecture` |
-| coupling (bidirectional) | `cross-module` |
-| dependencies (cycle) | `cross-module` |
-| dependencies (dead-export) | `module` |
-| barrel-policy | `module` |
-| unknown-proof | `line` |
-| api-drift | `cross-module` |
-| exact-duplicates | `function` |
-| structural-duplicates | `function` |
-| typecheck | `line` |
-| lint | `line` |
-| format | `line` |
+DiagnosticAggregator는 개별 finding을 넘어서 **구조적 패턴**을 탐지한다. 탐지된 패턴은 `top`에 독립 entry로 포함되며, catalog에 사고 유도 approach가 제공된다.
+
+**패턴 목록**:
+
+| 패턴 code | 탐지 조건 | Phase |
+|-----------|----------|-------|
+| `DIAG_GOD_FUNCTION` | 같은 함수에서 nesting + waste (또는 C-2 responsibility-boundary) 동시 발생 | 0 |
+| `DIAG_DATA_CLUMP` | 동일 파라미터 조합이 3개 이상 함수에서 반복 (C-3 필요) | 2+ |
+| `DIAG_SHOTGUN_SURGERY` | 동일 개념이 4개 이상 파일에 분산 | 1+ |
+| `DIAG_OVER_INDIRECTION` | forwarding chain + single-impl interface | 1+ |
+| `DIAG_MIXED_ABSTRACTION` | 같은 함수 내 nesting depth 차이 > 2 | 1+ |
+| `DIAG_CIRCULAR_DEPENDENCY` | dependencies.cycle 직접 승격 | 0 |
+| `DIAG_GOD_MODULE` | coupling.god-module 직접 승격 | 0 |
+
+**패턴 catalog 예시**:
+```json
+{
+  "DIAG_GOD_FUNCTION": {
+    "cause": "하나의 함수가 여러 독립적인 책임을 수행하여 nesting, waste, coupling finding이 동시에 발생",
+    "approach": "이 함수가 몇 개의 독립적인 관심사를 다루는지 파악하라. 변수 간 의존 관계를 분석하여 서로 독립적인 블록이 있는지 확인하라. 독립 블록이 있다면 각각 별도 함수로 추출할 수 있는지, 아니면 더 상위의 모듈 구조 변경이 필요한지 판단하라"
+  }
+}
+```
 
 #### 정밀도 관리
 
 DiagnosticAggregator의 패턴 매칭은 **휴리스틱 기반**이다. 오분류 위험을 관리하기 위한 원칙:
 
-1. **보수적 매칭**: 초기 버전은 높은 확신도의 패턴만 그룹화하고, 애매한 경우 독립 finding으로 유지
-2. **각 `DiagnosisPattern`에 `matchConfidence: number` (0-1)** 필드 추가.
-   - **≥ 0.8**: 처방(prescribe) — refactoringPlan을 포함하여 에이전트가 즉시 실행 가능
-   - **0.5 ~ 0.79**: 제안(suggest) — refactoringPlan 포함하되 에이전트에게 검증 후 실행 권고
-   - **< 0.5**: 관찰(observe) — finding 그룹화만 보고, refactoringPlan 생략. 에이전트 판단에 위임
-   - 초기 임계값은 OSS 3개 프로젝트(소/중/대 규모) 스캔 후 precision ≥ 0.8 기준으로 교정
-3. **패턴별 필수 조건(hard rules)** 정의:
-   - `god-function`: **Phase 0 (MVP)**: nesting.cognitiveComplexity ≥ 15 AND waste finding 동일 함수에 존재 시 매칭 (confidence 0.6). **Phase 2 이후**: C-2 responsibility-boundary finding 존재 (독립 클러스터 ≥ 2, 공유율 < 20%) 시 confidence 0.9로 승격
-   - `data-clump`: 동일 파라미터 조합이 **3개 이상** 함수에서 반복될 때만. **Phase 0**: DiagnosticAggregator가 직접 AST에서 함수 시그니처를 수집하여 반복 파라미터 그룹을 탐지하고, synthetic `paramobj` finding(`F-paramobj-*`)을 생성한 뒤 data-clump Diagnosis에 묶는다 (기존 디텍터 finding이 아닌 aggregator 자체 분석). **Phase 2 이후**: C-3(Parameter Object Opportunity) 디텍터가 `paramobj` finding을 직접 생성하므로, aggregator의 synthetic 생성 로직을 제거하고 C-3 출력을 소비한다
-   - `shotgun-surgery`: 동일 개념이 **4개 이상** 파일에 분산될 때만
-   - `primitive-obsession`: C-3 primitive param ∩ B-V-1 invariant-blindspot on same param
-   - `mixed-abstraction`: 같은 함수 내 최대/최소 nesting depth 차이 > 2 AND 독립 블록 2개 이상
-   - `missing-type-boundary`: export 함수의 param/return 중 any/unknown 비율 > 50%
-4. **다중 소속 규칙**: 하나의 finding이 여러 Diagnosis에 매칭될 수 있다. 처리 규칙:
-   - finding은 **matchConfidence가 가장 높은 Diagnosis 1개에만** 소속된다 (1:1)
-   - confidence 동률 시 tie-break: `expectedResolutions` 더 큰 쪽 우선 (더 많이 해결하는 진단이 우선)
-   - 그래도 동률이면 `diagnosisId` 사전순 (결정론적 보장)
-5. **테스트 전략**: 각 DiagnosisPattern에 대해 true-positive, true-negative, edge-case 시나리오를 `test/integration/diagnostic-aggregator/`에 작성. OSS 프로젝트 스캔으로 정밀도 측정 후 임계값 교정
-
-### MCP 출력 포맷 변경
-
-```typescript
-interface FirebatReport {
-  readonly meta: FirebatMeta;
-  readonly analyses: Partial<FirebatAnalyses>;
-  
-  // ── 신규 ──
-  readonly diagnoses?: ReadonlyArray<Diagnosis>;      // Layer 2 (optional — 후방 호환)
-  readonly health?: CodebaseHealth;                     // Layer 3 (optional — 후방 호환)
-}
-```
-
-MCP `scan` 도구 결과에 `diagnoses`와 `health`가 포함되면, 에이전트의 system prompt나 MCP 도구 설명에 아래 지시를 추가할 수 있다:
-
-```
-When firebat scan returns diagnoses, prioritize structural fixes over local patches.
-Read diagnoses[].refactoringPlan.steps and execute them in order.
-Do NOT fix individual findings that have a diagnosisRef — fix the diagnosis instead.
-Check health.topPriorities to determine what to fix first.
-```
+1. **보수적 매칭**: 초기 버전은 높은 확신도의 패턴만 포함하고, 애매한 경우 개별 finding code만 유지
+2. **패턴별 필수 조건(hard rules)**:
+   - `DIAG_GOD_FUNCTION`: nesting.cognitiveComplexity ≥ 15 AND waste finding이 동일 함수에 존재
+   - `DIAG_DATA_CLUMP`: 동일 파라미터 조합이 3개 이상 함수에서 반복
+   - `DIAG_CIRCULAR_DEPENDENCY`, `DIAG_GOD_MODULE`: 기존 디텍터 결과를 직접 승격 (추가 휴리스틱 없음)
+3. **테스트 전략**: 각 패턴에 대해 true-positive, true-negative, edge-case 시나리오를 `test/integration/diagnostic-aggregator/`에 작성
 
 ---
 
@@ -441,7 +406,9 @@ firebat의 소비자는 **AI 에이전트**다. 에이전트는 인간과 **다�
 
 1. **에이전트가 잘못 수정할 위치를 예측**하고
 2. **보이지 않는 것을 보이게 만들고**
-3. **증상이 아니라 변환(transformation)을 처방**하는 것이다.
+3. **구조적 원인을 catalog으로 제공하여 에이전트가 스스로 해법을 설계**하게 하는 것이다.
+
+> **설계 원칙 — 처방하지 않는다**: firebat은 Blueprint(목표 구조)나 Transformation Script(리팩토링 연산)를 직접 생성하지 않는다. 정적 분석만으로 정확한 구조적 처방을 만들기 불가능하며, 틀린 처방은 올바른 방향 제시보다 해가 크다. catalog의 `cause`가 근본 원인을, `approach`가 사고 방향을 제공하고, 구체적 설계 결정은 에이전트가 코드를 직접 분석하여 수행한다.
 
 ---
 
@@ -598,162 +565,15 @@ function process(user, order, config) {
 
 **한계**: 정적 분석이므로 런타임에만 결정되는 축 간 상관관계(예: `user.isVip`이면 항상 `order.amount > 1000`)는 탐지하지 못한다. 보고된 조합 경로 수는 이론적 상한이다.
 
-> **Note**: 기존 B-II-3(Modification Impact Radius)는 B-V-3과 측정 대상이 중복되어 B-V-3으로 통합되었다. → B-V-3 참조.
+> **Note**: 기존 B-II-3(Modification Impact Radius)는 B-IV-3과 측정 대상이 중복되어 B-IV-3으로 통합되었다. → B-IV-3 참조.
 
 ---
 
-### B-III. 증상이 아니라 변환을 처방하기 (Prescribe Transformations, Not Symptoms)
-
-#### B-III-1. Simplified Blueprint (단순화 청사진)
-
-**핵심 통찰**: "이 함수가 복잡하다"는 증상이다. 에이전트에게 필요한 것은 **"이 함수가 어떤 형태여야 하는가"**이다.
-
-firebat이 복잡한 함수/모듈에 대해 **목표 구조(target structure)**를 생성한다:
-
-```json
-{
-  "blueprints": [
-    {
-      "target": "src/order/processOrder.ts",
-      "currentState": {
-        "lines": 185,
-        "functions": 1,
-        "responsibilityClusters": 3,
-        "cognitiveLoad": 67
-      },
-      "proposedState": {
-        "files": [
-          {
-            "path": "src/order/validate-order.ts",
-            "exports": ["validateOrder"],
-            "estimatedLines": 25,
-            "responsibility": "validation"
-          },
-          {
-            "path": "src/order/persist-order.ts",
-            "exports": ["saveOrder", "updateOrderStatus"],
-            "estimatedLines": 35,
-            "responsibility": "persistence"
-          },
-          {
-            "path": "src/order/process-order.ts",
-            "exports": ["processOrder"],
-            "estimatedLines": 12,
-            "responsibility": "orchestration",
-            "delegatesTo": ["validateOrder", "saveOrder", "notifyOrderCreated"]
-          }
-        ],
-        "estimatedCognitiveLoad": 12
-      },
-      "reductionRatio": 0.82
-    }
-  ]
-}
-```
-
-**에이전트 영향**: 에이전트는 "문제를 고쳐라"가 아니라 **"이 설계도대로 만들어라"**를 받는다. 목표가 구체적이므로 국소 패치가 불가능하다.
-
-**제약**: Blueprint는 **구조적 메타데이터**(files, exports, responsibilities, delegatesTo)만 제공한다. 실제 코드 생성(`skeleton` 등)은 firebat의 범위가 아니라 에이전트의 역할이다. firebat은 "무엇을 분리할것인가"를 정하고, 에이전트는 "어떻게 작성할것인가"를 정한다.
-
-**proposedState 생성 알고리즘**:
-1. C-2(Responsibility Boundary)의 변수 클러스터 결과를 입력으로 받는다
-2. 각 클러스터 → 하나의 파일로 매핑. 파일명은 클러스터의 대표 변수/함수명에서 파생 (예: `validate` 관련 클러스터 → `validate-order.ts`)
-3. `exports`는 클러스터 내 외부 참조되는 함수명
-4. `estimatedLines`는 클러스터에 포함된 소스 라인 수
-5. `responsibility`는 클러스터의 대표 변수 동사에서 추출 (validate, save, notify 등)
-6. 원본 함수는 orchestrator로 변환: `delegatesTo`에 추출된 함수 목록 나열
-7. `estimatedCognitiveLoad`는 orchestrator의 예상 nesting depth (보통 0-1)
-
----
-
-#### B-III-2. Transformation Script (변환 스크립트)
-
-**핵심 통찰**: 에이전트에게 "suggestedRefactor: Extract validation logic"이라고 말하면, 에이전트는 자기 방식대로 추출한다 (파라미터 선택, 이름, 위치 등). 결과가 들쭉날쭉하다.
-
-firebat이 **원자적 리팩토링 연산의 시퀀스**를 처방한다:
-
-```json
-{
-  "transformations": [
-    {
-      "id": "T-001",
-      "type": "EXTRACT",
-      "from": { "file": "order.ts", "span": { "start": { "line": 10 }, "end": { "line": 25 } } },
-      "newFunction": {
-        "name": "validateOrder",
-        "params": [{ "name": "input", "type": "OrderInput" }],
-        "returnType": "ValidationResult",
-        "destination": "order/validate-order.ts"
-      },
-      "replaceOriginalWith": "const validated = validateOrder(input);",
-      "reason": "Responsibility cluster A: validation (variable overlap with remaining code: 8%)"
-    },
-    {
-      "id": "T-002",
-      "type": "INTRODUCE_TYPE",
-      "targets": [
-        { "file": "user-service.ts", "param": "userId", "currentType": "string" },
-        { "file": "order-service.ts", "param": "userId", "currentType": "string" },
-        { "file": "auth.ts", "param": "userId", "currentType": "string" }
-      ],
-      "newType": { "name": "UserId", "definition": "type UserId = string & { readonly __brand: unique symbol }", "file": "types/ids.ts" },
-      "reason": "Primitive 'string' used for 'userId' in 11 locations. No compile-time distinction from other strings."
-    },
-    {
-      "id": "T-003",
-      "type": "DELETE",
-      "target": { "file": "interfaces/IUserRepository.ts" },
-      "reason": "Single implementation. Abstraction adds 1 indirection layer with 0 polymorphic benefit.",
-      "prerequisite": "Inline interface methods into UserRepository class"
-    }
-  ]
-}
-```
-
-**EXTRACT, INTRODUCE_TYPE, DELETE** — 세 가지 원자 연산으로 대부분의 구조적 리팩토링이 표현 가능하다.
-
-> **액션 어휘 통일**: Transformation Script의 `type` 필드는 `RefactoringStep.action` union(`EXTRACT | MOVE | INLINE | INTRODUCE_TYPE | DELETE | RENAME | MERGE`)의 부분집합을 사용한다. 동일한 어휘를 공유하여 Diagnosis의 refactoringPlan과 Transformation Script 간 모호성을 방지한다.
-
-**EXTRACT 파라미터 결정 알고리즘**:
-1. C-2 클러스터의 줄 범위 → `from.span`
-2. 클러스터 내 **외부에서 정의되고 내부에서 읽히는** 변수 → `params` (variable-collector의 isRead 위치가 클러스터 내, 정의가 외부)
-3. 클러스터의 **마지막 할당 변수 중 클러스터 외부에서 읽히는** 것 → `returnType`
-4. 함수명: 클러스터 대표 동사 + 원본 함수의 목적어 (예: validate + Order → `validateOrder`)
-5. destination: 원본 파일의 디렉토리 + kebab-case 함수명 + `.ts`
-
----
-
-#### B-III-3. Deletion Candidates (삭제 후보)
-
-**핵심 통찰**: 단순성의 가장 강력한 도구는 **삭제**다. 코드를 추가하는 것은 항상 복잡도를 증가시킨다. 에이전트는 기본적으로 코드를 추가하려 한다 — 삭제를 적극적으로 제안해야 한다.
-
-```
-"Deletion candidates (removing these simplifies without changing behavior):
-
- 1. interfaces/IUserRepository.ts — single implementation, 0 consumers use the interface type directly
-    Impact: -1 file, -45 lines, -1 indirection layer. 0 behavior change.
-    
- 2. utils/retry.ts — imported by 1 file, wraps a 3-line try/catch. Inlining is simpler.
-    Impact: -1 file, -28 lines. Caller becomes 3 lines longer but eliminates 1 import.
-    
- 3. types/DeepPartialReadonly.ts — used in 2 locations, both could use Partial<T> instead.
-    Impact: -1 file, -15 lines. Simplifies type comprehension.
-    
- 4. constants/ERROR_CODES.ts (DEPRECATED_ERR, LEGACY_TIMEOUT) — 0 references in non-test code.
-    Impact: -2 exported symbols, -0 behavior change."
-```
-
-**안전 규칙**:
-- side-effect-only import(`import './polyfill'`, `import 'reflect-metadata'`)는 삭제 후보에서 **제외**한다.
-- 정적 분석 범위 한계: `require()` 동적 인자, `eval`, `Reflect` 기반 동적 참조는 탐지 대상 외이며, 이로 인한 false-positive 가능성을 finding message에 명시한다.
-
----
-
-### B-IV. 구조적 엔트로피 측정 (Structural Entropy)
+### B-III. 구조적 엔트로피 측정 (Structural Entropy)
 
 전통적 메트릭(complexity, coupling, cohesion)을 넘어서, **코드의 무질서도**를 측정하는 새로운 지표들.
 
-#### B-IV-1. Implementation Overhead Ratio (구현 오버헤드 비율)
+#### B-III-1. Implementation Overhead Ratio (구현 오버헤드 비율)
 
 **핵심 통찰**: 함수의 **인터페이스 복잡도**(입출력 표면)와 **구현 복잡도**(내부 로직)의 비율이 과도하면, 같은 일을 더 단순하게 할 수 있다는 신호다.
 
@@ -775,11 +595,11 @@ firebat이 **원자적 리팩토링 연산의 시퀀스**를 처방한다:
  suggestedRefactor: Extract internal logic into helper functions to reduce per-function implementation weight."
 ```
 
-**기존 B-IV-1(Accidental Complexity Ratio)에서 변경된 이유**: "본질적 복잡도"를 정적 분석으로 근사하는 것은 객관적 정의가 불가능하다 (파라미터가 `config: AppConfig` 하나여도 내부에서 30개 필드를 사용할 수 있음). 인터페이스/구현 비율은 AST만으로 객관적으로 측정 가능하다.
+**기존 B-III-1(Accidental Complexity Ratio)에서 변경된 이유**: "본질적 복잡도"를 정적 분석으로 근사하는 것은 객관적 정의가 불가능하다 (파라미터가 `config: AppConfig` 하나여도 내부에서 30개 필드를 사용할 수 있음). 인터페이스/구현 비율은 AST만으로 객관적으로 측정 가능하다.
 
 ---
 
-#### B-IV-2. Concept Scatter Index (개념 산재 지수)
+#### B-III-2. Concept Scatter Index (개념 산재 지수)
 
 **핵심 통찰**: 하나의 도메인 개념이 몇 개 파일에 걸쳐 있는가. 이것은 `coupling`이나 `dependencies`와 다르다 — import 관계가 아니라 **같은 개념을 다루는 코드의 물리적 분산도**를 측정한다.
 
@@ -801,7 +621,7 @@ firebat이 **원자적 리팩토링 연산의 시퀀스**를 처방한다:
 
 ---
 
-#### B-IV-3. Abstraction Fitness (추상화 적합도)
+#### B-III-3. Abstraction Fitness (추상화 적합도)
 
 **핵심 통찰**: 추상화 경계(모듈/클래스/인터페이스)는 **변경 경계와 일치**해야 한다. 함께 변경되는 코드가 다른 모듈에 있으면 추상화가 부적합하고, 독립적으로 변경되는 코드가 같은 모듈에 있어도 추상화가 부적합하다.
 
@@ -823,11 +643,11 @@ firebat이 **원자적 리팩토링 연산의 시퀀스**를 처방한다:
 
 ---
 
-### B-V. 에이전트 실패 예측 (Agent Failure Prediction)
+### B-IV. 에이전트 실패 예측 (Agent Failure Prediction)
 
 firebat의 궁극적 차별화: **에이전트가 이 코드를 수정할 때 어디서 실수할지를 예측**한다.
 
-#### B-V-1. Invariant Blindspot (불변 조건 사각지대)
+#### B-IV-1. Invariant Blindspot (불변 조건 사각지대)
 
 코드에 **타입으로 표현되지 않은 불변 조건(invariant)**이 있으면, 에이전트는 이를 위반할 확률이 높다.
 
@@ -848,7 +668,7 @@ firebat의 궁극적 차별화: **에이전트가 이 코드를 수정할 때 �
 
 ---
 
-#### B-V-2. Modification Trap (수정 함정)
+#### B-IV-2. Modification Trap (수정 함정)
 
 코드의 특정 위치가 **수정하기 쉬워 보이지만 실제로는 위험한** 곳을 식별한다.
 
@@ -879,9 +699,9 @@ firebat의 궁극적 차별화: **에이전트가 이 코드를 수정할 때 �
 
 ---
 
-#### B-V-3. Modification Impact Radius (수정 영향 반경)
+#### B-IV-3. Modification Impact Radius (수정 영향 반경)
 
-> **B-II-3과 통합**: 기존 B-II-3(Modification Impact Radius)은 scan 시점이 아니라 edit 시점의 MCP 도구로 기획되었으나, 기존 B-V-3과 측정 대상이 중복된다. 둘 다 "수정 시 에이전트가 읽어야 할 다른 코드의 범위"를 측정한다. 따라서 두 기능을 **하나의 디텍터 + MCP 도구**로 통합한다.
+> **B-II-3과 통합**: 기존 B-II-3(Modification Impact Radius)은 scan 시점이 아니라 edit 시점의 MCP 도구로 기획되었으나, 기존 B-IV-3과 측정 대상이 중복된다. 둘 다 "수정 시 에이전트가 읽어야 할 다른 코드의 범위"를 측정한다. 따라서 두 기능을 **하나의 디텍터 + MCP 도구**로 통합한다.
 
 **이중 용도**:
 1. **scan 시점 (디텍터 출력)**: 각 심볼의 impact radius를 사전 계산하여 finding으로 보고. 임계값 초과 시 경고.
@@ -934,18 +754,18 @@ interface AssessImpactOutput {
 
 ### 기존 디텍터 카탈로그와의 관계
 
-위의 B-I ~ B-V는 기존 "code smell → detector" 패러다임과 근본적으로 다르다:
+위의 B-I ~ B-IV는 기존 "code smell → detector" 패러다임과 근본적으로 다르다:
 
 | 기존 접근 (PLAN.md 스타일) | 신규 접근 (Agent Failure Mode 기반) |
 |---------------------------|-------------------------------------|
-| data-clump 탐지 | → B-IV-2 Concept Scatter의 한 증상으로 포착됨 |
-| primitive-obsession 탐지 | → B-V-1 Invariant Blindspot의 한 증상으로 포착됨 |
-| god-function 탐지 | → B-III-1 Blueprint가 해결책까지 제시 |
-| over-engineering 탐지 | → B-III-3 Deletion Candidates가 구체적 삭제 지시 |
-| parameter-complexity 탐지 | → B-II-2 Decision Surface + B-V-3 Impact Radius로 맥락 포함 |
-| module-cohesion 탐지 | → B-IV-3 Abstraction Fitness가 더 근본적 지표 |
+| data-clump 탐지 | → B-III-2 Concept Scatter의 한 증상으로 포착됨 |
+| primitive-obsession 탐지 | → B-IV-1 Invariant Blindspot의 한 증상으로 포착됨 |
+| god-function 탐지 | → DiagnosticAggregator의 DIAG_GOD_FUNCTION 패턴이 catalog approach로 사고 유도 |
+| over-engineering 탐지 | → waste 디텍터의 dead-code + forwarding 결과로 포착됨 |
+| parameter-complexity 탐지 | → B-II-2 Decision Surface + B-IV-3 Impact Radius로 맥락 포함 |
+| module-cohesion 탐지 | → B-III-3 Abstraction Fitness가 더 근본적 지표 |
 
-기존 PLAN.md의 디텍터들(giant-file, export-kind-mix 등)은 여전히 유용하지만, **독립적 finding이 아니라 B-III-1 Blueprint의 입력 신호**로 활용된다.
+기존 PLAN.md의 디텍터들(giant-file, export-kind-mix 등)은 여전히 유용하지만, **독립적 finding이 아니라 DiagnosticAggregator의 패턴 탐지 입력 신호**로 활용된다.
 
 ---
 
@@ -1030,7 +850,7 @@ interface AssessImpactOutput {
  Reduces total parameter count by 14 across the codebase."
 ```
 
-**DiagnosticAggregator와의 관계**: 이 디텍터가 `data-clump` 패턴의 직접 입력이 된다. Transformation Script의 `INTRODUCE_TYPE` 연산으로 연결.
+**DiagnosticAggregator와의 관계**: 이 디텍터가 `DIAG_DATA_CLUMP` 패턴의 직접 입력이 된다. catalog의 approach가 타입 도입 방향을 사고 유도.
 
 **config**:
 ```jsonc
@@ -1080,7 +900,7 @@ interface AssessImpactOutput {
 
 ### C-5. Module Cohesion Score (모듈 응집도 점수)
 
-**현재 gap**: `coupling`은 모듈 **간** 결합도(Martin 메트릭)를 사용한다. 모듈 **내부** 응집도를 직접 측정하는 디텍터가 없다. `Abstraction Fitness`(B-IV-3)가 응집도/결합 비율을 보지만, 응집도 자체를 독립적으로 보고하지 않는다.
+**현재 gap**: `coupling`은 모듈 **간** 결합도(Martin 메트릭)를 사용한다. 모듈 **내부** 응집도를 직접 측정하는 디텍터가 없다. `Abstraction Fitness`(B-III-3)가 응집도/결합 비율을 보지만, 응집도 자체를 독립적으로 보고하지 않는다.
 
 **측정** (LCOM 변형):
 1. 모듈 내 export 심볼 목록 추출
@@ -1809,25 +1629,50 @@ AGENTS.md Bun-first 원칙 위반. `analyzeDependencies`가 sync 함수라서 �
 
 ## 6. Finding 형식 불일치
 
-PLAN.md §1 명세: `kind`, `message`, `filePath`, `span`, `metrics`, `why`, `suggestedRefactor`
+★ 핵심 과제 A에서 정의한 BaseFinding 관례 + 프로퍼티명 최적화의 디텍터별 적용 현황.
 
-| Feature | `metrics` | `why` | `suggestedRefactor` |
-|---------|-----------|-------|---------------------|
-| coupling | ✅ | ✅ | ✅ |
-| nesting | ✅ (타입이 `NestingMetrics`, PLAN 명세의 `Record<string, number>`와 구조 불일치) | ❌ | `suggestions`로 대체 |
-| early-return | ✅ (타입이 `EarlyReturnMetrics`, 동일 구조 불일치) | ❌ | `suggestions`로 대체 |
-| noop | ❌ | ❌ | ❌ (`evidence`만) |
-| exact-duplicates | ❌ | ❌ | ❌ |
-| structural-duplicates | ❌ | ❌ | ❌ |
-| waste | ❌ | ❌ | ❌ |
-| forwarding | ❌ | ❌ | ❌ (`evidence`만) |
-| exception-hygiene | ❌ | ❌ | `recipes`로 대체 |
-| barrel-policy | ❌ | ❌ | ❌ (`evidence`만) |
-| dependencies (dead-export) | ❌ | ❌ | ❌ |
-| unknown-proof | ❌ | ❌ | ❌ |
-| api-drift | ❌ | ❌ | ❌ |
+### 현재 상태
 
-**개선 계획**: coupling처럼 `metrics` + `why` + `suggestedRefactor` 3필드를 모든 디텍터에 점진 적용. 기존 `suggestions`, `evidence`, `recipes` 필드는 호환성 유지하되 표준 필드를 추가.
+BaseFinding 관례 (`kind`, `file`, `span`, `code?`) 대비 각 디텍터의 gap:
+
+| 디텍터 | `kind` 현황 | `filePath`→`file` | `code?` 추가 | 삭제 대상 프로퍼티 | 축약 대상 |
+|--------|------------|-------------------|-------------|-------------------|----------|
+| waste | ✓ 있음 (`WasteKind`) | 필요 | 필요 | — | — |
+| nesting | ✗ **신규 부여** (`NestingKind`) | 필요 | 필요 | `suggestions` (→ catalog) | `accidentalQuadraticTargets`→`quadraticTargets` |
+| early-return | ✗ **신규 부여** (`EarlyReturnKind`) | 필요 | 필요 | `suggestions` (→ catalog) | `earlyReturnCount`→`returns`, `guardClauseCount`→`guards`, `hasGuardClauses`→`hasGuards` |
+| noop | ✓ 있음 (`string`) | 필요 | 필요 | — | — |
+| forwarding | ✓ 있음 (`ForwardingFindingKind`) | 필요 | 필요 | — | — |
+| exact-duplicates | ✓ `cloneType`→`kind` rename | 필요 | 필요 | — | `cloneType`→`kind`, `suggestedParams`→`params` |
+| structural-duplicates | ✓ `cloneType`→`kind` rename | 필요 | 필요 | — | `cloneClasses`→`groups` |
+| coupling | ✗ **signals 승격** (`CouplingKind`) | 필요 | 필요 | `why`, `suggestedRefactor` (→ catalog) | — |
+| dependencies | ✓ 있음 (sub-types) | 필요 | 필요 | — | `fanInTop`→`fanIn`, `fanOutTop`→`fanOut`, `edgeCutHints`→`cuts`, `exportName`→`name` |
+| barrel-policy | ✓ 있음 (`BarrelPolicyFindingKind`) | 필요 | 필요 | — | — |
+| exception-hygiene | ✓ 있음 (`ExceptionHygieneFindingKind`) | 필요 | 필요 | `recipes` (→ catalog) | — |
+| unknown-proof | ✓ 있음 (`UnknownProofFindingKind`) | 필요 | 필요 | `status` (→ meta.errors) | — |
+| api-drift | ✗ **신규 부여** (`ApiDriftKind`) | 필요 | 필요 | `status` (→ meta.errors) | `standardCandidate`→`standard`, `paramsCount`→`params`, `optionalCount`→`optionals` |
+| typecheck | — (외부 도구, code 불필요) | 필요 | — (외부 도구 메시지 유지) | `status`, `lineText` (→ codeFrame 중복) | — |
+| lint | — (외부 도구, code 불필요) | 필요 | — (외부 도구 메시지 유지) | `status` (→ meta.errors) | — |
+| format | — (외부 도구) | — | — (외부 도구 메시지 유지) | `status` (→ meta.errors) | `fileCount`→`files` |
+
+### `*Analysis` 래퍼 폐기
+
+기존: 각 디텍터가 개별 `*Analysis` 인터페이스를 반환. 래퍼 형태는 3가지:
+- **배열 추출만**: `{ items }` 또는 `{ findings }` 또는 `{ groups }` 또는 `{ hotspots }` 또는 `{ cloneClasses }`
+  - NestingAnalysis, EarlyReturnAnalysis, NoopAnalysis, BarrelPolicyAnalysis, ForwardingAnalysis, ApiDriftAnalysis, CouplingAnalysis, StructuralDuplicatesAnalysis
+- **status/tool + 배열**: `{ status, tool, error?, findings/items/diagnostics }`
+  - ExceptionHygieneAnalysis, UnknownProofAnalysis, LintAnalysis, TypecheckAnalysis, FormatAnalysis
+- **이미 bare array**: exact-duplicates, waste
+- **복합 객체 유지**: DependencyAnalysis (유일한 예외)
+
+개편: **bare array** 반환. `status`/`tool`/`error`는 `meta.errors`로 이동.
+
+### 적용 순서
+
+1. **`filePath`→`file`**: 모든 finding 타입에 일괄 적용 (breaking change → 한 번에)
+2. **`code?` 추가**: enrichment layer가 `kind` → `code` 매핑으로 생성. 디텍터 코드 수정 없음
+3. **삭제 대상 프로퍼티**: `suggestions`, `why`, `suggestedRefactor`, `recipes` → catalog `cause`/`approach`로 대체 후 제거
+4. **`*Analysis` 래퍼 제거**: 각 디텍터의 반환 타입을 bare array로 변경, `status`/`tool`/`error`는 `scan.usecase.ts`에서 `meta.errors`로 집계
+5. **프로퍼티명 축약**: 디텍터별 상위 컨텍스트 중복 제거 (위 표 참조)
 
 ---
 
@@ -1891,23 +1736,21 @@ tsconfig 읽기 실패 시 silent fallback. 어떤 설정이 적용되었는지 
 
 ## 9. 구현 인프라 (Implementation Infrastructure)
 
-### 9.1 후방 호환성 전략
+### 9.1 마이그레이션 전략
 
-`FirebatReport`에 `diagnoses`, `health` 필드를 추가하면 기존 MCP 클라이언트와 CLI 소비자가 영향받는다.
+★ A Phase 0은 **breaking change**다. `*Analysis` 래퍼 제거, `filePath`→`file`, 프로퍼티 삭제/축약이 동시에 일어난다.
 
 **원칙**:
-1. **신규 필드는 모두 optional**: `diagnoses?: ReadonlyArray<Diagnosis>`, `health?: CodebaseHealth`
-2. **기존 `analyses` 구조 변경 금지**: EnrichedFinding의 신규 필드(`fixScope`, `localFixWarning`, `diagnosisRef`)도 optional로 추가
-3. **`meta.reportVersion` 필드 도입**: 출력 스키마 버전을 명시 (`"1.0"` = 현재, `"2.0"` = 3-Layer 완료 시점)
-4. **deprecated 필드 공존**: 기존 `suggestions`, `evidence`, `recipes` 필드는 최소 2 minor 버전 동안 유지. 표준 필드(`metrics`, `why`, `suggestedRefactor`)와 병존
+1. **한 번에 전환**: 점진적 deprecated 공존은 코드 복잡성만 증가. Phase 0에서 일괄 전환
+2. **MCP 도구 설명 업데이트**: 스키마 변경 사항을 도구 설명에 반영하여 에이전트가 새 구조를 즉시 인식
+3. **테스트 전량 수정**: 기존 테스트의 `filePath`, `status`, `tool` 참조를 새 스키마에 맞춰 일괄 변경
 
 ```typescript
 interface FirebatReport {
-  readonly meta: FirebatMeta & { readonly reportVersion: string };
-  readonly analyses: Partial<FirebatAnalyses>;
-  // optional — 없으면 기존 클라이언트는 영향 없음
-  readonly diagnoses?: ReadonlyArray<Diagnosis>;
-  readonly health?: CodebaseHealth;
+  readonly meta: FirebatMeta;          // errors?: Record<string, string> 포함
+  readonly analyses: FirebatAnalyses;  // 각 디텍터가 bare array 반환
+  readonly top: ReadonlyArray<Priority>;
+  readonly catalog: Record<string, CodeEntry>;
 }
 ```
 
@@ -1956,20 +1799,21 @@ interface FirebatReport {
 
 ### 9.3 `report.ts` 텍스트 렌더러 확장
 
-Layer 2/3 출력을 CLI text 포맷으로 어떻게 표현할지:
+`top` + `catalog` 출력을 CLI text 포맷으로 어떻게 표현할지:
 
 ```
-── Diagnoses ─────────────────────────────────────────
-D-GOD-a3f1-34  structural  god-function  processOrder() handles 3 concerns       → resolves 4 findings
-D-CLMP-b2c4-0  design      data-clump    (userId, userName, userEmail) × 7 fns   → resolves 7 findings
-
-── Health ────────────────────────────────────────────
-Overall: 72/100
-  Simplicity: 68  Modularity: 75  Consistency: 80  TypeIntegrity: 65  Maintainability: 72
-
 ── Top Priorities ────────────────────────────────────
-1. D-GOD-a3f1-34 (resolves 4)  processOrder() handles 3 concerns
-2. D-CLMP-b2c4-0 (resolves 7)  (userId, userName, userEmail) × 7 functions
+1. WASTE_DEAD_STORE  (waste, resolves 15)
+2. NESTING_DEEP      (nesting, resolves 8)
+3. COUPLING_GOD_MOD  (coupling, resolves 5)
+
+── Catalog ───────────────────────────────────────────
+WASTE_DEAD_STORE
+  cause:    값이 할당된 후 읽히기 전에 덮어쓰이거나 스코프를 벗어남
+  approach: 이 할당이 왜 불필요해졌는지 경위를 파악하라...
+NESTING_DEEP
+  cause:    함수 내 제어 구조가 깊게 중첩되어 인지 복잡도가 높음
+  approach: 중첩이 깊어진 원인을 파악하라...
 ```
 
 ### 9.4 테스트 전략
@@ -1979,14 +1823,14 @@ Overall: 72/100
 | DiagnosticAggregator 패턴 매칭 | 각 DiagnosisPattern에 대해 true-positive, true-negative, edge-case | `test/integration/diagnostic-aggregator/` |
 | C-시리즈 신규 디텍터 | BDD 스타일: 입력 코드 fixture → expected finding | `test/integration/{detector-name}/` |
 | B-시리즈 분석기 | 입력 프로그램 → expected 출력 구조 검증 | `test/integration/{analyzer-name}/` |
-| EnrichedFinding 필드 | 기존 디텍터별로 `fixScope`, `localFixWarning` 생성 검증 | 각 feature의 기존 spec 확장 |
+| BaseFinding 프로퍼티 변경 | `filePath`→`file`, `code?` 추가, 삭제/축약 반영 검증 | 각 feature의 기존 spec 확장 |
 | MCP assess-impact | 심볼 쿼리 → impact radius 결과 | `test/mcp/` |
 
 ### 9.5 성능 예산
 
 | Phase | 허용 추가 시간 | 근거 |
 |-------|-------------|------|
-| Phase 5 (DiagnosticAggregator) | scan 전체 시간의 **10% 이하** | finding 수 N에 대해 O(N²) 이하 보장 |
+| Phase 0 Step 6 (DiagnosticAggregator) | scan 전체 시간의 **10% 이하** | finding 수 N에 대해 O(N²) 이하 보장 |
 | C-시리즈 디텍터 (새 AST 패스) | 기존 디텍터 합계의 **20% 이하** | 기존 엔진 재활용으로 추가 AST 순회 최소화 |
 | assess-impact MCP 툴 | 호출당 **500ms 이내** | 에이전트 응답 지연에 직접 영향 |
 
@@ -1997,7 +1841,7 @@ Overall: 72/100
 | PLAN 항목 | 상태 | 우선순위 |
 |-----------|------|----------|
 | **giant-file** (A1) | ❌ 미구현 | **즉시** |
-| **dependency-direction** (A2) | ⚠ 부분 (config 모델 불일치: 현재 `layers` + `allowedDependencies`, PLAN은 `layers[].globs` + `rules[]`) | 높음 |
+| **dependency-direction** (A2) | ⚠ 부분 (config 모델 불일치: 현재 코드는 `layers` + `allowedDependencies`, PLAN.md는 `layers[].globs` + `rules[]` 모델. **PLAN.md 모델로 전환 필요** — 현재 코드의 flat `layers` 배열은 glob 패턴 매칭을 지원하지 않으며, `allowedDependencies`는 `rules[]`의 from/to/allow 구조로 대체해야 한다) | 높음 |
 | **dead-export Stage 2** (A3) | ⚠ 부분 (package.json entrypoint 읽지만 library mode 미완) | 중간 |
 | **export-kind-mix** (B2) | ❌ 미구현 | 중간 |
 | **scatter-of-exports** (B3) | ❌ 미구현 | 중간 |
@@ -2010,17 +1854,17 @@ Overall: 72/100
 
 ## 11. 기존 PLAN.md 디텍터와의 통합
 
-PLAN.md의 Tier A-C 디텍터(giant-file, export-kind-mix, scatter-of-exports 등)는 여전히 구현할 가치가 있지만, **독립 finding이 아니라 B-III Blueprint/Transformation의 입력 신호**로 활용된다.
+PLAN.md의 Tier A-C 디텍터(giant-file, export-kind-mix, scatter-of-exports 등)는 여전히 구현할 가치가 있지만, **독립 finding이 아니라 DiagnosticAggregator의 패턴 탐지 입력 신호**로 활용된다.
 
 | PLAN 디텍터 | 통합 위치 |
 |-------------|-----------|
-| giant-file | → Blueprint의 분할 대상 식별 |
-| export-kind-mix | → Concept Scatter + Blueprint의 모듈 분리 근거 |
-| scatter-of-exports | → Abstraction Fitness의 입력 |
-| dead-export | → Deletion Candidates의 입력 |
-| shared-type-extraction | → Transformation Script의 EXTRACT 연산 |
+| giant-file | → DIAG_GOD_FUNCTION / DIAG_GOD_MODULE 패턴의 입력 신호 |
+| export-kind-mix | → Concept Scatter(B-III-2) + DIAG_GOD_MODULE 패턴의 입력 |
+| scatter-of-exports | → Abstraction Fitness(B-III-3)의 입력 |
+| dead-export | → waste 디텍터의 확장 |
+| shared-type-extraction | → DIAG_DATA_CLUMP 패턴의 입력 |
 | dependency-direction | → Implicit State Protocol + Temporal Coupling의 보조 |
-| public-surface-explosion | → Modification Impact Radius의 입력 |
+| public-surface-explosion | → Modification Impact Radius(B-IV-3)의 입력 |
 
 ---
 
@@ -2028,31 +1872,18 @@ PLAN.md의 Tier A-C 디텍터(giant-file, export-kind-mix, scatter-of-exports �
 
 > **용어 구분**: 이 섹션의 "Phase 0-6"은 **개발 로드맵 단계**를 의미한다. Section 1.1의 "Stage 0-5"는 `scan.usecase.ts`의 **런타임 실행 단계**이며 별개의 개념이다.
 
-### MVP 릴리스 컷
-
-**MVP = Phase 0 완료**. 이것만으로 기존 출력에 `fixScope` + `diagnosisRef` + `diagnoses` + `health`가 추가되며, 기존 finding만으로도 DiagnosticAggregator가 진단 그룹을 생성한다. 신규 디텍터(B/C) 없이도 즉시 가치를 제공한다.
-
-| MVP 포함 | MVP 제외 |
-|----------|----------|
-| EnrichedFinding 필드 (id, fixScope, localFixWarning, diagnosisRef) | B-시리즈 전체 (Phase 1, 3, 4, 5) |
-| DiagnosticAggregator (기존 16개 디텍터 finding 대상) | C-시리즈 전체 (Phase 2) |
-| CodebaseHealth (scoreStatus: 'experimental') | Transformation Script / Blueprint |
-| report.ts 렌더러 확장 | assess-impact MCP 도구 |
-| reportVersion 도입 | 기존 디텍터 성능 최적화 (Phase 6) |
-| reaching-definitions 엔진 추출 | |
-
 ### Phase별 완료 조건 (DoD)
 
 **공통 조건 (모든 Phase):** 같은 소스 코드에 같은 디텍터를 실행하면 항상 같은 결과가 나와야 한다 (결정론적 재현성).
 
 | Phase | 완료 조건 |
 |-------|----------|
-| **0 (기반)** | (1) 기존 16개 디텍터의 모든 finding에 id + fixScope 생성 (2) DiagnosticAggregator가 god-function, data-clump 2개 패턴 이상 매칭 (3) 기존 테스트 전량 통과 (4) 기존 MCP 소비자가 신규 필드 무시 시 동작 불변 (후방 호환) |
-| **1 (가시화)** | (1) B-I-1~3, B-V-1 디텍터 각각 true-positive 5개 이상 integration test (2) precision ≥ 0.8 (OSS 2개 프로젝트 — 소/중 또는 중/대 규모) (3) scan 전체 시간 증가 ≤ 15% |
+| **0 (기반)** | (1) `*Analysis` 래퍼 제거, 모든 디텍터가 bare array 반환 (2) `filePath`→`file` 일괄 적용 (3) kind 미존재 디텍터에 kind 부여 완료 (4) 삭제/축약 대상 프로퍼티 정리 완료 (5) kind→code 매핑 로직 동작, 모든 finding에 code 필드 존재 (6) DiagnosticAggregator가 `top` + `catalog` 생성, 3개 패턴(DIAG_GOD_FUNCTION, DIAG_CIRCULAR_DEPENDENCY, DIAG_GOD_MODULE) 매칭 (7) catalog 전수 작성 완료 (8) 기존 테스트 전량 통과 (9) breaking change이므로 MCP 도구 설명 업데이트 |
+| **1 (가시화)** | (1) B-I-1~3, B-IV-1 디텍터 각각 true-positive 5개 이상 integration test (2) precision ≥ 0.8 (OSS 2개 프로젝트 — 소/중 또는 중/대 규모) (3) scan 전체 시간 증가 ≤ 15% |
 | **2 (클린코드)** | (1) C-1~7 디텍터 각각 integration test (2) 기존 디텍터 합계 대비 AST 순회 추가 시간 ≤ 20% |
-| **3 (변환 처방)** | (1) Blueprint/Transformation/Deletion 각각 end-to-end 테스트 (2) 생성된 RefactoringPlan을 에이전트가 실행 시 finding 수 감소 검증 |
-| **4 (컨텍스트)** | (1) B-II-1~2, B-V-3 디텍터 integration test (2) assess-impact MCP 도구 호출당 ≤ 500ms |
-| **5 (엔트로피)** | (1) B-IV-1~3 디텍터 integration test |
+| **3 (에이전트 실패 예측 확장)** | (1) B-IV-2~3 디텍터 integration test (2) precision ≥ 0.8 (OSS 2개 프로젝트) (3) assess-impact MCP 도구 호출당 ≤ 500ms |
+| **4 (컨텍스트)** | (1) B-II-1~2 디텍터 integration test |
+| **5 (엔트로피)** | (1) B-III-1~3 디텍터 integration test |
 | **6 (개선)** | (1) 변경 대상 디텍터의 기존 테스트 전량 통과 (2) 성능 회귀 없음 (3) 워처 통합 시: MCP zero-change scan <1ms, CLI+bunner scan <5ms |
 
 ### Phase 의존 그래프
@@ -2062,7 +1893,7 @@ Phase 0 (기반)          ← 모든 후속 Phase의 전제
   │
   ├──→ Phase 1 (가시화)      ← 독립 구현 가능
   ├──→ Phase 2 (클린코드 위생) ← 독립 구현 가능, Phase 1과 병렬 가능
-  ├──→ Phase 3 (변환 처방)    ← Phase 2의 결과를 입력으로 사용하므로 후행
+  ├──→ Phase 3 (실패 예측 확장) ← Phase 1의 결과를 확장하므로 후행
   ├──→ Phase 4 (컨텍스트 비용) ← 독립 구현 가능, Phase 1과 병렬 가능
   ├──→ Phase 5 (구조 엔트로피) ← 독립 구현 가능
   └──→ Phase 6 (기존 개선)    ← 어느 Phase에서든 병렬 가능
@@ -2071,52 +1902,619 @@ Phase 0 (기반)          ← 모든 후속 Phase의 전제
 ### Phase 계획
 
 ```
-Phase 0 — 기반 (출력 아키텍처 전환)
+Phase 0 — 기반 (출력 스키마 전환)
   구현 순서 (의존 관계 기반 — 반드시 번호 순서대로 진행):
+
+  현재 래퍼 유형별 디텍터 분류 (Step 1 작업 범위):
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ bare array (변환 불필요):                                       │
+  │   exact-duplicates, waste                                      │
+  │                                                                │
+  │ { items/findings/groups } 래퍼 (배열 추출만):                   │
+  │   nesting, early-return, noop, barrel-policy, forwarding,      │
+  │   api-drift                                                    │
+  │                                                                │
+  │ { status, tool, error?, findings/items/diagnostics } 래퍼     │
+  │ (배열 추출 + status/tool/error → meta.errors 이동):            │
+  │   exception-hygiene, unknown-proof, lint, typecheck, format    │
+  │                                                                │
+  │ 복합 구조 (개별 처리):                                          │
+  │   coupling={hotspots}, structural-duplicates={cloneClasses},   │
+  │   dependencies (유일한 복합 객체 — 유지)                        │
+  └─────────────────────────────────────────────────────────────────┘
+
+  Step 1. `*Analysis` 래퍼 제거
+    └── 모든 디텍터의 반환 타입을 bare array로 변경
+    └── 대상 래퍼 인터페이스: NestingAnalysis, EarlyReturnAnalysis, NoopAnalysis,
+        BarrelPolicyAnalysis, ForwardingAnalysis, ApiDriftAnalysis,
+        ExceptionHygieneAnalysis, UnknownProofAnalysis, LintAnalysis,
+        TypecheckAnalysis, FormatAnalysis, CouplingAnalysis,
+        StructuralDuplicatesAnalysis (13개)
+    └── 이미 bare array인 디텍터: exact-duplicates, waste (2개, 변환 불필요)
+    └── 복합 객체 유지: dependencies (DependencyAnalysis — 유일한 예외)
+    └── scan.usecase.ts에서 status/tool/error를 meta.errors로 집계
+    └── 의존: 없음 (모든 후속 Step의 전제)
+    └── 검증: 기존 테스트 전량 통과, MCP 출력에서 status/tool 필드 소멸 확인
   
-  Step 1. NoopFinding, ForwardingFinding에 message: string 필드 추가
-    └── 의존: 없음. 후속 Step의 전제 조건 (EnrichedFinding 적용 시 message 필수)
-    └── 검증: 기존 noop, forwarding 테스트 전량 통과
+  Step 2. BaseFinding 프로퍼티 정리
+    └── filePath → file 일괄 변경 (모든 finding 타입)
+    └── 삭제: suggestions, why, suggestedRefactor, recipes, lineText (Section 6 참조)
+    └── 축약: 디텍터별 프로퍼티명 변경 (Section 6 참조)
+    └── kind 필드 부여 (현재 kind가 없는 디텍터 — 아래 E. kind 부여 명세 참조)
+    └── 의존: Step 1 (래퍼 제거 후 타입이 안정되어야 프로퍼티 수정 가능)
+    └── 검증: tsc 통과 + 모든 디텍터 테스트 통과
   
-  Step 2. src/types.ts에 신규 타입 정의
-    └── EnrichedFindingFields, Diagnosis, DiagnosisPattern, RefactoringPlan, RefactoringStep, CodebaseHealth
-    └── 의존: Step 1 (message 필드가 있어야 Enriched* 타입 정의 가능)
+  Step 3. src/types.ts에 신규 타입 정의
+    └── Priority, CodeEntry, FirebatReport 확장 (top, catalog)
+    └── 의존: Step 2 (finding 타입이 확정되어야 Priority 설계 확정)
     └── 검증: tsc 통과 (타입만 추가, 런타임 변경 없음)
   
-  Step 3. FirebatReport 확장
-    └── diagnoses?: ReadonlyArray<Diagnosis>, health?: CodebaseHealth, meta.reportVersion 추가
-    └── 의존: Step 2 (Diagnosis, CodebaseHealth 타입 필요)
-    └── 검증: 기존 테스트 전량 통과 (optional 필드만 추가이므로 후방 호환)
+  Step 4. code 매핑 로직 구현
+    └── kind → code 매핑 테이블 작성 (아래 B. kind → code 완전 매핑 테이블 참조)
+    └── scan.usecase.ts에서 finding에 code? 필드 주입
+    └── 의존: Step 3 (code 필드가 한정된 패턴 집합이어야 catalog 정합)
+    └── 검증: 모든 디텍터의 finding에 code 필드 존재 확인
+
+#### E. kind 부여 명세 (kind 필드가 없는 디텍터)
+
+현재 코드베이스에서 `kind` 필드가 없는 디텍터에 BaseFinding 관례 적용을 위해 kind를 신규 부여한다.
+
+**NestingItem → kind 추가**:
+```typescript
+type NestingKind = 'deep-nesting' | 'high-cognitive-complexity' | 'accidental-quadratic';
+```
+판정 규칙:
+- `metrics.accidentalQuadraticTargets.length > 0` → `'accidental-quadratic'`
+- `metrics.cognitiveComplexity >= 15` → `'high-cognitive-complexity'`
+- 그 외 (depth 기반) → `'deep-nesting'`
+- 우선순위: accidental-quadratic > high-cognitive-complexity > deep-nesting (첫 매칭)
+
+**EarlyReturnItem → kind 추가**:
+```typescript
+type EarlyReturnKind = 'invertible-if-else' | 'missing-guard';
+```
+판정 규칙:
+- `suggestions`에 invertible-if-else 관련 제안이 있으면 → `'invertible-if-else'`
+- 그 외 → `'missing-guard'`
+- **참고**: suggestions 필드는 Step 2에서 삭제되므로, kind 판정 로직은 analyzer 내부에서 suggestions 생성 시점에 kind도 함께 결정해야 한다. 즉, analyzer 코드에서 suggestions 조건 분기와 kind 결정을 동일 위치에서 수행 후 suggestions를 제거한다.
+
+**CouplingHotspot → kind 추가**:
+```typescript
+type CouplingKind = 'off-main-sequence' | 'unstable-module' | 'rigid-module' | 'god-module' | 'bidirectional-coupling';
+```
+판정 규칙:
+- `signals` 배열의 첫 번째 요소를 kind로 승격
+- signals가 복수인 경우: 우선순위 god-module > bidirectional-coupling > off-main-sequence > unstable-module > rigid-module
+- **참고**: CouplingHotspot은 현재 하나의 hotspot에 복수 signals를 가질 수 있다. kind는 최우선 1개만 대표하고, 나머지는 signals 배열에 유지한다.
+
+**ApiDriftGroup → kind 추가**:
+```typescript
+type ApiDriftKind = 'signature-drift';
+```
+- 현재 유일한 분류이므로 단일 값. 향후 확장을 위해 union type으로 선언.
+
+**exact-duplicates / structural-duplicates**:
+- `cloneType` 필드가 kind 역할을 한다. `cloneType`을 `kind`로 rename한다.
+- 실제 code 매핑에서는 `kind` 값을 그대로 사용: `type-1` → `EXACT_DUP_TYPE_1`, `type-2-shape` → `STRUCT_DUP_TYPE_2_SHAPE`, `type-3-normalized` → `STRUCT_DUP_TYPE_3_NORMALIZED`.
+
+#### B. kind → code 완전 매핑 테이블
+
+code 명명 규칙: `{DETECTOR}_{KIND}` (대문자, 하이픈→언더스코어). 약어는 보편적인 것만 허용 (DUP=duplicate, EH=exception-hygiene).
+
+> **lint/format/typecheck는 code를 부여하지 않는다**. 외부 도구 래핑이므로 top에서 제외되며, catalog에 포함되지 않는다. 에이전트가 필요하면 `analyses`에서 직접 접근한다.
+
+##### waste (3개)
+
+| kind | code |
+|------|------|
+| `dead-store` | `WASTE_DEAD_STORE` |
+| `dead-store-overwrite` | `WASTE_DEAD_STORE_OVERWRITE` |
+| `memory-retention` | `WASTE_MEMORY_RETENTION` |
+
+##### noop (5개)
+
+| kind | code |
+|------|------|
+| `expression-noop` | `NOOP_EXPRESSION` |
+| `self-assignment` | `NOOP_SELF_ASSIGNMENT` |
+| `constant-condition` | `NOOP_CONSTANT_CONDITION` |
+| `empty-catch` | `NOOP_EMPTY_CATCH` |
+| `empty-function-body` | `NOOP_EMPTY_FUNCTION_BODY` |
+
+##### forwarding (3개)
+
+| kind | code |
+|------|------|
+| `thin-wrapper` | `FWD_THIN_WRAPPER` |
+| `forward-chain` | `FWD_FORWARD_CHAIN` |
+| `cross-file-forwarding-chain` | `FWD_CROSS_FILE_CHAIN` |
+
+##### barrel-policy (6개)
+
+| kind | code |
+|------|------|
+| `export-star` | `BARREL_EXPORT_STAR` |
+| `deep-import` | `BARREL_DEEP_IMPORT` |
+| `index-deep-import` | `BARREL_INDEX_DEEP_IMPORT` |
+| `missing-index` | `BARREL_MISSING_INDEX` |
+| `invalid-index-statement` | `BARREL_INVALID_INDEX_STMT` |
+| `barrel-side-effect-import` | `BARREL_SIDE_EFFECT_IMPORT` |
+
+##### exception-hygiene (17개, tool-unavailable 제외)
+
+| kind | code |
+|------|------|
+| `throw-non-error` | `EH_THROW_NON_ERROR` |
+| `async-promise-executor` | `EH_ASYNC_PROMISE_EXECUTOR` |
+| `missing-error-cause` | `EH_MISSING_ERROR_CAUSE` |
+| `useless-catch` | `EH_USELESS_CATCH` |
+| `unsafe-finally` | `EH_UNSAFE_FINALLY` |
+| `return-in-finally` | `EH_RETURN_IN_FINALLY` |
+| `catch-or-return` | `EH_CATCH_OR_RETURN` |
+| `prefer-catch` | `EH_PREFER_CATCH` |
+| `prefer-await-to-then` | `EH_PREFER_AWAIT_TO_THEN` |
+| `floating-promises` | `EH_FLOATING_PROMISES` |
+| `misused-promises` | `EH_MISUSED_PROMISES` |
+| `return-await-policy` | `EH_RETURN_AWAIT_POLICY` |
+| `silent-catch` | `EH_SILENT_CATCH` |
+| `catch-transform-hygiene` | `EH_CATCH_TRANSFORM` |
+| `redundant-nested-catch` | `EH_REDUNDANT_NESTED_CATCH` |
+| `overscoped-try` | `EH_OVERSCOPED_TRY` |
+| `exception-control-flow` | `EH_EXCEPTION_CONTROL_FLOW` |
+
+> `tool-unavailable` kind는 디텍터 가용성 이슈(tsgo/oxc 미설치)이므로 code를 부여하지 않고, `meta.errors`로 흡수된다.
+
+##### unknown-proof (6개, tool-unavailable 제외)
+
+| kind | code |
+|------|------|
+| `type-assertion` | `UNKNOWN_TYPE_ASSERTION` |
+| `double-assertion` | `UNKNOWN_DOUBLE_ASSERTION` |
+| `unknown-type` | `UNKNOWN_UNNARROWED` |
+| `unvalidated-unknown` | `UNKNOWN_UNVALIDATED` |
+| `unknown-inferred` | `UNKNOWN_INFERRED` |
+| `any-inferred` | `UNKNOWN_ANY_INFERRED` |
+
+##### dependencies (3개)
+
+| kind | code |
+|------|------|
+| `layer-violation` | `DEP_LAYER_VIOLATION` |
+| `dead-export` | `DEP_DEAD_EXPORT` |
+| `test-only-export` | `DEP_TEST_ONLY_EXPORT` |
+
+> dependencies의 `cycles`, `fanInTop`, `fanOutTop`, `edgeCutHints`는 finding이 아닌 분석 데이터이므로 code 매핑 대상이 아니다. 단, DiagnosticAggregator가 `cycles`를 `DIAG_CIRCULAR_DEPENDENCY`로 승격한다.
+
+##### nesting (3개, 신규 kind)
+
+| kind | code |
+|------|------|
+| `deep-nesting` | `NESTING_DEEP` |
+| `high-cognitive-complexity` | `NESTING_HIGH_CC` |
+| `accidental-quadratic` | `NESTING_ACCIDENTAL_QUADRATIC` |
+
+##### early-return (2개, 신규 kind)
+
+| kind | code |
+|------|------|
+| `invertible-if-else` | `EARLY_RETURN_INVERTIBLE` |
+| `missing-guard` | `EARLY_RETURN_MISSING_GUARD` |
+
+##### coupling (5개, signals 승격)
+
+| kind (= signal) | code |
+|------|------|
+| `god-module` | `COUPLING_GOD_MODULE` |
+| `bidirectional-coupling` | `COUPLING_BIDIRECTIONAL` |
+| `off-main-sequence` | `COUPLING_OFF_MAIN_SEQ` |
+| `unstable-module` | `COUPLING_UNSTABLE` |
+| `rigid-module` | `COUPLING_RIGID` |
+
+##### api-drift (1개, 신규 kind)
+
+| kind | code |
+|------|------|
+| `signature-drift` | `API_DRIFT_SIGNATURE` |
+
+##### exact-duplicates (1개)
+
+| kind (= cloneType) | code |
+|------|------|
+| `type-1` | `EXACT_DUP_TYPE_1` |
+
+##### structural-duplicates (2개)
+
+| kind (= cloneType) | code |
+|------|------|
+| `type-2-shape` | `STRUCT_DUP_TYPE_2_SHAPE` |
+| `type-3-normalized` | `STRUCT_DUP_TYPE_3_NORMALIZED` |
+
+##### DiagnosticAggregator 패턴 (별도 — 디텍터 결과 조합에서 생성)
+
+| pattern code | 생성 조건 |
+|------|------|
+| `DIAG_GOD_FUNCTION` | 같은 함수에서 nesting(CC≥15) + waste 동시 발생 |
+| `DIAG_DATA_CLUMP` | C-3(Parameter Object) finding 존재 시 승격 (Phase 2+) |
+| `DIAG_SHOTGUN_SURGERY` | 동일 개념이 4개 이상 파일에 분산 (Phase 1+) |
+| `DIAG_OVER_INDIRECTION` | forwarding chain + single-impl interface (Phase 1+) |
+| `DIAG_MIXED_ABSTRACTION` | 같은 함수 내 nesting depth 차이 > 2 (Phase 1+) |
+| `DIAG_CIRCULAR_DEPENDENCY` | `dependencies.cycles` 직접 승격 |
+| `DIAG_GOD_MODULE` | `coupling` god-module signal 직접 승격 |
+
+> **Phase 0 가용 패턴**: `DIAG_GOD_FUNCTION`, `DIAG_CIRCULAR_DEPENDENCY`, `DIAG_GOD_MODULE` — 이 3개는 기존 디텍터 결과만으로 Phase 0에서 즉시 구현 가능하다. `DIAG_DATA_CLUMP`, `DIAG_SHOTGUN_SURGERY` 등은 신규 디텍터(C/B 시리즈) 결과가 필요하므로 해당 Phase에서 추가한다.
+
+#### C. catalog 전수 (CodeEntry: cause + approach)
+
+> **작성 원칙 재확인** (4가지 규칙):
+> 1. 질문으로 출발
+> 2. 직접 수정 지시 금지
+> 3. 가능한 근본 원인 나열
+> 4. scope 확장 유도
+
+##### waste
+
+```json
+{
+  "WASTE_DEAD_STORE": {
+    "cause": "A value is assigned to a variable but is overwritten or goes out of scope before being read.",
+    "approach": "Determine why this assignment became unnecessary. Possible root causes: leftover from a refactor, logic change that bypassed this path, or a control-flow design error. If multiple dead stores appear in the same function, examine the function's responsibilities and flow rather than individual assignments."
+  },
+  "WASTE_DEAD_STORE_OVERWRITE": {
+    "cause": "A variable is assigned, then unconditionally reassigned before the first value is ever read.",
+    "approach": "Identify whether the first assignment once had a purpose. It may be a remnant of removed branching, a copy-paste artifact, or a misunderstanding of the variable's lifecycle. If this pattern repeats across a function, the function may be accumulating unrelated setup steps that should be separated."
+  },
+  "WASTE_MEMORY_RETENTION": {
+    "cause": "A large object or collection is captured in a closure or long-lived scope and remains reachable after its logical use ends.",
+    "approach": "Investigate why the reference persists. The closure may capture more than it needs, or the variable's scope may be unnecessarily broad. Consider whether the value can be passed as a parameter instead of captured, or whether the lifetime can be shortened by restructuring the enclosing scope."
+  }
+}
+```
+
+##### noop
+
+```json
+{
+  "NOOP_EXPRESSION": {
+    "cause": "An expression is evaluated but its result is discarded and it produces no side effects.",
+    "approach": "Determine the original intent of this expression. It may be a debugging artifact, incomplete code, or a misunderstanding of an API's return behavior. If it was meant to have a side effect, the API contract should be verified."
+  },
+  "NOOP_SELF_ASSIGNMENT": {
+    "cause": "A variable is assigned to itself, producing no state change.",
+    "approach": "This is usually a typo or copy-paste error. Check whether a different target variable was intended, or whether this was meant to trigger a setter or reactivity system that requires explicit assignment."
+  },
+  "NOOP_CONSTANT_CONDITION": {
+    "cause": "A conditional expression always evaluates to the same boolean value, making one branch unreachable.",
+    "approach": "Determine whether the condition was once dynamic and became constant after a refactor, or whether it guards code that is not yet implemented. If the constant branch is intentional (feature flag, debug mode), make it explicit via a named constant or config."
+  },
+  "NOOP_EMPTY_CATCH": {
+    "cause": "A catch block is empty, silently swallowing errors.",
+    "approach": "Determine whether the error is intentionally ignored or accidentally suppressed. If intentional, add a comment explaining why. If accidental, the missing error handling may mask failures in production. Check whether the same pattern exists in related catch blocks — systematic silent catches suggest a missing error-handling strategy."
+  },
+  "NOOP_EMPTY_FUNCTION_BODY": {
+    "cause": "A function or method has an empty body, performing no operation.",
+    "approach": "Determine whether this is a placeholder, a no-op callback, or unfinished implementation. If it serves as a default no-op (e.g., event handler stub), the intent should be explicit via naming (e.g., 'noop') or a comment. If it appears in a class, it may indicate an interface method that should be abstract instead."
+  }
+}
+```
+
+##### forwarding
+
+```json
+{
+  "FWD_THIN_WRAPPER": {
+    "cause": "A function's entire body delegates to another function with identical or trivially transformed arguments, adding no logic.",
+    "approach": "Determine whether this wrapper serves an intentional purpose: dependency inversion, future extension point, or API stability boundary. If none apply, the indirection increases navigation cost for agents without adding value. Consider whether callers can reference the target directly."
+  },
+  "FWD_FORWARD_CHAIN": {
+    "cause": "Multiple functions form a chain where each forwards to the next with no added logic, creating unnecessary depth.",
+    "approach": "Trace the chain to find where real logic begins. The intermediate links may be remnants of refactoring or over-abstracted layers. If the chain crosses module boundaries, evaluate whether the abstraction layers are justified by actual variation or just ceremony."
+  },
+  "FWD_CROSS_FILE_CHAIN": {
+    "cause": "A forwarding chain spans multiple files, creating cross-file indirection without logic at each hop.",
+    "approach": "Cross-file forwarding amplifies navigation cost — an agent must open multiple files to find the real implementation. Determine whether each file boundary represents a genuine architectural concern. If the chain follows a re-export pattern, consolidating the public surface may eliminate intermediate hops."
+  }
+}
+```
+
+##### barrel-policy
+
+```json
+{
+  "BARREL_EXPORT_STAR": {
+    "cause": "An index file uses 'export *' which re-exports everything from a module, making the public surface implicit and unbounded.",
+    "approach": "Determine whether all re-exported symbols are intentionally public. 'export *' prevents controlling the public API surface and can inadvertently expose internal implementation details. If only a subset should be public, switch to named re-exports."
+  },
+  "BARREL_DEEP_IMPORT": {
+    "cause": "A consumer imports directly from a module's internal file, bypassing its barrel (index) entry point.",
+    "approach": "Check whether the barrel file exists and exposes the needed symbol. If it does, the deep import may be a convenience shortcut that undermines encapsulation. If the barrel does not expose the symbol, determine whether it should be added to the public surface or if the consumer's need indicates a missing abstraction."
+  },
+  "BARREL_INDEX_DEEP_IMPORT": {
+    "cause": "An index file itself imports from a deep path in another module instead of using that module's barrel.",
+    "approach": "This creates a transitive deep-import dependency at the barrel level. Determine whether the target module's barrel is incomplete or whether this index file is taking a shortcut. The fix direction depends on whether the target module should expose the symbol publicly."
+  },
+  "BARREL_MISSING_INDEX": {
+    "cause": "A directory with multiple source files has no index.ts barrel file, leaving no single entry point for the module.",
+    "approach": "Evaluate whether the directory represents a cohesive module that should have a public surface. If it does, a barrel file defines and controls what is exported. If files are independent utilities, a barrel may not be needed — but the directory structure should then reflect that they are not a module."
+  },
+  "BARREL_INVALID_INDEX_STMT": {
+    "cause": "An index.ts contains statements other than export declarations (e.g., logic, variable declarations, side effects).",
+    "approach": "Barrel files should be pure re-export surfaces. Logic in an index file is invisible to consumers who expect it to be a passthrough. Determine whether the logic belongs in a dedicated module file that the barrel re-exports."
+  },
+  "BARREL_SIDE_EFFECT_IMPORT": {
+    "cause": "A barrel file contains a side-effect import (import without specifiers), which executes code when the barrel is imported.",
+    "approach": "Side-effect imports in barrels make the import graph impure — importing the barrel triggers hidden execution. Determine whether the side effect is intentional (e.g., polyfill registration) and if so, whether it should be isolated into an explicit setup module rather than hiding in a barrel."
+  }
+}
+```
+
+##### exception-hygiene
+
+```json
+{
+  "EH_THROW_NON_ERROR": {
+    "cause": "A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.",
+    "approach": "Determine what type is being thrown and why. Throwing strings or plain objects is often a shortcut that breaks error handling patterns downstream. If the thrown value carries domain information, wrap it in a custom Error subclass."
+  },
+  "EH_ASYNC_PROMISE_EXECUTOR": {
+    "cause": "A Promise constructor receives an async executor function, which can silently swallow rejections from awaited expressions.",
+    "approach": "Identify why the Promise constructor is used with async. Usually the code can be refactored to an async function directly. If the Promise wraps a callback API, the async keyword in the executor is likely accidental."
+  },
+  "EH_MISSING_ERROR_CAUSE": {
+    "cause": "A caught error is re-thrown or wrapped without preserving the original error via the 'cause' option, breaking the error chain.",
+    "approach": "Determine whether the original error's context is needed for debugging. If wrapping in a new error, pass { cause: originalError } to preserve the chain. If re-throwing directly, 'cause' is not needed."
+  },
+  "EH_USELESS_CATCH": {
+    "cause": "A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.",
+    "approach": "Determine whether the catch was intended to add logging, transformation, or handling that was never implemented. If the try-catch serves no purpose, removing it reduces indentation and noise. If it once had purpose, investigate what changed."
+  },
+  "EH_UNSAFE_FINALLY": {
+    "cause": "A finally block contains a throw or return statement that can override the try/catch result, silently discarding errors.",
+    "approach": "Determine whether the throw/return in finally is intentional. In most cases it masks the original error. The finally block should contain only cleanup logic (close connections, release resources) that cannot fail or affect control flow."
+  },
+  "EH_RETURN_IN_FINALLY": {
+    "cause": "A finally block contains a return statement that will override any return or throw from the try/catch blocks.",
+    "approach": "This is almost always a bug — the finally return silently replaces whatever the try or catch produced. Move the return to the try block and ensure finally only performs cleanup."
+  },
+  "EH_CATCH_OR_RETURN": {
+    "cause": "A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.",
+    "approach": "Determine whether the Promise rejection is intentionally ignored or accidentally unhandled. If the code is in an async function, 'await' captures rejections naturally. If using .then(), add .catch() or return the chain for the caller to handle."
+  },
+  "EH_PREFER_CATCH": {
+    "cause": "Error handling uses .then(onFulfilled, onRejected) instead of .catch(), which is less readable and can miss errors thrown in onFulfilled.",
+    "approach": "The two-argument .then() form does not catch errors thrown inside the onFulfilled callback. Determine whether this is intentional. In most cases, replacing with .then().catch() provides more predictable error coverage."
+  },
+  "EH_PREFER_AWAIT_TO_THEN": {
+    "cause": "Promise chains use .then()/.catch() inside an async function instead of await, reducing readability and error flow clarity.",
+    "approach": "In async functions, await provides clearer control flow and automatic error propagation via try-catch. Determine whether the .then() chain has a specific reason (parallel execution, chaining) or is just a style inconsistency."
+  },
+  "EH_FLOATING_PROMISES": {
+    "cause": "A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.",
+    "approach": "Determine whether the fire-and-forget is intentional. If the Promise's result or error matters, await or return it. If truly fire-and-forget, add void prefix and ensure errors are handled inside the called function."
+  },
+  "EH_MISUSED_PROMISES": {
+    "cause": "A Promise is used in a context that expects a synchronous value (e.g., array.forEach callback, conditional expression), leading to always-truthy checks or ignored results.",
+    "approach": "Determine what the code expected to happen. forEach does not await returned Promises. Boolean checks on Promises are always true. Replace with for-of + await, or restructure the logic to properly handle asynchronous values."
+  },
+  "EH_RETURN_AWAIT_POLICY": {
+    "cause": "An async function returns await expression unnecessarily (or vice versa: should use return-await inside try blocks to catch errors properly).",
+    "approach": "In a try block, 'return await' is needed to catch rejections. Outside try blocks, 'return await' adds an unnecessary microtask tick. Determine the context: inside try → keep await, outside try → remove await."
+  },
+  "EH_SILENT_CATCH": {
+    "cause": "A catch block suppresses the error without logging, rethrowing, or handling it in any visible way.",
+    "approach": "Determine whether the error suppression is intentional. If so, document why. If not, the silent catch may mask failures. Check whether the same pattern exists in related error handlers — systematic silent catches suggest a missing error-handling strategy across the module."
+  },
+  "EH_CATCH_TRANSFORM": {
+    "cause": "A catch block modifies the error object or its message before rethrowing, potentially losing original error information.",
+    "approach": "Determine whether the transformation preserves the error chain (cause property). If the message is altered, the original stack trace should still be accessible. If the error type is changed, downstream handlers may not recognize it."
+  },
+  "EH_REDUNDANT_NESTED_CATCH": {
+    "cause": "A try-catch is nested inside another try-catch that already handles the same error types, creating redundant handling.",
+    "approach": "Determine whether the inner catch handles a specific error differently from the outer catch. If not, the nesting adds complexity without value. If the inner catch does transform errors, verify that the outer catch expects transformed errors."
+  },
+  "EH_OVERSCOPED_TRY": {
+    "cause": "A try block wraps significantly more code than the statements that can actually throw, obscuring which operation the catch is protecting.",
+    "approach": "Identify which statements within the try block can actually throw. Narrowing the try block makes the error source explicit. If multiple throwing statements are wrapped, determine whether they share error handling logic or whether each needs distinct handling."
+  },
+  "EH_EXCEPTION_CONTROL_FLOW": {
+    "cause": "Exceptions are used for normal control flow (e.g., throwing to break out of a loop or signal a condition), not for error signaling.",
+    "approach": "Determine whether the thrown value represents an actual error condition. Using exceptions for control flow is expensive, obscures intent, and confuses downstream error handlers. Replace with return values, result types, or explicit control flow constructs."
+  }
+}
+```
+
+##### unknown-proof
+
+```json
+{
+  "UNKNOWN_TYPE_ASSERTION": {
+    "cause": "A type assertion (as T) bypasses the type checker, asserting a type without runtime validation.",
+    "approach": "Determine whether the assertion is backed by a runtime check earlier in the code path. If no check exists, the assertion is a lie to the compiler that will surface as a runtime error. Consider using a type guard function or schema validation instead."
+  },
+  "UNKNOWN_DOUBLE_ASSERTION": {
+    "cause": "A double type assertion (as unknown as T) forces an unsafe type cast through the unknown escape hatch.",
+    "approach": "Double assertions are almost always a sign that the type system is being fought. Determine why the direct assertion fails — it usually means the types are fundamentally incompatible. This indicates either a design mismatch or missing intermediate transformation."
+  },
+  "UNKNOWN_UNNARROWED": {
+    "cause": "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
+    "approach": "Determine where the unknown value originates (external input, catch clause, generic parameter). Add appropriate narrowing: typeof guard, instanceof check, or schema validation. If the value crosses a trust boundary, validation should be at the boundary, not at each usage."
+  },
+  "UNKNOWN_UNVALIDATED": {
+    "cause": "An 'unknown' value from a trust boundary (API input, file read, deserialization) is used without schema validation.",
+    "approach": "Boundary values should be validated once at entry. Determine whether a validation layer exists and this usage bypasses it, or whether no validation layer exists yet. If the pattern repeats across multiple boundaries, a shared validation strategy is needed rather than ad-hoc checks."
+  },
+  "UNKNOWN_INFERRED": {
+    "cause": "TypeScript infers 'unknown' for a value where a more specific type was likely intended.",
+    "approach": "Determine what type the value should have. The inference may result from a missing return type annotation, an untyped dependency, or a generic function with insufficient type constraints. Adding an explicit type annotation makes the intent clear and catches mismatches earlier."
+  },
+  "UNKNOWN_ANY_INFERRED": {
+    "cause": "TypeScript infers 'any' for a value, disabling type checking for all downstream usage.",
+    "approach": "Determine the source of the 'any' inference: untyped import, missing type parameter, JSON.parse result, or catch clause. Each source has a different fix. If 'any' propagates widely, trace it to the root and add a type there — fixing downstream usage is ineffective while the source remains untyped."
+  }
+}
+```
+
+##### dependencies
+
+```json
+{
+  "DEP_LAYER_VIOLATION": {
+    "cause": "A module imports from a layer that the architecture rules prohibit, breaking the intended dependency direction.",
+    "approach": "Determine whether the import represents a genuine architectural violation or an inaccurate layer definition. If the import is needed, it may indicate that the layer boundary is drawn incorrectly, or that the imported symbol should be exposed through an allowed layer (e.g., via a port interface)."
+  },
+  "DEP_DEAD_EXPORT": {
+    "cause": "An exported symbol is not imported by any other module in the project, making the export unnecessary.",
+    "approach": "Determine whether the export is unused because it is obsolete, or because it serves an external consumer not visible to static analysis (CLI entry, test helper, library public API). If truly unused, removing it reduces the module's public surface. If externally consumed, mark it explicitly."
+  },
+  "DEP_TEST_ONLY_EXPORT": {
+    "cause": "An exported symbol is imported only by test files, meaning production code does not use it but the export exists for testability.",
+    "approach": "Determine whether the symbol should be internal (unexported, tested via public API) or whether it represents a testing concern that should live in a test utility module. Exporting symbols solely for tests increases the production public surface and can mislead consumers."
+  }
+}
+```
+
+##### nesting
+
+```json
+{
+  "NESTING_DEEP": {
+    "cause": "A function has deeply nested control structures, increasing indentation and making the execution path hard to follow.",
+    "approach": "Determine why nesting accumulated. Possible causes: multiple concerns interleaved in one function, missing early-return guards, or error paths mixed with happy paths. If other findings (waste, coupling) co-occur in the same function, the nesting is likely a symptom of the function doing too much."
+  },
+  "NESTING_HIGH_CC": {
+    "cause": "A function has high cognitive complexity, meaning it contains many interacting control-flow decisions.",
+    "approach": "High cognitive complexity means the function requires significant mental effort to trace. Determine which decision axes are independent — independent axes can be extracted into separate functions. If the complexity stems from validation logic, consider a declarative validation approach rather than nested conditionals."
+  },
+  "NESTING_ACCIDENTAL_QUADRATIC": {
+    "cause": "A nested loop or iteration pattern creates O(n²) complexity that may not be intentional.",
+    "approach": "Determine whether the quadratic behavior is inherent to the problem or accidental. Common accidental patterns: array.includes() inside a loop (use a Set), nested find/filter, repeated linear scans. If quadratic is inherent, document the expected input size and why it is acceptable."
+  }
+}
+```
+
+##### early-return
+
+```json
+{
+  "EARLY_RETURN_INVERTIBLE": {
+    "cause": "An if-else structure has a short branch (≤3 statements) ending in return/throw and a long branch, which can be inverted to reduce nesting.",
+    "approach": "Determine whether inverting the condition and returning early would improve readability. The short branch typically handles an edge case or error condition. If the pattern repeats across the function, the function may be processing multiple concerns sequentially — each concern's guard becomes a natural early return."
+  },
+  "EARLY_RETURN_MISSING_GUARD": {
+    "cause": "A function lacks guard clauses at the top, pushing the main logic into nested conditionals.",
+    "approach": "Identify which conditions at the start of the function check preconditions or special cases. Moving these to guard clauses (return/throw early) flattens the main logic. If preconditions are complex, they may warrant extraction into a validation function."
+  }
+}
+```
+
+##### coupling
+
+```json
+{
+  "COUPLING_GOD_MODULE": {
+    "cause": "A module has both high fan-in and high fan-out, meaning many modules depend on it and it depends on many modules.",
+    "approach": "Determine which responsibilities this module holds that attract so many dependents. A god module often accumulates shared utilities, configuration, and domain logic. Identify clusters of related imports/exports — each cluster may form a cohesive module if extracted."
+  },
+  "COUPLING_BIDIRECTIONAL": {
+    "cause": "Two modules import from each other, creating a circular dependency that prevents independent reasoning about either.",
+    "approach": "Determine which direction is primary and which is incidental. Often one direction represents a callback or event registration that can be inverted via dependency injection or an event bus. If both directions are essential, the two modules may logically be one module split incorrectly."
+  },
+  "COUPLING_OFF_MAIN_SEQ": {
+    "cause": "A module's instability-abstractness balance places it far from the main sequence, indicating it is either too abstract for its stability or too concrete for how many depend on it.",
+    "approach": "Determine whether the module should be more abstract (add interfaces/contracts) or less depended-upon (reduce fan-in by splitting). High-distance modules are the hardest to change correctly because their position creates conflicting forces."
+  },
+  "COUPLING_UNSTABLE": {
+    "cause": "A module has high instability (many outgoing dependencies, few incoming) and high fan-out, making it sensitive to changes in its dependencies.",
+    "approach": "Determine whether the high fan-out is essential or whether the module can depend on fewer abstractions. If it consumes many concrete implementations, introducing port interfaces can isolate it from change. If the module is a thin orchestrator, instability may be acceptable by design."
+  },
+  "COUPLING_RIGID": {
+    "cause": "A module has very low instability (many dependents, few dependencies) and high fan-in, making it extremely costly to change.",
+    "approach": "Determine whether the module's interface is stable by design (it should be) or frozen by accident (too many dependents accumulated). If the interface needs to evolve, consider versioning, adapter layers, or extracting the stable subset into a separate module."
+  }
+}
+```
+
+##### api-drift
+
+```json
+{
+  "API_DRIFT_SIGNATURE": {
+    "cause": "Functions with the same name pattern have inconsistent signatures (different parameter counts, optional parameter usage, return types, or async modifiers).",
+    "approach": "Determine whether the signature differences are intentional variations or drift from a common pattern. If the functions serve the same role in different contexts, their signatures should align. If they serve different roles, their names should differentiate them instead of sharing a misleading prefix."
+  }
+}
+```
+
+##### exact-duplicates / structural-duplicates
+
+```json
+{
+  "EXACT_DUP_TYPE_1": {
+    "cause": "Two or more code blocks are character-for-character identical (Type-1 clone), indicating copy-paste duplication.",
+    "approach": "Determine whether the duplication was intentional (e.g., generated code, test fixtures with identical structure) or accidental. If the blocks should stay in sync, extract a shared function. If they are expected to diverge, document why they are separate despite current identity."
+  },
+  "STRUCT_DUP_TYPE_2_SHAPE": {
+    "cause": "Two or more code blocks have identical structure but differ only in identifier names (Type-2 clone), suggesting parameterizable logic.",
+    "approach": "Examine the differences between clones — the differing identifiers are candidate parameters for a shared function. If the differences represent domain concepts (e.g., 'user' vs 'order'), the shared function should accept the concept as a parameter or generic type."
+  },
+  "STRUCT_DUP_TYPE_3_NORMALIZED": {
+    "cause": "Two or more code blocks have the same normalized structure after removing cosmetic differences (Type-3 clone), indicating similar but not identical logic.",
+    "approach": "The normalization reveals that these blocks solve the same structural problem with minor variations. Determine what the variations represent: different data types, different error handling, or different business rules. The appropriate abstraction depends on the nature of the variation."
+  }
+}
+```
+
+##### DiagnosticAggregator 패턴
+
+```json
+{
+  "DIAG_GOD_FUNCTION": {
+    "cause": "A single function triggers multiple finding types simultaneously (nesting + waste, or responsibility-boundary), indicating it handles multiple independent concerns.",
+    "approach": "Determine how many independent concerns this function handles by examining variable clusters. If variables form distinct groups that do not interact, each group likely represents a separable concern. Individual findings (nesting, waste) are symptoms — the root cause is responsibility overload."
+  },
+  "DIAG_CIRCULAR_DEPENDENCY": {
+    "cause": "A group of modules form a dependency cycle, making it impossible to understand or modify any one module in isolation.",
+    "approach": "Identify the weakest link in the cycle — the import that contributes least to the module's core purpose. Breaking cycles often requires introducing an interface at the boundary or moving shared types to a neutral location. If the cycle involves only two modules, they may need to merge."
+  },
+  "DIAG_GOD_MODULE": {
+    "cause": "A module acts as a hub with excessive fan-in and fan-out, coupling a large portion of the codebase through one point.",
+    "approach": "Analyze what responsibilities attract dependencies to this module. Common culprits: shared configuration, utility mixtures, domain model + logic in one place. Group the module's exports by their consumers — each consumer cluster may indicate a natural split boundary."
+  },
+  "DIAG_DATA_CLUMP": {
+    "cause": "The same group of parameters appears together across multiple function signatures, indicating a missing abstraction.",
+    "approach": "Determine whether the parameter group represents a coherent domain concept. If so, introduce a type/interface to bundle them. This reduces parameter counts across all affected functions and makes the concept explicit. If the parameters are coincidentally grouped, no action is needed."
+  },
+  "DIAG_SHOTGUN_SURGERY": {
+    "cause": "A single conceptual change requires modifications across many files, indicating the concept is scattered across the codebase.",
+    "approach": "Determine whether the scatter reflects an architectural choice (e.g., layered architecture naturally touches multiple layers) or accidental distribution. If the same change type repeatedly touches the same file set, those files should be colocated or the shared aspect should be centralized."
+  },
+  "DIAG_OVER_INDIRECTION": {
+    "cause": "Multiple forwarding layers exist with single-implementation interfaces, adding navigation cost without runtime variation.",
+    "approach": "Determine whether each abstraction layer serves a genuine purpose: dependency inversion for testing, plugin points for actual extensions, or architectural boundaries. If an interface has only one implementation and no test double, the abstraction may not earn its cost."
+  },
+  "DIAG_MIXED_ABSTRACTION": {
+    "cause": "A single function mixes high-level orchestration with low-level implementation detail, visible as large nesting depth variation within the function.",
+    "approach": "Identify which parts are orchestration (calling other functions, deciding what to do) and which are implementation (manipulating data, performing computations). Extract the implementation detail into named helper functions so the orchestrator reads as a sequence of high-level steps."
+  }
+}
+```
   
-  Step 4. 기존 finding 타입에 Enriched 확장 적용
-    └── 각 finding 타입에 & Partial<EnrichedFindingFields> intersection 적용
-    └── FirebatAnalyses의 디텍터 결과 타입을 Enriched* 버전으로 교체
-    └── 의존: Step 2 (EnrichedFindingFields 타입 필요)
-    └── 검증: tsc 통과 (Partial이므로 기존 코드 호환)
-  
-  Step 5. 각 디텍터에 id + fixScope 생성 로직 추가
-    └── 16개 디텍터 각각의 finding 생성 코드에 id, fixScope 필드 할당
-    └── id = F-{DETECTOR}-{hashString(relativePath).slice(-4)}-{line}
-    └── fixScope = 디텍터별 기본값 테이블(Section 1.1) 참조
-    └── 의존: Step 4 (Enriched 타입이 적용되어야 필드 할당 가능)
-    └── 검증: 모든 디텍터 테스트에서 finding에 id, fixScope 존재 확인
-  
-  Step 6. reaching-definitions 추출
+  Step 5. reaching-definitions 추출
     └── waste-detector-oxc.ts의 analyzeFunctionBody에서 reaching-definitions 로직을 engine/reaching-definitions.ts로 분리
-    └── 의존: 없음 (다른 Step과 독립. Step 1 이후 언제든 가능)
+    └── 의존: 없음 (다른 Step과 독립. 언제든 가능)
     └── 검증: waste 디텍터 테스트 전량 통과 (동작 불변)
   
-  Step 7. DiagnosticAggregator 구현
+  Step 6. DiagnosticAggregator 구현
     └── src/features/diagnostic-aggregator/aggregator.ts 생성
-    └── god-function, data-clump 2개 패턴 매칭 구현
-    └── scan.usecase.ts Stage 5에서 호출, enrichments 맵으로 finding 역주입
-    └── 의존: Step 5 (finding에 id가 있어야 enrichments 맵 키로 사용 가능)
-    └── 검증: integration test — 기존 코드베이스에서 god-function/data-clump 진단 생성 확인
+    └── 입력: Partial<FirebatAnalyses> (bare arrays)
+    └── 출력: { top: Priority[], catalog: Record<string, CodeEntry> }
+    └── Phase 0 패턴 3개 구현: DIAG_GOD_FUNCTION, DIAG_CIRCULAR_DEPENDENCY, DIAG_GOD_MODULE
+    └── 의존: Step 4 (code 필드가 있어야 패턴 그룹화 가능)
+    └── 검증: integration test — 기존 코드베이스에서 top/catalog 생성 확인
   
-  Step 8. report.ts 텍스트 렌더러 확장
-    └── diagnoses + health 섹션 출력 추가
-    └── 의존: Step 7 (DiagnosticAggregator 출력이 있어야 렌더링 가능)
-    └── 검증: 리포트 출력에 diagnoses, health 섹션 포함 확인
+  Step 7. report.ts 텍스트 렌더러 확장
+    └── top + catalog 섹션 출력 추가
+    └── 의존: Step 6 (DiagnosticAggregator 출력이 있어야 렌더링 가능)
+    └── 검증: 리포트 출력에 top, catalog 섹션 포함 확인
 
 Phase 1 — 보이지 않는 것을 가시화 (최고 우선, Phase 0 직후)
   ★ Temporal Coupling (B-I-1) — 에이전트가 절대 스스로 발견 못하는 정보
@@ -2125,7 +2523,7 @@ Phase 1 — 보이지 않는 것을 가시화 (최고 우선, Phase 0 직후)
     └── 엔진: AST traversal (process.env, module-scope let, singleton, event string)
   ★ Symmetry Breaking (B-I-3) — 에이전트가 가정하고 깨지는 패턴
     └── config 기반 그룹 정의 + 자동 탐지 하이브리드
-  ★ Invariant Blindspot (B-V-1) — 타입에 없는 런타임 제약
+  ★ Invariant Blindspot (B-IV-1) — 타입에 없는 런타임 제약
     └── 엔진: AST (assert/throw 조건, 주석 패턴)
 
 Phase 2 — 클린코드 위생 (Phase 0 직후, Phase 1과 병렬 가능)
@@ -2141,28 +2539,21 @@ Phase 2 — 클린코드 위생 (Phase 0 직후, Phase 1과 병렬 가능)
   ★ Naming Semantic Drift (C-6) — get* 함수의 부수효과 탐지
   ★ Error Boundary Completeness (C-7) — exception-hygiene 확장
 
-Phase 3 — 변환 처방 엔진 (Phase 2 결과를 입력으로 사용)
-  ★ Simplified Blueprint (B-III-1) — "이렇게 생겨야 한다" 구조적 목표 제시
-    └── C-2(Responsibility Boundary) finding을 주입력으로 사용
-  ★ Transformation Script (B-III-2) — 원자적 리팩토링 연산 시퀀스
-    └── C-3(Parameter Object) finding → INTRODUCE_TYPE 연산으로 연결
-  ★ Deletion Candidates (B-III-3) — 제거로 단순화
-    └── C-1(Dead Code) + dead-export + forwarding 결과를 입력으로
-  □ giant-file (PLAN A1) → Blueprint 입력으로 구현
+Phase 3 — 에이전트 실패 예측 확장 (Phase 1 결과를 확장)
+  ★ Modification Trap (B-IV-2) — 수정 함정 예측
+  ★ Modification Impact Radius (B-IV-3) — 수정 영향 반경
+    └── scan 디텍터 + MCP assess-impact 도구 이중 제공
+  □ giant-file (PLAN A1) → DIAG_GOD_FUNCTION 패턴 입력으로 구현
 
 Phase 4 — 컨텍스트 비용 모델링 (Phase 0 직후, Phase 1과 병렬 가능)
   ★ Variable Lifetime (B-II-1) — 변수 수명 = 컨텍스트 유지 비용
     └── 엔진: reaching-definitions 모듈 (Phase 0에서 추출) + CFG builder
   ★ Decision Surface (B-II-2) — 독립 결정 축 → 조합 폭발
     └── 엔진: AST 조건식 변수 집합 추출
-  ★ Modification Impact Radius (B-V-3, B-II-3 통합)
-    └── scan 디텍터 + MCP assess-impact 도구 이중 제공
-
 Phase 5 — 구조적 엔트로피 (Phase 0 직후, 독립 가능)
-  ★ Implementation Overhead Ratio (B-IV-1) — 인터페이스/구현 복잡도 비율
-  ★ Concept Scatter Index (B-IV-2) — 도메인 개념 산재도
-  ★ Abstraction Fitness (B-IV-3) — 모듈 경계 적합도
-  □ Modification Trap (B-V-2) — 수정 함정 예측
+  ★ Implementation Overhead Ratio (B-III-1) — 인터페이스/구현 복잡도 비율
+  ★ Concept Scatter Index (B-III-2) — 도메인 개념 산재도
+  ★ Abstraction Fitness (B-III-3) — 모듈 경계 적합도
 
 Phase 6 — 기존 디텍터 개선 + 성능 최적화 (모든 Phase와 병렬 가능)
   ★ 워처 기반 증분 캐싱 (Section 1.4)
@@ -2175,7 +2566,7 @@ Phase 6 — 기존 디텍터 개선 + 성능 최적화 (모든 Phase와 병렬 �
   □ 매직 넘버 config 노출
   □ 확장자 지원 (.tsx, .mts, .cts, .jsx)
   □ dependencies readFileSync → Bun-first 전환
-  □ PLAN.md Tier B/C 디텍터 (Blueprint 입력으로)
+  □ PLAN.md Tier B/C 디텍터 (DiagnosticAggregator 패턴 입력으로)
 
 [★] = known mainstream tools 기준 firebat 고유 기능
 [□] = 품질/성능 개선
