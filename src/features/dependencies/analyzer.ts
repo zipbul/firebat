@@ -1,5 +1,5 @@
-import * as path from 'node:path';
 import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type {
@@ -84,9 +84,17 @@ const globToRegExp = (pattern: string): RegExp => {
   return new RegExp(out);
 };
 
-const compileLayerMatchers = (layers: ReadonlyArray<DependencyLayerRule>): ReadonlyArray<{ readonly layer: DependencyLayerRule; readonly re: RegExp }> => {
+const compileLayerMatchers = (
+  layers: ReadonlyArray<DependencyLayerRule>,
+): ReadonlyArray<{ readonly layer: DependencyLayerRule; readonly re: RegExp }> => {
   return layers
-    .filter(layer => typeof layer.name === 'string' && layer.name.trim().length > 0 && typeof layer.glob === 'string' && layer.glob.trim().length > 0)
+    .filter(
+      layer =>
+        typeof layer.name === 'string' &&
+        layer.name.trim().length > 0 &&
+        typeof layer.glob === 'string' &&
+        layer.glob.trim().length > 0,
+    )
     .map(layer => ({ layer, re: globToRegExp(layer.glob) }));
 };
 
@@ -248,11 +256,7 @@ const resolveEntrypointToFile = (rootAbs: string, spec: string, fileMap: Map<str
   const trimmed = spec.trim();
   const rel = trimmed.startsWith('.') ? trimmed : `./${trimmed}`;
   const abs = path.resolve(rootAbs, rel);
-  const candidates = [
-    abs,
-    `${abs}.ts`,
-    path.join(abs, 'index.ts'),
-  ];
+  const candidates = [abs, `${abs}.ts`, path.join(abs, 'index.ts')];
 
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
@@ -498,11 +502,7 @@ const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string,
   }
 
   const base = path.resolve(path.dirname(fromPath), specifier);
-  const candidates = [
-    base,
-    `${base}.ts`,
-    path.join(base, 'index.ts'),
-  ];
+  const candidates = [base, `${base}.ts`, path.join(base, 'index.ts')];
 
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
@@ -955,7 +955,6 @@ const buildEdgeCutHints = (
 const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDependenciesInput): DependencyAnalysis => {
   const hasInputs = files.length > 0;
   const empty = createEmptyDependencies();
-
   const rootAbs = input?.rootAbs ?? process.cwd();
   const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
   const allowedDependencies = input?.allowedDependencies ?? {};
@@ -1052,6 +1051,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
 
     for (const file of files) {
       const moduleAbs = normalizePath(file.filePath);
+
       exportsByModule.set(moduleAbs, collectDeclaredExportNames(file));
     }
 
@@ -1064,7 +1064,6 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
         const state =
           usageByModule.get(entry.targetFilePath) ??
           ({ usesAll: false, names: new Set<string>(), consumers: new Set<string>(), perNameConsumerKinds: new Map() } as const);
-
         const mergedUsesAll = state.usesAll || entry.usesAll;
         const mergedNames = new Set(state.names);
 
@@ -1073,6 +1072,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
         }
 
         const mergedConsumers = new Set(state.consumers);
+
         mergedConsumers.add(`${consumerAbs}::${isTestConsumer ? 'test' : 'prod'}`);
 
         const mergedPerName = new Map(state.perNameConsumerKinds);
@@ -1080,6 +1080,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
         for (const n of entry.names) {
           const prev = mergedPerName.get(n) ?? new Set<'test' | 'prod'>();
           const next = new Set(prev);
+
           next.add(isTestConsumer ? 'test' : 'prod');
           mergedPerName.set(n, next);
         }

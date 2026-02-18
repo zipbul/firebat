@@ -2,11 +2,9 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import * as path from 'node:path';
 
 const tsgoRunnerAbs = path.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts');
-
 const withTsgoLspSessionMock = mock(async () => {
   return { ok: false as const, error: 'tsgo unavailable' };
 });
-
 const lspUriToFilePathMock = mock((uri: string) => {
   if (uri.startsWith('file://')) {
     return '/abs/src/a.ts';
@@ -14,7 +12,6 @@ const lspUriToFilePathMock = mock((uri: string) => {
 
   return '/abs/unknown.ts';
 });
-
 const openTsDocumentMock = mock(async () => {
   return { uri: 'file:///abs/src/a.ts', text: '' };
 });
@@ -39,7 +36,6 @@ describe('features/typecheck/detector', () => {
   it('should represent typecheck analysis as a bare array', async () => {
     // Arrange
     const { createEmptyTypecheck } = await import('./detector');
-
     // Act
     const empty = createEmptyTypecheck();
 
@@ -51,7 +47,6 @@ describe('features/typecheck/detector', () => {
   it('should normalize diagnostics to use file+msg fields', async () => {
     // Arrange
     const { convertPublishDiagnosticsToTypecheckItems } = await import('./detector');
-
     // Act
     const items = convertPublishDiagnosticsToTypecheckItems({
       uri: 'file:///abs/src/a.ts',
@@ -127,7 +122,6 @@ describe('features/typecheck/detector', () => {
         },
       ],
     };
-
     // Act
     const items = convertPublishDiagnosticsToTypecheckItems(params as any);
 
@@ -175,7 +169,6 @@ describe('features/typecheck/detector', () => {
         },
       ],
     };
-
     // Act
     const items = __test__.pullDiagnosticsToItems(raw);
 
@@ -198,7 +191,6 @@ describe('features/typecheck/detector', () => {
         },
       ],
     };
-
     // Act
     const items = __test__.pullDiagnosticsToItems(raw);
 

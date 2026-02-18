@@ -3,7 +3,6 @@ import type { CallToolResult, ServerNotification, ServerRequest } from '@modelco
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-
 import { z } from 'zod';
 
 import type { FirebatConfig } from '../../firebat-config';
@@ -34,6 +33,18 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'noop',
   'api-drift',
   'forwarding',
+  'implicit-state',
+  'temporal-coupling',
+  'symmetry-breaking',
+  'invariant-blindspot',
+  'modification-trap',
+  'modification-impact',
+  'variable-lifetime',
+  'decision-surface',
+  'implementation-overhead',
+  'concept-scatter',
+  'abstraction-fitness',
+  'giant-file',
 ];
 
 const asDetectors = (values: ReadonlyArray<string> | undefined): ReadonlyArray<FirebatDetector> => {
@@ -51,44 +62,9 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     return ALL_DETECTORS;
   }
 
-  const {
-    'exact-duplicates': exactDuplicates,
-    waste,
-    'barrel-policy': barrelPolicy,
-    'unknown-proof': unknownProof,
-    'exception-hygiene': exceptionHygiene,
-    format,
-    lint,
-    typecheck,
-    dependencies,
-    coupling,
-    'structural-duplicates': structuralDuplicates,
-    nesting,
-    'early-return': earlyReturn,
-    noop,
-    'api-drift': apiDrift,
-    forwarding,
-  } = features;
-  const enabled: Record<FirebatDetector, boolean> = {
-    'exact-duplicates': exactDuplicates !== false,
-    waste: waste !== false,
-    'barrel-policy': barrelPolicy !== false,
-    'unknown-proof': unknownProof !== false,
-    'exception-hygiene': exceptionHygiene !== false,
-    format: format !== false,
-    lint: lint !== false,
-    typecheck: typecheck !== false,
-    dependencies: dependencies !== false,
-    coupling: coupling !== false,
-    'structural-duplicates': structuralDuplicates !== false,
-    nesting: nesting !== false,
-    'early-return': earlyReturn !== false,
-    noop: noop !== false,
-    'api-drift': apiDrift !== false,
-    forwarding: forwarding !== false,
-  };
+  const record = features as Record<string, unknown>;
 
-  return ALL_DETECTORS.filter(detector => enabled[detector]);
+  return ALL_DETECTORS.filter(detector => record[detector] !== false);
 };
 
 const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): number | 'auto' | undefined => {
@@ -213,45 +189,10 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
   }
 
   const out: Record<string, unknown> = { ...root };
-  const {
-    'exact-duplicates': exactDuplicates,
-    waste,
-    'barrel-policy': barrelPolicy,
-    'unknown-proof': unknownProof,
-    'exception-hygiene': exceptionHygiene,
-    format,
-    lint,
-    typecheck,
-    dependencies,
-    coupling,
-    'structural-duplicates': structuralDuplicates,
-    nesting,
-    'early-return': earlyReturn,
-    noop,
-    'api-drift': apiDrift,
-    forwarding,
-  } = overrides;
-  const overrideMap: Record<FirebatDetector, unknown> = {
-    'exact-duplicates': exactDuplicates,
-    waste,
-    'barrel-policy': barrelPolicy,
-    'unknown-proof': unknownProof,
-    'exception-hygiene': exceptionHygiene,
-    format,
-    lint,
-    typecheck,
-    dependencies,
-    coupling,
-    'structural-duplicates': structuralDuplicates,
-    nesting,
-    'early-return': earlyReturn,
-    noop,
-    'api-drift': apiDrift,
-    forwarding,
-  };
+  const record = overrides as Record<string, unknown>;
 
   for (const detector of ALL_DETECTORS) {
-    const override = overrideMap[detector];
+    const override = record[detector];
 
     if (override === undefined || override === 'inherit') {
       continue;
@@ -411,7 +352,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: exact-duplicates, structural-duplicates, waste, nesting, early-return, noop, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, api-drift, lint, format, typecheck.',
+            'Available: exact-duplicates, structural-duplicates, waste, nesting, early-return, noop, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, api-drift, lint, format, typecheck, implicit-state, temporal-coupling, symmetry-breaking, invariant-blindspot, modification-trap, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, abstraction-fitness, giant-file.',
           ].join(' '),
         ),
       minSize: z
@@ -450,7 +391,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       errors: z.record(z.string(), z.string()).optional(),
     })
     .strict();
-
   const FirebatTopItemSchema = z
     .object({
       pattern: z.string(),
@@ -458,14 +398,12 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       resolves: z.number().int().nonnegative(),
     })
     .strict();
-
   const FirebatCatalogEntrySchema = z
     .object({
       cause: z.string(),
       approach: z.string(),
     })
     .strict();
-
   const FirebatReportSchema = z
     .object({
       meta: FirebatMetaSchema,

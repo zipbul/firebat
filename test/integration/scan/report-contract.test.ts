@@ -103,7 +103,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -139,7 +138,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -173,7 +171,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -206,7 +203,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -240,7 +236,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -288,7 +283,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -320,6 +314,7 @@ describe('integration/scan/report-contract', () => {
       expect(group.outliers.length).toBeGreaterThan(0);
 
       const outlier = group.outliers[0];
+
       expect(outlier.filePath).toBeUndefined();
       expect(typeof outlier.file).toBe('string');
       expect(typeof outlier.span).toBe('object');
@@ -344,7 +339,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -361,7 +355,6 @@ describe('integration/scan/report-contract', () => {
           { logger },
         ),
       );
-
       // Assert
       const deps = report.analyses.dependencies as unknown as any;
 
@@ -399,7 +392,6 @@ describe('integration/scan/report-contract', () => {
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -421,9 +413,11 @@ describe('integration/scan/report-contract', () => {
       expect(Array.isArray(report.analyses['exact-duplicates'])).toBe(true);
 
       const groups = report.analyses['exact-duplicates'] as unknown as any[];
+
       expect(groups.length).toBeGreaterThan(0);
 
       const group = groups[0];
+
       expect(typeof group.kind).toBe('string');
       expect(group.cloneType).toBeUndefined();
 
@@ -431,6 +425,7 @@ describe('integration/scan/report-contract', () => {
       expect(group.items.length).toBeGreaterThan(0);
 
       const item = group.items[0];
+
       expect(typeof item.file).toBe('string');
       expect(item.filePath).toBeUndefined();
 
@@ -438,6 +433,7 @@ describe('integration/scan/report-contract', () => {
       if (group.params !== undefined) {
         expect(typeof group.params).toBe('object');
       }
+
       expect(group.suggestedParams).toBeUndefined();
     } finally {
       await project.dispose();
@@ -471,7 +467,6 @@ exit 1
       );
 
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -506,7 +501,6 @@ exit 1
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -523,7 +517,6 @@ exit 1
           { logger },
         ),
       );
-
       // Assert
       const waste = report.analyses.waste as any[] | undefined;
 
@@ -544,7 +537,6 @@ exit 1
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -561,7 +553,6 @@ exit 1
           { logger },
         ),
       );
-
       // Assert
       const noop = report.analyses.noop as any;
 
@@ -593,7 +584,6 @@ exit 1
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -611,7 +601,6 @@ exit 1
           { logger },
         ),
       );
-
       // Assert
       const barrel = report.analyses['barrel-policy'] as any;
 
@@ -657,7 +646,6 @@ exit 7
       );
 
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -705,7 +693,6 @@ exit 7
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -722,13 +709,13 @@ exit 7
           { logger },
         ),
       );
-
       // Assert
       const findings = report.analyses['exception-hygiene'] as any;
 
       expect(Array.isArray(findings)).toBe(true);
 
       const throwNonError = (findings as any[]).find(f => f?.kind === 'throw-non-error');
+
       expect(throwNonError).toBeDefined();
       expect(typeof throwNonError?.file).toBe('string');
       expect(throwNonError?.file).toContain('src/a.ts');
@@ -747,17 +734,11 @@ exit 7
     // Arrange
     const project = await createScanProjectFixture(
       'firebat-report-contract-unknown-proof-bare-array',
-      [
-        'export function doubleAssertion() {',
-        '  const value = 1 as unknown as number;',
-        '  return value;',
-        '}',
-      ].join('\n'),
+      ['export function doubleAssertion() {', '  const value = 1 as unknown as number;', '  return value;', '}'].join('\n'),
     );
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -774,13 +755,13 @@ exit 7
           { logger },
         ),
       );
-
       // Assert
       const findings = report.analyses['unknown-proof'] as any;
 
       expect(Array.isArray(findings)).toBe(true);
 
       const double = (findings as any[]).find(f => f?.kind === 'double-assertion');
+
       expect(double).toBeDefined();
       expect(typeof double?.file).toBe('string');
       expect(double?.file).toContain('src/a.ts');
@@ -797,22 +778,13 @@ exit 7
   it('should expose forwarding findings as a bare array with file+code and no wrapper fields', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-forwarding-bare-array', {
-      'src/c.ts': [
-        'export const real = (value: number) => value + 1;',
-      ].join('\n'),
-      'src/b.ts': [
-        "import { real } from './c';",
-        'export const mid = (value: number) => real(value);',
-      ].join('\n'),
-      'src/a.ts': [
-        "import { mid } from './b';",
-        'export const top = (value: number) => mid(value);',
-      ].join('\n'),
+      'src/c.ts': ['export const real = (value: number) => value + 1;'].join('\n'),
+      'src/b.ts': ["import { real } from './c';", 'export const mid = (value: number) => real(value);'].join('\n'),
+      'src/a.ts': ["import { mid } from './b';", 'export const top = (value: number) => mid(value);'].join('\n'),
     });
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -829,7 +801,6 @@ exit 7
           { logger },
         ),
       );
-
       // Assert
       const findings = report.analyses.forwarding as any;
 
@@ -837,6 +808,7 @@ exit 7
       expect((findings as any[]).length).toBeGreaterThan(0);
 
       const first = (findings as any[])[0];
+
       expect(typeof first?.file).toBe('string');
       expect(first?.file).toContain('src/');
       expect(first?.filePath).toBeUndefined();
@@ -868,7 +840,6 @@ exit 7
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -885,17 +856,19 @@ exit 7
           { logger },
         ),
       );
-
       // Assert
       const groups = report.analyses['structural-duplicates'] as any;
+
       expect(Array.isArray(groups)).toBe(true);
 
       const first = (groups as any[])[0];
+
       expect(first?.cloneClasses).toBeUndefined();
       expect(first?.cloneType).toBeUndefined();
       expect(typeof first?.kind).toBe('string');
 
       const firstItem = (first?.items ?? [])[0];
+
       expect(firstItem?.filePath).toBeUndefined();
       expect(typeof firstItem?.file).toBe('string');
     } finally {
@@ -906,26 +879,14 @@ exit 7
   it('should build top by code frequency (excluding lint/format/typecheck) and only include seen codes in catalog', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-top-frequency', {
-      'src/a.ts': [
-        'export function deadStore() {',
-        '  let value = 1;',
-        '  return 0;',
-        '}',
-      ].join('\n'),
-      'src/b.ts': [
-        'export const b = 1;',
-      ].join('\n'),
+      'src/a.ts': ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
+      'src/b.ts': ['export const b = 1;'].join('\n'),
       'src/index.ts': "export * from './b';\n",
-      'src/c.ts': [
-        'export function badThrow() {',
-        "  throw 'nope';",
-        '}',
-      ].join('\n'),
+      'src/c.ts': ['export function badThrow() {', "  throw 'nope';", '}'].join('\n'),
     });
 
     try {
       const logger = createLogger();
-
       // Act
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
@@ -949,10 +910,11 @@ exit 7
       expect(report.top.some(p => p.detector === 'format')).toBe(false);
       expect(report.top.some(p => p.detector === 'typecheck')).toBe(false);
 
-      const patterns = report.top.map(p => p.pattern);
-      expect(patterns.includes('WASTE_DEAD_STORE')).toBe(true);
-      expect(patterns.includes('BARREL_EXPORT_STAR')).toBe(true);
-      expect(patterns.includes('EH_THROW_NON_ERROR')).toBe(true);
+      const patterns = new Set(report.top.map(p => p.pattern));
+
+      expect(patterns.has('WASTE_DEAD_STORE')).toBe(true);
+      expect(patterns.has('BARREL_EXPORT_STAR')).toBe(true);
+      expect(patterns.has('EH_THROW_NON_ERROR')).toBe(true);
 
       expect(typeof report.catalog.WASTE_DEAD_STORE?.cause).toBe('string');
       expect(typeof report.catalog.BARREL_EXPORT_STAR?.approach).toBe('string');

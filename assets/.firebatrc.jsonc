@@ -64,7 +64,58 @@
     "forwarding": { "maxForwardDepth": 0 },
 
     // Unknown-proof checks (propagation-only). Optional boundaryGlobs can restrict boundary matching.
-    "unknown-proof": true
+    "unknown-proof": true,
+
+    // --- Phase 1 detectors (IMPROVE.md) ---
+
+    // Hidden mutable state / implicit side effects.
+    "implicit-state": true,
+
+    // Time-order dependency / temporal coupling.
+    "temporal-coupling": true,
+
+    // Symmetry breaking across modules. Configure groups to define "modules".
+    "symmetry-breaking": {
+      "groups": [
+        {
+          "name": "adapters",
+          "glob": "src/adapters/**",
+          "exportPattern": "src/adapters/**/index.ts"
+        },
+        {
+          "name": "application",
+          "glob": "src/application/**",
+          "exportPattern": "src/application/**/index.ts"
+        }
+      ]
+    },
+
+    // Invariant blind spots.
+    "invariant-blindspot": true,
+
+    // Modification traps / high friction areas.
+    "modification-trap": true,
+
+    // Modification impact hotspots.
+    "modification-impact": true,
+
+    // Long-lived variables (optional threshold).
+    "variable-lifetime": { "maxLifetimeLines": 200 },
+
+    // High-dimensional decision surfaces (optional threshold).
+    "decision-surface": { "maxAxes": 10 },
+
+    // Implementation overhead (optional ratio threshold).
+    "implementation-overhead": { "minRatio": 1.5 },
+
+    // Concept scatter index (optional threshold).
+    "concept-scatter": { "maxScatterIndex": 10 },
+
+    // Abstraction fitness (optional score threshold).
+    "abstraction-fitness": { "minFitnessScore": 0.5 },
+
+    // Giant files (optional line threshold).
+    "giant-file": { "maxLines": 800 }
   },
 
   // MCP overrides (use "inherit" to reuse root config).

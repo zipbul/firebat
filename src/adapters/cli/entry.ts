@@ -102,7 +102,10 @@ const printHelp = (): void => {
     '',
     `    exact-duplicates, structural-duplicates, waste, nesting, early-return,`,
     `    noop, forwarding, barrel-policy, unknown-proof, api-drift,`,
-    `    exception-hygiene, lint, format, typecheck, dependencies, coupling`,
+    `    exception-hygiene, lint, format, typecheck, dependencies, coupling,`,
+    `    implicit-state, temporal-coupling, symmetry-breaking, invariant-blindspot,`,
+    `    modification-trap, modification-impact, variable-lifetime, decision-surface,`,
+    `    implementation-overhead, concept-scatter, abstraction-fitness, giant-file`,
     '',
     `  ${hc('CONFIG-ONLY OPTIONS', `${H.bold}${H.yellow}`, c)}  ${hc('(set in .firebatrc.jsonc)', H.dim, c)}`,
     '',
@@ -169,94 +172,31 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'noop',
     'api-drift',
     'forwarding',
+    'implicit-state',
+    'temporal-coupling',
+    'symmetry-breaking',
+    'invariant-blindspot',
+    'modification-trap',
+    'modification-impact',
+    'variable-lifetime',
+    'decision-surface',
+    'implementation-overhead',
+    'concept-scatter',
+    'abstraction-fitness',
+    'giant-file',
   ];
 
   if (!features) {
     return all;
   }
 
-  const {
-    'exact-duplicates': exactDuplicates,
-    waste,
-    'barrel-policy': barrelPolicy,
-    'unknown-proof': unknownProof,
-    'exception-hygiene': exceptionHygiene,
-    format,
-    lint,
-    typecheck,
-    dependencies,
-    coupling,
-    'structural-duplicates': structuralDuplicates,
-    nesting,
-    'early-return': earlyReturn,
-    noop,
-    'api-drift': apiDrift,
-    forwarding,
-  } = features;
+  const record = features as Record<string, unknown>;
   const disabled = new Set<FirebatDetector>();
 
-  if (exactDuplicates === false) {
-    disabled.add('exact-duplicates');
-  }
-
-  if (waste === false) {
-    disabled.add('waste');
-  }
-
-  if (barrelPolicy === false) {
-    disabled.add('barrel-policy');
-  }
-
-  if (unknownProof === false) {
-    disabled.add('unknown-proof');
-  }
-
-  if (exceptionHygiene === false) {
-    disabled.add('exception-hygiene');
-  }
-
-  if (format === false) {
-    disabled.add('format');
-  }
-
-  if (lint === false) {
-    disabled.add('lint');
-  }
-
-  if (typecheck === false) {
-    disabled.add('typecheck');
-  }
-
-  if (dependencies === false) {
-    disabled.add('dependencies');
-  }
-
-  if (coupling === false) {
-    disabled.add('coupling');
-  }
-
-  if (structuralDuplicates === false) {
-    disabled.add('structural-duplicates');
-  }
-
-  if (nesting === false) {
-    disabled.add('nesting');
-  }
-
-  if (earlyReturn === false) {
-    disabled.add('early-return');
-  }
-
-  if (noop === false) {
-    disabled.add('noop');
-  }
-
-  if (apiDrift === false) {
-    disabled.add('api-drift');
-  }
-
-  if (forwarding === false) {
-    disabled.add('forwarding');
+  for (const detector of all) {
+    if (record[detector] === false) {
+      disabled.add(detector);
+    }
   }
 
   return all.filter(detector => !disabled.has(detector));

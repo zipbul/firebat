@@ -29,6 +29,12 @@ const runWorkerOnce = async (payload: unknown, timeoutMs = 5_000): Promise<Parse
       }, timeoutMs);
 
       worker.onmessage = (event: MessageEvent) => {
+        const data = event.data as Record<string, unknown> | null;
+
+        if (data && typeof data === 'object' && data.type === 'ready') {
+          return;
+        }
+
         clearTimeout(timer);
         resolve(event.data as ParseWorkerResponse);
       };

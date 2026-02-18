@@ -63,9 +63,10 @@ firebat scan [targets...] [options]
 | `--log-level <level>` | `info` | error \| warn \| info \| debug \| trace |
 | `--log-stack` | off | Include stack traces in log output |
 
-## Detectors (15)
+## Detectors (28)
 
 All detectors run by default. Use `--only` to select a subset.
+If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be disabled by setting `features["<detector>"]` to `false`.
 
 ### Code Quality
 

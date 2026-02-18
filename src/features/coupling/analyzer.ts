@@ -127,7 +127,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
   };
 
   const zeroSpan: SourceSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-
   const hotspotsRaw = modules
     .map(module => {
       const fanIn = inDegree.get(module) ?? 0;
@@ -177,7 +176,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
         signals,
       });
       const score = Math.round(severity * 100);
-
       const kind = pickKind(signals);
 
       return {

@@ -30,7 +30,11 @@ const computeCloneDiff = (leftNode: unknown, rightNode: unknown): CloneDiff | un
       return;
     }
 
-    if (left.type === 'Identifier' && typeof (left as { name?: unknown }).name === 'string' && typeof (right as { name?: unknown }).name === 'string') {
+    if (
+      left.type === 'Identifier' &&
+      typeof (left as { name?: unknown }).name === 'string' &&
+      typeof (right as { name?: unknown }).name === 'string'
+    ) {
       const l = (left as { name: string }).name;
       const r = (right as { name: string }).name;
 
@@ -45,7 +49,11 @@ const computeCloneDiff = (leftNode: unknown, rightNode: unknown): CloneDiff | un
       const l = (left as { value?: unknown }).value;
       const r = (right as { value?: unknown }).value;
 
-      if (l !== r && (typeof l === 'string' || typeof l === 'number' || typeof l === 'boolean') && (typeof r === 'string' || typeof r === 'number' || typeof r === 'boolean')) {
+      if (
+        l !== r &&
+        (typeof l === 'string' || typeof l === 'number' || typeof l === 'boolean') &&
+        (typeof r === 'string' || typeof r === 'number' || typeof r === 'boolean')
+      ) {
         pairs.push({ left: String(l), right: String(r), location, kind: 'literal' });
       }
 
@@ -57,7 +65,14 @@ const computeCloneDiff = (leftNode: unknown, rightNode: unknown): CloneDiff | un
       const lName = (left as { typeName?: unknown }).typeName;
       const rName = (right as { typeName?: unknown }).typeName;
 
-      if (isOxcNode(lName) && isOxcNode(rName) && isNodeRecord(lName) && isNodeRecord(rName) && lName.type === 'Identifier' && rName.type === 'Identifier') {
+      if (
+        isOxcNode(lName) &&
+        isOxcNode(rName) &&
+        isNodeRecord(lName) &&
+        isNodeRecord(rName) &&
+        lName.type === 'Identifier' &&
+        rName.type === 'Identifier'
+      ) {
         const l = (lName as { name?: unknown }).name;
         const r = (rName as { name?: unknown }).name;
 
@@ -97,9 +112,8 @@ const computeCloneDiff = (leftNode: unknown, rightNode: unknown): CloneDiff | un
   }
 
   const kindPriority = (k: CloneDiff['kind']): number => (k === 'type' ? 3 : k === 'literal' ? 2 : 1);
-  const kind = pairs
-    .map(p => p.kind)
-    .sort((a, b) => kindPriority(b) - kindPriority(a))[0] as CloneDiff['kind'];
+
+  const kind = pairs.map(p => p.kind).sort((a, b) => kindPriority(b) - kindPriority(a))[0] as CloneDiff['kind'];
 
   return {
     kind,

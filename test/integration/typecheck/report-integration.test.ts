@@ -61,7 +61,6 @@ const createTypecheckOk = (items: ReadonlyArray<TypecheckItem>): ReadonlyArray<T
 };
 
 const typecheckEntryAbs = path.resolve(import.meta.dir, '../../../src/features/typecheck/index.ts');
-
 const analyzeTypecheckMock = mock(async (): Promise<ReadonlyArray<TypecheckItem>> => createTypecheckOk([]));
 
 mock.module(typecheckEntryAbs, () => {

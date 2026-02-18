@@ -60,6 +60,7 @@ export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<Readonly
 
   if (!result.ok) {
     const error = result.error ?? 'oxfmt failed';
+
     throw new Error(error);
   }
 

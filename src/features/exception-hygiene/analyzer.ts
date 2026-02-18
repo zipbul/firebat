@@ -28,6 +28,7 @@ interface PushFindingInput {
 
 const pushFinding = (findings: ExceptionHygieneFinding[], input: PushFindingInput): void => {
   const evidence = input.evidence.length > 0 ? input.evidence : 'unknown';
+
   findings.push({
     kind: input.kind,
     file: input.filePath,
@@ -676,7 +677,6 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           arg.type === 'Identifier' ||
           arg.type === 'AwaitExpression' ||
           arg.type === 'ChainExpression';
-
         // CallExpression is allowed in general (e.g. createError()),
         // but reject known primitive wrappers that never produce Error instances.
         const isCallButPrimitiveWrapper =
@@ -686,7 +686,6 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           arg.callee.type === 'Identifier' &&
           isNodeRecord(arg.callee) &&
           isPrimitiveWrapperName(arg.callee.name as string);
-
         const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
 
         if (!isLikelyError && !isAllowedCall) {

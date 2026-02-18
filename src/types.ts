@@ -22,7 +22,20 @@ export type FirebatDetector =
   | 'early-return'
   | 'noop'
   | 'api-drift'
-  | 'forwarding';
+  | 'forwarding'
+  // Phase 1 detectors (IMPROVE.md)
+  | 'implicit-state'
+  | 'temporal-coupling'
+  | 'symmetry-breaking'
+  | 'invariant-blindspot'
+  | 'modification-trap'
+  | 'modification-impact'
+  | 'variable-lifetime'
+  | 'decision-surface'
+  | 'implementation-overhead'
+  | 'concept-scatter'
+  | 'abstraction-fitness'
+  | 'giant-file';
 
 export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'node';
 
@@ -380,6 +393,116 @@ export interface FirebatMeta {
   readonly errors?: Readonly<Record<string, string>>;
 }
 
+export interface ImplicitStateFinding {
+  readonly kind: 'implicit-state';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly protocol: string;
+  readonly key?: string;
+}
+
+export interface TemporalCouplingFinding {
+  readonly kind: 'temporal-coupling';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly state: string;
+  readonly writers: number;
+  readonly readers: number;
+}
+
+export interface SymmetryBreakingFinding {
+  readonly kind: 'symmetry-breaking';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly group: string;
+  readonly signature: string;
+  readonly majorityCount: number;
+  readonly outlierCount: number;
+}
+
+export interface InvariantBlindspotFinding {
+  readonly kind: 'invariant-blindspot';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly signal: string;
+}
+
+export interface ModificationTrapFinding {
+  readonly kind: 'modification-trap';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly pattern: string;
+  readonly occurrences: number;
+}
+
+export interface ModificationImpactFinding {
+  readonly kind: 'modification-impact';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly impactRadius: number;
+  readonly highRiskCallers: ReadonlyArray<string>;
+}
+
+export interface VariableLifetimeFinding {
+  readonly kind: 'variable-lifetime';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly variable: string;
+  readonly lifetimeLines: number;
+  readonly contextBurden: number;
+}
+
+export interface DecisionSurfaceFinding {
+  readonly kind: 'decision-surface';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly axes: number;
+  readonly combinatorialPaths: number;
+  readonly repeatedChecks: number;
+}
+
+export interface ImplementationOverheadFinding {
+  readonly kind: 'implementation-overhead';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly interfaceComplexity: number;
+  readonly implementationComplexity: number;
+  readonly ratio: number;
+}
+
+export interface ConceptScatterFinding {
+  readonly kind: 'concept-scatter';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly concept: string;
+  readonly scatterIndex: number;
+  readonly files: ReadonlyArray<string>;
+  readonly layers: ReadonlyArray<string>;
+}
+
+export interface AbstractionFitnessFinding {
+  readonly kind: 'abstraction-fitness';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly module: string;
+  readonly internalCohesion: number;
+  readonly externalCoupling: number;
+  readonly fitness: number;
+}
+
+export interface GiantFileMetrics {
+  readonly lineCount: number;
+  readonly maxLines: number;
+}
+
+export interface GiantFileFinding {
+  readonly kind: 'giant-file';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly code: string;
+  readonly metrics: GiantFileMetrics;
+}
+
 export interface FirebatAnalyses {
   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
@@ -397,6 +520,20 @@ export interface FirebatAnalyses {
   readonly noop: ReadonlyArray<NoopFinding>;
   readonly 'api-drift': ReadonlyArray<ApiDriftGroup>;
   readonly forwarding: ReadonlyArray<ForwardingFinding>;
+
+  // Phase 1 detectors (IMPROVE.md)
+  readonly 'implicit-state': ReadonlyArray<ImplicitStateFinding>;
+  readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
+  readonly 'symmetry-breaking': ReadonlyArray<SymmetryBreakingFinding>;
+  readonly 'invariant-blindspot': ReadonlyArray<InvariantBlindspotFinding>;
+  readonly 'modification-trap': ReadonlyArray<ModificationTrapFinding>;
+  readonly 'modification-impact': ReadonlyArray<ModificationImpactFinding>;
+  readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
+  readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;
+  readonly 'implementation-overhead': ReadonlyArray<ImplementationOverheadFinding>;
+  readonly 'concept-scatter': ReadonlyArray<ConceptScatterFinding>;
+  readonly 'abstraction-fitness': ReadonlyArray<AbstractionFitnessFinding>;
+  readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
 }
 
 export interface FirebatReport {

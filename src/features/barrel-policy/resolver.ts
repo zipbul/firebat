@@ -220,11 +220,7 @@ const applyStarPattern = (pattern: string, star: string): string => {
 };
 
 const resolveFromFileSet = (baseAbs: string, fileSet: ReadonlySet<string>): string | null => {
-  const candidates = [
-    baseAbs,
-    `${baseAbs}.ts`,
-    path.join(baseAbs, 'index.ts'),
-  ];
+  const candidates = [baseAbs, `${baseAbs}.ts`, path.join(baseAbs, 'index.ts')];
 
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);

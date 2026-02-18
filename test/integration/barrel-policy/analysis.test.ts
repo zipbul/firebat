@@ -89,7 +89,7 @@ describe('integration/barrel-policy', () => {
     expect(analysis.some(f => f.kind === 'invalid-index-statement')).toBe(true);
   });
 
-  it("should report barrel-side-effect-import when index.ts contains side-effect imports", async () => {
+  it('should report barrel-side-effect-import when index.ts contains side-effect imports', async () => {
     // Arrange
     let sources = new Map<string, string>();
 

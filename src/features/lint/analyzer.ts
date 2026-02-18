@@ -33,7 +33,6 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArra
     ...(input.resolveMode !== undefined ? { resolveMode: input.resolveMode } : {}),
     logger,
   });
-
   const normalizedDiagnostics: ReadonlyArray<LintDiagnostic> = (result.diagnostics ?? [])
     .map(d => {
       const nextSeverity = normalizeSeverity(d.severity);
@@ -42,13 +41,10 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArra
         return null;
       }
 
-      return {
-        file: d.filePath,
-        msg: d.message,
-        ...(typeof d.code === 'string' ? { code: d.code } : {}),
+      return Object.assign({ file: d.filePath, msg: d.message }, typeof d.code === `string` ? { code: d.code } : {}, {
         severity: nextSeverity,
         span: d.span,
-      } satisfies LintDiagnostic;
+      }) satisfies LintDiagnostic;
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 

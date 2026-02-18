@@ -1,6 +1,43 @@
 {
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
   "features": {
+    "implicit-state": true,
+    "temporal-coupling": true,
+    "symmetry-breaking": {
+      "groups": [
+        {
+          "name": "adapters",
+          "glob": "src/adapters/**",
+          "exportPattern": "src/adapters/**/index.ts"
+        },
+        {
+          "name": "application",
+          "glob": "src/application/**",
+          "exportPattern": "src/application/**/index.ts"
+        }
+      ]
+    },
+    "invariant-blindspot": true,
+    "modification-trap": true,
+    "modification-impact": true,
+    "variable-lifetime": {
+      "maxLifetimeLines": 200
+    },
+    "decision-surface": {
+      "maxAxes": 10
+    },
+    "implementation-overhead": {
+      "minRatio": 1.5
+    },
+    "concept-scatter": {
+      "maxScatterIndex": 10
+    },
+    "abstraction-fitness": {
+      "minFitnessScore": 0.5
+    },
+    "giant-file": {
+      "maxLines": 800
+    },
     "exception-hygiene": true,
     "barrel-policy": true,
     "format": true,

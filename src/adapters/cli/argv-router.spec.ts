@@ -6,7 +6,6 @@ describe('argv-router', () => {
   test('should route to update when global flags precede command', () => {
     // Arrange
     const argv = ['--log-level', 'trace', 'update'];
-
     // Act
     const result = routeFirebatArgv(argv);
 
@@ -20,7 +19,6 @@ describe('argv-router', () => {
   test('should strip global log flags from update argv', () => {
     // Arrange
     const argv = ['update', '--log-level=debug', '--log-stack', '--yes'];
-
     // Act
     const result = routeFirebatArgv(argv);
 
@@ -34,7 +32,6 @@ describe('argv-router', () => {
   test('should route to scan when explicit scan appears after global flags', () => {
     // Arrange
     const argv = ['--log-stack', 'scan', 'src'];
-
     // Act
     const result = routeFirebatArgv(argv);
 
@@ -46,7 +43,6 @@ describe('argv-router', () => {
   test('should treat argv as scan when no subcommand is present', () => {
     // Arrange
     const argv = ['--log-level', 'info', 'src'];
-
     // Act
     const result = routeFirebatArgv(argv);
 
@@ -59,7 +55,6 @@ describe('argv-router', () => {
   test('should route to cache when cache command is present', () => {
     // Arrange
     const argv = ['--log-level', 'trace', 'cache', 'clean'];
-
     // Act
     const result = routeFirebatArgv(argv);
 

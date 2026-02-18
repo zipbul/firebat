@@ -161,7 +161,6 @@ const measureMaxCallbackDepth = (value: NodeValue, depth: number = 0): number =>
   if (value.type === 'CallExpression') {
     const args = Array.isArray(value.arguments) ? (value.arguments as ReadonlyArray<NodeValue>) : [];
     let max = depth;
-
     // Scan non-callback arguments at current depth.
     const callee = value.callee;
 
@@ -332,6 +331,7 @@ const analyzeFunctionNode = (
 
     const iterationTarget = getIterationTarget(value);
     const isIteration = iterationTarget !== null;
+
     const pushIteration = (): void => {
       if (iterationTarget === null) {
         return;
@@ -343,6 +343,7 @@ const analyzeFunctionNode = (
 
       iterationStack.push(iterationTarget);
     };
+
     const popIteration = (): void => {
       if (!isIteration) {
         return;
@@ -377,7 +378,6 @@ const analyzeFunctionNode = (
   const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
   const nestingScore = Math.max(0, cognitiveComplexity);
-
   const callbackDepth = measureMaxCallbackDepth(bodyValue as NodeValue);
   const quadraticTargets = Array.from(accidentalQuadraticTargets).sort();
 

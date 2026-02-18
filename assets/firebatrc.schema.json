@@ -7,7 +7,7 @@
   "properties": {
     "features": {
       "type": "object",
-      "description": "Per-feature enable/disable + feature-specific options. false disables. true enables with defaults. An object enables with explicit options (empty objects are not allowed).",
+      "description": "Per-feature enable/disable + feature-specific options. false disables. true enables with defaults. An object enables with explicit options (empty objects are allowed).",
       "additionalProperties": false,
       "properties": {
         "exact-duplicates": {
@@ -35,11 +35,24 @@
         "early-return": { "$ref": "#/$defs/emptyToggle" },
         "noop": { "$ref": "#/$defs/emptyToggle" },
         "exception-hygiene": { "$ref": "#/$defs/emptyToggle" },
-        "api-drift": { "$ref": "#/$defs/emptyToggle" }
+        "api-drift": { "$ref": "#/$defs/emptyToggle" },
+
+        "implicit-state": { "$ref": "#/$defs/emptyToggle" },
+        "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
+        "symmetry-breaking": { "$ref": "#/$defs/symmetryBreakingToggle" },
+        "invariant-blindspot": { "$ref": "#/$defs/emptyToggle" },
+        "modification-trap": { "$ref": "#/$defs/emptyToggle" },
+        "modification-impact": { "$ref": "#/$defs/emptyToggle" },
+        "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
+        "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
+        "implementation-overhead": { "$ref": "#/$defs/implementationOverheadToggle" },
+        "concept-scatter": { "$ref": "#/$defs/conceptScatterToggle" },
+        "abstraction-fitness": { "$ref": "#/$defs/abstractionFitnessToggle" },
+        "giant-file": { "$ref": "#/$defs/giantFileToggle" }
       }
     },
     "mcp": {
-      "description": "MCP tool overrides. Use 'inherit' to reuse root config. Per-feature values can be false | true | 'inherit' | {options} (empty objects are not allowed).",
+      "description": "MCP tool overrides. Use 'inherit' to reuse root config. Per-feature values can be false | true | 'inherit' | {options} (empty objects are allowed).",
       "oneOf": [
         { "type": "string", "const": "inherit" },
         {
@@ -65,7 +78,20 @@
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
                 "noop": { "$ref": "#/$defs/emptyInheritable" },
                 "exception-hygiene": { "$ref": "#/$defs/emptyInheritable" },
-                "api-drift": { "$ref": "#/$defs/emptyInheritable" }
+                "api-drift": { "$ref": "#/$defs/emptyInheritable" },
+
+                "implicit-state": { "$ref": "#/$defs/emptyInheritable" },
+                "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
+                "symmetry-breaking": { "$ref": "#/$defs/symmetryBreakingInheritable" },
+                "invariant-blindspot": { "$ref": "#/$defs/emptyInheritable" },
+                "modification-trap": { "$ref": "#/$defs/emptyInheritable" },
+                "modification-impact": { "$ref": "#/$defs/emptyInheritable" },
+                "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
+                "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
+                "implementation-overhead": { "$ref": "#/$defs/implementationOverheadInheritable" },
+                "concept-scatter": { "$ref": "#/$defs/conceptScatterInheritable" },
+                "abstraction-fitness": { "$ref": "#/$defs/abstractionFitnessInheritable" },
+                "giant-file": { "$ref": "#/$defs/giantFileInheritable" }
               }
             }
           }
@@ -138,8 +164,7 @@
           "additionalProperties": false,
           "properties": {
             "memoryRetentionThreshold": { "type": "integer", "minimum": 0, "default": 10 }
-          },
-          "minProperties": 1
+          }
         }
       ]
     },
@@ -153,8 +178,7 @@
           "additionalProperties": false,
           "properties": {
             "memoryRetentionThreshold": { "type": "integer", "minimum": 0, "default": 10 }
-          },
-          "minProperties": 1
+          }
         }
       ]
     },
@@ -184,8 +208,7 @@
               "items": { "type": "string" },
               "minItems": 1
             }
-          },
-          "minProperties": 1
+          }
         }
       ]
     },
@@ -203,8 +226,7 @@
               "minItems": 1,
               "description": "Additional ignore globs for barrel-policy. Default ignores are minimal: node_modules/** and dist/**."
             }
-          },
-          "minProperties": 1
+          }
         }
       ]
     },
@@ -262,8 +284,7 @@
               "items": { "type": "string" },
               "minItems": 1
             }
-          },
-          "minProperties": 1
+          }
         }
       ]
     },
@@ -282,8 +303,7 @@
               "minItems": 1,
               "description": "Additional ignore globs for barrel-policy. Default ignores are minimal: node_modules/** and dist/**."
             }
-          },
-          "minProperties": 1
+          }
         }
       ]
     },
@@ -312,6 +332,188 @@
           "properties": { "maxForwardDepth": { "type": "integer", "minimum": 0, "default": 0 } },
           "required": ["maxForwardDepth"],
           "minProperties": 1
+        }
+      ]
+    },
+
+    "symmetryBreakingGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "glob": { "type": "string", "minLength": 1 },
+        "exportPattern": { "type": "string", "minLength": 1 }
+      },
+      "required": ["name", "glob", "exportPattern"],
+      "minProperties": 3
+    },
+    "symmetryBreakingOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/symmetryBreakingGroup" },
+          "minItems": 1
+        }
+      }
+    },
+    "symmetryBreakingToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        { "$ref": "#/$defs/symmetryBreakingOptions" }
+      ]
+    },
+    "symmetryBreakingInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        { "$ref": "#/$defs/symmetryBreakingOptions" }
+      ]
+    },
+
+    "variableLifetimeToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxLifetimeLines": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+    "variableLifetimeInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxLifetimeLines": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+
+    "decisionSurfaceToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxAxes": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+    "decisionSurfaceInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxAxes": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+
+    "implementationOverheadToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minRatio": { "type": "number", "minimum": 0 } }
+        }
+      ]
+    },
+    "implementationOverheadInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minRatio": { "type": "number", "minimum": 0 } }
+        }
+      ]
+    },
+
+    "conceptScatterToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxScatterIndex": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+    "conceptScatterInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxScatterIndex": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+
+    "abstractionFitnessToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minFitnessScore": { "type": "number" } }
+        }
+      ]
+    },
+    "abstractionFitnessInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "minFitnessScore": { "type": "number" } }
+        }
+      ]
+    },
+
+    "giantFileToggle": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxLines": { "type": "integer", "minimum": 0 } }
+        }
+      ]
+    },
+    "giantFileInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "maxLines": { "type": "integer", "minimum": 0 } }
         }
       ]
     }

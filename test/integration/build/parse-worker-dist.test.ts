@@ -30,6 +30,12 @@ const runDistWorkerOnce = async (workerOutAbs: string, payload: unknown, timeout
       const timer = setTimeout(() => reject(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs);
 
       worker.onmessage = event => {
+        const data = (event as MessageEvent).data as Record<string, unknown> | null;
+
+        if (data && typeof data === 'object' && data.type === 'ready') {
+          return;
+        }
+
         clearTimeout(timer);
         resolve((event as MessageEvent).data as ParseWorkerResponse);
       };

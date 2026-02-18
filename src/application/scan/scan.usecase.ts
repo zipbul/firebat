@@ -7,22 +7,35 @@ import type { FirebatReport } from '../../types';
 
 import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
+import { analyzeAbstractionFitness, createEmptyAbstractionFitness } from '../../features/abstraction-fitness';
 import { analyzeApiDrift, createEmptyApiDrift } from '../../features/api-drift';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
+import { analyzeConceptScatter, createEmptyConceptScatter } from '../../features/concept-scatter';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
+import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../features/decision-surface';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { detectExactDuplicates } from '../../features/exact-duplicates';
 import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
+import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
+import { analyzeImplementationOverhead, createEmptyImplementationOverhead } from '../../features/implementation-overhead';
+import { analyzeImplicitState, createEmptyImplicitState } from '../../features/implicit-state';
+import { analyzeInvariantBlindspot, createEmptyInvariantBlindspot } from '../../features/invariant-blindspot';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
+import { analyzeModificationImpact, createEmptyModificationImpact } from '../../features/modification-impact';
+import { analyzeModificationTrap, createEmptyModificationTrap } from '../../features/modification-trap';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
 import { analyzeNoop, createEmptyNoop } from '../../features/noop';
 import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
+import { analyzeSymmetryBreaking, createEmptySymmetryBreaking } from '../../features/symmetry-breaking';
+import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
 import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
+import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
+import { loadFirebatConfigFile } from '../../firebat-config.loader';
 import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
 import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
 import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
@@ -123,6 +136,26 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   const ctx = await resolveRuntimeContextFromCwd();
 
   logger.trace('Runtime context resolved', { rootAbs: ctx.rootAbs, durationMs: Math.round(nowMs() - tCtx0) });
+
+  let config: Awaited<ReturnType<typeof loadFirebatConfigFile>>['config'] | null = null;
+
+  try {
+    const loaded = await loadFirebatConfigFile({
+      rootAbs: ctx.rootAbs,
+      ...(options.configPath ? { configPath: options.configPath } : {}),
+    });
+
+    config = loaded.config;
+
+    if (loaded.exists) {
+      logger.trace('Config loaded', { resolvedPath: loaded.resolvedPath });
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+
+    metaErrors.config = message;
+    config = null;
+  }
 
   const toolVersion = computeToolVersion();
 
@@ -476,9 +509,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             detectorTimings[detectorKey] = durationMs;
 
             const message = err instanceof Error ? err.message : String(err);
+
             metaErrors[detectorKey] = message;
 
             const partial = (err as any)?.partial;
+
             if (Array.isArray(partial)) {
               return partial as UnknownProofResult;
             }
@@ -509,6 +544,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             detectorTimings.typecheck = nowMs() - t0;
 
             const message = err instanceof Error ? err.message : String(err);
+
             metaErrors.typecheck = message.includes('tsgo') ? message : `tsgo: ${message}`;
 
             logger.debug('detector: failed', {
@@ -627,6 +663,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       exceptionHygiene = analyzeExceptionHygiene(program);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+
       metaErrors[detectorKey] = message;
       exceptionHygieneStatus = 'failed';
       exceptionHygiene = createEmptyExceptionHygiene();
@@ -710,6 +747,197 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   ]);
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
+
+  const defaultFeatureOptions = {
+    giantFileMaxLines: 1000,
+    decisionSurfaceMaxAxes: 2,
+    variableLifetimeMaxLifetimeLines: 30,
+    implementationOverheadMinRatio: 1.0,
+    conceptScatterMaxScatterIndex: 2,
+    abstractionFitnessMinFitnessScore: 0,
+  };
+  const resolvedGiantFileMaxLines =
+    (config as any)?.features?.['giant-file']?.maxLines ?? defaultFeatureOptions.giantFileMaxLines;
+  const resolvedDecisionSurfaceMaxAxes =
+    (config as any)?.features?.['decision-surface']?.maxAxes ?? defaultFeatureOptions.decisionSurfaceMaxAxes;
+  const resolvedVariableLifetimeMaxLifetimeLines =
+    (config as any)?.features?.['variable-lifetime']?.maxLifetimeLines ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
+  const resolvedImplementationOverheadMinRatio =
+    (config as any)?.features?.['implementation-overhead']?.minRatio ?? defaultFeatureOptions.implementationOverheadMinRatio;
+  const resolvedConceptScatterMaxScatterIndex =
+    (config as any)?.features?.['concept-scatter']?.maxScatterIndex ?? defaultFeatureOptions.conceptScatterMaxScatterIndex;
+  const resolvedAbstractionFitnessMinFitnessScore =
+    (config as any)?.features?.['abstraction-fitness']?.minFitnessScore ??
+    defaultFeatureOptions.abstractionFitnessMinFitnessScore;
+  let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
+
+  if (options.detectors.includes('giant-file')) {
+    const t0 = nowMs();
+    const detectorKey = 'giant-file';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    giantFile = analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let decisionSurface: ReturnType<typeof analyzeDecisionSurface> = createEmptyDecisionSurface();
+
+  if (options.detectors.includes('decision-surface')) {
+    const t0 = nowMs();
+    const detectorKey = 'decision-surface';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    decisionSurface = analyzeDecisionSurface(program, { maxAxes: Number(resolvedDecisionSurfaceMaxAxes) });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let variableLifetime: ReturnType<typeof analyzeVariableLifetime> = createEmptyVariableLifetime();
+
+  if (options.detectors.includes('variable-lifetime')) {
+    const t0 = nowMs();
+    const detectorKey = 'variable-lifetime';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    variableLifetime = analyzeVariableLifetime(program, { maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines) });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let implementationOverhead: ReturnType<typeof analyzeImplementationOverhead> = createEmptyImplementationOverhead();
+
+  if (options.detectors.includes('implementation-overhead')) {
+    const t0 = nowMs();
+    const detectorKey = 'implementation-overhead';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    implementationOverhead = analyzeImplementationOverhead(program, { minRatio: Number(resolvedImplementationOverheadMinRatio) });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let implicitState: ReturnType<typeof analyzeImplicitState> = createEmptyImplicitState();
+
+  if (options.detectors.includes('implicit-state')) {
+    const t0 = nowMs();
+    const detectorKey = 'implicit-state';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    implicitState = analyzeImplicitState(program);
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = createEmptyTemporalCoupling();
+
+  if (options.detectors.includes('temporal-coupling')) {
+    const t0 = nowMs();
+    const detectorKey = 'temporal-coupling';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    temporalCoupling = analyzeTemporalCoupling(program);
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let symmetryBreaking: ReturnType<typeof analyzeSymmetryBreaking> = createEmptySymmetryBreaking();
+
+  if (options.detectors.includes('symmetry-breaking')) {
+    const t0 = nowMs();
+    const detectorKey = 'symmetry-breaking';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    symmetryBreaking = analyzeSymmetryBreaking(program);
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let invariantBlindspot: ReturnType<typeof analyzeInvariantBlindspot> = createEmptyInvariantBlindspot();
+
+  if (options.detectors.includes('invariant-blindspot')) {
+    const t0 = nowMs();
+    const detectorKey = 'invariant-blindspot';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    invariantBlindspot = analyzeInvariantBlindspot(program);
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let modificationTrap: ReturnType<typeof analyzeModificationTrap> = createEmptyModificationTrap();
+
+  if (options.detectors.includes('modification-trap')) {
+    const t0 = nowMs();
+    const detectorKey = 'modification-trap';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    modificationTrap = analyzeModificationTrap(program);
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let modificationImpact: ReturnType<typeof analyzeModificationImpact> = createEmptyModificationImpact();
+
+  if (options.detectors.includes('modification-impact')) {
+    const t0 = nowMs();
+    const detectorKey = 'modification-impact';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    modificationImpact = analyzeModificationImpact(program);
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let conceptScatter: ReturnType<typeof analyzeConceptScatter> = createEmptyConceptScatter();
+
+  if (options.detectors.includes('concept-scatter')) {
+    const t0 = nowMs();
+    const detectorKey = 'concept-scatter';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    conceptScatter = analyzeConceptScatter(program, { maxScatterIndex: Number(resolvedConceptScatterMaxScatterIndex) });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
+  let abstractionFitness: ReturnType<typeof analyzeAbstractionFitness> = createEmptyAbstractionFitness();
+
+  if (options.detectors.includes('abstraction-fitness')) {
+    const t0 = nowMs();
+    const detectorKey = 'abstraction-fitness';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    abstractionFitness = analyzeAbstractionFitness(program, {
+      minFitnessScore: Number(resolvedAbstractionFitnessMinFitnessScore),
+    });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
 
   const selectedDetectors = new Set(options.detectors);
 
@@ -1005,6 +1233,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const enrichDependencies = (value: any) => {
     const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
+
     const toCode = (kind: string): string | undefined => {
       if (kind === 'layer-violation') {
         return 'DEP_LAYER_VIOLATION';
@@ -1132,10 +1361,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     const bump = (code: string, detector: string): void => {
       seenCodes.add(code);
+
       const prev = counts.get(code);
 
       if (!prev) {
         counts.set(code, { count: 1, detector });
+
         return;
       }
 
@@ -1153,14 +1384,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       for (const item of value as ReadonlyArray<any>) {
         const code = item?.code;
+
         if (typeof code === 'string' && code.length > 0) {
           bump(code, detector);
         }
 
         const outliers = item?.outliers;
+
         if (Array.isArray(outliers)) {
           for (const outlier of outliers) {
             const outlierCode = (outlier as any)?.code;
+
             if (typeof outlierCode === 'string' && outlierCode.length > 0) {
               bump(outlierCode, detector);
             }
@@ -1172,15 +1406,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     const topFromFrequency = [...counts.entries()]
       .map(([pattern, info]) => ({ pattern, detector: info.detector, resolves: info.count }))
       .sort((a, b) => b.resolves - a.resolves || a.pattern.localeCompare(b.pattern));
-
     const top = [...topFromFrequency, ...input.diagnostics.top].sort(
       (a, b) => b.resolves - a.resolves || a.pattern.localeCompare(b.pattern),
     );
-
     const catalog: Record<string, any> = { ...input.diagnostics.catalog };
 
     for (const code of seenCodes) {
       const entry = (FIREBAT_CODE_CATALOG as any)[code];
+
       if (entry !== undefined) {
         catalog[code] = entry;
       }
@@ -1212,11 +1445,21 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('noop') ? { noop: enrichNoop(noop as any) } : {}),
     ...(selectedDetectors.has('api-drift') ? { 'api-drift': enrichApiDrift(apiDrift as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
+    ...(selectedDetectors.has('giant-file') ? { 'giant-file': giantFile } : {}),
+    ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': decisionSurface } : {}),
+    ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': variableLifetime } : {}),
+    ...(selectedDetectors.has('implementation-overhead') ? { 'implementation-overhead': implementationOverhead } : {}),
+    ...(selectedDetectors.has('implicit-state') ? { 'implicit-state': implicitState } : {}),
+    ...(selectedDetectors.has('temporal-coupling') ? { 'temporal-coupling': temporalCoupling } : {}),
+    ...(selectedDetectors.has('symmetry-breaking') ? { 'symmetry-breaking': symmetryBreaking } : {}),
+    ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': invariantBlindspot } : {}),
+    ...(selectedDetectors.has('modification-trap') ? { 'modification-trap': modificationTrap } : {}),
+    ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': modificationImpact } : {}),
+    ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': conceptScatter } : {}),
+    ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': abstractionFitness } : {}),
   };
-
   const diagnostics = aggregateDiagnostics({ analyses: analyses as any });
   const topAndCatalog = computeTopAndCatalog({ analyses, diagnostics });
-
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',

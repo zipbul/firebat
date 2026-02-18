@@ -28,11 +28,13 @@ interface EligibleFile {
 
 interface ParseWorkerRequest {
   readonly filePath: string;
+  readonly requestId: number;
 }
 
 interface ParseWorkerResponseOk {
   readonly ok: true;
   readonly filePath: string;
+  readonly requestId: number;
   readonly sourceText: string;
   readonly program: ParsedFile['program'];
   readonly errors: ReadonlyArray<unknown>;
@@ -41,7 +43,9 @@ interface ParseWorkerResponseOk {
 interface ParseWorkerResponseFail {
   readonly ok: false;
   readonly filePath: string;
+  readonly requestId: number;
   readonly error: string;
+  readonly errorStage?: 'read' | 'parse' | 'postMessage' | 'unknown';
 }
 
 type ParseWorkerResponse = ParseWorkerResponseOk | ParseWorkerResponseFail;
@@ -49,6 +53,7 @@ type ParseWorkerResponse = ParseWorkerResponseOk | ParseWorkerResponseFail;
 interface WorkerHandlers {
   onmessage: ((event: MessageEvent<ParseWorkerResponse>) => void) | null;
   onerror: ((event: ErrorEvent) => void) | null;
+  onmessageerror: ((event: MessageEvent<unknown>) => void) | null;
 }
 
 interface ParseWorkerResponseShape {
@@ -95,6 +100,44 @@ const createParseWorker = (): Worker => {
   return new Worker(new URL('./workers/parse-worker.js', import.meta.url), { type: 'module' });
 };
 
+let readyTimeoutMs = 10_000;
+
+interface ReadyMessageShape {
+  readonly type?: unknown;
+}
+
+const waitForReady = (worker: Worker, timeoutMs: number): Promise<boolean> => {
+  return new Promise((resolve) => {
+    let resolved = false;
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+
+        (worker as unknown as WorkerHandlers).onmessage = null;
+
+        resolve(false);
+      }
+    }, timeoutMs);
+
+    (worker as unknown as WorkerHandlers).onmessage = ((event: MessageEvent) => {
+      const data = event.data as ReadyMessageShape | null;
+
+      if (data && typeof data === 'object' && data.type === 'ready') {
+        if (!resolved) {
+          resolved = true;
+
+          clearTimeout(timer);
+
+          (worker as unknown as WorkerHandlers).onmessage = null;
+
+          resolve(true);
+        }
+      }
+    }) as WorkerHandlers['onmessage'];
+  });
+};
+
 // Replaces createFirebatProgram to return ParsedFile[]
 export const createFirebatProgram = async (config: FirebatProgramConfig): Promise<ParsedFile[]> => {
   const fileNames = config.targets;
@@ -134,8 +177,35 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
   });
 
   try {
+    const maxBootRetries = 2;
+
     for (let i = 0; i < workerCount; i += 1) {
-      workers.push(createParseWorker());
+      let workerReady = false;
+
+      for (let attempt = 0; attempt <= maxBootRetries; attempt += 1) {
+        const w = createParseWorker();
+
+        const ready = await waitForReady(w, readyTimeoutMs);
+
+        if (ready) {
+          workers.push(w);
+          workerReady = true;
+
+          break;
+        }
+
+        config.logger.warn('Parse worker boot stall', { workerId: i, attempt });
+
+        try {
+          w.terminate();
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!workerReady) {
+        config.logger.warn('Parse worker boot failed after retries', { workerId: i, maxBootRetries });
+      }
     }
 
     const resultsByIndex: Array<ParsedFile | undefined> = new Array<ParsedFile | undefined>(fileNames.length);
@@ -153,15 +223,22 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
       }
     };
 
-    const requestParse = async (worker: Worker, filePath: string): Promise<ParseWorkerResponse> => {
+    let nextRequestId = 1;
+
+    const requestParse = async (worker: Worker, workerId: number, filePath: string): Promise<ParseWorkerResponse> => {
       return new Promise((resolve, reject) => {
         const w = worker as WorkerHandlers;
         const prevOnMessage = w.onmessage;
         const prevOnError = w.onerror;
+        const prevOnMessageError = w.onmessageerror;
+        const requestId = nextRequestId;
+
+        nextRequestId += 1;
 
         w.onmessage = (event: MessageEvent<ParseWorkerResponse>) => {
           w.onmessage = prevOnMessage;
           w.onerror = prevOnError;
+          w.onmessageerror = prevOnMessageError;
 
           resolve(event.data);
         };
@@ -169,17 +246,28 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
         w.onerror = (event: ErrorEvent) => {
           w.onmessage = prevOnMessage;
           w.onerror = prevOnError;
+          w.onmessageerror = prevOnMessageError;
 
           reject(event);
         };
 
-        const payload: ParseWorkerRequest = { filePath };
+        w.onmessageerror = (event: MessageEvent<unknown>) => {
+          w.onmessage = prevOnMessage;
+          w.onerror = prevOnError;
+          w.onmessageerror = prevOnMessageError;
+
+          config.logger.warn('Parse worker messageerror', { workerId, requestId, filePath });
+
+          reject(event);
+        };
+
+        const payload: ParseWorkerRequest = { filePath, requestId };
 
         worker.postMessage(payload);
       });
     };
 
-    const runners = workers.map(worker =>
+    const runners = workers.map((worker, workerId) =>
       (async (): Promise<void> => {
         while (true) {
           const current = cursor;
@@ -193,7 +281,7 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
           }
 
           try {
-            const data = await requestParse(worker, item.filePath);
+            const data = await requestParse(worker, workerId, item.filePath);
 
             if (!isParseWorkerResponse(data) || !isParseWorkerOk(data)) {
               const errText =
@@ -255,3 +343,12 @@ export const createFirebatProgram = async (config: FirebatProgramConfig): Promis
 };
 
 // End of file
+
+export const __testing__ = {
+  setReadyTimeoutMs: (ms: number): void => {
+    readyTimeoutMs = ms;
+  },
+  resetReadyTimeoutMs: (): void => {
+    readyTimeoutMs = 10_000;
+  },
+};

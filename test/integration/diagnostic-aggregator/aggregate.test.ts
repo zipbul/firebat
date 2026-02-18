@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-
 // Phase 0: DiagnosticAggregator should synthesize top/catalog from detector analyses.
 // NOTE: This test is intentionally written before implementation (RED first).
 

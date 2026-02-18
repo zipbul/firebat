@@ -182,12 +182,7 @@ const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
 const isExplicitIndexSpecifier = (specifier: string): boolean => {
   const normalized = normalizePath(specifier);
 
-  return (
-    normalized.endsWith('/index') ||
-    normalized.endsWith('/index.ts') ||
-    normalized === 'index' ||
-    normalized === 'index.ts'
-  );
+  return normalized.endsWith('/index') || normalized.endsWith('/index.ts') || normalized === 'index' || normalized === 'index.ts';
 };
 
 const createEmptyBarrelPolicy = (): ReadonlyArray<BarrelPolicyFinding> => [];

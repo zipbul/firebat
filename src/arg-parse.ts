@@ -23,6 +23,18 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'noop',
   'api-drift',
   'forwarding',
+  'implicit-state',
+  'temporal-coupling',
+  'symmetry-breaking',
+  'invariant-blindspot',
+  'modification-trap',
+  'modification-impact',
+  'variable-lifetime',
+  'decision-surface',
+  'implementation-overhead',
+  'concept-scatter',
+  'abstraction-fitness',
+  'giant-file',
 ];
 
 const parseLogLevel = (value: string): FirebatLogLevel => {
@@ -89,10 +101,22 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'early-return' &&
       selection !== 'noop' &&
       selection !== 'api-drift' &&
-      selection !== 'forwarding'
+      selection !== 'forwarding' &&
+      selection !== 'implicit-state' &&
+      selection !== 'temporal-coupling' &&
+      selection !== 'symmetry-breaking' &&
+      selection !== 'invariant-blindspot' &&
+      selection !== 'modification-trap' &&
+      selection !== 'modification-impact' &&
+      selection !== 'variable-lifetime' &&
+      selection !== 'decision-surface' &&
+      selection !== 'implementation-overhead' &&
+      selection !== 'concept-scatter' &&
+      selection !== 'abstraction-fitness' &&
+      selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding`,
+        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|api-drift|forwarding|implicit-state|temporal-coupling|symmetry-breaking|invariant-blindspot|modification-trap|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
       );
     }
 

@@ -53,7 +53,10 @@ const assertOkOrFailed = (result: UnknownProofRunResult): void => {
   expect([true, false]).toContain(result.ok);
 };
 
-const assertOkOrToolUnavailable = (result: UnknownProofRunResult, okPredicate: (findings: ReadonlyArray<UnknownProofFinding>) => boolean): void => {
+const assertOkOrToolUnavailable = (
+  result: UnknownProofRunResult,
+  okPredicate: (findings: ReadonlyArray<UnknownProofFinding>) => boolean,
+): void => {
   const okSatisfied = result.ok && okPredicate(result.findings);
   const unavailableSatisfied = result.ok === false;
 
@@ -270,7 +273,9 @@ describe('integration/unknown-proof', () => {
     );
 
     // Assert
-    assertOkOrToolUnavailable(result, findings => findings.every((finding: UnknownProofFinding) => finding.kind !== 'type-assertion'));
+    assertOkOrToolUnavailable(result, findings =>
+      findings.every((finding: UnknownProofFinding) => finding.kind !== 'type-assertion'),
+    );
 
     await rm(rootAbs, { recursive: true, force: true });
   });
@@ -343,7 +348,6 @@ describe('integration/unknown-proof', () => {
     );
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
     // Act
     const result = await runUnknownProof(() =>
       analyzeUnknownProof(program, {
@@ -382,7 +386,6 @@ describe('integration/unknown-proof', () => {
     );
 
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
     // Act
     const result = await runUnknownProof(() =>
       analyzeUnknownProof(program, {

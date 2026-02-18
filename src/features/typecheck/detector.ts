@@ -26,11 +26,7 @@ const buildLineIndex = (sourceText: string): ReadonlyArray<string> => {
   return sourceText.split(/\r?\n/);
 };
 
-const buildCodeFrame = (
-  lines: ReadonlyArray<string>,
-  line: number,
-  column: number,
-): Pick<TypecheckItem, 'codeFrame'> => {
+const buildCodeFrame = (lines: ReadonlyArray<string>, line: number, column: number): Pick<TypecheckItem, 'codeFrame'> => {
   const picked = lines[line - 1] ?? '';
   const safeColumn = Math.max(1, column);
   const caretPrefix = ' '.repeat(Math.max(0, safeColumn - 1));
@@ -173,7 +169,9 @@ const toCodeText = (code: string | number | undefined, source: string | undefine
 
 type TypecheckItemWithoutFrame = Omit<TypecheckItem, 'codeFrame'>;
 
-const convertPublishDiagnosticsToTypecheckItems = (params: PublishDiagnosticsParams): ReadonlyArray<TypecheckItemWithoutFrame> => {
+const convertPublishDiagnosticsToTypecheckItems = (
+  params: PublishDiagnosticsParams,
+): ReadonlyArray<TypecheckItemWithoutFrame> => {
   const file = lspUriToFilePath(params.uri);
 
   return (params.diagnostics ?? [])
@@ -242,167 +240,165 @@ const analyzeTypecheck = async (
   const logger = input?.logger ?? createNoopLogger();
 
   try {
-    const result = await withTsgoLspSession<ReadonlyArray<TypecheckItemWithoutFrame>>(
-      { root, logger },
-      async session => {
-        const collected: Array<TypecheckItemWithoutFrame> = [];
-        const openUris: string[] = [];
-        const seenByUri = new Map<string, ReadonlyArray<LspDiagnostic>>();
-        let lastUpdateAt = 0;
+    const result = await withTsgoLspSession<ReadonlyArray<TypecheckItemWithoutFrame>>({ root, logger }, async session => {
+      const collected: Array<TypecheckItemWithoutFrame> = [];
+      const openUris: string[] = [];
+      const seenByUri = new Map<string, ReadonlyArray<LspDiagnostic>>();
+      let lastUpdateAt = 0;
 
-        const isLspRange = (value: unknown): value is LspRange => {
-          if (!value || typeof value !== 'object') {
-            return false;
+      const isLspRange = (value: unknown): value is LspRange => {
+        if (!value || typeof value !== 'object') {
+          return false;
+        }
+
+        const shape = value as LspRangeLike;
+        const start = shape.start;
+        const end = shape.end;
+
+        if (!start || typeof start !== 'object' || !end || typeof end !== 'object') {
+          return false;
+        }
+
+        const startPosition = start as LspPositionLike;
+        const endPosition = end as LspPositionLike;
+        const startLine = startPosition.line;
+        const startChar = startPosition.character;
+        const endLine = endPosition.line;
+        const endChar = endPosition.character;
+
+        return (
+          typeof startLine === 'number' &&
+          typeof startChar === 'number' &&
+          typeof endLine === 'number' &&
+          typeof endChar === 'number'
+        );
+      };
+
+      const isLspDiagnostic = (value: unknown): value is LspDiagnostic => {
+        if (!value || typeof value !== 'object') {
+          return false;
+        }
+
+        const shape = value as LspDiagnosticLike;
+        const range = shape.range;
+        const message = shape.message;
+
+        return typeof message === 'string' && isLspRange(range);
+      };
+
+      const isPublishDiagnosticsParams = (value: unknown): value is PublishDiagnosticsParams => {
+        if (!value || typeof value !== 'object') {
+          return false;
+        }
+
+        const shape = value as PublishDiagnosticsParamsLike;
+        const uri = shape.uri;
+        const diagnostics = shape.diagnostics;
+
+        return typeof uri === 'string' && Array.isArray(diagnostics);
+      };
+
+      const dispose = session.lsp.onNotification('textDocument/publishDiagnostics', (raw: unknown) => {
+        if (!isPublishDiagnosticsParams(raw)) {
+          return;
+        }
+
+        const uri = raw.uri;
+        const diagnostics = raw.diagnostics.filter(isLspDiagnostic);
+
+        if (uri.length === 0) {
+          return;
+        }
+
+        lastUpdateAt = Date.now();
+
+        seenByUri.set(uri, diagnostics);
+      });
+
+      const requestDocumentDiagnosticsOnce = async (uri: string) => {
+        return session.lsp
+          .request('textDocument/diagnostic', { textDocument: { uri }, previousResultId: null }, 10_000)
+          .catch(() => null);
+      };
+
+      const requestDocumentDiagnostics = async (uri: string) => {
+        const first = await requestDocumentDiagnosticsOnce(uri);
+
+        if (first !== null) {
+          return first;
+        }
+
+        // tsgo can occasionally need a brief warm-up right after didOpen.
+        await new Promise<void>(r => setTimeout(r, 30));
+
+        return requestDocumentDiagnosticsOnce(uri);
+      };
+
+      try {
+        // Open all program files so tsgo can compute diagnostics.
+        for (const file of program) {
+          const opened = await openTsDocument({ lsp: session.lsp, filePath: file.filePath, text: file.sourceText });
+
+          openUris.push(opened.uri);
+
+          const pulled = await requestDocumentDiagnostics(opened.uri);
+          const pulledDiagnostics = pullDiagnosticsToItems(pulled).filter(isLspDiagnostic);
+
+          if (pulledDiagnostics.length > 0) {
+            seenByUri.set(opened.uri, pulledDiagnostics);
+
+            lastUpdateAt = Date.now();
           }
+        }
 
-          const shape = value as LspRangeLike;
-          const start = shape.start;
-          const end = shape.end;
+        const settleMs = 200;
+        const maxWaitMs = Math.min(10_000, Math.max(500, program.length * 3));
+        const start = Date.now();
+        let remainingMs = maxWaitMs;
+        const expectedUriCount = openUris.length;
 
-          if (!start || typeof start !== 'object' || !end || typeof end !== 'object') {
-            return false;
-          }
-
-          const startPosition = start as LspPositionLike;
-          const endPosition = end as LspPositionLike;
-          const startLine = startPosition.line;
-          const startChar = startPosition.character;
-          const endLine = endPosition.line;
-          const endChar = endPosition.character;
-
-          return (
-            typeof startLine === 'number' &&
-            typeof startChar === 'number' &&
-            typeof endLine === 'number' &&
-            typeof endChar === 'number'
-          );
-        };
-
-        const isLspDiagnostic = (value: unknown): value is LspDiagnostic => {
-          if (!value || typeof value !== 'object') {
-            return false;
-          }
-
-          const shape = value as LspDiagnosticLike;
-          const range = shape.range;
-          const message = shape.message;
-
-          return typeof message === 'string' && isLspRange(range);
-        };
-
-        const isPublishDiagnosticsParams = (value: unknown): value is PublishDiagnosticsParams => {
-          if (!value || typeof value !== 'object') {
-            return false;
-          }
-
-          const shape = value as PublishDiagnosticsParamsLike;
-          const uri = shape.uri;
-          const diagnostics = shape.diagnostics;
-
-          return typeof uri === 'string' && Array.isArray(diagnostics);
-        };
-
-        const dispose = session.lsp.onNotification('textDocument/publishDiagnostics', (raw: unknown) => {
-          if (!isPublishDiagnosticsParams(raw)) {
-            return;
-          }
-
-          const uri = raw.uri;
-          const diagnostics = raw.diagnostics.filter(isLspDiagnostic);
-
-          if (uri.length === 0) {
-            return;
-          }
-
-          lastUpdateAt = Date.now();
-
-          seenByUri.set(uri, diagnostics);
-        });
-
-        const requestDocumentDiagnosticsOnce = async (uri: string) => {
-          return session.lsp
-            .request('textDocument/diagnostic', { textDocument: { uri }, previousResultId: null }, 10_000)
-            .catch(() => null);
-        };
-
-        const requestDocumentDiagnostics = async (uri: string) => {
-          const first = await requestDocumentDiagnosticsOnce(uri);
-
-          if (first !== null) {
-            return first;
-          }
-
-          // tsgo can occasionally need a brief warm-up right after didOpen.
-          await new Promise<void>(r => setTimeout(r, 30));
-
-          return requestDocumentDiagnosticsOnce(uri);
-        };
-
-        try {
-          // Open all program files so tsgo can compute diagnostics.
-          for (const file of program) {
-            const opened = await openTsDocument({ lsp: session.lsp, filePath: file.filePath, text: file.sourceText });
-
-            openUris.push(opened.uri);
-
-            const pulled = await requestDocumentDiagnostics(opened.uri);
-            const pulledDiagnostics = pullDiagnosticsToItems(pulled).filter(isLspDiagnostic);
-
-            if (pulledDiagnostics.length > 0) {
-              seenByUri.set(opened.uri, pulledDiagnostics);
-              lastUpdateAt = Date.now();
-            }
-          }
-
-          const settleMs = 200;
-          const maxWaitMs = Math.min(10_000, Math.max(500, program.length * 3));
-          const start = Date.now();
-          let remainingMs = maxWaitMs;
-          const expectedUriCount = openUris.length;
-
-          // Wait until diagnostics stop changing (or a max timeout).
-          while (remainingMs > 0) {
-            if (lastUpdateAt === 0) {
-              // No diagnostics yet; wait a short baseline.
-              await new Promise<void>(r => setTimeout(r, 25));
-
-              remainingMs = maxWaitMs - (Date.now() - start);
-
-              continue;
-            }
-
-            const stableForMs = Date.now() - lastUpdateAt;
-            const gotAllUris = expectedUriCount > 0 && seenByUri.size >= expectedUriCount;
-
-            remainingMs = maxWaitMs - (Date.now() - start);
-
-            if (stableForMs >= settleMs && (gotAllUris || maxWaitMs - remainingMs >= 250)) {
-              break;
-            }
-
+        // Wait until diagnostics stop changing (or a max timeout).
+        while (remainingMs > 0) {
+          if (lastUpdateAt === 0) {
+            // No diagnostics yet; wait a short baseline.
             await new Promise<void>(r => setTimeout(r, 25));
 
             remainingMs = maxWaitMs - (Date.now() - start);
+
+            continue;
           }
 
-          for (const [uri, diagnostics] of seenByUri) {
-            collected.push(
-              ...convertPublishDiagnosticsToTypecheckItems({
-                uri,
-                diagnostics,
-              }),
-            );
+          const stableForMs = Date.now() - lastUpdateAt;
+          const gotAllUris = expectedUriCount > 0 && seenByUri.size >= expectedUriCount;
+
+          remainingMs = maxWaitMs - (Date.now() - start);
+
+          if (stableForMs >= settleMs && (gotAllUris || maxWaitMs - remainingMs >= 250)) {
+            break;
           }
 
-          return collected;
-        } finally {
-          dispose();
-          await Promise.all(
-            openUris.map(uri => session.lsp.notify('textDocument/didClose', { textDocument: { uri } }).catch(() => undefined)),
+          await new Promise<void>(r => setTimeout(r, 25));
+
+          remainingMs = maxWaitMs - (Date.now() - start);
+        }
+
+        for (const [uri, diagnostics] of seenByUri) {
+          collected.push(
+            ...convertPublishDiagnosticsToTypecheckItems({
+              uri,
+              diagnostics,
+            }),
           );
         }
-      },
-    );
+
+        return collected;
+      } finally {
+        dispose();
+        await Promise.all(
+          openUris.map(uri => session.lsp.notify('textDocument/didClose', { textDocument: { uri } }).catch(() => undefined)),
+        );
+      }
+    });
 
     if (!result.ok) {
       throw new Error(`tsgo: ${result.error}`);

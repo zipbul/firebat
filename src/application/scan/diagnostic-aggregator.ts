@@ -27,19 +27,19 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
   WASTE_DEAD_STORE_OVERWRITE: {
     cause: 'A variable is assigned, then unconditionally reassigned before the first value is ever read.',
     approach:
-      'Identify whether the first assignment once had a purpose. It may be a remnant of removed branching, a copy-paste artifact, or a misunderstanding of the variable\'s lifecycle. If this pattern repeats across a function, the function may be accumulating unrelated setup steps that should be separated.',
+      "Identify whether the first assignment once had a purpose. It may be a remnant of removed branching, a copy-paste artifact, or a misunderstanding of the variable's lifecycle. If this pattern repeats across a function, the function may be accumulating unrelated setup steps that should be separated.",
   },
   WASTE_MEMORY_RETENTION: {
     cause:
       'A large object or collection is captured in a closure or long-lived scope and remains reachable after its logical use ends.',
     approach:
-      'Investigate why the reference persists. The closure may capture more than it needs, or the variable\'s scope may be unnecessarily broad. Consider whether the value can be passed as a parameter instead of captured, or whether the lifetime can be shortened by restructuring the enclosing scope.',
+      "Investigate why the reference persists. The closure may capture more than it needs, or the variable's scope may be unnecessarily broad. Consider whether the value can be passed as a parameter instead of captured, or whether the lifetime can be shortened by restructuring the enclosing scope.",
   },
 
   NOOP_EXPRESSION: {
     cause: 'An expression is evaluated but its result is discarded and it produces no side effects.',
     approach:
-      'Determine the original intent of this expression. It may be a debugging artifact, incomplete code, or a misunderstanding of an API\'s return behavior. If it was meant to have a side effect, the API contract should be verified.',
+      "Determine the original intent of this expression. It may be a debugging artifact, incomplete code, or a misunderstanding of an API's return behavior. If it was meant to have a side effect, the API contract should be verified.",
   },
   NOOP_SELF_ASSIGNMENT: {
     cause: 'A variable is assigned to itself, producing no state change.',
@@ -88,7 +88,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
   BARREL_DEEP_IMPORT: {
     cause: "A consumer imports directly from a module's internal file, bypassing its barrel (index) entry point.",
     approach:
-      'Check whether the barrel file exists and exposes the needed symbol. If it does, the deep import may be a convenience shortcut that undermines encapsulation. If the barrel does not expose the symbol, determine whether it should be added to the public surface or if the consumer\'s need indicates a missing abstraction.',
+      "Check whether the barrel file exists and exposes the needed symbol. If it does, the deep import may be a convenience shortcut that undermines encapsulation. If the barrel does not expose the symbol, determine whether it should be added to the public surface or if the consumer's need indicates a missing abstraction.",
   },
   BARREL_INDEX_DEEP_IMPORT: {
     cause: "An index file itself imports from a deep path in another module instead of using that module's barrel.",
@@ -96,14 +96,12 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       "This creates a transitive deep-import dependency at the barrel level. Determine whether the target module's barrel is incomplete or whether this index file is taking a shortcut. The fix direction depends on whether the target module should expose the symbol publicly.",
   },
   BARREL_MISSING_INDEX: {
-    cause:
-      'A directory with multiple source files has no index.ts barrel file, leaving no single entry point for the module.',
+    cause: 'A directory with multiple source files has no index.ts barrel file, leaving no single entry point for the module.',
     approach:
       'Evaluate whether the directory represents a cohesive module that should have a public surface. If it does, a barrel file defines and controls what is exported. If files are independent utilities, a barrel may not be needed — but the directory structure should then reflect that they are not a module.',
   },
   BARREL_INVALID_INDEX_STMT: {
-    cause:
-      'An index.ts contains statements other than export declarations (e.g., logic, variable declarations, side effects).',
+    cause: 'An index.ts contains statements other than export declarations (e.g., logic, variable declarations, side effects).',
     approach:
       'Barrel files should be pure re-export surfaces. Logic in an index file is invisible to consumers who expect it to be a passthrough. Determine whether the logic belongs in a dedicated module file that the barrel re-exports.',
   },
@@ -111,12 +109,11 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
     cause:
       'A barrel file contains a side-effect import (import without specifiers), which executes code when the barrel is imported.',
     approach:
-      "Side-effect imports in barrels make the import graph impure — importing the barrel triggers hidden execution. Determine whether the side effect is intentional (e.g., polyfill registration) and if so, whether it should be isolated into an explicit setup module rather than hiding in a barrel.",
+      'Side-effect imports in barrels make the import graph impure — importing the barrel triggers hidden execution. Determine whether the side effect is intentional (e.g., polyfill registration) and if so, whether it should be isolated into an explicit setup module rather than hiding in a barrel.',
   },
 
   EH_THROW_NON_ERROR: {
-    cause:
-      'A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.',
+    cause: 'A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.',
     approach:
       'Determine what type is being thrown and why. Throwing strings or plain objects is often a shortcut that breaks error handling patterns downstream. If the thrown value carries domain information, wrap it in a custom Error subclass.',
   },
@@ -133,8 +130,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       "Determine whether the original error's context is needed for debugging. If wrapping in a new error, pass { cause: originalError } to preserve the chain. If re-throwing directly, 'cause' is not needed.",
   },
   EH_USELESS_CATCH: {
-    cause:
-      'A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.',
+    cause: 'A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.',
     approach:
       'Determine whether the catch was intended to add logging, transformation, or handling that was never implemented. If the try-catch serves no purpose, removing it reduces indentation and noise. If it once had purpose, investigate what changed.',
   },
@@ -145,14 +141,12 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       'Determine whether the throw/return in finally is intentional. In most cases it masks the original error. The finally block should contain only cleanup logic (close connections, release resources) that cannot fail or affect control flow.',
   },
   EH_RETURN_IN_FINALLY: {
-    cause:
-      'A finally block contains a return statement that will override any return or throw from the try/catch blocks.',
+    cause: 'A finally block contains a return statement that will override any return or throw from the try/catch blocks.',
     approach:
       'This is almost always a bug — the finally return silently replaces whatever the try or catch produced. Move the return to the try block and ensure finally only performs cleanup.',
   },
   EH_CATCH_OR_RETURN: {
-    cause:
-      "A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.",
+    cause: 'A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.',
     approach:
       "Determine whether the Promise rejection is intentionally ignored or accidentally unhandled. If the code is in an async function, 'await' captures rejections naturally. If using .then(), add .catch() or return the chain for the caller to handle.",
   },
@@ -169,8 +163,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       'In async functions, await provides clearer control flow and automatic error propagation via try-catch. Determine whether the .then() chain has a specific reason (parallel execution, chaining) or is just a style inconsistency.',
   },
   EH_FLOATING_PROMISES: {
-    cause:
-      'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
+    cause: 'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
     approach:
       "Determine whether the fire-and-forget is intentional. If the Promise's result or error matters, await or return it. If truly fire-and-forget, add void prefix and ensure errors are handled inside the called function.",
   },
@@ -182,7 +175,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
   },
   EH_RETURN_AWAIT_POLICY: {
     cause:
-      "An async function returns await expression unnecessarily (or vice versa: should use return-await inside try blocks to catch errors properly).",
+      'An async function returns await expression unnecessarily (or vice versa: should use return-await inside try blocks to catch errors properly).',
     approach:
       "In a try block, 'return await' is needed to catch rejections. Outside try blocks, 'return await' adds an unnecessary microtask tick. Determine the context: inside try → keep await, outside try → remove await.",
   },
@@ -222,47 +215,40 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       'Determine whether the assertion is backed by a runtime check earlier in the code path. If no check exists, the assertion is a lie to the compiler that will surface as a runtime error. Consider using a type guard function or schema validation instead.',
   },
   UNKNOWN_DOUBLE_ASSERTION: {
-    cause:
-      'A double type assertion (as unknown as T) forces an unsafe type cast through the unknown escape hatch.',
+    cause: 'A double type assertion (as unknown as T) forces an unsafe type cast through the unknown escape hatch.',
     approach:
       'Double assertions are almost always a sign that the type system is being fought. Determine why the direct assertion fails — it usually means the types are fundamentally incompatible. This indicates either a design mismatch or missing intermediate transformation.',
   },
   UNKNOWN_UNNARROWED: {
-    cause:
-      "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
+    cause: "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
     approach:
       'Determine where the unknown value originates (external input, catch clause, generic parameter). Add appropriate narrowing: typeof guard, instanceof check, or schema validation. If the value crosses a trust boundary, validation should be at the boundary, not at each usage.',
   },
   UNKNOWN_UNVALIDATED: {
-    cause:
-      "An 'unknown' value from a trust boundary (API input, file read, deserialization) is used without schema validation.",
+    cause: "An 'unknown' value from a trust boundary (API input, file read, deserialization) is used without schema validation.",
     approach:
       'Boundary values should be validated once at entry. Determine whether a validation layer exists and this usage bypasses it, or whether no validation layer exists yet. If the pattern repeats across multiple boundaries, a shared validation strategy is needed rather than ad-hoc checks.',
   },
   UNKNOWN_INFERRED: {
-    cause:
-      "TypeScript infers 'unknown' for a value where a more specific type was likely intended.",
+    cause: "TypeScript infers 'unknown' for a value where a more specific type was likely intended.",
     approach:
       'Determine what type the value should have. The inference may result from a missing return type annotation, an untyped dependency, or a generic function with insufficient type constraints. Adding an explicit type annotation makes the intent clear and catches mismatches earlier.',
   },
   UNKNOWN_ANY_INFERRED: {
-    cause:
-      "TypeScript infers 'any' for a value, disabling type checking for all downstream usage.",
+    cause: "TypeScript infers 'any' for a value, disabling type checking for all downstream usage.",
     approach:
       "Determine the source of the 'any' inference: untyped import, missing type parameter, JSON.parse result, or catch clause. Each source has a different fix. If 'any' propagates widely, trace it to the root and add a type there — fixing downstream usage is ineffective while the source remains untyped.",
   },
 
   DEP_LAYER_VIOLATION: {
-    cause:
-      'A module imports from a layer that the architecture rules prohibit, breaking the intended dependency direction.',
+    cause: 'A module imports from a layer that the architecture rules prohibit, breaking the intended dependency direction.',
     approach:
       'Determine whether the import represents a genuine architectural violation or an inaccurate layer definition. If the import is needed, it may indicate that the layer boundary is drawn incorrectly, or that the imported symbol should be exposed through an allowed layer (e.g., via a port interface).',
   },
   DEP_DEAD_EXPORT: {
-    cause:
-      'An exported symbol is not imported by any other module in the project, making the export unnecessary.',
+    cause: 'An exported symbol is not imported by any other module in the project, making the export unnecessary.',
     approach:
-      'Determine whether the export is unused because it is obsolete, or because it serves an external consumer not visible to static analysis (CLI entry, test helper, library public API). If truly unused, removing it reduces the module\'s public surface. If externally consumed, mark it explicitly.',
+      "Determine whether the export is unused because it is obsolete, or because it serves an external consumer not visible to static analysis (CLI entry, test helper, library public API). If truly unused, removing it reduces the module's public surface. If externally consumed, mark it explicitly.",
   },
   DEP_TEST_ONLY_EXPORT: {
     cause:
@@ -278,8 +264,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       'Determine why nesting accumulated. Possible causes: multiple concerns interleaved in one function, missing early-return guards, or error paths mixed with happy paths. If other findings (waste, coupling) co-occur in the same function, the nesting is likely a symptom of the function doing too much.',
   },
   NESTING_HIGH_CC: {
-    cause:
-      'A function has high cognitive complexity, meaning it contains many interacting control-flow decisions.',
+    cause: 'A function has high cognitive complexity, meaning it contains many interacting control-flow decisions.',
     approach:
       'High cognitive complexity means the function requires significant mental effort to trace. Determine which decision axes are independent — independent axes can be extracted into separate functions. If the complexity stems from validation logic, consider a declarative validation approach rather than nested conditionals.',
   },
@@ -302,21 +287,18 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
       "Determine whether inverting the condition and returning early would improve readability. The short branch typically handles an edge case or error condition. If the pattern repeats across the function, the function may be processing multiple concerns sequentially — each concern's guard becomes a natural early return.",
   },
   EARLY_RETURN_MISSING_GUARD: {
-    cause:
-      'A function lacks guard clauses at the top, pushing the main logic into nested conditionals.',
+    cause: 'A function lacks guard clauses at the top, pushing the main logic into nested conditionals.',
     approach:
       'Identify which conditions at the start of the function check preconditions or special cases. Moving these to guard clauses (return/throw early) flattens the main logic. If preconditions are complex, they may warrant extraction into a validation function.',
   },
 
   COUPLING_GOD_MODULE: {
-    cause:
-      'A module has both high fan-in and high fan-out, meaning many modules depend on it and it depends on many modules.',
+    cause: 'A module has both high fan-in and high fan-out, meaning many modules depend on it and it depends on many modules.',
     approach:
       'Determine which responsibilities this module holds that attract so many dependents. A god module often accumulates shared utilities, configuration, and domain logic. Identify clusters of related imports/exports — each cluster may form a cohesive module if extracted.',
   },
   COUPLING_BIDIRECTIONAL: {
-    cause:
-      'Two modules import from each other, creating a circular dependency that prevents independent reasoning about either.',
+    cause: 'Two modules import from each other, creating a circular dependency that prevents independent reasoning about either.',
     approach:
       'Determine which direction is primary and which is incidental. Often one direction represents a callback or event registration that can be inverted via dependency injection or an event bus. If both directions are essential, the two modules may logically be one module split incorrectly.',
   },
@@ -336,7 +318,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
     cause:
       'A module has very low instability (many dependents, few dependencies) and high fan-in, making it extremely costly to change.',
     approach:
-      'Determine whether the module\'s interface is stable by design (it should be) or frozen by accident (too many dependents accumulated). If the interface needs to evolve, consider versioning, adapter layers, or extracting the stable subset into a separate module.',
+      "Determine whether the module's interface is stable by design (it should be) or frozen by accident (too many dependents accumulated). If the interface needs to evolve, consider versioning, adapter layers, or extracting the stable subset into a separate module.",
   },
 
   API_DRIFT_SIGNATURE: {
@@ -347,8 +329,7 @@ export const FIREBAT_CODE_CATALOG: Readonly<Record<string, CodeEntry>> = {
   },
 
   EXACT_DUP_TYPE_1: {
-    cause:
-      'Two or more code blocks are character-for-character identical (Type-1 clone), indicating copy-paste duplication.',
+    cause: 'Two or more code blocks are character-for-character identical (Type-1 clone), indicating copy-paste duplication.',
     approach:
       'Determine whether the duplication was intentional (e.g., generated code, test fixtures with identical structure) or accidental. If the blocks should stay in sync, extract a shared function. If they are expected to diverge, document why they are separate despite current identity.',
   },
@@ -415,12 +396,10 @@ const asArray = <T>(v: unknown): ReadonlyArray<T> => {
 export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): DiagnosticAggregatorOutput => {
   const top: Priority[] = [];
   const catalog: Record<string, CodeEntry> = {};
-
   const waste = asArray<any>(input.analyses['waste']);
   const nesting = asArray<any>(input.analyses['nesting']);
   const coupling = asArray<any>(input.analyses['coupling']);
   const dependencies = input.analyses['dependencies'] as any;
-
   // Phase 0: DIAG_GOD_FUNCTION
   // Condition (IMPROVE.md): same function has nesting(CC>=15) + waste co-occur.
   // For Phase 0 implementation, we approximate by: any HIGH_CC nesting item exists AND any waste exists in same file.
@@ -430,9 +409,7 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
       .map((n: any) => String(n?.file ?? n?.filePath ?? ''))
       .filter(Boolean),
   );
-  const hasWasteInFile = new Set(
-    waste.map((w: any) => String(w?.file ?? w?.filePath ?? '')).filter(Boolean),
-  );
+  const hasWasteInFile = new Set(waste.map((w: any) => String(w?.file ?? w?.filePath ?? '')).filter(Boolean));
   let godFunctionResolves = 0;
 
   for (const f of hasHighCcInFile) {
@@ -443,21 +420,26 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
 
   if (godFunctionResolves > 0) {
     top.push({ pattern: 'DIAG_GOD_FUNCTION', detector: 'diagnostic-aggregator', resolves: godFunctionResolves });
-    catalog.DIAG_GOD_FUNCTION = FIREBAT_CODE_CATALOG['DIAG_GOD_FUNCTION'] as CodeEntry;
+
+    catalog.DIAG_GOD_FUNCTION = FIREBAT_CODE_CATALOG.DIAG_GOD_FUNCTION as CodeEntry;
   }
 
   // Phase 0: DIAG_CIRCULAR_DEPENDENCY
   const cycles = Array.isArray(dependencies?.cycles) ? dependencies.cycles : [];
+
   if (cycles.length > 0) {
     top.push({ pattern: 'DIAG_CIRCULAR_DEPENDENCY', detector: 'diagnostic-aggregator', resolves: cycles.length });
-    catalog.DIAG_CIRCULAR_DEPENDENCY = FIREBAT_CODE_CATALOG['DIAG_CIRCULAR_DEPENDENCY'] as CodeEntry;
+
+    catalog.DIAG_CIRCULAR_DEPENDENCY = FIREBAT_CODE_CATALOG.DIAG_CIRCULAR_DEPENDENCY as CodeEntry;
   }
 
   // Phase 0: DIAG_GOD_MODULE
   const godModules = coupling.filter((c: any) => c?.kind === 'god-module');
+
   if (godModules.length > 0) {
     top.push({ pattern: 'DIAG_GOD_MODULE', detector: 'diagnostic-aggregator', resolves: godModules.length });
-    catalog.DIAG_GOD_MODULE = FIREBAT_CODE_CATALOG['DIAG_GOD_MODULE'] as CodeEntry;
+
+    catalog.DIAG_GOD_MODULE = FIREBAT_CODE_CATALOG.DIAG_GOD_MODULE as CodeEntry;
   }
 
   top.sort((a, b) => b.resolves - a.resolves);

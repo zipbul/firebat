@@ -56,10 +56,7 @@ describe('engine/ast-normalizer', () => {
 
   describe('rule 3: template literal → concatenation normalization', () => {
     it('should normalize template literal to string concatenation', () => {
-      expectSameNormalized(
-        'export function f(a) { return `${a} world`; }',
-        'export function f(a) { return a + " world"; }',
-      );
+      expectSameNormalized('export function f(a) { return `${a} world`; }', 'export function f(a) { return a + " world"; }');
     });
   });
 
@@ -74,17 +71,11 @@ describe('engine/ast-normalizer', () => {
 
   describe('rule 5: De Morgan normalization', () => {
     it('should normalize !(a && b) to !a || !b', () => {
-      expectSameNormalized(
-        'export function f(a, b) { return !(a && b); }',
-        'export function f(a, b) { return !a || !b; }',
-      );
+      expectSameNormalized('export function f(a, b) { return !(a && b); }', 'export function f(a, b) { return !a || !b; }');
     });
 
     it('should normalize !(a || b) to !a && !b', () => {
-      expectSameNormalized(
-        'export function f(a, b) { return !(a || b); }',
-        'export function f(a, b) { return !a && !b; }',
-      );
+      expectSameNormalized('export function f(a, b) { return !(a || b); }', 'export function f(a, b) { return !a && !b; }');
     });
   });
 
@@ -115,19 +106,13 @@ describe('engine/ast-normalizer', () => {
 
   describe('rule 8: ternary inversion normalization', () => {
     it('should normalize !x ? A : B to x ? B : A', () => {
-      expectSameNormalized(
-        'export function f(x) { return !x ? 1 : 2; }',
-        'export function f(x) { return x ? 2 : 1; }',
-      );
+      expectSameNormalized('export function f(x) { return !x ? 1 : 2; }', 'export function f(x) { return x ? 2 : 1; }');
     });
   });
 
   describe('non-equivalent code', () => {
     it('should not normalize semantically different code', () => {
-      expectDifferentNormalized(
-        'export function f(a) { return a + 1; }',
-        'export function f(a) { return a - 1; }',
-      );
+      expectDifferentNormalized('export function f(a) { return a + 1; }', 'export function f(a) { return a - 1; }');
     });
   });
 });

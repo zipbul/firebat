@@ -48,11 +48,7 @@ const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string,
   }
 
   const base = path.resolve(path.dirname(fromPath), specifier);
-  const candidates = [
-    base,
-    `${base}.ts`,
-    path.join(base, 'index.ts'),
-  ];
+  const candidates = [base, `${base}.ts`, path.join(base, 'index.ts')];
 
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
@@ -742,6 +738,7 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
 
   const findings: ForwardingFinding[] = [];
   const fileMap = buildFileMap(files);
+
   type CrossFileWrapper = {
     node: Node;
     file: ParsedFile;
@@ -835,7 +832,9 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
 
       while (cursor !== null && !visited.has(cursor)) {
         visited.add(cursor);
+
         const entry = crossFileWrappers.get(cursor);
+
         cursor = entry?.targetKey ?? null;
       }
 
@@ -850,6 +849,7 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
           }
 
           const entryInCycle: CrossFileWrapper | undefined = mark !== null ? crossFileWrappers.get(mark) : undefined;
+
           mark = entryInCycle?.targetKey ?? null;
         } while (mark !== null && mark !== cycleStart);
       }

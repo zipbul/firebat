@@ -1,7 +1,7 @@
+import { routeFirebatArgv } from './src/adapters/cli/argv-router';
 import { runCache } from './src/adapters/cli/cache';
 import { runCli } from './src/adapters/cli/entry';
 import { runInstall, runUpdate } from './src/adapters/cli/install';
-import { routeFirebatArgv } from './src/adapters/cli/argv-router';
 import { runMcp } from './src/adapters/mcp/entry';
 import { appendFirebatLog } from './src/infra/logging';
 import { createPrettyConsoleLogger } from './src/infrastructure/logging/pretty-console-logger';
@@ -49,7 +49,6 @@ const main = async (): Promise<void> => {
   }
 
   const logger = createPrettyConsoleLogger({ level: logLevel ?? 'info', includeStack: routed.global.logStack });
-
   const subcommand = routed.subcommand;
 
   try {

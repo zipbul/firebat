@@ -7,29 +7,21 @@ const analyzeSingle = (filePath: string, sourceText: string) => {
   // Arrange
   const program = [parseSource(filePath, sourceText)];
   // Act
-  const analysis = analyzeExceptionHygiene(program);
+  const findings = analyzeExceptionHygiene(program);
 
   // Assert (shape)
-  expect(analysis.status).toBeDefined();
-  expect(analysis.tool).toBe('oxc');
-  expect(Array.isArray(analysis.findings)).toBe(true);
+  expect(Array.isArray(findings)).toBe(true);
 
-  return analysis;
+  return findings;
 };
 
-const kinds = (analysis: ReturnType<typeof analyzeSingle>) => analysis.findings.map(f => f.kind);
+const kinds = (findings: ReturnType<typeof analyzeSingle>) => findings.map(f => f.kind);
 
-const assertFindingShape = (analysis: ReturnType<typeof analyzeSingle>) => {
-  // Arrange
-  const findings = analysis.findings;
-
+const assertFindingShape = (findings: ReturnType<typeof analyzeSingle>) => {
   // Act / Assert
   for (const finding of findings) {
-    expect(finding.filePath.length).toBeGreaterThan(0);
-    expect(finding.message.length).toBeGreaterThan(0);
     expect(finding.evidence.length).toBeGreaterThan(0);
-    expect(Array.isArray(finding.recipes)).toBe(true);
-    expect(finding.recipes.length).toBeGreaterThanOrEqual(1);
+    expect(finding.file.length).toBeGreaterThan(0);
     expect(finding.span.start.line).toBeGreaterThanOrEqual(1);
     expect(finding.span.end.line).toBeGreaterThanOrEqual(finding.span.start.line);
   }
@@ -40,13 +32,13 @@ describe('analyzer', () => {
     // Arrange
     const program: ReturnType<typeof parseSource>[] = [];
     // Act
-    const analysis = analyzeExceptionHygiene(program);
+    const findings = analyzeExceptionHygiene(program);
 
     // Assert
-    expect(analysis.findings.length).toBe(0);
+    expect(findings.length).toBe(0);
   });
 
-  it('should always include recipes when finding is reported', () => {
+  it('should not include natural-language fields in findings', () => {
     // Arrange
     const filePath = '/virtual/src/adapters/cli/entry.ts';
     const source = [
@@ -56,11 +48,17 @@ describe('analyzer', () => {
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const findings = analyzeSingle(filePath, source);
 
     // Assert
-    expect(analysis.findings.length).toBeGreaterThanOrEqual(1);
-    assertFindingShape(analysis);
+    expect(findings.length).toBeGreaterThanOrEqual(1);
+    assertFindingShape(findings);
+
+    const sample = findings[0] as unknown as Record<string, unknown>;
+
+    expect(sample.filePath).toBeUndefined();
+    expect(sample.message).toBeUndefined();
+    expect(sample.recipes).toBeUndefined();
   });
 
   it('should report useless-catch when catch rethrows the same error', () => {
@@ -71,7 +69,7 @@ describe('analyzer', () => {
     );
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -85,7 +83,7 @@ describe('analyzer', () => {
     );
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -106,7 +104,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -126,7 +124,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -146,7 +144,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'useless-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -166,7 +164,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -186,7 +184,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -208,7 +206,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -230,7 +228,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'unsafe-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -244,7 +242,7 @@ describe('analyzer', () => {
     );
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'return-in-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -256,7 +254,7 @@ describe('analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'return-in-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -274,7 +272,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'return-in-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -292,7 +290,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'return-in-finally');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -309,7 +307,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -326,7 +324,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -343,7 +341,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -360,7 +358,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'catch-or-return');
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -372,7 +370,7 @@ describe('analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-catch');
+    const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -390,7 +388,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-catch');
+    const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -402,7 +400,7 @@ describe('analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-catch');
+    const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -425,7 +423,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -446,7 +444,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -458,7 +456,7 @@ describe('analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -472,7 +470,7 @@ describe('analyzer', () => {
     );
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -497,7 +495,7 @@ describe('analyzer', () => {
     const source = ['export function f() {', '  try {', '    throw new Error("x");', '  } catch (e) {', '  }', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
+    const hits = analysis.filter(f => f.kind === 'silent-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -517,7 +515,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
+    const hits = analysis.filter(f => f.kind === 'silent-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -537,7 +535,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
+    const hits = analysis.filter(f => f.kind === 'silent-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -557,7 +555,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'silent-catch');
+    const hits = analysis.filter(f => f.kind === 'silent-catch');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -577,7 +575,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'missing-error-cause');
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -597,7 +595,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'catch-transform-hygiene');
+    const hits = analysis.filter(f => f.kind === 'catch-transform-hygiene');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -621,7 +619,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'redundant-nested-catch');
+    const hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -641,7 +639,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'redundant-nested-catch');
+    const hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -671,7 +669,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'overscoped-try');
+    const hits = analysis.filter(f => f.kind === 'overscoped-try');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
@@ -685,7 +683,7 @@ describe('analyzer', () => {
     );
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'overscoped-try');
+    const hits = analysis.filter(f => f.kind === 'overscoped-try');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -705,7 +703,7 @@ describe('analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.findings.filter(f => f.kind === 'exception-control-flow');
+    const hits = analysis.filter(f => f.kind === 'exception-control-flow');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);

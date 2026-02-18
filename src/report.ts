@@ -154,6 +154,7 @@ const formatText = (report: FirebatReport): string => {
   const lines: string[] = [];
   const selectedDetectors = new Set(report.meta.detectors);
   const analyses = report.analyses;
+
   const getFile = (value: unknown): string => {
     const v = value as any;
 
@@ -191,10 +192,14 @@ const formatText = (report: FirebatReport): string => {
       layerViolations: [],
       deadExports: [],
     } as const);
-
-  const depsFanIn: ReadonlyArray<any> = (deps as any).fanIn ?? (deps as any).fanInTop ?? [];
-  const depsFanOut: ReadonlyArray<any> = (deps as any).fanOut ?? (deps as any).fanOutTop ?? [];
-  const depsCuts: ReadonlyArray<any> = (deps as any).cuts ?? (deps as any).edgeCutHints ?? [];
+  const depsLegacy = deps as typeof deps & {
+    readonly fanInTop?: ReadonlyArray<unknown>;
+    readonly fanOutTop?: ReadonlyArray<unknown>;
+    readonly edgeCutHints?: ReadonlyArray<unknown>;
+  };
+  const depsFanIn: ReadonlyArray<unknown> = depsLegacy.fanInTop ?? deps.fanIn;
+  const depsFanOut: ReadonlyArray<unknown> = depsLegacy.fanOutTop ?? deps.fanOut;
+  const depsCuts: ReadonlyArray<unknown> = depsLegacy.edgeCutHints ?? deps.cuts;
   const coupling = analyses.coupling ?? [];
   const nesting = analyses.nesting ?? [];
   const noop = analyses.noop ?? [];
@@ -202,182 +207,212 @@ const formatText = (report: FirebatReport): string => {
   const lintErrors = lint.filter(d => d.severity === 'error').length;
   const typecheckErrors = typecheck.filter(i => i.severity === 'error').length;
   const formatFindings = format.length;
+
+  const humanizeDetectorKey = (key: string): string => {
+    const acronyms = new Set(['api']);
+
+    return key
+      .split('-')
+      .filter(Boolean)
+      .map(part => {
+        const lower = part.toLowerCase();
+        if (acronyms.has(lower)) {
+          return lower.toUpperCase();
+        }
+
+        return `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`;
+      })
+      .join(' ');
+  };
+
   // ── Summary Dashboard ───────────────────────────────────────────
-  const summaryRows: SummaryTableRow[] = [];
+  const extractModule = (value: unknown): string => {
+    const v = value as Readonly<Record<string, unknown>>;
+    return typeof v.module === 'string' ? v.module : '';
+  };
 
-  if (selectedDetectors.has('exact-duplicates')) {
-    summaryRows.push({
-      emoji: '🔁',
-      label: 'Exact Duplicates',
-      count: duplicates.length,
-      filesCount: duplicates.length === 0 ? 0 : new Set(duplicates.flatMap(g => g.items.map(i => getFile(i)))).size,
-      timingKey: 'exact-duplicates',
-    });
-  }
+  const extractFromTo = (value: unknown): readonly [string, string] => {
+    const v = value as Readonly<Record<string, unknown>>;
+    const from = typeof v.from === 'string' ? v.from : '';
+    const to = typeof v.to === 'string' ? v.to : '';
+    return [from, to];
+  };
 
-  if (selectedDetectors.has('waste')) {
-    summaryRows.push({
-      emoji: '🗑️',
-      label: 'Waste',
-      count: waste.length,
-      filesCount: waste.length === 0 ? 0 : new Set(waste.map(f => getFile(f))).size,
-      timingKey: 'waste',
-    });
-  }
+  const defaultSummaryRow = (timingKey: string): SummaryTableRow => {
+    const label = humanizeDetectorKey(timingKey);
+    const v = analyses[timingKey as keyof typeof analyses] as unknown;
 
-  if (selectedDetectors.has('barrel-policy')) {
-    summaryRows.push({
-      emoji: '📦',
-      label: 'Barrel Policy',
-      count: barrelPolicy.length,
-      filesCount: barrelPolicy.length === 0 ? 0 : new Set(barrelPolicy.map(f => getFile(f))).size,
-      timingKey: 'barrel-policy',
-    });
-  }
+    if (!Array.isArray(v)) {
+      return {
+        emoji: '🔎',
+        label,
+        count: 0,
+        filesCount: 0,
+        timingKey,
+      };
+    }
 
-  if (selectedDetectors.has('unknown-proof')) {
-    summaryRows.push({
-      emoji: '🛡️',
-      label: 'Unknown Proof',
-      count: unknownProof.length,
-      filesCount: unknownProof.length === 0 ? 0 : new Set(unknownProof.map(f => getFile(f))).size,
-      timingKey: 'unknown-proof',
-    });
-  }
+    const items: ReadonlyArray<unknown> = v;
+    const count = items.length;
+    const filesCount =
+      count === 0 ? 0 : new Set(items.map(item => getFile(item)).filter(Boolean) as ReadonlyArray<string>).size;
 
-  if (selectedDetectors.has('format')) {
-    summaryRows.push({
-      emoji: '🎨',
-      label: 'Format',
-      count: formatFindings,
-      filesCount: formatFindings === 0 ? 0 : new Set(format).size,
-      timingKey: 'format',
-    });
-  }
+    return {
+      emoji: '🔎',
+      label,
+      count,
+      filesCount,
+      timingKey,
+    };
+  };
 
-  if (selectedDetectors.has('lint')) {
-    summaryRows.push({
-      emoji: '🔍',
-      label: 'Lint',
-      count: lintErrors,
-      filesCount: lintErrors === 0 ? 0 : new Set(lint.map(d => d.file).filter(Boolean) as string[]).size,
-      timingKey: 'lint',
-    });
-  }
+  const summaryRowFor = (timingKey: string): SummaryTableRow => {
+    switch (timingKey) {
+      case 'exact-duplicates':
+        return {
+          emoji: '🔁',
+          label: 'Exact Duplicates',
+          count: duplicates.length,
+          filesCount: duplicates.length === 0 ? 0 : new Set(duplicates.flatMap(g => g.items.map(i => getFile(i)))).size,
+          timingKey,
+        };
+      case 'waste':
+        return {
+          emoji: '🗑️',
+          label: 'Waste',
+          count: waste.length,
+          filesCount: waste.length === 0 ? 0 : new Set(waste.map(f => getFile(f))).size,
+          timingKey,
+        };
+      case 'barrel-policy':
+        return {
+          emoji: '📦',
+          label: 'Barrel Policy',
+          count: barrelPolicy.length,
+          filesCount: barrelPolicy.length === 0 ? 0 : new Set(barrelPolicy.map(f => getFile(f))).size,
+          timingKey,
+        };
+      case 'unknown-proof':
+        return {
+          emoji: '🛡️',
+          label: 'Unknown Proof',
+          count: unknownProof.length,
+          filesCount: unknownProof.length === 0 ? 0 : new Set(unknownProof.map(f => getFile(f))).size,
+          timingKey,
+        };
+      case 'format':
+        return {
+          emoji: '🎨',
+          label: 'Format',
+          count: formatFindings,
+          filesCount: formatFindings === 0 ? 0 : new Set(format).size,
+          timingKey,
+        };
+      case 'lint':
+        return {
+          emoji: '🔍',
+          label: 'Lint',
+          count: lintErrors,
+          filesCount: lintErrors === 0 ? 0 : new Set(lint.map(d => d.file).filter(Boolean) as string[]).size,
+          timingKey,
+        };
+      case 'typecheck':
+        return {
+          emoji: '🏷️',
+          label: 'Typecheck',
+          count: typecheckErrors,
+          filesCount: typecheckErrors === 0 ? 0 : new Set(typecheck.map(i => i.file)).size,
+          timingKey,
+        };
+      case 'forwarding':
+        return {
+          emoji: '↗️',
+          label: 'Forwarding',
+          count: forwarding.length,
+          filesCount: forwarding.length === 0 ? 0 : new Set(forwarding.map(f => getFile(f))).size,
+          timingKey,
+        };
+      case 'structural-duplicates':
+        return {
+          emoji: '🧬',
+          label: 'Structural Dupes',
+          count: structDups.length,
+          filesCount: structDups.length === 0 ? 0 : new Set(structDups.flatMap(g => g.items.map(i => getFile(i)))).size,
+          timingKey,
+        };
+      case 'nesting':
+        return {
+          emoji: '🪹',
+          label: 'Nesting',
+          count: nesting.length,
+          filesCount: nesting.length === 0 ? 0 : new Set(nesting.map(i => getFile(i))).size,
+          timingKey,
+        };
+      case 'early-return':
+        return {
+          emoji: '↩️',
+          label: 'Early Return',
+          count: earlyReturn.length,
+          filesCount: earlyReturn.length === 0 ? 0 : new Set(earlyReturn.map(i => getFile(i))).size,
+          timingKey,
+        };
+      case 'exception-hygiene':
+        return {
+          emoji: '🧯',
+          label: 'Exception Hygiene',
+          count: exceptionHygiene.length,
+          filesCount: exceptionHygiene.length === 0 ? 0 : new Set(exceptionHygiene.map(f => getFile(f))).size,
+          timingKey,
+        };
+      case 'noop':
+        return {
+          emoji: '💤',
+          label: 'Noop',
+          count: noop.length,
+          filesCount: noop.length === 0 ? 0 : new Set(noop.map(f => getFile(f))).size,
+          timingKey,
+        };
+      case 'dependencies':
+        return {
+          emoji: '🔗',
+          label: 'Dep Cycles',
+          count: deps.cycles.length,
+          filesCount:
+            deps.cycles.length === 0
+              ? 0
+              : new Set([
+                  ...deps.cycles.flatMap(c => c.path),
+                  ...depsFanIn.map(s => extractModule(s)).filter(Boolean),
+                  ...depsFanOut.map(s => extractModule(s)).filter(Boolean),
+                  ...depsCuts.flatMap(h => extractFromTo(h)).filter(Boolean),
+                ]).size,
+          timingKey,
+        };
+      case 'coupling':
+        return {
+          emoji: '🔥',
+          label: 'Coupling Hotspots',
+          count: coupling.length,
+          filesCount: coupling.length === 0 ? 0 : new Set(coupling.map(h => h.module)).size,
+          timingKey,
+        };
+      case 'api-drift':
+        return {
+          emoji: '📐',
+          label: 'API Drift',
+          count: apiDrift.length,
+          filesCount:
+            apiDrift.length === 0
+              ? 0
+              : new Set(apiDrift.flatMap(g => g.outliers.map(o => o.filePath))).size,
+          timingKey,
+        };
+      default:
+        return defaultSummaryRow(timingKey);
+    }
+  };
 
-  if (selectedDetectors.has('typecheck')) {
-    summaryRows.push({
-      emoji: '🏷️',
-      label: 'Typecheck',
-      count: typecheckErrors,
-      filesCount: typecheckErrors === 0 ? 0 : new Set(typecheck.map(i => i.file)).size,
-      timingKey: 'typecheck',
-    });
-  }
-
-  if (selectedDetectors.has('forwarding')) {
-    summaryRows.push({
-      emoji: '↗️',
-      label: 'Forwarding',
-      count: forwarding.length,
-      filesCount: forwarding.length === 0 ? 0 : new Set(forwarding.map(f => getFile(f))).size,
-      timingKey: 'forwarding',
-    });
-  }
-
-  if (selectedDetectors.has('structural-duplicates')) {
-    summaryRows.push({
-      emoji: '🧬',
-      label: 'Structural Dupes',
-      count: structDups.length,
-      filesCount:
-        structDups.length === 0
-          ? 0
-          : new Set(structDups.flatMap(g => g.items.map(i => getFile(i)))).size,
-      timingKey: 'structural-duplicates',
-    });
-  }
-
-  if (selectedDetectors.has('nesting')) {
-    summaryRows.push({
-      emoji: '🪹',
-      label: 'Nesting',
-      count: nesting.length,
-      filesCount: nesting.length === 0 ? 0 : new Set(nesting.map(i => getFile(i))).size,
-      timingKey: 'nesting',
-    });
-  }
-
-  if (selectedDetectors.has('early-return')) {
-    summaryRows.push({
-      emoji: '↩️',
-      label: 'Early Return',
-      count: earlyReturn.length,
-      filesCount: earlyReturn.length === 0 ? 0 : new Set(earlyReturn.map(i => getFile(i))).size,
-      timingKey: 'early-return',
-    });
-  }
-
-  if (selectedDetectors.has('exception-hygiene')) {
-    summaryRows.push({
-      emoji: '🧯',
-      label: 'Exception Hygiene',
-      count: exceptionHygiene.length,
-      filesCount: exceptionHygiene.length === 0 ? 0 : new Set(exceptionHygiene.map(f => getFile(f))).size,
-      timingKey: 'exception-hygiene',
-    });
-  }
-
-  if (selectedDetectors.has('noop')) {
-    summaryRows.push({
-      emoji: '💤',
-      label: 'Noop',
-      count: noop.length,
-      filesCount: noop.length === 0 ? 0 : new Set(noop.map(f => getFile(f))).size,
-      timingKey: 'noop',
-    });
-  }
-
-  if (selectedDetectors.has('dependencies')) {
-    summaryRows.push({
-      emoji: '🔗',
-      label: 'Dep Cycles',
-      count: deps.cycles.length,
-      filesCount:
-        deps.cycles.length === 0
-          ? 0
-          : new Set([
-              ...deps.cycles.flatMap(c => c.path),
-              ...depsFanIn.map((s: any) => s.module),
-              ...depsFanOut.map((s: any) => s.module),
-              ...depsCuts.flatMap((h: any) => [h.from, h.to]),
-            ]).size,
-      timingKey: 'dependencies',
-    });
-  }
-
-  if (selectedDetectors.has('coupling')) {
-    summaryRows.push({
-      emoji: '🔥',
-      label: 'Coupling Hotspots',
-      count: coupling.length,
-      filesCount: coupling.length === 0 ? 0 : new Set(coupling.map(h => h.module)).size,
-      timingKey: 'coupling',
-    });
-  }
-
-  if (selectedDetectors.has('api-drift')) {
-    summaryRows.push({
-      emoji: '📐',
-      label: 'API Drift',
-      count: apiDrift.length,
-      filesCount:
-        apiDrift.length === 0
-          ? 0
-          : new Set(apiDrift.flatMap((g: any) => (g.outliers ?? []).map((o: any) => getFile(o)))).size,
-      timingKey: 'api-drift',
-    });
-  }
+  const summaryRows: SummaryTableRow[] = report.meta.detectors.map(d => summaryRowFor(d));
 
   // ── Detail Sections (only shown when findings > 0) ──────────────
 
@@ -532,7 +567,8 @@ const formatText = (report: FirebatReport): string => {
     for (const finding of exceptionHygiene) {
       const rel = path.relative(process.cwd(), getFile(finding));
       const start = toPos(finding.span.start.line, finding.span.start.column);
-      const evidence = typeof finding.evidence === 'string' && finding.evidence.length > 0 ? cc(` (${finding.evidence})`, A.dim) : '';
+      const evidence =
+        typeof finding.evidence === 'string' && finding.evidence.length > 0 ? cc(` (${finding.evidence})`, A.dim) : '';
 
       lines.push(`    ${cc('·', A.dim)} ${finding.kind} ${cc(`@ ${rel}:${start}`, A.dim)}${evidence}`);
     }
@@ -573,7 +609,9 @@ const formatText = (report: FirebatReport): string => {
       lines.push(`    ${cc('layer violations:', A.yellow)}`);
 
       for (const finding of deps.layerViolations) {
-        lines.push(`      ${cc('·', A.dim)} ${finding.fromLayer} → ${finding.toLayer} ${cc(`(${finding.from} → ${finding.to})`, A.dim)}`);
+        lines.push(
+          `      ${cc('·', A.dim)} ${finding.fromLayer} → ${finding.toLayer} ${cc(`(${finding.from} → ${finding.to})`, A.dim)}`,
+        );
       }
     }
 

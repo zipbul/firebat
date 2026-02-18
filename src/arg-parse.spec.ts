@@ -33,6 +33,18 @@ describe('arg-parse', () => {
       'noop',
       'api-drift',
       'forwarding',
+      'implicit-state',
+      'temporal-coupling',
+      'symmetry-breaking',
+      'invariant-blindspot',
+      'modification-trap',
+      'modification-impact',
+      'variable-lifetime',
+      'decision-surface',
+      'implementation-overhead',
+      'concept-scatter',
+      'abstraction-fitness',
+      'giant-file',
     ]);
     expect(result.fix).toBe(false);
     expect(result.help).toBe(false);
@@ -69,6 +81,18 @@ describe('arg-parse', () => {
       'noop',
       'api-drift',
       'forwarding',
+      'implicit-state',
+      'temporal-coupling',
+      'symmetry-breaking',
+      'invariant-blindspot',
+      'modification-trap',
+      'modification-impact',
+      'variable-lifetime',
+      'decision-surface',
+      'implementation-overhead',
+      'concept-scatter',
+      'abstraction-fitness',
+      'giant-file',
     ]);
     expect(result.fix).toBe(false);
     expect(result.explicit).toBeDefined();
@@ -102,6 +126,18 @@ describe('arg-parse', () => {
       'noop',
       'api-drift',
       'forwarding',
+      'implicit-state',
+      'temporal-coupling',
+      'symmetry-breaking',
+      'invariant-blindspot',
+      'modification-trap',
+      'modification-impact',
+      'variable-lifetime',
+      'decision-surface',
+      'implementation-overhead',
+      'concept-scatter',
+      'abstraction-fitness',
+      'giant-file',
     ]);
     expect(result.fix).toBe(false);
     expect(result.help).toBe(false);
@@ -127,6 +163,16 @@ describe('arg-parse', () => {
 
     // Assert
     expect(result.detectors).toEqual(['waste']);
+  });
+
+  it('should parse P1 detectors when --only is provided', () => {
+    // Arrange
+    let argv = ['--only', 'decision-surface', 'packages'];
+    // Act
+    let result = parseArgs(argv);
+
+    // Assert
+    expect(result.detectors).toEqual(['decision-surface']);
   });
 
   it('should parse configPath and logLevel when provided', () => {

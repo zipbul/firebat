@@ -3,7 +3,6 @@ import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
 
 import { PartialResultError } from '../../engine/partial-result-error';
-
 import { collectUnknownProofCandidates } from './candidates';
 import { runTsgoUnknownProofChecks } from './tsgo-checks';
 
@@ -82,6 +81,7 @@ export const analyzeUnknownProof = async (
     throw new PartialResultError(tsgoResult.error, [...findings, ...tsgoResult.findings]);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+
     throw new PartialResultError(message, findings);
   }
 };

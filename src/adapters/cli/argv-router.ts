@@ -54,7 +54,15 @@ const parseGlobalLogOptions = (argv: readonly string[]): FirebatGlobalLogOptions
 };
 
 const isCommandToken = (token: string): token is Exclude<FirebatSubcommand, undefined> | 'i' | 'u' => {
-  return token === 'scan' || token === 'install' || token === 'i' || token === 'update' || token === 'u' || token === 'cache' || token === 'mcp';
+  return (
+    token === 'scan' ||
+    token === 'install' ||
+    token === 'i' ||
+    token === 'update' ||
+    token === 'u' ||
+    token === 'cache' ||
+    token === 'mcp'
+  );
 };
 
 const normalizeSubcommand = (token: string): FirebatSubcommand => {
@@ -134,14 +142,11 @@ export const routeFirebatArgv = (argv: readonly string[]): FirebatArgvRoute => {
   const subcommandIndex = findSubcommandIndex(argv);
   const subcommandToken = subcommandIndex === null ? undefined : argv[subcommandIndex];
   const subcommand = subcommandToken ? normalizeSubcommand(subcommandToken) : undefined;
-
   const scanArgv =
     subcommandIndex !== null && normalizeSubcommand(subcommandToken ?? '') === 'scan'
       ? argv.filter((_, idx) => idx !== subcommandIndex)
       : argv;
-
-  const subcommandArgv =
-    subcommandIndex === null ? [] : stripGlobalLogFlags(argv.filter((_, idx) => idx !== subcommandIndex));
+  const subcommandArgv = subcommandIndex === null ? [] : stripGlobalLogFlags(argv.filter((_, idx) => idx !== subcommandIndex));
 
   return {
     subcommand,
