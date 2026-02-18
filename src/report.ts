@@ -204,6 +204,18 @@ const formatText = (report: FirebatReport): string => {
   const nesting = analyses.nesting ?? [];
   const noop = analyses.noop ?? [];
   const forwarding = analyses.forwarding ?? [];
+  const implicitState = analyses['implicit-state'] ?? [];
+  const temporalCoupling = analyses['temporal-coupling'] ?? [];
+  const symmetryBreaking = analyses['symmetry-breaking'] ?? [];
+  const invariantBlindspot = analyses['invariant-blindspot'] ?? [];
+  const modificationTrap = analyses['modification-trap'] ?? [];
+  const modificationImpact = analyses['modification-impact'] ?? [];
+  const variableLifetime = analyses['variable-lifetime'] ?? [];
+  const decisionSurface = analyses['decision-surface'] ?? [];
+  const implementationOverhead = analyses['implementation-overhead'] ?? [];
+  const conceptScatter = analyses['concept-scatter'] ?? [];
+  const abstractionFitness = analyses['abstraction-fitness'] ?? [];
+  const giantFile = analyses['giant-file'] ?? [];
   const lintErrors = lint.filter(d => d.severity === 'error').length;
   const typecheckErrors = typecheck.filter(i => i.severity === 'error').length;
   const formatFindings = format.length;
@@ -335,7 +347,7 @@ const formatText = (report: FirebatReport): string => {
       case 'structural-duplicates':
         return {
           emoji: '🧬',
-          label: 'Structural Dupes',
+          label: 'Structural Duplicates',
           count: structDups.length,
           filesCount: structDups.length === 0 ? 0 : new Set(structDups.flatMap(g => g.items.map(i => getFile(i)))).size,
           timingKey,
@@ -375,8 +387,8 @@ const formatText = (report: FirebatReport): string => {
       case 'dependencies':
         return {
           emoji: '🔗',
-          label: 'Dep Cycles',
-          count: deps.cycles.length,
+          label: 'Dependencies',
+          count: deps.cycles.length + deps.layerViolations.length + deps.deadExports.length,
           filesCount:
             deps.cycles.length === 0
               ? 0
@@ -662,6 +674,141 @@ const formatText = (report: FirebatReport): string => {
           lines.push(`        ${cc('↳', A.dim)} ${oShape} ${cc(`@ ${rel}:${start}`, A.dim)}`);
         }
       }
+    }
+  }
+
+  if (selectedDetectors.has('implicit-state') && implicitState.length > 0) {
+    lines.push(sectionHeader('🧠', 'Implicit State', `${implicitState.length} findings`));
+
+    for (const f of implicitState) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+      const key = typeof (f as any).key === 'string' && (f as any).key.length > 0 ? ` key=${(f as any).key}` : '';
+
+      lines.push(`    ${cc('·', A.dim)} ${f.protocol}${key} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('temporal-coupling') && temporalCoupling.length > 0) {
+    lines.push(sectionHeader('⏱️', 'Temporal Coupling', `${temporalCoupling.length} findings`));
+
+    for (const f of temporalCoupling) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.state} ${cc(`writers=${f.writers} readers=${f.readers}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('symmetry-breaking') && symmetryBreaking.length > 0) {
+    lines.push(sectionHeader('⚖️', 'Symmetry Breaking', `${symmetryBreaking.length} findings`));
+
+    for (const f of symmetryBreaking) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.group}: ${f.signature} ${cc(`majority=${f.majorityCount} outliers=${f.outlierCount}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('invariant-blindspot') && invariantBlindspot.length > 0) {
+    lines.push(sectionHeader('🎯', 'Invariant Blindspot', `${invariantBlindspot.length} findings`));
+
+    for (const f of invariantBlindspot) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.signal} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('modification-trap') && modificationTrap.length > 0) {
+    lines.push(sectionHeader('🪤', 'Modification Trap', `${modificationTrap.length} findings`));
+
+    for (const f of modificationTrap) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.pattern} ${cc(`occurrences=${f.occurrences}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('modification-impact') && modificationImpact.length > 0) {
+    lines.push(sectionHeader('💥', 'Modification Impact', `${modificationImpact.length} findings`));
+
+    for (const f of modificationImpact) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+      const callers = f.highRiskCallers.length > 0 ? cc(` callers=${f.highRiskCallers.join(',')}`, A.dim) : '';
+
+      lines.push(`    ${cc('·', A.dim)} radius=${f.impactRadius}${callers} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('variable-lifetime') && variableLifetime.length > 0) {
+    lines.push(sectionHeader('⏳', 'Variable Lifetime', `${variableLifetime.length} findings`));
+
+    for (const f of variableLifetime) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('decision-surface') && decisionSurface.length > 0) {
+    lines.push(sectionHeader('🔀', 'Decision Surface', `${decisionSurface.length} findings`));
+
+    for (const f of decisionSurface) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} axes=${f.axes} paths=${f.combinatorialPaths} repeats=${f.repeatedChecks} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('implementation-overhead') && implementationOverhead.length > 0) {
+    lines.push(sectionHeader('⚙️', 'Implementation Overhead', `${implementationOverhead.length} findings`));
+
+    for (const f of implementationOverhead) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ratio=${f.ratio.toFixed(1)} impl=${f.implementationComplexity} iface=${f.interfaceComplexity} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('concept-scatter') && conceptScatter.length > 0) {
+    lines.push(sectionHeader('🌐', 'Concept Scatter', `${conceptScatter.length} findings`));
+
+    for (const f of conceptScatter) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.concept} ${cc(`scatter=${f.scatterIndex} files=${f.files.length} layers=${f.layers.length}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('abstraction-fitness') && abstractionFitness.length > 0) {
+    lines.push(sectionHeader('🏋️', 'Abstraction Fitness', `${abstractionFitness.length} findings`));
+
+    for (const f of abstractionFitness) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const start = toPos(f.span.start.line, f.span.start.column);
+
+      lines.push(`    ${cc('·', A.dim)} ${f.module} ${cc(`fitness=${f.fitness.toFixed(2)} cohesion=${f.internalCohesion.toFixed(2)} coupling=${f.externalCoupling.toFixed(2)}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+    }
+  }
+
+  if (selectedDetectors.has('giant-file') && giantFile.length > 0) {
+    lines.push(sectionHeader('📏', 'Giant File', `${giantFile.length} findings`));
+
+    for (const f of giantFile) {
+      const rel = path.relative(process.cwd(), getFile(f));
+      const metrics = (f as any).metrics;
+      const lineInfo = metrics ? `${metrics.lineCount}/${metrics.maxLines} lines` : '';
+
+      lines.push(`    ${cc('·', A.dim)} ${rel} ${cc(lineInfo, A.yellow)}`);
     }
   }
 

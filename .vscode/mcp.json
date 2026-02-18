@@ -7,11 +7,6 @@
         "@modelcontextprotocol/server-sequential-thinking"
       ]
     },
-    "context7": {
-      "type": "stdio",
-      "command": "bunx",
-      "args": ["-y", "@upstash/context7-mcp", "--api-key", "${env:CONTEXT7_API_KEY}"]
-    },
     "firebat": {
       "type": "stdio",
       "command": "bun",

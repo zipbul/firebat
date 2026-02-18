@@ -18,16 +18,20 @@ Before modifying code, **assess impact scope first:**
 ## Test-First Flow
 
 1. Determine the scope of changes.
-2. **Write ALL tests first** (unit + integration + e2e).
-3. Execute tests → confirm RED → report to user.
-4. `ㅇㅇ` approval → begin implementation.
-5. Implementation complete → confirm GREEN.
+2. **OVERFLOW**: Follow `TST-OVERFLOW` (test-standards.md). Output `[OVERFLOW Checkpoint]`.
+3. **PRUNE**: Follow `TST-PRUNE` (test-standards.md). Output `[PRUNE Checkpoint]`.
+4. **Write ALL tests** (unit + integration) based solely on the PRUNE output.
+5. Execute tests → confirm RED → report to user.
+6. `ㅇㅇ` approval → begin implementation.
+7. Implementation complete → confirm GREEN.
 
 ### Stage Gate Blocks
 
 Each stage transition requires its gate block in the response. **No gate block → no transition.**
 
-**After step 3 (RED confirmed):**
+Gate chain: **OVERFLOW → PRUNE → RED → GREEN**. Skipping any gate is a rule violation.
+
+**After step 5 (RED confirmed):**
 ```
 [RED Checkpoint]
 - Test file(s): (paths)
@@ -36,7 +40,7 @@ Each stage transition requires its gate block in the response. **No gate block �
 ```
 Without this block → implementation code is **prohibited**.
 
-**After step 5 (GREEN confirmed):**
+**After step 7 (GREEN confirmed):**
 ```
 [GREEN Checkpoint]
 - Test file(s): (paths)

@@ -20,7 +20,7 @@ const isTty = (): boolean => {
 };
 
 interface LevelStyle {
-  readonly emoji: string;
+  readonly label: string;
   readonly color: string;
 }
 
@@ -47,18 +47,28 @@ const c = (text: string, color: string, enabled: boolean): string => {
 const levelStyle = (level: FirebatLogLevel): LevelStyle => {
   switch (level) {
     case 'error':
-      return { emoji: '✖', color: ANSI.red };
+      return { label: 'ERROR', color: ANSI.red };
     case 'warn':
-      return { emoji: '▲', color: ANSI.yellow };
+      return { label: 'WARN ', color: ANSI.yellow };
     case 'info':
-      return { emoji: '●', color: ANSI.cyan };
+      return { label: 'INFO ', color: ANSI.cyan };
     case 'debug':
-      return { emoji: '◆', color: ANSI.magenta };
+      return { label: 'DEBUG', color: ANSI.magenta };
     case 'trace':
-      return { emoji: '·', color: ANSI.gray };
+      return { label: 'TRACE', color: ANSI.gray };
     default:
-      return { emoji: '·', color: ANSI.gray };
+      return { label: 'TRACE', color: ANSI.gray };
   }
+};
+
+const formatTimestamp = (): string => {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  const ms = String(now.getMilliseconds()).padStart(3, '0');
+
+  return `${h}:${m}:${s}.${ms}`;
 };
 
 const formatDuration = (ms: number | undefined): string => {
@@ -114,9 +124,10 @@ export const createPrettyConsoleLogger = (options: PrettyConsoleLoggerOptions): 
     }
 
     const style = levelStyle(level);
-    const dot = c(style.emoji, style.color, useColor);
+    const ts = c(formatTimestamp(), ANSI.dim, useColor);
+    const tag = c(style.label, style.color, useColor);
     const msg = level === 'error' || level === 'warn' ? c(message, style.color, useColor) : message;
-    let line = `  ${dot}  ${msg}${formatFields(fields, useColor)}`;
+    let line = `${ts} [${tag}] ${msg}${formatFields(fields, useColor)}`;
 
     if (includeStack && error instanceof Error && error.stack) {
       line += `\n${c(error.stack, ANSI.dim, useColor)}`;

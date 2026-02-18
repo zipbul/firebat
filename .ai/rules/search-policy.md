@@ -14,12 +14,6 @@ When external information is needed, follow this order strictly:
 - Use web search tools/MCP if available.
 - Or access search result pages directly.
 
-### 3. Doc-query MCP — e.g. context7 (supplementary, cross-check)
-
-- **context7 may contain outdated data. It is not authoritative.**
-- Use as cross-check for priorities 1–2, or fallback when 1–2 yield nothing.
-- **Never base a decision on context7 results alone.**
-
 ### 4. Codebase search (internal patterns)
 
 - Text/regex search, semantic search, file read.

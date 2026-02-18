@@ -2,133 +2,196 @@
 
 ## Layers
 
-| Layer | Pattern | Location | SUT 경계 |
-|-------|---------|----------|---------|
-| Unit | `*.spec.ts` | 소스 옆 (colocated) | 단일 export (함수/클래스) |
-| Integration | `*.test.ts` | `test/integration/` | 모듈 간 결합 |
-| E2E | `*.e2e.ts` | `test/e2e/` | 프로세스 전체 |
+| Layer | Pattern | Location | SUT Boundary |
+|-------|---------|----------|--------------|
+| Unit | `*.spec.ts` | Colocated with source | Single export (function/class) |
+| Integration | `*.test.ts` | `test/` | Cross-module combination |
 
 ```
 Rule: TST-LAYER
-Violation: 파일 확장자·위치가 위 테이블과 불일치
+Violation: File extension or location does not match the table above
 Enforcement: block
 ```
 
-## Isolation (전 계층 공통 원칙)
+## Isolation (common principle across all layers)
 
-SUT 경계 바깥의 모든 의존성은 mock/stub 대상이다.
-SUT 경계 안의 모든 의존성은 실제 구현을 사용한다.
-계층별로 SUT 경계만 달라지며, 격리 원칙은 동일하다.
+All dependencies outside the SUT boundary MUST be mocked/stubbed.
+All dependencies inside the SUT boundary MUST use real implementations.
+Only the SUT boundary differs per layer; the isolation principle is identical.
 
-- **Unit**: SUT = 단일 export. 그 함수/클래스가 호출하는 모든 외부 모듈·함수 = mock (DTO/Value Object 제외).
-- **Integration**: SUT = 결합된 모듈 집합. 집합 내부 = real, 집합 바깥 = mock.
-- **E2E**: SUT = 프로세스. 프로세스 내부 = real, 프로세스 바깥 = mock.
+- **Unit**: SUT = single export. All external modules/functions it calls = mock (except DTO/Value Objects).
+- **Integration**: SUT = combined module set. Inside the set = real, outside = mock.
 
 ```
 Rule: TST-ISOLATION
-Violation: SUT 경계 바깥의 의존성이 mock/stub 없이 실행되거나,
-          SUT 경계 안의 의존성이 mock 처리됨
+Violation: Dependency outside SUT boundary runs without mock/stub,
+           or dependency inside SUT boundary is mocked
 Enforcement: block
 ```
 
 ```
 Rule: TST-HERMETIC
-Violation: I/O·시간·랜덤 등 비결정적 자원이 SUT 경계 안에서 mock 없이 사용됨 (E2E 제외)
+Violation: Non-deterministic resources (I/O, time, random) used inside SUT boundary without mock
 Enforcement: block
 ```
 
 ```
 Rule: TST-SIDE-EFFECT-SPY
-Violation: SUT가 경계 밖 의존성에 side-effect(쓰기·삭제·전송 등)를 일으키는 호출을 하는데,
-          해당 호출에 대한 spy 검증(호출 횟수·인자)이 없음
+Violation: SUT calls a side-effect (write/delete/send) on an outside dependency
+           without spy verification (call count + arguments)
 Enforcement: block
 ```
 
 ## Access Boundary
 
-- **Unit**: SUT 내부 접근(white-box) 허용.
-- **Integration / E2E**: 공개(exported) API만 사용.
+- **Unit**: White-box access to SUT internals allowed.
+- **Integration**: Public (exported) API only.
 
-비공개 멤버에 대한 테스트 접근이 필요할 경우, 소스 파일에서 `__testing__` 오브젝트를 통해 export한다.
-테스트 코드가 unexported 멤버를 우회 접근(type assertion, dynamic property 등)하는 것은 금지한다.
+If test access to private members is needed, export them via a `__testing__` object in the source file.
+Bypass access to unexported members (type assertion, dynamic property, etc.) is prohibited.
 
 ```
 Rule: TST-ACCESS
-Violation: Integration/E2E 테스트가 unexported 멤버를 __testing__ export 없이 직접 접근
+Violation: Integration test accesses unexported member without __testing__ export
 Enforcement: block
 ```
 
 ## Test Case Design
 
-### 분기 커버리지 (Unit / Integration only)
+### Exhaustive Scenario Enumeration
 
-SUT가 가진 모든 분기에 대응하는 it이 존재해야 한다.
-분기는 if, else, switch/case, early return, throw, catch, 삼항 연산자(`? :`), 옵셔널 체이닝(`?.`), nullish coalescing(`??`)을 포함한다.
-E2E에서는 적용하지 않는다. E2E는 핵심 경로(happy + 대표 error)만 검증한다.
+Before proposing, planning, or writing any test — including enhancement of existing tests —
+the agent MUST enumerate test scenarios exhaustively.
+This is a **hard gate** — skipping this step prohibits all subsequent test authoring.
+
+#### TST-OVERFLOW — Scenario Flood
+
+For every module/function under test, use `sequential-thinking` MCP to enumerate
+**at least 50 scenarios per category** across all 8 categories below.
+
+| # | Category | Description |
+|---|----------|-------------|
+| 1 | Happy Path | Valid inputs producing expected outputs; primary use cases |
+| 2 | Negative / Error | Invalid inputs, error paths, expected exceptions |
+| 3 | Edge | Single boundary condition: empty, zero, one, max, min |
+| 4 | Corner | Two or more boundary conditions occurring simultaneously |
+| 5 | State Transition | Lifecycle changes, reuse after close/dispose, re-initialization |
+| 6 | Concurrency / Race | Simultaneous access, ordering races, timing sensitivity |
+| 7 | Idempotency | Repeated identical operations must yield identical results |
+| 8 | Ordering | Input/execution order affecting outcomes |
+
+**Hard constraints — no exceptions:**
+
+- Each applicable category MUST have **≥ 50 scenarios**. Fewer is a rule violation.
+- If a category does not apply to the target, declare `N/A: [concrete reason]`.
+  The exclusion declaration itself is evidence of deliberation. Unjustified `N/A` is a violation.
+- All enumeration MUST be performed via `sequential-thinking` MCP. Inline reasoning is prohibited.
+
+**Required output — gate block:**
+
+```
+[OVERFLOW Checkpoint]
+- Target: (module/function name)
+- Categories enumerated: (list with count per category, or N/A with reason)
+- Total scenarios: (number)
+```
+
+Without this block → PRUNE is **prohibited**.
+
+```
+Rule: TST-OVERFLOW
+Violation: Test code authored without prior scenario enumeration via sequential-thinking,
+           or any applicable category has fewer than 50 scenarios,
+           or a category is marked N/A without concrete justification,
+           or [OVERFLOW Checkpoint] block is missing
+Enforcement: block
+```
+
+#### TST-PRUNE — Deduplication & Filtering
+
+After OVERFLOW, review all enumerated scenarios and remove:
+
+1. **Duplicates** — scenarios exercising the same code path. Merge into one.
+2. **Excessive** — scenarios with no practical verification value.
+
+**Hard constraints:**
+
+- Every removal MUST state its rationale (e.g., "#12 and #35 test the same branch; keeping #12").
+- Produce a **numbered final test list** with category tags.
+- The final list is the **sole basis** for test code authoring. No ad-hoc additions without re-running OVERFLOW.
+
+**Required output — gate block:**
+
+```
+[PRUNE Checkpoint]
+- Scenarios before: (number)
+- Removed: (number, with rationale summary)
+- Final test count: (number)
+```
+
+Without this block → test code authoring is **prohibited**.
+
+```
+Rule: TST-PRUNE
+Violation: Test code authored without a finalized PRUNE list,
+           or scenarios removed without stated rationale,
+           or test code contains cases not present in the PRUNE list,
+           or [PRUNE Checkpoint] block is missing
+Enforcement: block
+```
+
+### Branch Coverage (Unit / Integration only)
+
+Every branch in the SUT MUST have a corresponding `it`.
+Branches include: if, else, switch/case, early return, throw, catch, ternary (`? :`), optional chaining (`?.`), nullish coalescing (`??`).
 
 ```
 Rule: TST-BRANCH
 Applies to: Unit, Integration
-Violation: SUT의 분기(if/else/switch/early return/throw/catch/삼항/?./??  포함)에 대응하는 it이 없음
+Violation: A SUT branch (if/else/switch/early return/throw/catch/ternary/?./??)
+           has no corresponding it
 Enforcement: block
 ```
 
-### 입력 분할 (Unit / Integration only)
+### Input Partitioning (Unit / Integration only)
 
-SUT 파라미터마다 동치 클래스(equivalence class)를 식별하고, 각 클래스에서 대표값 1개 + 경계값을 테스트한다.
-E2E에서는 적용하지 않는다.
+For each SUT parameter, identify equivalence classes and test one representative value + boundary values per class.
 
-타입별 필수 케이스:
+Required cases by type:
 
-| 파라미터 타입 | 필수 it |
-|-------------|--------|
-| nullable (`T \| null \| undefined`) | null 입력, undefined 입력 |
-| 배열 (`T[]`) | 빈 배열, 단일 요소, 복수 요소 |
-| 문자열 (`string`) | 빈 문자열 |
-| 숫자 (`number`) | 0, 음수 (해당되는 경우) |
-| union / enum | 각 variant 최소 1개 |
+| Parameter Type | Required it |
+|---------------|-------------|
+| nullable (`T \| null \| undefined`) | null input, undefined input |
+| array (`T[]`) | empty array, single element, multiple elements |
+| string | empty string |
+| number | 0, negative (if applicable) |
+| union / enum | at least 1 per variant |
 | boolean | true, false |
 
 ```
 Rule: TST-INPUT-PARTITION
 Applies to: Unit, Integration
-Violation: SUT 파라미터의 동치 클래스가 누락되어 테스트되지 않은 입력 영역이 존재하거나,
-          위 타입별 필수 케이스가 해당됨에도 it이 없음
+Violation: An equivalence class of a SUT parameter is untested,
+           or a required case from the type table above is missing
 Enforcement: block
 ```
 
-### 중복 금지
+### No Duplicates
 
-동일한 분기·동일한 동치 클래스를 검증하는 it이 2개 이상 존재하면 안 된다.
-동치 클래스가 다르면 같은 분기를 통과하더라도 중복이 아니다.
+No two `it` blocks may verify the same branch + same equivalence class.
+Different equivalence classes passing through the same branch are NOT duplicates.
 
 ```
 Rule: TST-NO-DUPLICATE
-Violation: 동일 분기·동일 동치 클래스에 대한 중복 it 존재
+Violation: Duplicate it blocks for the same branch and equivalence class
 Enforcement: block
 ```
 
-### 단일 시나리오
+### Single Scenario
 
 ```
 Rule: TST-SINGLE-SCENARIO
-Violation: 하나의 it이 복수의 시나리오/분기를 검증
-Enforcement: block
-```
-
-## E2E Constraints
-
-```
-Rule: TST-E2E-OUTPUT
-Applies to: E2E
-Violation: 출력 검증이 구조화된 데이터(exit code, JSON)가 아닌 로그 문자열·ANSI 파싱에 의존
-Enforcement: block
-```
-
-```
-Rule: TST-E2E-SCOPE
-Applies to: E2E
-Violation: E2E 테스트가 SUT의 모든 분기·동치 클래스를 개별 검증하려 함 (핵심 경로만 허용)
+Violation: A single it verifies multiple scenarios or branches
 Enforcement: block
 ```
 
@@ -136,20 +199,20 @@ Enforcement: block
 
 ```
 Rule: TST-BDD
-Violation: it 제목이 BDD 형식(should ... when ...)이 아님
+Violation: it title is not in BDD format (should ... when ...)
 Enforcement: block
 ```
 
 ```
 Rule: TST-AAA
-Violation: it 내부가 Arrange → Act → Assert 구조가 아님
+Violation: it body does not follow Arrange → Act → Assert structure
 Enforcement: block
 ```
 
 ```
 Rule: TST-DESCRIBE-UNIT
-Violation: Unit 테스트에서 describe 1-depth가 SUT 식별자가 아니거나,
-          describe 제목이 "when "으로 시작
+Violation: Unit test describe 1-depth is not the SUT identifier,
+           or describe title starts with "when "
 Enforcement: block
 ```
 
@@ -157,26 +220,26 @@ Enforcement: block
 
 ```
 Rule: TST-CLEANUP
-Violation: 테스트가 생성한 리소스를 teardown에서 정리하지 않음
+Violation: Test-created resources not cleaned up in teardown
 Enforcement: block
 ```
 
 ```
 Rule: TST-STATE
-Violation: 테스트 간 공유 mutable state 존재
+Violation: Shared mutable state exists between tests
 Enforcement: block
 ```
 
 ```
 Rule: TST-RUNNER
-Violation: bun:test 외 러너 사용
+Violation: Test runner other than bun:test is used
 Enforcement: block
 ```
 
 ```
 Rule: TST-COVERAGE-MAP
-Violation: 디렉토리에 *.spec.ts가 1개 이상 존재하고,
-          같은 디렉토리에 대응 spec이 없는 *.ts가 존재
-          (*.d.ts, *.spec.ts, *.test.ts, *.e2e.ts, index.ts, types.ts 제외)
+Violation: A directory has ≥ 1 *.spec.ts but contains *.ts files
+           without a corresponding spec
+           (excludes *.d.ts, *.spec.ts, *.test.ts, index.ts, types.ts)
 Enforcement: block
 ```

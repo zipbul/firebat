@@ -48,7 +48,7 @@ Before acting, identify which triggers apply. Read **every** matching rule file.
 | --- | --- |
 | File change needed (create / modify / delete) | `.ai/rules/write-gate.md` |
 | External info required (API, package, version, runtime behavior) | `.ai/rules/search-policy.md` |
-| Any code or test change | `.ai/rules/test-standards.md` |
+| Any code or test change | `.ai/rules/test-standards.md`, `.ai/rules/workflow.md` |
 | Starting a task, planning, or scoping | `.ai/rules/workflow.md` |
 | Choosing runtime, library, or native API | `.ai/rules/bun-first.md` |
 
@@ -66,7 +66,6 @@ This is not a suggestion — it is a hard gate.
 
 ### Required MCP Tools
 
-- `context7`: package/version/option/spec/compatibility verification
 - `sequential-thinking`: all analysis/judgment/planning tasks
 - `firebat`: project codebase analysis
 
