@@ -17,6 +17,8 @@ Before modifying code, **assess impact scope first:**
 
 ## Test-First Flow
 
+This flow applies equally to test quality reviews and enhancement proposals — not only to code changes.
+
 1. Determine the scope of changes.
 2. **OVERFLOW**: Follow `TST-OVERFLOW` (test-standards.md). Output `[OVERFLOW Checkpoint]`.
 3. **PRUNE**: Follow `TST-PRUNE` (test-standards.md). Output `[PRUNE Checkpoint]`.
@@ -48,6 +50,28 @@ Without this block → implementation code is **prohibited**.
 - Status: GREEN confirmed
 ```
 Without this block → commit proposal is **prohibited**.
+
+### OVERFLOW/PRUNE Exemption
+
+The following conditions MUST **ALL** be met to skip OVERFLOW/PRUNE:
+
+1. `it` block count is identical before and after the change.
+2. Scenarios (tested behaviors) are unchanged — only assertion form, mock strategy, or cleanup logic changes.
+3. A `[Refactor-Only Checkpoint]` block is present in the response.
+
+**Required output — gate block:**
+
+```
+[Refactor-Only Checkpoint]
+- File: (path)
+- it count before: (number)
+- it count after: (number)
+- Change type: (mock migration / assertion format / cleanup)
+- Scenario change: NONE
+```
+
+If any `it` block is added, deleted, split, or merged → exemption is **void** → full OVERFLOW required.
+Without this block → OVERFLOW/PRUNE exemption is **prohibited**.
 
 ## Incremental Test Run
 

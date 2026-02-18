@@ -13,12 +13,6 @@ alwaysApply: true
 
 No file create/modify/delete without explicit approval token `ㅇㅇ`.
 
-## Project
-
-firebat — code quality scanner & MCP server.
-
-**Stack:** Bun, TypeScript, oxc (parser), tsgo (typecheck), ast-grep (pattern search), oxlint, SQLite (cache)
-
 ## Language Policy
 
 **Always respond in Korean. No exceptions.**
@@ -48,11 +42,19 @@ Before acting, identify which triggers apply. Read **every** matching rule file.
 | --- | --- |
 | File change needed (create / modify / delete) | `.ai/rules/write-gate.md` |
 | External info required (API, package, version, runtime behavior) | `.ai/rules/search-policy.md` |
-| Any code or test change | `.ai/rules/test-standards.md`, `.ai/rules/workflow.md` |
+| Any code or test change, quality review, or enhancement proposal | `.ai/rules/test-standards.md`, `.ai/rules/workflow.md` |
 | Starting a task, planning, or scoping | `.ai/rules/workflow.md` |
 | Choosing runtime, library, or native API | `.ai/rules/bun-first.md` |
 
 Multiple triggers may fire at once — read all applicable files.
+
+## Rule File Loading
+
+Rule files MUST be read in full — from first line to last line — via actual tool calls.
+
+- **Partial read prohibited**: skipping lines, reading only a range, or stopping mid-file is a violation.
+- **Memory/summary prohibited**: a rule file is "loaded" only when its full content has been read in the current response via a tool call. Recollection from previous turns does not count.
+- **Split reads allowed**: if a file is too long for one read, split into multiple reads that together cover every line. All parts must be read before the file can be listed under "Rules loaded".
 
 ## Format Gate Principle
 
@@ -67,7 +69,6 @@ This is not a suggestion — it is a hard gate.
 ### Required MCP Tools
 
 - `sequential-thinking`: all analysis/judgment/planning tasks
-- `firebat`: project codebase analysis
 
 Usage of reasoning, assumptions, simulation, memory, or experience to substitute MCP is forbidden.
 
@@ -75,17 +76,6 @@ Usage of reasoning, assumptions, simulation, memory, or experience to substitute
 
 - Any analysis, judgment, or planning task (use as the FIRST tool call)
 - Exception: simple single-file reads or trivial lookups
-
-### firebat — Tool Selection Matrix:
-
-| Situation | Tool(s) |
-|-----------|--------|
-| After code change | `scan` (mandatory) |
-| Find symbol | `index_symbols` → `search_symbol_from_index` |
-| Refactoring | `find_references` → `rename_symbol` |
-| Code pattern search | `find_pattern` (ast-grep syntax) |
-| Type/signature check | `get_hover` |
-| External library API | `index_external_libraries` → `search_external_library_symbols` |
 
 ### MCP verification before value/judgment answers
 
