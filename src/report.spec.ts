@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
 import { formatReport } from './report';
+import { toJsonReport } from './types';
 import type {
   FirebatReport,
   SourceSpan,
@@ -14,7 +15,7 @@ import type {
   NestingItem,
   EarlyReturnItem,
   NoopFinding,
-  DependencyAnalysis,
+  DependencyFinding,
   CouplingHotspot,
   ApiDriftGroup,
   ImplicitStateFinding,
@@ -44,16 +45,7 @@ const cwd = process.cwd();
 const testFile = `${cwd}/test-file.ts`;
 const testFile2 = `${cwd}/test-file2.ts`;
 
-const emptyDeps: DependencyAnalysis = {
-  cycles: [],
-  adjacency: {},
-  exportStats: {},
-  fanIn: [],
-  fanOut: [],
-  cuts: [],
-  layerViolations: [],
-  deadExports: [],
-};
+const emptyDeps: ReadonlyArray<DependencyFinding> = [];
 
 const allDetectors: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates', 'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
@@ -70,7 +62,6 @@ const makeReport = (
 ): FirebatReport => ({
   meta: { engine: 'oxc', targetCount: 1, minSize: 0, maxForwardDepth: 0, detectors, detectorTimings: {}, errors: {} },
   analyses,
-  top: [],
   catalog: {},
 });
 
@@ -87,27 +78,65 @@ describe('formatReport', () => {
       expect(() => JSON.parse(out)).not.toThrow();
     });
 
-    it('should include analyses and meta in JSON output when format is json', () => {
+    it('should output detectors at root level and omit meta key when format is json', () => {
       const report = makeReport(['waste'], {
         waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span(), confidence: 1 }],
       });
       const parsed = JSON.parse(formatReport(report, 'json'));
 
-      expect(parsed.meta.engine).toBe('oxc');
+      expect(Array.isArray(parsed.detectors)).toBe(true);
+      expect(parsed.detectors).toContain('waste');
+      expect('meta' in parsed).toBe(false);
       expect(Array.isArray(parsed.analyses.waste)).toBe(true);
-      expect(parsed.analyses.waste[0].kind).toBe('dead-store');
     });
 
-    it('should preserve all report fields in JSON output when report has top and catalog', () => {
+    it('should preserve catalog in JSON output', () => {
       const report: FirebatReport = {
         ...makeReport(['waste'], { waste: [] }),
-        top: [{ pattern: 'dead-store', detector: 'waste', resolves: 3 }],
-        catalog: { DEAD_STORE: { cause: 'unused', approach: 'remove' } },
+        catalog: { WASTE_DEAD_STORE: { cause: 'unused', think: ['remove'] } },
       };
       const parsed = JSON.parse(formatReport(report, 'json'));
 
-      expect(parsed.top[0].pattern).toBe('dead-store');
-      expect(parsed.catalog.DEAD_STORE.cause).toBe('unused');
+      expect(parsed.catalog.WASTE_DEAD_STORE.cause).toBe('unused');
+    });
+
+    it('should include errors at root when meta.errors is non-empty', () => {
+      const report: FirebatReport = {
+        ...makeReport(['waste'], { waste: [] }),
+        meta: { ...makeReport(['waste']).meta, errors: { 'src/a.ts': 'parse error' } },
+      };
+      const parsed = JSON.parse(formatReport(report, 'json'));
+
+      expect(parsed.errors).toBeDefined();
+      expect(parsed.errors['src/a.ts']).toBe('parse error');
+    });
+
+    it('should omit errors key when meta.errors is undefined', () => {
+      const report: FirebatReport = {
+        ...makeReport(['waste'], { waste: [] }),
+        meta: { ...makeReport(['waste']).meta, errors: undefined },
+      };
+      const parsed = JSON.parse(formatReport(report, 'json'));
+
+      expect('errors' in parsed).toBe(false);
+    });
+
+    it('should omit errors key when meta.errors is empty object', () => {
+      const report = makeReport(['waste'], { waste: [] });
+      const parsed = JSON.parse(formatReport(report, 'json'));
+
+      expect('errors' in parsed).toBe(false);
+    });
+
+    it('should include errors at root when meta.errors has exactly one key', () => {
+      const report: FirebatReport = {
+        ...makeReport(['waste'], { waste: [] }),
+        meta: { ...makeReport(['waste']).meta, errors: { 'src/only.ts': 'err' } },
+      };
+      const parsed = JSON.parse(formatReport(report, 'json'));
+
+      expect(parsed.errors).toBeDefined();
+      expect(Object.keys(parsed.errors).length).toBe(1);
     });
   });
 
@@ -115,7 +144,7 @@ describe('formatReport', () => {
 
   describe('text summary', () => {
     it('should render summary table with all 28 detectors when all detectors selected and no findings', () => {
-      const report = makeReport([...allDetectors], { dependencies: emptyDeps });
+      const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
       expect(out).toContain('Summary');
@@ -189,16 +218,15 @@ describe('formatReport', () => {
       expect(bodyMatch).not.toBeNull();
     });
 
-    it('should sum cycles, layerViolations, and deadExports in dependencies summary count', () => {
-      const deps: DependencyAnalysis = {
-        ...emptyDeps,
-        cycles: [{ path: ['a', 'b'] }],
-        layerViolations: [{ kind: 'layer-violation', message: '', from: 'a', to: 'b', fromLayer: 'x', toLayer: 'y' }],
-        deadExports: [{ kind: 'dead-export', module: 'c', name: 'd' }],
-      };
+    it('should show total DependencyFinding count in dependencies summary', () => {
+      const deps: ReadonlyArray<DependencyFinding> = [
+        { kind: 'layer-violation', code: 'DEP_LAYER_VIOLATION', file: 'src/a.ts', span: span(), from: 'a', to: 'b', fromLayer: 'x', toLayer: 'y' },
+        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/a.ts', span: span() }, { file: 'src/b.ts', span: span() }] },
+        { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/c.ts', span: span(), module: 'c', name: 'd' },
+      ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
-      // Summary row should show 3 total (1 cycle + 1 violation + 1 dead export)
+      // Summary row should show 3 total (3 findings)
       expect(out).toContain('3');
     });
   });
@@ -593,12 +621,12 @@ describe('formatReport', () => {
 
   describe('noop body', () => {
     it('should render body with kind and evidence when findings exist', () => {
-      const finding: NoopFinding = { kind: 'noop-expression', file: testFile, span: span(50, 0), confidence: 0.9, evidence: '1;' };
+      const finding: NoopFinding = { kind: 'expression-noop', file: testFile, span: span(50, 0), confidence: 0.9, evidence: '1;' };
       const out = formatReport(makeReport(['noop'], { noop: [finding] }), 'text');
 
       expect(out).toContain('Noop');
       expect(out).toContain('1 findings');
-      expect(out).toContain('noop-expression');
+      expect(out).toContain('expression-noop');
       expect(out).toContain('1;');
       expect(out).toContain('50:0');
     });
@@ -607,11 +635,10 @@ describe('formatReport', () => {
   // ── Dependencies body ───────────────────────────────────────────
 
   describe('dependencies body', () => {
-    it('should render dead exports sub-section when deadExports exist', () => {
-      const deps: DependencyAnalysis = {
-        ...emptyDeps,
-        deadExports: [{ kind: 'dead-export', module: 'src/utils.ts', name: 'helperFn' }],
-      };
+    it('should render dead exports sub-section when dead-export findings exist', () => {
+      const deps: ReadonlyArray<DependencyFinding> = [
+        { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/utils.ts', span: span(), module: 'src/utils.ts', name: 'helperFn' },
+      ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
       expect(out).toContain('Dependencies');
@@ -620,11 +647,10 @@ describe('formatReport', () => {
       expect(out).toContain('src/utils.ts#helperFn');
     });
 
-    it('should render layer violations sub-section when layerViolations exist', () => {
-      const deps: DependencyAnalysis = {
-        ...emptyDeps,
-        layerViolations: [{ kind: 'layer-violation', message: '', from: 'src/a.ts', to: 'src/b.ts', fromLayer: 'adapters', toLayer: 'engine' }],
-      };
+    it('should render layer violations sub-section when layer-violation findings exist', () => {
+      const deps: ReadonlyArray<DependencyFinding> = [
+        { kind: 'layer-violation', code: 'DEP_LAYER_VIOLATION', file: 'src/a.ts', span: span(), from: 'src/a.ts', to: 'src/b.ts', fromLayer: 'adapters', toLayer: 'engine' },
+      ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
       expect(out).toContain('layer violations');
@@ -632,11 +658,10 @@ describe('formatReport', () => {
       expect(out).toContain('engine');
     });
 
-    it('should render cycles sub-section when cycles exist', () => {
-      const deps: DependencyAnalysis = {
-        ...emptyDeps,
-        cycles: [{ path: ['src/a.ts', 'src/b.ts', 'src/a.ts'] }],
-      };
+    it('should render cycles sub-section when cycle findings exist', () => {
+      const deps: ReadonlyArray<DependencyFinding> = [
+        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/a.ts', span: span() }, { file: 'src/b.ts', span: span() }, { file: 'src/a.ts', span: span() }] },
+      ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
       expect(out).toContain('cycles');
@@ -644,42 +669,39 @@ describe('formatReport', () => {
       expect(out).toContain('src/b.ts');
     });
 
-    it('should render edge cut hints sub-section when cuts exist', () => {
-      const deps: DependencyAnalysis = {
-        ...emptyDeps,
-        cuts: [{ from: 'src/x.ts', to: 'src/y.ts' }],
-      };
+    it('should render cut hint inside cycle when cycle has cut property', () => {
+      const deps: ReadonlyArray<DependencyFinding> = [
+        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/x.ts', span: span() }, { file: 'src/y.ts', span: span() }], cut: { from: 'src/x.ts', to: 'src/y.ts' } },
+      ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
-      expect(out).toContain('edge cut hints');
+      expect(out).toContain('cut:');
       expect(out).toContain('src/x.ts');
       expect(out).toContain('src/y.ts');
     });
 
-    it('should not render dependencies body when all sub-arrays are empty', () => {
+    it('should not render dependencies body when findings array is empty', () => {
       const out = formatReport(makeReport(['dependencies'], { dependencies: emptyDeps }), 'text');
       const lines = out.split('\n');
       const hasDepsBody = lines.some(l =>
-        l.includes('dead exports:') || l.includes('cycles:') || l.includes('layer violations:') || l.includes('edge cut hints:'),
+        l.includes('dead exports:') || l.includes('cycles:') || l.includes('layer violations:'),
       );
 
       expect(hasDepsBody).toBe(false);
     });
 
-    it('should render all four sub-sections when all dep arrays have items', () => {
-      const deps: DependencyAnalysis = {
-        ...emptyDeps,
-        cycles: [{ path: ['a', 'b'] }],
-        layerViolations: [{ kind: 'layer-violation', message: '', from: 'a', to: 'b', fromLayer: 'x', toLayer: 'y' }],
-        deadExports: [{ kind: 'dead-export', module: 'c', name: 'd' }],
-        cuts: [{ from: 'e', to: 'f' }],
-      };
+    it('should render all three sub-sections when all three finding kinds are present', () => {
+      const deps: ReadonlyArray<DependencyFinding> = [
+        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/a.ts', span: span() }, { file: 'src/b.ts', span: span() }], cut: { from: 'a', to: 'b' } },
+        { kind: 'layer-violation', code: 'DEP_LAYER_VIOLATION', file: 'src/b.ts', span: span(), from: 'a', to: 'b', fromLayer: 'x', toLayer: 'y' },
+        { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/c.ts', span: span(), module: 'c', name: 'd' },
+      ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
       expect(out).toContain('dead exports:');
       expect(out).toContain('layer violations:');
       expect(out).toContain('cycles:');
-      expect(out).toContain('edge cut hints:');
+      expect(out).toContain('cut:');
     });
   });
 

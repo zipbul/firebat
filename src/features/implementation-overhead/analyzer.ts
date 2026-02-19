@@ -506,13 +506,12 @@ const analyzeImplementationOverhead = (
         continue;
       }
 
-      const code = file.sourceText.slice(startOffset, Math.min(file.sourceText.length, startOffset + 200));
+      const evidenceEnd = Math.min(file.sourceText.length, startOffset + 200);
 
       findings.push({
         kind: 'implementation-overhead',
         file: rel,
-        span: spanForOffsets(file.sourceText, startOffset, Math.min(file.sourceText.length, startOffset + code.length)),
-        code,
+        span: spanForOffsets(file.sourceText, startOffset, evidenceEnd),
         interfaceComplexity,
         implementationComplexity,
         ratio,
@@ -544,13 +543,12 @@ const analyzeImplementationOverhead = (
         continue;
       }
 
-      const code = file.sourceText.slice(startOffset, Math.min(file.sourceText.length, startOffset + 200));
+      const evidenceEnd2 = Math.min(file.sourceText.length, startOffset + 200);
 
       findings.push({
         kind: 'implementation-overhead',
         file: rel,
-        span: spanForOffsets(file.sourceText, startOffset, Math.min(file.sourceText.length, startOffset + code.length)),
-        code,
+        span: spanForOffsets(file.sourceText, startOffset, evidenceEnd2),
         interfaceComplexity,
         implementationComplexity,
         ratio,

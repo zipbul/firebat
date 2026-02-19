@@ -32,7 +32,6 @@ describe('integration/diagnostic-aggregator', () => {
     } as any);
 
     // Assert
-    expect(out.top.some((p: any) => p.pattern === 'DIAG_GOD_FUNCTION')).toBe(true);
     expect(out.catalog.DIAG_GOD_FUNCTION).toBeDefined();
   });
 
@@ -54,7 +53,6 @@ describe('integration/diagnostic-aggregator', () => {
     } as any);
 
     // Assert
-    expect(out.top.some((p: any) => p.pattern === 'DIAG_CIRCULAR_DEPENDENCY')).toBe(true);
     expect(out.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
   });
 
@@ -78,7 +76,6 @@ describe('integration/diagnostic-aggregator', () => {
     } as any);
 
     // Assert
-    expect(out.top.some((p: any) => p.pattern === 'DIAG_GOD_MODULE')).toBe(true);
     expect(out.catalog.DIAG_GOD_MODULE).toBeDefined();
   });
 });

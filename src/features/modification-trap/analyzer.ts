@@ -122,13 +122,13 @@ const analyzeModificationTrap = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
       const file = files[idx];
       const rel = normalizeFile(file.filePath);
       const offset = Math.max(0, file.sourceText.indexOf('switch') >= 0 ? file.sourceText.indexOf('switch') : 0);
-      const code = file.sourceText.slice(offset, Math.min(file.sourceText.length, offset + 200));
 
       findings.push({
         kind: 'modification-trap',
         file: rel,
         span: spanForOffset(file.sourceText, offset),
-        code,
+        pattern: 'switch',
+        occurrences: idxs.length,
       });
     }
   }

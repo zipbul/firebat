@@ -143,13 +143,15 @@ const analyzeSymmetryBreaking = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
       }
 
       const file = files[it.fileIndex];
-      const code = file.sourceText.slice(it.offset, Math.min(file.sourceText.length, it.offset + 200));
 
       findings.push({
         kind: 'symmetry-breaking',
         file: it.rel,
         span: spanForOffset(file.sourceText, it.offset),
-        code,
+        group: majorityKey,
+        signature: it.sequenceKey,
+        majorityCount: items.filter(x => x.sequenceKey === majorityKey).length,
+        outlierCount: items.filter(x => x.sequenceKey !== majorityKey).length,
       });
     }
   }
@@ -186,13 +188,15 @@ const analyzeSymmetryBreaking = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
         }
 
         const offset = Math.max(0, x.f.sourceText.indexOf('return'));
-        const code = x.f.sourceText.slice(offset, Math.min(x.f.sourceText.length, offset + 200));
 
         findings.push({
           kind: 'symmetry-breaking',
           file: x.rel,
           span: spanForOffset(x.f.sourceText, offset),
-          code,
+          group: 'return-structure',
+          signature: kind,
+          majorityCount: freq.get(majority) ?? 0,
+          outlierCount: 1,
         });
       }
     }

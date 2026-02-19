@@ -4,7 +4,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleDetection": "force",
-    "allowJs": true,
+    "allowJs": false,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "noEmit": true,

@@ -1,3 +1,5 @@
+import type { FirebatCatalogCode } from '../../types';
+
 export type ExceptionHygieneFindingKind =
   | 'tool-unavailable'
   | 'throw-non-error'
@@ -32,6 +34,6 @@ export interface ExceptionHygieneFinding {
   readonly kind: ExceptionHygieneFindingKind;
   readonly file: string;
   readonly span: SourceSpan;
-  readonly code?: string;
+  readonly code?: FirebatCatalogCode;
   readonly evidence: string;
 }

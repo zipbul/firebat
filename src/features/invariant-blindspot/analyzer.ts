@@ -66,13 +66,13 @@ const analyzeInvariantBlindspot = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
       continue;
     }
 
-    const code = file.sourceText.slice(hitOffset, Math.min(file.sourceText.length, hitOffset + 200));
+    const evidence = file.sourceText.slice(hitOffset, Math.min(file.sourceText.length, hitOffset + 200));
 
     findings.push({
       kind: 'invariant-blindspot',
       file: rel,
       span: spanForOffset(file.sourceText, hitOffset),
-      code,
+      signal: evidence,
     });
   }
 

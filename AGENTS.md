@@ -13,6 +13,31 @@ alwaysApply: true
 
 No file create/modify/delete without explicit approval token `ㅇㅇ`.
 
+## Agent Autonomy Prohibition
+
+The agent MUST NOT override, reorder, or bypass any rule through its own judgment.
+
+### Prohibited Actions
+
+| Code | Prohibited | Example |
+| --- | --- | --- |
+| AUT-1 | **Reordering rules** — changing the execution order stated in a rule because "this order is more logical/efficient" | Rule says "sequential-thinking FIRST" → agent calls file-read first because "I need context first" |
+| AUT-2 | **Inventing exceptions** — creating an exception not explicitly written in the rule text | Rule has no exception for X → agent decides "X is trivially obvious, so the rule doesn't apply" |
+| AUT-3 | **Subjective bypass** — using words like "obviously", "reasonably", "more practical", "better" to justify skipping a rule | "It's obviously fine to skip this step because…" |
+| AUT-4 | **Conflict resolution** — deciding which rule takes priority when two rules appear to conflict | Rule A says "do X first", Rule B says "do Y first" → agent picks one |
+
+### On Rule Conflict
+
+When two or more rules appear to conflict:
+
+1. **STOP immediately.**
+2. Report to user: "Rule A (`source`) and Rule B (`source`) conflict: (describe the conflict)."
+3. **Wait for user instruction.** Do NOT proceed with either rule.
+
+### Enforcement
+
+A violation of any AUT-\* code is equivalent to a file-change without `ㅇㅇ` — a hard policy violation.
+
 ## Language Policy
 
 **Always respond in Korean. No exceptions.**

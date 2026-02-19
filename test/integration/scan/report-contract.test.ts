@@ -97,7 +97,7 @@ const createLogger = () => {
 };
 
 describe('integration/scan/report-contract', () => {
-  it('should always include top and catalog fields in the report', async () => {
+  it('should always include catalog field in the report', async () => {
     // Arrange
     const project = await createScanProjectFixture('firebat-report-contract-shape', 'export const a = 1;');
 
@@ -122,7 +122,6 @@ describe('integration/scan/report-contract', () => {
 
       // Assert
       expect(report).toBeDefined();
-      expect(Array.isArray((report as FirebatReport).top)).toBe(true);
       expect(typeof (report as FirebatReport).catalog).toBe('object');
     } finally {
       await project.dispose();
@@ -330,7 +329,7 @@ describe('integration/scan/report-contract', () => {
     }
   });
 
-  it('should emit dependencies using P0 field names (fanIn/fanOut/cuts, name) without natural-language messages', async () => {
+  it('should emit dependencies as an array of DependencyFinding with kind and code fields', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-deps-shape', {
       'src/a.ts': 'export const unused = 1;\nexport const used = 2;\n',
@@ -356,26 +355,24 @@ describe('integration/scan/report-contract', () => {
         ),
       );
       // Assert
-      const deps = report.analyses.dependencies as unknown as any;
+      const deps = report.analyses.dependencies;
 
-      expect(deps).toBeDefined();
-      expect(Array.isArray(deps.fanIn)).toBe(true);
-      expect(Array.isArray(deps.fanOut)).toBe(true);
-      expect(Array.isArray(deps.cuts)).toBe(true);
-      expect(deps.fanInTop).toBeUndefined();
-      expect(deps.fanOutTop).toBeUndefined();
-      expect(deps.edgeCutHints).toBeUndefined();
+      expect(Array.isArray(deps)).toBe(true);
 
-      expect(Array.isArray(deps.deadExports)).toBe(true);
+      const depsArr = deps as unknown as any[];
 
-      if (deps.deadExports.length > 0) {
-        const finding = deps.deadExports[0];
+      // old DependencyAnalysis shape fields must be absent
+      expect((deps as any)?.fanIn).toBeUndefined();
+      expect((deps as any)?.fanOut).toBeUndefined();
+      expect((deps as any)?.cuts).toBeUndefined();
+      expect((deps as any)?.cycles).toBeUndefined();
+
+      // each element must have kind and code fields
+      if (depsArr.length > 0) {
+        const finding = depsArr[0];
 
         expect(typeof finding.kind).toBe('string');
         expect(typeof finding.code).toBe('string');
-        expect(typeof finding.module).toBe('string');
-        expect(typeof finding.name).toBe('string');
-        expect(finding.exportName).toBeUndefined();
         expect(finding.message).toBeUndefined();
       }
     } finally {
@@ -485,8 +482,7 @@ exit 1
       );
 
       // Assert
-      expect(Array.isArray(report.top)).toBe(true);
-      expect(report.top.some(p => p.detector === 'lint')).toBe(false);
+      expect(report.catalog).toBeDefined();
     } finally {
       await project.dispose();
     }
@@ -664,8 +660,7 @@ exit 7
       );
 
       // Assert
-      expect(Array.isArray(report.top)).toBe(true);
-      expect(report.top.some(p => p.detector === 'format')).toBe(false);
+      expect(report.catalog).toBeDefined();
     } finally {
       await project.dispose();
     }
@@ -906,22 +901,55 @@ exit 7
       );
 
       // Assert
-      expect(report.top.some(p => p.detector === 'lint')).toBe(false);
-      expect(report.top.some(p => p.detector === 'format')).toBe(false);
-      expect(report.top.some(p => p.detector === 'typecheck')).toBe(false);
-
-      const patterns = new Set(report.top.map(p => p.pattern));
-
-      expect(patterns.has('WASTE_DEAD_STORE')).toBe(true);
-      expect(patterns.has('BARREL_EXPORT_STAR')).toBe(true);
-      expect(patterns.has('EH_THROW_NON_ERROR')).toBe(true);
-
       expect(typeof report.catalog.WASTE_DEAD_STORE?.cause).toBe('string');
-      expect(typeof report.catalog.BARREL_EXPORT_STAR?.approach).toBe('string');
+      expect(typeof report.catalog.BARREL_EXPORT_STAR?.think[0]).toBe('string');
       expect(typeof report.catalog.EH_THROW_NON_ERROR?.cause).toBe('string');
 
       // catalog should not include unrelated codes
       expect(report.catalog.NOOP_EXPRESSION).toBeUndefined();
+    } finally {
+      await project.dispose();
+    }
+  });
+
+  it('should have catalog entries with cause string and non-empty think array when findings are detected', async () => {
+    // Arrange
+    const project = await createScanProjectFixture(
+      'firebat-report-contract-catalog-shape',
+      ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
+    );
+
+    try {
+      const logger = createLogger();
+      // Act
+      const report = await withCwd(project.rootAbs, () =>
+        scanUseCase(
+          {
+            targets: [project.srcFileAbs],
+            format: 'json',
+            minSize: 0,
+            maxForwardDepth: 0,
+            exitOnFindings: false,
+            detectors: ['waste'],
+            fix: false,
+            help: false,
+          },
+          { logger },
+        ),
+      );
+
+      // Assert
+      const entries = Object.values(report.catalog);
+
+      expect(entries.length).toBeGreaterThan(0);
+
+      for (const entry of entries) {
+        expect(typeof entry.cause).toBe('string');
+        expect(entry.cause.length).toBeGreaterThan(0);
+        expect(Array.isArray(entry.think)).toBe(true);
+        expect(entry.think.length).toBeGreaterThan(0);
+        expect(typeof entry.think[0]).toBe('string');
+      }
     } finally {
       await project.dispose();
     }

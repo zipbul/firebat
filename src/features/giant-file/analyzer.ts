@@ -50,13 +50,11 @@ const analyzeGiantFile = (
     }
 
     const rel = normalizeFile(file.filePath);
-    const code = file.sourceText.slice(0, 200);
 
     findings.push({
       kind: 'giant-file',
       file: rel,
       span: spanForWholeFile(file.sourceText),
-      code,
       metrics: {
         lineCount,
         maxLines,

@@ -177,8 +177,6 @@ describe('integration/typecheck/report-integration', () => {
       expect((report.analyses.typecheck as any[])[0]?.filePath).toBeUndefined();
       expect((report.analyses.typecheck as any[])[0]?.message).toBeUndefined();
       expect((report.analyses.typecheck as any[])[0]?.lineText).toBeUndefined();
-      expect(Array.isArray(report.top)).toBe(true);
-      expect(report.top.some(p => p.detector === 'typecheck')).toBe(false);
     } finally {
       await project.dispose();
     }

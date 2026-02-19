@@ -3,7 +3,19 @@ import * as path from 'node:path';
 
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
-import type { FirebatReport } from '../../types';
+import type {
+  BarrelPolicyFindingKind,
+  CouplingKind,
+  DuplicateCloneType,
+  EarlyReturnKind,
+  FirebatCatalogCode,
+  FirebatReport,
+  ForwardingFindingKind,
+  NestingKind,
+  NoopKind,
+  UnknownProofFindingKind,
+  WasteKind,
+} from '../../types';
 
 import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
@@ -16,6 +28,7 @@ import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../featur
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { detectExactDuplicates } from '../../features/exact-duplicates';
+import type { ExceptionHygieneFindingKind } from '../../features/exception-hygiene';
 import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
@@ -949,11 +962,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichWaste = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<WasteKind, FirebatCatalogCode>> = {
       'dead-store': 'WASTE_DEAD_STORE',
       'dead-store-overwrite': 'WASTE_DEAD_STORE_OVERWRITE',
       'memory-retention': 'WASTE_MEMORY_RETENTION',
-    };
+    } as const;
 
     return items.map(item => {
       const kind = String(item?.kind ?? '');
@@ -971,13 +984,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichNoop = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<NoopKind, FirebatCatalogCode>> = {
       'expression-noop': 'NOOP_EXPRESSION',
       'self-assignment': 'NOOP_SELF_ASSIGNMENT',
       'constant-condition': 'NOOP_CONSTANT_CONDITION',
       'empty-catch': 'NOOP_EMPTY_CATCH',
       'empty-function-body': 'NOOP_EMPTY_FUNCTION_BODY',
-    };
+    } as const;
 
     return items.map(item => {
       const kind = String(item?.kind ?? '');
@@ -995,14 +1008,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichBarrelPolicy = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<BarrelPolicyFindingKind, FirebatCatalogCode>> = {
       'export-star': 'BARREL_EXPORT_STAR',
       'deep-import': 'BARREL_DEEP_IMPORT',
       'index-deep-import': 'BARREL_INDEX_DEEP_IMPORT',
       'missing-index': 'BARREL_MISSING_INDEX',
       'invalid-index-statement': 'BARREL_INVALID_INDEX_STMT',
       'barrel-side-effect-import': 'BARREL_SIDE_EFFECT_IMPORT',
-    };
+    } as const;
 
     return items.map(item => {
       const kind = String(item?.kind ?? '');
@@ -1019,12 +1032,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichNesting = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<NestingKind, FirebatCatalogCode>> = {
       'deep-nesting': 'NESTING_DEEP',
       'high-cognitive-complexity': 'NESTING_HIGH_CC',
       'accidental-quadratic': 'NESTING_ACCIDENTAL_QUADRATIC',
       'callback-depth': 'NESTING_CALLBACK_DEPTH',
-    };
+    } as const;
 
     return items.map(item => {
       const kind = String(item?.kind ?? '');
@@ -1039,10 +1052,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichEarlyReturn = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<EarlyReturnKind, FirebatCatalogCode>> = {
       'invertible-if-else': 'EARLY_RETURN_INVERTIBLE',
       'missing-guard': 'EARLY_RETURN_MISSING_GUARD',
-    };
+    } as const;
 
     return items.map(item => {
       const kind = String(item?.kind ?? '');
@@ -1057,7 +1070,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichExceptionHygiene = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Record<Exclude<ExceptionHygieneFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
       'throw-non-error': 'EH_THROW_NON_ERROR',
       'async-promise-executor': 'EH_ASYNC_PROMISE_EXECUTOR',
       'missing-error-cause': 'EH_MISSING_ERROR_CAUSE',
@@ -1077,7 +1090,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'exception-control-flow': 'EH_EXCEPTION_CONTROL_FLOW',
     };
 
-    return items.map(item => {
+    return items.filter((item: any) => item?.kind !== 'tool-unavailable').map(item => {
       const kind = String(item?.kind ?? '');
       const filePath = String(item?.filePath ?? item?.file ?? '');
 
@@ -1092,7 +1105,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichUnknownProof = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Record<Exclude<UnknownProofFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
       'type-assertion': 'UNKNOWN_TYPE_ASSERTION',
       'double-assertion': 'UNKNOWN_DOUBLE_ASSERTION',
       'unknown-type': 'UNKNOWN_UNNARROWED',
@@ -1101,7 +1114,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'any-inferred': 'UNKNOWN_ANY_INFERRED',
     };
 
-    return items.map(item => {
+    return items.filter((item: any) => item?.kind !== 'tool-unavailable').map(item => {
       const kind = String(item?.kind ?? '');
       const filePath = String(item?.filePath ?? item?.file ?? '');
 
@@ -1118,11 +1131,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichForwarding = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<ForwardingFindingKind, FirebatCatalogCode>> = {
       'thin-wrapper': 'FWD_THIN_WRAPPER',
       'forward-chain': 'FWD_FORWARD_CHAIN',
       'cross-file-forwarding-chain': 'FWD_CROSS_FILE_CHAIN',
-    };
+    } as const;
 
     return items.map(item => {
       const kind = String(item?.kind ?? '');
@@ -1141,13 +1154,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<CouplingKind, FirebatCatalogCode>> = {
       'god-module': 'COUPLING_GOD_MODULE',
       'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
       'off-main-sequence': 'COUPLING_OFF_MAIN_SEQ',
       'unstable-module': 'COUPLING_UNSTABLE',
       'rigid-module': 'COUPLING_RIGID',
-    };
+    } as const;
 
     const pickKind = (signals: ReadonlyArray<string>): string => {
       const s = new Set(signals);
@@ -1197,7 +1210,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const enrichApiDrift = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
     const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-    const kindToCode: Record<string, string> = { signature: 'API_DRIFT_SIGNATURE' };
+    const kindToCode = { signature: 'API_DRIFT_SIGNATURE' } as const satisfies Record<string, FirebatCatalogCode>;
 
     const normalizeShape = (shape: any) => {
       return {
@@ -1231,74 +1244,74 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
   };
 
-  const enrichDependencies = (value: any) => {
+  const enrichDependencies = (value: any): ReadonlyArray<any> => {
     const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-
-    const toCode = (kind: string): string | undefined => {
-      if (kind === 'layer-violation') {
-        return 'DEP_LAYER_VIOLATION';
-      }
-
-      if (kind === 'dead-export') {
-        return 'DEP_DEAD_EXPORT';
-      }
-
-      if (kind === 'test-only-export') {
-        return 'DEP_TEST_ONLY_EXPORT';
-      }
-
-      return undefined;
-    };
 
     const deadExports = Array.isArray(value?.deadExports) ? value.deadExports : [];
     const layerViolations = Array.isArray(value?.layerViolations) ? value.layerViolations : [];
+    const cycles = Array.isArray(value?.cycles) ? value.cycles : [];
+    const cuts = Array.isArray(value?.edgeCutHints)
+      ? value.edgeCutHints
+      : Array.isArray(value?.cuts)
+        ? value.cuts
+        : [];
 
-    return {
-      cycles: Array.isArray(value?.cycles) ? value.cycles : [],
-      adjacency: value?.adjacency ?? {},
-      exportStats: value?.exportStats ?? {},
-      fanIn: Array.isArray(value?.fanInTop) ? value.fanInTop : Array.isArray(value?.fanIn) ? value.fanIn : [],
-      fanOut: Array.isArray(value?.fanOutTop) ? value.fanOutTop : Array.isArray(value?.fanOut) ? value.fanOut : [],
-      cuts: Array.isArray(value?.edgeCutHints)
-        ? value.edgeCutHints.map((h: any) => ({ from: h?.from, to: h?.to, score: h?.score }))
-        : Array.isArray(value?.cuts)
-          ? value.cuts
-          : [],
-      layerViolations: layerViolations.map((v: any) => {
-        const kind = String(v?.kind ?? 'layer-violation');
-        const from = String(v?.from ?? '');
+    const findings: any[] = [];
 
-        return {
-          kind,
-          code: toCode(kind),
-          file: from,
+    for (const v of layerViolations) {
+      const from = String(v?.from ?? '');
+
+      findings.push({
+        kind: 'layer-violation',
+        code: 'DEP_LAYER_VIOLATION',
+        file: from,
+        span: zeroSpan,
+        from,
+        to: String(v?.to ?? ''),
+        fromLayer: String(v?.fromLayer ?? ''),
+        toLayer: String(v?.toLayer ?? ''),
+      });
+    }
+
+    for (const d of deadExports) {
+      const kind = String(d?.kind ?? 'dead-export');
+      const module = String(d?.module ?? '');
+      const code = kind === 'test-only-export' ? 'DEP_TEST_ONLY_EXPORT' : 'DEP_DEAD_EXPORT';
+
+      findings.push({
+        kind,
+        code,
+        file: module,
+        span: zeroSpan,
+        module,
+        name: String(d?.exportName ?? d?.name ?? ''),
+      });
+    }
+
+    for (const c of cycles) {
+      const pathModules = Array.isArray(c?.path) ? c.path : [];
+      const bestCut = cuts.find((h: any) =>
+        pathModules.includes(h?.from) && pathModules.includes(h?.to),
+      );
+
+      findings.push({
+        kind: 'circular-dependency',
+        code: 'DIAG_CIRCULAR_DEPENDENCY',
+        items: pathModules.map((mod: string) => ({
+          file: toProjectRelative(mod),
           span: zeroSpan,
-          from,
-          to: String(v?.to ?? ''),
-          fromLayer: String(v?.fromLayer ?? ''),
-          toLayer: String(v?.toLayer ?? ''),
-        };
-      }),
-      deadExports: deadExports.map((d: any) => {
-        const kind = String(d?.kind ?? 'dead-export');
-        const module = String(d?.module ?? '');
+        })),
+        ...(bestCut ? { cut: { from: bestCut.from, to: bestCut.to, score: bestCut.score } } : {}),
+      });
+    }
 
-        return {
-          kind,
-          code: toCode(kind),
-          file: module,
-          span: zeroSpan,
-          module,
-          name: String(d?.exportName ?? d?.name ?? ''),
-        };
-      }),
-    };
+    return findings;
   };
 
   const enrichExactDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<'type-1', FirebatCatalogCode>> = {
       'type-1': 'EXACT_DUP_TYPE_1',
-    };
+    } as const;
 
     return groups.map(group => {
       const kind = String(group?.cloneType ?? group?.kind ?? '');
@@ -1323,11 +1336,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<string, string> = {
+    const kindToCode: Readonly<Record<Exclude<DuplicateCloneType, 'type-2'>, FirebatCatalogCode>> = {
       'type-1': 'EXACT_DUP_TYPE_1',
       'type-2-shape': 'STRUCT_DUP_TYPE_2_SHAPE',
       'type-3-normalized': 'STRUCT_DUP_TYPE_3_NORMALIZED',
-    };
+    } as const;
 
     return groups.map(group => {
       const kind = String(group?.cloneType ?? group?.kind ?? '');
@@ -1351,75 +1364,84 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
   };
 
-  const computeTopAndCatalog = (input: {
+  const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
+
+  const enrichPhase1 = <T extends { readonly file?: string; readonly filePath?: string; readonly span?: unknown }>(
+    items: ReadonlyArray<T>,
+    code: FirebatCatalogCode,
+  ): ReadonlyArray<T & { readonly code: FirebatCatalogCode; readonly file: string; readonly span: unknown }> =>
+    items.map(item => {
+      const filePath = String((item as any)?.file ?? (item as any)?.filePath ?? '');
+
+      return {
+        ...item,
+        code,
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+        span: (item as any)?.span ?? zeroSpan,
+      };
+    });
+
+  const enrichFormat = (files: ReadonlyArray<string>): ReadonlyArray<any> =>
+    files.map(filePath => ({
+      kind: 'needs-formatting' as const,
+      code: 'FORMAT' as FirebatCatalogCode,
+      file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+      span: zeroSpan,
+    }));
+
+  const enrichLint = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
+    items.map(item => ({
+      ...item,
+      catalogCode: 'LINT' as FirebatCatalogCode,
+    }));
+
+  const enrichTypecheck = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
+    items.map(item => ({
+      ...item,
+      catalogCode: 'TYPECHECK' as FirebatCatalogCode,
+    }));
+
+  const buildCatalog = (input: {
     readonly analyses: FirebatReport['analyses'];
     readonly diagnostics: ReturnType<typeof aggregateDiagnostics>;
-  }): { readonly top: FirebatReport['top']; readonly catalog: FirebatReport['catalog'] } => {
-    const excludedDetectorsForTop = new Set(['lint', 'format', 'typecheck']);
-    const counts = new Map<string, { count: number; detector: string }>();
-    const seenCodes = new Set<string>();
+  }): FirebatReport['catalog'] => {
+    const seenCodes = new Set<FirebatCatalogCode>();
 
-    const bump = (code: string, detector: string): void => {
-      seenCodes.add(code);
-
-      const prev = counts.get(code);
-
-      if (!prev) {
-        counts.set(code, { count: 1, detector });
-
-        return;
-      }
-
-      counts.set(code, { count: prev.count + 1, detector: prev.detector });
-    };
-
-    for (const [detector, value] of Object.entries(input.analyses)) {
-      if (excludedDetectorsForTop.has(detector)) {
-        continue;
-      }
-
+    for (const [, value] of Object.entries(input.analyses)) {
       if (!Array.isArray(value)) {
         continue;
       }
 
       for (const item of value as ReadonlyArray<any>) {
-        const code = item?.code;
+        const code = item?.code ?? item?.catalogCode;
 
-        if (typeof code === 'string' && code.length > 0) {
-          bump(code, detector);
+        if (typeof code === 'string' && code in FIREBAT_CODE_CATALOG) {
+          seenCodes.add(code as FirebatCatalogCode);
         }
 
-        const outliers = item?.outliers;
+        const nested = item?.outliers ?? item?.items;
 
-        if (Array.isArray(outliers)) {
-          for (const outlier of outliers) {
-            const outlierCode = (outlier as any)?.code;
+        if (Array.isArray(nested)) {
+          for (const sub of nested) {
+            const subCode = (sub as any)?.code ?? (sub as any)?.catalogCode;
 
-            if (typeof outlierCode === 'string' && outlierCode.length > 0) {
-              bump(outlierCode, detector);
+            if (typeof subCode === 'string' && subCode in FIREBAT_CODE_CATALOG) {
+              seenCodes.add(subCode as FirebatCatalogCode);
             }
           }
         }
       }
     }
 
-    const topFromFrequency = [...counts.entries()]
-      .map(([pattern, info]) => ({ pattern, detector: info.detector, resolves: info.count }))
-      .sort((a, b) => b.resolves - a.resolves || a.pattern.localeCompare(b.pattern));
-    const top = [...topFromFrequency, ...input.diagnostics.top].sort(
-      (a, b) => b.resolves - a.resolves || a.pattern.localeCompare(b.pattern),
-    );
-    const catalog: Record<string, any> = { ...input.diagnostics.catalog };
+    const catalog: Partial<Record<FirebatCatalogCode, any>> = { ...input.diagnostics.catalog };
 
     for (const code of seenCodes) {
-      const entry = (FIREBAT_CODE_CATALOG as any)[code];
-
-      if (entry !== undefined) {
-        catalog[code] = entry;
+      if (!(code in catalog)) {
+        catalog[code] = FIREBAT_CODE_CATALOG[code];
       }
     }
 
-    return { top, catalog };
+    return catalog;
   };
 
   const analyses: FirebatReport['analyses'] = {
@@ -1432,9 +1454,9 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('exception-hygiene')
       ? { 'exception-hygiene': enrichExceptionHygiene(exceptionHygiene as any) }
       : {}),
-    ...(selectedDetectors.has('format') && format !== null ? { format: format } : {}),
-    ...(selectedDetectors.has('lint') && lint !== null ? { lint: lint } : {}),
-    ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: typecheck } : {}),
+    ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format) } : {}),
+    ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
+    ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
     ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies as any) } : {}),
     ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling as any) } : {}),
     ...(selectedDetectors.has('structural-duplicates')
@@ -1445,21 +1467,21 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('noop') ? { noop: enrichNoop(noop as any) } : {}),
     ...(selectedDetectors.has('api-drift') ? { 'api-drift': enrichApiDrift(apiDrift as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
-    ...(selectedDetectors.has('giant-file') ? { 'giant-file': giantFile } : {}),
-    ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': decisionSurface } : {}),
-    ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': variableLifetime } : {}),
-    ...(selectedDetectors.has('implementation-overhead') ? { 'implementation-overhead': implementationOverhead } : {}),
-    ...(selectedDetectors.has('implicit-state') ? { 'implicit-state': implicitState } : {}),
-    ...(selectedDetectors.has('temporal-coupling') ? { 'temporal-coupling': temporalCoupling } : {}),
-    ...(selectedDetectors.has('symmetry-breaking') ? { 'symmetry-breaking': symmetryBreaking } : {}),
-    ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': invariantBlindspot } : {}),
-    ...(selectedDetectors.has('modification-trap') ? { 'modification-trap': modificationTrap } : {}),
-    ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': modificationImpact } : {}),
-    ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': conceptScatter } : {}),
-    ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': abstractionFitness } : {}),
+    ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
+    ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') } : {}),
+    ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') } : {}),
+    ...(selectedDetectors.has('implementation-overhead') ? { 'implementation-overhead': enrichPhase1(implementationOverhead as any, 'IMPL_OVERHEAD') } : {}),
+    ...(selectedDetectors.has('implicit-state') ? { 'implicit-state': enrichPhase1(implicitState as any, 'IMPLICIT_STATE') } : {}),
+    ...(selectedDetectors.has('temporal-coupling') ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') } : {}),
+    ...(selectedDetectors.has('symmetry-breaking') ? { 'symmetry-breaking': enrichPhase1(symmetryBreaking as any, 'SYMMETRY_BREAK') } : {}),
+    ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') } : {}),
+    ...(selectedDetectors.has('modification-trap') ? { 'modification-trap': enrichPhase1(modificationTrap as any, 'MOD_TRAP') } : {}),
+    ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') } : {}),
+    ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') } : {}),
+    ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': enrichPhase1(abstractionFitness as any, 'ABSTRACTION_FITNESS') } : {}),
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as any });
-  const topAndCatalog = computeTopAndCatalog({ analyses, diagnostics });
+  const catalog = buildCatalog({ analyses, diagnostics });
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',
@@ -1471,8 +1493,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       ...(Object.keys(metaErrors).length > 0 ? { errors: metaErrors } : {}),
     },
     analyses,
-    top: topAndCatalog.top,
-    catalog: topAndCatalog.catalog,
+    catalog,
   };
 
   if (allowCache) {

@@ -18,7 +18,7 @@ describe('scan', () => {
   // Happy-path
   // -----------------------------------------------------------------------
 
-  test('should return a report with timings when scanning a single file', async () => {
+  test('should return a FirebatJsonReport when scanning a single file', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
     // Act
@@ -29,10 +29,10 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
-    expect(structured.timings).toBeDefined();
-    expect(typeof structured.timings.totalMs).toBe('number');
-    expect(structured.timings.totalMs).toBeGreaterThanOrEqual(0);
+    expect(structured).toBeTruthy();
+    expect(Array.isArray(structured.detectors)).toBe(true);
+    expect(typeof structured.analyses).toBe('object');
+    expect(typeof structured.catalog).toBe('object');
   }, 60_000);
 
   test('should run all detectors when none are specified', async () => {
@@ -44,17 +44,17 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
-    expect(structured.report.analyses).toBeDefined();
-    expect(typeof structured.report.analyses).toBe('object');
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
+    expect(typeof structured.analyses).toBe('object');
   }, 120_000);
 
-  test('should produce a diff object when scanning the same target twice', async () => {
+  test('should return consistent analyses when scanning the same target twice', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
 
-    // Act – first scan primes lastReport; second scan produces diff
-    await callTool(ctx.client, 'scan', {
+    // Act – scan twice to verify idempotency
+    const { structured: first } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
       detectors: ['exact-duplicates'],
       minSize: 'auto',
@@ -67,10 +67,9 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(second.diff).toBeDefined();
-    expect(typeof second.diff.newFindings).toBe('number');
-    expect(typeof second.diff.resolvedFindings).toBe('number');
-    expect(typeof second.diff.unchangedFindings).toBe('number');
+    expect(first.analyses).toBeDefined();
+    expect(second.analyses).toBeDefined();
+    expect(typeof second.analyses).toBe('object');
   }, 60_000);
 
   // -----------------------------------------------------------------------
@@ -106,8 +105,8 @@ describe('scan', () => {
 
       // Assert
       expect(isError).toBe(false);
-      expect(structured.report).toBeTruthy();
-      expect(structured.report.analyses).toBeDefined();
+      expect(structured).toBeTruthy();
+      expect(structured.analyses).toBeDefined();
     }, 60_000);
   });
 
@@ -126,7 +125,8 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   test('should scan when minSize=9999 (very large – should find nothing)', async () => {
@@ -140,7 +140,8 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   test('should scan when minSize is "auto"', async () => {
@@ -154,7 +155,8 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   // -----------------------------------------------------------------------
@@ -172,7 +174,8 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   test('should scan when maxForwardDepth=10', async () => {
@@ -186,7 +189,8 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   // -----------------------------------------------------------------------
@@ -208,7 +212,8 @@ describe('scan', () => {
     });
 
     // Assert
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   // -----------------------------------------------------------------------
@@ -226,7 +231,8 @@ describe('scan', () => {
 
     // Assert – may succeed or return empty analyses
     expect(isError).toBe(false);
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   test('should handle scanning when a target file does not exist', async () => {
@@ -254,7 +260,8 @@ describe('scan', () => {
 
     // Assert
     expect(isError).toBe(false);
-    expect(structured.report).toBeTruthy();
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
   }, 60_000);
 
   // -----------------------------------------------------------------------
@@ -279,7 +286,8 @@ describe('scan', () => {
 
       // Assert
       expect(isError).toBe(false);
-      expect(structured.report).toBeTruthy();
+      expect(structured).toBeTruthy();
+      expect(structured.analyses).toBeDefined();
     }
   }, 120_000);
 });

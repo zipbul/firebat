@@ -1,7 +1,8 @@
 import * as path from 'node:path';
 import { table as renderTable } from 'table';
 
-import type { FirebatReport, OutputFormat } from './types';
+import type { FirebatReport, OutputFormat, DependencyFinding } from './types';
+import { toJsonReport } from './types';
 
 const toPos = (line: number, column: number): string => `${line}:${column}`;
 
@@ -180,26 +181,11 @@ const formatText = (report: FirebatReport): string => {
   const structDups = analyses['structural-duplicates'] ?? [];
   const earlyReturn = analyses['early-return'] ?? [];
   const apiDrift = analyses['api-drift'] ?? [];
-  const deps =
-    analyses.dependencies ??
-    ({
-      cycles: [],
-      adjacency: {},
-      exportStats: {},
-      fanIn: [],
-      fanOut: [],
-      cuts: [],
-      layerViolations: [],
-      deadExports: [],
-    } as const);
-  const depsLegacy = deps as typeof deps & {
-    readonly fanInTop?: ReadonlyArray<unknown>;
-    readonly fanOutTop?: ReadonlyArray<unknown>;
-    readonly edgeCutHints?: ReadonlyArray<unknown>;
-  };
-  const depsFanIn: ReadonlyArray<unknown> = depsLegacy.fanInTop ?? deps.fanIn;
-  const depsFanOut: ReadonlyArray<unknown> = depsLegacy.fanOutTop ?? deps.fanOut;
-  const depsCuts: ReadonlyArray<unknown> = depsLegacy.edgeCutHints ?? deps.cuts;
+  const depsRaw = analyses.dependencies;
+  const depsFindings: ReadonlyArray<DependencyFinding> = Array.isArray(depsRaw) ? depsRaw : [];
+  const depsDead = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'dead-export' | 'test-only-export' }> => f.kind === 'dead-export' || f.kind === 'test-only-export');
+  const depsLayerViolations = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'layer-violation' }> => f.kind === 'layer-violation');
+  const depsCycleFindings = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'circular-dependency' }> => f.kind === 'circular-dependency');
   const coupling = analyses.coupling ?? [];
   const nesting = analyses.nesting ?? [];
   const noop = analyses.noop ?? [];
@@ -238,17 +224,6 @@ const formatText = (report: FirebatReport): string => {
   };
 
   // ── Summary Dashboard ───────────────────────────────────────────
-  const extractModule = (value: unknown): string => {
-    const v = value as Readonly<Record<string, unknown>>;
-    return typeof v.module === 'string' ? v.module : '';
-  };
-
-  const extractFromTo = (value: unknown): readonly [string, string] => {
-    const v = value as Readonly<Record<string, unknown>>;
-    const from = typeof v.from === 'string' ? v.from : '';
-    const to = typeof v.to === 'string' ? v.to : '';
-    return [from, to];
-  };
 
   const defaultSummaryRow = (timingKey: string): SummaryTableRow => {
     const label = humanizeDetectorKey(timingKey);
@@ -312,14 +287,15 @@ const formatText = (report: FirebatReport): string => {
           filesCount: unknownProof.length === 0 ? 0 : new Set(unknownProof.map(f => getFile(f))).size,
           timingKey,
         };
-      case 'format':
+      case 'format': {
         return {
           emoji: '🎨',
           label: 'Format',
           count: formatFindings,
-          filesCount: formatFindings === 0 ? 0 : new Set(format).size,
+          filesCount: formatFindings === 0 ? 0 : new Set(format.map(f => f.file)).size,
           timingKey,
         };
+      }
       case 'lint':
         return {
           emoji: '🔍',
@@ -388,16 +364,15 @@ const formatText = (report: FirebatReport): string => {
         return {
           emoji: '🔗',
           label: 'Dependencies',
-          count: deps.cycles.length + deps.layerViolations.length + deps.deadExports.length,
+          count: depsFindings.length,
           filesCount:
-            deps.cycles.length === 0
+            depsFindings.length === 0
               ? 0
-              : new Set([
-                  ...deps.cycles.flatMap(c => c.path),
-                  ...depsFanIn.map(s => extractModule(s)).filter(Boolean),
-                  ...depsFanOut.map(s => extractModule(s)).filter(Boolean),
-                  ...depsCuts.flatMap(h => extractFromTo(h)).filter(Boolean),
-                ]).size,
+              : new Set(
+                  depsFindings.flatMap(f =>
+                    'items' in f ? f.items.map(i => i.file) : [f.file],
+                  ),
+                ).size,
           timingKey,
         };
       case 'coupling':
@@ -599,47 +574,45 @@ const formatText = (report: FirebatReport): string => {
 
   if (
     selectedDetectors.has('dependencies') &&
-    (deps.cycles.length > 0 || depsCuts.length > 0 || deps.layerViolations.length > 0 || deps.deadExports.length > 0)
+    (depsDead.length > 0 || depsLayerViolations.length > 0 || depsCycleFindings.length > 0)
   ) {
     lines.push(
       sectionHeader(
         '🔗',
         'Dependencies',
-        `${deps.cycles.length} cycles · ${depsCuts.length} cut hints · ${deps.layerViolations.length} layer violations · ${deps.deadExports.length} dead exports`,
+        `${depsCycleFindings.length} cycles · ${depsLayerViolations.length} layer violations · ${depsDead.length} dead exports`,
       ),
     );
 
-    if (deps.deadExports.length > 0) {
+    if (depsDead.length > 0) {
       lines.push(`    ${cc('dead exports:', A.yellow)}`);
 
-      for (const finding of deps.deadExports) {
-        lines.push(`      ${cc('·', A.dim)} ${finding.kind}: ${finding.module}#${(finding as any).name ?? ''}`);
+      for (const finding of depsDead) {
+        lines.push(`      ${cc('·', A.dim)} ${finding.kind}: ${finding.module}#${finding.name}`);
       }
     }
 
-    if (deps.layerViolations.length > 0) {
+    if (depsLayerViolations.length > 0) {
       lines.push(`    ${cc('layer violations:', A.yellow)}`);
 
-      for (const finding of deps.layerViolations) {
+      for (const finding of depsLayerViolations) {
         lines.push(
           `      ${cc('·', A.dim)} ${finding.fromLayer} → ${finding.toLayer} ${cc(`(${finding.from} → ${finding.to})`, A.dim)}`,
         );
       }
     }
 
-    if (deps.cycles.length > 0) {
+    if (depsCycleFindings.length > 0) {
       lines.push(`    ${cc('cycles:', A.yellow)}`);
 
-      for (const cycle of deps.cycles) {
-        lines.push(`      ${cc('·', A.dim)} ${cycle.path.join(' → ')}`);
-      }
-    }
+      for (const cycle of depsCycleFindings) {
+        const cyclePath = cycle.items.map(i => i.file).join(' → ');
 
-    if (depsCuts.length > 0) {
-      lines.push(`    ${cc('edge cut hints:', A.yellow)}`);
+        lines.push(`      ${cc('·', A.dim)} ${cyclePath}`);
 
-      for (const hint of depsCuts as any[]) {
-        lines.push(`      ${cc('·', A.dim)} ${hint.from} → ${hint.to}`);
+        if (cycle.cut) {
+          lines.push(`        ${cc('cut:', A.dim)} ${cycle.cut.from} → ${cycle.cut.to}`);
+        }
       }
     }
   }
@@ -832,7 +805,7 @@ const formatText = (report: FirebatReport): string => {
 
 const formatReport = (report: FirebatReport, format: OutputFormat): string => {
   if (format === 'json') {
-    return JSON.stringify(report);
+    return JSON.stringify(toJsonReport(report));
   }
 
   return formatText(report);

@@ -8,7 +8,8 @@ export interface TempProject {
 }
 
 export const createTempProject = async (prefix: string): Promise<TempProject> => {
-  const rootAbs = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
+  const raw = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-`));
+  const rootAbs = await fs.realpath(raw);
 
   const dispose = async (): Promise<void> => {
     await fs.rm(rootAbs, { recursive: true, force: true });

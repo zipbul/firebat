@@ -274,13 +274,11 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
       });
     const file = files[ex.fileIndex];
     const offset = ex.offset;
-    const code = file.sourceText.slice(offset, Math.min(file.sourceText.length, offset + 200));
 
     findings.push({
       kind: 'modification-impact',
       file: rel,
       span: spanForOffset(file.sourceText, offset),
-      code,
       impactRadius,
       highRiskCallers,
     });

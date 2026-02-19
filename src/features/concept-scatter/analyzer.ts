@@ -123,13 +123,11 @@ const analyzeConceptScatter = (
     const anyFile = [...filesSet][0] ?? '';
     const fileObj = files.find(f => normalizeFile(f.filePath) === anyFile);
     const offset = fileObj ? Math.max(0, fileObj.sourceText.toLowerCase().indexOf(concept)) : 0;
-    const code = fileObj ? fileObj.sourceText.slice(offset, Math.min(fileObj.sourceText.length, offset + 200)) : '';
 
     findings.push({
       kind: 'concept-scatter',
       file: anyFile,
       span: fileObj ? spanForOffset(fileObj.sourceText, offset) : spanForOffset('', 0),
-      code,
       concept,
       scatterIndex,
       files: [...filesSet].sort(),

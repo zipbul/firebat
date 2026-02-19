@@ -121,13 +121,12 @@ const analyzeDecisionSurface = (
     }
 
     const firstOffset = conditions.length > 0 ? conditions[0].offset : 0;
-    const code = file.sourceText.slice(firstOffset, Math.min(file.sourceText.length, firstOffset + 200));
+    const evidence = file.sourceText.slice(firstOffset, Math.min(file.sourceText.length, firstOffset + 200));
 
     findings.push({
       kind: 'decision-surface',
       file: rel,
-      span: spanForMatch(file.sourceText, firstOffset, Math.min(file.sourceText.length, firstOffset + code.length)),
-      code,
+      span: spanForMatch(file.sourceText, firstOffset, Math.min(file.sourceText.length, firstOffset + evidence.length)),
       axes,
       combinatorialPaths,
       repeatedChecks,

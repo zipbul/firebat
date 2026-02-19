@@ -8,9 +8,10 @@ import { z } from 'zod';
 import type { FirebatConfig } from '../../firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
-import type { FirebatDetector, FirebatReport } from '../../types';
+import type { FirebatDetector } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
+import { toJsonReport } from '../../types';
 import { loadFirebatConfigFile } from '../../firebat-config.loader';
 import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
@@ -204,10 +205,6 @@ const resolveMcpFeatures = (config: FirebatConfig | null): FirebatConfig['featur
   return out as NonNullable<FirebatConfig['features']>;
 };
 
-const nowMs = (): number => {
-  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
-};
-
 interface FirebatMcpServerOptions {
   rootAbs: string;
   config: FirebatConfig | null;
@@ -239,99 +236,12 @@ const safeTool = <TArgs>(
 
 const toStructured = (value: StructuredRecord): StructuredRecord => value;
 
-type DiffCounts = { newFindings: number; resolvedFindings: number; unchangedFindings: number };
-
-const diffReports = (prev: FirebatReport | null, next: FirebatReport): DiffCounts => {
-  if (!prev) {
-    return { newFindings: -1, resolvedFindings: -1, unchangedFindings: -1 };
-  }
-
-  const stableStringify = (value: unknown): string => {
-    if (value === null || value === undefined) {
-      return String(value);
-    }
-
-    if (typeof value !== 'object') {
-      return JSON.stringify(value);
-    }
-
-    if (Array.isArray(value)) {
-      return `[${value.map(stableStringify).join(',')}]`;
-    }
-
-    const record = value as Record<string, unknown>;
-    const keys = Object.keys(record).sort();
-    const entries = keys.map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`);
-
-    return `{${entries.join(',')}}`;
-  };
-
-  const collectFindings = (value: unknown): ReadonlyArray<unknown> => {
-    if (!value) {
-      return [];
-    }
-
-    if (Array.isArray(value)) {
-      // Treat array items as the "finding" units.
-      return value;
-    }
-
-    if (typeof value !== 'object') {
-      return [];
-    }
-
-    const out: Array<unknown> = [];
-    const record = value as Record<string, unknown>;
-
-    for (const v of Object.values(record)) {
-      out.push(...collectFindings(v));
-    }
-
-    return out;
-  };
-
-  const findingKeys = (report: FirebatReport): ReadonlyArray<string> => {
-    const keys: Array<string> = [];
-
-    for (const [detector, analysis] of Object.entries(report.analyses ?? {})) {
-      for (const item of collectFindings(analysis)) {
-        keys.push(`${detector}:${stableStringify(item)}`);
-      }
-    }
-
-    return keys;
-  };
-
-  const prevKeys = new Set(findingKeys(prev));
-  const nextKeys = new Set(findingKeys(next));
-  let newFindings = 0;
-  let resolvedFindings = 0;
-  let unchangedFindings = 0;
-
-  for (const k of nextKeys) {
-    if (prevKeys.has(k)) {
-      unchangedFindings++;
-    } else {
-      newFindings++;
-    }
-  }
-
-  for (const k of prevKeys) {
-    if (!nextKeys.has(k)) {
-      resolvedFindings++;
-    }
-  }
-
-  return { newFindings, resolvedFindings, unchangedFindings };
-};
-
 export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): Promise<McpServer> => {
   const { rootAbs, config, logger } = options;
   const server = new McpServer({
     name: 'firebat',
     version: '2.0.0-scan-only',
   });
-  let lastReport: FirebatReport | null = null;
   const ScanInputSchema = z
     .object({
       targets: z
@@ -380,38 +290,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     })
     .strict();
   const FirebatDetectorSchema = z.enum([...ALL_DETECTORS] as [FirebatDetector, ...Array<FirebatDetector>]);
-  const FirebatMetaSchema = z
-    .object({
-      engine: z.literal('oxc'),
-      targetCount: z.number().int().nonnegative(),
-      minSize: z.number().int().nonnegative(),
-      maxForwardDepth: z.number().int().nonnegative(),
-      detectors: z.array(FirebatDetectorSchema),
-      detectorTimings: z.record(z.string(), z.number()).optional(),
-      errors: z.record(z.string(), z.string()).optional(),
-    })
-    .strict();
-  const FirebatTopItemSchema = z
-    .object({
-      pattern: z.string(),
-      detector: z.string(),
-      resolves: z.number().int().nonnegative(),
-    })
-    .strict();
-  const FirebatCatalogEntrySchema = z
-    .object({
-      cause: z.string(),
-      approach: z.string(),
-    })
-    .strict();
-  const FirebatReportSchema = z
-    .object({
-      meta: FirebatMetaSchema,
-      analyses: z.record(z.string(), z.unknown()),
-      top: z.array(FirebatTopItemSchema),
-      catalog: z.record(z.string(), FirebatCatalogEntrySchema),
-    })
-    .strict();
 
   server.registerTool(
     'scan',
@@ -427,32 +305,29 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         '- maxForwardDepth: max re-export depth for the forwarding detector (0 disables forwarding analysis).',
         '',
         'Outputs:',
-        '- report: the Firebat report as JSON (includes `meta`, `analyses`, `top`, and `catalog`).',
-        '- timings.totalMs: total wall time for this scan call.',
-        '- diff (optional): comparison to the previous `scan` call in the same server process.',
+        '- detectors: list of detectors that were run.',
+        '- analyses: per-detector findings (each value is an array of findings).',
+        '- catalog: diagnostic code definitions referenced in findings.',
+        '- errors (optional): per-detector error messages if a detector failed.',
         '',
         'Notes:',
         '- Unknown detector names are ignored when `detectors` is provided (if none are valid, Firebat falls back to running all detectors).',
-        '- `diff` is only returned from the second scan onward (first scan has no previous baseline).',
         '- Firebat may cache results internally for identical inputs to speed up repeated scans.',
       ].join('\n'),
       inputSchema: ScanInputSchema,
       outputSchema: z
         .object({
-          report: FirebatReportSchema,
-          timings: z.object({ totalMs: z.number() }),
-          diff: z
-            .object({
-              newFindings: z.number(),
-              resolvedFindings: z.number(),
-              unchangedFindings: z.number(),
-            })
-            .optional(),
+          detectors: z.array(FirebatDetectorSchema),
+          errors: z.record(z.string(), z.string()).optional(),
+          analyses: z.record(z.string(), z.unknown()),
+          catalog: z.record(
+            z.string(),
+            z.object({ cause: z.string(), think: z.array(z.string()) }).strict(),
+          ),
         })
         .strict(),
     },
     safeTool(async (args: z.infer<typeof ScanInputSchema>) => {
-      const t0 = nowMs();
       const targets = await resolveTargets(rootAbs, args.targets);
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
@@ -477,20 +352,11 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         help: false,
       };
       const report = await scanUseCase(cliOptions, { logger });
-      const diff = diffReports(lastReport, report);
-
-      lastReport = report;
-
-      const totalMs = nowMs() - t0;
-      const structured: StructuredRecord = {
-        report,
-        timings: { totalMs },
-        ...(diff.newFindings >= 0 ? { diff } : {}),
-      };
+      const jsonReport = toJsonReport(report);
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(structured) }],
-        structuredContent: toStructured(structured),
+        content: [{ type: 'text' as const, text: JSON.stringify(jsonReport) }],
+        structuredContent: toStructured(jsonReport as unknown as StructuredRecord),
       };
     }),
   );

@@ -31,13 +31,13 @@ const addFinding = (out: ImplicitStateFinding[], file: ParsedFile, offset: numbe
   }
 
   const start = Math.max(0, codeOffset ?? offset);
-  const code = file.sourceText.slice(start, Math.min(file.sourceText.length, start + 200));
 
   out.push({
     kind: 'implicit-state',
+    code: 'IMPLICIT_STATE' as const,
     file: rel,
     span: spanForOffset(file.sourceText, offset),
-    code,
+    protocol: file.sourceText.slice(start, Math.min(file.sourceText.length, start + 60)),
   });
 };
 

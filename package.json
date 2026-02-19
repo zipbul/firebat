@@ -24,7 +24,7 @@
     "firebat:ci": "bun dist/firebat.js --format json --log-level debug",
     "db:generate": "bunx -y drizzle-kit generate --config ./drizzle.config.ts",
     "db:migrate": "bunx -y drizzle-kit migrate --config ./drizzle.config.ts",
-    "test": "bun test",
+    "coverage": "bun test --coverage",
     "lint": "oxlint src index.ts oxlint-plugin.ts --config .oxlintrc.jsonc",
     "format": "oxfmt . --config .oxfmtrc.jsonc --check",
     "prepare": "husky",

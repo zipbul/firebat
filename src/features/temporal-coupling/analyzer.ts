@@ -80,7 +80,6 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
 
       if (writers.length > 0 && readers.length > 0) {
         const offset = Math.max(0, m.index);
-        const code = file.sourceText.slice(offset, Math.min(file.sourceText.length, offset + 200));
 
         // Emit per reader to satisfy "one writer feeds multiple readers".
         for (const _ of readers) {
@@ -88,7 +87,9 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
             kind: 'temporal-coupling',
             file: rel,
             span: spanForOffset(file.sourceText, offset),
-            code,
+            state: name,
+            writers: writers.length,
+            readers: readers.length,
           });
         }
       }
@@ -99,13 +100,14 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
     // class init-guard style (initialized)
     if (file.sourceText.includes('initialized') && file.sourceText.includes('init(') && file.sourceText.includes('query(')) {
       const offset = Math.max(0, file.sourceText.indexOf('initialized'));
-      const code = file.sourceText.slice(offset, Math.min(file.sourceText.length, offset + 200));
 
       findings.push({
         kind: 'temporal-coupling',
         file: rel,
         span: spanForOffset(file.sourceText, offset),
-        code,
+        state: 'initialized',
+        writers: 1,
+        readers: 1,
       });
     }
   }

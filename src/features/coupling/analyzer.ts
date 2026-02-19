@@ -1,4 +1,4 @@
-import type { CouplingHotspot, DependencyAnalysis, SourceSpan } from '../../types';
+import type { CouplingHotspot, DependencyAnalysis } from '../../types';
 
 import { sortCouplingHotspots } from '../../engine/sort-utils';
 
@@ -126,7 +126,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
     return signals[0] ?? 'coupling';
   };
 
-  const zeroSpan: SourceSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
   const hotspotsRaw = modules
     .map(module => {
       const fanIn = inDegree.get(module) ?? 0;
@@ -178,16 +177,17 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
       const score = Math.round(severity * 100);
       const kind = pickKind(signals);
 
+      const codeVal = kindToCode[kind] as import('../../types').FirebatCatalogCode | undefined;
+
       return {
-        kind,
-        code: kindToCode[kind],
-        file: module,
-        span: zeroSpan,
+        ...(codeVal !== undefined ? { code: codeVal } : {}),
         module,
         score,
         signals: [...signals].sort(),
         metrics,
-      };
+        why: signals.join(', '),
+        suggestedRefactor: '',
+      } satisfies CouplingHotspot;
     })
     .filter((v): v is NonNullable<typeof v> => v !== null);
   const hotspots = sortCouplingHotspots(hotspotsRaw);

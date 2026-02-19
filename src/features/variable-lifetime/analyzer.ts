@@ -128,13 +128,13 @@ const analyzeVariableLifetime = (
     const contextBurden = longLived.length;
 
     for (const item of longLived) {
-      const code = file.sourceText.slice(item.defOffset, Math.min(file.sourceText.length, item.defOffset + 200));
+      const evidenceEnd = Math.min(file.sourceText.length, item.defOffset + 200);
 
       findings.push({
         kind: 'variable-lifetime',
         file: rel,
-        span: spanForOffsets(file.sourceText, item.defOffset, Math.min(file.sourceText.length, item.defOffset + code.length)),
-        code,
+        span: spanForOffsets(file.sourceText, item.defOffset, evidenceEnd),
+        variable: item.name,
         lifetimeLines: item.lifeLines,
         contextBurden,
       });
