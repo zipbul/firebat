@@ -437,9 +437,9 @@ describe('integration/scan/report-contract', () => {
     }
   });
 
-  it('should exclude lint from top even when lint returns many diagnostics', async () => {
+  it('should include catalog entry for lint even when lint returns many diagnostics', async () => {
     // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-top-excludes-lint', 'export const a = 1;');
+    const project = await createScanProjectFixture('firebat-report-contract-catalog-includes-lint', 'export const a = 1;');
 
     try {
       await installFakeBin(
@@ -616,10 +616,10 @@ exit 1
     }
   });
 
-  it('should exclude format from top even when format returns many paths', async () => {
+  it('should include catalog entry for format even when format returns many paths', async () => {
     // Arrange
     const project = await createScanProjectFixture(
-      'firebat-report-contract-top-excludes-format',
+      'firebat-report-contract-catalog-includes-format',
       ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
     );
 
@@ -871,9 +871,9 @@ exit 7
     }
   });
 
-  it('should build top by code frequency (excluding lint/format/typecheck) and only include seen codes in catalog', async () => {
+  it('should only include seen codes in catalog and exclude codes for detectors not run', async () => {
     // Arrange
-    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-top-frequency', {
+    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-catalog-seen-codes', {
       'src/a.ts': ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
       'src/b.ts': ['export const b = 1;'].join('\n'),
       'src/index.ts': "export * from './b';\n",

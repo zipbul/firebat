@@ -730,15 +730,34 @@ export interface FirebatReport {
 export interface FirebatJsonReport {
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly errors?: Readonly<Record<string, string>>;
+  readonly blockers: number;
   readonly analyses: Partial<FirebatAnalyses>;
   readonly catalog: Readonly<Partial<Record<FirebatCatalogCode, CatalogEntry>>>;
 }
+
+export const countBlockers = (analyses: Partial<FirebatAnalyses>): number => {
+  const typecheckErrors = analyses.typecheck?.filter(item => item.severity === 'error').length ?? 0;
+  const lintErrors = analyses.lint?.filter(item => item.severity === 'error').length ?? 0;
+
+  return (
+    (analyses['exact-duplicates']?.length ?? 0) +
+    (analyses.waste?.length ?? 0) +
+    (analyses['barrel-policy']?.length ?? 0) +
+    (analyses.format?.length ?? 0) +
+    (analyses['unknown-proof']?.length ?? 0) +
+    (analyses['exception-hygiene']?.length ?? 0) +
+    (analyses.forwarding?.length ?? 0) +
+    lintErrors +
+    typecheckErrors
+  );
+};
 
 export const toJsonReport = (report: FirebatReport): FirebatJsonReport => ({
   detectors: report.meta.detectors,
   ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0
     ? { errors: report.meta.errors }
     : {}),
+  blockers: countBlockers(report.analyses),
   analyses: report.analyses,
   catalog: report.catalog,
 });

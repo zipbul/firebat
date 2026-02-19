@@ -681,7 +681,7 @@ export const FIREBAT_CODE_CATALOG = {
   FORMAT: {
     cause: 'A source file does not conform to the project formatting standard.',
     think: [
-      'Run the formatter to automatically fix formatting issues.',
+      'Determine whether the formatting difference is in hand-written source, generated code, or vendored files — generated and vendored files may legitimately diverge.',
       'Check whether the formatter is integrated into the development workflow (pre-commit hook or editor save action).',
       'If formatting conflicts recur, verify that the formatter configuration is consistent across the team.',
     ],
@@ -691,7 +691,7 @@ export const FIREBAT_CODE_CATALOG = {
     think: [
       'Examine the type error message and the types involved to determine the mismatch.',
       'Determine whether the mismatch represents a genuine logic error or an overly strict type annotation.',
-      'Fix type errors by correcting the logic or refining the types — avoid suppressing them with type assertions unless the type system lacks the expressiveness to capture the invariant.',
+      'Verify whether the type error is local to one declaration or symptomatic of a structural mismatch between modules — repeated errors sharing the same root type suggest the contract itself is wrong, not individual call sites.',
     ],
   },
 } satisfies Record<FirebatCatalogCode, CatalogEntry>;

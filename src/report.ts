@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { table as renderTable } from 'table';
 
 import type { FirebatReport, OutputFormat, DependencyFinding } from './types';
-import { toJsonReport } from './types';
+import { toJsonReport, countBlockers } from './types';
 
 const toPos = (line: number, column: number): string => `${line}:${column}`;
 
@@ -461,6 +461,12 @@ const formatText = (report: FirebatReport): string => {
   if (selectedDetectors.has('format') && format.length > 0) {
     lines.push(sectionHeader('🎨', 'Format', `${format.length} files`));
     lines.push(`    ${format.length} file${format.length === 1 ? '' : 's'} need formatting`);
+
+    for (const f of format) {
+      const rel = typeof f === 'string' ? path.relative(process.cwd(), f) : path.relative(process.cwd(), f.file);
+
+      lines.push(`      ${cc('·', A.dim)} ${rel}`);
+    }
   }
 
   if (selectedDetectors.has('lint') && lint.length > 0) {
@@ -796,6 +802,11 @@ const formatText = (report: FirebatReport): string => {
     lines.push(`  📊  ${cc('Summary', `${A.bold}${A.white}`)}${totalText}`);
     lines.push('');
     lines.push(...formatSummaryTable(summaryRows, report.meta.detectorTimings));
+
+    const blockers = countBlockers(report.analyses);
+
+    lines.push('');
+    lines.push(`  ${cc('⛔', A.dim)}  ${cc('Blockers', `${A.bold}${A.white}`)}  ${blockers > 0 ? cc(formatNumber(blockers), A.red) : cc('0', A.dim)}`);
   }
 
   lines.push('');

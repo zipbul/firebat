@@ -8,60 +8,7 @@
 
 ### 문제점
 
-1. **12개 감지기 body 누락**: Implicit State(20), Temporal Coupling(3), Symmetry Breaking(3), Invariant Blindspot(52), Modification Trap(19), Modification Impact(53), Variable Lifetime(1614), Decision Surface(65), Implementation Overhead(282), Concept Scatter(640), Abstraction Fitness(9), Giant File(11) — summary 테이블에만 존재하고 **상세 body 출력이 전무**. `report.ts`의 `formatText()`에 이 12개에 대한 렌더링 코드가 없어서 발생. Variable Lifetime 1614건, Concept Scatter 640건 등 대량 finding이 사용자에게 전혀 보이지 않음.
-
-2. **이름 불일치 — Structural Duplicates**: body 섹션 heading은 `Structural Duplicates`이지만 summary 테이블에서는 `Structural Dupes`. `report.ts:345` `summaryRowFor('structural-duplicates')` case에서 `label: 'Structural Dupes'`로 하드코딩.
-
-3. **이름 불일치 — Dependencies**: body 섹션은 `Dependencies 0 cycles · 0 cut hints · 4 layer violations · 140 dead exports`이지만 summary 테이블에서는 `Dep Cycles ✓ clean 0`. 두 가지 문제:
-   - 이름 불일치: "Dependencies" vs "Dep Cycles"
-   - 수치 불일치: body에 layer violations 4건 + dead exports 140건이 있지만 summary에서 `count: deps.cycles.length`만 사용 → `0`으로 표시하고 `✓ clean` 뱃지까지 붙음. **144건의 finding이 summary에서 은폐**.
-
-4. **stdout 첫 줄 빈 줄**: text output이 빈 줄(line 1)로 시작. `sectionHeader()` 함수가 `\n` prefix를 붙이기 때문.
-
-5. **blockingFindingCount 미노출**: stderr에 `blockingFindingCount=4115` 로그가 있지만 text stdout의 summary 테이블에는 total blocking count 행 없음. 사용자가 "이 프로젝트가 얼마나 나쁜지" 한눈에 알 수 없음.
-
-### 부족한 점
-
-- text 포맷에 **severity** 정보 없음. 어떤 finding이 blocking이고 어떤 것이 advisory인지 text 사용자는 구분 불가.
-- text 포맷에 **code/kind** 필드가 포함되지만 해당 코드가 무엇을 의미하는지 설명 없음 (JSON의 catalog에만 있음).
-- format 감지기는 `3 files need formatting`만 표시하고 **어떤 파일**인지 보여주지 않음 (파일명 출력 누락).
-
-### 보강 제안
-
-- 12개 감지기에 대한 body 렌더링 추가. 최소한 `defaultSummaryRow()` 패턴처럼 각 finding의 `file:span`을 출력.
-- Dependencies summary에서 `cycles + layerViolations + deadExports` 합산 count 사용, 또는 sub-row 분리.
-- blockingFindingCount를 summary 테이블 마지막 행에 `Total Blocking: 4,115` 형태로 추가.
-
----
-
-## 1-B: CLI json 포맷
-
-### 문제점
-
-1. **format 감지기 스키마 이상**: `analyses.format`이 string 배열(파일 경로). 다른 모든 감지기는 object 배열인데 여기만 primitive 배열 → 소비측 코드에서 `first.kind` 접근시 TypeError.
-
-2. **lint/typecheck 스키마 불일치**: `kind` 필드 없음, `severity`+`msg` 사용. 내부 감지기는 `{kind, code, file, span}` 스키마인데 외부 래핑 감지기는 `{code, file, span, severity, msg}` → 통합 파서 작성 불가.
-
-3. **api-drift 완전히 다른 스키마**: `kind`, `code`, `file`, `span` 모두 없음. `{label, standard, outliers}` 구조 → 28개 감지기 중 유일하게 위치 정보(file+span)가 top-level에 없는 감지기.
-
-4. **abstraction-fitness에 code 필드 누락**: 다른 감지기는 대부분 `code` 필드를 가지지만 abstraction-fitness는 `{kind, file, span, module, internalCohesion, externalCoupling, fitness}` → `code` 없음.
-
-5. **dependencies가 유일한 비-배열**: `analyses.dependencies`만 단일 object `{cycles, adjacency, exportStats, fanIn, fanOut, cuts, layerViolations, deadExports}`. 나머지 27개는 모두 배열.
-
-6. **JSON 5MB 단일 줄**: `JSON.stringify(report)`만 호출. `--pretty` 옵션 없음 → 디버깅시 jq 필수.
-
-7. **catalog이 object(key-value)**: `catalog` 필드가 `Record<string, {...}>` 형태. 배열 형태가 API 소비에 더 자연스러움. MCP/CLI 양쪽 동일 구조.
-
-### 부족한 점
-
-- JSON에 **blockingFindingCount** 미포함. text stderr에만 있고 JSON report에는 없음.
-- **format 감지기가 파일 경로만 반환** — diff/span 정보 없어서 어느 부분이 포맷 위반인지 알 수 없음.
-
-### 보강 제안
-
-- 최소 통합 스키마: 모든 감지기 finding에 `{kind, code, file, span}` 필수 필드 보장. format/lint/typecheck/api-drift 포함.
-- `meta`에 `blockingFindingCount` 추가.
-- ~~`--pretty` / `--indent` 옵션~~ → **불필요**. 주 소비자가 에이전트(JSON.parse)이므로 pretty는 용량 3배 부풀리기만. 사람은 `jq .`로 충분.
+1. **stdout 첫 줄 빈 줄**: text output이 빈 줄(line 1)로 시작. `sectionHeader()` 함수가 `\n` prefix를 붙이기 때문.
 
 ---
 
@@ -71,9 +18,7 @@
 
 1. **응답 ~8MB**: full scan 결과가 8MB → LLM 컨텍스트 윈도우를 대부분 소비. 필터/요약 옵션이 없어서 "barrel-policy만 보여줘" 같은 요청에도 28개 감지기 전체 전송.
 
-2. **diff "resolvedFindings" 오해**: partial scan(3개 감지기)→full scan diff에서 `resolvedFindings: 7752`. 실제로 resolve된 게 아니라 "이번 scan에서 안 돌린 감지기의 이전 finding" → "resolved"란 용어가 부정확.
-
-3. **MCP에 로그 채널 없음**: CLI는 stderr로 trace/debug 로그를 내보내지만 MCP는 JSON 결과만 반환. 디버깅/문제 진단에 필요한 로그(캐시 hit 여부, 파싱 실패 등)를 MCP 소비자가 받을 방법 없음.
+2. **MCP에 로그 채널 없음**: CLI는 stderr로 trace/debug 로그를 내보내지만 MCP는 JSON 결과만 반환. 디버깅/문제 진단에 필요한 로그(캐시 hit 여부, 파싱 실패 등)를 MCP 소비자가 받을 방법 없음.
 
 ### 부족한 점
 
@@ -84,7 +29,6 @@
 ### 보강 제안
 
 - top-N 요약 모드 추가: finding 수 > threshold인 감지기만 상위 finding 반환.
-- diff의 "resolvedFindings"를 "droppedFindings" 또는 "outOfScopeFindings"로 rename.
 - MCP logging notification (protocol의 `notifications/message`) 활용하여 trace 로그 전달.
 
 ---
@@ -95,27 +39,21 @@
 
 1. **error=0줄, warn=0줄**: 정상 실행시 error/warn 레벨에 아무 출력 없음. 최소 info에서 4줄만. 로그 레벨을 error로 설정한 사용자는 성공/실패 여부조차 알 수 없음.
 
-2. **레벨 라벨 없음**: `●`, `◆`, `·` 아이콘으로만 구분. `[INFO]`, `[DEBUG]`, `[TRACE]` 같은 명시적 라벨 없음 → 로그 파서/필터가 레벨 식별 불가.
+2. **절대 경로 노출**: debug 이상에서 `dbFilePath=/home/revil/projects/zipbul/firebat/.firebat/firebat.sqlite` → 상대 경로 사용이 적절.
 
-3. **타임스탬프 없음**: 모든 로그 줄에 시간 정보 없음 → 성능 디버깅시 각 단계 소요 시간 추적 불가.
+3. **"Analysis complete 0ms" 오해**: cache hit 경우 분석을 안 했는데 "Analysis complete 0ms" 출력 → "0ms만에 분석 완료"로 오해할 수 있음.
 
-4. **절대 경로 노출**: debug 이상에서 `dbFilePath=/home/revil/projects/zipbul/firebat/.firebat/firebat.sqlite` → 상대 경로 사용이 적절.
+4. **개별 감지기 타이밍 미출력**: JSON `meta.detectorTimings`에는 28개 감지기 개별 시간이 있지만 trace 로그에는 전체 시간만.
 
-5. **"Analysis complete 0ms" 오해**: cache hit 경우 분석을 안 했는데 "Analysis complete 0ms" 출력 → "0ms만에 분석 완료"로 오해할 수 있음.
-
-6. **개별 감지기 타이밍 미출력**: JSON `meta.detectorTimings`에는 28개 감지기 개별 시간이 있지만 trace 로그에는 전체 시간만.
-
-7. **tool version이 trace에서만**: `version=2.0.0-strict+2026-02-02-tsgo-lsp-v1`이 trace에서만 보임. info 레벨에서 보여야 디버그 리포트에 유용.
+5. **tool version이 trace에서만**: `version=2.0.0-strict+2026-02-02-tsgo-lsp-v1`이 trace에서만 보임. info 레벨에서 보여야 디버그 리포트에 유용.
 
 ### 부족한 점
 
-- 로그 아이콘 규약(`●`=info, `◆`=debug, `·`=trace) 문서화 없음.
 - cache hit시 "cache age" 또는 "since last invalidation" 정보 없음.
 - 파싱 실패 파일이 있으면 warn으로 로그해야 하는데, 이번 실행에서는 발생하지 않아 검증 불가.
 
 ### 보강 제안
 
-- 모든 로그에 `[LEVEL] timestamp message` 형식 적용.
 - info 레벨에 최소: version, target count, detector count, cache hit/miss, blocking count.
 - warn 레벨에: parse failure, config override, deprecated옵션.
 - cache hit 메시지를 `[INFO] Cache hit (artifact=94b01390, age=2m30s) — skipping analysis` 형태로.
@@ -157,10 +95,6 @@
 
 3. **unknown-proof 1852건**: 가장 많은 finding. type assertion이 모두 위험한 게 아닌데 (e.g., `as const`, well-typed assertion) 구분 없이 전부 보고.
 
-4. **variable-lifetime 1614건**: body 출력이 없어서 어떤 패턴을 잡는지 확인 불가.
-
-5. **concept-scatter 640건**: 역시 body 없음. scatterIndex 분포, 실제 유용성 확인 불가.
-
 ### 부족한 점
 
 - finding에 **confidence/severity** 레벨이 일부 감지기(waste, noop)에만 있고 대부분 없음.
@@ -176,7 +110,7 @@
 
 2. **MCP에 text 포맷 옵션 없음**: CLI는 `--format text|json`이지만 MCP는 JSON only. text 요약을 원하는 MCP 소비자(LLM)에게 불편.
 
-3. **MCP에 exit code 개념 없음**: CLI는 blockingFindingCount > 0이면 non-zero exit. MCP는 항상 성공 응답. blocking 여부를 판단하려면 소비자가 직접 계산해야 함.
+3. **MCP에 exit code 개념 없음**: CLI는 blockers > 0이면 non-zero exit. MCP는 항상 성공 응답. blocking 여부를 판단하려면 소비자가 직접 계산해야 함.
 
 ---
 
@@ -185,9 +119,7 @@
 ### 문제점
 
 1. **firebat가 자기 자신의 코드 문제를 못 잡는 경우**:
-   - `report.ts` 695줄 — giant-file 감지기가 11파일만 보고. report.ts가 여기 포함되는지 불명 (body 없어서 확인 불가).
-   - `report.ts`의 `formatText()` 함수: 12개 감지기 body가 누락된 건 noop/waste가 아닌 **구현 누락** — 어떤 감지기도 "이 함수가 일부 case를 처리하지 않음"을 잡지 못함.
-   - Dependencies summary에서 `count: deps.cycles.length`만 사용하여 144건을 누락하는 버그를 firebat 자체가 감지 못 함.
+   - 어떤 감지기도 "이 함수가 일부 case를 처리하지 않음"을 잡지 못함 (exhaustive switch/case 감지 부재).
 
 2. **cross-feature 상관 부재**:
    - exact-duplicates 59 groups + structural-duplicates 331 classes → 겹치는 부분이 있을 수 있으나 correlation 없음.
@@ -338,13 +270,8 @@
 
 | 우선순위 | 항목 | 영향도 |
 |----------|------|--------|
-| P0 | 12개 감지기 text body 렌더링 추가 | Variable Lifetime 1614건 등 보이지 않음 |
-| P0 | Dependencies summary count에 layerViolations+deadExports 포함 | 144건 finding 은폐 |
 | P1 | oxlintrc 기본값 중복 ~40개 규칙 제거 | config 100줄 감소, 유지보수 부담 감소 |
 | P1 | dead override/settings 삭제 | dead config 제거 |
-| P1 | JSON/MCP blockingFindingCount 추가 | CI 파이프라인 등에서 필수 |
-| P2 | format 감지기 스키마 정규화 | API 일관성 |
 | P2 | MCP 요약 모드 | LLM 컨텍스트 효율 |
-| P2 | 로그 레벨 라벨 + 타임스탬프 | 디버그 편의 |
 | P3 | firebat 커스텀 규칙 3개 빌트인 통합 | 플러그인 복잡도 감소 |
 | P3 | test 코드 경계 인식 | false positive 감소 |

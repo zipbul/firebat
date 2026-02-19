@@ -31,6 +31,7 @@ import type {
   AbstractionFitnessFinding,
   GiantFileFinding,
   FirebatDetector,
+  FormatFinding,
 } from './types';
 import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
 
@@ -191,6 +192,17 @@ describe('formatReport', () => {
       expect(out).toContain('Lint');
       expect(out).not.toContain('Exact Duplicates');
       expect(out).not.toContain('Nesting');
+    });
+
+    it('should include Blockers count in summary when blocking findings exist', () => {
+      const findings: WasteFinding[] = [
+        { kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span(), confidence: 1 },
+        { kind: 'dead-store', label: 'y', message: '', filePath: testFile2, span: span(), confidence: 1 },
+      ];
+      const out = formatReport(makeReport(['waste'], { waste: findings }), 'text');
+
+      expect(out).toContain('Blockers');
+      expect(out).toContain('2');
     });
 
     it('should count only errors for lint summary when lint has mixed severities', () => {
@@ -406,6 +418,23 @@ describe('formatReport', () => {
       const out = formatReport(makeReport(['format'], { format: [] }), 'text');
 
       expect(out).not.toContain('need formatting');
+    });
+
+    it('should list individual file names in format section when findings exist', () => {
+      const findings: FormatFinding[] = [
+        { code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: testFile, span: span() },
+        { code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: testFile2, span: span() },
+      ];
+      const out = formatReport(makeReport(['format'], { format: findings }), 'text');
+
+      expect(out).toContain('test-file.ts');
+      expect(out).toContain('test-file2.ts');
+    });
+
+    it('should omit file list when format findings are empty', () => {
+      const out = formatReport(makeReport(['format'], { format: [] }), 'text');
+
+      expect(out).not.toContain('test-file.ts');
     });
   });
 

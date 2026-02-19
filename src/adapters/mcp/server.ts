@@ -319,6 +319,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         .object({
           detectors: z.array(FirebatDetectorSchema),
           errors: z.record(z.string(), z.string()).optional(),
+          blockers: z.number(),
           analyses: z.record(z.string(), z.unknown()),
           catalog: z.record(
             z.string(),

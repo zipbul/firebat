@@ -2,6 +2,7 @@ import type { FirebatConfig } from '../../firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../ports/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
+import { countBlockers } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { parseArgs } from '../../arg-parse';
@@ -125,34 +126,7 @@ const printHelp = (): void => {
   writeStdout(lines.join('\n'));
 };
 
-const countBlockingFindings = (report: FirebatReport): number => {
-  const { analyses } = report;
-  const {
-    'exact-duplicates': exactDuplicates,
-    'unknown-proof': unknownProof,
-    'exception-hygiene': exceptionHygiene,
-    'barrel-policy': barrelPolicy,
-  } = analyses;
-  const typecheckErrors = analyses.typecheck?.filter(item => item.severity === 'error').length ?? 0;
-  const forwardingFindings = analyses.forwarding?.length ?? 0;
-  const lintErrors = analyses.lint?.filter(item => item.severity === 'error').length ?? 0;
-  const unknownProofFindings = unknownProof?.length ?? 0;
-  const exceptionHygieneFindings = exceptionHygiene?.length ?? 0;
-  const formatFindings = analyses.format?.length ?? 0;
-  const barrelPolicyFindings = barrelPolicy?.length ?? 0;
 
-  return (
-    (exactDuplicates?.length ?? 0) +
-    (analyses.waste?.length ?? 0) +
-    barrelPolicyFindings +
-    formatFindings +
-    unknownProofFindings +
-    exceptionHygieneFindings +
-    lintErrors +
-    typecheckErrors +
-    forwardingFindings
-  );
-};
 
 const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
   const all: ReadonlyArray<FirebatDetector> = [
@@ -468,11 +442,11 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
 
         process.stdout.write(output + '\n');
 
-        const findingCount = countBlockingFindings(report);
+        const blockers = countBlockers(report.analyses);
 
-        logger.debug('Blocking findings counted', { blockingFindingCount: findingCount });
+        logger.debug('Blocking findings counted', { blockers });
 
-        exitCode = findingCount > 0 && options.exitOnFindings ? 1 : 0;
+        exitCode = blockers > 0 && options.exitOnFindings ? 1 : 0;
       }
     }
   }
