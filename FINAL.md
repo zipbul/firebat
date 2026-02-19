@@ -207,41 +207,9 @@
 
 ---
 
-## 2-H: firebat 커스텀 oxlint 규칙 vs oxlint 빌트인 규칙
-
-| firebat 규칙 | oxlint 빌트인 대응 | 중복 여부 |
-|---|---|---|
-| firebat/unused-imports | no-unused-vars (✅ default) | 부분 중복. firebat은 import 전용 + auto-fix. 유지 가치 있음 |
-| firebat/no-non-null-assertion | typescript/no-non-null-assertion | 완전 대응 존재하지만 config에서 빌트인 미활성화. 하나로 통합 가능 |
-| firebat/no-ts-ignore | typescript/ban-ts-comment (pedantic) | 유사. ban-ts-comment이 더 범용 |
-| firebat/no-dynamic-import | import/no-dynamic-require | 부분 중복. 둘 다 활성화됨 |
-| firebat/no-unmodified-loop-condition | eslint/no-unmodified-loop-condition (suspicious) | 완전 대응. eslint 빌트인 미활성화. 하나로 통합 가능 |
-| firebat/no-double-assertion | (없음) | **고유**. 유지 |
-| firebat/no-inline-object-type | (없음) | **고유**. 유지 |
-| firebat/no-bracket-notation | (없음) | **고유**. 유지 |
-| firebat/no-globalthis-mutation | (없음) | **고유**. 유지 |
-| firebat/no-umbrella-types | typescript/no-empty-object-type | 부분 겹침이나 범위 다름. 유지 |
-| firebat/no-tombstone | (없음) | **고유**. 유지 |
-| firebat/single-exported-class | (없음) | **고유**. 유지 |
-| firebat/member-ordering | typescript/adjacent-overload-signatures | 부분. firebat 버전이 더 세밀 |
-| firebat/blank-lines-between-statement-groups | (없음) | **고유**. 유지 |
-| firebat/padding-line-between-statements | (없음, eslint에 있었으나 oxlint 미구현) | **고유**. 유지 |
-| firebat/test-describe-sut-name | (없음) | **고유**. 유지 |
-| firebat/test-unit-file-mapping | (없음) | **고유**. 유지 |
-
-### 삭제/통합 후보
-
-- `firebat/no-non-null-assertion` → `typescript/no-non-null-assertion` 빌트인으로 교체 가능.
-- `firebat/no-ts-ignore` → `typescript/ban-ts-comment` 빌트인으로 교체 가능 (config에 추가).
-- `firebat/no-unmodified-loop-condition` → `eslint/no-unmodified-loop-condition` 빌트인으로 교체 가능.
-- `firebat/no-dynamic-import` + `import/no-dynamic-require` → 하나로 통합 검토.
-
----
-
 ## 종합 우선순위
 
 | 우선순위 | 항목 | 영향도 |
 |----------|------|--------|
 | P2 | MCP 요약 모드 | LLM 컨텍스트 효율 |
-| P3 | firebat 커스텀 규칙 3개 빌트인 통합 | 플러그인 복잡도 감소 |
 | P3 | test 코드 경계 인식 | false positive 감소 |

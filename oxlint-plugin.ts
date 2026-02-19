@@ -5,9 +5,7 @@ import { noDoubleAssertionRule } from './src/oxlint-plugin/rules/no-double-asser
 import { noDynamicImportRule } from './src/oxlint-plugin/rules/no-dynamic-import';
 import { noGlobalThisMutationRule } from './src/oxlint-plugin/rules/no-globalthis-mutation';
 import { noInlineObjectTypeRule } from './src/oxlint-plugin/rules/no-inline-object-type';
-import { noNonNullAssertionRule } from './src/oxlint-plugin/rules/no-non-null-assertion';
 import { noTombstoneRule } from './src/oxlint-plugin/rules/no-tombstone';
-import { noTsIgnoreRule } from './src/oxlint-plugin/rules/no-ts-ignore';
 import { noUmbrellaTypesRule } from './src/oxlint-plugin/rules/no-umbrella-types';
 import { noUnmodifiedLoopConditionRule } from './src/oxlint-plugin/rules/no-unmodified-loop-condition';
 import { paddingLineBetweenStatementsRule } from './src/oxlint-plugin/rules/padding-line-between-statements';
@@ -27,8 +25,6 @@ const plugin = {
     'no-unmodified-loop-condition': noUnmodifiedLoopConditionRule,
     'no-tombstone': noTombstoneRule,
     'no-double-assertion': noDoubleAssertionRule,
-    'no-non-null-assertion': noNonNullAssertionRule,
-    'no-ts-ignore': noTsIgnoreRule,
     'no-inline-object-type': noInlineObjectTypeRule,
     'no-bracket-notation': noBracketNotationRule,
     'no-dynamic-import': noDynamicImportRule,

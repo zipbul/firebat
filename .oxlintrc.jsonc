@@ -157,8 +157,16 @@
       },
     ],
     "firebat/no-double-assertion": "error",
-    "firebat/no-non-null-assertion": "error",
-    "firebat/no-ts-ignore": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-ignore": true,
+        "ts-expect-error": "allow-with-description",
+        "ts-nocheck": true,
+        "ts-check": false
+      }
+    ],
     "firebat/no-inline-object-type": "error",
     "firebat/no-bracket-notation": [
       "error",
