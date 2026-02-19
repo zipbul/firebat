@@ -139,34 +139,6 @@
 
 ---
 
-## 2-D: oxlintrc 최적화
-
-### 문제점
-
-1. **oxlint 기본값 중복 규칙 (~40개)**: 다음 규칙들은 oxlint correctness 카테고리에서 **기본 활성화(✅)**됨. `.oxlintrc.jsonc`에 `"error"`로 명시할 필요 없음:
-   - `constructor-super`, `for-direction`, `no-async-promise-executor`, `no-caller`, `no-class-assign`, `no-compare-neg-zero`, `no-cond-assign`, `no-const-assign`, `no-constant-binary-expression`, `no-constant-condition`, `no-control-regex`, `no-debugger`, `no-delete-var`, `no-dupe-class-members`, `no-dupe-else-if`, `no-dupe-keys`, `no-duplicate-case`, `no-empty-pattern`, `no-ex-assign`, `no-extra-boolean-cast`, `no-func-assign`, `no-global-assign`, `no-import-assign`, `no-invalid-regexp`, `no-irregular-whitespace`, `no-loss-of-precision`, `no-new-native-nonconstructor`, `no-obj-calls`, `no-self-assign`, `no-setter-return`, `no-sparse-arrays`, `no-this-before-super`, `no-unsafe-negation`, `no-unsafe-optional-chaining`, `no-useless-backreference`, `no-useless-escape`, `no-useless-rename`, `no-with`, `no-eval`
-   - TypeScript: `typescript/await-thenable`, `typescript/no-array-delete`, `typescript/no-base-to-string`, `typescript/no-duplicate-type-constituents`, `typescript/no-for-in-array`, `typescript/no-meaningless-void-operator`, `typescript/no-misused-spread`, `typescript/no-redundant-type-constituents`, `typescript/no-unsafe-unary-minus`, `typescript/require-array-sort-compare`, `typescript/restrict-template-expressions`, `typescript/unbound-method`
-   - oxc: `oxc/missing-throw`, `oxc/number-arg-out-of-range`, `oxc/uninvoked-array-callback`
-   - unicorn: `unicorn/no-unnecessary-await`, `unicorn/no-useless-spread`, `unicorn/prefer-set-size`
-
-2. **dead override**: `packages/firebat/src/oxlint-plugin/**/*.spec.ts` 패턴이 3번째 override에 있지만 프로젝트에 `packages/` 디렉토리 없음. 또한 규칙 접두사가 `typescript-eslint/`인데 oxlint에서는 `typescript/` 접두사 사용 → **이 override는 완전히 무효**.
-
-3. **dead settings**: `jsx-a11y`, `next`, `react` settings가 있지만 프로젝트에 React/Next.js/JSX 없음. 15줄의 dead config.
-
-4. **vitest settings 부적절**: `"vitest": { "typecheck": false }` — 프로젝트는 `bun:test`를 사용하고 vitest가 아님.
-
-5. **firebat/no-dynamic-import vs import/no-dynamic-require 중복 가능성**: 둘 다 활성화됨. dynamic import를 두 규칙이 각각 잡을 수 있음.
-
-6. **`no-unused-vars` 이중 설정**: oxlint에서 기본 활성화(✅)이지만, config에서 custom options(`argsIgnorePattern: "^_"` 등)를 위해 명시적으로 설정. 이 경우는 **의도적** — 유지하되 주석으로 이유 명기 필요.
-
-### 보강 제안
-
-- ~40개 기본값 중복 규칙 제거 → config 100줄 이상 감소.
-- dead override 삭제, dead settings 삭제.
-- 의도적 override(no-unused-vars, no-empty)에 주석 추가: `// override default options`.
-
----
-
 ## 2-E: 누락 feature 제안 (극한의 코드 퀄리티)
 
 ### 보강 제안
@@ -270,8 +242,6 @@
 
 | 우선순위 | 항목 | 영향도 |
 |----------|------|--------|
-| P1 | oxlintrc 기본값 중복 ~40개 규칙 제거 | config 100줄 감소, 유지보수 부담 감소 |
-| P1 | dead override/settings 삭제 | dead config 제거 |
 | P2 | MCP 요약 모드 | LLM 컨텍스트 효율 |
 | P3 | firebat 커스텀 규칙 3개 빌트인 통합 | 플러그인 복잡도 감소 |
 | P3 | test 코드 경계 인식 | false positive 감소 |
