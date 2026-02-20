@@ -290,4 +290,90 @@ describe('scan', () => {
       expect(structured.analyses).toBeDefined();
     }
   }, 120_000);
+
+  // -----------------------------------------------------------------------
+  // filePatterns filtering
+  // -----------------------------------------------------------------------
+
+  test('should return all findings when filePatterns is omitted', async () => {
+    // Arrange
+    const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
+
+    // Act
+    const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
+      targets: [fixture],
+      detectors: ['waste'],
+    });
+
+    // Assert
+    expect(isError).toBe(false);
+    expect(structured).toBeTruthy();
+    expect(structured.analyses).toBeDefined();
+  }, 60_000);
+
+  test('should return only matched file findings when filePatterns matches a specific file', async () => {
+    // Arrange
+    const fixtures = [
+      path.join(ctx.fixturesAbs, 'sample.ts'),
+      path.join(ctx.fixturesAbs, 'editable.ts'),
+    ];
+
+    // Act
+    const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
+      targets: fixtures,
+      detectors: ['waste'],
+      filePatterns: ['**/sample.ts'],
+    });
+
+    // Assert
+    expect(isError).toBe(false);
+    const wasteFindings = (structured as any)?.analyses?.waste ?? [];
+    for (const f of wasteFindings as any[]) {
+      const filePath: string = (f as any).filePath ?? (f as any).file ?? '';
+
+      expect(filePath).toContain('sample.ts');
+      expect(filePath).not.toContain('editable.ts');
+    }
+  }, 60_000);
+
+  test('should return empty findings for detector when filePatterns matches no files', async () => {
+    // Arrange
+    const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
+
+    // Act
+    const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
+      targets: [fixture],
+      detectors: ['waste'],
+      filePatterns: ['**/nonexistent-xyz-file.ts'],
+    });
+
+    // Assert
+    expect(isError).toBe(false);
+    const wasteFindings = (structured as any)?.analyses?.waste ?? [];
+
+    expect(wasteFindings).toHaveLength(0);
+  }, 60_000);
+
+  test('should return all findings when filePatterns is empty array', async () => {
+    // Arrange
+    const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
+    const { structured: withoutFilter } = await callToolSafe(ctx.client, 'scan', {
+      targets: [fixture],
+      detectors: ['waste'],
+    });
+
+    // Act
+    const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
+      targets: [fixture],
+      detectors: ['waste'],
+      filePatterns: [],
+    });
+
+    // Assert
+    expect(isError).toBe(false);
+    const allWaste: unknown[] = (withoutFilter as any)?.analyses?.waste ?? [];
+    const emptyFilterWaste: unknown[] = (structured as any)?.analyses?.waste ?? [];
+
+    expect(emptyFilterWaste.length).toBe(allWaste.length);
+  }, 60_000);
 });

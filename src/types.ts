@@ -736,20 +736,7 @@ export interface FirebatJsonReport {
 }
 
 export const countBlockers = (analyses: Partial<FirebatAnalyses>): number => {
-  const typecheckErrors = analyses.typecheck?.filter(item => item.severity === 'error').length ?? 0;
-  const lintErrors = analyses.lint?.filter(item => item.severity === 'error').length ?? 0;
-
-  return (
-    (analyses['exact-duplicates']?.length ?? 0) +
-    (analyses.waste?.length ?? 0) +
-    (analyses['barrel-policy']?.length ?? 0) +
-    (analyses.format?.length ?? 0) +
-    (analyses['unknown-proof']?.length ?? 0) +
-    (analyses['exception-hygiene']?.length ?? 0) +
-    (analyses.forwarding?.length ?? 0) +
-    lintErrors +
-    typecheckErrors
-  );
+  return Object.values(analyses).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
 };
 
 export const toJsonReport = (report: FirebatReport): FirebatJsonReport => ({

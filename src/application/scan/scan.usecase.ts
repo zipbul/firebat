@@ -114,7 +114,6 @@ const loadCachedReport = async (params: LoadCachedReportParams): Promise<Firebat
 
   if (cached) {
     params.logger.info('Cache hit — skipping analysis', { durationMs: Math.round(nowMs() - tCache0) });
-    params.logger.info('Analysis complete', { durationMs: 0 });
 
     return cached;
   }

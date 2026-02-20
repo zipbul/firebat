@@ -241,6 +241,29 @@ describe('formatReport', () => {
       // Summary row should show 3 total (3 findings)
       expect(out).toContain('3');
     });
+
+    it('should not start with a newline when findings exist', () => {
+      // Arrange
+      const finding: WasteFinding = { kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span() };
+      const report = makeReport(['waste'], { waste: [finding] });
+
+      // Act
+      const out = formatReport(report, 'text');
+
+      // Assert
+      expect(out.startsWith('\n')).toBe(false);
+    });
+
+    it('should not start with a newline when no findings exist', () => {
+      // Arrange
+      const report = makeReport(['waste'], { waste: [] });
+
+      // Act
+      const out = formatReport(report, 'text');
+
+      // Assert
+      expect(out.startsWith('\n')).toBe(false);
+    });
   });
 
   // ── Exact Duplicates body ───────────────────────────────────────

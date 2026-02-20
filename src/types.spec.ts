@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
 import { toJsonReport, countBlockers } from './types';
-import type { FirebatReport, FirebatAnalyses, LintDiagnostic, TypecheckItem, FormatFinding, SourceSpan, WasteFinding, BarrelPolicyFinding, UnknownProofFinding, ForwardingFinding, DuplicateGroup } from './types';
+import type { FirebatReport, FirebatAnalyses, LintDiagnostic, TypecheckItem, FormatFinding, SourceSpan, WasteFinding, BarrelPolicyFinding, UnknownProofFinding, ForwardingFinding, DuplicateGroup, GiantFileFinding } from './types';
 import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ describe('toJsonReport', () => {
     });
     const out = toJsonReport(report);
 
-    expect(out.blockers).toBe(2);
+    expect(out.blockers).toBe(3);
   });
 
   it('should set blockers to 0 when no blocking findings', () => {
@@ -120,7 +120,7 @@ describe('toJsonReport', () => {
 // ── countBlockers ────────────────────────────────────────────────────
 
 describe('countBlockers', () => {
-  it('should return sum of all 9 blocking detector counts when all present', () => {
+  it('should return count of all findings across present detectors when all present', () => {
     const analyses: Partial<FirebatAnalyses> = {
       'exact-duplicates': [{ cloneType: 'type-1', items: [{ kind: 'function', header: 'a', filePath: 'a.ts', span: span() }] } as DuplicateGroup],
       waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
@@ -140,7 +140,7 @@ describe('countBlockers', () => {
     expect(countBlockers({ waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding] })).toBe(1);
   });
 
-  it('should count only errors for lint when mixed severities', () => {
+  it('should count all lint findings regardless of severity when mixed severities', () => {
     const analyses: Partial<FirebatAnalyses> = {
       lint: [
         { severity: 'error', code: 'a', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic,
@@ -149,10 +149,10 @@ describe('countBlockers', () => {
       ],
     };
 
-    expect(countBlockers(analyses)).toBe(2);
+    expect(countBlockers(analyses)).toBe(3);
   });
 
-  it('should count only errors for typecheck when mixed severities', () => {
+  it('should count all typecheck findings regardless of severity when mixed severities', () => {
     const analyses: Partial<FirebatAnalyses> = {
       typecheck: [
         { severity: 'error', code: 'TS2322', msg: 'err', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem,
@@ -160,21 +160,21 @@ describe('countBlockers', () => {
       ],
     };
 
-    expect(countBlockers(analyses)).toBe(1);
+    expect(countBlockers(analyses)).toBe(2);
   });
 
   it('should return 0 when analyses is empty', () => {
     expect(countBlockers({})).toBe(0);
   });
 
-  it('should return 0 when lint has only warnings', () => {
+  it('should count lint warnings as blockers when only warnings present', () => {
     const analyses: Partial<FirebatAnalyses> = {
       lint: [
         { severity: 'warning', code: 'a', msg: 'warn', file: 'a.ts', span: span() } as LintDiagnostic,
       ],
     };
 
-    expect(countBlockers(analyses)).toBe(0);
+    expect(countBlockers(analyses)).toBe(1);
   });
 
   it('should return 0 when all blocking detectors have empty arrays', () => {
@@ -202,7 +202,7 @@ describe('countBlockers', () => {
     expect(countBlockers(analyses)).toBe(1);
   });
 
-  it('should return 0 when lint and typecheck have only warnings and others empty', () => {
+  it('should count warnings from lint and typecheck as blockers when only warnings and others empty', () => {
     const analyses: Partial<FirebatAnalyses> = {
       'exact-duplicates': [],
       waste: [],
@@ -210,6 +210,22 @@ describe('countBlockers', () => {
       typecheck: [{ severity: 'warning', code: 'TS6133', msg: 'warn', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem],
     };
 
-    expect(countBlockers(analyses)).toBe(0);
+    expect(countBlockers(analyses)).toBe(2);
+  });
+
+  it('should count giant-file findings as blockers when present', () => {
+    const analyses: Partial<FirebatAnalyses> = {
+      'giant-file': [{ kind: 'giant-file', file: 'src/big.ts', span: span(), metrics: { lineCount: 900, maxLines: 800 }, code: 'GIANT_FILE' } as GiantFileFinding],
+    };
+
+    expect(countBlockers(analyses)).toBe(1);
+  });
+
+  it('should return same result when called twice with same input', () => {
+    const analyses: Partial<FirebatAnalyses> = {
+      waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
+    };
+
+    expect(countBlockers(analyses)).toBe(countBlockers(analyses));
   });
 });

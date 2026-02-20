@@ -811,7 +811,7 @@ const formatText = (report: FirebatReport): string => {
 
   lines.push('');
 
-  return lines.join('\n');
+  return lines.join('\n').replace(/^\n/, '');
 };
 
 const formatReport = (report: FirebatReport, format: OutputFormat): string => {

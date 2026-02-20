@@ -41,12 +41,12 @@ const getDb = async (input: DbOpenInput): Promise<Database> => {
   const existing = dbPromisesByPath.get(dbFilePath);
 
   if (existing) {
-    input.logger.trace('sqlite: reusing cached DB connection', { dbFilePath });
+    input.logger.trace('sqlite: reusing cached DB connection', { dbFilePath: path.relative(rootAbs, dbFilePath) });
 
     return existing;
   }
 
-  input.logger.debug('sqlite: opening database', { dbFilePath });
+  input.logger.debug('sqlite: opening database', { dbFilePath: path.relative(rootAbs, dbFilePath) });
 
   const created = ensureDatabase(dbFilePath);
 
@@ -61,7 +61,7 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
   const existing = ormPromisesByPath.get(dbFilePath);
 
   if (existing) {
-    input.logger.trace('sqlite: reusing cached ORM connection', { dbFilePath });
+    input.logger.trace('sqlite: reusing cached ORM connection', { dbFilePath: path.relative(rootAbs, dbFilePath) });
 
     return existing;
   }
@@ -95,9 +95,9 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
         const msg = String(err).toLowerCase();
 
         if (msg.includes('busy') || msg.includes('locked')) {
-          input.logger.warn('sqlite: migrations busy/locked; waiting for schema', { dbFilePath });
+          input.logger.warn('sqlite: migrations busy/locked; waiting for schema', { dbFilePath: path.relative(rootAbs, dbFilePath) });
         } else {
-          input.logger.warn('sqlite: migration failed', { dbFilePath }, err);
+          input.logger.warn('sqlite: migration failed', { dbFilePath: path.relative(rootAbs, dbFilePath) }, err);
         }
       }
 
