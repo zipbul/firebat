@@ -19,18 +19,56 @@ interface AnalyzeDecisionSurfaceOptions {
 
 const extractIfConditions = (sourceText: string): ReadonlyArray<{ readonly text: string; readonly offset: number }> => {
   const conditions: Array<{ readonly text: string; readonly offset: number }> = [];
-  const re = /\bif\s*\(([^)]*)\)/g;
+
+  // Strip comments to avoid false matches inside // and /* */ blocks
+  const stripped = sourceText
+    .replace(/\/\/[^\n]*/g, match => ' '.repeat(match.length))
+    .replace(/\/\*[\s\S]*?\*\//g, match => ' '.repeat(match.length));
+
+  const re = /\bif\s*\(/g;
 
   for (;;) {
-    const match = re.exec(sourceText);
+    const match = re.exec(stripped);
 
     if (match === null) {
       break;
     }
 
-    const cond = String(match[1] ?? '').trim();
+    // Find the opening paren position (end of the match minus 1)
+    const openParen = match.index + match[0].length - 1;
+    let depth = 1;
+    let pos = openParen + 1;
 
-    conditions.push({ text: cond, offset: match.index });
+    // Walk forward tracking paren depth to find the matching close paren
+    while (pos < stripped.length && depth > 0) {
+      const ch = stripped[pos];
+
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        depth--;
+      } else if (ch === "'" || ch === '"' || ch === '`') {
+        // Skip string literals
+        pos++;
+
+        while (pos < stripped.length && stripped[pos] !== ch) {
+          if (stripped[pos] === '\\') {
+            pos++;
+          }
+
+          pos++;
+        }
+      }
+
+      pos++;
+    }
+
+    if (depth === 0) {
+      // pos is one past the closing paren; extract text between parens
+      const cond = stripped.slice(openParen + 1, pos - 1).trim();
+
+      conditions.push({ text: cond, offset: match.index });
+    }
   }
 
   return conditions;

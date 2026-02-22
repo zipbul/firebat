@@ -81,4 +81,30 @@ describe('features/barrel-policy/analyzer — analyzeBarrelPolicy', () => {
     const result = await analyzeBarrelPolicy([f], { rootAbs: tmpDir });
     expect(result.every(r => r.kind !== 'export-star')).toBe(true);
   });
+
+  it('should ignore files in test directories by default', async () => {
+    const testDir = path.join(tmpDir, 'test', 'unit');
+    await fs.mkdir(testDir, { recursive: true });
+    const testsDir = path.join(tmpDir, '__tests__', 'integration');
+    await fs.mkdir(testsDir, { recursive: true });
+
+    const f1 = toFile(path.join(testDir, 'foo.ts'), `export * from './bar';`);
+    const f2 = toFile(path.join(testsDir, 'baz.ts'), `export * from './qux';`);
+
+    const result = await analyzeBarrelPolicy([f1, f2], { rootAbs: tmpDir });
+
+    expect(result).toEqual([]);
+  });
+
+  it('should ignore spec and test files by default', async () => {
+    const srcDir = path.join(tmpDir, 'src');
+    await fs.mkdir(srcDir, { recursive: true });
+
+    const f1 = toFile(path.join(srcDir, 'foo.spec.ts'), `export * from './bar';`);
+    const f2 = toFile(path.join(srcDir, 'bar.test.ts'), `export * from './baz';`);
+
+    const result = await analyzeBarrelPolicy([f1, f2], { rootAbs: tmpDir });
+
+    expect(result).toEqual([]);
+  });
 });

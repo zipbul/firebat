@@ -1,0 +1,86 @@
+[
+  {
+    "file": "/virtual/ts-advanced-syntax.ts",
+    "header": "validate",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 3,
+      "hasGuards": true,
+      "returns": 4
+    },
+    "score": 4,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 29
+      },
+      "start": {
+        "column": 7,
+        "line": 15
+      }
+    }
+  },
+  {
+    "file": "/virtual/ts-advanced-syntax.ts",
+    "header": "isString",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 1,
+      "hasGuards": true,
+      "returns": 2
+    },
+    "score": 2,
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 38
+      },
+      "start": {
+        "column": 9,
+        "line": 32
+      }
+    }
+  },
+  {
+    "file": "/virtual/ts-advanced-syntax.ts",
+    "header": "isNumber",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 2,
+      "hasGuards": true,
+      "returns": 3
+    },
+    "score": 3,
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 50
+      },
+      "start": {
+        "column": 9,
+        "line": 40
+      }
+    }
+  },
+  {
+    "file": "/virtual/ts-advanced-syntax.ts",
+    "header": "processAll",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 0,
+      "hasGuards": false,
+      "returns": 1
+    },
+    "score": 2,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 69
+      },
+      "start": {
+        "column": 7,
+        "line": 53
+      }
+    }
+  }
+]

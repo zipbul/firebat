@@ -84,4 +84,73 @@ describe('decision-surface/analyzer', () => {
     expect(result.length).toBe(1);
     expect(result[0]?.axes).toBeGreaterThanOrEqual(1);
   });
+
+  it('should handle nested parentheses in if conditions', () => {
+    // Arrange — if (fn(x) && y) has nested parens; old regex would truncate at first )
+    const sourceText = [
+      'export function f(a: any, b: any, c: any) {',
+      '  if (fn(a) && b.ok && c.ready) return 1;',
+      '  return 0;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeDecisionSurface(files as any, { maxAxes: 2 });
+
+    // Assert — should detect all 3 axes: fn/a, b.ok, c.ready
+    expect(result.length).toBe(1);
+    expect(result[0]?.axes).toBeGreaterThanOrEqual(3);
+  });
+
+  it('should handle deeply nested parentheses', () => {
+    // Arrange — if ((a || b) && (c || d)) has nested parens
+    const sourceText = [
+      'export function f(a: boolean, b: boolean, c: boolean, d: boolean) {',
+      '  if ((a || b) && (c || d)) return 1;',
+      '  return 0;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeDecisionSurface(files as any, { maxAxes: 3 });
+
+    // Assert — should detect 4 axes: a, b, c, d
+    expect(result.length).toBe(1);
+    expect(result[0]?.axes).toBeGreaterThanOrEqual(4);
+  });
+
+  it('should not extract conditions from line comments containing if (', () => {
+    // Arrange — `// if (x && y && z)` should not be treated as a real if-condition
+    const sourceText = [
+      'export function f(a: any) {',
+      '  // if (x && y && z) return bad;',
+      '  if (a.ok) return 1;',
+      '  return 0;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act — with maxAxes=1, only the real `if (a.ok)` should be found (1 axis)
+    const result = analyzeDecisionSurface(files as any, { maxAxes: 3 });
+
+    // Assert — if the comment were parsed, 4+ axes would be found → finding reported
+    // Since comment should be skipped, axes should be 1 (only a.ok) → no finding
+    expect(result.length).toBe(0);
+  });
+
+  it('should not let block comment ) affect paren depth tracking', () => {
+    // Arrange — `if (/* ) */ x && y && z)` has a `)` inside a block comment
+    const sourceText = [
+      'export function f(x: any, y: any, z: any) {',
+      '  if (/* ) */ x.a && y.b && z.c) return 1;',
+      '  return 0;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeDecisionSurface(files as any, { maxAxes: 3 });
+
+    // Assert — 3 axes (x.a, y.b, z.c) should be extracted correctly
+    expect(result.length).toBe(1);
+    expect(result[0]?.axes).toBeGreaterThanOrEqual(3);
+  });
 });

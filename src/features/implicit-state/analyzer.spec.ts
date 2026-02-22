@@ -116,4 +116,72 @@ describe('implicit-state/analyzer', () => {
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
+
+  it('[NE] should not FP when variable name appears only in comments or strings', () => {
+    // Arrange — 'data' appears in a comment and a string, but NOT as an actual identifier reference
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let data = 0;',
+          '// data is used here as documentation',
+          "export function logInfo() { console.log('data cleared'); }",
+          'export function reset() { console.log(1); }',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeImplicitState(files as any);
+
+    // Assert — old regex would match 'data' in comment/string → FP. AST should skip it.
+    expect(result.length).toBe(0);
+  });
+
+  it('should not detect process.env.KEY inside comments', () => {
+    // Arrange — process.env.DATABASE_URL appears in comments, not real code
+    const files = [
+      file('src/a.ts', [
+        '// Required: process.env.DATABASE_URL must be set',
+        'export const a = 1;',
+      ].join('\n')),
+      file('src/b.ts', [
+        '/* process.env.DATABASE_URL is injected at build time */',
+        'export const b = 2;',
+      ].join('\n')),
+    ];
+    // Act
+    const result = analyzeImplicitState(files as any);
+
+    // Assert — should NOT report: process.env.DATABASE_URL is only in comments
+    const envFindings = result.filter(r => r.protocol?.includes('process.env'));
+    expect(envFindings.length).toBe(0);
+  });
+
+  it('should not detect getInstance() inside string literals', () => {
+    // Arrange — getInstance appears only in strings
+    const files = [
+      file('src/a.ts', 'export const a = "call getInstance() to get singleton";'),
+      file('src/b.ts', "export const b = 'use getInstance() for service';"),
+    ];
+    // Act
+    const result = analyzeImplicitState(files as any);
+
+    // Assert — should NOT report: getInstance is only inside string literals
+    const singletonFindings = result.filter(r => r.protocol?.includes('getInstance'));
+    expect(singletonFindings.length).toBe(0);
+  });
+
+  it('should not detect emit/on channels inside comments', () => {
+    // Arrange — emit('user:created') appears only in comments
+    const files = [
+      file('src/a.ts', "// emit('user:created') is called when user signs up\nexport const a = 1;"),
+      file('src/b.ts', "/* on('user:created') handler */ export const b = 2;"),
+    ];
+    // Act
+    const result = analyzeImplicitState(files as any);
+
+    // Assert — should NOT report: channel references are in comments only
+    const channelFindings = result.filter(r => r.protocol?.includes('user:created'));
+    expect(channelFindings.length).toBe(0);
+  });
 });

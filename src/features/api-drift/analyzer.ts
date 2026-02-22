@@ -205,6 +205,19 @@ const buildGroups = (groupsByKey: Map<string, GroupAccumulator>): ApiDriftGroup[
   return groups;
 };
 
+const PREFIX_STOP_WORDS = new Set([
+  'get', 'set', 'on', 'is', 'to', 'has', 'do', 'can', 'should', 'will',
+  'add', 'remove', 'create', 'delete', 'update', 'find', 'handle', 'with',
+  'process', 'validate', 'parse', 'build', 'render', 'compute', 'transform',
+  'fetch', 'load', 'check', 'resolve', 'convert', 'format', 'serialize',
+  'make', 'apply', 'init', 'run', 'map', 'filter', 'merge', 'submit',
+  'dispatch', 'prepare', 'register', 'generate', 'configure', 'normalize',
+  'extract', 'collect', 'emit', 'invoke', 'execute', 'compile', 'visit',
+  'read', 'write', 'send', 'receive', 'open', 'close', 'start', 'stop',
+  'show', 'hide', 'enable', 'disable', 'reset', 'clear', 'flush', 'sync',
+  'patch', 'put', 'post', 'try', 'use', 'wrap', 'throw', 'log', 'print',
+]);
+
 const extractPrefixFamily = (name: string): string | null => {
   const trimmed = name.trim();
 
@@ -216,7 +229,13 @@ const extractPrefixFamily = (name: string): string | null => {
     const ch = trimmed[index];
 
     if (ch >= 'A' && ch <= 'Z') {
-      return trimmed.slice(0, index);
+      const prefix = trimmed.slice(0, index);
+
+      if (PREFIX_STOP_WORDS.has(prefix)) {
+        return null;
+      }
+
+      return prefix;
     }
   }
 
@@ -472,6 +491,8 @@ const analyzeApiDrift = async (
 
     if (tsgoResult.ok) {
       interfaceGroups = tsgoResult.groups;
+    } else {
+      logger.warn('api-drift: tsgo type-check failed — interface drift analysis skipped');
     }
   }
 

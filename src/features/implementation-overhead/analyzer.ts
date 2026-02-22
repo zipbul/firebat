@@ -129,8 +129,13 @@ const estimateImplementationComplexity = (body: string): number => {
   const semicolons = (body.match(/;/g) ?? []).length;
   const ifs = (body.match(/\bif\b/g) ?? []).length;
   const fors = (body.match(/\bfor\b/g) ?? []).length;
+  // for-of / for-in loops have no header semicolons — only subtract for C-style for loops
+  const forOfIn = (body.match(/\bfor\s*\(\s*(?:const|let|var)\s+\w+\s+(?:of|in)\b/g) ?? []).length;
+  const cStyleFors = Math.max(0, fors - forOfIn);
+  // Each C-style for-header contains 2 semicolons that are syntax, not statements.
+  const adjustedSemicolons = Math.max(0, semicolons - cStyleFors * 2);
 
-  return Math.max(1, semicolons + ifs + fors);
+  return Math.max(1, adjustedSemicolons + ifs + fors);
 };
 
 const findMatchingParen = (sourceText: string, openParenOffset: number): number => {
@@ -509,22 +514,38 @@ const analyzeImplementationOverhead = (
     }
 
     // Support arrow exported functions in a minimal way.
-    const arrowRe = /\bexport\s+const\s+([a-zA-Z_$][\w$]*)\s*=\s*\(([^)]*)\)\s*=>/g;
+    const arrowPrefixRe = /\bexport\s+const\s+([a-zA-Z_$][\w$]*)\s*=\s*\(/g;
 
     for (;;) {
-      const m = arrowRe.exec(file.sourceText);
+      const m = arrowPrefixRe.exec(file.sourceText);
 
       if (m === null) {
         break;
       }
 
       const startOffset = m.index;
-      const signatureEnd = arrowRe.lastIndex;
+      // openParen is the '(' at end of prefix match
+      const openParenOffset = arrowPrefixRe.lastIndex - 1;
+      const closeParenOffset = findMatchingParen(file.sourceText, openParenOffset);
+
+      if (closeParenOffset < 0) {
+        continue;
+      }
+
+      // Check for => after the closing paren (possibly with return type annotation)
+      const afterParen = file.sourceText.slice(closeParenOffset + 1, Math.min(file.sourceText.length, closeParenOffset + 200));
+      const arrowMatch = /^\s*(?::\s*[^=]*?)?\s*=>/.exec(afterParen);
+
+      if (arrowMatch === null) {
+        continue;
+      }
+
+      const signatureEnd = closeParenOffset + 1 + arrowMatch[0].length;
       const signature = file.sourceText.slice(startOffset, signatureEnd);
       const rest = file.sourceText.slice(signatureEnd);
       const endOffset = signatureEnd + Math.min(rest.length, 400);
       const body = file.sourceText.slice(signatureEnd, endOffset);
-      const paramsText = String(m[2] ?? '');
+      const paramsText = file.sourceText.slice(openParenOffset + 1, closeParenOffset);
       const interfaceComplexity = estimateInterfaceComplexity(signature, paramsText);
       const implementationComplexity = estimateImplementationComplexity(body);
       const ratio = implementationComplexity / Math.max(1, interfaceComplexity);

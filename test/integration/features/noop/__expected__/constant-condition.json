@@ -2,7 +2,7 @@
   {
     "confidence": 0.8,
     "evidence": "if condition is always truthy",
-    "file": "/virtual/constant-condition.ts",
+    "file": "constant-condition.ts",
     "kind": "constant-condition",
     "span": {
       "end": {

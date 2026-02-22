@@ -12,7 +12,15 @@ interface BarrelPolicyOptions {
   readonly ignoreGlobs?: ReadonlyArray<string>;
 }
 
-const DEFAULT_IGNORE_GLOBS: ReadonlyArray<string> = ['node_modules/**', 'dist/**'];
+const DEFAULT_IGNORE_GLOBS: ReadonlyArray<string> = [
+  'node_modules/**',
+  'dist/**',
+  'test/**',
+  '__test__/**',
+  '__tests__/**',
+  '**/*.spec.*',
+  '**/*.test.*',
+];
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 

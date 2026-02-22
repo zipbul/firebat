@@ -2,7 +2,7 @@
   {
     "confidence": 0.8,
     "evidence": "catch block has an empty body",
-    "file": "/virtual/empty-catch.ts",
+    "file": "empty-catch.ts",
     "kind": "empty-catch",
     "span": {
       "end": {

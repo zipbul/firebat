@@ -124,6 +124,104 @@ const collectParameterBindings = (functionNode: Node): ReadonlyArray<BindingName
   return bindings;
 };
 
+const PRIMITIVE_TYPE_KEYWORDS = new Set([
+  'TSStringKeyword',
+  'TSNumberKeyword',
+  'TSBooleanKeyword',
+  'TSNullKeyword',
+  'TSUndefinedKeyword',
+  'TSBigIntKeyword',
+  'TSSymbolKeyword',
+  'TSVoidKeyword',
+  'TSNeverKeyword',
+]);
+
+const PRIMITIVE_LITERAL_TYPES = new Set([
+  'Literal',
+  'NumericLiteral',
+  'StringLiteral',
+  'BooleanLiteral',
+  'NullLiteral',
+]);
+
+/** Check if a type AST node represents a primitive type (including unions of primitives). */
+const isPrimitiveTypeNode = (node: unknown): boolean => {
+  if (!isOxcNode(node as Node)) {
+    return false;
+  }
+
+  const n = node as Node;
+
+  if (PRIMITIVE_TYPE_KEYWORDS.has(n.type)) {
+    return true;
+  }
+
+  // TSUnionType: primitive if ALL members are primitive
+  if (n.type === 'TSUnionType' && isNodeRecord(n)) {
+    const types = (n as any).types;
+
+    if (Array.isArray(types) && types.length > 0) {
+      return types.every((member: unknown) => isPrimitiveTypeNode(member));
+    }
+  }
+
+  return false;
+};
+
+/** Collect names of variables declared with a primitive type annotation inside a function body. */
+const collectPrimitiveVarNames = (functionNode: Node): Set<string> => {
+  const primitiveNames = new Set<string>();
+  const bodyNode = isNodeRecord(functionNode) ? functionNode.body : undefined;
+
+  if (!bodyNode) {
+    return primitiveNames;
+  }
+
+  const declarators = collectOxcNodes(
+    isOxcNode(bodyNode) ? bodyNode : functionNode,
+    n => n.type === 'VariableDeclarator',
+  );
+
+  for (const decl of declarators) {
+    if (!isNodeRecord(decl)) {
+      continue;
+    }
+
+    const name = getNodeName(decl.id);
+
+    if (typeof name !== 'string' || name.length === 0) {
+      continue;
+    }
+
+    const id = decl.id;
+
+    if (!isOxcNode(id) || !isNodeRecord(id)) {
+      continue;
+    }
+
+    const typeAnnotation = (id as any).typeAnnotation;
+
+    // Check type annotation (direct primitive or union of primitives)
+    if (isOxcNode(typeAnnotation) && isNodeRecord(typeAnnotation)) {
+      const inner = typeAnnotation.typeAnnotation ?? typeAnnotation;
+
+      if (isPrimitiveTypeNode(inner)) {
+        primitiveNames.add(name);
+        continue;
+      }
+    }
+
+    // No type annotation — check if initializer is a primitive literal
+    const init = (decl as any).init;
+
+    if (isOxcNode(init) && PRIMITIVE_LITERAL_TYPES.has(init.type)) {
+      primitiveNames.add(name);
+    }
+  }
+
+  return primitiveNames;
+};
+
 const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
   const names = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
@@ -485,6 +583,7 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
         const localIndexByName = collectLocalVarIndexes(node);
         const parameterBindings = collectParameterBindings(node);
+        const primitiveVarNames = collectPrimitiveVarNames(node);
 
         if (localIndexByName.size === 0) {
           return;
@@ -706,6 +805,11 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
 
             // Skip variables with '_' prefix (intentionally ignored by convention).
             if (name.startsWith('_')) {
+              continue;
+            }
+
+            // Skip primitive-typed variables (no GC benefit from nullifying).
+            if (primitiveVarNames.has(name)) {
               continue;
             }
 

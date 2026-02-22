@@ -23,4 +23,8 @@ describe('golden/exact-duplicates', () => {
   runGolden(import.meta.dir, 'single-const', program =>
     detectExactDuplicates([...program], 5),
   );
+
+  runGolden(import.meta.dir, 'ts-advanced-syntax', program =>
+    detectExactDuplicates([...program], 5),
+  );
 });

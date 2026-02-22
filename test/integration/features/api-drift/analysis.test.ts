@@ -188,9 +188,9 @@ describe('integration/api-drift', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set('/virtual/api-drift/one.ts', `export function createUser(name: string) {\n  return name;\n}`);
-    sources.set('/virtual/api-drift/two.ts', `export function createOrder(name: string) {\n  return name;\n}`);
-    sources.set('/virtual/api-drift/three.ts', `export function createProduct(name: string, price: number) {\n  return name;\n}`);
+    sources.set('/virtual/api-drift/one.ts', `export function calibrateUser(name: string) {\n  return name;\n}`);
+    sources.set('/virtual/api-drift/two.ts', `export function calibrateOrder(name: string) {\n  return name;\n}`);
+    sources.set('/virtual/api-drift/three.ts', `export function calibrateProduct(name: string, price: number) {\n  return name;\n}`);
 
     // Act
     const program = createProgramFromMap(sources);
@@ -198,7 +198,7 @@ describe('integration/api-drift', () => {
 
     // Assert
     expect(groups.length).toBe(1);
-    expect(groups[0]?.label).toContain('prefix:create');
+    expect(groups[0]?.label).toContain('prefix:calibrate');
     expect(groups[0]?.outliers.length).toBe(1);
   });
 

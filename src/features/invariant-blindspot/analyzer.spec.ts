@@ -124,4 +124,14 @@ describe('invariant-blindspot/analyzer', () => {
     // Assert
     expect(result.length).toBe(0);
   });
+
+  it('should not report when comment contains only casual before keyword', () => {
+    // Arrange — "before" is too generic, should not trigger on its own
+    const files = [file('src/a.ts', '// process items before returning\nexport const x = 1;')];
+    // Act
+    const result = analyzeInvariantBlindspot(files as any);
+
+    // Assert
+    expect(result.length).toBe(0);
+  });
 });

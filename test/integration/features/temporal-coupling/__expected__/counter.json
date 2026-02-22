@@ -1,1 +1,19 @@
-[]
+[
+  {
+    "file": "counter.ts",
+    "kind": "temporal-coupling",
+    "readers": 1,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    },
+    "state": "count",
+    "writers": 1
+  }
+]

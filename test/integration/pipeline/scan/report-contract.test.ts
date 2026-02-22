@@ -274,10 +274,10 @@ describe('integration/scan/report-contract', () => {
   it('should emit api-drift groups using P0 field names (standard/params/optionals, file)', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-api-drift-shape', {
-      'src/a.ts': 'export function makeUser(id: string) { return id; }\n',
-      'src/b.ts': 'export function makeUser(id: string, flag?: boolean) { return id; }\n',
+      'src/a.ts': 'export function calibrateUser(id: string) { return id; }\n',
+      'src/b.ts': 'export function calibrateUser(id: string, flag?: boolean) { return id; }\n',
       // NOTE: prefix family grouping requires >= 3 occurrences (see api-drift analyzer).
-      'src/c.ts': 'export function makeOrder(id: string) { return id; }\n',
+      'src/c.ts': 'export function calibrateOrder(id: string) { return id; }\n',
     });
 
     try {

@@ -3,9 +3,25 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { NoopFinding } from '../../types';
 
-import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { normalizeFile } from '../../engine/normalize-file';
 import { evalStaticTruthiness } from '../../engine/oxc-expression-utils';
 import { getLineColumn } from '../../engine/source-position';
+
+const INTENTIONAL_NOOP_NAMES = new Set(['noop', '_noop', 'noOp', 'NOOP']);
+
+const isIntentionalNoop = (node: Node): boolean => {
+  // FunctionDeclaration: check node.id name
+  if (node.type === 'FunctionDeclaration' && isNodeRecord(node)) {
+    const name = getNodeName(node.id);
+
+    if (typeof name === 'string' && (INTENTIONAL_NOOP_NAMES.has(name) || name.startsWith('_noop'))) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const createEmptyNoop = (): ReadonlyArray<NoopFinding> => [];
 
@@ -79,6 +95,27 @@ const isSameExpression = (left: Node, right: Node): boolean => {
 
 const collectNoopFindings = (program: NodeValue, sourceText: string, file: string): NoopFinding[] => {
   const findings: NoopFinding[] = [];
+
+  // Pre-collect variable names that hold arrow/function expressions for intentional noop detection.
+  const arrowNoopOffsets = new Set<number>();
+
+  walkOxcTree(program, node => {
+    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+      const name = getNodeName(node.id);
+      const init = node.init;
+
+      if (
+        typeof name === 'string' &&
+        (INTENTIONAL_NOOP_NAMES.has(name) || name.startsWith('_noop')) &&
+        isOxcNode(init) &&
+        (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+      ) {
+        arrowNoopOffsets.add(init.start);
+      }
+    }
+
+    return true;
+  });
 
   walkOxcTree(program, node => {
     if (node.type === 'ExpressionStatement' && isNodeRecord(node)) {
@@ -160,7 +197,7 @@ const collectNoopFindings = (program: NodeValue, sourceText: string, file: strin
       if (isOxcNode(body) && body.type === 'BlockStatement' && isNodeRecord(body)) {
         const bodyArr = Array.isArray(body.body) ? body.body : [];
 
-        if (bodyArr.length === 0) {
+        if (bodyArr.length === 0 && !isIntentionalNoop(node) && !arrowNoopOffsets.has(node.start)) {
           findings.push({
             kind: 'empty-function-body',
             file,
@@ -190,7 +227,7 @@ const analyzeNoop = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<NoopFindin
       continue;
     }
 
-    findings.push(...collectNoopFindings(file.program, file.sourceText, file.filePath));
+    findings.push(...collectNoopFindings(file.program, file.sourceText, normalizeFile(file.filePath)));
   }
 
   return findings;

@@ -2,7 +2,7 @@
   {
     "confidence": 0.9,
     "evidence": "expression statement has no side effects (Identifier)",
-    "file": "/virtual/expression-noop.ts",
+    "file": "expression-noop.ts",
     "kind": "expression-noop",
     "span": {
       "end": {

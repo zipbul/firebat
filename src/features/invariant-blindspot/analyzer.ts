@@ -22,7 +22,7 @@ const analyzeInvariantBlindspot = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
   const signals: ReadonlyArray<{ readonly name: string; readonly re: RegExp }> = [
     { name: 'console.assert', re: /console\.assert\s*\(/g },
     { name: 'throw-guard', re: /\bthrow\s+new\s+Error\s*\(/g },
-    { name: 'must-comment', re: /\/\/.*\b(must|always|never|before)\b/gi },
+    { name: 'must-comment', re: /\/\/.*\b(must|always|never)\b/gi },
     { name: 'switch-default-throw', re: /\bdefault\s*:\s*\bthrow\b/gi },
     { name: 'bounds-throw', re: /\bif\s*\([^)]*\.length\s*===\s*0\)\s*throw\b/gi },
   ];

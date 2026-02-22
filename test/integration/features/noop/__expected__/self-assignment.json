@@ -2,7 +2,7 @@
   {
     "confidence": 0.9,
     "evidence": "left-hand side is assigned to itself",
-    "file": "/virtual/self-assignment.ts",
+    "file": "self-assignment.ts",
     "kind": "self-assignment",
     "span": {
       "end": {

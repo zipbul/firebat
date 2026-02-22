@@ -4,10 +4,30 @@ import type { DuplicateGroup, WasteFinding } from '../../../src/types';
 import { parseSource } from '../../../src/engine/parse-source';
 
 export const getFuzzSeed = (): number => {
+  const envSeed = process.env.FUZZ_SEED;
+
+  if (envSeed !== undefined && envSeed.length > 0) {
+    const parsed = Number(envSeed);
+
+    if (Number.isFinite(parsed) && parsed !== 0) {
+      return parsed | 0;
+    }
+  }
+
   return 1;
 };
 
 export const getFuzzIterations = (fallback: number): number => {
+  const envIter = process.env.FUZZ_ITERATIONS;
+
+  if (envIter !== undefined && envIter.length > 0) {
+    const parsed = Number(envIter);
+
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed | 0;
+    }
+  }
+
   return fallback;
 };
 

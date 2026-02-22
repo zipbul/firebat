@@ -15,5 +15,22 @@
     },
     "state": "sessionToken",
     "writers": 1
+  },
+  {
+    "file": "session-state.ts",
+    "kind": "temporal-coupling",
+    "readers": 1,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 2
+      },
+      "start": {
+        "column": 0,
+        "line": 2
+      }
+    },
+    "state": "sessionExpiry",
+    "writers": 1
   }
 ]

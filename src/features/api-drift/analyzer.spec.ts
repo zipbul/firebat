@@ -75,6 +75,44 @@ describe('features/api-drift/analyzer — analyzeApiDrift', () => {
       analyzeApiDrift([f], { rootAbs: process.cwd(), tsconfigPath: 'tsconfig.json' }),
     ).resolves.toBeDefined();
   });
+
+  it('should not group functions under common stop-word prefixes (get, set, on, is, to, has)', async () => {
+    // Arrange — functions with "get" prefix but DIFFERENT signatures → would produce outlier groups
+    const code = [
+      'function getUser(): string { return ""; }',
+      'function getItems(limit: number): string[] { return []; }',
+      'function getConfig(key: string, fallback: string): string { return ""; }',
+    ].join('\n');
+    const f = toFile('/src/fns.ts', code);
+    const result = await analyzeApiDrift([f]);
+    // No group should have a prefix label matching stop words
+    const prefixGroups = result.filter(g => g.label?.startsWith('prefix:get') || g.label?.startsWith('prefix:set'));
+    expect(prefixGroups.length).toBe(0);
+  });
+
+  it('should not group functions under extended stop-word prefixes (process, validate, parse, build)', async () => {
+    const code = [
+      'function processUser(id: string): void {}',
+      'function processOrder(id: string, amount: number): boolean { return true; }',
+      'function processPayment(id: string, amount: number, currency: string): void {}',
+      'function validateUser(id: string): boolean { return true; }',
+      'function validateInput(data: string, strict: boolean): void {}',
+      'function validateConfig(key: string): string { return ""; }',
+      'function parseToken(token: string): void {}',
+      'function parseConfig(raw: string, strict: boolean): void {}',
+      'function parseArgs(args: string[]): void {}',
+      'function buildQuery(table: string): string { return ""; }',
+      'function buildResponse(data: string, status: number): void {}',
+      'function buildUrl(base: string, path: string, query: string): string { return ""; }',
+    ].join('\n');
+    const f = toFile('/src/extended-fns.ts', code);
+    const result = await analyzeApiDrift([f]);
+    const prefixLabels = ['process', 'validate', 'parse', 'build'];
+    const fpGroups = result.filter(g =>
+      prefixLabels.some(p => g.label?.startsWith(`prefix:${p}`)),
+    );
+    expect(fpGroups.length).toBe(0);
+  });
 });
 
 afterAll(() => {

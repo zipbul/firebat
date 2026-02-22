@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test';
 import { parseSource } from '../../engine/parse-source';
 import { analyzeNoop, createEmptyNoop } from './analyzer';
 
-const file = (sourceText: string) => parseSource('test.ts', sourceText);
+const file = (sourceText: string) => parseSource('/src/test.ts', sourceText);
 
 describe('createEmptyNoop', () => {
   it('returns an empty array', () => {
@@ -81,5 +81,23 @@ describe('analyzeNoop', () => {
     const kinds = findings.map(f => f.kind);
     expect(kinds).toContain('empty-function-body');
     expect(kinds).toContain('empty-catch');
+  });
+
+  it('[NE] should skip intentionally empty (noop-named) function declaration', () => {
+    const findings = analyzeNoop([file('function noop() {}')]);
+    expect(findings.every(f => f.kind !== 'empty-function-body')).toBe(true);
+  });
+
+  it('[NE] should skip intentionally empty (_noop-prefixed) arrow function', () => {
+    const findings = analyzeNoop([file('const _noop = () => {};')]);
+    expect(findings.every(f => f.kind !== 'empty-function-body')).toBe(true);
+  });
+
+  it('should normalize file paths (not absolute)', () => {
+    const findings = analyzeNoop([file('function f() {}')]);
+    const finding = findings.find(f => f.kind === 'empty-function-body');
+    expect(finding).toBeDefined();
+    // normalizeFile strips to relative path — should not contain absolute /src/ prefix
+    expect(finding!.file).not.toMatch(/^\//);
   });
 });
