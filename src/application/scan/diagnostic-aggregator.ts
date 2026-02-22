@@ -477,9 +477,11 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       'Functions with the same name pattern have inconsistent signatures (different parameter counts, optional parameter usage, return types, or async modifiers).',
     think: [
+      'The standard shape is the most frequent signature among all same-name occurrences; on ties the first-encountered shape wins (insertion order).',
       'Determine whether the signature differences are intentional variations or drift from a common pattern.',
       'Check whether the functions serve the same role in different contexts — if so, their signatures should align.',
       'If they serve different roles, verify that their names differentiate them instead of sharing a misleading prefix.',
+      'prefix: groups cluster by name prefix only — verify each outlier actually shares the same contract before treating it as drift.',
     ],
   },
 
