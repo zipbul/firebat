@@ -204,7 +204,7 @@ interface ResultStatus {
   error?: string;
 }
 
-type ResultWithError<T extends Record<string, unknown>> = T & ResultStatus;
+type ResultWithError<T> = T & ResultStatus;
 
 interface OpenDocumentInput {
   lsp: LspClient;

@@ -668,7 +668,7 @@ const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput
 
           const typeAnn = isNodeRecord(node) ? node.typeAnnotation : undefined;
 
-          if (isNodeRecord(typeAnn) && typeAnn.type === 'TSTypeReference') {
+          if (typeAnn !== undefined && isNodeRecord(typeAnn) && typeAnn.type === 'TSTypeReference') {
             const typeName = typeAnn.typeName;
 
             if (isNodeRecord(typeName) && typeName.type === 'Identifier' && typeName.name === 'const') {

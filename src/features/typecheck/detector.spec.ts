@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it, mock } from 'bun:test';
 import * as path from 'node:path';
+import type { TypecheckItem } from '../../types';
 
 const tsgoRunnerAbs = path.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts');
 const withTsgoLspSessionMock = mock(async () => {

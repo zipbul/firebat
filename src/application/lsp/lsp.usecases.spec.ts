@@ -48,7 +48,7 @@ describe('getHoverUseCase', () => {
 
 describe('getDefinitionsUseCase', () => {
   it('should return ok:false when tsgo session fails', async () => {
-    const result = await getDefinitionsUseCase({ root, filePath: 'src/a.ts', line: 1, logger });
+    const result = await getDefinitionsUseCase({ root, filePath: 'src/a.ts', line: 1, symbolName: '', logger });
 
     expect(result.ok).toBe(false);
   });
@@ -72,7 +72,7 @@ describe('formatDocumentUseCase', () => {
 
 describe('getAvailableExternalSymbolsInFileUseCase', () => {
   it('should return ok:false when filePath is empty', async () => {
-    const result = await getAvailableExternalSymbolsInFileUseCase({ root, filePath: '   ', logger });
+    const result = await getAvailableExternalSymbolsInFileUseCase({ root, filePath: '   ' });
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('required');
@@ -81,7 +81,7 @@ describe('getAvailableExternalSymbolsInFileUseCase', () => {
 
 describe('parseImportsUseCase', () => {
   it('should return ok:false when filePath is empty', async () => {
-    const result = await parseImportsUseCase({ root, filePath: '', logger });
+    const result = await parseImportsUseCase({ root, filePath: '' });
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain('required');

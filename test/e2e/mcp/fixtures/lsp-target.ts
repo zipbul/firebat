@@ -87,7 +87,7 @@ function format(value: string | number, decimals?: number): string {
   return value.toFixed(decimals ?? 2);
 }
 
-const _UserService = UserService;
+void UserService;
 
 export type { AsyncCallback, Callback, User, UserCreateInput };
 export { DEFAULT_USER, createUser, format, getUserName, greetUser, processItems, processItemsAsync };

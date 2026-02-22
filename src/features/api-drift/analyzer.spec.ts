@@ -54,7 +54,7 @@ describe('features/api-drift/analyzer — analyzeApiDrift', () => {
     const f = toFile('/anon.ts', `const fn = function() { return 1; };`);
     const result = await analyzeApiDrift([f]);
     // anonymous functions produce no drift groups
-    const groups = result.filter(g => g.name === 'anonymous');
+    const groups = result.filter(g => g.label === 'anonymous');
     expect(groups.length).toBe(0);
   });
 
@@ -64,7 +64,7 @@ describe('features/api-drift/analyzer — analyzeApiDrift', () => {
     const f2 = toFile('/y/doThing.ts', `function doThing(a: string, b: number): boolean { return true; }`);
     const result = await analyzeApiDrift([f1, f2]);
     for (const group of result) {
-      expect(typeof group.name).toBe('string');
+      expect(typeof group.label).toBe('string');
       expect(Array.isArray(group.outliers)).toBe(true);
     }
   });

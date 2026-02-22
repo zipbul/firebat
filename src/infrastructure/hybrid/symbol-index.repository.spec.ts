@@ -91,7 +91,7 @@ describe('createHybridSymbolIndexRepository', () => {
 
     // Assert
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0].name).toBe('doWork');
+    expect(results[0]!.name).toBe('doWork');
   });
 
   it('should return memory stats and not call sqlite.getStats when memory has indexed files', async () => {

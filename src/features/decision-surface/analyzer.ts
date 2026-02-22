@@ -148,7 +148,7 @@ const analyzeDecisionSurface = (
       continue;
     }
 
-    const firstOffset = conditions.length > 0 ? conditions[0].offset : 0;
+    const firstOffset = conditions[0]?.offset ?? 0;
     const evidence = file.sourceText.slice(firstOffset, Math.min(file.sourceText.length, firstOffset + 200));
 
     findings.push({

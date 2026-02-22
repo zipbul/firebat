@@ -85,8 +85,8 @@ describe('createSqliteSymbolIndexRepository', () => {
 
     // Assert
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe('doWork');
-    expect(results[0].filePath).toBe('/src/util.ts');
+    expect(results[0]!.name).toBe('doWork');
+    expect(results[0]!.filePath).toBe('/src/util.ts');
   });
 
   it('should return empty array when search is called with empty query', async () => {
@@ -164,7 +164,7 @@ describe('createSqliteSymbolIndexRepository', () => {
 
     // Assert
     expect(results.length).toBe(1);
-    expect(results[0].name).toBe('MyWidget');
+    expect(results[0]!.name).toBe('MyWidget');
   });
 
   it('should isolate data across different projectKeys', async () => {

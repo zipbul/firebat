@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
 import { formatReport } from './report';
-import { toJsonReport } from './types';
 import type {
   FirebatReport,
   SourceSpan,
@@ -32,10 +31,18 @@ import type {
   GiantFileFinding,
   FirebatDetector,
   FormatFinding,
+  FirebatCatalogCode,
 } from './types';
 import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+const mkFormat = (file: string): FormatFinding => ({
+  code: 'FORMAT' as FirebatCatalogCode,
+  kind: 'needs-formatting',
+  file,
+  span: span(),
+});
 
 const span = (line = 1, col = 0): SourceSpan => ({
   start: { line, column: col },
@@ -115,7 +122,7 @@ describe('formatReport', () => {
     it('should omit errors key when meta.errors is undefined', () => {
       const report: FirebatReport = {
         ...makeReport(['waste'], { waste: [] }),
-        meta: { ...makeReport(['waste']).meta, errors: undefined },
+        meta: (({ errors: _e, ...rest }) => rest)(makeReport(['waste']).meta),
       };
       const parsed = JSON.parse(formatReport(report, 'json'));
 
@@ -425,14 +432,14 @@ describe('formatReport', () => {
 
   describe('format body', () => {
     it('should render singular form when single file needs formatting', () => {
-      const out = formatReport(makeReport(['format'], { format: [testFile] }), 'text');
+      const out = formatReport(makeReport(['format'], { format: [mkFormat(testFile)] }), 'text');
 
       expect(out).toContain('Format');
       expect(out).toContain('1 file need formatting');
     });
 
     it('should render plural form when multiple files need formatting', () => {
-      const out = formatReport(makeReport(['format'], { format: [testFile, testFile2] }), 'text');
+      const out = formatReport(makeReport(['format'], { format: [mkFormat(testFile), mkFormat(testFile2)] }), 'text');
 
       expect(out).toContain('2 files need formatting');
     });

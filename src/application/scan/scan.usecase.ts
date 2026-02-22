@@ -973,7 +973,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         label: item?.label,
@@ -997,7 +997,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         confidence: item?.confidence,
@@ -1022,7 +1022,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         evidence: item?.evidence,
@@ -1044,7 +1044,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         ...item,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
       };
     });
@@ -1062,7 +1062,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         ...item,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
       };
     });
@@ -1095,7 +1095,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         evidence: item?.evidence,
@@ -1119,7 +1119,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         symbol: item?.symbol,
@@ -1142,7 +1142,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         header: item?.header,
@@ -1196,7 +1196,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         file: module,
         span: zeroSpan,
         module,
@@ -1233,7 +1233,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
           return {
             kind,
-            code: kindToCode[kind],
+            code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
             file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
             span: o?.span ?? zeroSpan,
             shape: normalizeShape(o?.shape),
@@ -1318,7 +1318,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         items: items.map((item: any) => {
           const filePath = String(item?.filePath ?? item?.file ?? '');
 
@@ -1347,7 +1347,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       return {
         kind,
-        code: kindToCode[kind] ?? undefined,
+        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
         items: items.map((item: any) => {
           const filePath = String(item?.filePath ?? item?.file ?? '');
 

@@ -44,8 +44,8 @@ describe('infrastructure/sqlite/memory.repository — listKeys', () => {
     await repo.write({ projectKey: PROJECT_KEY, memoryKey: 'key-b', payloadJson: '{"b":2}' });
     const keys = await repo.listKeys({ projectKey: PROJECT_KEY });
     expect(keys.length).toBe(2);
-    expect(keys[0].memoryKey).toBe('key-b');
-    expect(keys[1].memoryKey).toBe('key-a');
+    expect(keys[0]!.memoryKey).toBe('key-b');
+    expect(keys[1]!.memoryKey).toBe('key-a');
   });
 
   it('only returns keys for the given projectKey', async () => {
@@ -53,7 +53,7 @@ describe('infrastructure/sqlite/memory.repository — listKeys', () => {
     await repo.write({ projectKey: 'other-project', memoryKey: 'key-b', payloadJson: '{}' });
     const keys = await repo.listKeys({ projectKey: PROJECT_KEY });
     expect(keys.length).toBe(1);
-    expect(keys[0].memoryKey).toBe('key-a');
+    expect(keys[0]!.memoryKey).toBe('key-a');
   });
 });
 

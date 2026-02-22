@@ -1021,6 +1021,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
 
         layerViolations.push({
           kind: 'layer-violation',
+          message: `${fromLayer} → ${toLayer} dependency not permitted`,
           from: toRelativePath(rootAbs, from),
           to: toRelativePath(rootAbs, target),
           fromLayer,

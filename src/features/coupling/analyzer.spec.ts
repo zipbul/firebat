@@ -9,6 +9,11 @@ const emptyDeps = (): DependencyAnalysis => ({
   adjacency: {},
   exportStats: {},
   cycles: noCycles,
+  fanIn: [],
+  fanOut: [],
+  cuts: [],
+  layerViolations: [],
+  deadExports: [],
 });
 
 describe('createEmptyCoupling', () => {
@@ -30,6 +35,11 @@ describe('analyzeCoupling', () => {
       adjacency: { C: ['A'], A: ['B'], B: [] },
       exportStats: {},
       cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
     };
     const result = analyzeCoupling(deps);
     expect(result.every(h => h.module !== 'A')).toBe(true);
@@ -48,6 +58,11 @@ describe('analyzeCoupling', () => {
       adjacency,
       exportStats: {},
       cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
@@ -71,6 +86,11 @@ describe('analyzeCoupling', () => {
       adjacency,
       exportStats: {},
       cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
@@ -84,6 +104,11 @@ describe('analyzeCoupling', () => {
       adjacency: { A: ['B'], B: ['A'] },
       exportStats: {},
       cycles: [{ path: ['A', 'B', 'A'] }] as DependencyAnalysis['cycles'],
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
     };
     const result = analyzeCoupling(deps);
     const modules = result.map(h => h.module);
@@ -101,6 +126,11 @@ describe('analyzeCoupling', () => {
       adjacency: { S: [] },
       exportStats: { S: { total: 0, abstract: 0 } },
       cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
     };
     const result = analyzeCoupling(deps);
     const sHotspot = result.find(h => h.module === 'S');
@@ -122,6 +152,11 @@ describe('analyzeCoupling', () => {
       adjacency,
       exportStats: {},
       cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');

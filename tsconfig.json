@@ -22,5 +22,5 @@
     "noImplicitOverride": true,
     "verbatimModuleSyntax": true
   },
-  "exclude": ["**/dist/**", "**/.firebat/**"]
+  "exclude": ["**/dist/**", "**/.firebat/**", "test/**/__fixtures__/**"]
 }

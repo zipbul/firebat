@@ -36,8 +36,10 @@ describe('toJsonReport', () => {
     expect(out.errors).toEqual({ 'src/a.ts': 'parse error' });
   });
 
-  it('should omit errors key when meta.errors is undefined', () => {
-    const report = makeReport({ errors: undefined });
+  it('should omit errors key when meta.errors is not present', () => {
+    const base = makeReport();
+    const { errors: _e, ...metaNoErrors } = base.meta;
+    const report: FirebatReport = { ...base, meta: metaNoErrors as FirebatReport['meta'] };
     const out = toJsonReport(report);
 
     expect('errors' in out).toBe(false);
@@ -130,7 +132,7 @@ describe('countBlockers', () => {
       format: [{ code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: 'a.ts', span: span() } as FormatFinding],
       lint: [{ severity: 'error', code: 'no-unused-vars', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic],
       typecheck: [{ severity: 'error', code: 'TS2322', msg: 'err', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem],
-      forwarding: [{ kind: 'forwarding', file: 'a.ts', span: span() } as ForwardingFinding],
+      forwarding: [{ kind: 'forwarding', file: 'a.ts', span: span() } as unknown as ForwardingFinding],
     };
 
     expect(countBlockers(analyses)).toBe(9);

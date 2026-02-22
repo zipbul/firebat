@@ -79,6 +79,8 @@ const analyzeSymmetryBreaking = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
+    if (!file) continue;
+
     if (file.errors.length > 0) {
       continue;
     }
@@ -133,6 +135,8 @@ const analyzeSymmetryBreaking = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
       }
 
       const file = files[it.fileIndex];
+
+      if (!file) continue;
 
       findings.push({
         kind: 'symmetry-breaking',

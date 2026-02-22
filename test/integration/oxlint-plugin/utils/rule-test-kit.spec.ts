@@ -24,7 +24,7 @@ const makeNoFixReport = (): ReportDescriptor => ({
 const makeNotFnReport = (): ReportDescriptor => ({
   node: { type: 'Identifier', range: [0, 0] } as unknown as ReportDescriptor['node'],
   messageId: 'test',
-  fix: 'notafunction' as unknown as ReportDescriptor['fix'],
+  fix: 'notafunction' as unknown as NonNullable<ReportDescriptor['fix']>,
 });
 
 const makeUndefinedTextReport = (start: number, end: number): ReportDescriptor => ({

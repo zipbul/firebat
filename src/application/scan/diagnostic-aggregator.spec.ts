@@ -21,21 +21,21 @@ describe('FIREBAT_CODE_CATALOG', () => {
   });
 
   it('should have a cause string for every entry', () => {
-    for (const [code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
+    for (const [_code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
       expect(typeof entry.cause).toBe('string');
       expect(entry.cause.length).toBeGreaterThan(0);
     }
   });
 
   it('should have a non-empty think array for every entry', () => {
-    for (const [code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
+    for (const [_code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
       expect(Array.isArray(entry.think)).toBe(true);
       expect(entry.think.length).toBeGreaterThanOrEqual(2);
     }
   });
 
   it('should have string elements in every think array', () => {
-    for (const [code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
+    for (const [_code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
       for (const t of entry.think) {
         expect(typeof t).toBe('string');
         expect(t.length).toBeGreaterThan(0);
@@ -44,7 +44,7 @@ describe('FIREBAT_CODE_CATALOG', () => {
   });
 
   it('should not have a fix field on any entry', () => {
-    for (const [code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
+    for (const [_code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
       expect('fix' in entry).toBe(false);
     }
   });

@@ -37,6 +37,6 @@ function identity<T>(value: T): T {
 
 const arrowFn = (x: number): number => x * 2;
 
-const _Greeter = Greeter;
+void Greeter;
 
 export { FAREWELL_PREFIX, GREETING_PREFIX, arrowFn, farewell, formatMessage, greet, identity };

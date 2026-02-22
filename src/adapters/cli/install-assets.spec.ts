@@ -75,7 +75,7 @@ describe('loadFirstExistingText', () => {
   });
 
   it('should return filePath and text for first existing candidate', async () => {
-    fileSpy = spyOn(Bun, 'file').mockImplementation((path: string) => {
+    fileSpy = spyOn(Bun, 'file').mockImplementation(((path: string) => {
       if (path === '/first.json') {
         return { exists: async () => false } as never;
       }
@@ -84,7 +84,7 @@ describe('loadFirstExistingText', () => {
         exists: async () => true,
         text: async () => '{"hello":"world"}',
       } as never;
-    });
+    }) as unknown as typeof Bun.file);
 
     const result = await loadFirstExistingText(['/first.json', '/second.json']);
 
@@ -95,7 +95,7 @@ describe('loadFirstExistingText', () => {
   it('should skip candidates where Bun.file throws', async () => {
     let callCount = 0;
 
-    fileSpy = spyOn(Bun, 'file').mockImplementation((_path: string) => {
+    fileSpy = spyOn(Bun, 'file').mockImplementation(((_path: string) => {
       callCount++;
       if (callCount === 1) {
         return {
@@ -107,7 +107,7 @@ describe('loadFirstExistingText', () => {
         exists: async () => true,
         text: async () => 'fallback content',
       } as never;
-    });
+    }) as unknown as typeof Bun.file);
 
     const result = await loadFirstExistingText(['/fail.json', '/ok.json']);
 

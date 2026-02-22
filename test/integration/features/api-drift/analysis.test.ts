@@ -7,20 +7,6 @@ import { parseSource } from '../../../../src/engine/parse-source';
 import { analyzeApiDrift } from '../../../../src/features/api-drift';
 import { createProgramFromMap } from '../../shared/test-kit';
 
-function createHandleValueSource(): string {
-  return ['export function handle(value) {', '  return value + 1;', '}'].join('\n');
-}
-
-function createHandleVoidSource(): string {
-  return ['export function handle(value, flag = false) {', '  if (flag) {', '    return;', '  }', '  return;', '}'].join('\n');
-}
-
-function createHandleOptionalSource(): string {
-  return ['export function handle(value, flag) {', '  if (flag) {', '    return value;', '  }', '  return value;', '}'].join(
-    '\n',
-  );
-}
-
 describe('integration/api-drift', () => {
   it('should not create global groups when the same bare name exists in many files', async () => {
     // Arrange

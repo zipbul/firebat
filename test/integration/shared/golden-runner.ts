@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import type { ParsedFile } from '../../../src/engine/types';
 import { parseSource } from '../../../src/engine/parse-source';
 import { PartialResultError } from '../../../src/engine/partial-result-error';
-import { normalizeValue, readExpected, toGoldenJson, writeExpected } from './golden-utils';
+import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

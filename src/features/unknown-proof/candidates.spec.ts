@@ -76,7 +76,7 @@ describe('features/unknown-proof/candidates — collectUnknownProofCandidates', 
     const result = collectUnknownProofCandidates({ program: [f], rootAbs: '/tmp' });
     const perFile = result.perFile.get('/assert.ts');
     expect(perFile?.typeAssertionFindings.length).toBeGreaterThanOrEqual(1);
-    expect(perFile?.typeAssertionFindings[0].kind).toBe('type-assertion');
+    expect(perFile?.typeAssertionFindings[0]!.kind).toBe('type-assertion');
   });
 
   it('detects double assertion as typeAssertionFinding', () => {

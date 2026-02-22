@@ -50,8 +50,8 @@ describe('openTsDocument', () => {
     });
 
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].method).toBe('textDocument/didOpen');
-    const params = notifications[0].params as Record<string, unknown>;
+    expect(notifications[0]!.method).toBe('textDocument/didOpen');
+    const params = notifications[0]!.params as Record<string, unknown>;
     const doc = params.textDocument as Record<string, unknown>;
 
     expect(doc.text).toBe('const x = 1;');
@@ -81,7 +81,7 @@ describe('openTsDocument', () => {
 
     await openTsDocument({ filePath: '/f.ts', text: '', lsp: mockLsp as never });
 
-    const doc = (notifications[0].params as Record<string, unknown>).textDocument as Record<string, unknown>;
+    const doc = (notifications[0]!.params as Record<string, unknown>).textDocument as Record<string, unknown>;
 
     expect(doc.languageId).toBe('typescript');
   });
@@ -96,7 +96,7 @@ describe('openTsDocument', () => {
 
     await openTsDocument({ filePath: '/f.tsx', text: '', languageId: 'typescriptreact', lsp: mockLsp as never });
 
-    const doc = (notifications[0].params as Record<string, unknown>).textDocument as Record<string, unknown>;
+    const doc = (notifications[0]!.params as Record<string, unknown>).textDocument as Record<string, unknown>;
 
     expect(doc.languageId).toBe('typescriptreact');
   });
@@ -111,7 +111,7 @@ describe('openTsDocument', () => {
 
     await openTsDocument({ filePath: '/f.ts', text: '', lsp: mockLsp as never });
 
-    const doc = (notifications[0].params as Record<string, unknown>).textDocument as Record<string, unknown>;
+    const doc = (notifications[0]!.params as Record<string, unknown>).textDocument as Record<string, unknown>;
 
     expect(doc.version).toBe(1);
   });

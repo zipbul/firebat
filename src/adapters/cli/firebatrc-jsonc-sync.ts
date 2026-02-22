@@ -459,7 +459,7 @@ class Scanner {
     return value;
   }
 
-  private fail<T>(message: string): T {
+  private fail(message: string): never {
     throw this.error(message);
   }
 }
@@ -551,7 +551,7 @@ const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
       const first = keptProps[0];
 
       if (!first) {
-        return [...nestedEdits, ...deletions, ...insertions];
+        return [...deletions, ...insertions];
       }
 
       const firstLineStart = lineStartAt(userText, first.keyStart);

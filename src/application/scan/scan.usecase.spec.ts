@@ -39,10 +39,10 @@ describe('resolveToolRcPath', () => {
 
   it('should join root and basename correctly', async () => {
     let capturedPath: string | undefined;
-    fileSpy = spyOn(Bun, 'file').mockImplementation((p: string) => {
+    fileSpy = spyOn(Bun, 'file').mockImplementation(((p: string) => {
       capturedPath = p;
       return { exists: async () => false } as never;
-    });
+    }) as unknown as typeof Bun.file);
 
     await resolveToolRcPath('/my/project', 'custom.rc');
 

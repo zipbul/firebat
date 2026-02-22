@@ -16,23 +16,6 @@ const spanForOffset = (sourceText: string, offset: number) => {
   return { start, end };
 };
 
-/** Check whether an Identifier node appears as the left-hand side of an AssignmentExpression or argument of an UpdateExpression. */
-const isWriteContext = (idNode: Node, parentNode: Node): boolean => {
-  if (parentNode.type === 'AssignmentExpression' && isNodeRecord(parentNode)) {
-    const left = parentNode.left;
-
-    return isOxcNode(left) && left === idNode;
-  }
-
-  if (parentNode.type === 'UpdateExpression' && isNodeRecord(parentNode)) {
-    const argument = parentNode.argument;
-
-    return isOxcNode(argument) && argument === idNode;
-  }
-
-  return false;
-};
-
 /** Get the enclosing exported function name, or null if not inside an exported function. */
 const getEnclosingExportedFunction = (program: Node, targetOffset: number): string | null => {
   let result: string | null = null;
@@ -109,7 +92,7 @@ interface WriterReaderResult {
 }
 
 /** For a given variable name, find which exported functions write it and which only read it. */
-const classifyExportedFunctions = (program: Node, sourceText: string, varName: string): WriterReaderResult => {
+const classifyExportedFunctions = (program: Node, _sourceText: string, varName: string): WriterReaderResult => {
   const writerFns = new Set<string>();
   const readerFns = new Set<string>();
 

@@ -28,7 +28,7 @@ describe('features/exception-hygiene/types — structural shape', () => {
       file: '/a.ts',
       span: { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } },
       evidence: 'throwing a string',
-      code: 'EX-001' as unknown as import('./types').FirebatCatalogCode,
+      code: 'EX-001' as unknown as import('../../types').FirebatCatalogCode,
     };
     const withoutCode = {
       kind: 'throw-non-error' as const,

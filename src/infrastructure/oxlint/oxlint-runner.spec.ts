@@ -50,11 +50,11 @@ describe('parseOxlintOutput', () => {
     const result = __testing__.parseOxlintOutput(raw);
 
     expect(result).toHaveLength(1);
-    expect(result[0].message).toBe('use const');
-    expect(result[0].severity).toBe('warning');
-    expect(result[0].filePath).toBe('/src/a.ts');
-    expect(result[0].span.start.line).toBe(3);
-    expect(result[0].span.start.column).toBe(5);
+    expect(result[0]!.message).toBe('use const');
+    expect(result[0]!.severity).toBe('warning');
+    expect(result[0]!.filePath).toBe('/src/a.ts');
+    expect(result[0]!.span.start.line).toBe(3);
+    expect(result[0]!.span.start.column).toBe(5);
   });
 
   it('should parse diagnostics-wrapper-style output', () => {
@@ -64,8 +64,8 @@ describe('parseOxlintOutput', () => {
     const result = __testing__.parseOxlintOutput(raw);
 
     expect(result).toHaveLength(1);
-    expect(result[0].message).toBe('no-var');
-    expect(result[0].severity).toBe('error');
+    expect(result[0]!.message).toBe('no-var');
+    expect(result[0]!.severity).toBe('error');
   });
 
   it('should fall back to text/level field aliases', () => {
@@ -74,27 +74,27 @@ describe('parseOxlintOutput', () => {
     ]);
     const result = __testing__.parseOxlintOutput(raw);
 
-    expect(result[0].message).toBe('aliased message');
-    expect(result[0].severity).toBe('info');
-    expect(result[0].filePath).toBe('/x.ts');
-    expect(result[0].code).toBe('rule-x');
-    expect(result[0].span.start.line).toBe(10);
-    expect(result[0].span.start.column).toBe(2);
+    expect(result[0]!.message).toBe('aliased message');
+    expect(result[0]!.severity).toBe('info');
+    expect(result[0]!.filePath).toBe('/x.ts');
+    expect(result[0]!.code).toBe('rule-x');
+    expect(result[0]!.span.start.line).toBe(10);
+    expect(result[0]!.span.start.column).toBe(2);
   });
 
   it('should default severity to warning when absent', () => {
     const raw = JSON.stringify([{ message: 'no severity' }]);
     const result = __testing__.parseOxlintOutput(raw);
 
-    expect(result[0].severity).toBe('warning');
+    expect(result[0]!.severity).toBe('warning');
   });
 
   it('should default line/column to 0 when absent', () => {
     const raw = JSON.stringify([{ message: 'no position' }]);
     const result = __testing__.parseOxlintOutput(raw);
 
-    expect(result[0].span.start.line).toBe(0);
-    expect(result[0].span.start.column).toBe(0);
+    expect(result[0]!.span.start.line).toBe(0);
+    expect(result[0]!.span.start.column).toBe(0);
   });
 
   it('should return empty array for empty array input', () => {
@@ -128,7 +128,7 @@ describe('runOxlint', () => {
     expect(result.tool).toBe('oxlint');
     expect(result.exitCode).toBe(1);
     expect(result.diagnostics).toHaveLength(1);
-    expect(result.diagnostics![0].message).toBe('no-var');
+    expect(result.diagnostics![0]!.message).toBe('no-var');
   });
 
   it('should parse stderr diagnostics when stdout has no JSON', async () => {
@@ -139,7 +139,7 @@ describe('runOxlint', () => {
 
     expect(result.ok).toBe(true);
     expect(result.diagnostics).toHaveLength(1);
-    expect(result.diagnostics![0].message).toBe('stderr-diag');
+    expect(result.diagnostics![0]!.message).toBe('stderr-diag');
   });
 
   it('should return empty diagnostics when stdout and stderr are both non-JSON', async () => {

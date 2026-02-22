@@ -69,6 +69,8 @@ const analyzeModificationTrap = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
+    if (!file) continue;
+
     if (file.errors.length > 0) {
       continue;
     }
@@ -119,6 +121,9 @@ const analyzeModificationTrap = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
 
     for (const idx of idxs) {
       const file = files[idx];
+
+      if (!file) continue;
+
       const rel = normalizeFile(file.filePath);
       const offset = Math.max(0, file.sourceText.indexOf('switch') >= 0 ? file.sourceText.indexOf('switch') : 0);
 

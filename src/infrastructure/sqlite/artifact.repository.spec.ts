@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { createDrizzleDb } from './drizzle-db';
 import { createSqliteArtifactRepository } from './artifact.repository';
-import { artifacts } from './schema';
 
 // Use an in-memory SQLite DB + Drizzle for integration tests.
 // We bootstrap the schema inline (no migration needed for a few CREATE TABLE stmts).

@@ -58,8 +58,8 @@ describe('createInMemorySymbolIndexRepository', () => {
 
     // Assert
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe('computeTotal');
-    expect(results[0].filePath).toBe('/src/util.ts');
+    expect(results[0]!.name).toBe('computeTotal');
+    expect(results[0]!.filePath).toBe('/src/util.ts');
   });
 
   it('should return empty array when search is called with empty query', async () => {
@@ -239,7 +239,7 @@ describe('createInMemorySymbolIndexRepository', () => {
 
     // Assert
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe('MyWidget');
+    expect(results[0]!.name).toBe('MyWidget');
   });
 
   it('should isolate data across different projectKeys', async () => {

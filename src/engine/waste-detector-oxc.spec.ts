@@ -47,7 +47,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       }
     `);
     const result = detectWasteOxc([f]);
-    const unusedFindings = result.filter(r => r.kind === 'unused-variable' || r.kind === 'dead-write');
     // OXC may detect as dead-write or unused-variable depending on analysis
     expect(Array.isArray(result)).toBe(true);
     // At least one waste finding expected
@@ -171,7 +170,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const f = toFile('/union-nonprim.ts', code);
     const result = detectWasteOxc([f], { memoryRetentionThreshold: 1 });
     // string | Date has a non-primitive (Date = TSTypeReference), so should NOT be filtered
-    const memRetention = result.filter(r => r.kind === 'memory-retention' && r.label === 'value');
     // May or may not report depending on CFG analysis, but should NOT be filtered by primitive check
     expect(Array.isArray(result)).toBe(true);
   });

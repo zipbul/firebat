@@ -94,9 +94,8 @@ describe('WriteBehindQueue', () => {
   it('should return immediately when flush timeoutMs is 0', async () => {
     // Arrange
     const queue = new WriteBehindQueue();
-    let ran = false;
     queue.enqueue(() => {
-      ran = true;
+      // callback intentionally empty for timing test
     });
 
     // Act

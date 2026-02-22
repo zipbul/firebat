@@ -6,8 +6,7 @@ import { computeInputsDigest } from './inputs-digest';
 const noopRepo: FileIndexRepository = {
   getFile: async () => null,
   upsertFile: async () => {},
-  deleteFilesNotIn: async () => {},
-  getFilesByProjectKey: async () => [],
+  deleteFile: async () => {},
 };
 
 describe('computeInputsDigest', () => {
@@ -76,7 +75,7 @@ describe('computeInputsDigest', () => {
   it('[HP] cached file entry is used from repo when available', async () => {
     const cachedRepo: FileIndexRepository = {
       ...noopRepo,
-      getFile: async () => ({ contentHash: 'abc123', mtimeMs: 0, size: 0, filePath: '/f.ts', projectKey: 'proj' }),
+      getFile: async () => ({ contentHash: 'abc123', mtimeMs: 0, size: 0, filePath: '/f.ts', updatedAt: 0 }),
     };
     const result = await computeInputsDigest({
       projectKey: 'proj',

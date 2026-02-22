@@ -164,6 +164,8 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
+    if (!file) continue;
+
     if (file.errors.length > 0) {
       continue;
     }
@@ -185,6 +187,8 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+
+    if (!file) continue;
 
     if (file.errors.length > 0) {
       continue;
@@ -263,6 +267,9 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
         return calleeLayer === 'application' && (callerLayer === 'adapters' || callerLayer === 'infrastructure');
       });
     const file = files[ex.fileIndex];
+
+    if (!file) continue;
+
     const offset = ex.offset;
 
     findings.push({

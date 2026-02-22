@@ -127,7 +127,7 @@ const createMcpTestContext = async (opts?: CreateMcpTestContextOptions): Promise
 // ---------------------------------------------------------------------------
 
 interface CallToolResult {
-  readonly structured: unknown;
+  readonly structured: Record<string, unknown>;
   readonly raw: ToolResultLike;
   readonly isError: boolean;
 }
@@ -135,7 +135,7 @@ interface CallToolResult {
 const callTool = async (client: Client, name: string, args: Record<string, unknown> = {}): Promise<CallToolResult> => {
   const raw = (await client.callTool({ name, arguments: args })) as ToolResultLike;
 
-  return { structured: getStructuredContent(raw), raw, isError: raw.isError === true };
+  return { structured: (getStructuredContent(raw) ?? {}) as Record<string, unknown>, raw, isError: raw.isError === true };
 };
 
 /**

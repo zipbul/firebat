@@ -75,10 +75,10 @@ describe('runOxfmt', () => {
   it('should include --config in args when configPath is provided', async () => {
     // Arrange
     let capturedCmd: string[] | undefined;
-    spawnSpy = spyOn(Bun, 'spawn').mockImplementation(({ cmd }: { cmd: string[] }) => {
+    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) =>  {
       capturedCmd = cmd;
       return makeProc() as ReturnType<typeof Bun.spawn>;
-    });
+    }) as unknown as typeof Bun.spawn);
 
     // Act
     await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath: '/p/.oxfmtrc', logger });
@@ -91,10 +91,10 @@ describe('runOxfmt', () => {
   it('should not include --config when configPath is whitespace only', async () => {
     // Arrange
     let capturedCmd: string[] | undefined;
-    spawnSpy = spyOn(Bun, 'spawn').mockImplementation(({ cmd }: { cmd: string[] }) => {
+    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) =>  {
       capturedCmd = cmd;
       return makeProc() as ReturnType<typeof Bun.spawn>;
-    });
+    }) as unknown as typeof Bun.spawn);
 
     // Act
     await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath: '   ', logger });

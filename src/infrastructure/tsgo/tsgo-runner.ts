@@ -500,13 +500,13 @@ const indexOfBytes = (haystack: Uint8Array, needle: Uint8Array): number => {
   return -1;
 };
 
-const concatBytes = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+const concatBytes = (a: Uint8Array<ArrayBufferLike>, b: Uint8Array<ArrayBufferLike>): Uint8Array<ArrayBuffer> => {
   if (a.length === 0) {
-    return b;
+    return new Uint8Array(b);
   }
 
   if (b.length === 0) {
-    return a;
+    return new Uint8Array(a);
   }
 
   const out = new Uint8Array(a.length + b.length);

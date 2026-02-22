@@ -124,7 +124,7 @@ describe('getIndexStatsFromIndexUseCase', () => {
   it('should return zero stats when empty', async () => {
     const stats = await getIndexStatsFromIndexUseCase({ logger });
 
-    expect(stats.fileCount).toBe(0);
+    expect(stats.indexedFileCount).toBe(0);
     expect(stats.symbolCount).toBe(0);
     expect(stats.lastIndexedAt).toBeNull();
   });

@@ -13,6 +13,6 @@ class Helper {
   }
 }
 
-const _Helper = Helper;
+void Helper;
 
 export { LABEL, demo };

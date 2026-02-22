@@ -42,10 +42,10 @@ describe('loadFirebatConfigFile', () => {
 
   it('should use configPath when provided', async () => {
     let capturedPath: string | undefined;
-    fileSpy = spyOn(Bun, 'file').mockImplementation((p: string) => {
-      capturedPath = p;
+    fileSpy = spyOn(Bun, 'file').mockImplementation(((p: string | URL) => {
+      capturedPath = p.toString();
       return { exists: async () => false, text: async () => '' } as never;
-    });
+    }) as unknown as typeof Bun.file);
 
     await loadFirebatConfigFile({ rootAbs: '/project', configPath: '/custom/.firebatrc' });
 

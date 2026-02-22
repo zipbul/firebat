@@ -46,7 +46,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `);
     const items = analyzeNesting([f]);
     expect(items.length).toBeGreaterThanOrEqual(1);
-    const item = items[0];
+    const item = items[0]!;
     expect(item.file).toBe('/deep3.ts');
     expect(typeof item.header).toBe('string');
     expect(typeof item.metrics.depth).toBe('number');
@@ -78,7 +78,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     expect(flatItems.length).toBe(0);
     // deep function SHOULD be a finding
     expect(deepItems.length).toBeGreaterThanOrEqual(1);
-    expect(deepItems[0].metrics.depth).toBeGreaterThanOrEqual(3);
+    expect(deepItems[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 
   it('NestingItem has required fields: filePath, header, maxDepth, span', () => {
@@ -97,7 +97,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `);
     const items = analyzeNesting([f]);
     expect(items.length).toBeGreaterThanOrEqual(1);
-    const item = items[0];
+    const item = items[0]!;
     expect(typeof item.file).toBe('string');
     expect(typeof item.header).toBe('string');
     expect(typeof item.metrics.depth).toBe('number');
@@ -136,7 +136,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `);
     const items = analyzeNesting([f]);
     expect(items.length).toBeGreaterThanOrEqual(1);
-    expect(typeof items[0].score).toBe('number');
+    expect(typeof items[0]!.score).toBe('number');
   });
 
   it('arrow functions deeply nested are analyzed', () => {
@@ -155,6 +155,6 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `);
     const items = analyzeNesting([f]);
     expect(items.length).toBeGreaterThanOrEqual(1);
-    expect(items[0].metrics.depth).toBeGreaterThanOrEqual(3);
+    expect(items[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 });

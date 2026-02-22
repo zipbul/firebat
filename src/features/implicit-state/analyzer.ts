@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { ImplicitStateFinding } from '../../types';
 
-import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode } from '../../engine/oxc-ast-utils';
 import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
@@ -45,6 +45,8 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+
+    if (!file) continue;
 
     if (file.errors.length > 0) {
       continue;
@@ -95,6 +97,9 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
 
     for (const idx of idxs) {
       const file = files[idx];
+
+      if (!file) continue;
+
       const offset = file.sourceText.indexOf(`process.env.${key}`);
 
       addFinding(findings, file, Math.max(0, offset));
@@ -106,6 +111,8 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+
+    if (!file) continue;
 
     if (file.errors.length > 0) {
       continue;
@@ -141,6 +148,9 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
   if (getInstanceFiles.length >= 2) {
     for (const idx of getInstanceFiles) {
       const file = files[idx];
+
+      if (!file) continue;
+
       const offset = file.sourceText.indexOf('getInstance()');
 
       addFinding(findings, file, Math.max(0, offset));
@@ -152,6 +162,8 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
+
+    if (!file) continue;
 
     if (file.errors.length > 0) {
       continue;
@@ -197,7 +209,7 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
       // String literal argument — Literal or StringLiteral
       let channel: string | null = null;
 
-      if (firstArg.type === 'Literal' || firstArg.type === 'StringLiteral') {
+      if (firstArg.type === 'Literal') {
         channel = isNodeRecord(firstArg) ? String((firstArg as any).value ?? '') : null;
       }
 
@@ -219,6 +231,9 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
 
     for (const idx of idxs) {
       const file = files[idx];
+
+      if (!file) continue;
+
       const offset =
         file.sourceText.indexOf(`'${channel}'`) >= 0
           ? file.sourceText.indexOf(`'${channel}'`)

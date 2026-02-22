@@ -12,9 +12,9 @@ const EMPTY_TS = '';
 let fileSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
-  fileSpy = spyOn(Bun, 'file').mockImplementation((_path: string) => ({
+  fileSpy = spyOn(Bun, 'file').mockImplementation(((_path: string | URL) => ({
     text: async () => SIMPLE_TS,
-  }) as BunFile);
+  }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 });
 
 afterEach(() => {
@@ -24,7 +24,7 @@ afterEach(() => {
 describe('findPatternInFiles', () => {
   it('should throw an error when neither matcher nor rule is provided', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => SIMPLE_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => SIMPLE_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act & Assert
     await expect(
@@ -47,7 +47,7 @@ describe('findPatternInFiles', () => {
 
   it('should return empty array when no matches are found in file', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => EMPTY_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => EMPTY_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     const results = await findPatternInFiles({
@@ -62,7 +62,7 @@ describe('findPatternInFiles', () => {
 
   it('should return matches with correct shape when matcher is provided', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => FN_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => FN_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     const results = await findPatternInFiles({
@@ -73,7 +73,7 @@ describe('findPatternInFiles', () => {
 
     // Assert
     if (results.length > 0) {
-      const match = results[0];
+      const match = results[0]!;
       expect(typeof match.filePath).toBe('string');
       expect(typeof match.text).toBe('string');
       expect(typeof match.ruleId).toBe('string');
@@ -90,7 +90,7 @@ describe('findPatternInFiles', () => {
 
   it('should use inline as ruleId when ruleName is not provided', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => FN_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => FN_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     const results = await findPatternInFiles({
@@ -107,7 +107,7 @@ describe('findPatternInFiles', () => {
 
   it('should use provided ruleName as ruleId', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => FN_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => FN_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     const results = await findPatternInFiles({
@@ -125,7 +125,7 @@ describe('findPatternInFiles', () => {
 
   it('should use filePath from target argument in each match', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => SIMPLE_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => SIMPLE_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     const results = await findPatternInFiles({
@@ -142,7 +142,7 @@ describe('findPatternInFiles', () => {
 
   it('should return span with 1-based line and column numbers', async () => {
     // Arrange
-    fileSpy.mockImplementation((_: string) => ({ text: async () => SIMPLE_TS }) as BunFile);
+    fileSpy.mockImplementation(((_: string | URL) => ({ text: async () => SIMPLE_TS }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     const results = await findPatternInFiles({
@@ -163,12 +163,12 @@ describe('findPatternInFiles', () => {
   it('should accumulate results from multiple targets', async () => {
     // Arrange
     let callCount = 0;
-    fileSpy.mockImplementation((_: string) => ({
+    fileSpy.mockImplementation(((_: string | URL) => ({
       text: async () => {
         callCount += 1;
         return SIMPLE_TS;
       },
-    }) as BunFile);
+    }) as ReturnType<typeof Bun.file>) as unknown as typeof Bun.file);
 
     // Act
     await findPatternInFiles({

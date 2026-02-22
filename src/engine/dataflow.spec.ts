@@ -5,7 +5,7 @@ import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSe
 describe('createBitSet', () => {
   it('creates an empty bit set', () => {
     const bs = createBitSet();
-    expect(bs.size()).toBe(0);
+    expect(bs.array().length).toBe(0);
   });
 });
 

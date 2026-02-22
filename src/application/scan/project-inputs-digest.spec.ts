@@ -6,8 +6,7 @@ import { computeProjectInputsDigest } from './project-inputs-digest';
 const noopRepo: FileIndexRepository = {
   getFile: async () => null,
   upsertFile: async () => {},
-  deleteFilesNotIn: async () => {},
-  getFilesByProjectKey: async () => [],
+  deleteFile: async () => {},
 };
 
 describe('computeProjectInputsDigest', () => {

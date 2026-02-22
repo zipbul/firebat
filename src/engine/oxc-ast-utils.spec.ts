@@ -73,7 +73,7 @@ describe('getNodeName', () => {
 
 describe('getLiteralString', () => {
   it('returns the string value for a string Literal node', () => {
-    const nodes = collectOxcNodes(prog('"hello";'), n => n.type === 'StringLiteral' || n.type === 'Literal');
+    const nodes = collectOxcNodes(prog('"hello";'), n => n.type === 'Literal');
     const strLiteral = nodes.find(n => (n as { value?: unknown }).value === 'hello');
     if (strLiteral) {
       expect(getLiteralString(strLiteral)).toBe('hello');

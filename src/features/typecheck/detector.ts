@@ -60,13 +60,6 @@ interface PullDiagnosticsFullReport {
   readonly items?: ReadonlyArray<LspDiagnostic>;
 }
 
-interface PullDiagnosticsUnchangedReport {
-  readonly kind: 'unchanged';
-  readonly resultId?: string;
-}
-
-type PullDiagnosticsReport = PullDiagnosticsFullReport | PullDiagnosticsUnchangedReport;
-
 interface PullDiagnosticsFullReportLike {
   readonly kind?: unknown;
   readonly items?: unknown;
@@ -146,7 +139,7 @@ const shouldIncludeDiagnostic = (severity: number | undefined): boolean => {
   return severity !== 3 && severity !== 4;
 };
 
-const toSeverity = (severity: number | undefined): 'error' => {
+const toSeverity = (_severity: number | undefined): 'error' => {
   // Policy: treat warnings as errors.
   return 'error';
 };

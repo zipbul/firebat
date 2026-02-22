@@ -37,7 +37,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArra
     .map(d => {
       const nextSeverity = normalizeSeverity(d.severity);
 
-      if (nextSeverity === null) {
+      if (nextSeverity === null || d.filePath === undefined) {
         return null;
       }
 

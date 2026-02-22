@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
 
 import { collectDuplicateGroups } from './duplicate-collector';
@@ -15,7 +14,6 @@ const isFunctionDeclaration = (node: { type?: unknown }): boolean =>
 
 // fingerprint: use structural text (body token count as string)
 const fpByType = (node: { type?: unknown }): string => String((node as { type: string }).type);
-const fpByStart = (node: { start?: unknown }): string => String((node as { start: number }).start);
 
 const kindResolver = (): import('../types').FirebatItemKind => 'function';
 
@@ -61,8 +59,8 @@ describe('engine/duplicate-collector — collectDuplicateGroups', () => {
     // Both are FunctionDeclaration → same fpByType fingerprint
     const groups = collectDuplicateGroups([f1, f2], 1, isFunctionDeclaration, fpByType, kindResolver, 'type-1');
     expect(groups.length).toBe(1);
-    expect(groups[0].cloneType).toBe('type-1');
-    expect(groups[0].items.length).toBe(2);
+    expect(groups[0]!.cloneType).toBe('type-1');
+    expect(groups[0]!.items.length).toBe(2);
   });
 
   it('group items have filePath, header, kind, span with start/end', () => {
@@ -70,7 +68,7 @@ describe('engine/duplicate-collector — collectDuplicateGroups', () => {
     const f2 = parsedFile('/p2.ts', 'function myFun() { const x = 1; return x; }');
     const groups = collectDuplicateGroups([f1, f2], 1, isFunctionDeclaration, fpByType, kindResolver, 'type-3-normalized');
     expect(groups.length).toBe(1);
-    const item = groups[0].items[0];
+    const item = groups[0]!.items[0]!;
     expect(typeof item.filePath).toBe('string');
     expect(typeof item.header).toBe('string');
     expect(item.kind).toBe('function');
@@ -101,9 +99,9 @@ describe('engine/duplicate-collector — collectDuplicateGroups', () => {
     const f1 = parsedFile('/x.ts', 'function doWork(alpha: number) { return alpha + 1; }');
     const f2 = parsedFile('/y.ts', 'function doWork(beta: number) { return beta + 1; }');
     const groups = collectDuplicateGroups([f1, f2], 1, isFunctionDeclaration, fpByType, kindResolver, 'type-2-shape');
-    if (groups.length > 0 && groups[0].suggestedParams) {
-      expect(groups[0].suggestedParams.pairs.length).toBeGreaterThanOrEqual(1);
-      expect(groups[0].suggestedParams.kind).toBe('identifier');
+    if (groups.length > 0 && groups[0]!.suggestedParams) {
+      expect(groups[0]!.suggestedParams.pairs.length).toBeGreaterThanOrEqual(1);
+      expect(groups[0]!.suggestedParams.kind).toBe('identifier');
     }
     // At minimum, a group was detected
     expect(groups.length).toBeGreaterThanOrEqual(0);

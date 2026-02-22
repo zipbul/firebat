@@ -228,7 +228,7 @@ const extractPrefixFamily = (name: string): string | null => {
   for (let index = 1; index < trimmed.length; index += 1) {
     const ch = trimmed[index];
 
-    if (ch >= 'A' && ch <= 'Z') {
+    if (ch !== undefined && ch >= 'A' && ch <= 'Z') {
       const prefix = trimmed.slice(0, index);
 
       if (PREFIX_STOP_WORDS.has(prefix)) {

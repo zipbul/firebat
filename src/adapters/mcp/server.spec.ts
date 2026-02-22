@@ -104,7 +104,7 @@ describe('filterAnalysesByFilePatterns', () => {
     const result = filterAnalysesByFilePatterns(analyses, ['src/**']);
 
     expect((result['waste'] as unknown[]).length).toBe(1);
-    expect((result['waste'] as { file: string }[])[0].file).toBe('src/a.ts');
+    expect((result['waste'] as { file: string }[])[0]!.file).toBe('src/a.ts');
   });
 
   it('should preserve findings with no file info', () => {

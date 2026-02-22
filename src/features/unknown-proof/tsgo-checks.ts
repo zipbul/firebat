@@ -60,11 +60,6 @@ interface RunTsgoUnknownProofChecksFail {
 
 type RunTsgoUnknownProofChecksResult = RunTsgoUnknownProofChecksOk | RunTsgoUnknownProofChecksFail;
 
-const createEmptySpan = (): SourceSpan => ({
-  start: { line: 1, column: 1 },
-  end: { line: 1, column: 1 },
-});
-
 const pickTypeSnippetFromHoverText = (text: string): string => {
   if (text.trim().length === 0) {
     return '';

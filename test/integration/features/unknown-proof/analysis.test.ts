@@ -16,19 +16,6 @@ const writeText = async (filePath: string, text: string): Promise<void> => {
   await Bun.write(filePath, text);
 };
 
-interface UnknownProofStatus {
-  readonly status: string;
-}
-
-interface UnknownProofWithFindings {
-  readonly status: string;
-  readonly findings: ReadonlyArray<UnknownProofFinding>;
-}
-
-interface UnknownProofFindingsOnly {
-  readonly findings: ReadonlyArray<UnknownProofFinding>;
-}
-
 // Phase 0: unknown-proof should become a bare array result, and tool availability/errors
 // should be lifted out of findings at a higher layer (e.g., report.meta.errors).
 type UnknownProofRunResult =

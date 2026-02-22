@@ -26,17 +26,16 @@ describe('features/api-drift/tsgo-checks — ApiDriftInterfaceMethodCandidate sh
       },
       methodName: 'findAll',
       shape: {
-        paramCount: 2,
-        optionalParamCount: 0,
-        hasRestParam: false,
-        hasReturn: true,
-        hasAsyncReturn: false,
+        paramsCount: 2,
+        optionalCount: 0,
+        returnKind: 'value',
+        async: false,
       },
       filePath: '/src/repo.ts',
       span: { start: { line: 5, column: 2 }, end: { line: 5, column: 20 } },
     };
     expect(candidate.methodName).toBe('findAll');
-    expect(candidate.shape.paramCount).toBe(2);
+    expect(candidate.shape.paramsCount).toBe(2);
     expect(candidate.filePath).toBe('/src/repo.ts');
     expect(candidate.interfaceToken.name).toBe('IRepo');
   });
@@ -45,7 +44,7 @@ describe('features/api-drift/tsgo-checks — ApiDriftInterfaceMethodCandidate sh
     const makeCandidate = (method: string): ApiDriftInterfaceMethodCandidate => ({
       interfaceToken: { name: 'IFoo', span: { start: { line: 1, column: 0 }, end: { line: 1, column: 4 } } },
       methodName: method,
-      shape: { paramCount: 0, optionalParamCount: 0, hasRestParam: false, hasReturn: false, hasAsyncReturn: false },
+      shape: { paramsCount: 0, optionalCount: 0, returnKind: 'void', async: false },
       filePath: '/foo.ts',
       span: { start: { line: 2, column: 0 }, end: { line: 2, column: 5 } },
     });
