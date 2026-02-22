@@ -1,0 +1,18 @@
+[
+  {
+    "code": "no-var",
+    "filePath": "src/index.ts",
+    "message": "no-var: Unexpected var, use let or const instead",
+    "severity": "warning",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 1,
+        "line": 1
+      }
+    }
+  }
+]

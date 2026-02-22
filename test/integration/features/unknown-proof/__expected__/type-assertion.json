@@ -1,0 +1,17 @@
+[
+  {
+    "filePath": "/virtual/type-assertion.ts",
+    "kind": "type-assertion",
+    "message": "Type assertions are forbidden (no `as T` / `<T>expr`)",
+    "span": {
+      "end": {
+        "column": 65,
+        "line": 1
+      },
+      "start": {
+        "column": 23,
+        "line": 1
+      }
+    }
+  }
+]

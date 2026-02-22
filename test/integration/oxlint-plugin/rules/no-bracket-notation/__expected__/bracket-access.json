@@ -1,0 +1,15 @@
+{
+  "fixedSource": "const config = { timeout: 5000 };\nconst value = config.timeout;\n",
+  "reports": [
+    {
+      "data": {
+        "key": "timeout"
+      },
+      "messageId": "bracketNotation",
+      "range": [
+        48,
+        65
+      ]
+    }
+  ]
+}

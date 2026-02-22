@@ -1,0 +1,11 @@
+{
+  "reports": [
+    {
+      "messageId": "doubleAssertion",
+      "range": [
+        38,
+        64
+      ]
+    }
+  ]
+}

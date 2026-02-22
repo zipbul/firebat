@@ -629,10 +629,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       reportExceptionControlFlowIfNeeded(node);
 
       const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
+      const hasFinalizer = isOxcNode(node.finalizer);
 
       tryCatchStack.push({ hasCatch });
 
-      if (hasCatch) {
+      if (hasCatch || hasFinalizer) {
         functionTryCatchDepth++;
       }
 
@@ -641,7 +642,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       visit(node.handler);
       visit(node.finalizer);
 
-      if (hasCatch) {
+      if (hasCatch || hasFinalizer) {
         functionTryCatchDepth--;
       }
 

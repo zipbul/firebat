@@ -1,0 +1,19 @@
+[
+  {
+    "file": "module-state.ts",
+    "kind": "temporal-coupling",
+    "readers": 1,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    },
+    "state": "currentUser",
+    "writers": 1
+  }
+]

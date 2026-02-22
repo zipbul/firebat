@@ -1,0 +1,18 @@
+[
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "module-cache.ts",
+    "kind": "implicit-state",
+    "protocol": "let cache: Map<string, string> | null = null;\n\nexport functi",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

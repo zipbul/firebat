@@ -1,20 +1,10 @@
 import type { ParsedFile } from '../../engine/types';
 import type { ModificationTrapFinding } from '../../types';
 
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyModificationTrap = (): ReadonlyArray<ModificationTrapFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffset = (sourceText: string, offset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, offset));
@@ -95,10 +85,19 @@ const analyzeModificationTrap = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
 
     if (labelSet.length === 0) {
       // also treat repeated imports of a shared type as a trap
-      const typeImportCount = (file.sourceText.match(/import\s+type\s+\{\s*User\s*\}\s+from\s+['"][^'"]+['"]/g) ?? []).length;
+      const typeImportRe = /import\s+type\s+\{\s*([A-Z][A-Za-z0-9_]*)\s*\}\s+from\s+['"][^'"]+['"]/g;
+      const importedTypes = new Set<string>();
 
-      if (typeImportCount > 0) {
-        const key = 'import-type:User';
+      for (const m of file.sourceText.matchAll(typeImportRe)) {
+        const typeName = String(m[1] ?? '');
+
+        if (typeName.length > 0) {
+          importedTypes.add(typeName);
+        }
+      }
+
+      for (const typeName of importedTypes) {
+        const key = `import-type:${typeName}`;
 
         patternToFiles.set(key, [...(patternToFiles.get(key) ?? []), i]);
       }

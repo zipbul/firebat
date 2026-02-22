@@ -1,0 +1,14 @@
+{
+  "reports": [
+    {
+      "data": {
+        "expected": "user-service"
+      },
+      "messageId": "sutName",
+      "range": [
+        42,
+        105
+      ]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "code": "COUPLING_OFF_MAIN_SEQ",
+    "metrics": {
+      "abstractness": 0,
+      "distance": 1,
+      "fanIn": 0,
+      "fanOut": 0,
+      "instability": 0
+    },
+    "module": "isolated.ts",
+    "score": 100,
+    "signals": [
+      "off-main-sequence"
+    ],
+    "suggestedRefactor": "",
+    "why": "off-main-sequence"
+  }
+]

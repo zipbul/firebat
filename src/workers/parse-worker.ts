@@ -136,3 +136,5 @@ self.onmessage = async (event: MessageEvent<ParseWorkerRequest>) => {
     }
   }
 };
+
+export const __testing__ = { extractFilePath, extractRequestId, toCloneableError };

@@ -246,6 +246,10 @@ const analyzeFunctionNode = (
   const span = getFunctionSpan(functionNode, sourceText);
   const score = Math.max(0, earlyReturnCount + (hasGuardClauses ? 0 : 1));
 
+  if (score === 0) {
+    return null;
+  }
+
   if (kind === null) {
     kind = 'missing-guard';
   }

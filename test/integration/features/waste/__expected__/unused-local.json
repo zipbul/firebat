@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/unused-local.ts",
+    "kind": "dead-store",
+    "label": "unused",
+    "message": "Variable 'unused' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 3
+      },
+      "start": {
+        "column": 8,
+        "line": 3
+      }
+    }
+  }
+]

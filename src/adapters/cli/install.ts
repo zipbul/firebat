@@ -702,3 +702,12 @@ export const runUpdate = async (argv: readonly string[] | undefined, logger: Fir
 
   return runInstallLike('update', safeArgv, logger);
 };
+
+export const __testing__ = {
+  sha256Hex,
+  isPlainObject,
+  toJsonValue,
+  sortJsonValue,
+  jsonText,
+  parseYesFlag,
+};

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, afterEach, describe, expect, it, mock } from 'bun:test';
 import * as path from 'node:path';
 
 const tsgoRunnerAbs = path.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts');
@@ -15,6 +15,8 @@ const lspUriToFilePathMock = mock((uri: string) => {
 const openTsDocumentMock = mock(async () => {
   return { uri: 'file:///abs/src/a.ts', text: '' };
 });
+
+const __origTsgoRunner = { ...require(tsgoRunnerAbs) };
 
 mock.module(tsgoRunnerAbs, () => {
   return {
@@ -198,4 +200,9 @@ describe('features/typecheck/detector', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ message: 'y' });
   });
+});
+
+afterAll(() => {
+  mock.restore();
+  mock.module(tsgoRunnerAbs, () => __origTsgoRunner);
 });

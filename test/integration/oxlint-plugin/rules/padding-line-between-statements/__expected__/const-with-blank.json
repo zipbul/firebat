@@ -1,0 +1,12 @@
+{
+  "fixedSource": "const alpha = 1;\nconst beta = 2;\n",
+  "reports": [
+    {
+      "messageId": "unexpectedBlankLine",
+      "range": [
+        18,
+        33
+      ]
+    }
+  ]
+}

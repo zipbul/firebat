@@ -1,0 +1,23 @@
+[
+  {
+    "file": "/virtual/multi-guard.ts",
+    "header": "process",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 0,
+      "hasGuards": false,
+      "returns": 4
+    },
+    "score": 5,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 15
+      },
+      "start": {
+        "column": 7,
+        "line": 1
+      }
+    }
+  }
+]

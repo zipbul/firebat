@@ -1,20 +1,10 @@
 import type { ParsedFile } from '../../engine/types';
 import type { TemporalCouplingFinding } from '../../types';
 
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffset = (sourceText: string, offset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, offset));
@@ -47,10 +37,10 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
     if (m !== null) {
       const name = String(m[2] ?? '');
       const writerRe = new RegExp(
-        `\\bexport\\s+function\\s+([a-zA-Z_$][\\w$]*)\\s*\\([^)]*\\)\\s*\\{[^}]*\\b${name}\\s*(=|\\+=|-=|\\*=|\\/=)`,
+        `\\bexport\\s+function\\s+([a-zA-Z_$][\\w$]*)\\s*\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\b${name}\\s*(=|\\+=|-=|\\*=|\\/=)`,
         'g',
       );
-      const readerRe = new RegExp(`\\bexport\\s+function\\s+([a-zA-Z_$][\\w$]*)\\s*\\([^)]*\\)\\s*\\{[^}]*\\b${name}\\b`, 'g');
+      const readerRe = new RegExp(`\\bexport\\s+function\\s+([a-zA-Z_$][\\w$]*)\\s*\\([^)]*\\)[^{]*\\{[\\s\\S]*?\\b${name}\\b`, 'g');
       const writers: string[] = [];
       const readers: string[] = [];
 
@@ -97,8 +87,12 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
       continue;
     }
 
-    // class init-guard style (initialized)
-    if (file.sourceText.includes('initialized') && file.sourceText.includes('init(') && file.sourceText.includes('query(')) {
+    // class init-guard: initialized property + init() method + query() method
+    const initAssignRe = /\binitialized\s*=/;
+    const initMethodRe = /\binit\b\s*\([^)]*\)[^{]*\{/;
+    const queryMethodRe = /\bquery\b\s*\([^)]*\)[^{]*\{/;
+
+    if (initAssignRe.test(file.sourceText) && initMethodRe.test(file.sourceText) && queryMethodRe.test(file.sourceText)) {
       const offset = Math.max(0, file.sourceText.indexOf('initialized'));
 
       findings.push({

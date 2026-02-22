@@ -1,0 +1,18 @@
+[
+  {
+    "code": "6133",
+    "message": "'result' is declared but its value is never read.",
+    "range": {
+      "end": {
+        "character": 12,
+        "line": 3
+      },
+      "start": {
+        "character": 0,
+        "line": 3
+      }
+    },
+    "severity": 2,
+    "source": "ts"
+  }
+]

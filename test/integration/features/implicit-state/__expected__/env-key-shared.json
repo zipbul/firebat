@@ -1,0 +1,34 @@
+[
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "db.ts",
+    "kind": "implicit-state",
+    "protocol": "process.env.DATABASE_URL;\n",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 1
+      },
+      "start": {
+        "column": 30,
+        "line": 1
+      }
+    }
+  },
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "server.ts",
+    "kind": "implicit-state",
+    "protocol": "process.env.DATABASE_URL;\n",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 1
+      },
+      "start": {
+        "column": 39,
+        "line": 1
+      }
+    }
+  }
+]

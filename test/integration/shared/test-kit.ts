@@ -12,7 +12,9 @@ export const getFuzzIterations = (fallback: number): number => {
 };
 
 export const createPrng = (seed: number) => {
-  let state = (seed | 0) >>> 0;
+  // xorshift32 produces an infinite-zero sequence for seed=0 (0 is a fixed
+  // point of the algorithm). Guard against it by mapping 0 → 1.
+  let state = seed === 0 ? 1 : (seed | 0) >>> 0;
 
   const nextU32 = (): number => {
     // xorshift32

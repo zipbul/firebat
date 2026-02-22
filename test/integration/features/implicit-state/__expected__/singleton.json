@@ -1,0 +1,34 @@
+[
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "request-handler.ts",
+    "kind": "implicit-state",
+    "protocol": "getInstance();\n  logger.info('request received');\n};\n",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 4
+      },
+      "start": {
+        "column": 24,
+        "line": 4
+      }
+    }
+  },
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "response-handler.ts",
+    "kind": "implicit-state",
+    "protocol": "getInstance();\n  logger.info('response sent');\n};\n",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 4
+      },
+      "start": {
+        "column": 24,
+        "line": 4
+      }
+    }
+  }
+]

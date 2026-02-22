@@ -1,0 +1,24 @@
+[
+  {
+    "file": "/virtual/deep-if.ts",
+    "header": "deepCheck",
+    "kind": "deep-nesting",
+    "metrics": {
+      "callbackDepth": 0,
+      "cognitiveComplexity": 6,
+      "depth": 3,
+      "quadraticTargets": []
+    },
+    "score": 6,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 15
+      },
+      "start": {
+        "column": 7,
+        "line": 1
+      }
+    }
+  }
+]

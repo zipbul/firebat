@@ -1,0 +1,55 @@
+{
+  "adjacency": {
+    "linear-chain/a.ts": [
+      "linear-chain/b.ts"
+    ],
+    "linear-chain/b.ts": [
+      "linear-chain/c.ts"
+    ],
+    "linear-chain/c.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [
+    {
+      "kind": "dead-export",
+      "module": "linear-chain/a.ts",
+      "name": "a"
+    }
+  ],
+  "exportStats": {
+    "linear-chain/a.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "linear-chain/b.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "linear-chain/c.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "linear-chain/b.ts"
+    },
+    {
+      "count": 1,
+      "module": "linear-chain/c.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 1,
+      "module": "linear-chain/a.ts"
+    },
+    {
+      "count": 1,
+      "module": "linear-chain/b.ts"
+    }
+  ],
+  "layerViolations": []
+}

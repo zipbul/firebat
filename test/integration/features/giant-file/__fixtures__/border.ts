@@ -1,0 +1,11 @@
+export const line01 = 'data';
+export const line02 = 'data';
+export const line03 = 'data';
+export const line04 = 'data';
+export const line05 = 'data';
+export const line06 = 'data';
+export const line07 = 'data';
+export const line08 = 'data';
+export const line09 = 'data';
+export const line10 = 'data';
+export const line11 = 'data';

@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "} catch (e) {}",
+    "file": "/virtual/silent-catch.ts",
+    "kind": "silent-catch",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 4
+      },
+      "start": {
+        "column": 4,
+        "line": 4
+      }
+    }
+  }
+]

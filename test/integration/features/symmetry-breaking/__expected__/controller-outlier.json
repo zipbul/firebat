@@ -1,0 +1,20 @@
+[
+  {
+    "file": "controller-c.ts",
+    "group": "return-structure",
+    "kind": "symmetry-breaking",
+    "majorityCount": 2,
+    "outlierCount": 1,
+    "signature": "null",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 2
+      },
+      "start": {
+        "column": 2,
+        "line": 2
+      }
+    }
+  }
+]

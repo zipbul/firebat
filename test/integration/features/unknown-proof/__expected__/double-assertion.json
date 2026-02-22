@@ -1,0 +1,17 @@
+[
+  {
+    "filePath": "/virtual/double-assertion.ts",
+    "kind": "double-assertion",
+    "message": "Double type assertion bypasses type safety entirely",
+    "span": {
+      "end": {
+        "column": 65,
+        "line": 1
+      },
+      "start": {
+        "column": 39,
+        "line": 1
+      }
+    }
+  }
+]

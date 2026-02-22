@@ -1,0 +1,17 @@
+[
+  {
+    "file": "switch-throw.ts",
+    "kind": "invariant-blindspot",
+    "signal": "throw new Error(`Unknown kind: ${kind}`);\n  }\n}\n",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 8
+      },
+      "start": {
+        "column": 6,
+        "line": 8
+      }
+    }
+  }
+]

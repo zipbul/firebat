@@ -1,0 +1,60 @@
+{
+  "adjacency": {
+    "fan-out/hub.ts": [
+      "fan-out/module-a.ts",
+      "fan-out/module-b.ts",
+      "fan-out/module-c.ts"
+    ],
+    "fan-out/module-a.ts": [],
+    "fan-out/module-b.ts": [],
+    "fan-out/module-c.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [
+    {
+      "kind": "dead-export",
+      "module": "fan-out/hub.ts",
+      "name": "combined"
+    }
+  ],
+  "exportStats": {
+    "fan-out/hub.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "fan-out/module-a.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "fan-out/module-b.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "fan-out/module-c.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "fan-out/module-a.ts"
+    },
+    {
+      "count": 1,
+      "module": "fan-out/module-b.ts"
+    },
+    {
+      "count": 1,
+      "module": "fan-out/module-c.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 3,
+      "module": "fan-out/hub.ts"
+    }
+  ],
+  "layerViolations": []
+}

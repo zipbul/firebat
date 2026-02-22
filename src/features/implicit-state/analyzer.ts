@@ -1,20 +1,10 @@
 import type { ParsedFile } from '../../engine/types';
 import type { ImplicitStateFinding } from '../../types';
 
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyImplicitState = (): ReadonlyArray<ImplicitStateFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffset = (sourceText: string, offset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, offset));
@@ -173,7 +163,7 @@ const analyzeImplicitState = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<I
     const name = String(m[2] ?? '');
     const exports = (file.sourceText.match(/\bexport\s+function\b/g) ?? []).length;
 
-    if (exports >= 2 && file.sourceText.includes(name)) {
+    if (exports >= 2 && (file.sourceText.match(new RegExp(`\\b${name}\\b`, 'g')) ?? []).length >= 2) {
       addFinding(findings, file, m.index);
     }
   }

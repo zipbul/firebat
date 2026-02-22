@@ -1,0 +1,11 @@
+{
+  "reports": [
+    {
+      "messageId": "dynamicImport",
+      "range": [
+        62,
+        80
+      ]
+    }
+  ]
+}

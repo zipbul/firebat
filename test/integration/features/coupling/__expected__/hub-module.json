@@ -1,0 +1,87 @@
+[
+  {
+    "code": "COUPLING_OFF_MAIN_SEQ",
+    "metrics": {
+      "abstractness": 0,
+      "distance": 1,
+      "fanIn": 1,
+      "fanOut": 0,
+      "instability": 0
+    },
+    "module": "hub-module/module-a.ts",
+    "score": 100,
+    "signals": [
+      "off-main-sequence"
+    ],
+    "suggestedRefactor": "",
+    "why": "off-main-sequence"
+  },
+  {
+    "code": "COUPLING_OFF_MAIN_SEQ",
+    "metrics": {
+      "abstractness": 0,
+      "distance": 1,
+      "fanIn": 1,
+      "fanOut": 0,
+      "instability": 0
+    },
+    "module": "hub-module/module-b.ts",
+    "score": 100,
+    "signals": [
+      "off-main-sequence"
+    ],
+    "suggestedRefactor": "",
+    "why": "off-main-sequence"
+  },
+  {
+    "code": "COUPLING_OFF_MAIN_SEQ",
+    "metrics": {
+      "abstractness": 0,
+      "distance": 1,
+      "fanIn": 1,
+      "fanOut": 0,
+      "instability": 0
+    },
+    "module": "hub-module/module-c.ts",
+    "score": 100,
+    "signals": [
+      "off-main-sequence"
+    ],
+    "suggestedRefactor": "",
+    "why": "off-main-sequence"
+  },
+  {
+    "code": "COUPLING_OFF_MAIN_SEQ",
+    "metrics": {
+      "abstractness": 0,
+      "distance": 1,
+      "fanIn": 1,
+      "fanOut": 0,
+      "instability": 0
+    },
+    "module": "hub-module/module-d.ts",
+    "score": 100,
+    "signals": [
+      "off-main-sequence"
+    ],
+    "suggestedRefactor": "",
+    "why": "off-main-sequence"
+  },
+  {
+    "code": "COUPLING_OFF_MAIN_SEQ",
+    "metrics": {
+      "abstractness": 0,
+      "distance": 1,
+      "fanIn": 1,
+      "fanOut": 0,
+      "instability": 0
+    },
+    "module": "hub-module/module-e.ts",
+    "score": 100,
+    "signals": [
+      "off-main-sequence"
+    ],
+    "suggestedRefactor": "",
+    "why": "off-main-sequence"
+  }
+]

@@ -1,0 +1,36 @@
+[
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to String",
+    "filePath": "/virtual/format-chain/formatter.ts",
+    "header": "format",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 46,
+        "line": 1
+      },
+      "start": {
+        "column": 22,
+        "line": 1
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to format",
+    "filePath": "/virtual/format-chain/display.ts",
+    "header": "display",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 47,
+        "line": 3
+      },
+      "start": {
+        "column": 23,
+        "line": 3
+      }
+    }
+  }
+]

@@ -1,0 +1,25 @@
+[
+  {
+    "concept": "user",
+    "file": "user-repository.ts",
+    "files": [
+      "user-repository.ts",
+      "user-service.ts"
+    ],
+    "kind": "concept-scatter",
+    "layers": [
+      "src"
+    ],
+    "scatterIndex": 3,
+    "span": {
+      "end": {
+        "column": 21,
+        "line": 1
+      },
+      "start": {
+        "column": 20,
+        "line": 1
+      }
+    }
+  }
+]

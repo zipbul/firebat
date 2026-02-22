@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, mock } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, it, mock } from 'bun:test';
 import * as path from 'node:path';
 
 import type { TypecheckItem } from '../../../../src/types';
@@ -62,6 +62,8 @@ const createTypecheckOk = (items: ReadonlyArray<TypecheckItem>): ReadonlyArray<T
 
 const typecheckEntryAbs = path.resolve(import.meta.dir, '../../../../src/features/typecheck/index.ts');
 const analyzeTypecheckMock = mock(async (): Promise<ReadonlyArray<TypecheckItem>> => createTypecheckOk([]));
+
+const __origTypecheckEntry = { ...require(typecheckEntryAbs) };
 
 mock.module(typecheckEntryAbs, () => {
   return {
@@ -181,4 +183,9 @@ describe('integration/typecheck/report-integration', () => {
       await project.dispose();
     }
   });
+});
+
+afterAll(() => {
+  mock.restore();
+  mock.module(typecheckEntryAbs, () => __origTypecheckEntry);
 });

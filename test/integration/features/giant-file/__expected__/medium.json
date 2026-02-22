@@ -1,0 +1,20 @@
+[
+  {
+    "file": "medium.ts",
+    "kind": "giant-file",
+    "metrics": {
+      "lineCount": 15,
+      "maxLines": 10
+    },
+    "span": {
+      "end": {
+        "column": 0,
+        "line": 15
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

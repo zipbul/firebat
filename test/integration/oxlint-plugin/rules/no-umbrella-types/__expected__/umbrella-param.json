@@ -1,0 +1,11 @@
+{
+  "reports": [
+    {
+      "messageId": "forbiddenGlobal",
+      "range": [
+        20,
+        28
+      ]
+    }
+  ]
+}

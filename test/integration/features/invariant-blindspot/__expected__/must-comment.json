@@ -1,0 +1,17 @@
+[
+  {
+    "file": "must-comment.ts",
+    "kind": "invariant-blindspot",
+    "signal": "// You must call init() before using this module\nexport let initialized = false;\n\nexport function init(): void {\n  initialized = true;\n}\n\nexport function doWork(): void {\n  // always check initialized",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

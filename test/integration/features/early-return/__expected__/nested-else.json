@@ -1,0 +1,23 @@
+[
+  {
+    "file": "/virtual/nested-else.ts",
+    "header": "classify",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 0,
+      "hasGuards": false,
+      "returns": 3
+    },
+    "score": 4,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 11
+      },
+      "start": {
+        "column": 7,
+        "line": 1
+      }
+    }
+  }
+]

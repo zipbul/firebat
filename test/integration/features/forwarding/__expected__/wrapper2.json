@@ -1,0 +1,19 @@
+[
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to math",
+    "filePath": "/virtual/wrapper2/calculate.ts",
+    "header": "calculate",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 47,
+        "line": 3
+      },
+      "start": {
+        "column": 25,
+        "line": 3
+      }
+    }
+  }
+]

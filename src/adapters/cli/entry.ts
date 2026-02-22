@@ -455,3 +455,14 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
 };
 
 export { runCli };
+
+export const __testing__ = {
+  resolveEnabledDetectorsFromFeatures,
+  resolveUnknownProofBoundaryGlobsFromFeatures,
+  resolveBarrelPolicyIgnoreGlobsFromFeatures,
+  resolveDependenciesLayersFromFeatures,
+  resolveDependenciesAllowedDependenciesFromFeatures,
+  resolveMinSizeFromFeatures,
+  resolveMaxForwardDepthFromFeatures,
+  resolveWasteMemoryRetentionThresholdFromFeatures,
+};

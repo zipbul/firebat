@@ -1,0 +1,19 @@
+[
+  {
+    "file": "logic-heavy.ts",
+    "implementationComplexity": 11,
+    "interfaceComplexity": 2,
+    "kind": "implementation-overhead",
+    "ratio": 5.5,
+    "span": {
+      "end": {
+        "column": 8,
+        "line": 5
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

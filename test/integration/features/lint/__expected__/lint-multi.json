@@ -1,0 +1,50 @@
+[
+  {
+    "code": "no-unused-vars",
+    "filePath": "src/a.ts",
+    "message": "no-unused-vars: 'x' is defined but never used",
+    "severity": "warning",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 1
+      },
+      "start": {
+        "column": 7,
+        "line": 1
+      }
+    }
+  },
+  {
+    "code": "no-unused-vars",
+    "filePath": "src/b.ts",
+    "message": "no-unused-vars: 'y' is defined but never used",
+    "severity": "warning",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 2
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "code": "no-console",
+    "filePath": "src/b.ts",
+    "message": "no-console: Unexpected console statement",
+    "severity": "error",
+    "span": {
+      "end": {
+        "column": 2,
+        "line": 5
+      },
+      "start": {
+        "column": 2,
+        "line": 5
+      }
+    }
+  }
+]

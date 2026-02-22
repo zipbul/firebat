@@ -1,0 +1,12 @@
+{
+  "fixedSource": "\n\nconst x = 1;\n",
+  "reports": [
+    {
+      "messageId": "unusedImportDeclaration",
+      "range": [
+        0,
+        31
+      ]
+    }
+  ]
+}

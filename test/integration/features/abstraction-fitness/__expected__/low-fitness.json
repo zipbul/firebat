@@ -1,0 +1,38 @@
+[
+  {
+    "externalCoupling": 0,
+    "file": "module.ts",
+    "fitness": 0,
+    "internalCohesion": 1,
+    "kind": "abstraction-fitness",
+    "module": "module.ts",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  },
+  {
+    "externalCoupling": 0,
+    "file": "base.ts",
+    "fitness": 0,
+    "internalCohesion": 0,
+    "kind": "abstraction-fitness",
+    "module": "base.ts",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

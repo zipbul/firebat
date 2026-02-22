@@ -1,0 +1,28 @@
+{
+  "adjacency": {
+    "no-deps.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [
+    {
+      "kind": "dead-export",
+      "module": "no-deps.ts",
+      "name": "helper"
+    },
+    {
+      "kind": "dead-export",
+      "module": "no-deps.ts",
+      "name": "standalone"
+    }
+  ],
+  "exportStats": {
+    "no-deps.ts": {
+      "abstract": 0,
+      "total": 2
+    }
+  },
+  "fanIn": [],
+  "fanOut": [],
+  "layerViolations": []
+}

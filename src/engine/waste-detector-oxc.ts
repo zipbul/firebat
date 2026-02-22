@@ -614,6 +614,11 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
             continue;
           }
 
+          // Skip variables with '_' prefix (intentionally ignored by convention).
+          if (meta.name.startsWith('_')) {
+            continue;
+          }
+
           const loc = getLineColumn(file.sourceText, meta.location);
           const isOverwritten = overwrittenDefIds[defId] === true;
           const kind = isOverwritten && meta.writeKind !== 'declaration' ? 'dead-store-overwrite' : 'dead-store';
@@ -696,6 +701,11 @@ export const detectWasteOxc = (files: ParsedFile[], options?: WasteDetectorOptio
             const name = nameByVarIndex[varIndex] ?? '';
 
             if (name.length === 0) {
+              continue;
+            }
+
+            // Skip variables with '_' prefix (intentionally ignored by convention).
+            if (name.startsWith('_')) {
               continue;
             }
 

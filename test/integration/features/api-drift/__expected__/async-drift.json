@@ -1,0 +1,32 @@
+[
+  {
+    "label": "prefix:get",
+    "outliers": [
+      {
+        "filePath": "/virtual/async-drift.ts",
+        "shape": {
+          "async": true,
+          "optionalCount": 0,
+          "paramsCount": 1,
+          "returnKind": "value"
+        },
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 11
+          },
+          "start": {
+            "column": 7,
+            "line": 9
+          }
+        }
+      }
+    ],
+    "standardCandidate": {
+      "async": false,
+      "optionalCount": 0,
+      "paramsCount": 1,
+      "returnKind": "value"
+    }
+  }
+]

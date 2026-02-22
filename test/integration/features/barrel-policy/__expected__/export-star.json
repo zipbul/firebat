@@ -1,0 +1,31 @@
+[
+  {
+    "file": "/virtual/export-star.ts",
+    "kind": "export-star",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  },
+  {
+    "evidence": "/virtual",
+    "file": "/virtual",
+    "kind": "missing-index",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 1,
+        "line": 1
+      }
+    }
+  }
+]

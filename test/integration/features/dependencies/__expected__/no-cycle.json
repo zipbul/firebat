@@ -1,0 +1,23 @@
+{
+  "adjacency": {
+    "no-cycle.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [
+    {
+      "kind": "dead-export",
+      "module": "no-cycle.ts",
+      "name": "greet"
+    }
+  ],
+  "exportStats": {
+    "no-cycle.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [],
+  "fanOut": [],
+  "layerViolations": []
+}

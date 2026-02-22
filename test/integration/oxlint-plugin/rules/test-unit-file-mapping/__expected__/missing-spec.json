@@ -1,0 +1,14 @@
+{
+  "reports": [
+    {
+      "data": {
+        "expected": "/virtual/missing-spec.spec.ts"
+      },
+      "messageId": "missingSpec",
+      "range": [
+        0,
+        71
+      ]
+    }
+  ]
+}

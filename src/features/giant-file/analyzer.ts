@@ -1,20 +1,10 @@
 import type { ParsedFile } from '../../engine/types';
 import type { GiantFileFinding } from '../../types';
 
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyGiantFile = (): ReadonlyArray<GiantFileFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForWholeFile = (sourceText: string) => {
   const start = getLineColumn(sourceText, 0);

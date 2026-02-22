@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/dead-export.ts",
+    "kind": "dead-store",
+    "label": "value",
+    "message": "Variable 'value' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 2
+      },
+      "start": {
+        "column": 6,
+        "line": 2
+      }
+    }
+  }
+]

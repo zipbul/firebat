@@ -1,0 +1,19 @@
+[
+  {
+    "contextBurden": 1,
+    "file": "long-lifetime.ts",
+    "kind": "variable-lifetime",
+    "lifetimeLines": 8,
+    "span": {
+      "end": {
+        "column": 0,
+        "line": 12
+      },
+      "start": {
+        "column": 2,
+        "line": 2
+      }
+    },
+    "variable": "base"
+  }
+]

@@ -1,20 +1,10 @@
 import type { ParsedFile } from '../../engine/types';
 import type { ImplementationOverheadFinding } from '../../types';
 
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyImplementationOverhead = (): ReadonlyArray<ImplementationOverheadFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffsets = (sourceText: string, startOffset: number, endOffset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, startOffset));

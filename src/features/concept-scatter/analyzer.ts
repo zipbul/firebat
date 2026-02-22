@@ -1,20 +1,11 @@
 import type { ParsedFile } from '../../engine/types';
 import type { ConceptScatterFinding } from '../../types';
 
+import { collectOxcNodes, getNodeName } from '../../engine/oxc-ast-utils';
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyConceptScatter = (): ReadonlyArray<ConceptScatterFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffset = (sourceText: string, offset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, offset));
@@ -95,7 +86,12 @@ const analyzeConceptScatter = (
     }
 
     const layer = layerOf(rel);
-    const concepts = new Set<string>([...tokenizeConcepts(rel), ...tokenizeConcepts(file.sourceText)]);
+    const identifierNodes = collectOxcNodes(file.program, n => n.type === 'Identifier');
+    const astText = identifierNodes
+      .map(n => getNodeName(n) ?? '')
+      .filter(n => n.length > 0)
+      .join(' ');
+    const concepts = new Set<string>([...tokenizeConcepts(rel), ...tokenizeConcepts(astText)]);
 
     for (const c of concepts) {
       const filesSet = conceptToFiles.get(c) ?? new Set<string>();
@@ -120,7 +116,7 @@ const analyzeConceptScatter = (
       continue;
     }
 
-    const anyFile = [...filesSet][0] ?? '';
+    const anyFile = [...filesSet].sort()[0] ?? '';
     const fileObj = files.find(f => normalizeFile(f.filePath) === anyFile);
     const offset = fileObj ? Math.max(0, fileObj.sourceText.toLowerCase().indexOf(concept)) : 0;
 

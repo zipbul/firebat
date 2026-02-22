@@ -1,0 +1,11 @@
+{
+  "reports": [
+    {
+      "messageId": "globalThisMutation",
+      "range": [
+        21,
+        48
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "concept": "order",
+    "file": "order-controller.ts",
+    "files": [
+      "order-controller.ts",
+      "order-repository.ts",
+      "order-validator.ts"
+    ],
+    "kind": "concept-scatter",
+    "layers": [
+      "src"
+    ],
+    "scatterIndex": 4,
+    "span": {
+      "end": {
+        "column": 17,
+        "line": 1
+      },
+      "start": {
+        "column": 16,
+        "line": 1
+      }
+    }
+  }
+]

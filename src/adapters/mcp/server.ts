@@ -484,7 +484,16 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
   return server;
 };
 
-export const __testing__ = { createMcpLogger, filterAnalysesByFilePatterns, extractFindingFilePaths };
+export const __testing__ = {
+  createMcpLogger,
+  filterAnalysesByFilePatterns,
+  extractFindingFilePaths,
+  asDetectors,
+  resolveEnabledDetectorsFromFeatures,
+  resolveMinSizeFromFeatures,
+  resolveMaxForwardDepthFromFeatures,
+  toMcpLevel,
+};
 
 export const runMcpServer = async (): Promise<void> => {
   const ctx = await resolveRuntimeContextFromCwd();

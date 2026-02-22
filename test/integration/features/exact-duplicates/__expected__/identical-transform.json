@@ -1,0 +1,37 @@
+[
+  {
+    "cloneType": "type-1",
+    "items": [
+      {
+        "filePath": "/virtual/identical-transform.ts",
+        "header": "anonymous",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 9
+          },
+          "start": {
+            "column": 25,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/identical-transform.ts",
+        "header": "anonymous",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 19
+          },
+          "start": {
+            "column": 23,
+            "line": 11
+          }
+        }
+      }
+    ]
+  }
+]

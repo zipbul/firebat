@@ -1,20 +1,10 @@
 import type { ParsedFile } from '../../engine/types';
 import type { AbstractionFitnessFinding } from '../../types';
 
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyAbstractionFitness = (): ReadonlyArray<AbstractionFitnessFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffset = (sourceText: string, offset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, offset));
@@ -134,7 +124,7 @@ const analyzeAbstractionFitness = (
       }
 
       // If file imports any '../', count as external
-      if (rel.includes('/application/') && (rel.includes('/adapters/') || rel.includes('/infrastructure/'))) {
+      if (rel.includes('/application/') || rel.includes('/adapters/') || rel.includes('/infrastructure/')) {
         externalCoupling += 1;
       }
     }

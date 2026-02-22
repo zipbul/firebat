@@ -1,0 +1,23 @@
+[
+  {
+    "file": "/virtual/guard-clause.ts",
+    "header": "greet",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 1,
+      "hasGuards": true,
+      "returns": 2
+    },
+    "score": 2,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 7
+      },
+      "start": {
+        "column": 7,
+        "line": 1
+      }
+    }
+  }
+]

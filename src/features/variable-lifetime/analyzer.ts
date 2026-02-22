@@ -1,20 +1,11 @@
 import type { ParsedFile } from '../../engine/types';
 import type { VariableLifetimeFinding } from '../../types';
 
+import { collectOxcNodes, getNodeName } from '../../engine/oxc-ast-utils';
+import { normalizeFile } from '../../engine/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyVariableLifetime = (): ReadonlyArray<VariableLifetimeFinding> => [];
-
-const normalizeFile = (filePath: string): string => {
-  const normalized = filePath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/src/');
-
-  if (idx >= 0) {
-    return normalized.slice(idx + 1);
-  }
-
-  return normalized;
-};
 
 const spanForOffsets = (sourceText: string, startOffset: number, endOffset: number) => {
   const start = getLineColumn(sourceText, Math.max(0, startOffset));
@@ -99,21 +90,13 @@ const analyzeVariableLifetime = (
 
       const name = String(m[2] ?? '');
       const defOffset = m.index;
-      // Find last usage of name after the declaration.
-      const useRe = new RegExp(`\\b${name}\\b`, 'g');
-
-      useRe.lastIndex = defOffset;
-
+      // Find last AST identifier node with matching name at or after the declaration.
       let lastOffset = defOffset;
 
-      for (;;) {
-        const um = useRe.exec(file.sourceText);
-
-        if (um === null) {
-          break;
+      for (const idNode of collectOxcNodes(file.program, n => n.type === 'Identifier' && getNodeName(n) === name && n.start >= defOffset)) {
+        if (idNode.start > lastOffset) {
+          lastOffset = idNode.start;
         }
-
-        lastOffset = um.index;
       }
 
       const defLine = offsetToLineIndex(starts, defOffset);

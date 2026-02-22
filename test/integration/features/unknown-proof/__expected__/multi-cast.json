@@ -1,0 +1,32 @@
+[
+  {
+    "filePath": "/virtual/multi-cast.ts",
+    "kind": "type-assertion",
+    "message": "Type assertions are forbidden (no `as T` / `<T>expr`)",
+    "span": {
+      "end": {
+        "column": 65,
+        "line": 1
+      },
+      "start": {
+        "column": 22,
+        "line": 1
+      }
+    }
+  },
+  {
+    "filePath": "/virtual/multi-cast.ts",
+    "kind": "type-assertion",
+    "message": "Type assertions are forbidden (no `as T` / `<T>expr`)",
+    "span": {
+      "end": {
+        "column": 57,
+        "line": 2
+      },
+      "start": {
+        "column": 21,
+        "line": 2
+      }
+    }
+  }
+]

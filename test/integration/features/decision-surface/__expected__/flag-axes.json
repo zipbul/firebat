@@ -1,0 +1,19 @@
+[
+  {
+    "axes": 3,
+    "combinatorialPaths": 8,
+    "file": "flag-axes.ts",
+    "kind": "decision-surface",
+    "repeatedChecks": 0,
+    "span": {
+      "end": {
+        "column": 0,
+        "line": 18
+      },
+      "start": {
+        "column": 2,
+        "line": 4
+      }
+    }
+  }
+]

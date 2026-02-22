@@ -1,0 +1,17 @@
+[
+  {
+    "file": "throw-guard.ts",
+    "kind": "invariant-blindspot",
+    "signal": "throw new Error('empty array');\n\n  const item = items[index];\n\n  if (item === undefined) throw new Error(`index ${index} out of bounds`);\n\n  return item;\n}\n",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 2
+      },
+      "start": {
+        "column": 26,
+        "line": 2
+      }
+    }
+  }
+]

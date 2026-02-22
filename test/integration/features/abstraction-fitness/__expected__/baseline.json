@@ -1,0 +1,20 @@
+[
+  {
+    "externalCoupling": 0,
+    "file": "baseline.ts",
+    "fitness": 0,
+    "internalCohesion": 0,
+    "kind": "abstraction-fitness",
+    "module": "baseline.ts",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

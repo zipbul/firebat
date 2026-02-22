@@ -1,0 +1,24 @@
+[
+  {
+    "file": "/virtual/switch-nesting.ts",
+    "header": "handleEvent",
+    "kind": "deep-nesting",
+    "metrics": {
+      "callbackDepth": 0,
+      "cognitiveComplexity": 6,
+      "depth": 3,
+      "quadraticTargets": []
+    },
+    "score": 6,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 16
+      },
+      "start": {
+        "column": 7,
+        "line": 1
+      }
+    }
+  }
+]

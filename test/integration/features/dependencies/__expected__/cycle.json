@@ -1,0 +1,58 @@
+{
+  "adjacency": {
+    "cycle/a.ts": [
+      "cycle/b.ts"
+    ],
+    "cycle/b.ts": [
+      "cycle/a.ts"
+    ]
+  },
+  "cuts": [
+    {
+      "from": "cycle/a.ts",
+      "score": 1,
+      "to": "cycle/b.ts"
+    }
+  ],
+  "cycles": [
+    {
+      "path": [
+        "cycle/a.ts",
+        "cycle/b.ts",
+        "cycle/a.ts"
+      ]
+    }
+  ],
+  "deadExports": [],
+  "exportStats": {
+    "cycle/a.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "cycle/b.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "cycle/a.ts"
+    },
+    {
+      "count": 1,
+      "module": "cycle/b.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 1,
+      "module": "cycle/a.ts"
+    },
+    {
+      "count": 1,
+      "module": "cycle/b.ts"
+    }
+  ],
+  "layerViolations": []
+}

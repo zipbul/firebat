@@ -1,0 +1,18 @@
+[
+  {
+    "code": "2304",
+    "message": "Cannot find name 'myVar'.",
+    "range": {
+      "end": {
+        "character": 10,
+        "line": 0
+      },
+      "start": {
+        "character": 4,
+        "line": 0
+      }
+    },
+    "severity": 1,
+    "source": "ts"
+  }
+]

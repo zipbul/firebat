@@ -1,0 +1,11 @@
+{
+  "reports": [
+    {
+      "messageId": "inlineObjectType",
+      "range": [
+        12,
+        28
+      ]
+    }
+  ]
+}

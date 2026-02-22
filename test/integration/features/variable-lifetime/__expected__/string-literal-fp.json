@@ -1,0 +1,36 @@
+[
+  {
+    "contextBurden": 2,
+    "file": "string-literal-fp.ts",
+    "kind": "variable-lifetime",
+    "lifetimeLines": 6,
+    "span": {
+      "end": {
+        "column": 0,
+        "line": 13
+      },
+      "start": {
+        "column": 2,
+        "line": 3
+      }
+    },
+    "variable": "a"
+  },
+  {
+    "contextBurden": 2,
+    "file": "string-literal-fp.ts",
+    "kind": "variable-lifetime",
+    "lifetimeLines": 6,
+    "span": {
+      "end": {
+        "column": 0,
+        "line": 13
+      },
+      "start": {
+        "column": 2,
+        "line": 5
+      }
+    },
+    "variable": "c"
+  }
+]

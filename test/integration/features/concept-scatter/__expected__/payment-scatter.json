@@ -1,0 +1,25 @@
+[
+  {
+    "concept": "payment",
+    "file": "payment-repository.ts",
+    "files": [
+      "payment-repository.ts",
+      "payment-service.ts"
+    ],
+    "kind": "concept-scatter",
+    "layers": [
+      "src"
+    ],
+    "scatterIndex": 3,
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 1
+      },
+      "start": {
+        "column": 19,
+        "line": 1
+      }
+    }
+  }
+]

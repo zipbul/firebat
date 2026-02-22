@@ -1,0 +1,19 @@
+[
+  {
+    "file": "heavy-body.ts",
+    "implementationComplexity": 8,
+    "interfaceComplexity": 2,
+    "kind": "implementation-overhead",
+    "ratio": 4,
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 8
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

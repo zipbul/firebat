@@ -1,0 +1,12 @@
+{
+  "fixedSource": "import { foo } from './foo';\n\nfunction bar() {\n  return foo();\n}\n",
+  "reports": [
+    {
+      "messageId": "expectedBlankLine",
+      "range": [
+        29,
+        63
+      ]
+    }
+  ]
+}
