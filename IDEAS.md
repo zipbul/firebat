@@ -1,3 +1,5 @@
+PublicAPI 에 코멘트 필수
+
 some == 'A', some == 'B' 와 같이 일정한 패턴의 상수 비교가 있을 경우 감지
 
 function vs class 최적안 선택
