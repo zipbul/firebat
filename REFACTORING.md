@@ -466,71 +466,121 @@ const analyzeDependencies = async (ctx: AnalysisContext) => {
 
 ### 4.0 전제 조건
 
-- gildash 0.4.0 릴리즈 (Phase 0 + Phase 1 독립 FR 포함)
-- firebat 자체 선행 작업 (Phase 0) 완료
+- firebat Phase P0 (Public API Boundary) 완료 — 이후 모든 Phase에서 통합/E2E 수정 불필요
+- gildash 0.4.0 릴리즈 (gildash Phase 0 + Phase 1 독립 FR) — firebat Phase 2 착수 조건
 
-### 4.1 단계별 실행 계획
+### 4.1 Opus/Sonnet 실행 구분
+
+모든 Phase는 **설계 단계 (🔴 Opus)** 와 **실행 단계 (🟢 Sonnet)** 로 나뉜다.
+
+- 🔴 Opus: 구조 설계, 심볼 분류, 메커니즘 결정, 새 인터페이스 정의
+- 🟢 Sonnet: 기계적 파일 이동, import 치환, 정해진 패턴의 반복 구현
+- 🟢→🔴 전환 신호: "**Opus로 전환 필요**" — 판단이 필요한 분기점 도달 시
+- 🔴→🟢 전환 신호: "**Sonnet 전환 가능**" — 설계 확정 후 기계적 실행 단계 진입 시
+
+### 4.2 단계별 실행 계획
+
+#### firebat Phase P0: Public API Boundary (gildash 불필요)
+
+**목적**: 통합/E2E 테스트를 내부 경로에서 격리. 이후 모든 Phase에서 test/ 수정 불필요.
+
+**원칙**: 통합/E2E 테스트는 public API를 통해서만 import. 내부 구조 변경이 테스트를 깨뜨리면 안 됨.
+
+1. 🔴 Opus — public API 심볼 목록 확정
+   - 통합/E2E가 현재 import하는 모든 심볼 수집 (30+개 확인됨)
+   - "public API" vs "test-only internal" 분류
+   - barrel export 파일 위치 결정 (`src/index.ts` 또는 `package.json#imports`)
+2. 🔴 Opus — barrel export 파일 설계 + 작성
+3. 🟢 Sonnet — `test/integration/`, `test/e2e/`의 모든 import를 barrel 경유로 일괄 치환
+4. 🟢 Sonnet — 전체 테스트 실행 → GREEN 확인
+
+커밋: `refactor: introduce public API boundary for integration/e2e tests`
 
 #### firebat Phase 0: 선행 준비 (gildash 대기 중 병행)
 
 gildash Phase 0~1 완료를 기다리는 동안 firebat 자체 준비 작업.
 
-1. **oxc-parser `>=0.114.0` 업그레이드** — gildash peerDep 충족
-2. **`@zipbul/result` 의존성 추가** + `core/result-utils.ts` unwrap 유틸리티
-3. **`store/artifact.ts` 생성** — raw bun:sqlite로 ArtifactRepository 재구현
-4. **`store/memory.ts` 생성** — raw bun:sqlite로 MemoryRepository 재구현
-5. 테스트 통과 확인
+1. 🟢 Sonnet — **oxc-parser `>=0.114.0` 업그레이드** — gildash peerDep 충족
+2. 🟢 Sonnet — **`@zipbul/result` 의존성 추가** + `core/result-utils.ts` unwrap 유틸리티
+3. 🔴 Opus — **`store/artifact.ts` 설계** — raw bun:sqlite 스키마, API
+4. 🟢 Sonnet — **`store/artifact.ts` 구현** + 기존 ArtifactRepository 교체
+5. 🔴 Opus — **`store/memory.ts` 설계**
+6. 🟢 Sonnet — **`store/memory.ts` 구현** + 기존 MemoryRepository 교체
+7. 🟢 Sonnet — 테스트 통과 확인
 
 이 단계에서 gildash는 아직 도입하지 않음. 기존 코드 동작 유지.
 
+커밋: `refactor: replace artifact/memory repos with raw bun:sqlite store`
+
 #### firebat Phase 1: gildash 도입 + scan pipeline (gildash 0.4.0 필요)
 
-1. `bun add @zipbul/gildash@^0.4.0`
-2. `store/gildash.ts` 생성 — factory 패턴, 명시적 lifecycle
-3. `core/pipeline.ts` 생성 — gildash 기반 scan 오케스트레이터
+1. 🟢 Sonnet — `bun add @zipbul/gildash@^0.4.0`
+2. 🔴 Opus — `store/gildash.ts` 설계 + 구현 — factory 패턴, 명시적 lifecycle
+3. 🔴 Opus — `core/pipeline.ts` 설계 + 구현 — gildash 기반 scan 오케스트레이터
    - `Gildash.open({ watchMode: false })` → `batchParse()` → detector 실행 → `close()`
-4. `createFirebatProgram` (`ts-program.ts`) → `gildash.batchParse()` 전환
-5. `extractSymbolsOxc` (`engine/symbol-extractor-oxc.ts`) → `gildash.extractSymbols()` / `getFullSymbol()` 전환
-6. 기존 `application/symbol-index/`, `application/indexing/`를 gildash API로 교체
-7. 교체 대상 ~25개 파일 제거
-8. 테스트 통과 확인
+4. 🟢 Sonnet — `createFirebatProgram` (`ts-program.ts`) → `gildash.batchParse()` 전환
+5. 🟢 Sonnet — `extractSymbolsOxc` (`engine/symbol-extractor-oxc.ts`) → `gildash.extractSymbols()` / `getFullSymbol()` 전환
+6. 🟢 Sonnet — 기존 `application/symbol-index/`, `application/indexing/`를 gildash API로 교체
+7. 🟢 Sonnet — 교체 대상 ~25개 파일 제거
+8. 🟢 Sonnet — barrel export 갱신 (새 경로 반영)
+9. 🟢 Sonnet — 테스트 통과 확인
+
+커밋: `refactor: integrate gildash, replace scan pipeline and symbol-index infra`
 
 #### firebat Phase 2: Plugin Registry 도입
 
-1. `core/detector-registry.ts` 생성 — `AnalysisContext`에 gildash 인스턴스 포함
-2. 28개 detector를 `detectors/*/detector.plugin.ts` 형태로 마이그레이션
-3. gildash API 활용 detector 전환:
+1. 🔴 Opus — `core/detector-registry.ts` 설계 — `AnalysisContext`에 gildash 인스턴스 포함
+2. 🔴 Opus — **plugin registration 메커니즘 결정**:
+   - 옵션 A: `detectors/index.ts`에서 명시적 import 배열 (tree-shake safe)
+   - 옵션 B: `Bun.glob('detectors/*/detector.plugin.ts')` runtime 동적 로딩
+   - 옵션 C: build.ts에서 glob → 명시적 import 생성
+3. 🔴 Opus — **secondary export 위치 결정**:
+   - `resolveToolRcPath` → `shared/config.ts` 또는 `core/pipeline.ts`
+   - `__test__` (features/typecheck) → `detectors/typecheck/__test__.ts` 내부 export
+4. 🟢 Sonnet — 28개 detector를 `detectors/*/detector.plugin.ts` 형태로 이동
+5. 🟢 Sonnet — gildash API 활용 detector 전환:
    - **dependencies**: `getImportGraph()`, `getCycles()`, `getDeadExports()`, `getFanMetrics()`
    - **coupling**: `getFanMetrics()`, `getModuleInterface()`
    - **forwarding**: `searchRelations({ type: 're-exports' })`, `resolveSymbol()`
    - **barrel-policy**: `searchRelations({ type: 're-exports' })`
    - **giant-file**: `getFileStats()`
-4. `detectors/_catalog/catalog.ts`로 diagnostic-aggregator 분산
-5. `scan.usecase.ts` 제거
-6. 테스트 통과 확인
+6. 🟢 Sonnet — `detectors/_catalog/catalog.ts`로 diagnostic-aggregator 분산
+7. 🟢 Sonnet — `scan.usecase.ts` 제거
+8. 🟢 Sonnet — barrel export 갱신
+9. 🟢 Sonnet — 테스트 통과 확인
+
+커밋: `refactor: introduce plugin registry, decompose scan.usecase.ts`
 
 #### firebat Phase 3: 디렉토리 정리
 
-1. `src/` root 고아 파일 → `shared/`로 이동
-2. `engine/` flat → `engine/ast/`, `engine/cfg/`, `engine/dataflow/` 서브디렉토리화
-3. `tooling/` 생성 — `infrastructure/{ast-grep,oxfmt,oxlint,tsgo}` 이동 + flatten
-4. `shared/logger.ts` — `ports/logger.ts` + `infra/logging.ts` + `infrastructure/logging/` 통합
-5. `ports/`, `infrastructure/`, `infra/` 디렉토리 전체 삭제
-6. 테스트 통과 확인
+1. 🔴 Opus — 파일 from→to 매핑표 확정 (engine 서브디렉토리, src root → shared/, tooling/)
+2. 🟢 Sonnet — `src/` root 고아 파일 → `shared/`로 이동
+3. 🟢 Sonnet — `engine/` flat → `engine/ast/`, `engine/cfg/`, `engine/dataflow/` 서브디렉토리화
+4. 🟢 Sonnet — `tooling/` 생성 — `infrastructure/{ast-grep,oxfmt,oxlint,tsgo}` 이동 + flatten
+5. 🟢 Sonnet — `shared/logger.ts` — `ports/logger.ts` + `infra/logging.ts` + `infrastructure/logging/` 통합
+6. 🟢 Sonnet — `ports/`, `infrastructure/`, `infra/` 디렉토리 전체 삭제
+7. 🟢 Sonnet — barrel export 최종 갱신
+8. 🟢 Sonnet — 테스트 통과 확인
+
+커밋: `refactor: reorganize directory structure, remove ports/infrastructure`
 
 #### firebat Phase 4: 어댑터 + 고급 FR 활용
 
-1. `adapters/cli/`, `adapters/mcp/` — import 경로 갱신
-2. MCP 서버에 gildash 기반 도구 추가:
+1. 🟢 Sonnet — `adapters/cli/`, `adapters/mcp/` — import 경로 갱신
+2. 🔴 Opus — MCP 서버에 gildash 기반 도구 추가 설계:
    - symbol search (`searchSymbols`, regex 포함)
    - dependency graph (`getImportGraph`, `getCycles`)
    - dead export report (`getDeadExports`)
-3. LSP 강화 — `resolveSymbol()`, `getHeritageChain()` 활용
-4. incremental scan 설계 — `onIndexed` + `changedSymbols` (gildash FR-08)
-5. `main.ts` — CLI/MCP 분기 진입점
-6. 전체 테스트 + E2E 통과 확인
+3. 🟢 Sonnet — MCP 도구 구현
+4. 🔴 Opus — LSP 강화 설계 — `resolveSymbol()`, `getHeritageChain()` 활용
+5. 🟢 Sonnet — LSP 강화 구현
+6. 🔴 Opus — incremental scan 설계 — `onIndexed` + `changedSymbols` (gildash FR-08)
+7. 🟢 Sonnet — `main.ts` — CLI/MCP 분기 진입점 정리
+8. 🟢 Sonnet — 전체 테스트 + E2E 통과 확인
 
-### 4.2 gildash 의존성 매트릭스
+커밋: `feat: add gildash-powered MCP tools and LSP enhancements`
+
+### 4.3 gildash 의존성 매트릭스
 
 | firebat Phase | 필요한 gildash FR | gildash Phase |
 |---|---|---|
@@ -545,13 +595,15 @@ gildash Phase 0~1 완료를 기다리는 동안 firebat 자체 준비 작업.
 
 **firebat Phase 1은 gildash Phase 1 완료만으로 착수 가능.** Phase 2 중 일부 detector는 gildash Phase 2까지 대기 필요 — 해당 detector는 기존 로직 유지 후 점진 전환.
 
-### 4.3 마이그레이션 규칙
+### 4.4 마이그레이션 규칙
 
+- **통합/E2E 불가침**: Phase P0 이후 `test/integration/`, `test/e2e/` 파일은 일체 수정 금지. 내부 구조 변경은 barrel export에서 흡수.
 - **Phase 단위 커밋**: 각 Phase 완료 시 커밋. Phase 중간 상태로 커밋 금지.
 - **테스트 선행**: 각 파일 이동/변경 전 관련 테스트 확인, 이동 후 즉시 재실행.
-- **import 경로 일괄 갱신**: 파일 이동 시 `grep -r` 으로 모든 import 참조 갱신.
+- **import 경로 일괄 갱신**: 파일 이동 시 `grep -r` 으로 모든 import 참조 갱신. 단, test/는 barrel 경유이므로 갱신 불필요.
 - **기능 변경 금지**: 리팩토링 중 기능 추가/변경 없음. 동작 동일성 보장.
 - **점진적 gildash 전환**: gildash Phase 2 대기가 필요한 detector는 기존 로직 유지 → gildash FR 배포 시 교체.
+- **Opus/Sonnet 전환**: 각 Phase의 🔴/🟢 태그에 따라 모델 전환. 전환 시점에 사용자에게 명시적 신호.
 
 ---
 
@@ -561,7 +613,7 @@ gildash Phase 0~1 완료를 기다리는 동안 firebat 자체 준비 작업.
 
 | 지표 | 현재 | 목표 |
 |---|---|---|
-| scan.usecase.ts | 1516줄 | pipeline.ts ~100줄 |
+| scan.usecase.ts | 1516줄 | pipeline.ts (대폭 축소) |
 | symbol-index 관련 파일 | ~20개 | 1개 (`store/gildash.ts`) |
 | infrastructure/ 파일 | ~30개 (3층 repo × 5 entity) | 0개 (디렉토리 삭제) |
 | ports/ 파일 | 10개 | 0개 (디렉토리 삭제) |
