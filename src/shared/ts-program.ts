@@ -97,7 +97,7 @@ const formatUnknownError = (error: unknown): string => {
 };
 
 const createParseWorker = (): Worker => {
-  return new Worker(new URL('../workers/parse-worker.js', import.meta.url), { type: 'module' });
+  return new Worker(new URL('./workers/parse-worker.js', import.meta.url), { type: 'module' });
 };
 
 let readyTimeoutMs = 10_000;
