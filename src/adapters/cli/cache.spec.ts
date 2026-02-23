@@ -15,7 +15,7 @@ mock.module('node:fs/promises', () => ({
 }));
 
 import { runCache } from './cache';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const logger = createNoopLogger('error');
 let fileSpy: ReturnType<typeof spyOn>;

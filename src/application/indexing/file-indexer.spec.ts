@@ -1,6 +1,6 @@
 import { describe, it, expect, spyOn, afterEach } from 'bun:test';
 import { indexTargets } from './file-indexer';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const logger = createNoopLogger('error');
 

@@ -45,7 +45,7 @@ import {
   writeMemoryUseCase,
   deleteMemoryUseCase,
 } from './memory.usecases';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const logger = createNoopLogger();
 

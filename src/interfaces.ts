@@ -35,5 +35,5 @@ export interface FirebatCliOptions {
 
 export interface FirebatProgramConfig {
   readonly targets: readonly string[];
-  readonly logger: import('./ports/logger').FirebatLogger;
+  readonly logger: import('./shared/logger').FirebatLogger;
 }

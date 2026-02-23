@@ -24,7 +24,7 @@ import {
   getAvailableExternalSymbolsInFileUseCase,
   parseImportsUseCase,
 } from './lsp.usecases';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const logger = createNoopLogger('error');
 const root = '/project';

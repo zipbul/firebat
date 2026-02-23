@@ -4,7 +4,7 @@ import type {
   FirebatCliOptions,
   FirebatProgramConfig,
 } from './interfaces';
-import { createNoopLogger } from './ports/logger';
+import { createNoopLogger } from './shared/logger';
 
 describe('FirebatCliExplicitFlags', () => {
   it('should satisfy all boolean fields when assigned', () => {

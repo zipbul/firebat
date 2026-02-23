@@ -5,7 +5,7 @@ const __origScanUsecase = { ...require(nodePath.resolve(import.meta.dir, '../../
 const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts')) };
 const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
 const __origConfigLoader = { ...require(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts')) };
-const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/logging/pretty-console-logger.ts')) };
+const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 
 // Heavy dependencies mocked to avoid side-effects
 mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => ({
@@ -24,7 +24,7 @@ mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loade
   loadFirebatConfigFile: mock(async () => ({ config: null, resolvedPath: undefined })),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/logging/pretty-console-logger.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
   createPrettyConsoleLogger: mock(() => ({
     level: 'error',
     log: mock(() => undefined),
@@ -236,6 +236,6 @@ afterAll(() => {
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => __origConfigLoader);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/logging/pretty-console-logger.ts'), () => __origPrettyLogger);
+  mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origPrettyLogger);
 });
 

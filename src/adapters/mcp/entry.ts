@@ -1,4 +1,4 @@
-import { appendFirebatLog } from '../../infra/logging';
+import { appendFirebatLog } from '../../shared/logger';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { runMcpServer } from './server';
 

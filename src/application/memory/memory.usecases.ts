@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { type MemoryStore, createMemoryStore } from '../../store/memory';

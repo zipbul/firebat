@@ -2,7 +2,7 @@
 import * as path from 'node:path';
 
 import type { FirebatCliOptions } from '../../interfaces';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type {
   BarrelPolicyFindingKind,
   CouplingKind,

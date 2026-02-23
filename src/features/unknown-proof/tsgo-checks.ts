@@ -1,9 +1,9 @@
 import type { ParsedFile } from '../../engine/types';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
 
 import { withTsgoLspSession, openTsDocument } from '../../tooling/tsgo/tsgo-runner';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 import { stringifyHover } from './candidates';
 
 interface BindingCandidate {

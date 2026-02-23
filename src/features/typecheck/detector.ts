@@ -1,11 +1,11 @@
 import * as path from 'node:path';
 
 import type { ParsedFile } from '../../engine/types';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan, TypecheckItem } from '../../types';
 
 import { lspUriToFilePath, openTsDocument, withTsgoLspSession } from '../../tooling/tsgo/tsgo-runner';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 

@@ -11,7 +11,7 @@ const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '..
 mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => mockResolveBin);
 mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => mockVersionOnce);
 import { runOxlint, __testing__ } from './oxlint-runner';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const logger = createNoopLogger('error');
 

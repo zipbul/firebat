@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SymbolMatch, SymbolIndexStats } from '../../ports/symbol-index.repository';
 
 import { initHasher } from '../../engine/hasher';

@@ -14,7 +14,7 @@ const __origTargetDiscovery = { ...require(path.resolve(import.meta.dir, '../../
 mock.module(path.resolve(import.meta.dir, '../../tooling/ast-grep/find-pattern.ts'), () => mockFindPattern);
 mock.module(path.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => mockResolveTargets);
 import { findPatternUseCase } from './find-pattern.usecase';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const logger = createNoopLogger('error');
 

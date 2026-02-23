@@ -68,14 +68,14 @@ export { aggregateDiagnostics } from './application/scan/diagnostic-aggregator';
 // ---------------------------------------------------------------------------
 // Infrastructure  (Phase 0/3 에서 교체/이동 예정)
 // ---------------------------------------------------------------------------
-export { createPrettyConsoleLogger } from './infrastructure/logging/pretty-console-logger';
+export { createPrettyConsoleLogger } from './shared/logger';
 export { closeAll as closeAllSqliteConnections } from './infrastructure/sqlite/firebat.db';
 export { __testing__ as __testing__OxlintRunner } from './tooling/oxlint/oxlint-runner';
 
 // ---------------------------------------------------------------------------
 // Ports  (Phase 3 에서 shared/ 이동 예정)
 // ---------------------------------------------------------------------------
-export { createNoopLogger } from './ports/logger';
+export { createNoopLogger } from './shared/logger';
 
 // ---------------------------------------------------------------------------
 // Adapters — MCP  (Phase 4)

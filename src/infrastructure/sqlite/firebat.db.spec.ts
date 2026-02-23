@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { closeAll, getDb, getOrmDb } from './firebat.db';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 // These tests use a real temporary directory. Each test gets a unique dir.
 let tmpDir: string;

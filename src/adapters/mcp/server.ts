@@ -7,13 +7,13 @@ import { z } from 'zod';
 
 import type { FirebatConfig, FirebatLogLevel } from '../../shared/firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
-import type { FirebatLogger, FirebatLogFields } from '../../ports/logger';
+import type { FirebatLogger, FirebatLogFields } from '../../shared/logger';
 import type { FirebatDetector } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { toJsonReport } from '../../types';
 import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
-import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
+import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { resolveTargets } from '../../shared/target-discovery';
 

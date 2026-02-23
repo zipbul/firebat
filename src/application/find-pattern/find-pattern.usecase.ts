@@ -1,4 +1,4 @@
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { findPatternInFiles, type AstGrepMatch } from '../../tooling/ast-grep/find-pattern';
 import { resolveTargets } from '../../shared/target-discovery';

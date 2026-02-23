@@ -6,8 +6,8 @@ const __origRootResolver = { ...require(nodePath.resolve(import.meta.dir, '../..
 const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
 const __origConfigLoader = { ...require(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts')) };
 const __origReport = { ...require(nodePath.resolve(import.meta.dir, '../../report.ts')) };
-const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../infra/logging.ts')) };
-const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/logging/pretty-console-logger.ts')) };
+const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
+const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 
 // Heavy dependencies mocked to prevent side-effects and slow load
 mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => ({
@@ -31,11 +31,11 @@ mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => ({
   formatReport: mock((_r: unknown, _f: unknown) => '[]'),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../infra/logging.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
   appendFirebatLog: mock(async () => undefined),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/logging/pretty-console-logger.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
   createPrettyConsoleLogger: mock(() => ({
     error: mock(() => undefined),
     info: mock(() => undefined),
@@ -275,7 +275,7 @@ afterAll(() => {
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => __origConfigLoader);
   mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => __origReport);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infra/logging.ts'), () => __origLogging);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/logging/pretty-console-logger.ts'), () => __origPrettyLogger);
+  mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origLogging);
+  mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origPrettyLogger);
 });
 

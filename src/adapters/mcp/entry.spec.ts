@@ -2,7 +2,7 @@ import { mock, afterAll, describe, it, expect } from 'bun:test';
 import * as nodePath from 'node:path';
 
 const __origServer = { ...require(nodePath.resolve(import.meta.dir, './server.ts')) };
-const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../infra/logging.ts')) };
+const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 const __origRootResolver = { ...require(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts')) };
 
 const mockRunMcpServer = mock(async () => undefined);
@@ -11,7 +11,7 @@ mock.module(nodePath.resolve(import.meta.dir, './server.ts'), () => ({
   runMcpServer: mockRunMcpServer,
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../infra/logging.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
   appendFirebatLog: mock(async () => undefined),
 }));
 
@@ -46,6 +46,6 @@ describe('runMcp', () => {
 afterAll(() => {
   mock.restore();
   mock.module(nodePath.resolve(import.meta.dir, './server.ts'), () => __origServer);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infra/logging.ts'), () => __origLogging);
+  mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origLogging);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts'), () => __origRootResolver);
 });

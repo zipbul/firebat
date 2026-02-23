@@ -1,7 +1,7 @@
 // MUST: MUST-1
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan } from '../../types';
 
 import { initHasher } from '../../engine/hasher';

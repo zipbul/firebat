@@ -1,7 +1,7 @@
 import { mkdir, rename } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { TsgoLspSession } from '../../tooling/tsgo/tsgo-runner';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SymbolMatch } from '../../ports/symbol-index.repository';
 
 import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../tooling/tsgo/tsgo-runner';

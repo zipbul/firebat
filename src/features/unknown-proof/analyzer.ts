@@ -1,5 +1,5 @@
 import type { ParsedFile } from '../../engine/types';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
 
 import { PartialResultError } from '../../engine/partial-result-error';

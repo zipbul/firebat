@@ -1,5 +1,61 @@
-import type { FirebatLogLevel } from '../../shared/firebat-config';
-import type { FirebatLogFields, FirebatLogger } from '../../ports/logger';
+import { appendFile, mkdir } from 'node:fs/promises';
+import * as path from 'node:path';
+
+import type { FirebatLogLevel } from './firebat-config';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type FirebatLogFields = Record<string, string | number | boolean | null | undefined>;
+
+export interface FirebatLogger {
+  readonly level: FirebatLogLevel;
+
+  log(level: FirebatLogLevel, message: string, fields?: FirebatLogFields, error?: unknown): void;
+
+  error(message: string, fields?: FirebatLogFields, error?: unknown): void;
+  warn(message: string, fields?: FirebatLogFields, error?: unknown): void;
+  info(message: string, fields?: FirebatLogFields, error?: unknown): void;
+  debug(message: string, fields?: FirebatLogFields, error?: unknown): void;
+  trace(message: string, fields?: FirebatLogFields, error?: unknown): void;
+}
+
+// ── Noop Logger ───────────────────────────────────────────────────────────────
+
+export const createNoopLogger = (level: FirebatLogLevel = 'error'): FirebatLogger => {
+  const noop = () => undefined;
+
+  return {
+    level,
+    log: noop,
+    error: noop,
+    warn: noop,
+    info: noop,
+    debug: noop,
+    trace: noop,
+  };
+};
+
+// ── File Logger ───────────────────────────────────────────────────────────────
+
+const ensureDir = async (dirPath: string): Promise<void> => {
+  await mkdir(dirPath, { recursive: true });
+};
+
+const formatLogEntry = (message: string): string => {
+  const ts = new Date().toISOString();
+
+  return `[${ts}] ${message}\n`;
+};
+
+export const appendFirebatLog = async (rootAbs: string, relativePath: string, message: string): Promise<void> => {
+  const filePath = path.resolve(rootAbs, relativePath);
+  const dirPath = path.dirname(filePath);
+
+  await ensureDir(dirPath);
+  await appendFile(filePath, formatLogEntry(message), 'utf8');
+};
+
+// ── Pretty Console Logger ─────────────────────────────────────────────────────
 
 interface PrettyConsoleLoggerOptions {
   readonly level: FirebatLogLevel;

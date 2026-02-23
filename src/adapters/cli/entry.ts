@@ -1,14 +1,14 @@
 import type { FirebatConfig } from '../../shared/firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
 import { countBlockers } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { parseArgs } from '../../shared/arg-parse';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../shared/firebat-config.loader';
-import { appendFirebatLog } from '../../infra/logging';
-import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
+import { appendFirebatLog } from '../../shared/logger';
+import { createPrettyConsoleLogger } from '../../shared/logger';
 import { formatReport } from '../../report';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { resolveTargets } from '../../shared/target-discovery';

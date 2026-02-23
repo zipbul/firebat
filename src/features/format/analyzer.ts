@@ -1,7 +1,7 @@
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { runOxfmt } from '../../tooling/oxfmt/oxfmt-runner';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 
 const createEmptyFormat = (): ReadonlyArray<string> => [];
 

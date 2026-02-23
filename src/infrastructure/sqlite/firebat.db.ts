@@ -4,7 +4,7 @@ import { migrate } from 'drizzle-orm/bun-sqlite/migrator';
 import { mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { createDrizzleDb, type FirebatDrizzleDb } from './drizzle-db';
 

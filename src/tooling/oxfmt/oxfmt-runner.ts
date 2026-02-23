@@ -1,4 +1,4 @@
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';

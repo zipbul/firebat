@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import * as path from 'node:path';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
 
 import {
@@ -17,7 +17,7 @@ import {
   walkOxcTree,
 } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../../shared/logger';
 import { runTsgoApiDriftChecks, type ApiDriftInterfaceMethodCandidate, type ApiDriftInterfaceToken } from './tsgo-checks';
 
 const createEmptyApiDrift = (): ReadonlyArray<ApiDriftGroup> => [];

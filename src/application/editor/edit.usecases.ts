@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';

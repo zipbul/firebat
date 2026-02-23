@@ -1,6 +1,6 @@
 import { ts } from '@ast-grep/napi';
 
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan } from '../../types';
 
 interface AstGrepMatch {
