@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { testUnitFileMappingRule } from '../../../../../src/oxlint-plugin/rules/test-unit-file-mapping';
+import { testUnitFileMappingRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/test-unit-file-mapping', () => {

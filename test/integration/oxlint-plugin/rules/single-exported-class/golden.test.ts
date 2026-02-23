@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { singleExportedClassRule } from '../../../../../src/oxlint-plugin/rules/single-exported-class';
+import { singleExportedClassRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/single-exported-class', () => {

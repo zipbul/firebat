@@ -1,7 +1,7 @@
-import type { ParsedFile } from '../../../src/engine/types';
-import type { DuplicateGroup, WasteFinding } from '../../../src/types';
+import type { ParsedFile } from '../../../src/test-api';
+import type { DuplicateGroup, WasteFinding } from '../../../src/test-api';
 
-import { parseSource } from '../../../src/engine/parse-source';
+import { parseSource } from '../../../src/test-api';
 
 export const getFuzzSeed = (): number => {
   const envSeed = process.env.FUZZ_SEED;

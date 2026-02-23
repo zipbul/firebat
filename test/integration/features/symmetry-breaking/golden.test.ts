@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeSymmetryBreaking } from '../../../../src/features/symmetry-breaking';
+import { analyzeSymmetryBreaking } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/symmetry-breaking', () => {

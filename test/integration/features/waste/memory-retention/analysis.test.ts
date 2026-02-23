@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectWaste } from '../../../../../src/features/waste';
+import { detectWaste } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
 
 describe('integration/waste/memory-retention', () => {

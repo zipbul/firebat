@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 // Phase 0: DiagnosticAggregator should synthesize top/catalog from detector analyses.
 // NOTE: This test is intentionally written before implementation (RED first).
 
-import { aggregateDiagnostics } from '../../../../src/application/scan/diagnostic-aggregator';
+import { aggregateDiagnostics } from '../../../../src/test-api';
 
 describe('integration/diagnostic-aggregator', () => {
   it('should emit DIAG_GOD_FUNCTION when nesting(high-cc) + waste co-occur in same function', () => {

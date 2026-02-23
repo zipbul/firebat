@@ -1,4 +1,4 @@
-import type { SourceToken } from '../../../../src/oxlint-plugin/types';
+import type { SourceToken } from '../../../../src/test-api';
 
 const PUNCTUATION_CHARS = new Set([',', ';', '(', ')', '{', '}', '[', ']']);
 

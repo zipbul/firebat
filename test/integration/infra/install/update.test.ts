@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { runInstall, runUpdate } from '../../../../src/adapters/cli/install';
-import { createPrettyConsoleLogger } from '../../../../src/infrastructure/logging/pretty-console-logger';
+import { runInstall, runUpdate } from '../../../../src/test-api';
+import { createPrettyConsoleLogger } from '../../../../src/test-api';
 
 const testLogger = createPrettyConsoleLogger({ level: 'error', includeStack: false });
 

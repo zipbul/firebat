@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeInvariantBlindspot } from '../../../../src/features/invariant-blindspot';
+import { analyzeInvariantBlindspot } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/invariant-blindspot', () => {

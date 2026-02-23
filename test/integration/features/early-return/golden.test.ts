@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeEarlyReturn } from '../../../../src/features/early-return';
+import { analyzeEarlyReturn } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/early-return', () => {

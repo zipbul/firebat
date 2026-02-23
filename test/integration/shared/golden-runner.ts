@@ -4,7 +4,7 @@
  * Usage pattern inside a golden.test.ts:
  *
  *   import { runGolden } from '../../shared/golden-runner';
- *   import { detectWaste } from '../../../../src/features/waste';
+ *   import { detectWaste } from '../../../../src/test-api';
  *
  *   runGolden(import.meta.dir, 'dead-store', sources => detectWaste(sources));
  *
@@ -17,9 +17,9 @@ import { expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import type { ParsedFile } from '../../../src/engine/types';
-import { parseSource } from '../../../src/engine/parse-source';
-import { PartialResultError } from '../../../src/engine/partial-result-error';
+import type { ParsedFile } from '../../../src/test-api';
+import { parseSource } from '../../../src/test-api';
+import { PartialResultError } from '../../../src/test-api';
 import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────

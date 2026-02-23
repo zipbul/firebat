@@ -4,9 +4,9 @@ import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/type
 
 import { createInMemoryMcpContext, type InMemoryMcpContext } from './helpers/inmemory-server';
 import { callToolSafe } from './helpers/mcp-client';
-import { createNoopLogger } from '../../../src/ports/logger';
+import { createNoopLogger } from '../../../src/test-api';
 // __testing__ is exported after implementation; before it, accessing it causes RED.
-import { __testing__ } from '../../../src/adapters/mcp/server';
+import { __testing__McpServer as __testing__ } from '../../../src/test-api';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

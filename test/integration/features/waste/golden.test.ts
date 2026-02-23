@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { detectWaste } from '../../../../src/features/waste';
+import { detectWaste } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/waste', () => {

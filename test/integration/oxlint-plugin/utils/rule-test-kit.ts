@@ -10,7 +10,7 @@ import type {
   SourceCode,
   SourceToken,
   Variable,
-} from '../../../../src/oxlint-plugin/types';
+} from '../../../../src/test-api';
 
 interface RuleContextExtras {
   filename?: string;

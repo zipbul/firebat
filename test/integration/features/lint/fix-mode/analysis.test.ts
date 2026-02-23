@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
-import { analyzeLint } from '../../../../../src/features/lint';
+import { analyzeLint } from '../../../../../src/test-api';
 import { createTempProject, installFakeBin, readText, writeText } from '../../../shared/external-tool-test-kit';
 
 describe('integration/lint/fix-mode', () => {

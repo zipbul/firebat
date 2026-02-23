@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectExactDuplicates } from '../../../../src/features/exact-duplicates';
+import { detectExactDuplicates } from '../../../../src/test-api';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed } from '../../shared/test-kit';
 
 const createBlockPairSource = (firstName: string, secondName: string, literal: number): string => {

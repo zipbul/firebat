@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noTombstoneRule } from '../../../../../src/oxlint-plugin/rules/no-tombstone';
+import { noTombstoneRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-tombstone', () => {

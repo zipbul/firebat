@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { __testing__ } from '../../../../src/features/format/analyzer';
+import { __testing__FormatAnalyzer as __testing__ } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 const { parseOxfmtFiles } = __testing__;

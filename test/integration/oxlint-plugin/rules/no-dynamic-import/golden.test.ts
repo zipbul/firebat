@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noDynamicImportRule } from '../../../../../src/oxlint-plugin/rules/no-dynamic-import';
+import { noDynamicImportRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-dynamic-import', () => {

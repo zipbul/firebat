@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeImplicitState } from '../../../../src/features/implicit-state';
+import { analyzeImplicitState } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/implicit-state', () => {

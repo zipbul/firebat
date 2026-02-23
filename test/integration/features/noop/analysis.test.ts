@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeNoop } from '../../../../src/features/noop';
+import { analyzeNoop } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 function createNoopSource(): string {

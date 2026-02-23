@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noGlobalThisMutationRule } from '../../../../../src/oxlint-plugin/rules/no-globalthis-mutation';
+import { noGlobalThisMutationRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-globalthis-mutation', () => {

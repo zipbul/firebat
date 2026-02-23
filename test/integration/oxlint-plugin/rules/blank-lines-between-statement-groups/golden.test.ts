@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { blankLinesBetweenStatementGroupsRule } from '../../../../../src/oxlint-plugin/rules/blank-lines-between-statement-groups';
+import { blankLinesBetweenStatementGroupsRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/blank-lines-between-statement-groups', () => {

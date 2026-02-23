@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { __testing__ } from '../../../../src/infrastructure/oxlint/oxlint-runner';
+import { __testing__OxlintRunner as __testing__ } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 const { parseOxlintOutput } = __testing__;

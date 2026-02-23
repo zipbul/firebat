@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import type { ReportDescriptor } from '../../../../src/oxlint-plugin/types';
+import type { ReportDescriptor } from '../../../../src/test-api';
 
 import { applyFixes } from './rule-test-kit';
 

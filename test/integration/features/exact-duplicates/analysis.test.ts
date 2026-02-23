@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectExactDuplicates } from '../../../../src/features/exact-duplicates';
+import { detectExactDuplicates } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {

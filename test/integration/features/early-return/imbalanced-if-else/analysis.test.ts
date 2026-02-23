@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeEarlyReturn } from '../../../../../src/features/early-return';
+import { analyzeEarlyReturn } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
 
 describe('integration/early-return/imbalanced-if-else', () => {

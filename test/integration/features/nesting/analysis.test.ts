@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeNesting } from '../../../../src/features/nesting';
+import { analyzeNesting } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 function createComplexSource(): string {

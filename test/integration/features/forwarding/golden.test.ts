@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeForwarding } from '../../../../src/features/forwarding';
+import { analyzeForwarding } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/forwarding', () => {

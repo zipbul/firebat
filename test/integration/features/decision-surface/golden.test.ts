@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeDecisionSurface } from '../../../../src/features/decision-surface';
+import { analyzeDecisionSurface } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/decision-surface', () => {

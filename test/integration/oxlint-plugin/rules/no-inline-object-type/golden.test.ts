@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noInlineObjectTypeRule } from '../../../../../src/oxlint-plugin/rules/no-inline-object-type';
+import { noInlineObjectTypeRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-inline-object-type', () => {

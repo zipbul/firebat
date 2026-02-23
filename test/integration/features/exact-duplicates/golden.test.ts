@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { detectExactDuplicates } from '../../../../src/features/exact-duplicates';
+import { detectExactDuplicates } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/exact-duplicates', () => {

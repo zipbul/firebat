@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeUnknownProof } from '../../../../src/features/unknown-proof';
+import { analyzeUnknownProof } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/unknown-proof', () => {

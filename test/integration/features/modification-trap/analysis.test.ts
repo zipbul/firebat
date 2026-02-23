@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { scanUseCase } from '../../../../src/application/scan/scan.usecase';
+import { scanUseCase } from '../../../../src/test-api';
 import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
 
 const expectBaseFinding = (item: any): void => {

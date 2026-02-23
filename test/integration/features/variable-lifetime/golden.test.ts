@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeVariableLifetime } from '../../../../src/features/variable-lifetime';
+import { analyzeVariableLifetime } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/variable-lifetime', () => {

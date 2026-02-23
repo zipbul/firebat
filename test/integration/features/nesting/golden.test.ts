@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeNesting } from '../../../../src/features/nesting';
+import { analyzeNesting } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/nesting', () => {

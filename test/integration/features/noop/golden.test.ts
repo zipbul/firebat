@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeNoop } from '../../../../src/features/noop';
+import { analyzeNoop } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/noop', () => {

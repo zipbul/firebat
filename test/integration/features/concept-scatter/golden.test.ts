@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeConceptScatter } from '../../../../src/features/concept-scatter';
+import { analyzeConceptScatter } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/concept-scatter', () => {

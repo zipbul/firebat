@@ -7,13 +7,13 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../../src/engine/parse-source';
-import type { ParsedFile } from '../../../src/engine/types';
-import { analyzeEarlyReturn } from '../../../src/features/early-return';
-import { analyzeExceptionHygiene } from '../../../src/features/exception-hygiene';
-import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
-import { analyzeNesting } from '../../../src/features/nesting';
-import { analyzeNoop } from '../../../src/features/noop';
+import { parseSource } from '../../../src/test-api';
+import type { ParsedFile } from '../../../src/test-api';
+import { analyzeEarlyReturn } from '../../../src/test-api';
+import { analyzeExceptionHygiene } from '../../../src/test-api';
+import { detectExactDuplicates } from '../../../src/test-api';
+import { analyzeNesting } from '../../../src/test-api';
+import { analyzeNoop } from '../../../src/test-api';
 
 const SOURCE = `
 import { readFileSync } from 'node:fs';

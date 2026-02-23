@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { __test__ } from '../../../../src/features/typecheck/detector';
+import { __test__TypecheckDetector as __test__ } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 const { pullDiagnosticsToItems } = __test__;

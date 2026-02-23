@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
-import { analyzeDependencies } from '../../../../src/features/dependencies';
+import { analyzeDependencies } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 const toCycleKey = (cycle: { readonly path: ReadonlyArray<string> }): string => {

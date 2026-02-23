@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noUnmodifiedLoopConditionRule } from '../../../../../src/oxlint-plugin/rules/no-unmodified-loop-condition';
+import { noUnmodifiedLoopConditionRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-unmodified-loop-condition', () => {

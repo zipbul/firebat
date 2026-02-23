@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noDoubleAssertionRule } from '../../../../../src/oxlint-plugin/rules/no-double-assertion';
+import { noDoubleAssertionRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-double-assertion', () => {

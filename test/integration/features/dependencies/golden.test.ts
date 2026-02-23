@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeDependencies } from '../../../../src/features/dependencies';
+import { analyzeDependencies } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/dependencies', () => {

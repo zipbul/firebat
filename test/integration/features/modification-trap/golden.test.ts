@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeModificationTrap } from '../../../../src/features/modification-trap';
+import { analyzeModificationTrap } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/modification-trap', () => {

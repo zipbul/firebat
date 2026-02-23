@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeModificationImpact } from '../../../../src/features/modification-impact';
+import { analyzeModificationImpact } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/modification-impact', () => {

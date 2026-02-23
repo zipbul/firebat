@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeGiantFile } from '../../../../src/features/giant-file';
+import { analyzeGiantFile } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/giant-file', () => {

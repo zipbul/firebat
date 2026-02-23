@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeExceptionHygiene } from '../../../../src/features/exception-hygiene';
+import { analyzeExceptionHygiene } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/exception-hygiene', () => {

@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noUmbrellaTypesRule } from '../../../../../src/oxlint-plugin/rules/no-umbrella-types';
+import { noUmbrellaTypesRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-umbrella-types', () => {

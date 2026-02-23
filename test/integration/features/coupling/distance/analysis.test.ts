@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeCoupling } from '../../../../../src/features/coupling';
-import { analyzeDependencies } from '../../../../../src/features/dependencies';
+import { analyzeCoupling } from '../../../../../src/test-api';
+import { analyzeDependencies } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
 
 describe('integration/coupling/distance', () => {

@@ -7,7 +7,7 @@
  * Usage inside a golden.test.ts:
  *
  *   import { runGoldenRule } from '../../shared/oxlint-golden-runner';
- *   import { noDoubleAssertionRule } from '../../../../src/oxlint-plugin/rules/no-double-assertion';
+ *   import { noDoubleAssertionRule } from '../../../../src/test-api';
  *
  *   runGoldenRule(import.meta.dir, 'basic', noDoubleAssertionRule);
  *
@@ -28,7 +28,7 @@ import type {
   AstNodeValue,
   RuleContext,
   Variable,
-} from '../../../src/oxlint-plugin/types';
+} from '../../../src/test-api';
 
 import { applyFixes, createRuleContext, createSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../oxlint-plugin/utils/token-utils';

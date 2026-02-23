@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeTemporalCoupling } from '../../../../src/features/temporal-coupling';
+import { analyzeTemporalCoupling } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/temporal-coupling', () => {

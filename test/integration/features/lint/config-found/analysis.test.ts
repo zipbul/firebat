@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
-import { resolveToolRcPath } from '../../../../../src/application/scan/scan.usecase';
+import { resolveToolRcPath } from '../../../../../src/test-api';
 import { createTempProject, writeText } from '../../../shared/external-tool-test-kit';
 
 describe('integration/lint/config-found', () => {

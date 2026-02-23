@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import { createPrettyConsoleLogger } from '../../../src/infrastructure/logging/pretty-console-logger';
+import { createPrettyConsoleLogger } from '../../../src/test-api';
 import { createTempProject, writeText } from './external-tool-test-kit';
 
 export const writeJson = async (filePath: string, value: unknown): Promise<void> => {

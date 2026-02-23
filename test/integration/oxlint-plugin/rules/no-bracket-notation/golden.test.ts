@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { noBracketNotationRule } from '../../../../../src/oxlint-plugin/rules/no-bracket-notation';
+import { noBracketNotationRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/no-bracket-notation', () => {

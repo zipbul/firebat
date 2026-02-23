@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { testDescribeSutNameRule } from '../../../../../src/oxlint-plugin/rules/test-describe-sut-name';
+import { testDescribeSutNameRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/test-describe-sut-name', () => {

@@ -9,13 +9,13 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../../src/engine/parse-source';
-import { analyzeDecisionSurface } from '../../../src/features/decision-surface';
-import { analyzeGiantFile } from '../../../src/features/giant-file';
-import { analyzeImplementationOverhead } from '../../../src/features/implementation-overhead';
-import { analyzeVariableLifetime } from '../../../src/features/variable-lifetime';
-import { analyzeForwarding } from '../../../src/features/forwarding';
-import { detectExactDuplicates } from '../../../src/features/exact-duplicates';
+import { parseSource } from '../../../src/test-api';
+import { analyzeDecisionSurface } from '../../../src/test-api';
+import { analyzeGiantFile } from '../../../src/test-api';
+import { analyzeImplementationOverhead } from '../../../src/test-api';
+import { analyzeVariableLifetime } from '../../../src/test-api';
+import { analyzeForwarding } from '../../../src/test-api';
+import { detectExactDuplicates } from '../../../src/test-api';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 

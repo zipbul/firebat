@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { paddingLineBetweenStatementsRule } from '../../../../../src/oxlint-plugin/rules/padding-line-between-statements';
+import { paddingLineBetweenStatementsRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/padding-line-between-statements', () => {

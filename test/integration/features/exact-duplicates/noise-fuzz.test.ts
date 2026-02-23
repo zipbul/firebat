@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectExactDuplicates } from '../../../../src/features/exact-duplicates';
+import { detectExactDuplicates } from '../../../../src/test-api';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toDuplicateSignatures } from '../../shared/test-kit';
 
 const createDuplicateFunction = (exportName: string, literal: number): string => {

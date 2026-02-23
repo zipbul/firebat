@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectClones } from '../../../../src/engine/duplicate-detector';
+import { detectClones } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 const expectHasCloneClassOf2 = (groups: ReturnType<typeof detectClones>): void => {

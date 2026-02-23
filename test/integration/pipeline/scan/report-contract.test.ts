@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
-import type { FirebatReport } from '../../../../src/types';
+import type { FirebatReport } from '../../../../src/test-api';
 
-import { scanUseCase } from '../../../../src/application/scan/scan.usecase';
-import { createPrettyConsoleLogger } from '../../../../src/infrastructure/logging/pretty-console-logger';
+import { scanUseCase } from '../../../../src/test-api';
+import { createPrettyConsoleLogger } from '../../../../src/test-api';
 import { createTempProject, installFakeBin, writeText } from '../../shared/external-tool-test-kit';
 
 const writeJson = async (filePath: string, value: unknown): Promise<void> => {

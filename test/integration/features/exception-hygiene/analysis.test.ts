@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeExceptionHygiene } from '../../../../src/features/exception-hygiene';
+import { analyzeExceptionHygiene } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 describe('integration/exception-hygiene', () => {

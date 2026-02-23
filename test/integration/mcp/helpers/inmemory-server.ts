@@ -5,9 +5,9 @@ import * as path from 'node:path';
 
 // InMemoryTransport is not in the SDK's main exports; use resolved path (see AGENTS.md / plan).
 import { InMemoryTransport } from '../../../../node_modules/@modelcontextprotocol/sdk/dist/esm/inMemory.js';
-import { createFirebatMcpServer } from '../../../../src/adapters/mcp/server';
-import { closeAll as closeAllSqliteConnections } from '../../../../src/infrastructure/sqlite/firebat.db';
-import { createNoopLogger } from '../../../../src/ports/logger';
+import { createFirebatMcpServer } from '../../../../src/test-api';
+import { closeAllSqliteConnections } from '../../../../src/test-api';
+import { createNoopLogger } from '../../../../src/test-api';
 
 type McpServerInstance = Awaited<ReturnType<typeof createFirebatMcpServer>>;
 

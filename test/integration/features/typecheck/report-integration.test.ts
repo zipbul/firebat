@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, mock } from 'bun:test';
 import * as path from 'node:path';
 
-import type { TypecheckItem } from '../../../../src/types';
+import type { TypecheckItem } from '../../../../src/test-api';
 
-import { createPrettyConsoleLogger } from '../../../../src/infrastructure/logging/pretty-console-logger';
+import { createPrettyConsoleLogger } from '../../../../src/test-api';
 import { createTempProject, writeText } from '../../shared/external-tool-test-kit';
 
 const writeJson = async (filePath: string, value: unknown): Promise<void> => {

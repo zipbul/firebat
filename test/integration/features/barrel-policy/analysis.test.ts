@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeBarrelPolicy } from '../../../../src/features/barrel-policy';
+import { analyzeBarrelPolicy } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 describe('integration/barrel-policy', () => {

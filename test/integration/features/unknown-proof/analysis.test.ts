@@ -3,11 +3,11 @@ import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import type { UnknownProofFinding } from '../../../../src/types';
+import type { UnknownProofFinding } from '../../../../src/test-api';
 
-import { parseSource } from '../../../../src/engine/parse-source';
-import { PartialResultError } from '../../../../src/engine/partial-result-error';
-import { analyzeUnknownProof } from '../../../../src/features/unknown-proof';
+import { parseSource } from '../../../../src/test-api';
+import { PartialResultError } from '../../../../src/test-api';
+import { analyzeUnknownProof } from '../../../../src/test-api';
 
 const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
 

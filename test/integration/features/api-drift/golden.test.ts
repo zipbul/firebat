@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeApiDrift } from '../../../../src/features/api-drift';
+import { analyzeApiDrift } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/api-drift', () => {

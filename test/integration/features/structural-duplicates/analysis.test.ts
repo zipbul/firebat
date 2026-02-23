@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { ParsedFile } from '../../../../src/engine/types';
+import type { ParsedFile } from '../../../../src/test-api';
 
-import { analyzeStructuralDuplicates } from '../../../../src/features/structural-duplicates';
+import { analyzeStructuralDuplicates } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {

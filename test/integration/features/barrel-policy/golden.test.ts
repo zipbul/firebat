@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeBarrelPolicy } from '../../../../src/features/barrel-policy';
+import { analyzeBarrelPolicy } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/barrel-policy', () => {

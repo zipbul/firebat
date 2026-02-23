@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { unusedImportsRule } from '../../../../../src/oxlint-plugin/rules/unused-imports';
+import { unusedImportsRule } from '../../../../../src/test-api';
 import { runGoldenRule } from '../../../shared/oxlint-golden-runner';
 
 describe('golden/unused-imports', () => {

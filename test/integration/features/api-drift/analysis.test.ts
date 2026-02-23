@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import { parseSource } from '../../../../src/engine/parse-source';
-import { analyzeApiDrift } from '../../../../src/features/api-drift';
+import { parseSource } from '../../../../src/test-api';
+import { analyzeApiDrift } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 describe('integration/api-drift', () => {

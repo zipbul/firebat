@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeAbstractionFitness } from '../../../../src/features/abstraction-fitness';
+import { analyzeAbstractionFitness } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/abstraction-fitness', () => {

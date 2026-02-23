@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeImplementationOverhead } from '../../../../src/features/implementation-overhead';
+import { analyzeImplementationOverhead } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/implementation-overhead', () => {

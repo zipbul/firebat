@@ -1,6 +1,6 @@
 import { describe } from 'bun:test';
 
-import { analyzeStructuralDuplicates } from '../../../../src/features/structural-duplicates';
+import { analyzeStructuralDuplicates } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/structural-duplicates', () => {

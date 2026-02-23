@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectWaste } from '../../../../src/features/waste';
+import { detectWaste } from '../../../../src/test-api';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
 
 const createNoRead = (functionName: string, literal: number): string => {
