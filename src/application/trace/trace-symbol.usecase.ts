@@ -5,15 +5,13 @@ import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan } from '../../types';
 
 import { initHasher } from '../../engine/hasher';
-import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
 import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
-import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
 import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
-import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
 import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb, getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { runTsgoTraceSymbol } from '../../infrastructure/tsgo/tsgo-runner';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { createArtifactStore } from '../../store/artifact';
 import { computeToolVersion } from '../../tool-version';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
@@ -285,11 +283,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const ctx = await resolveRuntimeContextFromCwd();
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
+  const db = await getDb({ rootAbs: ctx.rootAbs, logger });
   const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger });
-  const artifactRepository = createHybridArtifactRepository({
-    memory: createInMemoryArtifactRepository(),
-    sqlite: createSqliteArtifactRepository(orm),
-  });
+  const artifactRepository = createArtifactStore(db);
   const fileIndexRepository = createHybridFileIndexRepository({
     memory: createInMemoryFileIndexRepository(),
     sqlite: createSqliteFileIndexRepository(orm),
@@ -313,7 +309,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
     ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
   });
-  const cached = await artifactRepository.getArtifact<TraceSymbolOutput>({
+  const cached = artifactRepository.get<TraceSymbolOutput>({
     projectKey,
     kind: 'tsgo:traceSymbol',
     artifactKey,
@@ -351,7 +347,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     ...(normalized.raw !== undefined ? { raw: normalized.raw } : {}),
   };
 
-  await artifactRepository.setArtifact({
+  artifactRepository.set({
     projectKey,
     kind: 'tsgo:traceSymbol',
     artifactKey,

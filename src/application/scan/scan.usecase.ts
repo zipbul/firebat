@@ -49,13 +49,11 @@ import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unk
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
 import { loadFirebatConfigFile } from '../../firebat-config.loader';
-import { createHybridArtifactRepository } from '../../infrastructure/hybrid/artifact.repository';
 import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
-import { createInMemoryArtifactRepository } from '../../infrastructure/memory/artifact.repository';
 import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
-import { createSqliteArtifactRepository } from '../../infrastructure/sqlite/artifact.repository';
 import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb, getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { createArtifactStore } from '../../store/artifact';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { computeToolVersion } from '../../tool-version';
 import { createFirebatProgram } from '../../ts-program';
@@ -92,7 +90,7 @@ const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<str
 
 interface LoadCachedReportParams {
   readonly allowCache: boolean;
-  readonly artifactRepository: ReturnType<typeof createHybridArtifactRepository>;
+  readonly artifactRepository: ReturnType<typeof createArtifactStore>;
   readonly projectKey: string;
   readonly artifactKey: string;
   readonly inputsDigest: string;
@@ -105,7 +103,7 @@ const loadCachedReport = async (params: LoadCachedReportParams): Promise<Firebat
   }
 
   const tCache0 = nowMs();
-  const cached = await params.artifactRepository.getArtifact<FirebatReport>({
+  const cached = params.artifactRepository.get<FirebatReport>({
     projectKey: params.projectKey,
     kind: 'firebat:report',
     artifactKey: params.artifactKey,
@@ -178,20 +176,18 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.trace('Project key computed', { projectKey });
 
   const tDb0 = nowMs();
+  const db = await getDb({ rootAbs: ctx.rootAbs, logger });
   const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger });
 
-  logger.trace('ORM DB ready', { durationMs: Math.round(nowMs() - tDb0) });
+  logger.trace('DB ready', { durationMs: Math.round(nowMs() - tDb0) });
 
-  const artifactRepository = createHybridArtifactRepository({
-    memory: createInMemoryArtifactRepository(),
-    sqlite: createSqliteArtifactRepository(orm),
-  });
+  const artifactRepository = createArtifactStore(db);
   const fileIndexRepository = createHybridFileIndexRepository({
     memory: createInMemoryFileIndexRepository(),
     sqlite: createSqliteFileIndexRepository(orm),
   });
 
-  logger.trace('Repositories created (hybrid: memory + sqlite)');
+  logger.trace('Repositories created');
 
   const tIndex0 = nowMs();
 
@@ -1498,7 +1494,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   if (allowCache) {
     const tSave0 = nowMs();
 
-    await artifactRepository.setArtifact({
+    artifactRepository.set({
       projectKey,
       kind: 'firebat:report',
       artifactKey,

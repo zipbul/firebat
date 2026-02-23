@@ -1,10 +1,9 @@
 import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../ports/logger';
-import type { MemoryRepository } from '../../ports/memory.repository';
 
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
-import { createSqliteMemoryRepository } from '../../infrastructure/sqlite/memory.repository';
+import { getDb } from '../../infrastructure/sqlite/firebat.db';
+import { type MemoryStore, createMemoryStore } from '../../store/memory';
 
 interface JsonObject {
   readonly [k: string]: JsonValue;
@@ -53,7 +52,7 @@ const resolveProjectKey = (root: string | undefined): string => {
   return path.isAbsolute(trimmed) ? trimmed : path.resolve(cwd, trimmed);
 };
 
-const repoPromisesByProjectKey = new Map<string, Promise<MemoryRepository>>();
+const repoPromisesByProjectKey = new Map<string, Promise<MemoryStore>>();
 
 interface RepositoryInput {
   readonly root?: string;
@@ -68,10 +67,10 @@ const getRepository = async (input: RepositoryInput) => {
     return { projectKey, repo: await existing };
   }
 
-  const created = (async (): Promise<MemoryRepository> => {
-    const orm = await getOrmDb({ rootAbs: projectKey, logger: input.logger });
+  const created = (async (): Promise<MemoryStore> => {
+    const db = await getDb({ rootAbs: projectKey, logger: input.logger });
 
-    return createSqliteMemoryRepository(orm);
+    return createMemoryStore(db);
   })();
 
   repoPromisesByProjectKey.set(projectKey, created);

@@ -2,9 +2,7 @@ import { mock, describe, it, expect, afterAll } from 'bun:test';
 import * as nodePath from 'node:path';
 
 const __origFirebatDb = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts')) };
-const __origMemArtifact = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/artifact.repository.ts')) };
-const __origSqliteArtifact = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/artifact.repository.ts')) };
-const __origHybridArtifact = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/artifact.repository.ts')) };
+const __origArtifactStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/artifact.ts')) };
 const __origMemFileIndex = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts')) };
 const __origSqliteFileIndex = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts')) };
 const __origHybridFileIndex = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts')) };
@@ -15,24 +13,13 @@ const __origTsgoRunner = { ...require(nodePath.resolve(import.meta.dir, '../../i
 
 // Mock all heavy infrastructure
 mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
+  getDb: async () => ({}),
   getOrmDb: async () => ({}),
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/artifact.repository.ts'), () => ({
-  createInMemoryArtifactRepository: () => ({
-    getArtifact: async () => null,
-    setArtifact: async () => {},
-  }),
-}));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/artifact.repository.ts'), () => ({
-  createSqliteArtifactRepository: () => ({
-    getArtifact: async () => null,
-    setArtifact: async () => {},
-  }),
-}));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/artifact.repository.ts'), () => ({
-  createHybridArtifactRepository: () => ({
-    getArtifact: async () => null,
-    setArtifact: async () => {},
+mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => ({
+  createArtifactStore: () => ({
+    get: () => null,
+    set: () => {},
   }),
 }));
 mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts'), () => ({
@@ -102,9 +89,7 @@ describe('traceSymbolUseCase', () => {
 afterAll(() => {
   mock.restore();
   mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/artifact.repository.ts'), () => __origMemArtifact);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/artifact.repository.ts'), () => __origSqliteArtifact);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/artifact.repository.ts'), () => __origHybridArtifact);
+  mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => __origArtifactStore);
   mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts'), () => __origMemFileIndex);
   mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts'), () => __origSqliteFileIndex);
   mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts'), () => __origHybridFileIndex);

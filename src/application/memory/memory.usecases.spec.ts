@@ -2,19 +2,19 @@ import { afterAll, afterEach, describe, expect, it, mock } from 'bun:test';
 import * as path from 'node:path';
 
 const __origFirebatDb = { ...require(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts')) };
-const __origMemoryRepo = { ...require(path.resolve(import.meta.dir, '../../infrastructure/sqlite/memory.repository.ts')) };
+const __origMemoryStore = { ...require(path.resolve(import.meta.dir, '../../store/memory.ts')) };
 
 // mock SQLite DB to avoid filesystem side effects
 mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
-  getOrmDb: async () => ({}),
+  getDb: async () => ({}),
 }));
 
-mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/memory.repository.ts'), () => {
+mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => {
   // In-memory store for tests
   const store = new Map<string, string>();
   return {
-    createSqliteMemoryRepository: () => ({
-      listKeys: async ({ projectKey }: { projectKey: string }) => {
+    createMemoryStore: () => ({
+      listKeys: ({ projectKey }: { projectKey: string }) => {
         const entries: Array<{ memoryKey: string; updatedAt: number }> = [];
         for (const [k] of store.entries()) {
           if (k.startsWith(`${projectKey}:`)) {
@@ -23,16 +23,16 @@ mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/memory.re
         }
         return entries;
       },
-      read: async ({ projectKey, memoryKey }: { projectKey: string; memoryKey: string }) => {
+      read: ({ projectKey, memoryKey }: { projectKey: string; memoryKey: string }) => {
         const key = `${projectKey}:${memoryKey}`;
         const val = store.get(key);
         if (!val) return null;
         return { projectKey, memoryKey, payloadJson: val, createdAt: 0, updatedAt: 0 };
       },
-      write: async ({ projectKey, memoryKey, payloadJson }: { projectKey: string; memoryKey: string; payloadJson: string }) => {
+      write: ({ projectKey, memoryKey, payloadJson }: { projectKey: string; memoryKey: string; payloadJson: string }) => {
         store.set(`${projectKey}:${memoryKey}`, payloadJson);
       },
-      delete: async ({ projectKey, memoryKey }: { projectKey: string; memoryKey: string }) => {
+      delete: ({ projectKey, memoryKey }: { projectKey: string; memoryKey: string }) => {
         store.delete(`${projectKey}:${memoryKey}`);
       },
     }),
@@ -115,5 +115,5 @@ describe('application/memory/memory.usecases — deleteMemoryUseCase', () => {
 afterAll(() => {
   mock.restore();
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
-  mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/memory.repository.ts'), () => __origMemoryRepo);
+  mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => __origMemoryStore);
 });
