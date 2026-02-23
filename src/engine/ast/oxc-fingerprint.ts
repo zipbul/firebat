@@ -1,9 +1,9 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue, NodeWithValue } from './types';
+import type { NodeRecord, NodeValue, NodeWithValue } from '../types';
 
 import { normalizeForFingerprint } from './ast-normalizer';
-import { hashString } from './hasher';
+import { hashString } from '../hasher';
 
 const isOxcNode = (value: NodeValue): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value) && 'type' in value && typeof value.type === 'string';

@@ -10,7 +10,7 @@ import type {
   DependencyLayerViolation,
 } from '../../types';
 
-import { getNodeName, isNodeRecord, isOxcNode } from '../../engine/oxc-ast-utils';
+import { getNodeName, isNodeRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { sortDependencyFanStats } from '../../engine/sort-utils';
 
 const createEmptyDependencies = (): DependencyAnalysis => ({

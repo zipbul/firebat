@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-import { parseSource } from './engine/parse-source';
+import { parseSource } from './engine/ast/parse-source';
 import { getNodeHeader } from './node-header';
 
 const functionNodeOf = (src: string) => {

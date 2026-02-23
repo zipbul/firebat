@@ -1,6 +1,6 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue } from './types';
+import type { NodeValue } from '../types';
 
 import { isOxcNode } from './oxc-ast-utils';
 

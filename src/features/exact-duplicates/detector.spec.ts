@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ParsedFile } from '../../engine/types';
 import type { DuplicateGroup } from '../../types';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { detectExactDuplicates } from './detector';
 
 describe('detector', () => {

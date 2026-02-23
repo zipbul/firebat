@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type { ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
 
-import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');

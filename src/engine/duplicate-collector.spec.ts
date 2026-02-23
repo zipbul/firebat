@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { collectDuplicateGroups } from './duplicate-collector';
-import { parseSource } from './parse-source';
+import { parseSource } from './ast/parse-source';
 import type { ParsedFile } from './types';
 
 // Helpers

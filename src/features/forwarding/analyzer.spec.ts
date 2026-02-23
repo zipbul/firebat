@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from '../../engine/types';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeForwarding } from './analyzer';
 
 const createProgram = (filePath: string, sourceText: string): ParsedFile[] => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeNoop, createEmptyNoop } from './analyzer';
 
 const file = (sourceText: string) => parseSource('/src/test.ts', sourceText);

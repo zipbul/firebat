@@ -1,8 +1,8 @@
 import type { CloneDiff, DuplicateCloneType, DuplicateGroup, DuplicateItem, SourceSpan } from '../types';
 import type { DuplicateFingerprintResolver, DuplicateItemKindResolver, OxcNodePredicate, ParsedFile } from './types';
 
-import { collectOxcNodes, getNodeHeader, isNodeRecord, isOxcNode } from './oxc-ast-utils';
-import { countOxcSize } from './oxc-size-count';
+import { collectOxcNodes, getNodeHeader, isNodeRecord, isOxcNode } from './ast/oxc-ast-utils';
+import { countOxcSize } from './ast/oxc-size-count';
 import { getLineColumn } from './source-position';
 
 interface CollectorItem {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-import { parseSource } from './parse-source';
+import { parseSource } from './ast/parse-source';
 import { extractSymbolsOxc } from './symbol-extractor-oxc';
 
 const file = (src: string) => parseSource('test.ts', src);

@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from './analyzer';
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import type { ParsedFile } from '../../engine/types';
 
 const toFile = (filePath: string, code: string): ParsedFile =>

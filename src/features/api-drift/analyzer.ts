@@ -15,7 +15,7 @@ import {
   collectFunctionNodesWithParent,
   getNodeHeader,
   walkOxcTree,
-} from '../../engine/oxc-ast-utils';
+} from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 import { createNoopLogger } from '../../ports/logger';
 import { runTsgoApiDriftChecks, type ApiDriftInterfaceMethodCandidate, type ApiDriftInterfaceToken } from './tsgo-checks';

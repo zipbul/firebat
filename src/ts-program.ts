@@ -1,7 +1,7 @@
 import type { ParsedFile } from './engine/types';
 import type { FirebatProgramConfig } from './interfaces';
 
-import { parseSource } from './engine/parse-source';
+import { parseSource } from './engine/ast/parse-source';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 

@@ -2,7 +2,7 @@ import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from './types';
 
-import { collectFunctionNodesWithParent } from './oxc-ast-utils';
+import { collectFunctionNodesWithParent } from './ast/oxc-ast-utils';
 
 type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string, parent: Node | null) => TItem | null;
 

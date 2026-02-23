@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { SourceSpan } from '../types';
 import type { NodeValue, ParsedFile } from './types';
 
-import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode } from './oxc-ast-utils';
+import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode } from './ast/oxc-ast-utils';
 import { getLineColumn } from './source-position';
 
 type ExtractedSymbolKind = 'function' | 'method' | 'class' | 'type' | 'interface' | 'enum';

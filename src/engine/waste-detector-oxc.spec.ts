@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWasteOxc } from './waste-detector-oxc';
-import { parseSource } from './parse-source';
+import { parseSource } from './ast/parse-source';
 import type { ParsedFile } from './types';
 
 const toFile = (filePath: string, code: string): ParsedFile =>

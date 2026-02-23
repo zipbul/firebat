@@ -4,13 +4,13 @@ import type { DuplicateCloneType, DuplicateGroup, DuplicateItem } from '../types
 import type { ParsedFile } from './types';
 
 import { collectDuplicateGroups } from './duplicate-collector';
-import { getNodeType } from './oxc-ast-utils';
+import { getNodeType } from './ast/oxc-ast-utils';
 import {
   createOxcFingerprint,
   createOxcFingerprintExact,
   createOxcFingerprintNormalized,
   createOxcFingerprintShape,
-} from './oxc-fingerprint';
+} from './ast/oxc-fingerprint';
 
 const isCloneTarget = (node: Node): boolean => {
   const type = getNodeType(node);

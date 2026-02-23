@@ -3,8 +3,8 @@ import type { Node } from 'oxc-parser';
 import type { WasteFinding } from '../types';
 import type { BitSet, DefMeta, FunctionBodyAnalysis, NodeValue, ParsedFile } from './types';
 
-import { OxcCFGBuilder } from './cfg-builder';
-import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
+import { OxcCFGBuilder } from './cfg/cfg-builder';
+import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow/dataflow';
 import {
   collectOxcNodes,
   getNodeName,
@@ -13,9 +13,9 @@ import {
   isNodeRecord,
   isOxcNode,
   isOxcNodeArray,
-} from './oxc-ast-utils';
+} from './ast/oxc-ast-utils';
 import { getLineColumn } from './source-position';
-import { collectVariables } from './variable-collector';
+import { collectVariables } from './dataflow/variable-collector';
 
 interface WasteDetectorOptions {
   readonly memoryRetentionThreshold?: number;

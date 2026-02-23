@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { ExceptionHygieneFinding, ExceptionHygieneFindingKind, SourceSpan } from './types';
 
-import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 const getSpan = (node: Node, sourceText: string): SourceSpan => {

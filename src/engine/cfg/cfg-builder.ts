@@ -1,9 +1,9 @@
 import type { Node } from 'oxc-parser';
 
 import { IntegerCFG } from './cfg';
-import { getNodeName, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
-import { evalStaticTruthiness } from './oxc-expression-utils';
-import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type NodeValue, type OxcBuiltFunctionCfg } from './types';
+import { getNodeName, isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
+import { evalStaticTruthiness } from '../ast/oxc-expression-utils';
+import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type NodeValue, type OxcBuiltFunctionCfg } from '../types';
 
 type HandledStatementType =
   | 'BlockStatement'

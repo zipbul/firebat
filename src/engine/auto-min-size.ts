@@ -1,8 +1,8 @@
 import type { ParsedFile } from './types';
 
 import { isCloneTarget } from './duplicate-detector';
-import { collectOxcNodes } from './oxc-ast-utils';
-import { countOxcSize } from './oxc-size-count';
+import { collectOxcNodes } from './ast/oxc-ast-utils';
+import { countOxcSize } from './ast/oxc-size-count';
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 

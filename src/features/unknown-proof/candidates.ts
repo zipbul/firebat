@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
 
-import { isNodeRecord, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { isNodeRecord, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 interface BindingCandidate {

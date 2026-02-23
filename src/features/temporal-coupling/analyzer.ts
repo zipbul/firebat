@@ -3,8 +3,8 @@ import type { Node } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { TemporalCouplingFinding } from '../../types';
 
-import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
-import { normalizeFile } from '../../engine/normalize-file';
+import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { normalizeFile } from '../../engine/ast/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];

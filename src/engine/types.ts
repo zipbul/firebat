@@ -2,12 +2,12 @@ import type { Comment, Node, OxcError, Program } from 'oxc-parser';
 
 import type { FirebatItemKind } from '../types';
 import type { IntegerCFG } from './cfg';
-import type { NodeId } from './cfg-types';
+import type { NodeId } from './cfg/cfg-types';
 
 export type { WriteBehindQueue } from './write-behind-queue';
 
-export { EdgeType } from './cfg-types';
-export type { NodeId } from './cfg-types';
+export { EdgeType } from './cfg/cfg-types';
+export type { NodeId } from './cfg/cfg-types';
 
 export interface BitSet {
   add(index: number): void;

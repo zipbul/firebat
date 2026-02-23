@@ -27,7 +27,7 @@ const expectDifferentNormalized = (codeA: string, codeB: string): void => {
   expect(fa).not.toBe(fb);
 };
 
-describe('engine/ast-normalizer', () => {
+describe('engine/ast/ast-normalizer', () => {
   describe('rule 1: if/else → ternary normalization', () => {
     it('should normalize if/else returning values to ternary', () => {
       // Arrange / Act / Assert

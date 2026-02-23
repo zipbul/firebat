@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { NodeRecord, NodeWithBody, OxcBuiltFunctionCfg } from './types';
+import type { NodeRecord, NodeWithBody, OxcBuiltFunctionCfg } from '../types';
 
 import { OxcCFGBuilder } from './cfg-builder';
-import { isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
-import { parseSource } from './parse-source';
+import { isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
+import { parseSource } from '../ast/parse-source';
 
 const getFunctionBody = (fn: NodeWithBody): NodeRecord => {
   const body = fn.body;

@@ -1,7 +1,7 @@
 import type { ParsedFile } from '../../engine/types';
 import type { GiantFileFinding } from '../../types';
 
-import { normalizeFile } from '../../engine/normalize-file';
+import { normalizeFile } from '../../engine/ast/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyGiantFile = (): ReadonlyArray<GiantFileFinding> => [];

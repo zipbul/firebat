@@ -1,4 +1,4 @@
-import type { NodeValue } from './types';
+import type { NodeValue } from '../types';
 
 import { isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
 

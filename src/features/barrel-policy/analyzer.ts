@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { BarrelPolicyFinding, SourceSpan } from '../../types';
 
-import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
+import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
 

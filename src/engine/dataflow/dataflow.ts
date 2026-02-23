@@ -1,6 +1,6 @@
 import FastBitSet from 'fastbitset';
 
-import type { BitSet } from './types';
+import type { BitSet } from '../types';
 
 const createBitSet = (): BitSet => new FastBitSet();
 

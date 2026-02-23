@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-import { parseSource } from './parse-source';
+import { parseSource } from '../ast/parse-source';
 import { resolveFunctionBody, shouldIncreaseDepth } from './control-flow-utils';
 
 const functionNodeOf = (src: string) => {

@@ -3,9 +3,9 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { NoopFinding } from '../../types';
 
-import { getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/oxc-ast-utils';
-import { normalizeFile } from '../../engine/normalize-file';
-import { evalStaticTruthiness } from '../../engine/oxc-expression-utils';
+import { getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { normalizeFile } from '../../engine/ast/normalize-file';
+import { evalStaticTruthiness } from '../../engine/ast/oxc-expression-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 const INTENTIONAL_NOOP_NAMES = new Set(['noop', '_noop', 'noOp', 'NOOP']);

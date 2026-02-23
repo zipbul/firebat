@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeGiantFile, createEmptyGiantFile } from './analyzer';
 
 const file = (relPath: string, sourceText: string) => parseSource(`/p/${relPath}`, sourceText);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeExceptionHygiene } from './analyzer';
 
 const analyzeSingle = (filePath: string, sourceText: string) => {

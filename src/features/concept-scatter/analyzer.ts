@@ -1,8 +1,8 @@
 import type { ParsedFile } from '../../engine/types';
 import type { ConceptScatterFinding } from '../../types';
 
-import { collectOxcNodes, getNodeName } from '../../engine/oxc-ast-utils';
-import { normalizeFile } from '../../engine/normalize-file';
+import { collectOxcNodes, getNodeName } from '../../engine/ast/oxc-ast-utils';
+import { normalizeFile } from '../../engine/ast/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyConceptScatter = (): ReadonlyArray<ConceptScatterFinding> => [];

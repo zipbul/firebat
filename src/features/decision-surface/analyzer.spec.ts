@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeDecisionSurface, createEmptyDecisionSurface } from './analyzer';
 
 const file = (relPath: string, sourceText: string) => parseSource(`/p/${relPath}`, sourceText);

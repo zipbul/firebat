@@ -1,7 +1,7 @@
 import type { ParsedFile } from '../../engine/types';
 import type { ImplementationOverheadFinding } from '../../types';
 
-import { normalizeFile } from '../../engine/normalize-file';
+import { normalizeFile } from '../../engine/ast/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyImplementationOverhead = (): ReadonlyArray<ImplementationOverheadFinding> => [];

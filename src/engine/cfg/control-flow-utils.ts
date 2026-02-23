@@ -1,8 +1,8 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue } from './types';
+import type { NodeValue } from '../types';
 
-import { isFunctionNode, isNodeRecord } from './oxc-ast-utils';
+import { isFunctionNode, isNodeRecord } from '../ast/oxc-ast-utils';
 
 const resolveFunctionBody = (functionNode: Node): NodeValue | null => {
   if (!isFunctionNode(functionNode)) {

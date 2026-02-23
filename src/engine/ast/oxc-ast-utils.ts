@@ -1,6 +1,6 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue, NodeValueVisitor, OxcNodePredicate, OxcNodeWalker } from './types';
+import type { NodeRecord, NodeValue, NodeValueVisitor, OxcNodePredicate, OxcNodeWalker } from '../types';
 
 export const isOxcNode = (value: unknown): value is Node =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

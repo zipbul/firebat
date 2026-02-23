@@ -4,7 +4,7 @@ import type { FirebatLogger } from '../../ports/logger';
 import type { SymbolMatch, SymbolIndexStats } from '../../ports/symbol-index.repository';
 
 import { initHasher } from '../../engine/hasher';
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
 import { createHybridSymbolIndexRepository } from '../../infrastructure/hybrid/symbol-index.repository';
 import { createInMemorySymbolIndexRepository } from '../../infrastructure/memory/symbol-index.repository';

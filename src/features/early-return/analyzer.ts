@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { EarlyReturnItem, EarlyReturnKind } from '../../types';
 
-import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/control-flow-utils';
+import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
 import {
@@ -13,7 +13,7 @@ import {
   isOxcNode,
   isOxcNodeArray,
   visitOxcChildren,
-} from '../../engine/oxc-ast-utils';
+} from '../../engine/ast/oxc-ast-utils';
 
 const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 

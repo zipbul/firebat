@@ -49,7 +49,7 @@ export { __testing__ as __testing__FormatAnalyzer } from './features/format/anal
 // ---------------------------------------------------------------------------
 // Engine  (Phase 3 에서 서브디렉토리화 예정)
 // ---------------------------------------------------------------------------
-export { parseSource } from './engine/parse-source';
+export { parseSource } from './engine/ast/parse-source';
 export { PartialResultError } from './engine/partial-result-error';
 export { detectClones } from './engine/duplicate-detector';
 export type { ParsedFile } from './engine/types';

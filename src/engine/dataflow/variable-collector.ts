@@ -1,9 +1,9 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue, VariableCollectorOptions, VariableUsage } from './types';
+import type { NodeValue, VariableCollectorOptions, VariableUsage } from '../types';
 
-import { getLiteralString, getNodeName, getNodeType, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
-import { evalStaticTruthiness, unwrapExpression } from './oxc-expression-utils';
+import { getLiteralString, getNodeName, getNodeType, isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
+import { evalStaticTruthiness, unwrapExpression } from '../ast/oxc-expression-utils';
 
 const getNodeStart = (node: Node): number => node.start;
 

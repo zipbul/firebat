@@ -9,7 +9,7 @@ mock.module(path.resolve(import.meta.dir, './tsgo-checks.ts'), () => ({
 }));
 
 import { analyzeApiDrift, createEmptyApiDrift } from './analyzer';
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import type { ParsedFile } from '../../engine/types';
 
 const toFile = (filePath: string, code: string): ParsedFile =>

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ParsedFile } from '../../engine/types';
 import type { WasteFinding } from '../../types';
 
-import { parseSource } from '../../engine/parse-source';
+import { parseSource } from '../../engine/ast/parse-source';
 import { detectWaste } from './detector';
 
 describe('detector', () => {
