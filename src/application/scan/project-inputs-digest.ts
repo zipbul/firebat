@@ -1,7 +1,7 @@
 import { readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { FileIndexRepository } from '../../ports/file-index.repository';
+import type { FileIndexStore } from '../../store/file-index';
 
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
@@ -40,7 +40,7 @@ const listProjectInputFiles = async (rootAbs: string): Promise<string[]> => {
 interface ProjectInputsDigestInput {
   readonly projectKey: string;
   readonly rootAbs: string;
-  readonly fileIndexRepository: FileIndexRepository;
+  readonly fileIndexRepository: FileIndexStore;
 }
 
 const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Promise<string> => {
@@ -69,7 +69,7 @@ const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Prom
       }
 
       try {
-        const existing = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+        const existing = input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
 
         if (existing) {
           partsByIndex[item.index] = `project:${filePath}:${existing.contentHash}`;
@@ -81,7 +81,7 @@ const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Prom
         const [stats, content] = await Promise.all([file.stat(), file.text()]);
         const contentHash = hashString(content);
 
-        await input.fileIndexRepository.upsertFile({
+        input.fileIndexRepository.upsertFile({
           projectKey: input.projectKey,
           filePath,
           mtimeMs: stats.mtimeMs,

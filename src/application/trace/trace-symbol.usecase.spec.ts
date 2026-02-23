@@ -3,9 +3,7 @@ import * as nodePath from 'node:path';
 
 const __origFirebatDb = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts')) };
 const __origArtifactStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/artifact.ts')) };
-const __origMemFileIndex = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts')) };
-const __origSqliteFileIndex = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts')) };
-const __origHybridFileIndex = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts')) };
+const __origFileIndexStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/file-index.ts')) };
 const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../runtime-context.ts')) };
 const __origToolVersion = { ...require(nodePath.resolve(import.meta.dir, '../../tool-version.ts')) };
 const __origFileIndexer = { ...require(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts')) };
@@ -22,14 +20,8 @@ mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => 
     set: () => {},
   }),
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts'), () => ({
-  createInMemoryFileIndexRepository: () => ({ getFile: async () => null, upsertFile: async () => {}, deleteFile: async () => {} }),
-}));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts'), () => ({
-  createSqliteFileIndexRepository: () => ({ getFile: async () => null, upsertFile: async () => {}, deleteFile: async () => {} }),
-}));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts'), () => ({
-  createHybridFileIndexRepository: () => ({ getFile: async () => null, upsertFile: async () => {}, deleteFile: async () => {} }),
+mock.module(nodePath.resolve(import.meta.dir, '../../store/file-index.ts'), () => ({
+  createFileIndexStore: () => ({ getFile: () => null, upsertFile: () => {}, deleteFile: () => {} }),
 }));
 mock.module(nodePath.resolve(import.meta.dir, '../../runtime-context.ts'), () => ({
   resolveRuntimeContextFromCwd: async () => ({ rootAbs: '/project' }),
@@ -90,9 +82,7 @@ afterAll(() => {
   mock.restore();
   mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
   mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => __origArtifactStore);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts'), () => __origMemFileIndex);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts'), () => __origSqliteFileIndex);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts'), () => __origHybridFileIndex);
+  mock.module(nodePath.resolve(import.meta.dir, '../../store/file-index.ts'), () => __origFileIndexStore);
   mock.module(nodePath.resolve(import.meta.dir, '../../runtime-context.ts'), () => __origRuntimeContext);
   mock.module(nodePath.resolve(import.meta.dir, '../../tool-version.ts'), () => __origToolVersion);
   mock.module(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => __origFileIndexer);

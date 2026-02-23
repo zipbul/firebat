@@ -5,13 +5,11 @@ import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan } from '../../types';
 
 import { initHasher } from '../../engine/hasher';
-import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
-import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
-import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { getDb, getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { runTsgoTraceSymbol } from '../../infrastructure/tsgo/tsgo-runner';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { createArtifactStore } from '../../store/artifact';
+import { createFileIndexStore } from '../../store/file-index';
 import { computeToolVersion } from '../../tool-version';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
@@ -284,12 +282,8 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const toolVersion = computeToolVersion();
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
   const db = await getDb({ rootAbs: ctx.rootAbs, logger });
-  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger });
   const artifactRepository = createArtifactStore(db);
-  const fileIndexRepository = createHybridFileIndexRepository({
-    memory: createInMemoryFileIndexRepository(),
-    sqlite: createSqliteFileIndexRepository(orm),
-  });
+  const fileIndexRepository = createFileIndexStore(db);
   const relatedFiles = await resolveRelatedFiles(input);
 
   logger.trace('trace-symbol: related files resolved', { count: relatedFiles.length });

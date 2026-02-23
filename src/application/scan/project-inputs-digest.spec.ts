@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'bun:test';
 
-import type { FileIndexRepository } from '../../ports/file-index.repository';
+import type { FileIndexStore } from '../../store/file-index';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
-const noopRepo: FileIndexRepository = {
-  getFile: async () => null,
-  upsertFile: async () => {},
-  deleteFile: async () => {},
+const noopRepo: FileIndexStore = {
+  getFile: () => null,
+  upsertFile: () => {},
+  deleteFile: () => {},
 };
 
 describe('computeProjectInputsDigest', () => {

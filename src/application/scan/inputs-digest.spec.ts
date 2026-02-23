@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'bun:test';
 
-import type { FileIndexRepository } from '../../ports/file-index.repository';
+import type { FileIndexStore } from '../../store/file-index';
 import { computeInputsDigest } from './inputs-digest';
 
-const noopRepo: FileIndexRepository = {
-  getFile: async () => null,
-  upsertFile: async () => {},
-  deleteFile: async () => {},
+const noopRepo: FileIndexStore = {
+  getFile: () => null,
+  upsertFile: () => {},
+  deleteFile: () => {},
 };
 
 describe('computeInputsDigest', () => {
@@ -73,9 +73,9 @@ describe('computeInputsDigest', () => {
   });
 
   it('[HP] cached file entry is used from repo when available', async () => {
-    const cachedRepo: FileIndexRepository = {
+    const cachedRepo: FileIndexStore = {
       ...noopRepo,
-      getFile: async () => ({ contentHash: 'abc123', mtimeMs: 0, size: 0, filePath: '/f.ts', updatedAt: 0 }),
+      getFile: () => ({ contentHash: 'abc123', mtimeMs: 0, size: 0, filePath: '/f.ts', updatedAt: 0 }),
     };
     const result = await computeInputsDigest({
       projectKey: 'proj',

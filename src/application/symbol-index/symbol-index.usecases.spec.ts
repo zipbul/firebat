@@ -2,11 +2,9 @@ import { mock, describe, it, expect, afterAll } from 'bun:test';
 import * as path from 'node:path';
 
 const __origFirebatDb = { ...require(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts')) };
-const __origMemFileIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts')) };
+const __origFileIndexStore = { ...require(path.resolve(import.meta.dir, '../../store/file-index.ts')) };
 const __origMemSymIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/memory/symbol-index.repository.ts')) };
-const __origSqliteFileIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts')) };
 const __origSqliteSymIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/sqlite/symbol-index.repository.ts')) };
-const __origHybridFileIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts')) };
 const __origHybridSymIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/hybrid/symbol-index.repository.ts')) };
 const __origRuntimeContext = { ...require(path.resolve(import.meta.dir, '../../runtime-context.ts')) };
 const __origTargetDiscovery = { ...require(path.resolve(import.meta.dir, '../../target-discovery.ts')) };
@@ -14,9 +12,8 @@ const __origToolVersion = { ...require(path.resolve(import.meta.dir, '../../tool
 const __origFileIndexer = { ...require(path.resolve(import.meta.dir, '../indexing/file-indexer.ts')) };
 
 // Mock all heavy infrastructure before importing the usecase
+const mockDb = {};
 const mockOrm = {};
-const mockFileIndexMemRepo = { getFile: async () => null, upsertFile: async () => {}, deleteFile: async () => {} };
-const mockFileIndexSqliteRepo = { getFile: async () => null, upsertFile: async () => {}, deleteFile: async () => {} };
 const mockSymIndexMemRepo = {
   getIndexedFile: async () => null,
   replaceFileSymbols: async () => {},
@@ -32,9 +29,9 @@ const mockSymIndexSqliteRepo = {
   clearProject: async () => {},
 };
 const mockFileIndexHybridRepo = {
-  getFile: async () => null,
-  upsertFile: async () => {},
-  deleteFile: async () => {},
+  getFile: () => null,
+  upsertFile: () => {},
+  deleteFile: () => {},
 };
 const mockSymIndexHybridRepo = {
   getIndexedFile: async () => null,
@@ -45,22 +42,17 @@ const mockSymIndexHybridRepo = {
 };
 
 mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
+  getDb: async () => mockDb,
   getOrmDb: async () => mockOrm,
 }));
-mock.module(path.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts'), () => ({
-  createInMemoryFileIndexRepository: () => mockFileIndexMemRepo,
+mock.module(path.resolve(import.meta.dir, '../../store/file-index.ts'), () => ({
+  createFileIndexStore: () => mockFileIndexHybridRepo,
 }));
 mock.module(path.resolve(import.meta.dir, '../../infrastructure/memory/symbol-index.repository.ts'), () => ({
   createInMemorySymbolIndexRepository: () => mockSymIndexMemRepo,
 }));
-mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts'), () => ({
-  createSqliteFileIndexRepository: () => mockFileIndexSqliteRepo,
-}));
 mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/symbol-index.repository.ts'), () => ({
   createSqliteSymbolIndexRepository: () => mockSymIndexSqliteRepo,
-}));
-mock.module(path.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts'), () => ({
-  createHybridFileIndexRepository: () => mockFileIndexHybridRepo,
 }));
 mock.module(path.resolve(import.meta.dir, '../../infrastructure/hybrid/symbol-index.repository.ts'), () => ({
   createHybridSymbolIndexRepository: () => mockSymIndexHybridRepo,
@@ -139,11 +131,9 @@ describe('clearIndexUseCase', () => {
 afterAll(() => {
   mock.restore();
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
-  mock.module(path.resolve(import.meta.dir, '../../infrastructure/memory/file-index.repository.ts'), () => __origMemFileIndex);
+  mock.module(path.resolve(import.meta.dir, '../../store/file-index.ts'), () => __origFileIndexStore);
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/memory/symbol-index.repository.ts'), () => __origMemSymIndex);
-  mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/file-index.repository.ts'), () => __origSqliteFileIndex);
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/symbol-index.repository.ts'), () => __origSqliteSymIndex);
-  mock.module(path.resolve(import.meta.dir, '../../infrastructure/hybrid/file-index.repository.ts'), () => __origHybridFileIndex);
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/hybrid/symbol-index.repository.ts'), () => __origHybridSymIndex);
   mock.module(path.resolve(import.meta.dir, '../../runtime-context.ts'), () => __origRuntimeContext);
   mock.module(path.resolve(import.meta.dir, '../../target-discovery.ts'), () => __origTargetDiscovery);

@@ -1,4 +1,4 @@
-import type { FileIndexRepository } from '../../ports/file-index.repository';
+import type { FileIndexStore } from '../../store/file-index';
 
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
@@ -8,7 +8,7 @@ const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/
 interface ComputeInputsDigestInput {
   readonly projectKey: string;
   readonly targets: ReadonlyArray<string>;
-  readonly fileIndexRepository: FileIndexRepository;
+  readonly fileIndexRepository: FileIndexStore;
   readonly extraParts?: ReadonlyArray<string>;
 }
 
@@ -39,7 +39,7 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
       }
 
       try {
-        const entry = await input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+        const entry = input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
 
         if (entry) {
           partsByIndex[index] = `file:${filePath}:${entry.contentHash}`;
@@ -52,7 +52,7 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
         const [stats, content] = await Promise.all([file.stat(), file.text()]);
         const contentHash = hashString(content);
 
-        await input.fileIndexRepository.upsertFile({
+        input.fileIndexRepository.upsertFile({
           projectKey: input.projectKey,
           filePath,
           mtimeMs: stats.mtimeMs,

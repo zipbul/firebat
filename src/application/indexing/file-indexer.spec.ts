@@ -8,11 +8,11 @@ const makeRepo = () => {
   const store = new Map<string, { filePath: string; mtimeMs: number; size: number; contentHash: string }>();
 
   return {
-    getFile: async ({ filePath }: { projectKey: string; filePath: string }) => store.get(filePath) ?? null,
-    upsertFile: async (entry: { projectKey: string; filePath: string; mtimeMs: number; size: number; contentHash: string }) => {
+    getFile: ({ filePath }: { projectKey: string; filePath: string }) => store.get(filePath) ?? null,
+    upsertFile: (entry: { projectKey: string; filePath: string; mtimeMs: number; size: number; contentHash: string }) => {
       store.set(entry.filePath, { filePath: entry.filePath, mtimeMs: entry.mtimeMs, size: entry.size, contentHash: entry.contentHash });
     },
-    deleteFile: async ({ filePath }: { projectKey: string; filePath: string }) => {
+    deleteFile: ({ filePath }: { projectKey: string; filePath: string }) => {
       store.delete(filePath);
     },
     _store: store,
@@ -55,7 +55,7 @@ describe('indexTargets', () => {
     const repo = makeRepo();
 
     // Pre-populate repo
-    await repo.upsertFile({ projectKey: 'p', filePath: '/a.ts', mtimeMs: 1000, size: 42, contentHash: 'abc' });
+    repo.upsertFile({ projectKey: 'p', filePath: '/a.ts', mtimeMs: 1000, size: 42, contentHash: 'abc' });
 
     fileSpy = spyOn(Bun, 'file').mockReturnValue({
       stat: async () => ({ mtimeMs: 1000, size: 42 }),
@@ -81,7 +81,7 @@ describe('indexTargets', () => {
 
     await indexTargets({ projectKey: 'p', targets: ['/a.ts'], repository: repo as never, logger });
 
-    const entry = await repo.getFile({ projectKey: 'p', filePath: '/a.ts' });
+    const entry = repo.getFile({ projectKey: 'p', filePath: '/a.ts' });
 
     expect(entry?.mtimeMs).toBe(2000);
   });

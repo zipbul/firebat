@@ -6,13 +6,11 @@ import type { SymbolMatch, SymbolIndexStats } from '../../ports/symbol-index.rep
 import { initHasher } from '../../engine/hasher';
 import { parseSource } from '../../engine/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
-import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
 import { createHybridSymbolIndexRepository } from '../../infrastructure/hybrid/symbol-index.repository';
-import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
 import { createInMemorySymbolIndexRepository } from '../../infrastructure/memory/symbol-index.repository';
-import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb, getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { createSqliteSymbolIndexRepository } from '../../infrastructure/sqlite/symbol-index.repository';
+import { createFileIndexStore } from '../../store/file-index';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { resolveTargets } from '../../target-discovery';
 import { computeToolVersion } from '../../tool-version';
@@ -41,11 +39,9 @@ interface RepositoryContext {
 }
 
 const getRepositories = async (ctx: RepositoryContext) => {
+  const db = await getDb({ rootAbs: ctx.rootAbs, logger: ctx.logger });
   const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger: ctx.logger });
-  const fileIndexRepository = createHybridFileIndexRepository({
-    memory: createInMemoryFileIndexRepository(),
-    sqlite: createSqliteFileIndexRepository(orm),
-  });
+  const fileIndexRepository = createFileIndexStore(db);
   const symbolIndexRepository = createHybridSymbolIndexRepository({
     memory: createInMemorySymbolIndexRepository(),
     sqlite: createSqliteSymbolIndexRepository(orm),

@@ -1,4 +1,4 @@
-import type { FileIndexRepository } from '../../ports/file-index.repository';
+import type { FileIndexStore } from '../../store/file-index';
 import type { FirebatLogger } from '../../ports/logger';
 
 import { hashString } from '../../engine/hasher';
@@ -7,7 +7,7 @@ import { runWithConcurrency } from '../../engine/promise-pool';
 interface IndexTargetsInput {
   readonly projectKey: string;
   readonly targets: ReadonlyArray<string>;
-  readonly repository: FileIndexRepository;
+  readonly repository: FileIndexStore;
   readonly concurrency?: number;
   readonly logger: FirebatLogger;
 }
@@ -40,10 +40,8 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
     try {
       const file = Bun.file(filePath);
-      const [stats, existing] = await Promise.all([
-        file.stat(),
-        input.repository.getFile({ projectKey: input.projectKey, filePath }),
-      ]);
+      const stats = await file.stat();
+      const existing = input.repository.getFile({ projectKey: input.projectKey, filePath });
       const mtimeMs = stats.mtimeMs;
       const size = stats.size;
 
@@ -53,7 +51,7 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
         const content = await file.text();
         const contentHash = hashString(content);
 
-        await input.repository.upsertFile({
+        input.repository.upsertFile({
           projectKey: input.projectKey,
           filePath,
           mtimeMs,
@@ -70,7 +68,7 @@ const indexTargets = async (input: IndexTargetsInput): Promise<void> => {
 
       logger.warn('Index failed, entry removed', { filePath });
 
-      await input.repository.deleteFile({ projectKey: input.projectKey, filePath });
+      input.repository.deleteFile({ projectKey: input.projectKey, filePath });
     }
   });
 

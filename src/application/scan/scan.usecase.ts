@@ -49,11 +49,9 @@ import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unk
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
 import { loadFirebatConfigFile } from '../../firebat-config.loader';
-import { createHybridFileIndexRepository } from '../../infrastructure/hybrid/file-index.repository';
-import { createInMemoryFileIndexRepository } from '../../infrastructure/memory/file-index.repository';
-import { createSqliteFileIndexRepository } from '../../infrastructure/sqlite/file-index.repository';
-import { getDb, getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createArtifactStore } from '../../store/artifact';
+import { createFileIndexStore } from '../../store/file-index';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { computeToolVersion } from '../../tool-version';
 import { createFirebatProgram } from '../../ts-program';
@@ -177,15 +175,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const tDb0 = nowMs();
   const db = await getDb({ rootAbs: ctx.rootAbs, logger });
-  const orm = await getOrmDb({ rootAbs: ctx.rootAbs, logger });
 
   logger.trace('DB ready', { durationMs: Math.round(nowMs() - tDb0) });
 
   const artifactRepository = createArtifactStore(db);
-  const fileIndexRepository = createHybridFileIndexRepository({
-    memory: createInMemoryFileIndexRepository(),
-    sqlite: createSqliteFileIndexRepository(orm),
-  });
+  const fileIndexRepository = createFileIndexStore(db);
 
   logger.trace('Repositories created');
 
