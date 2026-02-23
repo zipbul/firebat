@@ -6,9 +6,9 @@ const __origFileIndexStore = { ...require(path.resolve(import.meta.dir, '../../s
 const __origMemSymIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/memory/symbol-index.repository.ts')) };
 const __origSqliteSymIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/sqlite/symbol-index.repository.ts')) };
 const __origHybridSymIndex = { ...require(path.resolve(import.meta.dir, '../../infrastructure/hybrid/symbol-index.repository.ts')) };
-const __origRuntimeContext = { ...require(path.resolve(import.meta.dir, '../../runtime-context.ts')) };
-const __origTargetDiscovery = { ...require(path.resolve(import.meta.dir, '../../target-discovery.ts')) };
-const __origToolVersion = { ...require(path.resolve(import.meta.dir, '../../tool-version.ts')) };
+const __origRuntimeContext = { ...require(path.resolve(import.meta.dir, '../../shared/runtime-context.ts')) };
+const __origTargetDiscovery = { ...require(path.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
+const __origToolVersion = { ...require(path.resolve(import.meta.dir, '../../shared/tool-version.ts')) };
 const __origFileIndexer = { ...require(path.resolve(import.meta.dir, '../indexing/file-indexer.ts')) };
 
 // Mock all heavy infrastructure before importing the usecase
@@ -57,13 +57,13 @@ mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/symbol-in
 mock.module(path.resolve(import.meta.dir, '../../infrastructure/hybrid/symbol-index.repository.ts'), () => ({
   createHybridSymbolIndexRepository: () => mockSymIndexHybridRepo,
 }));
-mock.module(path.resolve(import.meta.dir, '../../runtime-context.ts'), () => ({
+mock.module(path.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
   resolveRuntimeContextFromCwd: async () => ({ rootAbs: '/project' }),
 }));
-mock.module(path.resolve(import.meta.dir, '../../target-discovery.ts'), () => ({
+mock.module(path.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => ({
   resolveTargets: async (_cwd: string, targets?: ReadonlyArray<string>) => targets ?? [],
 }));
-mock.module(path.resolve(import.meta.dir, '../../tool-version.ts'), () => ({
+mock.module(path.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => ({
   computeToolVersion: () => '1.0.0-test',
 }));
 mock.module(path.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => ({
@@ -135,9 +135,9 @@ afterAll(() => {
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/memory/symbol-index.repository.ts'), () => __origMemSymIndex);
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/symbol-index.repository.ts'), () => __origSqliteSymIndex);
   mock.module(path.resolve(import.meta.dir, '../../infrastructure/hybrid/symbol-index.repository.ts'), () => __origHybridSymIndex);
-  mock.module(path.resolve(import.meta.dir, '../../runtime-context.ts'), () => __origRuntimeContext);
-  mock.module(path.resolve(import.meta.dir, '../../target-discovery.ts'), () => __origTargetDiscovery);
-  mock.module(path.resolve(import.meta.dir, '../../tool-version.ts'), () => __origToolVersion);
+  mock.module(path.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
+  mock.module(path.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
+  mock.module(path.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => __origToolVersion);
   mock.module(path.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => __origFileIndexer);
 });
 

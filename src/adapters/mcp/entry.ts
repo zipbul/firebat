@@ -1,5 +1,5 @@
 import { appendFirebatLog } from '../../infra/logging';
-import { resolveFirebatRootFromCwd } from '../../root-resolver';
+import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { runMcpServer } from './server';
 
 const appendMcpErrorLog = async (message: string): Promise<void> => {

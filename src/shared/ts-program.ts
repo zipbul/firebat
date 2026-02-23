@@ -1,7 +1,7 @@
-import type { ParsedFile } from './engine/types';
-import type { FirebatProgramConfig } from './interfaces';
+import type { ParsedFile } from '../engine/types';
+import type { FirebatProgramConfig } from '../interfaces';
 
-import { parseSource } from './engine/ast/parse-source';
+import { parseSource } from '../engine/ast/parse-source';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
@@ -97,7 +97,7 @@ const formatUnknownError = (error: unknown): string => {
 };
 
 const createParseWorker = (): Worker => {
-  return new Worker(new URL('./workers/parse-worker.js', import.meta.url), { type: 'module' });
+  return new Worker(new URL('../workers/parse-worker.js', import.meta.url), { type: 'module' });
 };
 
 let readyTimeoutMs = 10_000;

@@ -1,4 +1,4 @@
-import type { FirebatLogLevel } from '../../firebat-config';
+import type { FirebatLogLevel } from '../../shared/firebat-config';
 import type { FirebatLogFields, FirebatLogger } from '../../ports/logger';
 
 interface PrettyConsoleLoggerOptions {

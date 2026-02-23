@@ -9,10 +9,10 @@ const mockResolveTargets = {
 };
 
 const __origFindPattern = { ...require(path.resolve(import.meta.dir, '../../tooling/ast-grep/find-pattern.ts')) };
-const __origTargetDiscovery = { ...require(path.resolve(import.meta.dir, '../../target-discovery.ts')) };
+const __origTargetDiscovery = { ...require(path.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
 
 mock.module(path.resolve(import.meta.dir, '../../tooling/ast-grep/find-pattern.ts'), () => mockFindPattern);
-mock.module(path.resolve(import.meta.dir, '../../target-discovery.ts'), () => mockResolveTargets);
+mock.module(path.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => mockResolveTargets);
 import { findPatternUseCase } from './find-pattern.usecase';
 import { createNoopLogger } from '../../ports/logger';
 
@@ -53,5 +53,5 @@ describe('findPatternUseCase', () => {
 afterAll(() => {
   mock.restore();
   mock.module(path.resolve(import.meta.dir, '../../tooling/ast-grep/find-pattern.ts'), () => __origFindPattern);
-  mock.module(path.resolve(import.meta.dir, '../../target-discovery.ts'), () => __origTargetDiscovery);
+  mock.module(path.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
 });

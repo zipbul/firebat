@@ -1,7 +1,7 @@
 import type { FirebatLogger } from '../../ports/logger';
 
 import { findPatternInFiles, type AstGrepMatch } from '../../tooling/ast-grep/find-pattern';
-import { resolveTargets } from '../../target-discovery';
+import { resolveTargets } from '../../shared/target-discovery';
 
 interface JsonObject {
   readonly [k: string]: JsonValue;

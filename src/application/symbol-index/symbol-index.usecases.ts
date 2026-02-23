@@ -11,9 +11,9 @@ import { createInMemorySymbolIndexRepository } from '../../infrastructure/memory
 import { getDb, getOrmDb } from '../../infrastructure/sqlite/firebat.db';
 import { createSqliteSymbolIndexRepository } from '../../infrastructure/sqlite/symbol-index.repository';
 import { createFileIndexStore } from '../../store/file-index';
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { resolveTargets } from '../../target-discovery';
-import { computeToolVersion } from '../../tool-version';
+import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { resolveTargets } from '../../shared/target-discovery';
+import { computeToolVersion } from '../../shared/tool-version';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey } from '../scan/cache-keys';
 

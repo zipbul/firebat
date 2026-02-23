@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { FirebatLogger } from '../../ports/logger';
 
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 

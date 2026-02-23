@@ -1,4 +1,4 @@
-import type { FirebatLogLevel } from './firebat-config';
+import type { FirebatLogLevel } from './shared/firebat-config';
 import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
 
 export interface FirebatCliExplicitFlags {

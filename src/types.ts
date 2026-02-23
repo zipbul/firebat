@@ -2,7 +2,7 @@ import type { ExceptionHygieneFinding } from './features/exception-hygiene/types
 
 export type OutputFormat = 'text' | 'json';
 
-export type { FirebatConfig } from './firebat-config';
+export type { FirebatConfig } from './shared/firebat-config';
 
 export type MinSizeOption = number | 'auto';
 

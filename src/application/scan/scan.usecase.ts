@@ -48,13 +48,13 @@ import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck
 import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
-import { loadFirebatConfigFile } from '../../firebat-config.loader';
+import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createArtifactStore } from '../../store/artifact';
 import { createFileIndexStore } from '../../store/file-index';
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { computeToolVersion } from '../../tool-version';
-import { createFirebatProgram } from '../../ts-program';
+import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { computeToolVersion } from '../../shared/tool-version';
+import { createFirebatProgram } from '../../shared/ts-program';
 import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';

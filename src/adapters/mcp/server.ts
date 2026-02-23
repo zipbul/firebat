@@ -5,17 +5,17 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
-import type { FirebatConfig, FirebatLogLevel } from '../../firebat-config';
+import type { FirebatConfig, FirebatLogLevel } from '../../shared/firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger, FirebatLogFields } from '../../ports/logger';
 import type { FirebatDetector } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { toJsonReport } from '../../types';
-import { loadFirebatConfigFile } from '../../firebat-config.loader';
+import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { createPrettyConsoleLogger } from '../../infrastructure/logging/pretty-console-logger';
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
-import { resolveTargets } from '../../target-discovery';
+import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { resolveTargets } from '../../shared/target-discovery';
 
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',

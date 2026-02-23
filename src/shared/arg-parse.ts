@@ -1,8 +1,8 @@
 import * as path from 'node:path';
 
 import type { FirebatLogLevel } from './firebat-config';
-import type { FirebatCliExplicitFlags, FirebatCliOptions } from './interfaces';
-import type { FirebatDetector, MinSizeOption, OutputFormat } from './types';
+import type { FirebatCliExplicitFlags, FirebatCliOptions } from '../interfaces';
+import type { FirebatDetector, MinSizeOption, OutputFormat } from '../types';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
 const DEFAULT_MAX_FORWARD_DEPTH = 0;

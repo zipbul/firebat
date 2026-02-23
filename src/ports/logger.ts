@@ -1,4 +1,4 @@
-import type { FirebatLogLevel } from '../firebat-config';
+import type { FirebatLogLevel } from '../shared/firebat-config';
 
 export type FirebatLogFields = Record<string, string | number | boolean | null | undefined>;
 

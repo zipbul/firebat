@@ -5,7 +5,7 @@ import { runInstall, runUpdate } from './src/adapters/cli/install';
 import { runMcp } from './src/adapters/mcp/entry';
 import { appendFirebatLog } from './src/infra/logging';
 import { createPrettyConsoleLogger } from './src/infrastructure/logging/pretty-console-logger';
-import { resolveFirebatRootFromCwd } from './src/root-resolver';
+import { resolveFirebatRootFromCwd } from './src/shared/root-resolver';
 
 const appendErrorLogSafe = async (subcommand: string | undefined, message: string): Promise<void> => {
   const relativeLogPath = subcommand === 'mcp' ? '.firebat/mcp-error.log' : '.firebat/cli-error.log';

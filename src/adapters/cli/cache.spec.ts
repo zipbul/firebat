@@ -1,10 +1,10 @@
 import { mock, afterAll, describe, it, expect, spyOn, afterEach } from 'bun:test';
 import * as nodePath from 'node:path';
 
-const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../runtime-context.ts')) };
+const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts')) };
 const __origFsPromises = { ...require('node:fs/promises') };
 
-mock.module(nodePath.resolve(import.meta.dir, '../../runtime-context.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
   resolveRuntimeContextFromCwd: async () => ({ rootAbs: '/project' }),
 }));
 
@@ -71,6 +71,6 @@ describe('runCache', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../../runtime-context.ts'), () => __origRuntimeContext);
+  mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
   mock.module('node:fs/promises', () => __origFsPromises);
 });

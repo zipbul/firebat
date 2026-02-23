@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../ports/logger';
 
-import { resolveRuntimeContextFromCwd } from '../../runtime-context';
+import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 
 const isTty = (): boolean => Boolean(process.stdout?.isTTY);
 
