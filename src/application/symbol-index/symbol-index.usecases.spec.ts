@@ -18,14 +18,14 @@ const mockSymIndexMemRepo = {
   getIndexedFile: async () => null,
   replaceFileSymbols: async () => {},
   search: async () => [],
-  getStats: async () => ({ fileCount: 0, symbolCount: 0, lastIndexedAt: null }),
+  getStats: async () => ({ indexedFileCount: 0, symbolCount: 0, lastIndexedAt: null }),
   clearProject: async () => {},
 };
 const mockSymIndexSqliteRepo = {
   getIndexedFile: async () => null,
   replaceFileSymbols: async () => {},
   search: async () => [],
-  getStats: async () => ({ fileCount: 0, symbolCount: 0, lastIndexedAt: null }),
+  getStats: async () => ({ indexedFileCount: 0, symbolCount: 0, lastIndexedAt: null }),
   clearProject: async () => {},
 };
 const mockFileIndexHybridRepo = {
@@ -37,7 +37,7 @@ const mockSymIndexHybridRepo = {
   getIndexedFile: async () => null,
   replaceFileSymbols: async () => {},
   search: async (_: unknown) => [] as unknown[],
-  getStats: async (_: unknown) => ({ fileCount: 0, symbolCount: 0, lastIndexedAt: null }),
+  getStats: async (_: unknown) => ({ indexedFileCount: 0, symbolCount: 0, lastIndexedAt: null }),
   clearProject: async () => {},
 };
 
