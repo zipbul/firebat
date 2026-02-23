@@ -6,7 +6,7 @@ import type { SourceSpan } from '../../types';
 
 import { initHasher } from '../../engine/hasher';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { runTsgoTraceSymbol } from '../../infrastructure/tsgo/tsgo-runner';
+import { runTsgoTraceSymbol } from '../../tooling/tsgo/tsgo-runner';
 import { resolveRuntimeContextFromCwd } from '../../runtime-context';
 import { createArtifactStore } from '../../store/artifact';
 import { createFileIndexStore } from '../../store/file-index';

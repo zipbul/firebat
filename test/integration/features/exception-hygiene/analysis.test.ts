@@ -387,7 +387,7 @@ describe('integration/exception-hygiene', () => {
   it('should report return-await-policy when return await is used outside try/catch (infrastructure file)', () => {
     // Arrange
     let sources = new Map<string, string>();
-    let filePath = '/virtual/src/infrastructure/tsgo/tsgo-runner.ts';
+    let filePath = '/virtual/src/tooling/tsgo/tsgo-runner.ts';
     let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
       '\n',
     );

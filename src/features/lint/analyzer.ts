@@ -1,7 +1,7 @@
 import type { FirebatLogger } from '../../ports/logger';
 import type { LintDiagnostic } from '../../types';
 
-import { runOxlint } from '../../infrastructure/oxlint/oxlint-runner';
+import { runOxlint } from '../../tooling/oxlint/oxlint-runner';
 import { createNoopLogger } from '../../ports/logger';
 
 const createEmptyLint = (): ReadonlyArray<LintDiagnostic> => [];

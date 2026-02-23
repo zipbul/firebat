@@ -1,7 +1,7 @@
 import type { FirebatLogger } from '../../ports/logger';
 
-import { logExternalToolVersionOnce } from '../tooling/external-tool-version';
-import { tryResolveLocalBin } from '../tooling/resolve-bin';
+import { logExternalToolVersionOnce } from '../external-tool-version';
+import { tryResolveLocalBin } from '../resolve-bin';
 
 interface OxfmtRunResult {
   readonly ok: boolean;

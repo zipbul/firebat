@@ -1,4 +1,4 @@
-import type { FirebatLogger } from '../../ports/logger';
+import type { FirebatLogger } from '../ports/logger';
 
 interface ExternalToolVersionInput {
   readonly tool: string;

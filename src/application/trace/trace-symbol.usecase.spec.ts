@@ -7,7 +7,7 @@ const __origFileIndexStore = { ...require(nodePath.resolve(import.meta.dir, '../
 const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../runtime-context.ts')) };
 const __origToolVersion = { ...require(nodePath.resolve(import.meta.dir, '../../tool-version.ts')) };
 const __origFileIndexer = { ...require(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts')) };
-const __origTsgoRunner = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts')) };
+const __origTsgoRunner = { ...require(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts')) };
 
 // Mock all heavy infrastructure
 mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
@@ -32,7 +32,7 @@ mock.module(nodePath.resolve(import.meta.dir, '../../tool-version.ts'), () => ({
 mock.module(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => ({
   indexTargets: async () => {},
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts'), () => ({
   runTsgoTraceSymbol: async () => ({
     ok: false,
     tool: 'tsgo',
@@ -86,6 +86,6 @@ afterAll(() => {
   mock.module(nodePath.resolve(import.meta.dir, '../../runtime-context.ts'), () => __origRuntimeContext);
   mock.module(nodePath.resolve(import.meta.dir, '../../tool-version.ts'), () => __origToolVersion);
   mock.module(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => __origFileIndexer);
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts'), () => __origTsgoRunner);
+  mock.module(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts'), () => __origTsgoRunner);
 });
 

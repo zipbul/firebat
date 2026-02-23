@@ -2,7 +2,7 @@ import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../ports/logger';
 
-import { tryResolveBunxCommand, tryResolveLocalBin } from '../tooling/resolve-bin';
+import { tryResolveBunxCommand, tryResolveLocalBin } from '../resolve-bin';
 
 interface TsgoTraceRequest {
   readonly entryFile: string;

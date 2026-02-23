@@ -2,7 +2,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../ports/logger';
 import type { SourceSpan, UnknownProofFinding } from '../../types';
 
-import { withTsgoLspSession, openTsDocument } from '../../infrastructure/tsgo/tsgo-runner';
+import { withTsgoLspSession, openTsDocument } from '../../tooling/tsgo/tsgo-runner';
 import { createNoopLogger } from '../../ports/logger';
 import { stringifyHover } from './candidates';
 

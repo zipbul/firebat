@@ -2,7 +2,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../ports/logger';
 import type { ApiDriftGroup, ApiDriftShape, SourceSpan } from '../../types';
 
-import { openTsDocument, withTsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
+import { openTsDocument, withTsgoLspSession } from '../../tooling/tsgo/tsgo-runner';
 import { createNoopLogger } from '../../ports/logger';
 
 export interface ApiDriftInterfaceToken {

@@ -5,7 +5,7 @@ import { describe, it, expect } from 'bun:test';
 // calling logExternalToolVersionOnce with a non-existent command and verifying
 // it doesn't throw (error path) and that the logger's warn is called.
 
-import { createNoopLogger } from '../../ports/logger';
+import { createNoopLogger } from '../ports/logger';
 import { logExternalToolVersionOnce } from './external-tool-version';
 
 describe('logExternalToolVersionOnce', () => {

@@ -1,11 +1,11 @@
 import { mock, afterAll, describe, it, expect } from 'bun:test';
 import * as nodePath from 'node:path';
 
-const __origTsgoRunner = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts')) };
+const __origTsgoRunner = { ...require(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts')) };
 const __origSymbolIndex = { ...require(nodePath.resolve(import.meta.dir, '../symbol-index/symbol-index.usecases.ts')) };
 
 // Mock tsgo-runner so withTsgoLspSession returns ok:false without spawning
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts'), () => ({
+mock.module(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts'), () => ({
   withTsgoLspSession: async (_input: unknown, _fn: unknown) => ({ ok: false, error: 'tsgo not available in test' }),
   openTsDocument: async () => ({ uri: 'file:///test.ts', text: '' }),
   lspUriToFilePath: (uri: string) => uri.replace(/^file:\/\//, ''),
@@ -90,6 +90,6 @@ describe('parseImportsUseCase', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/tsgo/tsgo-runner.ts'), () => __origTsgoRunner);
+  mock.module(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts'), () => __origTsgoRunner);
   mock.module(nodePath.resolve(import.meta.dir, '../symbol-index/symbol-index.usecases.ts'), () => __origSymbolIndex);
 });

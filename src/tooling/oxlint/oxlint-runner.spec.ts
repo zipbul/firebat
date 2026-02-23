@@ -5,11 +5,11 @@ import * as path from 'node:path';
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxlint' as string | null };
 const mockVersionOnce = { logExternalToolVersionOnce: async (_args: unknown) => {} };
 
-const __origResolveBin = { ...require(path.resolve(import.meta.dir, '../tooling/resolve-bin.ts')) };
-const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '../tooling/external-tool-version.ts')) };
+const __origResolveBin = { ...require(path.resolve(import.meta.dir, '../resolve-bin.ts')) };
+const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '../external-tool-version.ts')) };
 
-mock.module(path.resolve(import.meta.dir, '../tooling/resolve-bin.ts'), () => mockResolveBin);
-mock.module(path.resolve(import.meta.dir, '../tooling/external-tool-version.ts'), () => mockVersionOnce);
+mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => mockResolveBin);
+mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => mockVersionOnce);
 import { runOxlint, __testing__ } from './oxlint-runner';
 import { createNoopLogger } from '../../ports/logger';
 
@@ -154,7 +154,7 @@ describe('runOxlint', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(path.resolve(import.meta.dir, '../tooling/resolve-bin.ts'), () => __origResolveBin);
-  mock.module(path.resolve(import.meta.dir, '../tooling/external-tool-version.ts'), () => __origExternalToolVersion);
+  mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => __origResolveBin);
+  mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => __origExternalToolVersion);
 });
 

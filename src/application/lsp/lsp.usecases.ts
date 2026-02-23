@@ -1,10 +1,10 @@
 import * as path from 'node:path';
 
-import type { TsgoLspSession } from '../../infrastructure/tsgo/tsgo-runner';
+import type { TsgoLspSession } from '../../tooling/tsgo/tsgo-runner';
 import type { FirebatLogger } from '../../ports/logger';
 import type { SymbolMatch } from '../../ports/symbol-index.repository';
 
-import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../infrastructure/tsgo/tsgo-runner';
+import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../tooling/tsgo/tsgo-runner';
 import { indexSymbolsUseCase, searchSymbolFromIndexUseCase } from '../symbol-index/symbol-index.usecases';
 
 type LineParam = number | string;
