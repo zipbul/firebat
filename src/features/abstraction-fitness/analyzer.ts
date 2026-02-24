@@ -2,16 +2,8 @@ import type { ParsedFile } from '../../engine/types';
 import type { AbstractionFitnessFinding } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyAbstractionFitness = (): ReadonlyArray<AbstractionFitnessFinding> => [];
-
-const spanForOffset = (sourceText: string, offset: number) => {
-  const start = getLineColumn(sourceText, Math.max(0, offset));
-  const end = getLineColumn(sourceText, Math.min(sourceText.length, Math.max(0, offset + 1)));
-
-  return { start, end };
-};
 
 interface AnalyzeAbstractionFitnessOptions {
   readonly minFitnessScore: number;
@@ -51,28 +43,19 @@ const analyzeAbstractionFitness = (
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
 
-    if (file === undefined) {
-      continue;
-    }
-
-    if (file.errors.length > 0) {
-      continue;
-    }
+    if (file === undefined) continue;
+    if (file.errors.length > 0) continue;
 
     const rel = relPaths[i] ?? '';
 
-    if (!rel.endsWith('.ts')) {
-      continue;
-    }
+    if (!rel.endsWith('.ts')) continue;
 
     const froms: string[] = [];
 
     for (;;) {
       const m = importRe.exec(file.sourceText);
 
-      if (m === null) {
-        break;
-      }
+      if (m === null) break;
 
       const from = String(m[1] ?? '');
 
@@ -112,25 +95,20 @@ const analyzeAbstractionFitness = (
       const froms = importsFrom.get(idx) ?? [];
 
       for (const from of froms) {
-        // crude: if import path includes '../' treat as external
         if (from.startsWith('../')) {
           externalCoupling += 1;
         } else {
-          // './' or './x' likely internal
           internalCohesion += 1;
         }
 
         totalImports += 1;
       }
 
-      // If file imports any '../', count as external
       if (rel.includes('/application/') || rel.includes('/adapters/') || rel.includes('/infrastructure/')) {
         externalCoupling += 1;
       }
     }
 
-    // Heuristic: files that participate in a module graph should be judged more strictly.
-    // Keep modules with zero imports quiet under minFitnessScore=0 (see neg tests).
     const penalty = totalImports > 0 ? members.length : 0;
     const fitness = internalCohesion - externalCoupling - penalty;
 
@@ -138,7 +116,6 @@ const analyzeAbstractionFitness = (
       continue;
     }
 
-    // Pick the first member as representative.
     const idx = members[0] as number;
     const file = files[idx];
 
@@ -147,12 +124,11 @@ const analyzeAbstractionFitness = (
     }
 
     const rel = relPaths[idx] ?? '';
-    const offset = 0;
 
     findings.push({
       kind: 'abstraction-fitness',
       file: rel,
-      span: spanForOffset(file.sourceText, offset),
+      span: { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } },
       module: folder,
       internalCohesion,
       externalCoupling,

@@ -2,16 +2,8 @@ import type { ParsedFile } from '../../engine/types';
 import type { GiantFileFinding } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyGiantFile = (): ReadonlyArray<GiantFileFinding> => [];
-
-const spanForWholeFile = (sourceText: string) => {
-  const start = getLineColumn(sourceText, 0);
-  const end = getLineColumn(sourceText, Math.max(0, sourceText.length));
-
-  return { start, end };
-};
 
 interface AnalyzeGiantFileOptions {
   readonly maxLines: number;
@@ -44,7 +36,7 @@ const analyzeGiantFile = (
     findings.push({
       kind: 'giant-file',
       file: rel,
-      span: spanForWholeFile(file.sourceText),
+      span: { start: { line: 1, column: 0 }, end: { line: lineCount, column: 0 } },
       metrics: {
         lineCount,
         maxLines,
