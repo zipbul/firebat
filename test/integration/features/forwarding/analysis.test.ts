@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeForwarding } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
+import { buildMockGildashFromSources } from './mock-gildash-helper';
 
 const createForwardingSource = (): string => {
   return [
@@ -29,7 +30,7 @@ const createForwardingChainSource = (): string => {
 };
 
 describe('integration/forwarding', () => {
-  it('should report thin wrappers when they only forward arguments', () => {
+  it('should report thin wrappers when they only forward arguments', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -37,7 +38,8 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
@@ -45,7 +47,7 @@ describe('integration/forwarding', () => {
     expect(thinWrappers[0]?.header).toBe('wrapper');
   });
 
-  it('should report thin wrappers when destructured params are forwarded', () => {
+  it('should report thin wrappers when destructured params are forwarded', async () => {
     // Arrange
     const sources = new Map<string, string>();
     const source = [
@@ -61,14 +63,15 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
     expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
   });
 
-  it('should report thin wrappers when destructured rest params are forwarded', () => {
+  it('should report thin wrappers when destructured rest params are forwarded', async () => {
     // Arrange
     const sources = new Map<string, string>();
     const source = [
@@ -84,14 +87,15 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
     expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
   });
 
-  it('should report chain depth when it exceeds max', () => {
+  it('should report chain depth when it exceeds max', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -99,7 +103,8 @@ describe('integration/forwarding', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 1);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 1, '/virtual');
     const chainFindings = findings.filter(finding => finding.kind === 'forward-chain');
 
     // Assert

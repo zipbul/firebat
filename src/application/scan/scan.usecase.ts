@@ -713,7 +713,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         });
       })()
     : Promise.resolve(createEmptyApiDrift());
-  let forwarding: ReturnType<typeof analyzeForwarding>;
+  let forwarding: Awaited<ReturnType<typeof analyzeForwarding>>;
 
   if (options.detectors.includes('forwarding')) {
     const t0 = nowMs();
@@ -721,7 +721,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    forwarding = analyzeForwarding(program, options.maxForwardDepth);
+    forwarding = await analyzeForwarding(gildash, program, options.maxForwardDepth, ctx.rootAbs);
     detectorTimings.forwarding = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.forwarding) });

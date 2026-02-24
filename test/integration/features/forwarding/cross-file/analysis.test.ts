@@ -2,9 +2,10 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeForwarding } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
+import { buildMockGildashFromSources } from '../mock-gildash-helper';
 
 describe('integration/forwarding/cross-file', () => {
-  it('should report cross-file chain depth when wrappers forward across modules', () => {
+  it('should report cross-file chain depth when wrappers forward across modules', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -25,7 +26,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
@@ -34,7 +36,7 @@ describe('integration/forwarding/cross-file', () => {
     expect(crossFile[0]?.depth).toBe(2);
   });
 
-  it('should resolve named imports when wrappers forward across modules', () => {
+  it('should resolve named imports when wrappers forward across modules', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -55,7 +57,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
@@ -64,7 +67,7 @@ describe('integration/forwarding/cross-file', () => {
     expect(crossFile[0]?.depth).toBe(2);
   });
 
-  it('should resolve aliased named imports when wrappers forward across modules', () => {
+  it('should resolve aliased named imports when wrappers forward across modules', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -85,7 +88,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
@@ -94,7 +98,7 @@ describe('integration/forwarding/cross-file', () => {
     expect(crossFile[0]?.depth).toBe(2);
   });
 
-  it('should report intermediate wrappers when chain depth exceeds two', () => {
+  it('should report intermediate wrappers when chain depth exceeds two', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -120,7 +124,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
     const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 
@@ -130,7 +135,7 @@ describe('integration/forwarding/cross-file', () => {
     expect(crossFile.find(f => f.header === 'g')?.depth).toBe(2);
   });
 
-  it('should not report cross-file chain when import cannot be resolved', () => {
+  it('should not report cross-file chain when import cannot be resolved', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
@@ -141,7 +146,8 @@ describe('integration/forwarding/cross-file', () => {
 
     // Act
     const program = createProgramFromMap(sources);
-    const findings = analyzeForwarding(program, 0);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert

@@ -2,9 +2,10 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeForwarding } from '../../../../../src/test-api';
 import { createPrng, createProgramFromMap } from '../../../shared/test-kit';
+import { buildMockGildashFromSources } from '../mock-gildash-helper';
 
 describe('integration/forwarding/cross-file (fuzz)', () => {
-  it('should report a cross-file chain for every wrapper with depth >= 2 when a random chain is generated', () => {
+  it('should report a cross-file chain for every wrapper with depth >= 2 when a random chain is generated', async () => {
     // Arrange
     const rng = createPrng(1);
     const iterations = 25;
@@ -40,7 +41,8 @@ describe('integration/forwarding/cross-file (fuzz)', () => {
 
       // Act
       const program = createProgramFromMap(sources);
-      const findings = analyzeForwarding(program, 0);
+      const gildash = buildMockGildashFromSources(sources);
+      const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
       const crossFile = findings.filter(f => f.kind === 'cross-file-forwarding-chain');
       const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 

@@ -2,255 +2,28 @@ import type { Node } from 'oxc-parser';
 
 import * as path from 'node:path';
 
+import type { Gildash } from '@zipbul/gildash';
+import { isErr } from '@zipbul/result';
+
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type { ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
 
 import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
+/* ------------------------------------------------------------------ */
+/*  Path utilities                                                     */
+/* ------------------------------------------------------------------ */
+
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
-const isStringLiteral = (value: NodeValue): value is NodeRecord => {
-  if (!isOxcNode(value)) {
-    return false;
-  }
+/** Ensure a path from gildash (may be project-relative) is absolute. */
+const resolveAbs = (rootAbs: string, p: string): string =>
+  normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
 
-  if (!isNodeRecord(value)) {
-    return false;
-  }
-
-  if (value.type !== 'Literal') {
-    return false;
-  }
-
-  const literalValue = value.value;
-
-  return typeof literalValue === 'string';
-};
-
-const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<NodeValue> } => {
-  return !!value && typeof value === 'object' && Array.isArray((value as { body?: unknown }).body);
-};
-
-const buildFileMap = (files: ReadonlyArray<ParsedFile>): Map<string, ParsedFile> => {
-  const map = new Map<string, ParsedFile>();
-
-  for (const file of files) {
-    map.set(normalizePath(file.filePath), file);
-  }
-
-  return map;
-};
-
-const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string, ParsedFile>): string | null => {
-  if (!specifier.startsWith('.')) {
-    return null;
-  }
-
-  const base = path.resolve(path.dirname(fromPath), specifier);
-  const candidates = [base, `${base}.ts`, path.join(base, 'index.ts')];
-
-  for (const candidate of candidates) {
-    const normalized = normalizePath(candidate);
-
-    if (fileMap.has(normalized)) {
-      return normalized;
-    }
-  }
-
-  return null;
-};
-
-type ImportBinding =
-  | {
-      readonly kind: 'named';
-      readonly targetFilePath: string;
-      readonly importedName: string;
-    }
-  | {
-      readonly kind: 'default';
-      readonly targetFilePath: string;
-    }
-  | {
-      readonly kind: 'namespace';
-      readonly targetFilePath: string;
-    };
-
-const collectImportBindings = (
-  program: NodeValue,
-  fromFilePath: string,
-  fileMap: Map<string, ParsedFile>,
-): Map<string, ImportBinding> => {
-  const out = new Map<string, ImportBinding>();
-  const p = program as unknown;
-
-  if (!isProgramBody(p)) {
-    return out;
-  }
-
-  for (const stmt of p.body) {
-    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
-      continue;
-    }
-
-    if (stmt.type !== 'ImportDeclaration') {
-      continue;
-    }
-
-    const source = stmt.source;
-
-    if (!isStringLiteral(source)) {
-      continue;
-    }
-
-    const specifier = source.value;
-    const resolved = resolveImport(fromFilePath, specifier, fileMap);
-
-    if (!resolved) {
-      continue;
-    }
-
-    const specifiers = Array.isArray(stmt.specifiers) ? stmt.specifiers : [];
-
-    for (const spec of specifiers) {
-      if (!isOxcNode(spec) || !isNodeRecord(spec)) {
-        continue;
-      }
-
-      if (spec.type === 'ImportSpecifier') {
-        const local = spec.local;
-        const imported = spec.imported;
-
-        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
-          continue;
-        }
-
-        if (!isOxcNode(imported)) {
-          continue;
-        }
-
-        if (imported.type === 'Identifier' && typeof imported.name === 'string') {
-          out.set(local.name, { kind: 'named', targetFilePath: resolved, importedName: imported.name });
-
-          continue;
-        }
-
-        if (imported.type === 'Literal' && typeof (imported as unknown as { value?: unknown }).value === 'string') {
-          const name = (imported as unknown as { value: string }).value;
-
-          out.set(local.name, { kind: 'named', targetFilePath: resolved, importedName: name });
-
-          continue;
-        }
-
-        continue;
-      }
-
-      if (spec.type === 'ImportDefaultSpecifier') {
-        const local = spec.local;
-
-        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
-          continue;
-        }
-
-        out.set(local.name, { kind: 'default', targetFilePath: resolved });
-
-        continue;
-      }
-
-      if (spec.type === 'ImportNamespaceSpecifier') {
-        const local = spec.local;
-
-        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
-          continue;
-        }
-
-        out.set(local.name, { kind: 'namespace', targetFilePath: resolved });
-
-        continue;
-      }
-    }
-  }
-
-  return out;
-};
-
-const collectExportedNameByLocal = (program: NodeValue): Map<string, string> => {
-  const out = new Map<string, string>();
-  const p = program as unknown;
-
-  if (!isProgramBody(p)) {
-    return out;
-  }
-
-  for (const stmt of p.body) {
-    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
-      continue;
-    }
-
-    if (stmt.type === 'ExportNamedDeclaration') {
-      const declaration = stmt.declaration;
-      const specifiers = Array.isArray(stmt.specifiers) ? stmt.specifiers : [];
-
-      if (isOxcNode(declaration) && isNodeRecord(declaration)) {
-        if (declaration.type === 'FunctionDeclaration') {
-          const id = declaration.id;
-
-          if (isOxcNode(id) && id.type === 'Identifier' && typeof id.name === 'string') {
-            out.set(id.name, id.name);
-          }
-        }
-
-        if (declaration.type === 'VariableDeclaration') {
-          const declarations = Array.isArray(declaration.declarations) ? declaration.declarations : [];
-
-          for (const decl of declarations) {
-            if (!isOxcNode(decl) || !isNodeRecord(decl) || decl.type !== 'VariableDeclarator') {
-              continue;
-            }
-
-            const id = decl.id;
-
-            if (isOxcNode(id) && id.type === 'Identifier' && typeof id.name === 'string') {
-              out.set(id.name, id.name);
-            }
-          }
-        }
-      }
-
-      for (const spec of specifiers) {
-        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
-          continue;
-        }
-
-        if (spec.type !== 'ExportSpecifier') {
-          continue;
-        }
-
-        const local = spec.local;
-        const exported = spec.exported;
-
-        if (!isOxcNode(local) || local.type !== 'Identifier' || typeof local.name !== 'string') {
-          continue;
-        }
-
-        if (!isOxcNode(exported) || exported.type !== 'Identifier' || typeof exported.name !== 'string') {
-          continue;
-        }
-
-        out.set(local.name, exported.name);
-      }
-
-      continue;
-    }
-
-    if (stmt.type === 'ExportDefaultDeclaration') {
-      continue;
-    }
-  }
-
-  return out;
-};
+/* ------------------------------------------------------------------ */
+/*  AST utilities — thin-wrapper detection                             */
+/* ------------------------------------------------------------------ */
 
 const createEmptyForwarding = (): ReadonlyArray<ForwardingFinding> => [];
 
@@ -548,24 +321,23 @@ const resolveCalleeName = (callExpression: Node): string | null => {
   return null;
 };
 
-type CalleeRef =
+/** Structured callee reference for cross-file import resolution via gildash. */
+type SimpleCalleeRef =
   | { readonly kind: 'local'; readonly name: string }
-  | { readonly kind: 'namespace'; readonly namespace: string; readonly name: string }
-  | { readonly kind: 'this'; readonly name: string }
-  | { readonly kind: 'unknown' };
+  | { readonly kind: 'namespace'; readonly ns: string; readonly name: string };
 
-const resolveCalleeRef = (callExpression: Node): CalleeRef => {
+const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
   if (!isNodeRecord(callExpression)) {
-    return { kind: 'unknown' };
+    return null;
   }
 
   const callee = callExpression.callee;
 
   if (!isOxcNode(callee)) {
-    return { kind: 'unknown' };
+    return null;
   }
 
-  if (callee.type === 'Identifier' && 'name' in callee && typeof callee.name === 'string') {
+  if (callee.type === 'Identifier' && typeof callee.name === 'string') {
     return { kind: 'local', name: callee.name };
   }
 
@@ -573,54 +345,24 @@ const resolveCalleeRef = (callExpression: Node): CalleeRef => {
     const object = callee.object;
     const property = callee.property;
 
-    if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && property.type === 'Identifier') {
-      return { kind: 'this', name: property.name };
+    if (
+      isOxcNode(object) &&
+      object.type === 'Identifier' &&
+      typeof object.name === 'string' &&
+      isOxcNode(property) &&
+      property.type === 'Identifier' &&
+      typeof property.name === 'string'
+    ) {
+      return { kind: 'namespace', ns: object.name, name: property.name };
     }
-
-    if (isOxcNode(object) && object.type === 'Identifier' && typeof object.name === 'string') {
-      if (isOxcNode(property) && property.type === 'Identifier' && typeof property.name === 'string') {
-        return { kind: 'namespace', namespace: object.name, name: property.name };
-      }
-    }
-  }
-
-  return { kind: 'unknown' };
-};
-
-const resolveImportedTarget = (
-  callee: CalleeRef,
-  imports: Map<string, ImportBinding>,
-): { readonly targetFilePath: string; readonly exportedName: string } | null => {
-  if (callee.kind === 'local') {
-    const binding = imports.get(callee.name);
-
-    if (!binding) {
-      return null;
-    }
-
-    if (binding.kind === 'named') {
-      return { targetFilePath: binding.targetFilePath, exportedName: binding.importedName };
-    }
-
-    if (binding.kind === 'default') {
-      return { targetFilePath: binding.targetFilePath, exportedName: 'default' };
-    }
-
-    return null;
-  }
-
-  if (callee.kind === 'namespace') {
-    const binding = imports.get(callee.namespace);
-
-    if (!binding || binding.kind !== 'namespace') {
-      return null;
-    }
-
-    return { targetFilePath: binding.targetFilePath, exportedName: callee.name };
   }
 
   return null;
 };
+
+/* ------------------------------------------------------------------ */
+/*  Function name collection                                           */
+/* ------------------------------------------------------------------ */
 
 const collectFunctionNames = (program: NodeValue): Map<Node, string> => {
   const namesByNode = new Map<Node, string>();
@@ -731,13 +473,120 @@ const computeChainDepth = (name: string, calleeByName: Map<string, string | null
   return 1 + nextDepth;
 };
 
-const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: number): ReadonlyArray<ForwardingFinding> => {
+/* ------------------------------------------------------------------ */
+/*  Import / export indices from gildash                               */
+/* ------------------------------------------------------------------ */
+
+interface ImportTarget {
+  readonly targetFilePath: string;
+  readonly exportedName: string | null;
+}
+
+const buildImportIndex = (
+  gildash: Gildash,
+  rootAbs: string,
+): Map<string, Map<string, ImportTarget>> => {
+  const importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+
+  if (isErr(importRels)) {
+    return new Map();
+  }
+
+  const index = new Map<string, Map<string, ImportTarget>>();
+
+  for (const rel of importRels) {
+    const srcFile = resolveAbs(rootAbs, rel.srcFilePath);
+    const fileImports = index.get(srcFile) ?? new Map<string, ImportTarget>();
+
+    if (rel.srcSymbolName) {
+      fileImports.set(rel.srcSymbolName, {
+        targetFilePath: resolveAbs(rootAbs, rel.dstFilePath),
+        exportedName: rel.dstSymbolName ?? null,
+      });
+    }
+
+    index.set(srcFile, fileImports);
+  }
+
+  return index;
+};
+
+const buildExportIndex = (
+  gildash: Gildash,
+  rootAbs: string,
+): Map<string, Set<string>> => {
+  const allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+
+  if (isErr(allExported)) {
+    return new Map();
+  }
+
+  const index = new Map<string, Set<string>>();
+
+  for (const sym of allExported) {
+    const absFile = resolveAbs(rootAbs, sym.filePath);
+    const names = index.get(absFile) ?? new Set<string>();
+
+    names.add(sym.name);
+    index.set(absFile, names);
+  }
+
+  return index;
+};
+
+const resolveCrossFileTarget = (
+  ref: SimpleCalleeRef,
+  srcFilePath: string,
+  importIdx: Map<string, Map<string, ImportTarget>>,
+): { readonly targetFilePath: string; readonly exportedName: string } | null => {
+  const fileImports = importIdx.get(srcFilePath);
+
+  if (!fileImports) {
+    return null;
+  }
+
+  if (ref.kind === 'local') {
+    const imp = fileImports.get(ref.name);
+
+    if (!imp || imp.exportedName === null) {
+      return null;
+    }
+
+    return { targetFilePath: imp.targetFilePath, exportedName: imp.exportedName };
+  }
+
+  if (ref.kind === 'namespace') {
+    const imp = fileImports.get(ref.ns);
+
+    if (!imp) {
+      return null;
+    }
+
+    return { targetFilePath: imp.targetFilePath, exportedName: ref.name };
+  }
+
+  return null;
+};
+
+/* ------------------------------------------------------------------ */
+/*  Main analysis                                                      */
+/* ------------------------------------------------------------------ */
+
+const analyzeForwarding = async (
+  gildash: Gildash,
+  files: ReadonlyArray<ParsedFile>,
+  maxForwardDepth: number,
+  rootAbs: string,
+): Promise<ReadonlyArray<ForwardingFinding>> => {
   if (files.length === 0) {
     return createEmptyForwarding();
   }
 
   const findings: ForwardingFinding[] = [];
-  const fileMap = buildFileMap(files);
+
+  // Build import/export indices from gildash for cross-file resolution
+  const importIdx = buildImportIndex(gildash, rootAbs);
+  const exportIdx = buildExportIndex(gildash, rootAbs);
 
   type CrossFileWrapper = {
     node: Node;
@@ -758,8 +607,7 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
     const namesByNode = collectFunctionNames(file.program);
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
-    const exportsByLocal = collectExportedNameByLocal(file.program as NodeValue);
-    const importsByLocal = collectImportBindings(file.program as NodeValue, normalizedFilePath, fileMap);
+    const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
 
     walkOxcTree(file.program, node => {
       if (!isFunctionNode(node)) {
@@ -782,13 +630,16 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
         calleeByName.set(header, calleeName);
         wrapperNodeByName.set(header, node);
 
-        const exportedName = exportsByLocal.get(header);
-
-        if (exportedName && exportedName.length > 0) {
-          const calleeRef = resolveCalleeRef(wrapperCall);
-          const importedTarget = resolveImportedTarget(calleeRef, importsByLocal);
-          const targetKey = importedTarget ? `${importedTarget.targetFilePath}:${importedTarget.exportedName}` : null;
-          const key = `${normalizedFilePath}:${exportedName}`;
+        // Cross-file: only track exported functions
+        if (fileExports.has(header)) {
+          const calleeRef = getSimpleCalleeRef(wrapperCall);
+          const crossTarget = calleeRef
+            ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx)
+            : null;
+          const targetKey = crossTarget
+            ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}`
+            : null;
+          const key = `${normalizedFilePath}:${header}`;
 
           crossFileWrappers.set(key, {
             node,
@@ -839,7 +690,6 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
       }
 
       if (cursor !== null && visited.has(cursor)) {
-        // Found a cycle — mark all nodes in the cycle.
         let mark: string | null = cursor;
         const cycleStart = cursor;
 
@@ -887,7 +737,6 @@ const analyzeForwarding = (files: ReadonlyArray<ParsedFile>, maxForwardDepth: nu
 
     for (const [key, entry] of crossFileWrappers.entries()) {
       if (inCycle.has(key)) {
-        // Report circular forwarding as a distinct finding.
         const evidence = 'circular forwarding chain detected';
 
         addFinding(
