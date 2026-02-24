@@ -101,8 +101,55 @@ export const buildMockGildashFromSources = (
     }
   }
 
+  /* ── Reverse adjacency for getAffected ── */
+  const reverseAdj = new Map<string, string[]>();
+
+  for (const rel of relations) {
+    if (rel.type !== 'imports') continue;
+
+    let list = reverseAdj.get(rel.dstFilePath);
+
+    if (!list) {
+      list = [];
+      reverseAdj.set(rel.dstFilePath, list);
+    }
+
+    if (!list.includes(rel.srcFilePath)) {
+      list.push(rel.srcFilePath);
+    }
+  }
+
+  const getTransitiveDependents = (filePath: string): string[] => {
+    const visited = new Set<string>();
+    const queue = [filePath];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+
+      for (const dep of reverseAdj.get(current) ?? []) {
+        if (!visited.has(dep)) {
+          visited.add(dep);
+          queue.push(dep);
+        }
+      }
+    }
+
+    return Array.from(visited);
+  };
+
   return {
     searchRelations: () => relations,
     searchSymbols: () => symbols,
+    getAffected: async (changedFiles: string[]) => {
+      const all = new Set<string>();
+
+      for (const f of changedFiles) {
+        for (const dep of getTransitiveDependents(f)) {
+          all.add(dep);
+        }
+      }
+
+      return Array.from(all);
+    },
   } as unknown as Gildash;
 };
