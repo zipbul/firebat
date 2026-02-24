@@ -355,33 +355,10 @@ const runBuild = async (logger: Logger): Promise<void> => {
 
   logger.debug('Plugin build completed', { success: pluginBuildResult.success, outputs: pluginBuildResult.outputs.length });
 
-  const workerOutdir = `${outdir}/workers`;
-
-  logger.trace('Building parse worker', { entry: 'src/workers/parse-worker.ts', outdir: workerOutdir });
-
-  const parseWorkerBuildResult = await Bun.build({
-    entrypoints: ['src/workers/parse-worker.ts'],
-    outdir: workerOutdir,
-    target: 'bun',
-    minify: true,
-    sourcemap: 'inline',
-    packages: 'external',
-    naming: 'parse-worker.js',
-  });
-
-  if (parseWorkerBuildResult.logs.length > 0) {
-    logger.trace('Parse worker build logs:', { logs: parseWorkerBuildResult.logs });
-  }
-
-  logger.debug('Parse worker build completed', {
-    success: parseWorkerBuildResult.success,
-    outputs: parseWorkerBuildResult.outputs.length,
-  });
-
-  if (!cliBuildResult.success || !pluginBuildResult.success || !parseWorkerBuildResult.success) {
+  if (!cliBuildResult.success || !pluginBuildResult.success) {
     logger.error('Build failed', { cliSuccess: cliBuildResult.success, pluginSuccess: pluginBuildResult.success });
 
-    const allLogs = [...cliBuildResult.logs, ...pluginBuildResult.logs, ...parseWorkerBuildResult.logs];
+    const allLogs = [...cliBuildResult.logs, ...pluginBuildResult.logs];
 
     if (allLogs.length > 0) {
       logger.error('Build logs:', { logs: allLogs });
