@@ -567,8 +567,8 @@ const analyzeDependencies = async (ctx: AnalysisContext) => {
 | **M-6** | modification-impact 단순화 | BFS→getAffected | **-20** | `getAffected` | M-4 | 0.5.0 ✅ **완료** |
 | **M-7** | coupling/giant-file/abstraction-fitness | 계획 수정 | — | — | — | ⚠️ **계획 수정** (아래 참조) |
 | **M-8** | ast-grep 인프라 교체 | `@ast-grep/napi` 의존 제거 | **-148** | `findPattern` | M-1 | 0.5.0 ✅ **완료** |
-| **M-9** | scan.usecase.ts 오케스트레이션 정리 | 부분 리라이트 | **-30** | 전체 API | M-2~M-8 | 미착수 |
-| **M-10** | 신규 API 활용 기능 | 신규 기능 추가 | +features | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | M-9 | 미착수 |
+| **M-9** | scan.usecase.ts 오케스트레이션 정리 | M-2~M-8에서 흡수 | 0 | — | M-2~M-8 | 0.5.0 ✅ **완료** (추가 정리불필요) |
+| **M-10** | 신규 API 활용 기능 | MCP tool 등록 + analyzer 활용 | +features | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | M-9 | 0.5.0 ✅ **완료** (6/6 API) |
 
 **총계**: ~3,096줄 삭제 + ~1,000 spec줄 = **~4,060줄 감축**
 
@@ -586,8 +586,8 @@ const analyzeDependencies = async (ctx: AnalysisContext) => {
 │ M-7 ⚠️ 계획 수정 (의미론 불일치 3건)         │
 │ M-8 ✅ @ast-grep/napi 제거 완료              │
 ├──────────────────────────────────────────┤
-│ M-9  scan.usecase.ts 오케스트레이션 정리    │
-│ M-10 신규 API 활용 기능                       │
+│ M-9  ✅ scan.usecase.ts 정리 (M-2~M-8 흡수)   │
+│ M-10 ✅ 신규 API 활용 (6/6 구현)              │
 └──────────────────────────────────────────┘
 ```
 
@@ -704,24 +704,23 @@ bun add @zipbul/gildash@0.5.0 @zipbul/result@^0.0.3
 
 커밋: `refactor: replace ast-grep infra with gildash findPattern`
 
-#### M-9: scan.usecase.ts 오케스트레이션 정리
+#### M-9: scan.usecase.ts 오케스트레이션 정리 ✅ 완료
 
-- M-2~M-8 완료 후 scan.usecase.ts에서 제거된 인프라 참조 정리
-- gildash lifecycle을 pipeline 수준에서 관리
-- ~30줄 추가 정리
+- M-2~M-8 각 단계에서 인크리멘탈하게 정리 완료 (dead import 0건, gildash lifecycle 이미 pipeline 수준)
+- 추가 정리 항목 없음 (oxlint 검증)
 
-커밋: `refactor: clean up scan orchestration after gildash migration`
+#### M-10: 신규 API 활용 기능 ✅ 완료 (6/6 API)
 
-#### M-10: 신규 API 활용 기능
+M-2~M-8 구현 과정에서 대부분 활용 완료. 마지막 `getSymbolsByFile` MCP tool 등록 완료.
 
-gildash 0.4.0의 추가 API를 활용한 새 기능:
-- `getAffected` → incremental scan 대상 자동 결정
-- `getDependencies/getDependents` → detector 단위 파일 영향 조회
-- `getSymbolsByFile` → 파일별 심볼 접근 최적화
-- `getHeritageChain` → api-drift 클래스 계층 분석 강화
-- `indexExternalPackages` → MCP external library 검색
-
-커밋: `feat: leverage gildash 0.4.0 additional APIs`
+| API | 사용처 | 구현 시점 |
+|-----|--------|----------|
+| `getAffected` | mod-impact analyzer + MCP scan | M-6 |
+| `getDependencies` | MCP `query-dependencies` tool | M-4 |
+| `getDependents` | MCP `query-dependencies` tool | M-4 |
+| `getHeritageChain` | api-drift analyzer | M-4 |
+| `indexExternalPackages` | MCP `index-external-packages` tool | M-8 |
+| `getSymbolsByFile` | MCP `symbols-by-file` tool | M-10 |
 
 ### 4.3 gildash 의존성 상태
 
@@ -737,8 +736,8 @@ gildash 0.4.0의 추가 API를 활용한 새 기능:
 | M-6 | `getAffected` | 0.5.0 | ✅ **완료** (BFS→getAffected 전환) |
 | M-7 | ~~`getFanMetrics`, `getFileStats`, `getInternalRelations`~~ | — | ⚠️ **계획 수정** (API 의미론 불일치, 현재 상태 최적) |
 | M-8 | `findPattern` (+ `@ast-grep/napi` 의존 제거) | 0.5.0 | ✅ **완료** |
-| M-9 | 전체 | 0.5.0 | 미착수 |
-| M-10 | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | 0.5.0 | 미착수 (5/6 API 구현, `getSymbolsByFile` 미구현) |
+| M-9 | 전체 | 0.5.0 | ✅ **완료** (M-2~M-8에서 인크리멘탈 정리 흡수, 추가 작업 불필요) |
+| M-10 | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | 0.5.0 | ✅ **완료** (6/6 API 구현. MCP tool + analyzer 활용) |
 
 ### 4.4 마이그레이션 규칙
 

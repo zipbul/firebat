@@ -626,6 +626,52 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     }),
   );
 
+  const SymbolsByFileInputSchema = z
+    .object({
+      filePath: z
+        .string()
+        .describe('Absolute path of the file to list symbols from.'),
+    })
+    .strict();
+
+  server.registerTool(
+    'symbols-by-file',
+    {
+      title: 'List symbols in file',
+      description: [
+        'List all symbols (functions, classes, variables, types, interfaces, enums) declared in a file.',
+        'Returns name, kind, exported status, span, and signature for each symbol.',
+      ].join('\n'),
+      inputSchema: SymbolsByFileInputSchema,
+    },
+    safeTool(async (args: z.infer<typeof SymbolsByFileInputSchema>) => {
+      const gildash = await ensureGildash();
+      const result = gildash.getSymbolsByFile(args.filePath);
+
+      if (isErr(result)) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `symbols-by-file failed: ${result.data.message}` }],
+        };
+      }
+
+      const symbols = result.map(s => ({
+        name: s.name,
+        kind: s.kind,
+        isExported: s.isExported,
+        span: s.span,
+        signature: s.signature,
+      }));
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ filePath: args.filePath, count: symbols.length, symbols }),
+        }],
+      };
+    }),
+  );
+
   return server;
 };
 
