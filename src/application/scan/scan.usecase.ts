@@ -207,8 +207,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Inputs digest computed', { inputsDigest, durationMs: Math.round(nowMs() - tInputsDigest0) });
 
-  await gildash.close({ cleanup: false });
-
   const artifactKey = computeScanArtifactKey({
     detectors: options.detectors,
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
@@ -404,6 +402,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   const program = await createFirebatProgram({
     targets: options.targets,
     logger,
+    gildash,
   });
 
   logger.info('Parse complete', { parsedCount: program.length, durationMs: Math.round(nowMs() - tProgram0) });
@@ -887,7 +886,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
   }
 
-  let modificationImpact: ReturnType<typeof analyzeModificationImpact> = createEmptyModificationImpact();
+  let modificationImpact: Awaited<ReturnType<typeof analyzeModificationImpact>> = createEmptyModificationImpact();
 
   if (options.detectors.includes('modification-impact')) {
     const t0 = nowMs();
@@ -895,7 +894,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    modificationImpact = analyzeModificationImpact(program);
+    modificationImpact = await analyzeModificationImpact(gildash, program, ctx.rootAbs);
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1474,6 +1473,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     analyses,
     catalog,
   };
+
+  await gildash.close({ cleanup: false });
 
   if (allowCache) {
     const tSave0 = nowMs();

@@ -1,3 +1,5 @@
+import type { Gildash } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../engine/types';
 import type { FirebatProgramConfig } from '../interfaces';
 
@@ -26,7 +28,7 @@ const shouldIncludeFile = (filePath: string): boolean => {
 };
 
 export const createFirebatProgram = async (
-  config: FirebatProgramConfig,
+  config: FirebatProgramConfig & { readonly gildash?: Gildash },
 ): Promise<ParsedFile[]> => {
   const { logger } = config;
 
@@ -39,8 +41,9 @@ export const createFirebatProgram = async (
 
   logger.debug('Parsing files with gildash', { eligibleCount: eligible.length });
 
+  const ownsGildash = config.gildash === undefined;
   const root = process.cwd();
-  const gildash = await createGildash({ projectRoot: root, watchMode: false });
+  const gildash = config.gildash ?? (await createGildash({ projectRoot: root, watchMode: false }));
 
   try {
     const result = await gildash.batchParse(eligible);
@@ -52,6 +55,8 @@ export const createFirebatProgram = async (
 
     return Array.from(result.values()) as unknown as ParsedFile[];
   } finally {
-    await gildash.close({ cleanup: false });
+    if (ownsGildash) {
+      await gildash.close({ cleanup: false });
+    }
   }
 };

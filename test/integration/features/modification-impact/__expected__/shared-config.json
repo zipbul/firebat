@@ -6,7 +6,7 @@
     "kind": "modification-impact",
     "span": {
       "end": {
-        "column": 1,
+        "column": 10,
         "line": 1
       },
       "start": {
@@ -22,12 +22,12 @@
     "kind": "modification-impact",
     "span": {
       "end": {
-        "column": 1,
-        "line": 2
+        "column": 10,
+        "line": 1
       },
       "start": {
         "column": 0,
-        "line": 2
+        "line": 1
       }
     }
   }

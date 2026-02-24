@@ -1,87 +1,18 @@
+import type { Gildash } from '@zipbul/gildash';
+import { isErr } from '@zipbul/result';
+
 import type { ParsedFile } from '../../engine/types';
 import type { ModificationImpactFinding } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyModificationImpact = (): ReadonlyArray<ModificationImpactFinding> => [];
-
-const spanForOffset = (sourceText: string, offset: number) => {
-  const start = getLineColumn(sourceText, Math.max(0, offset));
-  const end = getLineColumn(sourceText, Math.min(sourceText.length, Math.max(0, offset + 1)));
-
-  return { start, end };
-};
 
 interface ExportRef {
   readonly fileIndex: number;
   readonly name: string;
-  readonly offset: number;
+  readonly span: { readonly start: { readonly line: number; readonly column: number }; readonly end: { readonly line: number; readonly column: number } };
 }
-
-const extractExports = (sourceText: string): ReadonlyArray<{ readonly name: string; readonly offset: number }> => {
-  const out: Array<{ readonly name: string; readonly offset: number }> = [];
-  const fnRe = /\bexport\s+function\s+([a-zA-Z_$][\w$]*)\b/g;
-
-  for (;;) {
-    const m = fnRe.exec(sourceText);
-
-    if (m === null) {
-      break;
-    }
-
-    out.push({ name: String(m[1] ?? ''), offset: m.index });
-  }
-
-  const constRe = /\bexport\s+const\s+([a-zA-Z_$][\w$]*)\b/g;
-
-  for (;;) {
-    const m = constRe.exec(sourceText);
-
-    if (m === null) {
-      break;
-    }
-
-    out.push({ name: String(m[1] ?? ''), offset: m.index });
-  }
-
-  const classRe = /\bexport\s+class\s+([a-zA-Z_$][\w$]*)\b/g;
-
-  for (;;) {
-    const m = classRe.exec(sourceText);
-
-    if (m === null) {
-      break;
-    }
-
-    out.push({ name: String(m[1] ?? ''), offset: m.index });
-  }
-
-  return out;
-};
-
-const extractImports = (sourceText: string): ReadonlyArray<{ readonly names: ReadonlyArray<string>; readonly from: string }> => {
-  const out: Array<{ readonly names: ReadonlyArray<string>; readonly from: string }> = [];
-  const re = /import\s+\{([^}]+)\}\s+from\s+['"]([^'"]+)['"]/g;
-
-  for (;;) {
-    const m = re.exec(sourceText);
-
-    if (m === null) {
-      break;
-    }
-
-    const names = String(m[1] ?? '')
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-      .map(s => s.split('\n').join(''));
-
-    out.push({ names, from: String(m[2] ?? '') });
-  }
-
-  return out;
-};
 
 const layerOf = (relPath: string): string => {
   if (relPath.startsWith('src/adapters/')) {
@@ -103,47 +34,11 @@ const layerOf = (relPath: string): string => {
   return 'src';
 };
 
-const dirname = (relPath: string): string => {
-  const normalized = relPath.replaceAll('\\', '/');
-  const idx = normalized.lastIndexOf('/');
-
-  if (idx < 0) {
-    return '';
-  }
-
-  return normalized.slice(0, idx);
-};
-
-const normalizePath = (path: string): string => {
-  const parts = path.replaceAll('\\', '/').split('/');
-  const out: string[] = [];
-
-  for (const part of parts) {
-    if (part === '' || part === '.') {
-      continue;
-    }
-
-    if (part === '..') {
-      out.pop();
-
-      continue;
-    }
-
-    out.push(part);
-  }
-
-  return out.join('/');
-};
-
-const resolveRelativeImportToRelTs = (importerRel: string, from: string): string => {
-  const baseDir = dirname(importerRel);
-  const joined = baseDir.length > 0 ? `${baseDir}/${from}` : from;
-  const normalized = normalizePath(joined);
-
-  return normalized.endsWith('.ts') ? normalized : `${normalized}.ts`;
-};
-
-const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<ModificationImpactFinding> => {
+const analyzeModificationImpact = async (
+  gildash: Gildash,
+  files: ReadonlyArray<ParsedFile>,
+  rootAbs: string,
+): Promise<ReadonlyArray<ModificationImpactFinding>> => {
   if (files.length === 0) {
     return createEmptyModificationImpact();
   }
@@ -159,69 +54,57 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
     }
   }
 
+  /* ── Exports from gildash ── */
+
+  const allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+
+  if (isErr(allExported)) {
+    return createEmptyModificationImpact();
+  }
+
   const exports: ExportRef[] = [];
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+  for (const sym of allExported) {
+    const rel = normalizeFile(sym.filePath);
+    const fileIndex = relPathToIndex.get(rel) ?? -1;
 
-    if (!file) continue;
+    if (fileIndex < 0) continue;
 
-    if (file.errors.length > 0) {
-      continue;
-    }
+    const file = files[fileIndex];
 
-    const rel = relPaths[i] ?? '';
+    if (!file || file.errors.length > 0) continue;
 
-    if (!rel.endsWith('.ts')) {
-      continue;
-    }
+    if (!rel.endsWith('.ts')) continue;
 
-    for (const e of extractExports(file.sourceText)) {
-      exports.push({ fileIndex: i, name: e.name, offset: e.offset });
-    }
+    exports.push({
+      fileIndex,
+      name: sym.name,
+      span: sym.span,
+    });
   }
 
-  // Build a dependency graph (file -> imported files)
+  /* ── File-level dependency edges from gildash ── */
+
+  const importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+
+  if (isErr(importRels)) {
+    return createEmptyModificationImpact();
+  }
+
   const edges = new Map<number, number[]>();
-  const importersByExport = new Map<string, Set<number>>();
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
+  for (const rel of importRels) {
+    const srcRel = normalizeFile(rel.srcFilePath);
+    const dstRel = normalizeFile(rel.dstFilePath);
+    const srcIdx = relPathToIndex.get(srcRel) ?? -1;
+    const dstIdx = relPathToIndex.get(dstRel) ?? -1;
 
-    if (!file) continue;
-
-    if (file.errors.length > 0) {
-      continue;
-    }
-
-    const imports = extractImports(file.sourceText);
-    const importerRel = relPaths[i] ?? '';
-
-    for (const imp of imports) {
-      // Only support simple relative imports like "./a" or "../x".
-      const from = imp.from;
-
-      if (!from.startsWith('.')) {
-        continue;
-      }
-
-      const candidate = resolveRelativeImportToRelTs(importerRel, from);
-      const candidateIndex = normalizePath(candidate.replace(/\.ts$/, '/index.ts'));
-      const targetIdx = relPathToIndex.get(candidate) ?? relPathToIndex.get(candidateIndex) ?? -1;
-
-      if (targetIdx >= 0) {
-        edges.set(targetIdx, [...(edges.get(targetIdx) ?? []), i]);
-      }
-
-      for (const name of imp.names) {
-        const key = `${from}:${name}`;
-        const set = importersByExport.get(key) ?? new Set<number>();
-
-        set.add(i);
-        importersByExport.set(key, set);
-      }
+    if (srcIdx >= 0 && dstIdx >= 0) {
+      edges.set(dstIdx, [...(edges.get(dstIdx) ?? []), srcIdx]);
     }
   }
+
+  /* ── BFS for transitive impact ── */
 
   const findings: ModificationImpactFinding[] = [];
 
@@ -232,7 +115,6 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
       continue;
     }
 
-    // Compute transitive impact: number of reachable dependent files.
     const visited = new Set<number>();
     const queue: number[] = [...(edges.get(ex.fileIndex) ?? [])];
 
@@ -252,7 +134,6 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
 
     const impactRadius = visited.size;
 
-    // Threshold: report only if impact spreads beyond a single local caller.
     if (impactRadius < 2) {
       continue;
     }
@@ -266,16 +147,11 @@ const analyzeModificationImpact = (files: ReadonlyArray<ParsedFile>): ReadonlyAr
 
         return calleeLayer === 'application' && (callerLayer === 'adapters' || callerLayer === 'infrastructure');
       });
-    const file = files[ex.fileIndex];
-
-    if (!file) continue;
-
-    const offset = ex.offset;
 
     findings.push({
       kind: 'modification-impact',
       file: rel,
-      span: spanForOffset(file.sourceText, offset),
+      span: ex.span,
       impactRadius,
       highRiskCallers,
     });
