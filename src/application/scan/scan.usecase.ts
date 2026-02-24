@@ -701,7 +701,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
         logger.debug('detector: start', { detector: detectorKey });
 
-        return analyzeApiDrift(program, { rootAbs: ctx.rootAbs, logger }).then(r => {
+        return analyzeApiDrift(program, { rootAbs: ctx.rootAbs, logger, gildash }).then(r => {
           const durationMs = nowMs() - t0;
 
           detectorTimings[detectorKey] = durationMs;

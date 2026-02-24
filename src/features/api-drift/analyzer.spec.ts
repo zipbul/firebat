@@ -113,6 +113,62 @@ describe('features/api-drift/analyzer — analyzeApiDrift', () => {
     );
     expect(fpGroups.length).toBe(0);
   });
+
+  it('detects heritage chain drift when gildash provides extends chain', async () => {
+    const parent = toFile('/src/base.ts', `
+      class Animal {
+        speak(volume: number): void {}
+      }
+    `);
+    const child = toFile('/src/dog.ts', `
+      class Dog extends Animal {
+        speak(volume: number, tone: string): string { return tone; }
+      }
+    `);
+
+    const mockGildash = {
+      getHeritageChain: async (symbolName: string, filePath: string) => {
+        if (symbolName === 'Dog') {
+          return {
+            symbolName: 'Dog',
+            filePath: '/src/dog.ts',
+            children: [{
+              symbolName: 'Animal',
+              filePath: '/src/base.ts',
+              kind: 'extends' as const,
+              children: [],
+            }],
+          };
+        }
+        if (symbolName === 'Animal') {
+          return { symbolName: 'Animal', filePath: '/src/base.ts', children: [] };
+        }
+        return { symbolName, filePath, children: [] };
+      },
+    } as any;
+
+    const result = await analyzeApiDrift([parent, child], { gildash: mockGildash });
+    const heritageGroups = result.filter(g => g.label.includes('heritage'));
+    expect(heritageGroups.length).toBeGreaterThanOrEqual(1);
+    expect(heritageGroups[0]!.label).toContain('Animal.speak');
+    expect(heritageGroups[0]!.outliers.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('skips heritage drift when gildash is not provided', async () => {
+    const parent = toFile('/src/base.ts', `
+      class Animal {
+        speak(volume: number): void {}
+      }
+    `);
+    const child = toFile('/src/dog.ts', `
+      class Dog extends Animal {
+        speak(volume: number, tone: string): string { return tone; }
+      }
+    `);
+    const result = await analyzeApiDrift([parent, child]);
+    const heritageGroups = result.filter(g => g.label.includes('heritage'));
+    expect(heritageGroups.length).toBe(0);
+  });
 });
 
 afterAll(() => {

@@ -16,6 +16,9 @@ import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { resolveTargets } from '../../shared/target-discovery';
+import { createGildash } from '../../store/gildash';
+
+import { isErr } from '@zipbul/result';
 
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates',
@@ -336,6 +339,18 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     { name: 'firebat', version: '2.0.0-scan-only' },
     { capabilities: { logging: {} } },
   );
+  // ── Shared gildash for query tools ──────────────────────────────────────────
+
+  let sharedGildash: Awaited<ReturnType<typeof createGildash>> | null = null;
+
+  const ensureGildash = async () => {
+    if (sharedGildash === null) {
+      sharedGildash = await createGildash({ projectRoot: rootAbs, watchMode: false });
+    }
+
+    return sharedGildash;
+  };
+
   const ScanInputSchema = z
     .object({
       targets: z
@@ -392,6 +407,16 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Example: ["src/adapters/**", "src/engine/**"].',
           ].join(' '),
         ),
+      expandAffected: z
+        .boolean()
+        .optional()
+        .describe(
+          [
+            'When true and targets are provided, automatically expand the scan scope',
+            'to include all files transitively affected by the target files.',
+            'Useful for incremental analysis: pass changed files as targets and set this to true.',
+          ].join(' '),
+        ),
     })
     .strict();
   const FirebatDetectorSchema = z.enum([...ALL_DETECTORS] as [FirebatDetector, ...Array<FirebatDetector>]);
@@ -441,7 +466,27 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof ScanInputSchema>) => {
       const mcpLogger = createMcpLogger(server, logger);
-      const targets = await resolveTargets(rootAbs, args.targets);
+      let targets = await resolveTargets(rootAbs, args.targets);
+
+      if (args.expandAffected === true && args.targets !== undefined && args.targets.length > 0) {
+        try {
+          const gildash = await ensureGildash();
+          const affectedResult = await gildash.getAffected(targets);
+
+          if (!isErr(affectedResult)) {
+            const expanded = new Set([...targets, ...affectedResult]);
+
+            mcpLogger.info('expandAffected: scope expanded', {
+              original: targets.length,
+              affected: affectedResult.length,
+              total: expanded.size,
+            });
+            targets = Array.from(expanded);
+          }
+        } catch {
+          mcpLogger.warn('expandAffected: getAffected failed, using original targets');
+        }
+      }
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
@@ -477,6 +522,106 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(filteredReport) }],
         structuredContent: toStructured(filteredReport as unknown as StructuredRecord),
+      };
+    }),
+  );
+
+  // ── Gildash-backed query tools ──────────────────────────────────────────────
+
+  const IndexExternalPackagesInputSchema = z
+    .object({
+      packages: z
+        .array(z.string())
+        .describe('Package names as they appear in node_modules/ (e.g. ["react", "typescript"]).'),
+    })
+    .strict();
+
+  server.registerTool(
+    'index-external-packages',
+    {
+      title: 'Index external packages',
+      description: [
+        'Index the TypeScript type declarations (.d.ts) of one or more node_modules packages.',
+        'Each package is indexed under a dedicated @external/<packageName> project.',
+        'After indexing, symbols from these packages become searchable.',
+      ].join('\n'),
+      inputSchema: IndexExternalPackagesInputSchema,
+    },
+    safeTool(async (args: z.infer<typeof IndexExternalPackagesInputSchema>) => {
+      const gildash = await ensureGildash();
+      const result = await gildash.indexExternalPackages(args.packages);
+
+      if (isErr(result)) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `indexExternalPackages failed: ${result.data.message}` }],
+        };
+      }
+
+      const summary = result.map(r => ({
+        project: r.project,
+        filesIndexed: r.filesIndexed,
+        symbolsExtracted: r.symbolsExtracted,
+        relationsExtracted: r.relationsExtracted,
+      }));
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ packages: args.packages, results: summary }) }],
+      };
+    }),
+  );
+
+  const DependencyQueryInputSchema = z
+    .object({
+      filePath: z
+        .string()
+        .describe('Absolute path of the file to query.'),
+      direction: z
+        .enum(['dependencies', 'dependents'])
+        .describe('"dependencies" returns files this file imports; "dependents" returns files that import this file.'),
+    })
+    .strict();
+
+  server.registerTool(
+    'query-dependencies',
+    {
+      title: 'Query file dependencies',
+      description: [
+        'List the direct dependencies or dependents of a file.',
+        'Use direction="dependencies" to get files that the given file imports.',
+        'Use direction="dependents" to get files that import the given file.',
+      ].join('\n'),
+      inputSchema: DependencyQueryInputSchema,
+    },
+    safeTool(async (args: z.infer<typeof DependencyQueryInputSchema>) => {
+      const gildash = await ensureGildash();
+      const result = args.direction === 'dependencies'
+        ? gildash.getDependencies(args.filePath)
+        : gildash.getDependents(args.filePath);
+
+      if (isErr(result)) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `query-dependencies failed: ${result.data.message}` }],
+        };
+      }
+
+      const toRel = (p: string): string => {
+        const rel = p.startsWith(rootAbs) ? p.slice(rootAbs.length + 1) : p;
+
+        return rel.replaceAll('\\', '/');
+      };
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            filePath: args.filePath,
+            direction: args.direction,
+            count: result.length,
+            files: result.map(toRel),
+          }),
+        }],
       };
     }),
   );

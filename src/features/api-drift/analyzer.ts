@@ -2,6 +2,9 @@ import type { Node } from 'oxc-parser';
 
 import * as path from 'node:path';
 
+import type { Gildash } from '@zipbul/gildash';
+import { isErr } from '@zipbul/result';
+
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../shared/logger';
 import type { ApiDriftGroup, ApiDriftOutlier, ApiDriftShape, SourceSpan } from '../../types';
@@ -26,6 +29,7 @@ interface AnalyzeApiDriftInput {
   readonly rootAbs?: string;
   readonly tsconfigPath?: string;
   readonly logger?: FirebatLogger;
+  readonly gildash?: Gildash;
 }
 
 const isParamOptional = (value: NodeValue): boolean => {
@@ -478,6 +482,7 @@ const analyzeApiDrift = async (
 
   const rootAbs = input?.rootAbs;
   const logger = input?.logger ?? createNoopLogger();
+  const gildash = input?.gildash;
   let interfaceGroups: ReadonlyArray<ApiDriftGroup> = [];
 
   if (rootAbs !== undefined && interfaceCandidatesByFile.size > 0) {
@@ -493,6 +498,113 @@ const analyzeApiDrift = async (
       interfaceGroups = tsgoResult.groups;
     } else {
       logger.warn('api-drift: tsgo type-check failed — interface drift analysis skipped');
+    }
+  }
+
+  // Heritage chain drift: detect override signature mismatches across extends chains
+  if (gildash !== undefined) {
+    const classMethodShapes = new Map<string, Map<string, { readonly shape: ApiDriftShape; readonly location: ShapeLocation }>>(); // className → methodName → { shape, location }
+    const classFileMap = new Map<string, string>(); // className → filePath
+
+    for (const file of files) {
+      if (file.errors.length > 0) {
+        continue;
+      }
+
+      walkOxcTree(file.program, node => {
+        if (!isNodeRecord(node) || (node.type !== 'ClassDeclaration' && node.type !== 'ClassExpression')) {
+          return true;
+        }
+
+        const className = getNodeName(node.id) ?? (node.type === 'ClassExpression' ? undefined : undefined);
+
+        if (typeof className !== 'string' || className.trim().length === 0) {
+          return true;
+        }
+
+        classFileMap.set(className, file.filePath);
+
+        const bodyValue = node.body;
+        const bodyNodes = isOxcNode(bodyValue) && isNodeRecord(bodyValue) && Array.isArray(bodyValue.body) ? bodyValue.body : [];
+        const methods = new Map<string, { readonly shape: ApiDriftShape; readonly location: ShapeLocation }>();
+
+        for (const element of bodyNodes) {
+          if (!isOxcNode(element) || !isNodeRecord(element) || element.type !== 'MethodDefinition') {
+            continue;
+          }
+
+          const methodKey = element.key;
+          const methodName = methodKey != null ? (getLiteralString(methodKey) ?? getNodeName(methodKey)) : null;
+
+          if (typeof methodName !== 'string' || methodName.trim().length === 0 || methodName === 'constructor') {
+            continue;
+          }
+
+          const valueNode = element.value;
+
+          if (!isOxcNode(valueNode)) {
+            continue;
+          }
+
+          const shape = buildShape(valueNode);
+          const start = getLineColumn(file.sourceText, element.start);
+          const end = getLineColumn(file.sourceText, element.end);
+
+          methods.set(methodName, { shape, location: { filePath: file.filePath, span: { start, end } } });
+        }
+
+        if (methods.size > 0) {
+          classMethodShapes.set(className, methods);
+        }
+
+        return true;
+      });
+    }
+
+    for (const [className, filePath] of classFileMap.entries()) {
+      const childMethods = classMethodShapes.get(className);
+
+      if (!childMethods || childMethods.size === 0) {
+        continue;
+      }
+
+      const chainResult = await gildash.getHeritageChain(className, filePath);
+
+      if (isErr(chainResult)) {
+        continue;
+      }
+
+      const ancestors: Array<{ readonly symbolName: string; readonly filePath: string }> = [];
+      const collectAncestors = (node: typeof chainResult): void => {
+        for (const child of node.children) {
+          ancestors.push({ symbolName: child.symbolName, filePath: child.filePath });
+          collectAncestors(child);
+        }
+      };
+
+      collectAncestors(chainResult);
+
+      for (const ancestor of ancestors) {
+        const parentMethods = classMethodShapes.get(ancestor.symbolName);
+
+        if (!parentMethods) {
+          continue;
+        }
+
+        for (const [methodName, childEntry] of childMethods.entries()) {
+          const parentEntry = parentMethods.get(methodName);
+
+          if (!parentEntry) {
+            continue;
+          }
+
+          const heritageKey = `heritage:${ancestor.symbolName}.${methodName}`;
+          const heritageLabel = `${ancestor.symbolName}.${methodName} (heritage)`;
+
+          recordShape(groupsByKey, heritageKey, heritageLabel, parentEntry.shape, parentEntry.location);
+          recordShape(groupsByKey, heritageKey, heritageLabel, childEntry.shape, childEntry.location);
+        }
+      }
     }
   }
 
