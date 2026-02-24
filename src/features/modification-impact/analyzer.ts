@@ -83,30 +83,12 @@ const analyzeModificationImpact = async (
     });
   }
 
-  /* ── File-level dependency edges from gildash ── */
-
-  const importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
-
-  if (isErr(importRels)) {
-    return createEmptyModificationImpact();
-  }
-
-  const edges = new Map<number, number[]>();
-
-  for (const rel of importRels) {
-    const srcRel = normalizeFile(rel.srcFilePath);
-    const dstRel = normalizeFile(rel.dstFilePath);
-    const srcIdx = relPathToIndex.get(srcRel) ?? -1;
-    const dstIdx = relPathToIndex.get(dstRel) ?? -1;
-
-    if (srcIdx >= 0 && dstIdx >= 0) {
-      edges.set(dstIdx, [...(edges.get(dstIdx) ?? []), srcIdx]);
-    }
-  }
-
-  /* ── BFS for transitive impact ── */
+  /* ── Transitive impact via gildash getAffected ── */
 
   const findings: ModificationImpactFinding[] = [];
+
+  // Cache getAffected per file to avoid redundant calls
+  const affectedCache = new Map<number, ReadonlyArray<string>>();
 
   for (const ex of exports) {
     const rel = relPaths[ex.fileIndex] ?? '';
@@ -115,31 +97,30 @@ const analyzeModificationImpact = async (
       continue;
     }
 
-    const visited = new Set<number>();
-    const queue: number[] = [...(edges.get(ex.fileIndex) ?? [])];
+    let affected = affectedCache.get(ex.fileIndex);
 
-    while (queue.length > 0) {
-      const cur = queue.shift() as number;
+    if (affected === undefined) {
+      const absPath = files[ex.fileIndex]?.filePath;
 
-      if (visited.has(cur)) {
+      if (!absPath) {
+        affectedCache.set(ex.fileIndex, []);
         continue;
       }
 
-      visited.add(cur);
+      const affectedResult = await gildash.getAffected([absPath]);
 
-      for (const next of edges.get(cur) ?? []) {
-        queue.push(next);
-      }
+      affected = isErr(affectedResult) ? [] : affectedResult;
+      affectedCache.set(ex.fileIndex, affected);
     }
 
-    const impactRadius = visited.size;
+    const impactRadius = affected.length;
 
     if (impactRadius < 2) {
       continue;
     }
 
-    const highRiskCallers = [...visited]
-      .map(i => relPaths[i] ?? '')
+    const highRiskCallers = affected
+      .map(p => normalizeFile(p))
       .filter(p => p.length > 0)
       .filter(p => {
         const callerLayer = layerOf(p);

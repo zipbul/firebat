@@ -1,12 +1,4 @@
 import { mock, afterAll, describe, it, expect, spyOn, afterEach } from 'bun:test';
-import * as nodePath from 'node:path';
-
-const __origSymbolIndexUsecases = { ...require(nodePath.resolve(import.meta.dir, '../symbol-index/symbol-index.usecases.ts')) };
-
-// Mock indexSymbolsUseCase to prevent heavy infra during reindex
-mock.module(nodePath.resolve(import.meta.dir, '../symbol-index/symbol-index.usecases.ts'), () => ({
-  indexSymbolsUseCase: async () => ({ ok: true, indexedFiles: 0, skippedFiles: 0, symbolsIndexed: 0, parseErrors: 0 }),
-}));
 
 import {
   replaceRangeUseCase,
@@ -176,5 +168,4 @@ describe('replaceRegexUseCase', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../symbol-index/symbol-index.usecases.ts'), () => __origSymbolIndexUsecases);
 });

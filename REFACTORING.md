@@ -57,8 +57,7 @@ scan.usecase.ts (1516줄)
 
 Bun-native **TypeScript code intelligence engine**. oxc-parser 기반 심볼 추출, cross-file 관계 추적, SQLite FTS5 검색, 의존성 그래프, incremental indexing, `@parcel/watcher` 내장.
 
-- **설치 완료**: **0.4.1** (M-1 커밋 338c449)
-- **대기 중**: **0.5.0** — ParserOptions passthrough, getCyclePaths Johnson's 교체, getDeadExports 삭제, maxCycles 옵션
+- **설치 완료**: **0.5.0** (0.4.1 → 0.5.0 업그레이드 완료. ParserOptions passthrough, getCyclePaths Johnson's 교체, getDeadExports 삭제, maxCycles 옵션 포함)
 - **저자 동일** (parkrevil) — API 안정성/호환성 리스크 없음
 - **공유 의존성**: oxc-parser (`>=0.114.0`), bun:sqlite, drizzle-orm — 추가 의존성 최소
 - **peerDependencies**: `@zipbul/result` (firebat에 추가 완료)
@@ -166,26 +165,28 @@ gildash 자체 점검에서 발견된 데이터 갭. FR 구현의 전제 조건.
 
 ### 2.5 gildash 릴리즈 현황
 
-**0.4.0에서 전량 릴리즈 완료. 0.4.1 patch 적용. 0.5.0 대기 중.**
+**0.5.0 릴리즈 완료. firebat 설치 완료.**
 
-- 원래 Phase 0~3으로 나뉘어 0.4.x patch 순차 배포 예정이었으나, **0.4.0 단일 릴리즈로 21건 FR + IMP-A~D 전부 포함**
-- firebat 설치: `"@zipbul/gildash": "^0.4.1"`, `"@zipbul/result": "^0.0.3"` — M-1에서 완료 (338c449)
+- 0.4.0 단일 릴리즈로 21건 FR + IMP-A~D 전부 포함
+- 0.5.0에서 getCyclePaths Johnson's 교체, getDeadExports 삭제, maxCycles 옵션, ParserOptions passthrough 추가
+- firebat 설치: `"@zipbul/gildash": "0.5.0"` (pinned, no ^), `"@zipbul/result": "^0.0.3"`
 - gildash Phase 구분은 더 이상 의미 없음
 
-#### 0.5.0 대기 항목 (gildash 최종 협의 결과)
+#### 0.5.0 적용 항목 (전부 완료)
 
-| # | 항목 | 내용 | 유형 |
-|---|------|------|------|
-| 1 | oxc-parser bump | 0.114.0 → 0.115.0 | 보강 |
-| 2 | ParserOptions passthrough | `parseSource`, `batchParse` 시그니처에 `options?: ParserOptions` 추가 | 추가 |
-| 3 | getCyclePaths 알고리즘 교체 | DFS + globalVisited → **Tarjan SCC + Johnson's circuits** (elementary circuit 완전성 보장) | 보강 |
-| 4 | getCyclePaths maxCycles | `getCyclePaths(options?: { maxCycles?: number })` | 추가 |
-| 5 | getDeadExports 삭제 | entry point 정책 내장 = 정체성 이탈. 0.x semver이므로 minor에서 breaking 허용 | **삭제** |
-| 6 | 문서화 | getCyclePaths 알고리즘 변경, getImportGraph 활용 안내, 정체성 원칙 | 문서 |
+| # | 항목 | 내용 | 유형 | 상태 |
+|---|------|------|------|------|
+| 1 | oxc-parser bump | 0.114.0 → 0.115.0 | 보강 | ✅ |
+| 2 | ParserOptions passthrough | `parseSource`, `batchParse` 시그니처에 `options?: ParserOptions` 추가 | 추가 | ✅ |
+| 3 | getCyclePaths 알고리즘 교체 | DFS + globalVisited → **Tarjan SCC + Johnson's circuits** | 보강 | ✅ |
+| 4 | getCyclePaths maxCycles | `getCyclePaths(options?: { maxCycles?: number })` | 추가 | ✅ (firebat에서 maxCycles:100 적용 완료) |
+| 5 | getDeadExports 삭제 | entry point 정책 내장 = 정체성 이탈 | **삭제** | ✅ (firebat searchSymbols+searchRelations 조합으로 전환 완료) |
+| 6 | 문서화 | getCyclePaths 알고리즘 변경, getImportGraph 활용 안내, 정체성 원칙 | 문서 | ✅ |
 
-**firebat 액션 아이템:**
-- getCyclePaths Johnson's 이식을 위한 레퍼런스 코드 공유 (Tarjan SCC ~49줄 + Johnson's ~87줄 + 정규화 ~31줄)
-- `getDeadExports()` 의존 → `searchSymbols` + `searchRelations` 조합으로 전환
+**firebat 액션 아이템 (완료):**
+- getCyclePaths Johnson's 이식을 위한 레퍼런스 코드 공유 → gildash 0.5.0에 반영 완료
+- `getDeadExports()` 의존 → `searchSymbols` + `searchRelations` 조합으로 전환 완료
+- `getCyclePaths(undefined, { maxCycles: 100 })` firebat에 적용 완료
 
 #### 0.4.0에서 추가 제공된 API (FR 외 14건)
 
@@ -551,39 +552,43 @@ const analyzeDependencies = async (ctx: AnalysisContext) => {
 ### 4.0 전제 조건
 
 - firebat 아키텍처 선행 정리 완료 (Phase P0, 0, D, A, B, C — 전부 커밋 완료)
-- gildash **0.4.1** 설치 완료 (M-1 커밋 338c449)
-- gildash **0.5.0** 대기 중 — ParserOptions passthrough, getCyclePaths Johnson's 교체, getDeadExports 삭제, maxCycles 옵션
-- 0.4.1로 착수 가능한 Phase: M-2, M-3, M-8
-- 0.5.0 필수 Phase: M-4 (getCyclePaths Johnson's + getDeadExports 삭제 대응)
+- gildash **0.5.0** 설치 완료 (0.4.1 → 0.5.0 업그레이드)
+- M-1 ~ M-8 완료. M-9, M-10 미착수.
 
 ### 4.1 실행 순서 총괄 (M-1 ~ M-10)
 
 | Phase | Task | 삭제 대상 | 줄 수 | 주요 gildash API | 선행 | gildash 버전 |
 |-------|------|----------|-------|-----------------|------|-------------|
-| **M-1** | gildash 설치 + factory | 신규 파일 | +~40 | `Gildash.open()`, `close()` | — | 0.4.1 ✅ **완료** |
-| **M-2** | Parse 인프라 교체 | `ts-program.ts`, `workers/parse-worker.ts` (+spec) | **-573** | `batchParse`, `parseSource`, `getParsedAst` | M-1 | 0.4.1 (→ 0.5.0에서 ParserOptions 패치) |
-| **M-3** | Indexing 스택 삭제 | `symbol-extractor-oxc.ts`, `symbol-index.repository.ts` (ports+3구현), `file-index.ts`, `file-indexer.ts`, `symbol-index.usecases.ts` (+specs) | **-1,049** | `searchSymbols`, `getFullSymbol`, `getStats`, `listIndexedFiles` | M-1 | 0.4.1 |
-| **M-4** | dependencies analyzer 단순화 | 부분 리라이트 | **-820** | `getImportGraph`, `getCyclePaths(maxCycles)`, `searchSymbols`, `searchRelations`, `getFanMetrics`, `getModuleInterface` | M-1 + **0.5.0** | **0.5.0** |
-| **M-5** | forwarding analyzer 단순화 | 부분 리라이트 | **-254** | `resolveSymbol`, `getImportGraph`, `getModuleInterface` | M-4 | 0.4.1 |
-| **M-6** | modification-impact 단순화 | 부분 리라이트 | **-152** | `getAffected`, `getTransitiveDependencies`, `getModuleInterface` | M-4 | 0.4.1 |
-| **M-7** | coupling/giant-file/abstraction-fitness | 부분 3파일 | **-70** | `getFanMetrics`, `getFileStats`, `getInternalRelations` | M-4 | 0.4.1 |
-| **M-8** | ast-grep 인프라 교체 | `tooling/ast-grep/find-pattern.ts`, `find-pattern.usecase.ts` (+spec) | **-148** | `findPattern` | M-1 | 0.4.1 |
-| **M-9** | scan.usecase.ts 오케스트레이션 정리 | 부분 리라이트 | **-30** | 전체 API | M-2~M-8 | 0.5.0 |
-| **M-10** | 신규 API 활용 기능 | 신규 기능 추가 | +features | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | M-9 | 0.5.0 |
+| **M-1** | gildash 설치 + factory | 신규 파일 | +~40 | `Gildash.open()`, `close()` | — | 0.5.0 ✅ **완료** |
+| **M-2** | Parse 인프라 교체 | `ts-program.ts`, `workers/parse-worker.ts` (+spec) | **-573** | `batchParse`, `parseSource`, `getParsedAst` | M-1 | 0.5.0 ✅ **완료** |
+| **M-3** | Indexing 스택 삭제 | `symbol-extractor-oxc.ts`, `symbol-index.repository.ts` (ports+3구현), `file-index.ts`, `file-indexer.ts`, `symbol-index.usecases.ts` (+specs) | **-1,049** | `searchSymbols`, `getFullSymbol`, `getStats`, `listIndexedFiles` | M-1 | 0.5.0 ✅ **완료** |
+| **M-4** | dependencies analyzer 단순화 | 부분 리라이트 | **-820** | `getImportGraph`, `getCyclePaths(maxCycles:100)`, `searchSymbols`, `searchRelations` | M-1 + 0.5.0 | 0.5.0 ✅ **완료** (maxCycles 적용) |
+| **M-5** | forwarding analyzer 단순화 | 계획 수정 | — | — | — | ⚠️ **계획 수정** (아래 참조) |
+| **M-6** | modification-impact 단순화 | BFS→getAffected | **-20** | `getAffected` | M-4 | 0.5.0 ✅ **완료** |
+| **M-7** | coupling/giant-file/abstraction-fitness | 계획 수정 | — | — | — | ⚠️ **계획 수정** (아래 참조) |
+| **M-8** | ast-grep 인프라 교체 | `@ast-grep/napi` 의존 제거 | **-148** | `findPattern` | M-1 | 0.5.0 ✅ **완료** |
+| **M-9** | scan.usecase.ts 오케스트레이션 정리 | 부분 리라이트 | **-30** | 전체 API | M-2~M-8 | 미착수 |
+| **M-10** | 신규 API 활용 기능 | 신규 기능 추가 | +features | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | M-9 | 미착수 |
 
 **총계**: ~3,096줄 삭제 + ~1,000 spec줄 = **~4,060줄 감축**
 
 #### 실행 순서 다이어그램
 
 ```
-0.4.1 (현재)                        0.5.0 릴리즈 후
-┌──────────────────────┐  ┌──────────────────────┐
-│ M-1 ✅ 완료 (338c449)  │  │ M-4 (dependencies)   │ ← getCyclePaths Johnson's
-│ M-2 (parse)           │  │   + dead export 전환  │
-│ M-3 (indexing)        │  │ M-2 패치 (ParserOpts)  │
-│ M-8 (ast-grep)        │  │ M-5/M-6/M-7 (병렬)   │
-└──────────────────────┘  │ M-9 → M-10            │
-                              └──────────────────────┘
+0.5.0 (현재) — M-1~M-8 완료
+┌──────────────────────────────────────────┐
+│ M-1 ✅ gildash 0.5.0 설치 + factory           │
+│ M-2 ✅ parse 인프라 교체                        │
+│ M-3 ✅ indexing 스택 삭제                      │
+│ M-4 ✅ dependencies maxCycles:100 적용       │
+│ M-5 ⚠️ 계획 수정 (resolveSymbol 의미론 불일치) │
+│ M-6 ✅ mod-impact BFS→getAffected 전환       │
+│ M-7 ⚠️ 계획 수정 (의미론 불일치 3건)         │
+│ M-8 ✅ @ast-grep/napi 제거 완료              │
+├──────────────────────────────────────────┤
+│ M-9  scan.usecase.ts 오케스트레이션 정리    │
+│ M-10 신규 API 활용 기능                       │
+└──────────────────────────────────────────┘
 ```
 
 ### 4.2 Phase 상세
@@ -591,7 +596,7 @@ const analyzeDependencies = async (ctx: AnalysisContext) => {
 #### M-1: gildash 설치 + `src/store/gildash.ts` factory ✅ 완료
 
 ```bash
-bun add @zipbul/gildash@^0.4.1 @zipbul/result@^0.0.3
+bun add @zipbul/gildash@0.5.0 @zipbul/result@^0.0.3
 ```
 
 - `src/store/gildash.ts`: `createGildash()` factory wrapper, 명시적 lifecycle
@@ -631,19 +636,19 @@ bun add @zipbul/gildash@^0.4.1 @zipbul/result@^0.0.3
 
 커밋: `refactor: remove indexing stack, delegate to gildash`
 
-#### M-4: dependencies analyzer 단순화 (**gildash 0.5.0 필수**)
+#### M-4: dependencies analyzer 단순화 ✅ 완료 (gildash 0.5.0 적용)
 
-현재 ~1,189줄 analyzer에서 ~820줄 감축:
+현재 ~1,189줄 analyzer에서 대부분 완료. 추가 적용: `getCyclePaths(undefined, { maxCycles: 100 })`
 
-| 대상 | 현재 | 변경 후 | 감축 |
-|------|------|---------|------|
-| adjacency 구축 (`collectImportSources` + `buildFileMap` + `resolveImport` + `buildAdjacency`) | ~90줄 | `getImportGraph()` 1줄 | -90 |
-| cycle 탐지 (`normalizeCycle` + `recordCyclePath` + `tarjanScc` + `johnsonCircuits` + `detectCycles`) | ~200줄 | `getCyclePaths({ maxCycles: 100 })` 1줄 | -200 |
-| dead export 탐지 | ~120줄 | `searchSymbols` + `searchRelations` 조합 + firebat entry point 정책 (~40줄) | -80 |
-| fanIn/fanOut | ~80줄 | `getFanMetrics()` 1줄 | -80 |
-| abstractness (`collectExportStats` + 관련 로직) | ~150줄 | `getModuleInterface()` 1줄 | -150 |
-| 기타 graph 유틸 (`buildEdgeCutHints`, degree 계산 등) | ~220줄 | gildash API 조합 | -220 |
-| firebat 고유 로직 (layers, allowed deps, 보고서 조립) | ~369줄 | 유지 | 0 |
+| 대상 | 현재 | 변경 후 | 감축 | 상태 |
+|------|------|---------|------|------|
+| adjacency 구축 | ~90줄 | `getImportGraph()` 1줄 | -90 | ✅ |
+| cycle 탐지 | ~200줄 | `getCyclePaths(undefined, { maxCycles: 100 })` | -200 | ✅ (maxCycles 적용) |
+| dead export 탐지 | ~120줄 | `searchSymbols` + `searchRelations` 조합 (~40줄) | -80 | ✅ |
+| fanIn/fanOut | ~80줄 | ~~`getFanMetrics()`~~ 수동 계산 유지 | 0 | ⚠️ API 의미론 불일치 (M-7 참조) |
+| abstractness | ~150줄 | ~~`getModuleInterface()`~~ 유지 | 0 | ⚠️ 별도 리서치 필요 |
+| 기타 graph 유틸 | ~220줄 | gildash API 조합 | -220 | ✅ |
+| firebat 고유 로직 | ~369줄 | 유지 | 0 | ✅ |
 
 **0.5.0 의존 사유:**
 - `getCyclePaths()`: 0.5.0에서 Tarjan SCC + Johnson's circuits로 교체 (elementary circuit 완전성 보장). 0.4.x는 DFS+globalVisited 기반으로 공유 노드 사이클 누락 가능.
@@ -658,32 +663,43 @@ bun add @zipbul/gildash@^0.4.1 @zipbul/result@^0.0.3
 
 커밋: `refactor: simplify dependencies analyzer with gildash APIs`
 
-#### M-5: forwarding analyzer 단순화
+#### M-5: forwarding analyzer — ⚠️ 계획 수정 (API 의미론 불일치)
 
-- re-export chain ~200줄 → `resolveSymbol()` + `searchRelations({ type: 're-exports' })`
-- barrel-policy도 `searchRelations` 활용
-- ~254줄 감축
+**원래 계획**: re-export chain ~200줄 → `resolveSymbol()` 대체
+**실제 분석 결과**: `resolveSymbol`은 re-export chain 추적용 API. forwarding analyzer는 thin-wrapper 감지(함수 본체가 다른 함수를 단순 호출하는 패턴)로, re-export와 목적이 다름.
+- forwarding analyzer는 이미 `searchRelations` + `searchSymbols`를 활용 중 (779줄 중 gildash 호출 다수)
+- `resolveSymbol`로 대체 가능한 코드 영역이 없음
+- **결론**: 추가 gildash API 전환 불필요. 현재 상태가 최적.
 
-커밋: `refactor: simplify forwarding analyzer with gildash resolveSymbol`
+#### M-6: modification-impact — ✅ getAffected 전환 완료
 
-#### M-6: modification-impact 단순화
-
-- 양방향 BFS ~152줄 → `getAffected(changedFiles)` + `getTransitiveDependencies()`
-- gildash `getAffected`는 FR 외 추가 API — BFS 수동 구현 완전 대체
+**원래 계획**: 양방향 BFS ~152줄 → `getAffected(changedFiles)` 대체
+**실제 구현**: BFS + edges Map (~35줄) → `getAffected` per-unique-file + cache (~15줄)
+- 동일 파일의 export들은 BFS에서 동일한 impactRadius를 가짐 → `getAffected` (파일 단위)가 의미론적으로 동등
+- `affectedCache = Map<fileIndex, string[]>`로 파일당 1회만 호출
+- `highRiskCallers`: getAffected 반환값(절대경로) → `normalizeFile` → `layerOf`로 계산
+- spec 5개 `it` 블록 유지, mock을 `searchRelations` → `getAffected`로 전환
+- **결과**: ~20줄 순 감축
 
 커밋: `refactor: simplify modification-impact with gildash getAffected`
 
-#### M-7: coupling/giant-file/abstraction-fitness
+#### M-7: coupling/giant-file/abstraction-fitness — ⚠️ 계획 수정 (API 의미론 불일치)
 
-- coupling: `getFanMetrics()` 활용 (~30줄 감축)
-- giant-file: `getFileStats()` 활용 (~20줄 감축)
-- abstraction-fitness: `getInternalRelations()` 활용 LCOM (~20줄 감축)
+**원래 계획**: 3개 analyzer에 gildash API 직접 호출 추가
+**실제 분석 결과**: 각 API의 의미론이 실제 사용 패턴과 불일치
 
-커밋: `refactor: simplify metric detectors with gildash APIs`
+| Analyzer | 계획 API | 불일치 사유 |
+|----------|---------|------------|
+| coupling | `getFanMetrics` | coupling은 dependencies 분석 결과(`DependencyAnalysis`)를 소비하는 하류 detector. gildash 직접 호출은 아키텍처 중복 |
+| giant-file | `getFileStats` | `getFileStats`는 인덱스 데이터 사용(stale 가능). 현재 코드는 `sourceText` 직읽기(live, 정확). 50줄 파일에 API 전환 불필요 |
+| abstraction-fitness | `getInternalRelations` | `getInternalRelations`은 파일 내부 관계(calls/heritage). 현재 코드는 cross-file import 패턴 분석. 또한 함수 시그니처에 gildash 추가 필요 → caller 6곳 수정 필요 → ~10줄 절감 대비 비용 과다 |
 
-#### M-8: ast-grep 인프라 교체
+**결론**: 3개 모두 현재 상태 유지가 최적. 계획 자체가 API 의미론에 대한 사전 분석 부족에서 기인.
+
+#### M-8: ast-grep 인프라 교체 ✅ 완료
 
 - `tooling/ast-grep/find-pattern.ts` + `find-pattern.usecase.ts` → `gildash.findPattern()`
+- `@ast-grep/napi` package.json에서 의존성 제거 완료
 - ~148줄 감축
 
 커밋: `refactor: replace ast-grep infra with gildash findPattern`
@@ -713,19 +729,16 @@ gildash 0.4.0의 추가 API를 활용한 새 기능:
 
 | M-Phase | 필요한 gildash API | 최소 버전 | 상태 |
 |---------|-------------------|-----------|------|
-| M-1 | `Gildash.open()`, `close()` | 0.4.1 | ✅ **완료** |
-| M-2 | `batchParse`, `parseSource`, `getParsedAst` | 0.4.1 (ParserOptions: 0.5.0) | ✅ 착수 가능 |
-| M-3 | `searchSymbols`, `getFullSymbol`, `extractSymbols`, `getStats`, `listIndexedFiles` | 0.4.1 | ✅ 착수 가능 |
-| M-4 | `getImportGraph`, `getCyclePaths(maxCycles)`, `searchSymbols`, `searchRelations`, `getFanMetrics`, `getModuleInterface` | **0.5.0** | ⏳ 대기 |
-| M-5 | `resolveSymbol`, `searchRelations` | 0.4.1 | M-4 후 |
-| M-6 | `getAffected`, `getTransitiveDependencies` | 0.4.1 | M-4 후 |
-| M-7 | `getFanMetrics`, `getFileStats`, `getInternalRelations` | 0.4.1 | M-4 후 |
-| M-8 | `findPattern` | 0.4.1 | ✅ 착수 가능 |
-| M-9 | 전체 | 0.5.0 | M-2~M-8 후 |
-| M-10 | `getAffected`, `getDependencies/Dependents`, `getHeritageChain`, `indexExternalPackages` | 0.5.0 | M-9 후 |
-
-**0.4.1로 즉시 착수 가능**: M-2, M-3, M-8
-**0.5.0 필수**: M-4 (getCyclePaths Johnson's + getDeadExports 삭제 대응)
+| M-1 | `Gildash.open()`, `close()` | 0.5.0 | ✅ **완료** |
+| M-2 | `batchParse`, `parseSource`, `getParsedAst` | 0.5.0 | ✅ **완료** |
+| M-3 | `searchSymbols`, `getFullSymbol`, `extractSymbols`, `getStats`, `listIndexedFiles` | 0.5.0 | ✅ **완료** |
+| M-4 | `getImportGraph`, `getCyclePaths(maxCycles:100)`, `searchSymbols`, `searchRelations` | 0.5.0 | ✅ **완료** |
+| M-5 | ~~`resolveSymbol`~~ | — | ⚠️ **계획 수정** (API 의미론 불일치, 현재 상태 최적) |
+| M-6 | `getAffected` | 0.5.0 | ✅ **완료** (BFS→getAffected 전환) |
+| M-7 | ~~`getFanMetrics`, `getFileStats`, `getInternalRelations`~~ | — | ⚠️ **계획 수정** (API 의미론 불일치, 현재 상태 최적) |
+| M-8 | `findPattern` (+ `@ast-grep/napi` 의존 제거) | 0.5.0 | ✅ **완료** |
+| M-9 | 전체 | 0.5.0 | 미착수 |
+| M-10 | `getAffected`, `getDependencies/Dependents`, `getSymbolsByFile`, `getHeritageChain`, `indexExternalPackages` | 0.5.0 | 미착수 (5/6 API 구현, `getSymbolsByFile` 미구현) |
 
 ### 4.4 마이그레이션 규칙
 
@@ -734,7 +747,8 @@ gildash 0.4.0의 추가 API를 활용한 새 기능:
 - **테스트 선행**: 각 파일 이동/변경 전 관련 테스트 확인, 이동 후 즉시 재실행.
 - **import 경로 일괄 갱신**: 파일 이동 시 `grep -r` 으로 모든 import 참조 갱신. 단, test/는 barrel 경유이므로 갱신 불필요.
 - **기능 변경 금지**: 리팩토링 중 기능 추가/변경 없음. 동작 동일성 보장. (M-10은 예외 — 신규 기능)
-- **순차 실행**: M-1(완료) → M-2/M-3/M-8 (0.4.1, 병렬 가능) → **0.5.0 대기** → M-4 → M-5/M-6/M-7 (병렬 가능) → M-9 → M-10
+- **순차 실행**: M-1~M-8 완료 → M-9 → M-10
+- **M-5/M-7 계획 수정**: gildash API 의미론 분석 결과, `resolveSymbol`/`getFanMetrics`/`getFileStats`/`getInternalRelations` 전환은 목적 불일치로 취소. 현재 상태가 최적.
 
 ---
 
@@ -785,15 +799,16 @@ gildash 0.4.0의 추가 API를 활용한 새 기능:
 
 | 리스크 | 상태 | 대응 |
 |---|---|---|
-| gildash Phase 일정 불확정 | ✅ **해소** | 0.4.0 단일 릴리즈로 전량 배포 완료. 0.4.1 patch 적용. |
+| gildash Phase 일정 불확정 | ✅ **해소** | 0.5.0 릴리즈 완료. firebat 설치 완료. |
 | oxc-parser 버전 충돌 | ✅ **해소** | M-1에서 `^0.114.0`으로 다운그레이드 완료. gildash peerDep `>=0.114.0` 호환. |
 | `@zipbul/result` 미보유 | ✅ **해소** | M-1에서 `^0.0.3` dependencies 추가 완료. |
 | IMP-A~D DB 스키마 변경 | ✅ **해소** | 0.4.0에서 완료. drizzle 자동 migration. |
-| gildash ParsedFile ↔ firebat ParsedFile 호환성 | 🟨 미확인 | 둘 다 oxc-parser 기반. M-2에서 타입 호환성 확인 필요. |
+| gildash ParsedFile ↔ firebat ParsedFile 호환성 | ✅ **해소** | M-2에서 `ParsedFile` as cast 사용. 구조적 호환 확인 완료. |
 | drizzle-orm 의존성 중복 | ⚠️ 경미 | gildash도 drizzle-orm 사용 (transitive). artifact/memory가 raw bun:sqlite로 전환되면 firebat 직접 의존 제거 가능. |
-| 대규모 import 경로 변경 | ⚠️ 관리 필요 | M-2~M-8에서 점진적 처리. 각 M-Phase마다 import 갱신 + 테스트. |
+| 대규모 import 경로 변경 | ⚠️ 관리 필요 | M-2~M-8에서 점진적 처리 완료. |
 | E2E 테스트 깨짐 | ⚠️ 리스크 낮음 | CLI output format 변경 없으므로 리스크 낮음. M-9 후 E2E 확인. |
-| Worker pool 제거 영향 | 🟨 미확인 | M-2에서 parse-worker 삭제 시 빌드 설정/번들 확인 필요. |
-| **`getDeadExports()` 0.5.0 삭제** | 🟡 **신규** | M-4에서 `searchSymbols` + `searchRelations` 조합으로 전환. firebat 자체 entry point 정책 + test-only-export 판별 결합. |
-| **M-4가 gildash 0.5.0 의존** | 🟡 **신규** | getCyclePaths Johnson's + getDeadExports 삭제 대응. M-2/M-3/M-8은 0.4.1로 선행 가능. |
-| **gildash 0.5.0 릴리즈 시점 미확정** | 🟡 **신규** | firebat이 Johnson's 레퍼런스 코드 공유 후 gildash 구현 대기. 그 동안 M-2/M-3/M-8 선행. |
+| Worker pool 제거 영향 | ✅ **해소** | M-2에서 parse-worker 삭제 완료. 빌드 설정 확인됨. |
+| `getDeadExports()` 0.5.0 삭제 | ✅ **해소** | M-4에서 `searchSymbols` + `searchRelations` 조합으로 전환 완료. |
+| M-5/M-7 API 의미론 불일치 | 🟡 **발견** | `resolveSymbol`(M-5), `getFanMetrics`/`getFileStats`/`getInternalRelations`(M-7)은 실제 사용 패턴과 목적이 다름. 계획 수정 완료. |
+| `@ast-grep/napi` dead dependency | ✅ **해소** | M-8에서 package.json에서 제거. gildash `findPattern`으로 대체 완료. |
+| trace-symbol spec gildash mock 누락 | 🟡 **기존 결함** | `trace-symbol.usecase.spec.ts`에서 `store/gildash.ts` mock 없이 실제 gildash.open 호출 → 실패. M-3 dead mock 제거와 무관 (변경 전에도 실패). |

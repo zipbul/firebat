@@ -324,7 +324,7 @@ const analyzeDependencies = async (
   const fanOut = listFanStats(rootAbs, outDegree, 10);
 
   // 3. Cycles via gildash (Tarjan SCC + Johnson's circuits)
-  const cycleResult = await gildash.getCyclePaths();
+  const cycleResult = await gildash.getCyclePaths(undefined, { maxCycles: 100 });
   let cyclePaths: ReadonlyArray<ReadonlyArray<string>> = [];
 
   if (!isErr(cycleResult)) {

@@ -3,10 +3,8 @@ import * as nodePath from 'node:path';
 
 const __origFirebatDb = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts')) };
 const __origArtifactStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/artifact.ts')) };
-const __origFileIndexStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/file-index.ts')) };
 const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts')) };
 const __origToolVersion = { ...require(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts')) };
-const __origFileIndexer = { ...require(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts')) };
 const __origTsgoRunner = { ...require(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts')) };
 
 // Mock all heavy infrastructure
@@ -20,17 +18,11 @@ mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => 
     set: () => {},
   }),
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../store/file-index.ts'), () => ({
-  createFileIndexStore: () => ({ getFile: () => null, upsertFile: () => {}, deleteFile: () => {} }),
-}));
 mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
   resolveRuntimeContextFromCwd: async () => ({ rootAbs: '/project' }),
 }));
 mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => ({
   computeToolVersion: () => '1.0.0-test',
-}));
-mock.module(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => ({
-  indexTargets: async () => {},
 }));
 mock.module(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts'), () => ({
   runTsgoTraceSymbol: async () => ({
@@ -82,10 +74,8 @@ afterAll(() => {
   mock.restore();
   mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
   mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => __origArtifactStore);
-  mock.module(nodePath.resolve(import.meta.dir, '../../store/file-index.ts'), () => __origFileIndexStore);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => __origToolVersion);
-  mock.module(nodePath.resolve(import.meta.dir, '../indexing/file-indexer.ts'), () => __origFileIndexer);
   mock.module(nodePath.resolve(import.meta.dir, '../../tooling/tsgo/tsgo-runner.ts'), () => __origTsgoRunner);
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { err } from '@zipbul/result';
-import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
+import type { Gildash, SymbolSearchResult } from '@zipbul/gildash';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeModificationImpact, createEmptyModificationImpact } from './analyzer';
@@ -26,24 +26,13 @@ const mkSymbol = (
   detail: {},
 });
 
-const mkImport = (
-  srcFilePath: string,
-  dstFilePath: string,
-): CodeRelation => ({
-  type: 'imports',
-  srcFilePath,
-  srcSymbolName: null,
-  dstFilePath,
-  dstSymbolName: null,
-} as CodeRelation);
-
 const createMockGildash = (overrides: {
-  searchRelations?: (q: unknown) => CodeRelation[] | ReturnType<typeof err>;
   searchSymbols?: (q: unknown) => SymbolSearchResult[] | ReturnType<typeof err>;
+  getAffected?: (changedFiles: string[]) => Promise<string[] | ReturnType<typeof err>>;
 } = {}): Gildash => {
   return {
-    searchRelations: overrides.searchRelations ?? (() => []),
     searchSymbols: overrides.searchSymbols ?? (() => []),
+    getAffected: overrides.getAffected ?? (async () => []),
   } as unknown as Gildash;
 };
 
@@ -102,10 +91,10 @@ describe('modification-impact/analyzer', () => {
         mkSymbol(2, 'src/b.ts', 'b'),
         mkSymbol(3, 'src/c.ts', 'c'),
       ],
-      searchRelations: () => [
-        mkImport('src/b.ts', 'src/a.ts'),
-        mkImport('src/c.ts', 'src/a.ts'),
-      ],
+      getAffected: async (changedFiles: string[]) => {
+        if (changedFiles[0]?.includes('src/a.ts')) return ['/p/src/b.ts', '/p/src/c.ts'];
+        return [];
+      },
     });
     // Act
     const result = await analyzeModificationImpact(gildash, files as any, '/p');
@@ -128,9 +117,10 @@ describe('modification-impact/analyzer', () => {
         mkSymbol(1, 'src/a.ts', 'f'),
         mkSymbol(2, 'src/b.ts', 'b'),
       ],
-      searchRelations: () => [
-        mkImport('src/b.ts', 'src/a.ts'),
-      ],
+      getAffected: async (changedFiles: string[]) => {
+        if (changedFiles[0]?.includes('src/a.ts')) return ['/p/src/b.ts'];
+        return [];
+      },
     });
     // Act
     const result = await analyzeModificationImpact(gildash, files as any, '/p');
@@ -152,10 +142,12 @@ describe('modification-impact/analyzer', () => {
         mkSymbol(2, 'src/adapters/cli/entry.ts', 'run'),
         mkSymbol(3, 'src/infrastructure/db.ts', 'db'),
       ],
-      searchRelations: () => [
-        mkImport('src/adapters/cli/entry.ts', 'src/application/service.ts'),
-        mkImport('src/infrastructure/db.ts', 'src/application/service.ts'),
-      ],
+      getAffected: async (changedFiles: string[]) => {
+        if (changedFiles[0]?.includes('src/application/service.ts')) {
+          return ['/p/src/adapters/cli/entry.ts', '/p/src/infrastructure/db.ts'];
+        }
+        return [];
+      },
     });
     // Act
     const result = await analyzeModificationImpact(gildash, files as any, '/p');
