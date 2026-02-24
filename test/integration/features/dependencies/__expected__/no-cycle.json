@@ -1,7 +1,5 @@
 {
-  "adjacency": {
-    "no-cycle.ts": []
-  },
+  "adjacency": {},
   "cuts": [],
   "cycles": [],
   "deadExports": [

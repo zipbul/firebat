@@ -1,22 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { Gildash, GildashOptions } from '@zipbul/gildash';
 import type { GildashError } from '@zipbul/gildash';
 import { err } from '@zipbul/result';
+
+import { __testing__, createGildash } from './gildash';
 
 const mockOpen = mock<(options: GildashOptions) => Promise<Gildash | ReturnType<typeof err>>>(() =>
   Promise.resolve({ projectRoot: '/test' } as unknown as Gildash),
 );
 
-mock.module('@zipbul/gildash', () => ({
-  Gildash: { open: mockOpen },
-}));
-
-const { createGildash } = await import('./gildash');
-
 describe('createGildash', () => {
   beforeEach(() => {
     mockOpen.mockClear();
     mockOpen.mockResolvedValue({ projectRoot: '/test' } as unknown as Gildash);
+    spyOn(__testing__, 'open').mockImplementation(mockOpen);
   });
 
   afterEach(() => {

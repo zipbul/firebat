@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
-import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
+import type { Gildash } from '@zipbul/gildash';
+import { isErr } from '@zipbul/result';
+
 import type {
   DependencyAnalysis,
   DependencyDeadExportFinding,
@@ -10,8 +12,11 @@ import type {
   DependencyLayerViolation,
 } from '../../types';
 
-import { getNodeName, isNodeRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { sortDependencyFanStats } from '../../engine/sort-utils';
+
+/* ------------------------------------------------------------------ */
+/*  Utilities                                                          */
+/* ------------------------------------------------------------------ */
 
 const createEmptyDependencies = (): DependencyAnalysis => ({
   cycles: [],
@@ -28,6 +33,14 @@ const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
 
+/** Ensure a path from gildash (may be project-relative) is absolute. */
+const resolveAbs = (rootAbs: string, p: string): string =>
+  normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
+
+/* ------------------------------------------------------------------ */
+/*  Layer matching                                                     */
+/* ------------------------------------------------------------------ */
+
 interface DependencyLayerRule {
   readonly name: string;
   readonly glob: string;
@@ -37,14 +50,12 @@ interface AnalyzeDependenciesInput {
   readonly rootAbs?: string;
   readonly layers?: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly readFileFn?: (path: string) => string;
 }
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const globToRegExp = (pattern: string): RegExp => {
-  // Supports: **, *, ?, and path separators '/'.
-  // - ** matches any characters including '/'
-  // - * matches any characters except '/'
   const normalized = normalizePath(pattern);
   let out = '^';
   let i = 0;
@@ -118,72 +129,9 @@ const matchLayerName = (
   return null;
 };
 
-const isNodeValueArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => Array.isArray(value);
-
-const isStringLiteral = (value: NodeValue): value is NodeRecord => {
-  if (!isOxcNode(value)) {
-    return false;
-  }
-
-  if (!isNodeRecord(value)) {
-    return false;
-  }
-
-  if (value.type !== 'Literal') {
-    return false;
-  }
-
-  const literalValue = value.value;
-
-  return typeof literalValue === 'string';
-};
-
-const collectImportSources = (node: NodeValue, sources: string[]): void => {
-  if (isNodeValueArray(node)) {
-    for (const entry of node) {
-      collectImportSources(entry, sources);
-    }
-
-    return;
-  }
-
-  if (!isOxcNode(node)) {
-    return;
-  }
-
-  if (!isNodeRecord(node)) {
-    return;
-  }
-
-  if (node.type === 'ImportDeclaration' || node.type === 'ExportNamedDeclaration' || node.type === 'ExportAllDeclaration') {
-    const source = node.source;
-
-    if (isStringLiteral(source) && typeof source.value === 'string') {
-      sources.push(source.value);
-    }
-  }
-
-  // P3-7 dependencies: dynamic import() edges
-  if (node.type === 'ImportExpression') {
-    const source = (node as unknown as { source?: unknown }).source as NodeValue | undefined;
-
-    if (source && isStringLiteral(source) && typeof source.value === 'string') {
-      sources.push(source.value);
-    }
-  }
-
-  for (const value of Object.values(node)) {
-    if (value === node || value === null || value === undefined) {
-      continue;
-    }
-
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-      continue;
-    }
-
-    collectImportSources(value as NodeValue, sources);
-  }
-};
+/* ------------------------------------------------------------------ */
+/*  Path helpers                                                       */
+/* ------------------------------------------------------------------ */
 
 const isTestLikePath = (value: string): boolean => {
   const normalized = normalizePath(value);
@@ -192,14 +140,13 @@ const isTestLikePath = (value: string): boolean => {
     normalized.includes('/test/') ||
     normalized.includes('/tests/') ||
     normalized.endsWith('.test.ts') ||
-    normalized.endsWith('.spec.ts') ||
     normalized.endsWith('.spec.ts')
   );
 };
 
-const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
+const readPackageEntrypoints = (rootAbs: string, readFn: (p: string) => string): ReadonlyArray<string> => {
   try {
-    const raw = readFileSync(path.join(rootAbs, 'package.json'), 'utf8');
+    const raw = readFn(path.join(rootAbs, 'package.json'));
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const out: string[] = [];
 
@@ -227,7 +174,6 @@ const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
       }
     };
 
-    // Standard entry point fields
     const scalarFields = ['main', 'module', 'browser', 'types', 'typings'] as const;
 
     for (const field of scalarFields) {
@@ -236,10 +182,7 @@ const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
       }
     }
 
-    // bin can be a string or an object of strings
     collectStrings(parsed.bin);
-
-    // exports can be a complex conditional exports map
     collectStrings(parsed.exports);
 
     return out;
@@ -248,7 +191,7 @@ const readPackageEntrypoints = (rootAbs: string): ReadonlyArray<string> => {
   }
 };
 
-const resolveEntrypointToFile = (rootAbs: string, spec: string, fileMap: Map<string, ParsedFile>): string | null => {
+const resolveEntrypointToFile = (rootAbs: string, spec: string, graphKeys: ReadonlySet<string>): string | null => {
   if (typeof spec !== 'string' || spec.trim().length === 0) {
     return null;
   }
@@ -261,7 +204,7 @@ const resolveEntrypointToFile = (rootAbs: string, spec: string, fileMap: Map<str
   for (const candidate of candidates) {
     const normalized = normalizePath(candidate);
 
-    if (fileMap.has(normalized)) {
+    if (graphKeys.has(normalized)) {
       return normalized;
     }
   }
@@ -269,635 +212,9 @@ const resolveEntrypointToFile = (rootAbs: string, spec: string, fileMap: Map<str
   return null;
 };
 
-const collectDeclaredExportNames = (file: ParsedFile): ReadonlyArray<string> => {
-  const program = file.program as unknown;
-
-  if (file.errors.length > 0) {
-    return [];
-  }
-
-  if (!isProgramBody(program)) {
-    return [];
-  }
-
-  const out = new Set<string>();
-
-  const recordName = (name: unknown): void => {
-    if (typeof name === 'string' && name.trim().length > 0) {
-      out.add(name);
-    }
-  };
-
-  const recordDeclarationName = (decl: NodeValue): void => {
-    if (!isOxcNode(decl) || !isNodeRecord(decl)) {
-      return;
-    }
-
-    if (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration' || decl.type === 'TSInterfaceDeclaration') {
-      recordName(getNodeName((decl as unknown as { id?: NodeValue }).id));
-
-      return;
-    }
-
-    if (decl.type === 'TSTypeAliasDeclaration') {
-      recordName(getNodeName((decl as unknown as { id?: NodeValue }).id));
-
-      return;
-    }
-
-    if (decl.type === 'VariableDeclaration') {
-      const declarations = (decl as unknown as { declarations?: unknown }).declarations;
-
-      if (!Array.isArray(declarations)) {
-        return;
-      }
-
-      for (const d of declarations) {
-        if (!isOxcNode(d) || !isNodeRecord(d) || d.type !== 'VariableDeclarator') {
-          continue;
-        }
-
-        const id = (d as unknown as { id?: unknown }).id as NodeValue | undefined;
-
-        if (isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier') {
-          recordName(id.name);
-        }
-      }
-    }
-  };
-
-  for (const stmt of program.body) {
-    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
-      continue;
-    }
-
-    if (stmt.type === 'ExportDefaultDeclaration') {
-      out.add('default');
-
-      continue;
-    }
-
-    if (stmt.type !== 'ExportNamedDeclaration') {
-      continue;
-    }
-
-    const declaration = (stmt as unknown as { declaration?: unknown }).declaration as NodeValue | undefined;
-    const specifiers = (stmt as unknown as { specifiers?: unknown }).specifiers;
-
-    if (declaration) {
-      recordDeclarationName(declaration);
-
-      continue;
-    }
-
-    if (!Array.isArray(specifiers)) {
-      continue;
-    }
-
-    for (const spec of specifiers) {
-      if (!isOxcNode(spec) || !isNodeRecord(spec)) {
-        continue;
-      }
-
-      const exported = (spec as unknown as { exported?: unknown }).exported as NodeValue | undefined;
-      const local = (spec as unknown as { local?: unknown }).local as NodeValue | undefined;
-      const exportedName = getNodeName((exported ?? local) as never);
-
-      recordName(exportedName);
-    }
-  }
-
-  return Array.from(out).sort();
-};
-
-const collectImportConsumers = (
-  file: ParsedFile,
-  fileMap: Map<string, ParsedFile>,
-): ReadonlyArray<{
-  readonly targetFilePath: string;
-  readonly usesAll: boolean;
-  readonly names: ReadonlyArray<string>;
-}> => {
-  const program = file.program as unknown;
-
-  if (file.errors.length > 0) {
-    return [];
-  }
-
-  if (!isProgramBody(program)) {
-    return [];
-  }
-
-  const consumers: Array<{ targetFilePath: string; usesAll: boolean; names: string[] }> = [];
-  const fromFilePath = normalizePath(file.filePath);
-
-  const addUsage = (specifier: string, usesAll: boolean, names: string[]): void => {
-    const resolved = resolveImport(fromFilePath, specifier, fileMap);
-
-    if (!resolved) {
-      return;
-    }
-
-    consumers.push({ targetFilePath: resolved, usesAll, names });
-  };
-
-  for (const stmt of program.body) {
-    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
-      continue;
-    }
-
-    if (stmt.type === 'ImportDeclaration') {
-      const source = stmt.source;
-
-      if (!isStringLiteral(source)) {
-        continue;
-      }
-
-      const specifiers = Array.isArray(stmt.specifiers) ? stmt.specifiers : [];
-      const names: string[] = [];
-      let usesAll = false;
-
-      for (const spec of specifiers) {
-        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
-          continue;
-        }
-
-        if (spec.type === 'ImportNamespaceSpecifier') {
-          usesAll = true;
-        }
-
-        if (spec.type === 'ImportDefaultSpecifier') {
-          names.push('default');
-        }
-
-        if (spec.type === 'ImportSpecifier') {
-          const imported = (spec as unknown as { imported?: unknown }).imported as NodeValue | undefined;
-          const importedName = getNodeName(imported as never);
-
-          if (typeof importedName === 'string' && importedName.trim().length > 0) {
-            names.push(importedName);
-          }
-        }
-      }
-
-      addUsage(source.value, usesAll, names);
-
-      continue;
-    }
-
-    if (stmt.type === 'ExportNamedDeclaration' || stmt.type === 'ExportAllDeclaration') {
-      const source = (stmt as unknown as { source?: unknown }).source;
-
-      if (!isStringLiteral(source as never)) {
-        continue;
-      }
-
-      if (stmt.type === 'ExportAllDeclaration') {
-        addUsage((source as { value: string }).value, true, []);
-
-        continue;
-      }
-
-      const specifiers = (stmt as unknown as { specifiers?: unknown }).specifiers;
-
-      if (!Array.isArray(specifiers)) {
-        continue;
-      }
-
-      const names: string[] = [];
-
-      for (const spec of specifiers) {
-        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
-          continue;
-        }
-
-        const local = (spec as unknown as { local?: unknown }).local as NodeValue | undefined;
-        const importedName = getNodeName(local as never);
-
-        if (typeof importedName === 'string' && importedName.trim().length > 0) {
-          names.push(importedName);
-        }
-      }
-
-      addUsage((source as { value: string }).value, false, names);
-    }
-  }
-
-  return consumers;
-};
-
-const buildFileMap = (files: ReadonlyArray<ParsedFile>): Map<string, ParsedFile> => {
-  const map = new Map<string, ParsedFile>();
-
-  for (const file of files) {
-    map.set(normalizePath(file.filePath), file);
-  }
-
-  return map;
-};
-
-const resolveImport = (fromPath: string, specifier: string, fileMap: Map<string, ParsedFile>): string | null => {
-  if (!specifier.startsWith('.')) {
-    return null;
-  }
-
-  const base = path.resolve(path.dirname(fromPath), specifier);
-  const candidates = [base, `${base}.ts`, path.join(base, 'index.ts')];
-
-  for (const candidate of candidates) {
-    const normalized = normalizePath(candidate);
-
-    if (fileMap.has(normalized)) {
-      return normalized;
-    }
-  }
-
-  return null;
-};
-
-const buildAdjacency = (files: ReadonlyArray<ParsedFile>): Map<string, ReadonlyArray<string>> => {
-  const fileMap = buildFileMap(files);
-  const adjacency = new Map<string, ReadonlyArray<string>>();
-
-  for (const file of files) {
-    const normalized = normalizePath(file.filePath);
-    const sources: string[] = [];
-
-    collectImportSources(file.program as NodeValue, sources);
-
-    const targets = new Set<string>();
-
-    for (const source of sources) {
-      const resolved = resolveImport(normalized, source, fileMap);
-
-      if (resolved !== null && resolved.length > 0) {
-        targets.add(resolved);
-      }
-    }
-
-    adjacency.set(normalized, Array.from(targets).sort());
-  }
-
-  return adjacency;
-};
-
-const isProgramBody = (value: unknown): value is { readonly body: ReadonlyArray<NodeValue> } => {
-  return !!value && typeof value === 'object' && Array.isArray((value as { body?: unknown }).body);
-};
-
-const collectExportStats = (
-  file: ParsedFile,
-): {
-  readonly total: number;
-  readonly abstract: number;
-} => {
-  if (file.errors.length > 0) {
-    return { total: 0, abstract: 0 };
-  }
-
-  const program = file.program as unknown;
-
-  if (!isProgramBody(program)) {
-    return { total: 0, abstract: 0 };
-  }
-
-  const declaredInterfaces = new Set<string>();
-  const declaredAbstractClasses = new Set<string>();
-
-  for (const stmt of program.body) {
-    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
-      continue;
-    }
-
-    if (stmt.type === 'TSInterfaceDeclaration') {
-      const name = getNodeName((stmt as unknown as { id?: NodeValue }).id);
-
-      if (typeof name === 'string' && name.trim().length > 0) {
-        declaredInterfaces.add(name);
-      }
-
-      continue;
-    }
-
-    if (stmt.type === 'ClassDeclaration') {
-      const abstractFlag = !!(stmt as unknown as { abstract?: unknown }).abstract;
-
-      if (!abstractFlag) {
-        continue;
-      }
-
-      const name = getNodeName((stmt as unknown as { id?: NodeValue }).id);
-
-      if (typeof name === 'string' && name.trim().length > 0) {
-        declaredAbstractClasses.add(name);
-      }
-    }
-  }
-
-  let total = 0;
-  let abstract = 0;
-
-  const record = (kind: 'interface' | 'abstract-class' | 'other'): void => {
-    total += 1;
-
-    if (kind === 'interface' || kind === 'abstract-class') {
-      abstract += 1;
-    }
-  };
-
-  const recordDeclaration = (decl: NodeValue): void => {
-    if (!isOxcNode(decl) || !isNodeRecord(decl)) {
-      return;
-    }
-
-    if (decl.type === 'TSInterfaceDeclaration') {
-      record('interface');
-
-      return;
-    }
-
-    if (decl.type === 'ClassDeclaration') {
-      const abstractFlag = !!(decl as unknown as { abstract?: unknown }).abstract;
-
-      record(abstractFlag ? 'abstract-class' : 'other');
-
-      return;
-    }
-
-    // Types, consts, functions, enums, namespaces, etc.
-    record('other');
-  };
-
-  for (const stmt of program.body) {
-    if (!isOxcNode(stmt) || !isNodeRecord(stmt)) {
-      continue;
-    }
-
-    if (stmt.type === 'ExportNamedDeclaration') {
-      const source = (stmt as unknown as { source?: unknown }).source;
-
-      // Ignore re-exports (cannot attribute abstractness without resolution).
-      if (source != null) {
-        continue;
-      }
-
-      const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
-
-      if (declaration != null) {
-        recordDeclaration(declaration as NodeValue);
-
-        continue;
-      }
-
-      const specifiers = (stmt as unknown as { specifiers?: unknown }).specifiers;
-
-      if (!Array.isArray(specifiers)) {
-        continue;
-      }
-
-      for (const spec of specifiers) {
-        if (!isOxcNode(spec) || !isNodeRecord(spec)) {
-          continue;
-        }
-
-        const local = (spec as unknown as { local?: unknown }).local;
-        const localName = getNodeName(local as never);
-
-        if (typeof localName !== 'string' || localName.trim().length === 0) {
-          record('other');
-
-          continue;
-        }
-
-        if (declaredInterfaces.has(localName)) {
-          record('interface');
-        } else if (declaredAbstractClasses.has(localName)) {
-          record('abstract-class');
-        } else {
-          record('other');
-        }
-      }
-
-      continue;
-    }
-
-    if (stmt.type === 'ExportDefaultDeclaration') {
-      const declaration = (stmt as unknown as { declaration?: unknown }).declaration;
-
-      recordDeclaration(declaration as NodeValue);
-    }
-  }
-
-  return { total, abstract };
-};
-
-const compareStrings = (left: string, right: string): number => left.localeCompare(right);
-
-const normalizeCycle = (cycle: ReadonlyArray<string>): string[] => {
-  const unique = cycle.length > 1 && cycle[0] === cycle[cycle.length - 1] ? cycle.slice(0, -1) : [...cycle];
-
-  if (unique.length === 0) {
-    return [];
-  }
-
-  let best = unique;
-
-  for (let index = 1; index < unique.length; index += 1) {
-    const rotated = unique.slice(index).concat(unique.slice(0, index));
-
-    if (rotated.join('::') < best.join('::')) {
-      best = rotated;
-    }
-  }
-
-  return best.concat(best[0] ?? '');
-};
-
-const recordCyclePath = (cycleKeys: Set<string>, cycles: string[][], path: ReadonlyArray<string>): void => {
-  const normalized = normalizeCycle(path);
-
-  if (normalized.length === 0) {
-    return;
-  }
-
-  const key = normalized.join('->');
-
-  if (cycleKeys.has(key)) {
-    return;
-  }
-
-  cycleKeys.add(key);
-  cycles.push(normalized);
-};
-
-interface SccResult {
-  readonly components: ReadonlyArray<ReadonlyArray<string>>;
-}
-
-const tarjanScc = (graph: Map<string, ReadonlyArray<string>>): SccResult => {
-  let index = 0;
-  const stack: string[] = [];
-  const onStack = new Set<string>();
-  const indices = new Map<string, number>();
-  const lowlinks = new Map<string, number>();
-  const components: string[][] = [];
-
-  const strongConnect = (node: string): void => {
-    indices.set(node, index);
-    lowlinks.set(node, index);
-
-    index += 1;
-
-    stack.push(node);
-    onStack.add(node);
-
-    for (const next of graph.get(node) ?? []) {
-      if (!indices.has(next)) {
-        strongConnect(next);
-        lowlinks.set(node, Math.min(lowlinks.get(node) ?? 0, lowlinks.get(next) ?? 0));
-      } else if (onStack.has(next)) {
-        lowlinks.set(node, Math.min(lowlinks.get(node) ?? 0, indices.get(next) ?? 0));
-      }
-    }
-
-    if (lowlinks.get(node) === indices.get(node)) {
-      const component: string[] = [];
-      let current = '';
-
-      do {
-        current = stack.pop() ?? '';
-
-        onStack.delete(current);
-        component.push(current);
-      } while (current !== node && stack.length > 0);
-
-      components.push(component);
-    }
-  };
-
-  for (const node of graph.keys()) {
-    if (!indices.has(node)) {
-      strongConnect(node);
-    }
-  }
-
-  return { components };
-};
-
-const johnsonCircuits = (
-  scc: ReadonlyArray<string>,
-  adjacency: Map<string, ReadonlyArray<string>>,
-  maxCircuits: number,
-): string[][] => {
-  const cycles: string[][] = [];
-  const cycleKeys = new Set<string>();
-  const nodes = [...scc].sort(compareStrings);
-
-  const unblock = (node: string, blocked: Set<string>, blockMap: Map<string, Set<string>>): void => {
-    blocked.delete(node);
-
-    const blockedBy = blockMap.get(node);
-
-    if (!blockedBy) {
-      return;
-    }
-
-    for (const entry of blockedBy) {
-      if (blocked.has(entry)) {
-        unblock(entry, blocked, blockMap);
-      }
-    }
-
-    blockedBy.clear();
-  };
-
-  for (let index = 0; index < nodes.length && cycles.length < maxCircuits; index += 1) {
-    const start = nodes[index] ?? '';
-    const allowed = new Set(nodes.slice(index));
-    const blocked = new Set<string>();
-    const blockMap = new Map<string, Set<string>>();
-    const stack: string[] = [];
-
-    const neighbors = (value: string): ReadonlyArray<string> => (adjacency.get(value) ?? []).filter(entry => allowed.has(entry));
-
-    const circuit = (node: string): boolean => {
-      if (cycles.length >= maxCircuits) {
-        return true;
-      }
-
-      let found = false;
-
-      stack.push(node);
-      blocked.add(node);
-
-      for (const next of neighbors(node)) {
-        if (cycles.length >= maxCircuits) {
-          break;
-        }
-
-        if (next === start) {
-          recordCyclePath(cycleKeys, cycles, stack.concat(start));
-
-          found = true;
-        } else if (!blocked.has(next)) {
-          if (circuit(next)) {
-            found = true;
-          }
-        }
-      }
-
-      if (found) {
-        unblock(node, blocked, blockMap);
-      } else {
-        for (const next of neighbors(node)) {
-          const blockedBy = blockMap.get(next) ?? new Set<string>();
-
-          blockedBy.add(node);
-          blockMap.set(next, blockedBy);
-        }
-      }
-
-      stack.pop();
-
-      return found;
-    };
-
-    circuit(start);
-  }
-
-  return cycles;
-};
-
-const detectCycles = (adjacency: Map<string, ReadonlyArray<string>>): ReadonlyArray<ReadonlyArray<string>> => {
-  const { components } = tarjanScc(adjacency);
-  const cycles: string[][] = [];
-  const cycleKeys = new Set<string>();
-
-  for (const component of components) {
-    if (component.length === 0) {
-      continue;
-    }
-
-    if (component.length === 1) {
-      const node = component[0] ?? '';
-      const next = adjacency.get(node) ?? [];
-
-      if (next.includes(node)) {
-        recordCyclePath(cycleKeys, cycles, [node, node]);
-      }
-
-      continue;
-    }
-
-    const circuits = johnsonCircuits(component, adjacency, 100);
-
-    for (const circuit of circuits) {
-      recordCyclePath(cycleKeys, cycles, circuit);
-    }
-  }
-
-  return cycles;
-};
+/* ------------------------------------------------------------------ */
+/*  Fan stats & edge cut hints                                         */
+/* ------------------------------------------------------------------ */
 
 const listFanStats = (rootAbs: string, counts: Map<string, number>, limit: number): ReadonlyArray<DependencyFanStat> => {
   const items = Array.from(counts.entries())
@@ -952,26 +269,43 @@ const buildEdgeCutHints = (
   return hints;
 };
 
-const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDependenciesInput): DependencyAnalysis => {
-  const hasInputs = files.length > 0;
+/* ------------------------------------------------------------------ */
+/*  Main analysis function                                             */
+/* ------------------------------------------------------------------ */
+
+const analyzeDependencies = async (
+  gildash: Gildash,
+  input?: AnalyzeDependenciesInput,
+): Promise<DependencyAnalysis> => {
   const empty = createEmptyDependencies();
   const rootAbs = input?.rootAbs ?? process.cwd();
   const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
   const allowedDependencies = input?.allowedDependencies ?? {};
+  const readFn = input?.readFileFn ?? ((p: string) => readFileSync(p, 'utf8'));
 
-  if (!hasInputs) {
+  // 1. Import graph
+  const graphResult = await gildash.getImportGraph();
+
+  if (isErr(graphResult)) {
     return empty;
   }
 
-  const adjacency = buildAdjacency(files);
-  const fileMap = buildFileMap(files);
+  const graph: Map<string, string[]> = graphResult;
+
+  // Normalise gildash paths (may be project-relative) to absolute
+  const absGraph = new Map<string, string[]>();
+
+  for (const [from, targets] of graph) {
+    absGraph.set(resolveAbs(rootAbs, from), targets.map(t => resolveAbs(rootAbs, t)));
+  }
+
+  // 2. Adjacency & fan metrics
   const adjacencyOut: Record<string, ReadonlyArray<string>> = {};
-  const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
   const inDegree = new Map<string, number>();
   const outDegree = new Map<string, number>();
 
-  for (const [from, targets] of adjacency.entries()) {
-    adjacencyOut[toRelativePath(rootAbs, from)] = targets.map(target => toRelativePath(rootAbs, target));
+  for (const [from, targets] of absGraph.entries()) {
+    adjacencyOut[toRelativePath(rootAbs, from)] = targets.map(t => toRelativePath(rootAbs, t));
 
     outDegree.set(from, targets.length);
 
@@ -986,16 +320,25 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
     }
   }
 
-  const cyclePaths = detectCycles(adjacency);
-  const cycles = cyclePaths.map(path => ({ path: path.map(entry => toRelativePath(rootAbs, entry)) }));
   const fanIn = listFanStats(rootAbs, inDegree, 10);
   const fanOut = listFanStats(rootAbs, outDegree, 10);
+
+  // 3. Cycles via gildash (Tarjan SCC + Johnson's circuits)
+  const cycleResult = await gildash.getCyclePaths();
+  let cyclePaths: ReadonlyArray<ReadonlyArray<string>> = [];
+
+  if (!isErr(cycleResult)) {
+    cyclePaths = (cycleResult as string[][]).map(p => p.map(e => resolveAbs(rootAbs, e)));
+  }
+
+  const cycles = cyclePaths.map(p => ({ path: p.map(entry => toRelativePath(rootAbs, entry)) }));
   const cuts = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
+
+  // 4. Layer violations
   const layerViolations: DependencyLayerViolation[] = [];
-  const deadExports: DependencyDeadExportFinding[] = [];
 
   if (layerMatchers.length > 0) {
-    for (const [from, targets] of adjacency.entries()) {
+    for (const [from, targets] of absGraph.entries()) {
       const fromLayer = matchLayerName(rootAbs, from, layerMatchers);
 
       if (!fromLayer) {
@@ -1007,15 +350,7 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
       for (const target of targets) {
         const toLayer = matchLayerName(rootAbs, target, layerMatchers);
 
-        if (!toLayer) {
-          continue;
-        }
-
-        if (fromLayer === toLayer) {
-          continue;
-        }
-
-        if (allowed.includes(toLayer)) {
+        if (!toLayer || fromLayer === toLayer || allowed.includes(toLayer)) {
           continue;
         }
 
@@ -1031,144 +366,154 @@ const analyzeDependencies = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeDe
     }
   }
 
-  for (const file of files) {
-    const key = toRelativePath(rootAbs, normalizePath(file.filePath));
+  // 5. Export stats via searchSymbols
+  const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
+  const allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
 
-    exportStats[key] = collectExportStats(file);
+  const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: Record<string, unknown> }>>();
+
+  if (!isErr(allExported)) {
+    for (const sym of allExported) {
+      const absFilePath = resolveAbs(rootAbs, sym.filePath);
+      const existing = exportsByFile.get(absFilePath) ?? [];
+
+      existing.push({ name: sym.name, kind: sym.kind, detail: sym.detail });
+      exportsByFile.set(absFilePath, existing);
+    }
+
+    for (const [filePath, symbols] of exportsByFile) {
+      const total = symbols.length;
+      const abstract = symbols.filter(
+        s =>
+          s.kind === 'interface' ||
+          (s.kind === 'class' &&
+            Array.isArray((s.detail as Record<string, unknown>)?.modifiers) &&
+            ((s.detail as Record<string, unknown>).modifiers as string[]).includes('abstract')),
+      ).length;
+
+      exportStats[toRelativePath(rootAbs, filePath)] = { total, abstract };
+    }
   }
 
-  // P3-6 dependencies: dead export detection (best-effort)
-  {
-    const exportsByModule = new Map<string, ReadonlyArray<string>>();
-    const usageByModule = new Map<
-      string,
-      {
-        readonly usesAll: boolean;
-        readonly names: Set<string>;
-        readonly consumers: Set<string>;
-        readonly perNameConsumerKinds: Map<string, Set<'test' | 'prod'>>;
-      }
-    >();
+  // 6. Dead export detection
+  const deadExports: DependencyDeadExportFinding[] = [];
 
-    for (const file of files) {
-      const moduleAbs = normalizePath(file.filePath);
+  if (!isErr(allExported) && exportsByFile.size > 0) {
+    const importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+    const reExportRels = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
 
-      exportsByModule.set(moduleAbs, collectDeclaredExportNames(file));
-    }
+    if (!isErr(importRels) || !isErr(reExportRels)) {
+      const imports = isErr(importRels) ? [] : importRels;
+      const reExports = isErr(reExportRels) ? [] : reExportRels;
 
-    for (const file of files) {
-      const consumerAbs = normalizePath(file.filePath);
-      const isTestConsumer = isTestLikePath(consumerAbs);
-      const consumers = collectImportConsumers(file, fileMap);
+      // Build usage map per module
+      const usageByModule = new Map<
+        string,
+        {
+          usesAll: boolean;
+          names: Set<string>;
+          perNameConsumerKinds: Map<string, Set<'test' | 'prod'>>;
+        }
+      >();
 
-      for (const entry of consumers) {
-        const state =
-          usageByModule.get(entry.targetFilePath) ??
-          ({ usesAll: false, names: new Set<string>(), consumers: new Set<string>(), perNameConsumerKinds: new Map() } as const);
-        const mergedUsesAll = state.usesAll || entry.usesAll;
-        const mergedNames = new Set(state.names);
+      for (const rel of [...imports, ...reExports]) {
+        const target = resolveAbs(rootAbs, rel.dstFilePath);
+        const consumer = resolveAbs(rootAbs, rel.srcFilePath);
+        const isTestConsumer = isTestLikePath(consumer);
+        const kind: 'test' | 'prod' = isTestConsumer ? 'test' : 'prod';
 
-        for (const n of entry.names) {
-          mergedNames.add(n);
+        const state = usageByModule.get(target) ?? {
+          usesAll: false,
+          names: new Set<string>(),
+          perNameConsumerKinds: new Map<string, Set<'test' | 'prod'>>(),
+        };
+
+        // null/undefined dstSymbolName = namespace import (import * as X) or export *
+        if (rel.dstSymbolName === null || rel.dstSymbolName === undefined) {
+          state.usesAll = true;
+        } else {
+          state.names.add(rel.dstSymbolName);
+
+          const prev = state.perNameConsumerKinds.get(rel.dstSymbolName) ?? new Set<'test' | 'prod'>();
+
+          prev.add(kind);
+          state.perNameConsumerKinds.set(rel.dstSymbolName, prev);
         }
 
-        const mergedConsumers = new Set(state.consumers);
+        usageByModule.set(target, state);
+      }
 
-        mergedConsumers.add(`${consumerAbs}::${isTestConsumer ? 'test' : 'prod'}`);
+      // Entry point reachability via BFS
+      const graphKeys = new Set(absGraph.keys());
+      const entrySpecs = readPackageEntrypoints(rootAbs, readFn);
+      const entryModules = new Set<string>();
 
-        const mergedPerName = new Map(state.perNameConsumerKinds);
+      for (const spec of entrySpecs) {
+        const resolved = resolveEntrypointToFile(rootAbs, spec, graphKeys);
 
-        for (const n of entry.names) {
-          const prev = mergedPerName.get(n) ?? new Set<'test' | 'prod'>();
-          const next = new Set(prev);
-
-          next.add(isTestConsumer ? 'test' : 'prod');
-          mergedPerName.set(n, next);
+        if (resolved) {
+          entryModules.add(resolved);
         }
-
-        usageByModule.set(entry.targetFilePath, {
-          usesAll: mergedUsesAll,
-          names: mergedNames,
-          consumers: mergedConsumers,
-          perNameConsumerKinds: mergedPerName,
-        });
       }
-    }
 
-    const entrySpecs = readPackageEntrypoints(rootAbs);
-    const entryModules = new Set<string>();
+      const reachable = new Set<string>();
+      const queue: string[] = [];
 
-    for (const spec of entrySpecs) {
-      const resolved = resolveEntrypointToFile(rootAbs, spec, fileMap);
-
-      if (resolved) {
-        entryModules.add(resolved);
+      for (const entry of entryModules) {
+        reachable.add(entry);
+        queue.push(entry);
       }
-    }
 
-    const reachable = new Set<string>();
-    const queue: string[] = [];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
 
-    for (const entry of entryModules) {
-      reachable.add(entry);
-      queue.push(entry);
-    }
+        for (const next of absGraph.get(current) ?? []) {
+          if (!reachable.has(next)) {
+            reachable.add(next);
+            queue.push(next);
+          }
+        }
+      }
 
-    while (queue.length > 0) {
-      const current = queue.shift() ?? '';
-
-      for (const next of adjacency.get(current) ?? []) {
-        if (reachable.has(next)) {
+      // Check each module's exports
+      for (const [moduleAbs, symbols] of exportsByFile) {
+        if (symbols.length === 0 || reachable.has(moduleAbs)) {
           continue;
         }
 
-        reachable.add(next);
-        queue.push(next);
-      }
-    }
+        const usage = usageByModule.get(moduleAbs);
 
-    for (const [moduleAbs, exportedNames] of exportsByModule.entries()) {
-      if (exportedNames.length === 0) {
-        continue;
-      }
+        if (usage?.usesAll) {
+          continue;
+        }
 
-      // Skip exports reachable from package entrypoints (public API surface).
-      if (reachable.has(moduleAbs)) {
-        continue;
-      }
+        const usedNames = usage?.names ?? new Set<string>();
+        const perNameConsumerKinds = usage?.perNameConsumerKinds ?? new Map<string, Set<'test' | 'prod'>>();
 
-      const usage = usageByModule.get(moduleAbs);
+        for (const sym of symbols) {
+          const relModule = toRelativePath(rootAbs, moduleAbs);
 
-      if (usage?.usesAll) {
-        continue;
-      }
+          if (usedNames.has(sym.name)) {
+            const kinds = perNameConsumerKinds.get(sym.name) ?? new Set<'test' | 'prod'>();
+            const isTestOnly = kinds.size > 0 && !kinds.has('prod');
 
-      const usedNames = usage?.names ?? new Set<string>();
-      const perNameConsumerKinds = usage?.perNameConsumerKinds ?? new Map<string, Set<'test' | 'prod'>>();
+            if (isTestOnly) {
+              deadExports.push({
+                kind: 'test-only-export',
+                module: relModule,
+                name: sym.name,
+              });
+            }
 
-      for (const exportName of exportedNames) {
-        const relModule = toRelativePath(rootAbs, moduleAbs);
-
-        if (usedNames.has(exportName)) {
-          const kinds = perNameConsumerKinds.get(exportName) ?? new Set<'test' | 'prod'>();
-          const isTestOnly = kinds.size > 0 && !kinds.has('prod');
-
-          if (isTestOnly) {
-            deadExports.push({
-              kind: 'test-only-export',
-              module: relModule,
-              name: exportName,
-            });
+            continue;
           }
 
-          continue;
+          deadExports.push({
+            kind: 'dead-export',
+            module: relModule,
+            name: sym.name,
+          });
         }
-
-        deadExports.push({
-          kind: 'dead-export',
-          module: relModule,
-          name: exportName,
-        });
       }
     }
   }

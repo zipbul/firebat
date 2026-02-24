@@ -2,10 +2,10 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeCoupling } from '../../../../../src/test-api';
 import { analyzeDependencies } from '../../../../../src/test-api';
-import { createProgramFromMap } from '../../../shared/test-kit';
+import { createTempGildash } from '../../../shared/gildash-test-kit';
 
 describe('integration/coupling/god-module', () => {
-  it('should use a dynamic threshold based on total module count', () => {
+  it('should use a dynamic threshold based on total module count', async () => {
     // Arrange
     const sources = new Map<string, string>();
     const totalModules = 200;
@@ -32,16 +32,21 @@ describe('integration/coupling/god-module', () => {
 
     sources.set('/virtual/coupling/god/core.ts', `${coreImports}\nexport const core = 1;`);
 
-    // Act
-    const program = createProgramFromMap(sources);
-    const dependencies = analyzeDependencies(program);
-    const hotspots = analyzeCoupling(dependencies);
-    const core = hotspots.find(h => h.module.includes('core'));
+    const { gildash, tmpDir, cleanup } = await createTempGildash(sources);
 
-    // Assert
-    expect(core).toBeDefined();
-    expect(core?.signals.includes('god-module')).toBe(true);
-    expect(core?.metrics.fanIn).toBe(fan);
-    expect(core?.metrics.fanOut).toBe(fan);
+    try {
+      // Act
+      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+      const hotspots = analyzeCoupling(dependencies);
+      const core = hotspots.find(h => h.module.includes('core'));
+
+      // Assert
+      expect(core).toBeDefined();
+      expect(core?.signals.includes('god-module')).toBe(true);
+      expect(core?.metrics.fanIn).toBe(fan);
+      expect(core?.metrics.fanOut).toBe(fan);
+    } finally {
+      await cleanup();
+    }
   });
 });

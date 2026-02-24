@@ -550,7 +550,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       })()
     : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
-  let dependencies: ReturnType<typeof analyzeDependencies>;
+  let dependencies: Awaited<ReturnType<typeof analyzeDependencies>>;
 
   if (shouldRunDependencies) {
     const t0 = nowMs();
@@ -558,7 +558,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    dependencies = analyzeDependencies(program, {
+    dependencies = await analyzeDependencies(gildash, {
       rootAbs: ctx.rootAbs,
       ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
       ...(options.dependenciesAllowedDependencies !== undefined

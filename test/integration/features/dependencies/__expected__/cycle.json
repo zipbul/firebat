@@ -18,8 +18,7 @@
     {
       "path": [
         "cycle/a.ts",
-        "cycle/b.ts",
-        "cycle/a.ts"
+        "cycle/b.ts"
       ]
     }
   ],

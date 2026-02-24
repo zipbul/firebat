@@ -7,8 +7,13 @@ interface CreateGildashOptions {
   readonly extensions?: string[];
 }
 
+/** @internal Exposed for unit tests to spy on Gildash.open without mock.module. */
+export const __testing__ = {
+  open: Gildash.open.bind(Gildash) as typeof Gildash.open,
+};
+
 const createGildash = async (opts: CreateGildashOptions): Promise<Gildash> => {
-  const result = await Gildash.open({
+  const result = await __testing__.open({
     projectRoot: opts.projectRoot,
     watchMode: opts.watchMode ?? false,
     extensions: opts.extensions ?? ['.ts', '.mts', '.cts', '.tsx'],

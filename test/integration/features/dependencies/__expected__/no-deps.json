@@ -1,7 +1,5 @@
 {
-  "adjacency": {
-    "no-deps.ts": []
-  },
+  "adjacency": {},
   "cuts": [],
   "cycles": [],
   "deadExports": [
