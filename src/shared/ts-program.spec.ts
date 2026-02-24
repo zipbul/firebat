@@ -1,403 +1,228 @@
-import { describe, test, expect } from 'bun:test';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { mock, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
 
-import { createFirebatProgram, __testing__ } from './ts-program';
+import type { Gildash } from '@zipbul/gildash';
+import type { ParsedFile } from './ts-program';
+import { err } from '@zipbul/result';
+import { createNoopLogger } from './logger';
 
-interface FakeWorkerEvent<T> {
-  readonly data: T;
-}
+// ── Mocks ─────────────────────────────────────────────────────────────────────
 
-interface FakeWorkerMessageErrorEvent {
-  readonly type: 'messageerror';
-}
+const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
+const mockBatchParse = mock(
+  async (_filePaths: string[]): Promise<Map<string, unknown>> => new Map(),
+);
 
-class FakeWorker {
-  public onmessage: ((event: FakeWorkerEvent<any>) => void) | null = null;
-  public onerror: ((event: ErrorEvent) => void) | null = null;
-  public onmessageerror: ((event: FakeWorkerMessageErrorEvent) => void) | null = null;
+const mockGildash = {
+  batchParse: mockBatchParse,
+  close: mockClose,
+} as unknown as Gildash;
 
-  readonly url: string;
-  readonly options: unknown;
+const mockCreateGildash = mock(async (_opts: unknown) => mockGildash);
 
-  static created: FakeWorker[] = [];
-  static postedPayloads: unknown[] = [];
-  static simulateOkFalseOnce = false;
-  static simulateOkFalseError = 'simulated worker error';
-  static simulateMessageErrorOnce = false;
+mock.module('../store/gildash', () => ({ createGildash: mockCreateGildash }));
 
-  constructor(url: URL | string, options?: unknown) {
-    this.url = typeof url === 'string' ? url : url.toString();
-    this.options = options;
+// ── Import after mock ─────────────────────────────────────────────────────────
 
-    FakeWorker.created.push(this);
+import { createFirebatProgram } from './ts-program';
 
-    // Simulate worker boot completion (READY handshake)
-    queueMicrotask(() => {
-      this.onmessage?.({ data: { type: 'ready' } });
+const logger = createNoopLogger('error');
+
+const makeParsedFile = (filePath: string): ParsedFile => ({
+  filePath,
+  program: {} as ParsedFile['program'],
+  errors: [],
+  comments: [],
+  sourceText: `// ${filePath}`,
+});
+
+const batchParseReturnsOk =
+  (entries: [string, ParsedFile][]) =>
+  async (_filePaths: string[]): Promise<Map<string, ParsedFile>> =>
+    new Map(entries);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+beforeEach(() => {
+  mockCreateGildash.mockReset();
+  mockClose.mockReset();
+  mockBatchParse.mockReset();
+
+  mockCreateGildash.mockImplementation(async (_opts: unknown) => mockGildash);
+  mockClose.mockImplementation(async (_opts?: { cleanup?: boolean }) => {});
+  mockBatchParse.mockImplementation(
+    async (_filePaths: string[]): Promise<Map<string, unknown>> => new Map(),
+  );
+});
+
+afterEach(() => {
+  mock.restore();
+});
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe('createFirebatProgram', () => {
+  it('should return ParsedFile array when batchParse succeeds with eligible targets', async () => {
+    // Arrange
+    const pf = makeParsedFile('/proj/src/a.ts');
+    mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
+
+    // Act
+    const result = await createFirebatProgram({ targets: ['/proj/src/a.ts'], logger });
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.filePath).toBe('/proj/src/a.ts');
+  });
+
+  it('should exclude node_modules path from batchParse call', async () => {
+    // Arrange
+    const pf = makeParsedFile('/proj/src/a.ts');
+    mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
+
+    // Act
+    await createFirebatProgram({
+      targets: ['/proj/src/a.ts', '/proj/node_modules/lib/index.ts'],
+      logger,
     });
-  }
 
-  postMessage(payload: unknown): void {
-    FakeWorker.postedPayloads.push(payload);
+    // Assert
+    const [calledWith] = mockBatchParse.mock.calls[0] as [string[]];
+    expect(calledWith).toEqual(['/proj/src/a.ts']);
+  });
 
-    queueMicrotask(() => {
-      if (FakeWorker.simulateMessageErrorOnce) {
-        FakeWorker.simulateMessageErrorOnce = false;
+  it('should exclude .d.ts files from batchParse call', async () => {
+    // Arrange
+    const pf = makeParsedFile('/proj/src/a.ts');
+    mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
 
-        this.onmessageerror?.({ type: 'messageerror' });
-
-        return;
-      }
-
-      if (!this.onmessage) {
-        return;
-      }
-
-      const filePath = (payload as any)?.filePath;
-
-      if (FakeWorker.simulateOkFalseOnce) {
-        FakeWorker.simulateOkFalseOnce = false;
-
-        this.onmessage({
-          data: {
-            ok: false,
-            filePath: typeof filePath === 'string' ? filePath : '',
-            error: FakeWorker.simulateOkFalseError,
-          },
-        });
-
-        return;
-      }
-
-      this.onmessage({
-        data: {
-          ok: true,
-          filePath: typeof filePath === 'string' ? filePath : '',
-          sourceText: 'export const x = 1;\n',
-          program: {},
-          errors: [],
-        },
-      });
+    // Act
+    await createFirebatProgram({
+      targets: ['/proj/src/a.ts', '/proj/src/types.d.ts'],
+      logger,
     });
-  }
 
-  terminate(): void {
-    // noop
-  }
-}
-
-describe('ts-program', () => {
-  test('should post a {filePath} payload when parsing targets', async () => {
-    // Arrange
-    const realWorker = globalThis.Worker;
-
-    (globalThis as any).Worker = FakeWorker;
-
-    FakeWorker.created = [];
-    FakeWorker.postedPayloads = [];
-
-    const warns: Array<{ message: string }> = [];
-    const logger = {
-      level: 'trace',
-      log: () => undefined,
-      error: () => undefined,
-      warn: (message: string) => {
-        warns.push({ message });
-      },
-      info: () => undefined,
-      debug: () => undefined,
-      trace: () => undefined,
-    };
-    const filePath = path.join(process.cwd(), 'test/mcp/fixtures/sample.ts');
-
-    try {
-      // Act
-      const result = await createFirebatProgram({ targets: [filePath], logger } as any);
-
-      // Assert
-      expect(result.length).toBe(1);
-      expect(result[0]?.filePath).toBe(filePath);
-      expect(FakeWorker.postedPayloads[0]).toMatchObject({ filePath, requestId: 1 });
-      expect(warns.length).toBe(0);
-    } finally {
-      // Cleanup
-      (globalThis as any).Worker = realWorker;
-    }
+    // Assert
+    const [calledWith] = mockBatchParse.mock.calls[0] as [string[]];
+    expect(calledWith).toEqual(['/proj/src/a.ts']);
   });
 
-  test('should prefer parse-worker.js when it can be constructed', async () => {
+  it('should call gildash.close with cleanup false on success', async () => {
     // Arrange
-    const realWorker = globalThis.Worker;
+    mockBatchParse.mockImplementation(batchParseReturnsOk([]));
 
-    (globalThis as any).Worker = FakeWorker;
+    // Act
+    await createFirebatProgram({ targets: ['/a.ts'], logger });
 
-    FakeWorker.created = [];
-    FakeWorker.postedPayloads = [];
-
-    const logger = {
-      level: 'trace',
-      log: () => undefined,
-      error: () => undefined,
-      warn: () => undefined,
-      info: () => undefined,
-      debug: () => undefined,
-      trace: () => undefined,
-    };
-    const filePath = path.join(process.cwd(), 'test/mcp/fixtures/sample.ts');
-
-    try {
-      // Act
-      await createFirebatProgram({ targets: [filePath], logger } as any);
-
-      // Assert
-      expect(FakeWorker.created.length).toBeGreaterThan(0);
-      expect(FakeWorker.created[0]?.url.endsWith('workers/parse-worker.js')).toBe(true);
-      expect(FakeWorker.created[0]?.options).toEqual({ type: 'module' });
-    } finally {
-      // Cleanup
-      (globalThis as any).Worker = realWorker;
-    }
+    // Assert
+    expect(mockClose).toHaveBeenCalledWith({ cleanup: false });
   });
 
-  test('should throw when parse-worker.js construction throws', async () => {
+  it('should call createGildash with watchMode false', async () => {
     // Arrange
-    const realWorker = globalThis.Worker;
+    mockBatchParse.mockImplementation(batchParseReturnsOk([]));
 
-    class ThrowingJsWorker extends FakeWorker {
-      constructor(url: URL | string, options?: unknown) {
-        const urlString = typeof url === 'string' ? url : url.toString();
+    // Act
+    await createFirebatProgram({ targets: ['/a.ts'], logger });
 
-        if (urlString.endsWith('workers/parse-worker.js')) {
-          throw new Error('simulate missing dist worker');
-        }
-
-        super(url, options);
-      }
-    }
-
-    (globalThis as any).Worker = ThrowingJsWorker;
-
-    FakeWorker.created = [];
-    FakeWorker.postedPayloads = [];
-
-    const logger = {
-      level: 'trace',
-      log: () => undefined,
-      error: () => undefined,
-      warn: () => undefined,
-      info: () => undefined,
-      debug: () => undefined,
-      trace: () => undefined,
-    };
-    const filePath = path.join(process.cwd(), 'test/mcp/fixtures/sample.ts');
-
-    try {
-      // Act
-      let thrown: unknown = null;
-
-      try {
-        await createFirebatProgram({ targets: [filePath], logger } as any);
-      } catch (error) {
-        thrown = error;
-      }
-
-      // Assert
-      expect(thrown).toBeTruthy();
-      expect(FakeWorker.created.length).toBe(0);
-    } finally {
-      // Cleanup
-      (globalThis as any).Worker = realWorker;
-    }
+    // Assert
+    expect(mockCreateGildash).toHaveBeenCalledWith(
+      expect.objectContaining({ watchMode: false }),
+    );
   });
 
-  test('should return parsed files even when worker returns ok=false (fallback path)', async () => {
+  it('should pass eligible file paths to batchParse', async () => {
     // Arrange
-    const realWorker = globalThis.Worker;
+    mockBatchParse.mockImplementation(batchParseReturnsOk([]));
 
-    (globalThis as any).Worker = FakeWorker;
+    // Act
+    await createFirebatProgram({ targets: ['/a.ts', '/b.ts'], logger });
 
-    FakeWorker.created = [];
-    FakeWorker.postedPayloads = [];
-    FakeWorker.simulateOkFalseOnce = true;
-    FakeWorker.simulateOkFalseError = 'simulated worker failure';
-
-    const warns: Array<{ message: string }> = [];
-    const logger = {
-      level: 'trace',
-      log: () => undefined,
-      error: () => undefined,
-      warn: (message: string) => {
-        warns.push({ message });
-      },
-      info: () => undefined,
-      debug: () => undefined,
-      trace: () => undefined,
-    };
-    const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-ts-program-test-'));
-    const fixturesAbs = path.join(tmpRootAbs, 'fixtures');
-
-    await mkdir(fixturesAbs, { recursive: true });
-
-    const filePath = path.join(fixturesAbs, 'fallback.ts');
-
-    await Bun.write(filePath, 'export const x = 1;\n');
-
-    try {
-      // Act
-      const result = await createFirebatProgram({ targets: [filePath], logger } as any);
-
-      // Assert
-      expect(result.length).toBe(1);
-      expect(result[0]?.filePath).toBe(filePath);
-      expect(warns.length).toBe(0);
-    } finally {
-      // Cleanup
-      await rm(tmpRootAbs, { recursive: true, force: true });
-
-      (globalThis as any).Worker = realWorker;
-    }
+    // Assert
+    expect(mockBatchParse).toHaveBeenCalledWith(['/a.ts', '/b.ts']);
   });
 
-  test('should fall back when worker triggers messageerror (clone failure) rather than hanging', async () => {
+  it('should return empty array and not create gildash when targets is empty', async () => {
+    // Arrange & Act
+    const result = await createFirebatProgram({ targets: [], logger });
+
+    // Assert
+    expect(result).toEqual([]);
+    expect(mockCreateGildash).not.toHaveBeenCalled();
+  });
+
+  it('should return empty array and not create gildash when all targets are in node_modules', async () => {
+    // Arrange & Act
+    const result = await createFirebatProgram({
+      targets: ['/proj/node_modules/a.ts', '/proj/node_modules/sub/b.ts'],
+      logger,
+    });
+
+    // Assert
+    expect(result).toEqual([]);
+    expect(mockCreateGildash).not.toHaveBeenCalled();
+  });
+
+  it('should return empty array and not create gildash when all targets are .d.ts files', async () => {
+    // Arrange & Act
+    const result = await createFirebatProgram({
+      targets: ['/proj/src/types.d.ts', '/proj/src/global.d.ts'],
+      logger,
+    });
+
+    // Assert
+    expect(result).toEqual([]);
+    expect(mockCreateGildash).not.toHaveBeenCalled();
+  });
+
+  it('should return empty array when batchParse returns Err', async () => {
     // Arrange
-    const realWorker = globalThis.Worker;
+    mockBatchParse.mockImplementation(
+      async () => err({ type: 'closed' as const, message: 'gildash closed' }) as unknown as Map<string, unknown>,
+    );
 
-    (globalThis as any).Worker = FakeWorker;
+    // Act
+    const result = await createFirebatProgram({ targets: ['/a.ts'], logger });
 
-    FakeWorker.created = [];
-    FakeWorker.postedPayloads = [];
-    FakeWorker.simulateMessageErrorOnce = true;
+    // Assert
+    expect(result).toEqual([]);
+  });
 
-    const warns: Array<{ message: string }> = [];
-    const logger = {
-      level: 'trace',
-      log: () => undefined,
-      error: () => undefined,
-      warn: (message: string) => {
-        warns.push({ message });
-      },
-      info: () => undefined,
-      debug: () => undefined,
-      trace: () => undefined,
-    };
-    const tmpRootAbs = await mkdtemp(path.join(os.tmpdir(), 'firebat-ts-program-messageerror-test-'));
-    const fixturesAbs = path.join(tmpRootAbs, 'fixtures');
-
-    await mkdir(fixturesAbs, { recursive: true });
-
-    const filePath = path.join(fixturesAbs, 'messageerror.ts');
-
-    await Bun.write(filePath, 'export const x = 1;\n');
-
-    try {
-      // Act
-      const result = await createFirebatProgram({ targets: [filePath], logger } as any);
-
-      // Assert
-      expect(result.length).toBe(1);
-      expect(result[0]?.filePath).toBe(filePath);
-      expect(warns.length).toBe(1);
-      expect(warns[0]?.message).toBe('Parse worker messageerror');
-    } finally {
-      // Cleanup
-      await rm(tmpRootAbs, { recursive: true, force: true });
-
-      (globalThis as any).Worker = realWorker;
-    }
-  }, 1500);
-
-  test('should recover when a worker fails to boot (READY handshake)', async () => {
+  it('should call gildash.close even when batchParse returns Err', async () => {
     // Arrange
-    const realWorker = globalThis.Worker;
-    const terminatedUrls: string[] = [];
-    let creationIndex = 0;
+    mockBatchParse.mockImplementation(
+      async () => err({ type: 'closed' as const, message: 'gildash closed' }) as unknown as Map<string, unknown>,
+    );
 
-    class ReadyAwareFakeWorker {
-      public onmessage: ((event: any) => void) | null = null;
-      public onerror: ((event: any) => void) | null = null;
-      public onmessageerror: ((event: any) => void) | null = null;
+    // Act
+    await createFirebatProgram({ targets: ['/a.ts'], logger });
 
-      readonly url: string;
-      readonly options: unknown;
-      private readonly stalled: boolean;
+    // Assert
+    expect(mockClose).toHaveBeenCalledWith({ cleanup: false });
+  });
 
-      constructor(url: URL | string, options?: unknown) {
-        this.url = typeof url === 'string' ? url : url.toString();
-        this.options = options;
+  it('should propagate error when createGildash throws', async () => {
+    // Arrange
+    mockCreateGildash.mockImplementation(async () => {
+      throw new Error('open failed');
+    });
 
-        this.stalled = creationIndex === 0;
-        creationIndex += 1;
+    // Act & Assert
+    await expect(
+      createFirebatProgram({ targets: ['/a.ts'], logger }),
+    ).rejects.toThrow('open failed');
+  });
 
-        if (!this.stalled) {
-          queueMicrotask(() => {
-            this.onmessage?.({ data: { type: 'ready' } });
-          });
-        }
-      }
+  it('should return early with empty array and call nothing when all targets are mixed excluded', async () => {
+    // Arrange & Act
+    const result = await createFirebatProgram({
+      targets: ['/proj/node_modules/a.ts', '/proj/src/types.d.ts'],
+      logger,
+    });
 
-      postMessage(payload: unknown): void {
-        if (this.stalled) {
-          return;
-        }
-
-        queueMicrotask(() => {
-          if (!this.onmessage) {
-            return;
-          }
-
-          const filePath = (payload as any)?.filePath;
-
-          this.onmessage({
-            data: {
-              ok: true,
-              filePath: typeof filePath === 'string' ? filePath : '',
-              requestId: (payload as any)?.requestId ?? 0,
-              sourceText: 'export const x = 1;\n',
-              program: {},
-              errors: [],
-            },
-          });
-        });
-      }
-
-      terminate(): void {
-        terminatedUrls.push(this.url);
-      }
-    }
-
-    (globalThis as any).Worker = ReadyAwareFakeWorker;
-
-    const warns: Array<{ message: string }> = [];
-    const logger = {
-      level: 'trace',
-      log: () => undefined,
-      error: () => undefined,
-      warn: (message: string) => {
-        warns.push({ message });
-      },
-      info: () => undefined,
-      debug: () => undefined,
-      trace: () => undefined,
-    };
-    const filePath = path.join(process.cwd(), 'test/mcp/fixtures/sample.ts');
-
-    try {
-      __testing__.setReadyTimeoutMs(200);
-
-      // Act
-      const result = await createFirebatProgram({ targets: [filePath], logger } as any);
-
-      // Assert — stalled worker terminated, retry created a new one, parsing succeeded
-      expect(result.length).toBe(1);
-      expect(result[0]?.filePath).toBe(filePath);
-      expect(terminatedUrls.length).toBeGreaterThanOrEqual(1);
-      expect(creationIndex).toBeGreaterThan(1);
-    } finally {
-      __testing__.resetReadyTimeoutMs();
-
-      (globalThis as any).Worker = realWorker;
-    }
-  }, 5000);
+    // Assert
+    expect(result).toEqual([]);
+    expect(mockCreateGildash).not.toHaveBeenCalled();
+    expect(mockBatchParse).not.toHaveBeenCalled();
+    expect(mockClose).not.toHaveBeenCalled();
+  });
 });
