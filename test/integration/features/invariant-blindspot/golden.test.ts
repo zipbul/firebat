@@ -13,4 +13,6 @@ describe('golden/invariant-blindspot', () => {
   runGolden(import.meta.dir, 'must-comment', program => analyzeInvariantBlindspot(program));
 
   runGolden(import.meta.dir, 'switch-throw', program => analyzeInvariantBlindspot(program));
+
+  runGolden(import.meta.dir, 'bounds-check', program => analyzeInvariantBlindspot(program));
 });

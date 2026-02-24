@@ -1,0 +1,107 @@
+[
+  {
+    "evidence": "Promise.resolve('ignored');",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "floating-promises",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 7
+      },
+      "start": {
+        "column": 2,
+        "line": 7
+      }
+    }
+  },
+  {
+    "evidence": "forEach callback is async",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "misused-promises",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 13
+      },
+      "start": {
+        "column": 2,
+        "line": 11
+      }
+    }
+  },
+  {
+    "evidence": "fetchData().then(",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "catch-or-return",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 20
+      },
+      "start": {
+        "column": 2,
+        "line": 17
+      }
+    }
+  },
+  {
+    "evidence": "fetchData().then(",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "prefer-catch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 20
+      },
+      "start": {
+        "column": 2,
+        "line": 17
+      }
+    }
+  },
+  {
+    "evidence": "fetchData()",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "catch-or-return",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 31
+      },
+      "start": {
+        "column": 2,
+        "line": 24
+      }
+    }
+  },
+  {
+    "evidence": "fetchData()",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "prefer-await-to-then",
+    "span": {
+      "end": {
+        "column": 6,
+        "line": 31
+      },
+      "start": {
+        "column": 2,
+        "line": 24
+      }
+    }
+  },
+  {
+    "evidence": "fetchData().then((data) => console.log(data));",
+    "file": "/virtual/promise-patterns.ts",
+    "kind": "catch-or-return",
+    "span": {
+      "end": {
+        "column": 48,
+        "line": 35
+      },
+      "start": {
+        "column": 2,
+        "line": 35
+      }
+    }
+  }
+]

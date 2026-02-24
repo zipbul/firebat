@@ -1,0 +1,44 @@
+[
+  {
+    "file": "/virtual/invertible-if-else.ts",
+    "header": "invertibleIfElse",
+    "kind": "invertible-if-else",
+    "metrics": {
+      "guards": 0,
+      "hasGuards": false,
+      "returns": 2
+    },
+    "score": 3,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 14
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "file": "/virtual/invertible-if-else.ts",
+    "header": "loopContinueGuard",
+    "kind": "missing-guard",
+    "metrics": {
+      "guards": 1,
+      "hasGuards": true,
+      "returns": 1
+    },
+    "score": 1,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 29
+      },
+      "start": {
+        "column": 7,
+        "line": 16
+      }
+    }
+  }
+]

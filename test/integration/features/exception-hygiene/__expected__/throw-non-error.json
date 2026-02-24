@@ -1,0 +1,62 @@
+[
+  {
+    "evidence": "throw 'something went wrong';",
+    "file": "/virtual/throw-non-error.ts",
+    "kind": "throw-non-error",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 4
+      },
+      "start": {
+        "column": 2,
+        "line": 4
+      }
+    }
+  },
+  {
+    "evidence": "throw 42;",
+    "file": "/virtual/throw-non-error.ts",
+    "kind": "throw-non-error",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 8
+      },
+      "start": {
+        "column": 2,
+        "line": 8
+      }
+    }
+  },
+  {
+    "evidence": "throw String('error message');",
+    "file": "/virtual/throw-non-error.ts",
+    "kind": "throw-non-error",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 12
+      },
+      "start": {
+        "column": 2,
+        "line": 12
+      }
+    }
+  },
+  {
+    "evidence": "return new Promise(async (resolve) => {",
+    "file": "/virtual/throw-non-error.ts",
+    "kind": "async-promise-executor",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 19
+      },
+      "start": {
+        "column": 9,
+        "line": 16
+      }
+    }
+  }
+]

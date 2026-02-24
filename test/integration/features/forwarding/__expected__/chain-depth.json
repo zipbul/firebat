@@ -1,0 +1,87 @@
+[
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to level2",
+    "filePath": "/virtual/chain-depth/chain.ts",
+    "header": "level1",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 6
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to level3",
+    "filePath": "/virtual/chain-depth/chain.ts",
+    "header": "level2",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 10
+      },
+      "start": {
+        "column": 0,
+        "line": 8
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to target",
+    "filePath": "/virtual/chain-depth/chain.ts",
+    "header": "level3",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 14
+      },
+      "start": {
+        "column": 0,
+        "line": 12
+      }
+    }
+  },
+  {
+    "depth": 3,
+    "evidence": "forwarding chain depth 3 exceeds max 1",
+    "filePath": "/virtual/chain-depth/chain.ts",
+    "header": "level1",
+    "kind": "forward-chain",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 6
+      },
+      "start": {
+        "column": 7,
+        "line": 4
+      }
+    }
+  },
+  {
+    "depth": 2,
+    "evidence": "forwarding chain depth 2 exceeds max 1",
+    "filePath": "/virtual/chain-depth/chain.ts",
+    "header": "level2",
+    "kind": "forward-chain",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 10
+      },
+      "start": {
+        "column": 0,
+        "line": 8
+      }
+    }
+  }
+]

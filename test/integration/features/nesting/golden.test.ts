@@ -13,4 +13,8 @@ describe('golden/nesting', () => {
   runGolden(import.meta.dir, 'switch-nesting', program => analyzeNesting(program));
 
   runGolden(import.meta.dir, 'well-structured', program => analyzeNesting(program));
+
+  runGolden(import.meta.dir, 'callback-depth', program => analyzeNesting(program));
+
+  runGolden(import.meta.dir, 'accidental-quadratic', program => analyzeNesting(program));
 });

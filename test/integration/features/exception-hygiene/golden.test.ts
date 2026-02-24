@@ -13,4 +13,10 @@ describe('golden/exception-hygiene', () => {
   runGolden(import.meta.dir, 'silent-catch2', program => analyzeExceptionHygiene(program));
 
   runGolden(import.meta.dir, 'async-silent', program => analyzeExceptionHygiene(program));
+
+  runGolden(import.meta.dir, 'throw-non-error', program => analyzeExceptionHygiene(program));
+
+  runGolden(import.meta.dir, 'promise-patterns', program => analyzeExceptionHygiene(program));
+
+  runGolden(import.meta.dir, 'nested-try-catch', program => analyzeExceptionHygiene(program));
 });

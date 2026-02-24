@@ -24,4 +24,12 @@ describe('golden/forwarding', () => {
   runGolden(import.meta.dir, 'format-chain', async (program, sources) =>
     analyzeForwarding(buildMockGildashFromSources(sources), program, 1, '/virtual'),
   );
+
+  runGolden(import.meta.dir, 'chain-depth', async (program, sources) =>
+    analyzeForwarding(buildMockGildashFromSources(sources), program, 1, '/virtual'),
+  );
+
+  runGolden(import.meta.dir, 'param-patterns', async (program, sources) =>
+    analyzeForwarding(buildMockGildashFromSources(sources), program, 1, '/virtual'),
+  );
 });

@@ -1,0 +1,36 @@
+[
+  {
+    "file": "class-temporal.ts",
+    "kind": "temporal-coupling",
+    "readers": 1,
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 4
+      },
+      "start": {
+        "column": 2,
+        "line": 4
+      }
+    },
+    "state": "currentUser",
+    "writers": 1
+  },
+  {
+    "file": "class-temporal.ts",
+    "kind": "temporal-coupling",
+    "readers": 1,
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 5
+      },
+      "start": {
+        "column": 2,
+        "line": 5
+      }
+    },
+    "state": "lastAccess",
+    "writers": 1
+  }
+]

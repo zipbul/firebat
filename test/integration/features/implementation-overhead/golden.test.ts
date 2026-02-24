@@ -27,4 +27,8 @@ describe('golden/implementation-overhead', () => {
   runGolden(import.meta.dir, 'ts-advanced-syntax', program =>
     analyzeImplementationOverhead(program, { minRatio: 2 }),
   );
+
+  runGolden(import.meta.dir, 'edge-cases', program =>
+    analyzeImplementationOverhead(program, { minRatio: 2 }),
+  );
 });

@@ -23,4 +23,8 @@ describe('golden/decision-surface', () => {
   runGolden(import.meta.dir, 'const-only', program =>
     analyzeDecisionSurface(program, { maxAxes: 2 }),
   );
+
+  runGolden(import.meta.dir, 'nested-parens', program =>
+    analyzeDecisionSurface(program, { maxAxes: 2 }),
+  );
 });

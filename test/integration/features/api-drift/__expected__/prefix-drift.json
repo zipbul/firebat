@@ -1,0 +1,51 @@
+[
+  {
+    "label": "prefix:user",
+    "outliers": [
+      {
+        "filePath": "/virtual/prefix-drift.ts",
+        "shape": {
+          "async": true,
+          "optionalCount": 0,
+          "paramsCount": 1,
+          "returnKind": "value"
+        },
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 11
+          },
+          "start": {
+            "column": 7,
+            "line": 9
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/prefix-drift.ts",
+        "shape": {
+          "async": false,
+          "optionalCount": 1,
+          "paramsCount": 3,
+          "returnKind": "value"
+        },
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 15
+          },
+          "start": {
+            "column": 7,
+            "line": 13
+          }
+        }
+      }
+    ],
+    "standardCandidate": {
+      "async": false,
+      "optionalCount": 0,
+      "paramsCount": 2,
+      "returnKind": "implicit-void"
+    }
+  }
+]

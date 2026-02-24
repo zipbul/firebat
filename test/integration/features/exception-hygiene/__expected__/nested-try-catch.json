@@ -1,0 +1,167 @@
+[
+  {
+    "evidence": "} catch (e) {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "useless-catch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 28
+      },
+      "start": {
+        "column": 4,
+        "line": 26
+      }
+    }
+  },
+  {
+    "evidence": "return Promise.resolve('value').finally(() => {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "return-in-finally",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 58
+      },
+      "start": {
+        "column": 9,
+        "line": 56
+      }
+    }
+  },
+  {
+    "evidence": "try {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "overscoped-try",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 20
+      },
+      "start": {
+        "column": 2,
+        "line": 5
+      }
+    }
+  },
+  {
+    "evidence": "} catch (err) {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "silent-catch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 20
+      },
+      "start": {
+        "column": 4,
+        "line": 18
+      }
+    }
+  },
+  {
+    "evidence": "try {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "exception-control-flow",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 40
+      },
+      "start": {
+        "column": 2,
+        "line": 32
+      }
+    }
+  },
+  {
+    "evidence": "try {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "exception-control-flow",
+    "span": {
+      "end": {
+        "column": 5,
+        "line": 37
+      },
+      "start": {
+        "column": 4,
+        "line": 33
+      }
+    }
+  },
+  {
+    "evidence": "} catch (inner) {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "redundant-nested-catch",
+    "span": {
+      "end": {
+        "column": 5,
+        "line": 37
+      },
+      "start": {
+        "column": 6,
+        "line": 35
+      }
+    }
+  },
+  {
+    "evidence": "} catch (inner) {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "silent-catch",
+    "span": {
+      "end": {
+        "column": 5,
+        "line": 37
+      },
+      "start": {
+        "column": 6,
+        "line": 35
+      }
+    }
+  },
+  {
+    "evidence": "} catch (outer) {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "silent-catch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 40
+      },
+      "start": {
+        "column": 4,
+        "line": 38
+      }
+    }
+  },
+  {
+    "evidence": "throw new Error('wrapped');",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "missing-error-cause",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 47
+      },
+      "start": {
+        "column": 4,
+        "line": 47
+      }
+    }
+  },
+  {
+    "evidence": "return await Promise.resolve('data');",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "return-await-policy",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 52
+      },
+      "start": {
+        "column": 2,
+        "line": 52
+      }
+    }
+  }
+]

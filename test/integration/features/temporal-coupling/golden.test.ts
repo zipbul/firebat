@@ -13,4 +13,6 @@ describe('golden/temporal-coupling', () => {
   runGolden(import.meta.dir, 'pure-function', program => analyzeTemporalCoupling(program));
 
   runGolden(import.meta.dir, 'session-state', program => analyzeTemporalCoupling(program));
+
+  runGolden(import.meta.dir, 'class-temporal', program => analyzeTemporalCoupling(program));
 });

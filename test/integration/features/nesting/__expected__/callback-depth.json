@@ -1,0 +1,46 @@
+[
+  {
+    "file": "/virtual/callback-depth.ts",
+    "header": "deepCallbacks",
+    "kind": "callback-depth",
+    "metrics": {
+      "callbackDepth": 4,
+      "cognitiveComplexity": 0,
+      "depth": 0,
+      "quadraticTargets": []
+    },
+    "score": 0,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 16
+      },
+      "start": {
+        "column": 7,
+        "line": 3
+      }
+    }
+  },
+  {
+    "file": "/virtual/callback-depth.ts",
+    "header": "anonymous",
+    "kind": "callback-depth",
+    "metrics": {
+      "callbackDepth": 3,
+      "cognitiveComplexity": 0,
+      "depth": 0,
+      "quadraticTargets": []
+    },
+    "score": 0,
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 15
+      },
+      "start": {
+        "column": 16,
+        "line": 4
+      }
+    }
+  }
+]

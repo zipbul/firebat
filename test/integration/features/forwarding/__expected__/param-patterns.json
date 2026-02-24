@@ -1,0 +1,53 @@
+[
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to processUser",
+    "filePath": "/virtual/param-patterns.ts",
+    "header": "destructuredForward",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 9
+      },
+      "start": {
+        "column": 7,
+        "line": 7
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to log",
+    "filePath": "/virtual/param-patterns.ts",
+    "header": "restForward",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 13
+      },
+      "start": {
+        "column": 7,
+        "line": 11
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to fetchRemote",
+    "filePath": "/virtual/param-patterns.ts",
+    "header": "awaitForward",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 17
+      },
+      "start": {
+        "column": 7,
+        "line": 15
+      }
+    }
+  }
+]

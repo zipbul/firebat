@@ -1,0 +1,66 @@
+[
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "listener.ts",
+    "kind": "implicit-state",
+    "protocol": "'notification', handler);\n}\n\nexport function listenUpdate(ha",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 4
+      },
+      "start": {
+        "column": 13,
+        "line": 4
+      }
+    }
+  },
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "sender.ts",
+    "kind": "implicit-state",
+    "protocol": "'notification', message);\n}\n\nexport function broadcastUpdate",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 4
+      },
+      "start": {
+        "column": 15,
+        "line": 4
+      }
+    }
+  },
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "listener.ts",
+    "kind": "implicit-state",
+    "protocol": "'update', handler);\n}\n",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 8
+      },
+      "start": {
+        "column": 13,
+        "line": 8
+      }
+    }
+  },
+  {
+    "code": "IMPLICIT_STATE",
+    "file": "sender.ts",
+    "kind": "implicit-state",
+    "protocol": "'update', data);\n}\n",
+    "span": {
+      "end": {
+        "column": 16,
+        "line": 8
+      },
+      "start": {
+        "column": 15,
+        "line": 8
+      }
+    }
+  }
+]

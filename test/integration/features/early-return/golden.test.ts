@@ -15,4 +15,6 @@ describe('golden/early-return', () => {
   runGolden(import.meta.dir, 'multi-guard', program => analyzeEarlyReturn(program));
 
   runGolden(import.meta.dir, 'ts-advanced-syntax', program => analyzeEarlyReturn(program));
+
+  runGolden(import.meta.dir, 'invertible-if-else', program => analyzeEarlyReturn(program));
 });

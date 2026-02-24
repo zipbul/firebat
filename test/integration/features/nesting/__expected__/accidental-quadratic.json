@@ -1,0 +1,50 @@
+[
+  {
+    "file": "/virtual/accidental-quadratic.ts",
+    "header": "findDuplicates",
+    "kind": "accidental-quadratic",
+    "metrics": {
+      "callbackDepth": 0,
+      "cognitiveComplexity": 21,
+      "depth": 6,
+      "quadraticTargets": [
+        "items"
+      ]
+    },
+    "score": 21,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 21
+      },
+      "start": {
+        "column": 7,
+        "line": 3
+      }
+    }
+  },
+  {
+    "file": "/virtual/accidental-quadratic.ts",
+    "header": "nestedFilterSameTarget",
+    "kind": "accidental-quadratic",
+    "metrics": {
+      "callbackDepth": 2,
+      "cognitiveComplexity": 0,
+      "depth": 0,
+      "quadraticTargets": [
+        "data"
+      ]
+    },
+    "score": 0,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 27
+      },
+      "start": {
+        "column": 7,
+        "line": 23
+      }
+    }
+  }
+]

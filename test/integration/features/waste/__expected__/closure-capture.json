@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/closure-capture.ts",
+    "kind": "dead-store-overwrite",
+    "label": "value",
+    "message": "Variable 'value' is assigned but overwritten before being read",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 19
+      },
+      "start": {
+        "column": 2,
+        "line": 19
+      }
+    }
+  }
+]

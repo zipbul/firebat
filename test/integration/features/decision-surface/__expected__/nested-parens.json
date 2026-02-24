@@ -1,0 +1,19 @@
+[
+  {
+    "axes": 6,
+    "combinatorialPaths": 64,
+    "file": "nested-parens.ts",
+    "kind": "decision-surface",
+    "repeatedChecks": 5,
+    "span": {
+      "end": {
+        "column": 0,
+        "line": 23
+      },
+      "start": {
+        "column": 16,
+        "line": 11
+      }
+    }
+  }
+]

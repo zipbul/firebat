@@ -1,0 +1,36 @@
+[
+  {
+    "file": "edge-cases.ts",
+    "implementationComplexity": 6,
+    "interfaceComplexity": 2,
+    "kind": "implementation-overhead",
+    "ratio": 3,
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 26
+      },
+      "start": {
+        "column": 0,
+        "line": 13
+      }
+    }
+  },
+  {
+    "file": "edge-cases.ts",
+    "implementationComplexity": 7,
+    "interfaceComplexity": 3,
+    "kind": "implementation-overhead",
+    "ratio": 2.3333333333333335,
+    "span": {
+      "end": {
+        "column": 68,
+        "line": 42
+      },
+      "start": {
+        "column": 0,
+        "line": 39
+      }
+    }
+  }
+]

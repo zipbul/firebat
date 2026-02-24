@@ -13,4 +13,8 @@ describe('golden/api-drift', () => {
   runGolden(import.meta.dir, 'all-async', program => analyzeApiDrift(program));
 
   runGolden(import.meta.dir, 'no-functions', program => analyzeApiDrift(program));
+
+  runGolden(import.meta.dir, 'prefix-drift', program => analyzeApiDrift(program));
+
+  runGolden(import.meta.dir, 'class-drift', program => analyzeApiDrift(program));
 });

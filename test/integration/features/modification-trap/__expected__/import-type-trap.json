@@ -1,0 +1,34 @@
+[
+  {
+    "file": "status-display.ts",
+    "kind": "modification-trap",
+    "occurrences": 2,
+    "pattern": "switch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 4
+      },
+      "start": {
+        "column": 2,
+        "line": 4
+      }
+    }
+  },
+  {
+    "file": "order-handler.ts",
+    "kind": "modification-trap",
+    "occurrences": 2,
+    "pattern": "switch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 4
+      },
+      "start": {
+        "column": 2,
+        "line": 4
+      }
+    }
+  }
+]

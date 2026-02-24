@@ -23,4 +23,12 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'unused-local', program =>
     detectWaste([...program]),
   );
+
+  runGolden(import.meta.dir, 'primitive-skip', program =>
+    detectWaste([...program]),
+  );
+
+  runGolden(import.meta.dir, 'closure-capture', program =>
+    detectWaste([...program]),
+  );
 });

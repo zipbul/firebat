@@ -13,4 +13,6 @@ describe('golden/implicit-state', () => {
   runGolden(import.meta.dir, 'unused-module-var', program => analyzeImplicitState(program));
 
   runGolden(import.meta.dir, 'module-cache', program => analyzeImplicitState(program));
+
+  runGolden(import.meta.dir, 'event-channel', program => analyzeImplicitState(program));
 });

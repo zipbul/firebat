@@ -13,4 +13,6 @@ describe('golden/noop', () => {
   runGolden(import.meta.dir, 'constant-condition', program => analyzeNoop(program));
 
   runGolden(import.meta.dir, 'empty-catch', program => analyzeNoop(program));
+
+  runGolden(import.meta.dir, 'empty-body-noop', program => analyzeNoop(program));
 });
