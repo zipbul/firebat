@@ -1,4 +1,4 @@
-import { mock, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 import type { Gildash } from '@zipbul/gildash';
 import type { ParsedFile } from './ts-program';

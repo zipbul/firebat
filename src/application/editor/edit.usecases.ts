@@ -4,7 +4,7 @@ import type { FirebatLogger } from '../../shared/logger';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { extractSymbolsOxc } from '../../engine/symbol-extractor-oxc';
-import { indexSymbolsUseCase } from '../symbol-index/symbol-index.usecases';
+import { createGildash } from '../../store/gildash';
 
 interface SourcePosition {
   line: number;
@@ -144,8 +144,11 @@ const writeIfChanged = async (filePath: string, prevText: string, nextText: stri
   return true;
 };
 
-const reindexFile = async (rootAbs: string, fileAbs: string, logger: FirebatLogger): Promise<void> => {
-  await indexSymbolsUseCase({ root: rootAbs, targets: [fileAbs], logger }).catch(() => undefined);
+const reindexFile = async (rootAbs: string, _fileAbs: string, _logger: FirebatLogger): Promise<void> => {
+  const gildash = await createGildash({ projectRoot: rootAbs, watchMode: false }).catch(() => undefined);
+  if (gildash) {
+    await gildash.close({ cleanup: false });
+  }
 };
 
 export const replaceRangeUseCase = async (input: ReplaceRangeInput): Promise<EditResult> => {

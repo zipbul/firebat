@@ -9,9 +9,8 @@ import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { runTsgoTraceSymbol } from '../../tooling/tsgo/tsgo-runner';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { createArtifactStore } from '../../store/artifact';
-import { createFileIndexStore } from '../../store/file-index';
+import { createGildash } from '../../store/gildash';
 import { computeToolVersion } from '../../shared/tool-version';
-import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
 import { computeCacheNamespace } from '../scan/cache-namespace';
 import { computeInputsDigest } from '../scan/inputs-digest';
@@ -283,20 +282,18 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
   const db = await getDb({ rootAbs: ctx.rootAbs, logger });
   const artifactRepository = createArtifactStore(db);
-  const fileIndexRepository = createFileIndexStore(db);
+  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
   const relatedFiles = await resolveRelatedFiles(input);
 
   logger.trace('trace-symbol: related files resolved', { count: relatedFiles.length });
 
-  await indexTargets({ projectKey, targets: relatedFiles, repository: fileIndexRepository, concurrency: 4, logger });
-
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
   const inputsDigest = await computeInputsDigest({
-    projectKey,
     targets: relatedFiles,
-    fileIndexRepository,
+    gildash,
     extraParts: [`ns:${cacheNamespace}`],
   });
+  await gildash.close({ cleanup: false });
   const artifactKey = computeTraceArtifactKey({
     entryFile: relatedFiles[0] ?? input.entryFile,
     symbol: input.symbol,

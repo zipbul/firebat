@@ -1,8 +1,9 @@
 import { readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { FileIndexStore } from '../../store/file-index';
+import type { Gildash } from '@zipbul/gildash';
 
+import { isErr } from '@zipbul/result';
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
 
@@ -38,9 +39,8 @@ const listProjectInputFiles = async (rootAbs: string): Promise<string[]> => {
 };
 
 interface ProjectInputsDigestInput {
-  readonly projectKey: string;
   readonly rootAbs: string;
-  readonly fileIndexRepository: FileIndexStore;
+  readonly gildash: Gildash;
 }
 
 const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Promise<string> => {
@@ -62,32 +62,20 @@ const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Prom
 
       if (isEmptyPath) {
         partsByIndex[item.index] = `project:missing:${filePath}`;
-      }
-
-      if (isEmptyPath) {
         return;
       }
 
       try {
-        const existing = input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+        const fileRec = input.gildash.getFileInfo(filePath);
 
-        if (existing) {
-          partsByIndex[item.index] = `project:${filePath}:${existing.contentHash}`;
-
+        if (!isErr(fileRec) && fileRec !== null) {
+          partsByIndex[item.index] = `project:${filePath}:${fileRec.contentHash}`;
           return;
         }
 
         const file = Bun.file(item.filePathAbs);
-        const [stats, content] = await Promise.all([file.stat(), file.text()]);
+        const content = await file.text();
         const contentHash = hashString(content);
-
-        input.fileIndexRepository.upsertFile({
-          projectKey: input.projectKey,
-          filePath,
-          mtimeMs: stats.mtimeMs,
-          size: stats.size,
-          contentHash,
-        });
 
         partsByIndex[item.index] = `project:${filePath}:${contentHash}`;
       } catch {

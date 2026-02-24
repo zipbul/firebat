@@ -1,14 +1,14 @@
-import type { FileIndexStore } from '../../store/file-index';
+import type { Gildash } from '@zipbul/gildash';
 
+import { isErr } from '@zipbul/result';
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
 
 const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 interface ComputeInputsDigestInput {
-  readonly projectKey: string;
   readonly targets: ReadonlyArray<string>;
-  readonly fileIndexRepository: FileIndexStore;
+  readonly gildash: Gildash;
   readonly extraParts?: ReadonlyArray<string>;
 }
 
@@ -32,33 +32,20 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
 
       if (isEmptyPath) {
         partsByIndex[index] = `missing:${filePath}`;
-      }
-
-      if (isEmptyPath) {
         return;
       }
 
       try {
-        const entry = input.fileIndexRepository.getFile({ projectKey: input.projectKey, filePath });
+        const fileRec = input.gildash.getFileInfo(filePath);
 
-        if (entry) {
-          partsByIndex[index] = `file:${filePath}:${entry.contentHash}`;
-
+        if (!isErr(fileRec) && fileRec !== null) {
+          partsByIndex[index] = `file:${filePath}:${fileRec.contentHash}`;
           return;
         }
 
-        const filePathAbs = filePath;
-        const file = Bun.file(filePathAbs);
-        const [stats, content] = await Promise.all([file.stat(), file.text()]);
+        const file = Bun.file(filePath);
+        const content = await file.text();
         const contentHash = hashString(content);
-
-        input.fileIndexRepository.upsertFile({
-          projectKey: input.projectKey,
-          filePath,
-          mtimeMs: stats.mtimeMs,
-          size: stats.size,
-          contentHash,
-        });
 
         partsByIndex[index] = `file:${filePath}:${contentHash}`;
       } catch {
@@ -69,7 +56,6 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
 
   for (let i = 0; i < partsByIndex.length; i += 1) {
     const part = partsByIndex[i];
-
     parts.push(part ?? `missing:${normalizedTargets[i] ?? ''}`);
   }
 

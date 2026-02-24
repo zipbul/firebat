@@ -51,11 +51,10 @@ import { detectWaste } from '../../features/waste';
 import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createArtifactStore } from '../../store/artifact';
-import { createFileIndexStore } from '../../store/file-index';
+import { createGildash } from '../../store/gildash';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { computeToolVersion } from '../../shared/tool-version';
 import { createFirebatProgram } from '../../shared/ts-program';
-import { indexTargets } from '../indexing/file-indexer';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
@@ -179,21 +178,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.trace('DB ready', { durationMs: Math.round(nowMs() - tDb0) });
 
   const artifactRepository = createArtifactStore(db);
-  const fileIndexRepository = createFileIndexStore(db);
 
   logger.trace('Repositories created');
 
   const tIndex0 = nowMs();
-
-  await indexTargets({
-    projectKey,
-    targets: options.targets,
-    repository: fileIndexRepository,
-    concurrency: 8,
-    logger,
-  });
-
-  logger.info('Indexing complete', { targetCount: options.targets.length, durationMs: Math.round(nowMs() - tIndex0) });
+  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
+  logger.info('Indexing complete (gildash)', { targetCount: options.targets.length, durationMs: Math.round(nowMs() - tIndex0) });
 
   const tNamespace0 = nowMs();
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
@@ -202,22 +192,22 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const tProjectDigest0 = nowMs();
   const projectInputsDigest = await computeProjectInputsDigest({
-    projectKey,
     rootAbs: ctx.rootAbs,
-    fileIndexRepository,
+    gildash,
   });
 
   logger.trace('Project inputs digest computed', { projectInputsDigest, durationMs: Math.round(nowMs() - tProjectDigest0) });
 
   const tInputsDigest0 = nowMs();
   const inputsDigest = await computeInputsDigest({
-    projectKey,
     targets: options.targets,
-    fileIndexRepository,
+    gildash,
     extraParts: [`ns:${cacheNamespace}`, `project:${projectInputsDigest}`],
   });
 
   logger.trace('Inputs digest computed', { inputsDigest, durationMs: Math.round(nowMs() - tInputsDigest0) });
+
+  await gildash.close({ cleanup: false });
 
   const artifactKey = computeScanArtifactKey({
     detectors: options.detectors,

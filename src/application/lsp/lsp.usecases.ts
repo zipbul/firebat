@@ -2,10 +2,11 @@ import * as path from 'node:path';
 
 import type { TsgoLspSession } from '../../tooling/tsgo/tsgo-runner';
 import type { FirebatLogger } from '../../shared/logger';
-import type { SymbolMatch } from '../../ports/symbol-index.repository';
+import type { SymbolSearchResult } from '@zipbul/gildash';
 
+import { isErr } from '@zipbul/result';
 import { openTsDocument, withTsgoLspSession, lspUriToFilePath } from '../../tooling/tsgo/tsgo-runner';
-import { indexSymbolsUseCase, searchSymbolFromIndexUseCase } from '../symbol-index/symbol-index.usecases';
+import { createGildash } from '../../store/gildash';
 
 type LineParam = number | string;
 
@@ -753,7 +754,7 @@ const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput
 
   input.logger.debug('lsp:workspaceSymbols', { query });
 
-  const toWorkspaceSymbol = (match: SymbolMatch) => {
+  const toWorkspaceSymbol = (match: SymbolSearchResult) => {
     const uri = Bun.pathToFileURL(match.filePath).toString();
 
     return {
@@ -774,11 +775,14 @@ const getWorkspaceSymbolsUseCase = async (input: RootInput & WorkspaceQueryInput
       return { ok: true, symbols: [] };
     }
 
-    await indexSymbolsUseCase({ root: rootAbs, logger: input.logger });
-
-    const matches = await searchSymbolFromIndexUseCase({ root: rootAbs, query, logger: input.logger });
-
-    return { ok: true, symbols: matches.map(toWorkspaceSymbol) };
+    const gildash = await createGildash({ projectRoot: rootAbs, watchMode: false });
+    try {
+      const result = gildash.searchSymbols({ text: query });
+      if (isErr(result)) return { ok: true, symbols: [] };
+      return { ok: true, symbols: result.map(toWorkspaceSymbol) };
+    } finally {
+      await gildash.close({ cleanup: true });
+    }
   };
 
   const result = await withTsgoLspSession<unknown>(

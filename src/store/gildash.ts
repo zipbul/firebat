@@ -1,4 +1,4 @@
-import { Gildash, type GildashOptions } from '@zipbul/gildash';
+import { Gildash } from '@zipbul/gildash';
 import { isErr } from '@zipbul/result';
 
 interface CreateGildashOptions {

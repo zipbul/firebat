@@ -1,88 +1,112 @@
 import { describe, it, expect } from 'bun:test';
 
-import type { FileIndexStore } from '../../store/file-index';
+import type { Gildash } from '@zipbul/gildash';
+import { err } from '@zipbul/result';
 import { computeInputsDigest } from './inputs-digest';
 
-const noopRepo: FileIndexStore = {
-  getFile: () => null,
-  upsertFile: () => {},
-  deleteFile: () => {},
-};
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const makeFileRecord = (filePath: string, contentHash = 'abc123') => ({
+  project: 'test',
+  filePath,
+  mtimeMs: 1000,
+  size: 100,
+  contentHash,
+  updatedAt: new Date().toISOString(),
+});
+
+const makeGildash = (
+  getFileInfoImpl: (filePath: string) => ReturnType<Gildash['getFileInfo']>,
+): Gildash =>
+  ({
+    getFileInfo: getFileInfoImpl,
+  }) as unknown as Gildash;
+
+const noopGildash = makeGildash(() => null);
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('computeInputsDigest', () => {
-  it('[ED] returns a hash for empty targets array', async () => {
+  it('[HP] returns digest using contentHash from getFileInfo when FileRecord available', async () => {
+    const gildash = makeGildash(() => makeFileRecord('/a.ts', 'hash1'));
+
     const result = await computeInputsDigest({
-      projectKey: 'proj',
-      targets: [],
-      fileIndexRepository: noopRepo,
+      targets: ['/a.ts'],
+      gildash,
     });
+
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
   });
 
-  it('[HP] same inputs produce same digest (deterministic)', async () => {
-    const opts = {
-      projectKey: 'proj',
+  it('[HP] returns hash for empty targets array', async () => {
+    const result = await computeInputsDigest({
       targets: [],
-      fileIndexRepository: noopRepo,
-      extraParts: ['extra'],
-    };
-    const a = await computeInputsDigest(opts);
-    const b = await computeInputsDigest(opts);
-    expect(a).toBe(b);
+      gildash: noopGildash,
+    });
+
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
   });
 
   it('[HP] different extraParts produce different digest', async () => {
     const a = await computeInputsDigest({
-      projectKey: 'proj',
       targets: [],
-      fileIndexRepository: noopRepo,
+      gildash: noopGildash,
       extraParts: ['a'],
     });
     const b = await computeInputsDigest({
-      projectKey: 'proj',
       targets: [],
-      fileIndexRepository: noopRepo,
+      gildash: noopGildash,
       extraParts: ['b'],
     });
+
     expect(a).not.toBe(b);
   });
 
   it('[HP] target order does not affect digest (targets are sorted)', async () => {
-    const a = await computeInputsDigest({
-      projectKey: 'proj',
-      targets: ['/b/file.ts', '/a/file.ts'],
-      fileIndexRepository: noopRepo,
-    });
-    const b = await computeInputsDigest({
-      projectKey: 'proj',
-      targets: ['/a/file.ts', '/b/file.ts'],
-      fileIndexRepository: noopRepo,
-    });
+    const gildash = makeGildash(fp =>
+      fp === '/b.ts' ? makeFileRecord('/b.ts', 'h2') : makeFileRecord('/a.ts', 'h1'),
+    );
+
+    const a = await computeInputsDigest({ targets: ['/b.ts', '/a.ts'], gildash });
+    const b = await computeInputsDigest({ targets: ['/a.ts', '/b.ts'], gildash });
+
     expect(a).toBe(b);
   });
 
-  it('[HP] empty-path target is recorded as missing entry', async () => {
-    // should not throw
+  it('[ED] getFileInfo returns null → falls back to disk read (no throw)', async () => {
+    const gildash = makeGildash(() => null);
+
+    // Will try to read a non-existent file, but should not throw — returns string
     const result = await computeInputsDigest({
-      projectKey: 'proj',
       targets: ['   '],
-      fileIndexRepository: noopRepo,
+      gildash,
     });
+
     expect(typeof result).toBe('string');
   });
 
-  it('[HP] cached file entry is used from repo when available', async () => {
-    const cachedRepo: FileIndexStore = {
-      ...noopRepo,
-      getFile: () => ({ contentHash: 'abc123', mtimeMs: 0, size: 0, filePath: '/f.ts', updatedAt: 0 }),
-    };
+  it('[ED] getFileInfo returns Err → falls back to disk read (no throw)', async () => {
+    const gildash = makeGildash(
+      () => err({ type: 'closed' as const, message: 'gildash closed' }) as ReturnType<Gildash['getFileInfo']>,
+    );
+
     const result = await computeInputsDigest({
-      projectKey: 'proj',
-      targets: ['/f.ts'],
-      fileIndexRepository: cachedRepo,
+      targets: ['   '],
+      gildash,
     });
-    // Should produce a digest containing the hash from repo
+
     expect(typeof result).toBe('string');
+  });
+
+  it('[ID] same inputs produce same digest (deterministic)', async () => {
+    const gildash = makeGildash(() => makeFileRecord('/a.ts', 'stable'));
+
+    const opts = { targets: ['/a.ts'], gildash, extraParts: ['v1'] };
+    const x = await computeInputsDigest(opts);
+    const y = await computeInputsDigest(opts);
+
+    expect(x).toBe(y);
   });
 });
