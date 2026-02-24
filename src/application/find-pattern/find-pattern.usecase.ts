@@ -1,44 +1,40 @@
-import type { FirebatLogger } from '../../shared/logger';
+import type { PatternMatch } from '@zipbul/gildash';
+import { isErr } from '@zipbul/result';
 
-import { findPatternInFiles, type AstGrepMatch } from '../../tooling/ast-grep/find-pattern';
+import { createGildash } from '../../store/gildash';
 import { resolveTargets } from '../../shared/target-discovery';
-
-interface JsonObject {
-  readonly [k: string]: JsonValue;
-}
-
-type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
+import type { FirebatLogger } from '../../shared/logger';
 
 interface FindPatternInput {
   readonly targets?: ReadonlyArray<string>;
-  readonly rule?: JsonValue;
-  readonly matcher?: JsonValue;
-  readonly ruleName?: string;
+  readonly pattern: string;
   readonly logger: FirebatLogger;
+  readonly rootAbs?: string;
 }
 
-const findPatternUseCase = async (input: FindPatternInput): Promise<ReadonlyArray<AstGrepMatch>> => {
-  const { logger } = input;
-  const cwd = process.cwd();
-  const targets = await resolveTargets(cwd, input.targets);
+const findPatternUseCase = async (
+  input: FindPatternInput,
+): Promise<ReadonlyArray<PatternMatch>> => {
+  const { logger, pattern } = input;
+  const root = input.rootAbs ?? process.cwd();
+  const filePaths = await resolveTargets(root, input.targets);
 
-  logger.debug('find-pattern: searching', { ruleName: input.ruleName, targetCount: targets.length });
+  logger.debug('find-pattern: searching', { pattern, targetCount: filePaths.length });
 
-  const request: Parameters<typeof findPatternInFiles>[0] = { targets, logger };
+  if (filePaths.length === 0) return [];
 
-  if (input.rule !== undefined) {
-    request.rule = input.rule;
+  const gildash = await createGildash({ projectRoot: root, watchMode: false });
+  try {
+    const result = await gildash.findPattern(pattern, { filePaths });
+    if (isErr(result)) {
+      logger.debug('find-pattern: error', { message: result.data.message });
+      return [];
+    }
+    return result;
+  } finally {
+    await gildash.close({ cleanup: true });
   }
-
-  if (input.matcher !== undefined) {
-    request.matcher = input.matcher;
-  }
-
-  if (input.ruleName !== undefined) {
-    request.ruleName = input.ruleName;
-  }
-
-  return findPatternInFiles(request);
 };
 
 export { findPatternUseCase };
+export type { FindPatternInput };
