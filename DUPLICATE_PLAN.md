@@ -2,6 +2,9 @@
 
 > 4개 피처(exact-duplicates, structural-duplicates, modification-trap, symmetry-breaking)를
 > 1개의 `duplicates` 디텍터로 통합하는 상세 개발 계획.
+> 코드·디렉토리·테스트를 모두 `src/features/duplicates/`로 완전 통합한다.
+
+---
 
 ## 1. 현재 상태 분석
 
@@ -9,31 +12,45 @@
 
 | 피처 | 파일 | LOC | 알고리즘 | 출력 타입 |
 |------|------|-----|---------|----------|
-| exact-duplicates | `src/features/exact-duplicates/detector.ts` | 12 | `detectClones('type-1')` | `DuplicateGroup[]` |
-| structural-duplicates | `src/features/structural-duplicates/analyzer.ts` | 18 | `detectClones('type-2-shape')` + `detectClones('type-3-normalized')` | `DuplicateGroup[]` |
+| exact-duplicates | `src/features/exact-duplicates/detector.ts` | 14 | `detectClones('type-1')` | `DuplicateGroup[]` |
+| structural-duplicates | `src/features/structural-duplicates/analyzer.ts` | 20 | `detectClones('type-2-shape')` + `detectClones('type-3-normalized')` | `DuplicateGroup[]` |
 | modification-trap | `src/features/modification-trap/analyzer.ts` | 143 | Regex: case 라벨 + 리터럴 비교 추출 → 패턴 그룹핑 | `ModificationTrapFinding[]` |
 | symmetry-breaking | `src/features/symmetry-breaking/analyzer.ts` | 202 | Regex: Handler/Controller suffix + no-arg call sequence → 다수결 투표 | `SymmetryBreakingFinding[]` |
 
-### 1.2 기존 엔진
+### 1.2 기존 엔진 (duplicates 전용 — 삭제 대상)
 
-| 파일 | LOC | 역할 |
-|------|-----|------|
-| `src/engine/duplicate-detector.ts` | 80 | `isCloneTarget`, `detectClones` 진입점 |
-| `src/engine/duplicate-collector.ts` | 191 | `collectDuplicateGroups` (해시 그룹핑), `computeCloneDiff` |
-| `src/engine/ast/oxc-fingerprint.ts` | 211 | 4종 fingerprint 생성 (Exact/Normal/Shape/Normalized) |
-| `src/engine/ast/oxc-size-count.ts` | 42 | AST 노드 수 카운팅 |
-| `src/engine/hasher.ts` | 17 | `Bun.hash.xxHash64` 래퍼 |
-| `src/engine/auto-min-size.ts` | 39 | 자동 minSize 계산 |
+| 파일 | LOC | 역할 | 통합 후 처리 |
+|------|-----|------|-------------|
+| `src/engine/duplicate-detector.ts` | 80 | `isCloneTarget`, `resolveFingerprint`, `detectClones` | **삭제** — `analyzer.ts`에 재작성 (~35줄) |
+| `src/engine/duplicate-collector.ts` | 191 | `collectDuplicateGroups` (해시 그룹핑), `computeCloneDiff` | **삭제** — hash 그룹핑 `analyzer.ts` 인라인 (~50줄), `computeCloneDiff`는 anti-unifier가 상위 대체 |
 
-### 1.3 통합 지점
+*삭제 근거:* 이 두 파일을 import하는 곳은 오직 `exact-duplicates/detector.ts`, `structural-duplicates/analyzer.ts`, `test-api.ts` — 모두 통합 과정에서 제거되는 파일들이다.
+
+### 1.3 기존 엔진 (범용 — 유지)
+
+| 파일 | LOC | 역할 | 사용처 |
+|------|-----|------|--------|
+| `src/engine/ast/oxc-fingerprint.ts` | 211 | 4종 fingerprint: `createOxcFingerprintExact` (Type-1), `createOxcFingerprint` (Type-2), `createOxcFingerprintShape` (Type-2-shape), `createOxcFingerprintNormalized` (Type-3) | duplicates + 향후 AST 비교 |
+| `src/engine/ast/ast-normalizer.ts` | — | `normalizeForFingerprint` (fingerprint 전처리) | oxc-fingerprint 의존 |
+| `src/engine/ast/oxc-ast-utils.ts` | — | AST 순회/노드 유틸 | 20+ 피처/엔진 |
+| `src/engine/ast/oxc-size-count.ts` | 42 | AST 노드 수 카운팅 | auto-min-size + duplicates |
+| `src/engine/hasher.ts` | 17 | `Bun.hash.xxHash64` 래퍼 | 6곳 (scan, trace 등) |
+| `src/engine/auto-min-size.ts` | 39 | 자동 minSize 계산 | scan.usecase |
+
+### 1.4 통합 지점
 
 | 위치 | 참조 방식 |
 |------|----------|
 | `src/application/scan/scan.usecase.ts` | 4개 함수 개별 import + 개별 호출 |
-| `src/test-api.ts` | 4개 함수 re-export (통합/e2e 테스트용) |
+| `src/test-api.ts` | 4개 함수 re-export |
 | `src/types.ts` → `FirebatDetector` | 4개 문자열 리터럴 |
 | `src/types.ts` → `FirebatAnalyses` | 4개 필드 |
-| `test/integration/features/*/` | 각 피처별 테스트 디렉토리 |
+| `test/integration/features/exact-duplicates/*.test.ts` | 5개 테스트 |
+| `test/integration/features/structural-duplicates/*.test.ts` | 3개 테스트 (analysis, golden, type-3-normalized) |
+| `test/integration/features/modification-trap/*.test.ts` | 2개 테스트 (analysis, golden) |
+| `test/integration/features/symmetry-breaking/*.test.ts` | 2개 테스트 (analysis, golden) |
+
+---
 
 ## 2. 목표 아키텍처
 
@@ -46,7 +63,7 @@ Input: OXC 파싱된 AST 함수들
 │ type-1 fingerprint → exact-clone 그룹                       │
 │ type-2-shape fingerprint → structural-clone 그룹            │
 │ type-3-normalized fingerprint → structural-clone 그룹       │
-│ (기존 엔진 유지)                                             │
+│ (hash Map 그룹핑 — analyzer.ts 인라인)                       │
 └─────────────────────────────────────────────────────────────┘
          │ 그룹에 속하지 않은 함수들
          ▼
@@ -55,6 +72,7 @@ Input: OXC 파싱된 AST 함수들
 │ bag-of-statement-fingerprints → MinHash 시그니처 (k=128)    │
 │ LSH banding → 후보 쌍 (estimated Jaccard ≥ threshold)       │
 │ 크기 필터: AST 노드 수 ±50% 이내만 비교                      │
+│ (statement ＜ 5개 → MinHash 생략, 직접 pairwise LCS)         │
 └─────────────────────────────────────────────────────────────┘
          │ 후보 쌍
          ▼
@@ -66,8 +84,8 @@ Input: OXC 파싱된 AST 함수들
          │ 모든 클론 그룹 (Type-1, 2, 3)
          ▼
 ┌─ Level 4: Anti-unification 상세 분석 ───────────────────────┐
-│ 그룹 내 대표 × 각 멤버: Plotkin anti-unification             │
-│ 생성된 변수(차이점) 분류:                                     │
+│ 그룹 내 representative(median-size) × 각 멤버               │
+│ Plotkin anti-unification → 차이점(변수) 분류:                │
 │  - Identifier만 다름 → structural-clone                      │
 │  - Literal만 다름 → literal-variant (modification-trap)      │
 │  - 구조적 차이 → near-miss-clone                             │
@@ -79,21 +97,24 @@ Input: OXC 파싱된 AST 함수들
 
 | 단계 | 알고리즘 | 선정 이유 |
 |------|----------|----------|
-| Level 1 | Hash exact match | Type-1/2에 **수학적 완전** (false positive 0). 기존 엔진 그대로 사용. |
+| Level 1 | Hash exact match | Type-1/2에 **수학적 완전** (false positive 0). |
 | Level 2 | MinHash/LSH | 집합 유사도 pre-filtering에 **확률론적 최적**. Pr[h(A)=h(B)] = Jaccard(A,B). |
 | Level 3 | LCS | 문장 삽입/삭제 패턴(가장 흔한 Type-3)에 **최적 DP**. Hunt-Szymanski O(r log n). |
 | Level 4 | Anti-unification | 구조 비교에서 **정보량 최대** — 파라미터화 템플릿 + 정확한 차이점 추출. Plotkin O(\|T₁\|+\|T₂\|). |
 
 **기각한 대안:**
-- 순수 SourcererCC (token Jaccard): 토큰 순서 정보 손실 → 재배치된 코드에서 false positive 높음
-- Deckard (특성 벡터): AST 노드 타입 카운트만 사용 → 세부 구조 손실
-- 순수 Tree edit distance: anti-unification보다 비용 크고 "공유 템플릿" 대신 "편집 수"만 제공
-- PDG 기반: Type-4(의미적 클론) 탐지용, NP-hard, 이 프로젝트 범위 밖
+
+| 대안 | 기각 이유 |
+|------|----------|
+| 순수 SourcererCC (token Jaccard) | 토큰 순서 정보 손실 → 재배치된 코드에서 false positive 높음 |
+| Deckard (특성 벡터) | AST 노드 타입 카운트만 사용 → 세부 구조 손실 |
+| 순수 Tree edit distance | anti-unification보다 비용 크고 "공유 템플릿" 대신 "편집 수"만 제공 |
+| PDG 기반 | Type-4(의미적 클론) 탐지용, NP-hard, 이 프로젝트 범위 밖 |
 
 **출처:**
 - SourcererCC: arXiv:1512.06448 (ICSE'16), Sajnani et al.
 - Anti-unification: Plotkin (1970), Bulychev & Minea (2008) "Duplicate Code Detection Using Anti-Unification"
-- MinHash/LSH: Wikipedia "Locality-sensitive hashing", Broder et al. (1997)
+- MinHash/LSH: Broder et al. (1997), Wikipedia "Locality-sensitive hashing"
 
 ### 2.3 Finding 종류
 
@@ -106,31 +127,46 @@ type DuplicateFindingKind =
   | 'pattern-outlier';   // symmetry-breaking: 그룹에서 유의미 이탈 멤버
 ```
 
+**findingKind → FirebatCatalogCode 매핑:**
+
+| findingKind | catalogCode | 신규/기존 |
+|-------------|-------------|----------|
+| `exact-clone` | `EXACT_DUP_TYPE_1` | 기존 |
+| `structural-clone` | `STRUCT_DUP_TYPE_2_SHAPE` 또는 `STRUCT_DUP_TYPE_3_NORMALIZED` (cloneType 기준) | 기존 |
+| `near-miss-clone` | `DUP_NEAR_MISS` | **신규** |
+| `literal-variant` | `MOD_TRAP` | 기존 재활용 |
+| `pattern-outlier` | `SYMMETRY_BREAK` | 기존 재활용 |
+
 ### 2.4 디렉토리 구조 (최종)
 
 ```
 src/features/duplicates/
-  index.ts                    # public API re-export
-  analyzer.ts                 # 메인 진입점: analyzeDuplicates()
-  analyzer.spec.ts            # 유닛 테스트
-src/engine/
-  duplicate-detector.ts       # Level 1 (기존, refactored)
-  duplicate-collector.ts      # Level 1 (기존, refactored)
-  near-miss-detector.ts       # Level 2+3 (신규)
+  index.ts                       # public API re-export
+  types.ts                       # 내부 타입 (InternalCloneGroup, InternalCloneItem)
+  analyzer.ts                    # Level 1(인라인) + Level 2~4 오케스트레이션
+  analyzer.spec.ts
+  near-miss-detector.ts          # Level 2+3 (MinHash/LSH + LCS 검증)
   near-miss-detector.spec.ts
-  anti-unifier.ts             # Level 4 (신규)
+  anti-unifier.ts                # Level 4 (Plotkin anti-unification)
   anti-unifier.spec.ts
-  minhash.ts                  # MinHash/LSH (신규)
-  minhash.spec.ts
-  lcs.ts                      # LCS 알고리즘 (신규)
+  lcs.ts                         # 순수 알고리즘: LCS
   lcs.spec.ts
-  statement-fingerprint.ts    # statement 단위 fingerprint (신규)
+  minhash.ts                     # 순수 알고리즘: MinHash/LSH
+  minhash.spec.ts
+  statement-fingerprint.ts       # statement 단위 fingerprint
   statement-fingerprint.spec.ts
 ```
 
+**설계 원칙:**
+- duplicates 관련 모든 코드가 **한 디렉토리**에 존재 (self-contained module)
+- 범용 인프라(`engine/ast/*`, `engine/hasher.ts`)만 외부 import
+- `lcs.ts`, `minhash.ts` 등 순수 알고리즘이 향후 다른 피처에서 필요해지면 `engine/`으로 promote (YAGNI)
+
+---
+
 ## 3. 구현 단계
 
-### Phase 0: 기반 작업 (코드 변경 없음)
+### Phase 0: 기반 작업 (코드 변경 없음) 🤖 Sonnet
 
 #### Step 0-1: 기존 테스트 스냅샷
 - `bun test` 실행, 현재 통과/실패 수 기록
@@ -139,22 +175,22 @@ src/engine/
   - `src/features/structural-duplicates/analyzer.spec.ts`
   - `src/features/modification-trap/analyzer.spec.ts`
   - `src/features/symmetry-breaking/analyzer.spec.ts`
-  - `test/integration/features/exact-duplicates/*.test.ts` (5개)
-  - `test/integration/features/structural-duplicates/*.test.ts` (2개)
-  - `test/integration/features/modification-trap/*.test.ts` (1개)
+  - `test/integration/features/exact-duplicates/*.test.ts` (5개: analysis, golden, fuzz, blocks-fuzz, noise-fuzz)
+  - `test/integration/features/structural-duplicates/*.test.ts` (3개: analysis, golden, type-3-normalized)
+  - `test/integration/features/modification-trap/*.test.ts` (2개: analysis, golden)
+  - `test/integration/features/symmetry-breaking/*.test.ts` (2개: analysis, golden)
 
 ---
 
-### Phase 1: 신규 엔진 모듈 (하위 → 상위)
+### Phase 1: 신규 모듈 (하위 → 상위)
 
-#### Step 1-1: `src/engine/lcs.ts` — LCS 알고리즘
+#### Step 1-1: `src/features/duplicates/lcs.ts` — LCS 알고리즘 🤖 Sonnet
 
 **인터페이스:**
 ```typescript
 /**
  * 두 문자열 배열의 Longest Common Subsequence 길이를 계산한다.
  * Hunt-Szymanski 알고리즘 (평균 O(r log n), 최악 O(n²)).
- * atoms이 해시 문자열이므로 비교는 문자열 등호.
  */
 export const computeLcsLength = (
   a: ReadonlyArray<string>,
@@ -179,8 +215,8 @@ export interface LcsAlignment {
     readonly aIndex: number;
     readonly bIndex: number;
   }>;
-  readonly aOnly: ReadonlyArray<number>;  // A에만 있는 인덱스
-  readonly bOnly: ReadonlyArray<number>;  // B에만 있는 인덱스
+  readonly aOnly: ReadonlyArray<number>;
+  readonly bOnly: ReadonlyArray<number>;
 }
 
 export const computeLcsAlignment = (
@@ -199,19 +235,11 @@ export const computeLcsAlignment = (
 
 ---
 
-#### Step 1-2: `src/engine/minhash.ts` — MinHash + LSH
+#### Step 1-2: `src/features/duplicates/minhash.ts` — MinHash + LSH 🤖 Sonnet
 
 **인터페이스:**
 ```typescript
-/**
- * MinHash 시그니처 생성기.
- * k개의 해시 함수로 bag-of-items의 MinHash 시그니처를 계산한다.
- *
- * 내부: k개의 서로 다른 seed로 xxHash64 사용.
- * Pr[sig_A[i] === sig_B[i]] ≈ Jaccard(A, B)
- */
 export interface MinHasher {
-  /** bag-of-items에서 k개 MinHash 값 계산 */
   readonly computeSignature: (
     items: ReadonlyArray<string>,
   ) => ReadonlyArray<bigint>;
@@ -220,16 +248,6 @@ export interface MinHasher {
 export const createMinHasher = (k?: number): MinHasher;
 // default k=128
 
-/**
- * LSH banding으로 후보 쌍 생성.
- * b bands × r rows = k.
- * Jaccard ≥ threshold일 때 후보가 될 확률 ≈ 1 - (1 - t^r)^b.
- *
- * @param signatures - 각 아이템의 MinHash 시그니처 배열
- * @param threshold - Jaccard 유사도 임계값 (default: 0.5)
- * @param bands - band 수 (default: 자동 계산)
- * @returns 후보 쌍 [index_i, index_j][]
- */
 export interface LshCandidate {
   readonly i: number;
   readonly j: number;
@@ -242,6 +260,8 @@ export const findLshCandidates = (
 ): ReadonlyArray<LshCandidate>;
 ```
 
+**의존성:** `../../engine/hasher.ts` (xxHash64)
+
 **테스트 케이스:**
 - 동일 bag → 시그니처 동일 → 반드시 후보 쌍
 - 완전 불일치 bag → 후보 아님
@@ -252,7 +272,7 @@ export const findLshCandidates = (
 
 ---
 
-#### Step 1-3: `src/engine/statement-fingerprint.ts` — Statement 단위 Fingerprint
+#### Step 1-3: `src/features/duplicates/statement-fingerprint.ts` — Statement 단위 Fingerprint 🤖 Sonnet
 
 **인터페이스:**
 ```typescript
@@ -261,13 +281,11 @@ import type { Node } from 'oxc-parser';
 /**
  * 함수 AST 노드에서 top-level statement별 fingerprint 시퀀스를 추출한다.
  *
- * 절차:
  * 1. 함수 body의 직계 statement 노드들을 순서대로 추출
  * 2. 각 statement에 대해 type-2-shape fingerprint 생성
  * 3. fingerprint 문자열 배열 반환
  *
- * BlockStatement가 아닌 body (ArrowFunction expression body):
- * → 단일 statement로 취급하여 1개 fingerprint 반환
+ * ArrowFunction expression body → 단일 statement로 취급.
  */
 export const extractStatementFingerprints = (
   functionNode: Node,
@@ -282,7 +300,7 @@ export const extractStatementFingerprintBag = (
 ): ReadonlyArray<string>;
 ```
 
-**의존성:** `oxc-fingerprint.ts`의 `createOxcFingerprintShape`, `oxc-ast-utils.ts`
+**의존성:** `../../engine/ast/oxc-fingerprint.ts` (`createOxcFingerprintShape`), `../../engine/ast/oxc-ast-utils.ts`
 
 **테스트 케이스:**
 - 빈 함수 body → 빈 배열
@@ -293,30 +311,24 @@ export const extractStatementFingerprintBag = (
 
 ---
 
-#### Step 1-4: `src/engine/anti-unifier.ts` — Anti-unification (Plotkin's lgg)
+#### Step 1-4: `src/features/duplicates/anti-unifier.ts` — Anti-unification (Plotkin's lgg) 🤖 Opus
 
 **인터페이스:**
 ```typescript
 import type { Node } from 'oxc-parser';
 
-/**
- * Anti-unification에서 발견된 하나의 차이점(변수).
- */
 export interface AntiUnificationVariable {
   readonly id: number;
   readonly location: string;    // dotpath (예: "body[0].consequent.body[2]")
-  readonly leftType: string;    // 왼쪽 노드 타입 또는 값
-  readonly rightType: string;   // 오른쪽 노드 타입 또는 값
+  readonly leftType: string;
+  readonly rightType: string;
   readonly kind: 'identifier' | 'literal' | 'type' | 'structural';
 }
 
-/**
- * Anti-unification 결과.
- */
 export interface AntiUnificationResult {
-  readonly sharedSize: number;  // lgg의 노드 수
-  readonly leftSize: number;    // 왼쪽 원본 노드 수
-  readonly rightSize: number;   // 오른쪽 원본 노드 수
+  readonly sharedSize: number;
+  readonly leftSize: number;
+  readonly rightSize: number;
   readonly similarity: number;  // sharedSize / max(leftSize, rightSize)
   readonly variables: ReadonlyArray<AntiUnificationVariable>;
 }
@@ -324,9 +336,9 @@ export interface AntiUnificationResult {
 /**
  * 두 AST 노드의 anti-unification을 수행한다.
  *
- * Plotkin's algorithm 적용:
- * - 같은 type의 노드 → 재귀적으로 자식 비교
- * - 다른 type의 노드 → 변수(차이점) 생성
+ * Plotkin's algorithm:
+ * - 같은 type → 재귀적 자식 비교
+ * - 다른 type → 변수(차이점) 생성
  * - 배열 자식(BlockStatement.body 등) → LCS 정렬 후 매칭된 쌍만 재귀
  */
 export const antiUnify = (
@@ -334,15 +346,6 @@ export const antiUnify = (
   right: Node,
 ): AntiUnificationResult;
 
-/**
- * AntiUnificationResult의 variables를 분류하여
- * 주요 차이 종류를 결정한다.
- *
- * - 모든 변수가 identifier → 'rename-only'
- * - 모든 변수가 literal → 'literal-variant'
- * - structural 변수 존재 → 'structural-diff'
- * - 혼합 → 'mixed'
- */
 export type DiffClassification =
   | 'rename-only'
   | 'literal-variant'
@@ -354,6 +357,8 @@ export const classifyDiff = (
 ): DiffClassification;
 ```
 
+**의존성:** `./lcs.ts` (`computeLcsAlignment`), `../../engine/ast/oxc-fingerprint.ts` (`createOxcFingerprintShape`), `../../engine/ast/oxc-ast-utils.ts`, `../../engine/ast/oxc-size-count.ts`
+
 **테스트 케이스:**
 - 동일 노드 → variables 빈 배열, similarity 1.0
 - Identifier만 다른 두 함수 → kind='identifier' 변수만 생성, classify='rename-only'
@@ -364,28 +369,27 @@ export const classifyDiff = (
 
 ---
 
-#### Step 1-5: `src/engine/near-miss-detector.ts` — Level 2+3 통합
+#### Step 1-5: `src/features/duplicates/near-miss-detector.ts` — Level 2+3 통합 🤖 Opus
 
 **인터페이스:**
 ```typescript
-import type { ParsedFile } from './types';
+import type { Node } from 'oxc-parser';
+import type { SourceSpan, FirebatItemKind } from '../../types';
+import type { ParsedFile } from '../../engine/types';
 
 export interface NearMissCloneItem {
-  readonly functionNode: unknown;      // AST Node (opaque)
-  readonly kind: 'function' | 'method' | 'type' | 'interface' | 'node';
+  readonly node: Node;
+  readonly kind: FirebatItemKind;
   readonly header: string;
   readonly filePath: string;
-  readonly span: {
-    start: { line: number; column: number };
-    end: { line: number; column: number };
-  };
+  readonly span: SourceSpan;
   readonly size: number;
   readonly statementFingerprints: ReadonlyArray<string>;
 }
 
 export interface NearMissCloneGroup {
   readonly items: ReadonlyArray<NearMissCloneItem>;
-  readonly similarity: number; // 그룹 내 평균 pairwise 유사도
+  readonly similarity: number;
 }
 
 export interface NearMissDetectorOptions {
@@ -394,16 +398,16 @@ export interface NearMissDetectorOptions {
   readonly jaccardThreshold: number;    // MinHash pre-filter (default: 0.5)
   readonly minHashK: number;            // MinHash 해시 수 (default: 128)
   readonly sizeRatio: number;           // 크기 비율 필터 (default: 0.5)
+  readonly minStatementCount: number;   // MinHash 최소 statement 수 (default: 5)
 }
 
 /**
  * Level 2+3: near-miss 클론 탐지.
  *
- * 절차:
- * 1. 모든 파일에서 isCloneTarget 노드 추출
+ * 1. 모든 파일에서 clone 대상 노드 추출
  * 2. Level 1 해시 그룹에 이미 속한 노드 제외 (excludedHashes)
  * 3. 각 노드의 statement fingerprint 시퀀스 추출
- * 4. bag-of-statement-fingerprints → MinHash 시그니처
+ * 4. statement ≥ minStatementCount → MinHash/LSH, 미만 → 직접 pairwise
  * 5. LSH banding → 후보 쌍
  * 6. 크기 비율 필터
  * 7. 후보 쌍에 LCS 유사도 검증 → threshold 이상이면 확정
@@ -416,7 +420,7 @@ export const detectNearMissClones = (
 ): ReadonlyArray<NearMissCloneGroup>;
 ```
 
-**의존성:** `minhash.ts`, `lcs.ts`, `statement-fingerprint.ts`, `duplicate-detector.ts`
+**의존성:** `./minhash.ts`, `./lcs.ts`, `./statement-fingerprint.ts`, `../../engine/ast/oxc-ast-utils.ts`, `../../engine/ast/oxc-size-count.ts`, `../../engine/ast/oxc-fingerprint.ts`, `../../engine/source-position.ts`
 
 **테스트 케이스:**
 - 빈 파일 배열 → 빈 결과
@@ -424,10 +428,46 @@ export const detectNearMissClones = (
 - 완전 동일 함수 → Level 1에서 잡히므로 excludedHashes로 제외됨
 - threshold 0.9에서 80% 유사 함수 → 그룹 미형성
 - 3개 함수 A≈B, B≈C → transitive closure로 {A,B,C} 그룹
+- statement 3개 함수 (< minStatementCount) → MinHash 생략, 직접 LCS 비교
 
 ---
 
-### Phase 2: 통합 Analyzer
+#### Step 1-6: `src/features/duplicates/types.ts` — 내부 타입 🤖 Sonnet
+
+```typescript
+import type { Node } from 'oxc-parser';
+import type { DuplicateCloneType, FirebatItemKind, SourceSpan } from '../../types';
+
+/**
+ * 내부 처리용 클론 아이템.
+ * AST Node를 보존하여 Level 4 anti-unification에서 사용.
+ * 최종 출력 시 node를 drop하여 DuplicateItem으로 변환.
+ */
+export interface InternalCloneItem {
+  readonly node: Node;
+  readonly kind: FirebatItemKind;
+  readonly header: string;
+  readonly filePath: string;
+  readonly span: SourceSpan;
+  readonly size: number;
+}
+
+/**
+ * 내부 처리용 클론 그룹.
+ * Level 1~3 → InternalCloneGroup[] 형태로 수집
+ * Level 4 → node를 이용해 antiUnify 수행
+ * 최종 출력 → node drop → DuplicateGroup[]
+ */
+export interface InternalCloneGroup {
+  readonly cloneType: DuplicateCloneType;
+  readonly items: ReadonlyArray<InternalCloneItem>;
+  readonly similarity?: number;
+}
+```
+
+---
+
+### Phase 2: 통합 Analyzer 🤖 Opus
 
 #### Step 2-1: `src/features/duplicates/analyzer.ts` — 메인 진입점
 
@@ -441,20 +481,26 @@ export interface DuplicatesAnalyzerOptions {
   readonly nearMissSimilarityThreshold?: number;  // default: 0.7
   readonly enableNearMiss?: boolean;               // default: true
   readonly enableAntiUnification?: boolean;        // default: true
+  readonly minStatementCount?: number;             // default: 5
 }
 
 /**
  * 통합 중복 코드 분석기.
  *
- * 절차:
- * 1. Level 1: detectClones('type-1') → exact-clone 그룹
- * 2. Level 1: detectClones('type-2-shape') + ('type-3-normalized')
- *    → structural-clone 그룹
- * 3. Level 2+3: detectNearMissClones() → near-miss-clone 그룹
- * 4. Level 4: 모든 그룹에 anti-unification 적용 → 상세 분류
- *    - structural-clone 그룹 중 literal 차이만 → literal-variant 재분류
- *    - near-miss 그룹 중 유의미 이탈 멤버 → pattern-outlier 마킹
- * 5. 결과 정렬 및 반환
+ * Level 1: Hash 기반 그룹핑 (인라인)
+ *   - 파일 순회 → isCloneTarget(node) → size 필터 → fingerprint(node) → Map<hash, InternalCloneItem[]>
+ *   - type-1 → exact-clone, type-2-shape/type-3-normalized → structural-clone
+ *
+ * Level 2+3: detectNearMissClones()
+ *   - Level 1에서 미그룹핑된 노드 대상
+ *   - MinHash/LSH pre-filter + LCS 유사도 검증
+ *
+ * Level 4: 모든 그룹에 anti-unification 적용
+ *   - InternalCloneGroup의 node를 직접 사용 (drop 전)
+ *   - structural-clone 중 literal 차이만 → literal-variant 재분류
+ *   - near-miss 중 유의미 이탈 멤버 → pattern-outlier 마킹
+ *
+ * 최종: InternalCloneGroup → DuplicateGroup 변환 (node drop)
  */
 export const analyzeDuplicates = (
   files: ReadonlyArray<ParsedFile>,
@@ -464,13 +510,43 @@ export const analyzeDuplicates = (
 export const createEmptyDuplicates = (): ReadonlyArray<DuplicateGroup> => [];
 ```
 
-**그룹 분류 로직 (Level 4 detail):**
+**Level 1 인라인 로직 (~50줄):**
+```typescript
+// isCloneTarget: 8개 AST 노드 타입 체크
+const isCloneTarget = (node: Node): boolean => { ... };
+
+// getItemKind: 노드 → FirebatItemKind 매핑
+const getItemKind = (node: Node): FirebatItemKind => { ... };
+
+// Level 1 hash 그룹핑
+const groupByHash = (
+  files: ReadonlyArray<ParsedFile>,
+  minSize: number,
+  fingerprintFn: (node: Node) => string,
+  cloneType: DuplicateCloneType,
+): InternalCloneGroup[] => {
+  const map = new Map<string, InternalCloneItem[]>();
+  for (const file of files) {
+    if (file.errors.length > 0) continue;
+    for (const node of collectOxcNodes(file.program, isCloneTarget)) {
+      const size = countOxcSize(node);
+      if (size < minSize) continue;
+      const hash = fingerprintFn(node);
+      // ... Map에 추가
+    }
+  }
+  // 2개 이상인 그룹만 반환
+};
+```
+
+**Outlier detection (Level 4 detail):**
 ```
 for each group:
-  representative = group.items[0]
-  for each member in group.items[1..]:
+  representative = group에서 AST 노드 수가 median에 가장 가까운 멤버
+  for each member (≠ representative):
     result = antiUnify(representative.node, member.node)
     classification = classifyDiff(result)
+    varCount = result.variables.length
 
   if group.cloneType === 'type-1':
     findingKind = 'exact-clone'
@@ -481,25 +557,24 @@ for each group:
   else:
     findingKind = 'structural-clone'  // default
 
-  // Outlier detection within group:
-  for each member:
-    if member.variableCount > mean + 1.5 * stddev:
-      emit separate pattern-outlier finding for this member
+  // Outlier detection:
+  mean = avg(varCount per member)
+  stddev = sqrt(avg((varCount - mean)²))
+  for each member where varCount > mean + 1.5 * stddev:
+    → emit separate pattern-outlier finding
 ```
 
 ---
 
-#### Step 2-2: 타입 변경 (`src/types.ts`)
+#### Step 2-2: 타입 변경 (`src/types.ts`) 🤖 Sonnet
 
 ```typescript
 // ── FirebatDetector ──
-// BEFORE (4개 리터럴):
-//   | 'exact-duplicates'
-//   | 'structural-duplicates'
-//   | 'symmetry-breaking'
-//   | 'modification-trap'
-// AFTER (1개):
-//   | 'duplicates'
+// BEFORE: | 'exact-duplicates' | 'structural-duplicates' | 'symmetry-breaking' | 'modification-trap'
+// AFTER:  | 'duplicates'
+
+// ── FirebatCatalogCode (추가) ──
+// + | 'DUP_NEAR_MISS'
 
 // ── DuplicateFindingKind (신규) ──
 export type DuplicateFindingKind =
@@ -512,11 +587,11 @@ export type DuplicateFindingKind =
 // ── DuplicateGroup (확장) ──
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
-  readonly findingKind?: DuplicateFindingKind;  // 신규
+  readonly findingKind: DuplicateFindingKind;     // 커밋 6까지 optional, 커밋 7부터 required
   readonly code?: FirebatCatalogCode;
   readonly items: ReadonlyArray<DuplicateItem>;
   readonly suggestedParams?: CloneDiff;
-  readonly similarity?: number;                  // 신규: near-miss용
+  readonly similarity?: number;                    // near-miss 유사도
 }
 
 // ── DuplicateCloneType (확장) ──
@@ -525,25 +600,25 @@ export type DuplicateCloneType =
   | 'type-2'
   | 'type-2-shape'
   | 'type-3-normalized'
-  | 'type-3-near-miss';                          // 신규
+  | 'type-3-near-miss';                            // 신규
 
 // ── 삭제 대상 타입 ──
-// SymmetryBreakingFinding → 삭제 (DuplicateGroup.findingKind='pattern-outlier'로 대체)
-// ModificationTrapFinding → 삭제 (DuplicateGroup.findingKind='literal-variant'로 대체)
+// SymmetryBreakingFinding → 삭제 (findingKind='pattern-outlier'로 대체)
+// ModificationTrapFinding → 삭제 (findingKind='literal-variant'로 대체)
 
 // ── FirebatAnalyses (변경) ──
-// BEFORE:
-//   readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
-//   readonly 'structural-duplicates': ReadonlyArray<DuplicateGroup>;
-//   readonly 'symmetry-breaking': ReadonlyArray<SymmetryBreakingFinding>;
-//   readonly 'modification-trap': ReadonlyArray<ModificationTrapFinding>;
-// AFTER:
-//   readonly 'duplicates': ReadonlyArray<DuplicateGroup>;
+// BEFORE: 4개 필드 (exact-duplicates, structural-duplicates, symmetry-breaking, modification-trap)
+// AFTER:  readonly 'duplicates': ReadonlyArray<DuplicateGroup>;
 ```
+
+**findingKind optional → required 전환 전략:**
+- 커밋 6 (통합 analyzer 도입)까지: `findingKind?` — 기존 코드 경로 병행
+- 커밋 7 (오케스트레이터 통합): `findingKind` — 모든 DuplicateGroup이 `analyzeDuplicates()`에서만 생성
+- 커밋 8 (레거시 삭제) 이후: required 확정
 
 ---
 
-### Phase 3: 오케스트레이터 통합
+### Phase 3: 오케스트레이터 통합 🤖 Sonnet
 
 #### Step 3-1: `src/application/scan/scan.usecase.ts` 수정
 
@@ -555,7 +630,8 @@ export type DuplicateCloneType =
 
 #### Step 3-2: `src/test-api.ts` 수정
 
-- 4개 re-export → `analyzeDuplicates`, `createEmptyDuplicates` 1개로 교체
+- 4개 re-export 제거
+- `analyzeDuplicates`, `createEmptyDuplicates` re-export 추가
 
 #### Step 3-3: `src/report.ts` 수정
 
@@ -569,14 +645,13 @@ export type DuplicateCloneType =
 
 ---
 
-### Phase 4: 마이그레이션 & 정리
+### Phase 4: 마이그레이션 & 정리 🤖 Sonnet
 
 #### Step 4-1: 하위호환 별칭
 
 config 파일에서 기존 detector 이름 사용 시 → `duplicates`로 자동 매핑.
 
 ```typescript
-// firebat-config.loader.ts 또는 scan.usecase.ts
 const DETECTOR_ALIASES: Record<string, FirebatDetector> = {
   'exact-duplicates': 'duplicates',
   'structural-duplicates': 'duplicates',
@@ -585,59 +660,83 @@ const DETECTOR_ALIASES: Record<string, FirebatDetector> = {
 };
 ```
 
-#### Step 4-2: 기존 피처 디렉토리 삭제
+#### Step 4-2: 기존 코드 삭제
 
 ```
-삭제 대상:
-  src/features/exact-duplicates/     (3 files: index.ts, detector.ts, detector.spec.ts)
-  src/features/structural-duplicates/ (3 files: index.ts, analyzer.ts, analyzer.spec.ts)
-  src/features/modification-trap/    (3 files: index.ts, analyzer.ts, analyzer.spec.ts)
-  src/features/symmetry-breaking/    (3 files: index.ts, analyzer.ts, analyzer.spec.ts)
+features/ 삭제 대상 (12파일):
+  src/features/exact-duplicates/      (index.ts, detector.ts, detector.spec.ts)
+  src/features/structural-duplicates/ (index.ts, analyzer.ts, analyzer.spec.ts)
+  src/features/modification-trap/     (index.ts, analyzer.ts, analyzer.spec.ts)
+  src/features/symmetry-breaking/     (index.ts, analyzer.ts, analyzer.spec.ts)
+
+engine/ 삭제 대상 (4파일):
+  src/engine/duplicate-detector.ts
+  src/engine/duplicate-detector.spec.ts
+  src/engine/duplicate-collector.ts
+  src/engine/duplicate-collector.spec.ts
 ```
 
 #### Step 4-3: 기존 통합 테스트 마이그레이션
 
 ```
 이동/재작성 대상:
-  test/integration/features/exact-duplicates/     → test/integration/features/duplicates/
-  test/integration/features/structural-duplicates/ → (통합)
-  test/integration/features/modification-trap/     → (통합)
+  test/integration/features/exact-duplicates/      → test/integration/features/duplicates/
+  test/integration/features/structural-duplicates/  → (통합)
+  test/integration/features/modification-trap/      → (통합)
+  test/integration/features/symmetry-breaking/      → (통합)
 ```
 
 ---
 
 ## 4. 파일 변경 매트릭스
 
-| 파일 | 작업 | Phase |
-|------|------|-------|
-| `src/engine/lcs.ts` | 신규 | 1-1 |
-| `src/engine/lcs.spec.ts` | 신규 | 1-1 |
-| `src/engine/minhash.ts` | 신규 | 1-2 |
-| `src/engine/minhash.spec.ts` | 신규 | 1-2 |
-| `src/engine/statement-fingerprint.ts` | 신규 | 1-3 |
-| `src/engine/statement-fingerprint.spec.ts` | 신규 | 1-3 |
-| `src/engine/anti-unifier.ts` | 신규 | 1-4 |
-| `src/engine/anti-unifier.spec.ts` | 신규 | 1-4 |
-| `src/engine/near-miss-detector.ts` | 신규 | 1-5 |
-| `src/engine/near-miss-detector.spec.ts` | 신규 | 1-5 |
-| `src/features/duplicates/index.ts` | 신규 | 2-1 |
-| `src/features/duplicates/analyzer.ts` | 신규 | 2-1 |
-| `src/features/duplicates/analyzer.spec.ts` | 신규 | 2-1 |
-| `src/types.ts` | 수정 | 2-2 |
-| `src/engine/duplicate-detector.ts` | 수정 | 2-1 |
-| `src/engine/duplicate-collector.ts` | 수정 | 2-1 |
-| `src/application/scan/scan.usecase.ts` | 수정 | 3-1 |
-| `src/test-api.ts` | 수정 | 3-2 |
-| `src/report.ts` | 수정 | 3-3 |
-| `src/adapters/cli/entry.ts` | 수정 | 3-4 |
-| `src/shared/firebat-config.ts` | 수정 | 4-1 |
-| `src/features/exact-duplicates/*` | 삭제 | 4-2 |
-| `src/features/structural-duplicates/*` | 삭제 | 4-2 |
-| `src/features/modification-trap/*` | 삭제 | 4-2 |
-| `src/features/symmetry-breaking/*` | 삭제 | 4-2 |
-| `test/integration/features/duplicates/*` | 신규/이동 | 4-3 |
+### 신규 (14파일)
 
-**총계:** 신규 16파일, 수정 8파일, 삭제 12파일
+| 파일 | Phase | 담당 |
+|------|-------|------|
+| `src/features/duplicates/types.ts` | 1-6 | Sonnet |
+| `src/features/duplicates/lcs.ts` | 1-1 | Sonnet |
+| `src/features/duplicates/lcs.spec.ts` | 1-1 | Sonnet |
+| `src/features/duplicates/minhash.ts` | 1-2 | Sonnet |
+| `src/features/duplicates/minhash.spec.ts` | 1-2 | Sonnet |
+| `src/features/duplicates/statement-fingerprint.ts` | 1-3 | Sonnet |
+| `src/features/duplicates/statement-fingerprint.spec.ts` | 1-3 | Sonnet |
+| `src/features/duplicates/anti-unifier.ts` | 1-4 | Opus |
+| `src/features/duplicates/anti-unifier.spec.ts` | 1-4 | Opus |
+| `src/features/duplicates/near-miss-detector.ts` | 1-5 | Opus |
+| `src/features/duplicates/near-miss-detector.spec.ts` | 1-5 | Opus |
+| `src/features/duplicates/analyzer.ts` | 2-1 | Opus |
+| `src/features/duplicates/analyzer.spec.ts` | 2-1 | Opus |
+| `src/features/duplicates/index.ts` | 2-1 | Sonnet |
+
+### 수정 (5파일)
+
+| 파일 | Phase | 담당 |
+|------|-------|------|
+| `src/types.ts` | 2-2 | Sonnet |
+| `src/application/scan/scan.usecase.ts` | 3-1 | Sonnet |
+| `src/test-api.ts` | 3-2 | Sonnet |
+| `src/report.ts` | 3-3 | Sonnet |
+| `src/adapters/cli/entry.ts` | 3-4 | Sonnet |
+
+### 삭제 (16파일)
+
+| 파일 | Phase | 담당 |
+|------|-------|------|
+| `src/engine/duplicate-detector.ts` (+spec) | 4-2 | Sonnet |
+| `src/engine/duplicate-collector.ts` (+spec) | 4-2 | Sonnet |
+| `src/features/exact-duplicates/*` (3파일) | 4-2 | Sonnet |
+| `src/features/structural-duplicates/*` (3파일) | 4-2 | Sonnet |
+| `src/features/modification-trap/*` (3파일) | 4-2 | Sonnet |
+| `src/features/symmetry-breaking/*` (3파일) | 4-2 | Sonnet |
+
+### 마이그레이션
+
+| 대상 | Phase | 담당 |
+|------|-------|------|
+| `test/integration/features/duplicates/*` (신규/이동) | 4-3 | Sonnet |
+
+**총계:** 신규 14파일, 수정 5파일, 삭제 16파일
 
 ---
 
@@ -649,7 +748,7 @@ const DETECTOR_ALIASES: Record<string, FirebatDetector> = {
 Input: bag S = {s₁, s₂, ..., sₙ} (statement fingerprint 문자열)
 
 for i = 1 to k:
-  seed_i = BigInt(i) * 0x517CC1B727220A95n  // 각기 다른 seed
+  seed_i = BigInt(i) * 0x517CC1B727220A95n
   sig[i] = min { xxHash64(s, seed_i) for s in S }
 
 Output: sig[1..k]
@@ -658,7 +757,6 @@ Output: sig[1..k]
 **LSH Banding:**
 ```
 k = 128, b = 16 bands, r = 8 rows per band
-// 한 band에서 r개 sig 값이 모두 일치하면 동일 버킷
 
 for each band j = 0..15:
   bucketKey = hash(sig[j*8], sig[j*8+1], ..., sig[j*8+7])
@@ -670,7 +768,12 @@ for each band j = 0..15:
 **Jaccard threshold와 발견 확률:**
 - threshold=0.5, b=16, r=8: Pr[발견] ≈ 1-(1-0.5⁸)¹⁶ ≈ 0.9996
 - threshold=0.3, b=16, r=8: Pr[발견] ≈ 1-(1-0.3⁸)¹⁶ ≈ 0.001 (거의 0)
-- → 0.5 이상 유사한 쌍은 거의 모두 포착, 0.3 미만은 거의 무시
+- → 0.5 이상은 거의 모두 포착, 0.3 미만은 거의 무시
+
+**소규모 함수 fallback:**
+- statement 수 < `minStatementCount`(default: 5)인 함수 → MinHash/LSH 생략
+- 직접 pairwise LCS 유사도 비교 수행 (함수 수가 적으므로 비용 무시 가능)
+- 근거: k=128 시그니처가 bag 크기 대비 과대 → 의미 있는 Jaccard 추정 불가
 
 ### 5.2 LCS (Hunt-Szymanski)
 
@@ -686,24 +789,18 @@ Input: A[0..m-1], B[0..n-1] (statement fingerprint 시퀀스)
 Output: LCS 길이 + 정렬된 인덱스 쌍
 ```
 
-**시간 복잡도:** O((r + n) log n), r = 매칭 쌍 총 수. 해시 기반 atom이므로 r은 보통 작음.
+**시간 복잡도:** O((r + n) log n), r = 매칭 쌍 총 수.
 
 ### 5.3 Anti-unification (Plotkin)
 
 ```
 function antiUnify(left: Node, right: Node, path: string): void
   if left.type !== right.type:
-    variables.push({
-      path,
-      leftType: left.type,
-      rightType: right.type,
-      kind: 'structural'
-    })
+    variables.push({ path, leftType: left.type, rightType: right.type, kind: 'structural' })
     return
 
   sharedSize += 1
 
-  // 고정 자식 (named properties)
   for key in sortedKeys(left):
     if key is positional/meta: skip
     lVal = left[key], rVal = right[key]
@@ -713,39 +810,21 @@ function antiUnify(left: Node, right: Node, path: string): void
     elif both are Node[]:
       // 배열 자식 → LCS 정렬
       alignment = computeLcsAlignment(
-        lVal.map(fingerprint),
-        rVal.map(fingerprint),
+        lVal.map(n => createOxcFingerprintShape(n)),
+        rVal.map(n => createOxcFingerprintShape(n)),
       )
       for (aIdx, bIdx) in alignment.matched:
-        antiUnify(lVal[aIdx], rVal[bIdx],
-          path + '.' + key + '[' + aIdx + ']')
+        antiUnify(lVal[aIdx], rVal[bIdx], path + '.' + key + '[' + aIdx + ']')
       for aIdx in alignment.aOnly:
-        variables.push({
-          path + '.' + key + '[' + aIdx + ']',
-          kind: 'structural'
-        })
+        variables.push({ path + '.' + key + '[' + aIdx + ']', kind: 'structural' })
       for bIdx in alignment.bOnly:
-        variables.push({
-          path + '.' + key + '[' + bIdx + ']',
-          kind: 'structural'
-        })
+        variables.push({ path + '.' + key + '[' + bIdx + ']', kind: 'structural' })
     elif both are Identifier.name && differ:
-      variables.push({
-        path + '.name',
-        kind: 'identifier',
-        left: lVal, right: rVal
-      })
+      variables.push({ path + '.name', kind: 'identifier', left: lVal, right: rVal })
     elif both are Literal.value && differ:
-      variables.push({
-        path + '.value',
-        kind: 'literal',
-        left: lVal, right: rVal
-      })
+      variables.push({ path + '.value', kind: 'literal', left: lVal, right: rVal })
     elif both are TSTypeReference && differ:
-      variables.push({
-        path, kind: 'type',
-        left: lVal, right: rVal
-      })
+      variables.push({ path, kind: 'type', left: lVal, right: rVal })
 ```
 
 ### 5.4 Outlier Detection
@@ -753,8 +832,9 @@ function antiUnify(left: Node, right: Node, path: string): void
 ```
 Within a clone group G = {f₁, f₂, ..., fₙ}:
 
-1. representative = f₁ (first item, or median-size item)
-2. for each fᵢ (i ≥ 2):
+1. representative = AST 노드 수가 median에 가장 가까운 멤버
+
+2. for each fᵢ (≠ representative):
    result_i = antiUnify(representative, fᵢ)
    varCount_i = result_i.variables.length
 
@@ -780,7 +860,8 @@ Within a clone group G = {f₁, f₂, ..., fₙ}:
       "enabled": true,
       "similarityThreshold": 0.7,
       "jaccardThreshold": 0.5,
-      "minHashK": 128
+      "minHashK": 128,
+      "minStatementCount": 5
     }
   }
 }
@@ -790,32 +871,75 @@ Within a clone group G = {f₁, f₂, ..., fₙ}:
 
 ---
 
-## 7. 커밋 전략
+## 7. 에러 처리 전략
 
-| 커밋 | 내용 | Phase |
-|------|------|-------|
-| 1 | `feat(engine): add LCS algorithm` | 1-1 |
-| 2 | `feat(engine): add MinHash/LSH` | 1-2 |
-| 3 | `feat(engine): add statement fingerprinting` | 1-3 |
-| 4 | `feat(engine): add anti-unification` | 1-4 |
-| 5 | `feat(engine): add near-miss clone detector` | 1-5 |
-| 6 | `feat(duplicates): unified duplicates analyzer` | 2-1 |
-| 7 | `refactor(types): merge 4 duplicate detectors into 1` | 2-2 + 3-* |
-| 8 | `refactor: remove legacy duplicate features` | 4-* |
-
-각 커밋은 독립적으로 빌드 + 테스트 통과해야 함.
-커밋 7까지는 기존 4개 피처가 병행 존재 (deprecate 상태).
-커밋 8에서 최종 삭제.
+| 상황 | 처리 |
+|------|------|
+| 파싱 에러 있는 파일 | 기존 패턴 유지: `file.errors.length > 0` → skip |
+| Level 2/3 실패 (MinHash/LCS) | Level 1 결과만 반환 (graceful degradation) |
+| Level 4 실패 (anti-unification) | findingKind를 cloneType 기반 기본값 사용 (type-1→exact-clone 등) |
+| 과도한 함수 수 (20K+) | PromisePool 활용, 기존 배치 처리 패턴 유지 |
 
 ---
 
-## 8. 위험 요소 및 완화
+## 8. 커밋 전략
+
+| 커밋 | 내용 | Phase | 담당 |
+|------|------|-------|------|
+| 1 | `feat(duplicates): add LCS algorithm` | 1-1 | Sonnet |
+| 2 | `feat(duplicates): add MinHash/LSH` | 1-2 | Sonnet |
+| 3 | `feat(duplicates): add statement fingerprinting` | 1-3 | Sonnet |
+| 4 | `feat(duplicates): add anti-unification` | 1-4 | Opus |
+| 5 | `feat(duplicates): add near-miss clone detector` | 1-5 | Opus |
+| 6 | `feat(duplicates): unified duplicates analyzer` | 1-6 + 2-1 | Opus |
+| 7 | `refactor(types): merge 4 duplicate detectors into 1` | 2-2 + 3-* | Sonnet |
+| 8 | `refactor: remove legacy duplicate features and engine` | 4-* | Sonnet |
+
+각 커밋은 독립적으로 빌드 + 테스트 통과해야 함.
+커밋 7까지는 기존 4개 피처가 병행 존재 (deprecate 상태).
+커밋 8에서 features/ 4개 디렉토리 + engine/ 2파일 최종 삭제.
+
+---
+
+## 9. 모델 배정 근거
+
+| 모델 | 배정 기준 | 배정된 작업 |
+|------|----------|------------|
+| **Opus** | 알고리즘 설계 판단, 복잡한 AST 재귀 순회, 다중 모듈 오케스트레이션 | anti-unifier, near-miss-detector, analyzer |
+| **Sonnet** | 명확한 인터페이스의 순수 함수 구현, 기계적 리팩토링, 파일 이동/삭제 | lcs, minhash, statement-fingerprint, types 수정, Phase 3~4 전체 |
+
+**배정 상세:**
+
+- **Opus 필수 (커밋 4, 5, 6):**
+  - `anti-unifier` — Plotkin 알고리즘의 AST 재귀 + LCS 정렬 + 차이점 분류를 정확하게 조합
+  - `near-miss-detector` — MinHash fallback 분기 + Union-Find transitive closure + excludedHashes 통합
+  - `analyzer` — Level 1~4 파이프라인 오케스트레이션 + InternalCloneGroup → DuplicateGroup 변환 + outlier detection 통계
+
+- **Sonnet 충분 (커밋 1, 2, 3, 7, 8):**
+  - `lcs`, `minhash`, `statement-fingerprint` — 입출력이 명확한 순수 알고리즘, 테스트 케이스 상세 정의됨
+  - Phase 3~4 — import 교체, re-export 수정, 파일 삭제 등 기계적 작업
+
+---
+
+## 10. 성능 기준
+
+| 항목 | 기준 | 측정 시점 |
+|------|------|----------|
+| Level 1 (hash 그룹핑) | 10K 함수 기준 < 2초 | Phase 2 완료 후 |
+| Level 2+3 (MinHash/LCS) | 10K 함수 기준 < 5초 | Phase 2 완료 후 |
+| Level 4 (anti-unification) | 10K 함수 기준 < 3초 | Phase 2 완료 후 |
+| 전체 분석 | 10K 함수 기준 < 10초 | Phase 2 완료 후 |
+| 메모리 (MinHash 시그니처) | 20K 함수 × 128 × 8B = ~20MB | Phase 1-2 완료 후 |
+
+---
+
+## 11. 위험 요소 및 완화
 
 | 위험 | 영향 | 완화 |
 |------|------|------|
 | MinHash 시그니처 계산 성능 | 대규모 프로젝트 (20K+ 함수)에서 느려질 수 있음 | k=128은 보수적, 프로파일링 후 k 조정 가능 |
+| 소규모 함수 MinHash 의미 희석 | statement 3~5개 함수에서 부정확 | `minStatementCount` fallback: 직접 pairwise LCS 비교 |
 | LCS O(n²) worst case | statement 수 100+ 함수에서 느릴 수 있음 | Hunt-Szymanski로 평균 O(r log n), 최악 시 early termination |
 | Anti-unification 배열 정렬 | BlockStatement.body가 매우 길 때 | LCS 정렬 선행 → 매칭된 쌍만 재귀, 미매칭은 바로 variable |
 | 하위호환 깨짐 | 기존 config 사용자 | detector alias 매핑으로 완화 |
 | 기존 테스트 대량 수정 | 통합 테스트 변경 범위 | Phase 4에서 일괄 마이그레이션, 기존 테스트 로직 보존 |
-| gildash FK 제약 조건 | scan 실행 시 DB 에러 (기존 blocker) | 이 계획과 독립, 별도 수정 필요 |
