@@ -35,47 +35,6 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  NOOP_EXPRESSION: {
-    cause: 'An expression is evaluated but its result is discarded and it produces no side effects.',
-    think: [
-      'Determine the original intent of this expression — debugging artifact, incomplete code, or misunderstanding of an API return behavior.',
-      'Check whether the expression was meant to produce a side effect by inspecting the called function or accessed property.',
-      'Verify whether removing the expression changes observable behavior; if not, it is safe to delete.',
-    ],
-  },
-  NOOP_SELF_ASSIGNMENT: {
-    cause: 'A variable is assigned to itself, producing no state change.',
-    think: [
-      'Determine whether a different target variable was intended — this is usually a typo or copy-paste error.',
-      'Check whether the self-assignment is meant to trigger a setter or reactivity system that requires explicit assignment.',
-      'Verify by searching nearby code for the intended target variable name.',
-    ],
-  },
-  NOOP_CONSTANT_CONDITION: {
-    cause: 'A conditional expression always evaluates to the same boolean value, making one branch unreachable.',
-    think: [
-      'Determine whether the condition was once dynamic and became constant after a refactor.',
-      'Check whether the guarded branch is intentional (feature flag, debug mode) or unfinished implementation.',
-      'If intentional, verify that a named constant or config makes the intent explicit rather than a magic literal.',
-    ],
-  },
-  NOOP_EMPTY_CATCH: {
-    cause: 'A catch block is empty, silently swallowing errors.',
-    think: [
-      'Determine whether the error is intentionally ignored or accidentally suppressed.',
-      'Check whether the same pattern exists in related catch blocks — systematic silent catches suggest a missing error-handling strategy.',
-      'If intentional, verify that a comment explains why; if accidental, identify what handling or logging is needed.',
-    ],
-  },
-  NOOP_EMPTY_FUNCTION_BODY: {
-    cause: 'A function or method has an empty body, performing no operation.',
-    think: [
-      'Determine whether this is a placeholder, a no-op callback, or unfinished implementation.',
-      "Check whether the function serves as a default no-op (e.g., event handler stub) whose intent should be explicit via naming ('noop') or a comment.",
-      'If it appears in a class, verify whether the method should be abstract instead of a concrete empty body.',
-    ],
-  },
-
   FWD_THIN_WRAPPER: {
     cause:
       "A function's entire body delegates to another function with identical or trivially transformed arguments, adding no logic.",

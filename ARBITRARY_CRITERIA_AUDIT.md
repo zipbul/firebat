@@ -28,7 +28,8 @@
 > - 하드코딩된 임의 수치가 아닌, 사용자/프로젝트가 설정하는 threshold.
 > - 기본값은 있을 수 있으나, 변경 가능해야 한다.
 
-> **목적**: 28개 feature + engine 핵심 모듈 전체를 코드 레벨로 읽고, "분석 데이터로부터 도출된 논리적/객관적 사실"이 **아닌** 개발자가 근거 없이 설정한 기준들을 식별한다.
+> **목적**: 26개 feature + engine 핵심 모듈 전체를 코드 레벨로 읽고, "분석 데이터로부터 도출된 논리적/객관적 사실"이 **아닌** 개발자가 근거 없이 설정한 기준들을 식별한다.
+> *(원래 28개에서 api-drift, noop 삭제)*
 >
 > **작성일**: 2025-02-25
 >
@@ -454,6 +455,7 @@
 - **질문**:
   - `noOperation`, `emptyFn`, `identity`, `stub`, `placeholder`는?
   - test double(spy, mock)도 빈 함수일 수 있음
+- **결론**: ✅ **기능 전체 폐기** — noop의 5개 finding kind(expression-noop, self-assignment, constant-condition, empty-catch, empty-function-body)는 모두 기존 lint 규칙으로 100% 대체 가능. 3개는 이미 활성 중(no-constant-condition, no-self-assign, no-empty), 2개를 추가(no-unused-expressions, no-empty-function). 특히 `empty-catch`는 firebat의 lint 설정이 이미 `allowEmptyCatch: true`로 의도적 허용하고 있어 noop과 직접 모순. `empty-function-body`는 INTENTIONAL_NOOP_NAMES 4개로는 구조적 FP 불가피(class methods, callbacks, JSX handlers 등). **noop 기능 전체 삭제 완료, lint 규칙으로 완전 대체** (27→26 detectors).
 
 ---
 
@@ -656,6 +658,7 @@
 - **파일**: `src/features/noop/analyzer.ts` L139
 - **값**: `confidence: 0.9`
 - **질문**: 0.9라는 수치가 "100건 중 90건은 의미 없는 코드"라는 뜻인가? 어떤 데이터에서?
+- **결론**: ✅ **해당 없음** — noop 기능 전체 삭제로 제거됨. lint 규칙(`no-unused-expressions`, `no-self-assign`)이 confidence 없이 동일 감지 수행.
 
 ---
 
@@ -664,6 +667,7 @@
 - **파일**: `src/features/noop/analyzer.ts` L153
 - **값**: `confidence: 0.8`
 - **질문**: constant condition이 의도적인 경우(feature flag)가 20%라는 의미인가?
+- **결론**: ✅ **해당 없음** — noop 기능 전체 삭제로 제거됨. lint 규칙(`no-constant-condition`, `no-empty`)이 confidence 없이 동일 감지 수행.
 
 ---
 
@@ -672,6 +676,7 @@
 - **파일**: `src/features/noop/analyzer.ts` L203
 - **값**: `confidence: 0.6`
 - **질문**: 0.6이면 거의 동전 던지기 수준. 이 confidence라면 보고 자체를 하지 않는 것이 나은가?
+- **결론**: ✅ **해당 없음** — noop 기능 전체 삭제로 제거됨. lint 규칙(`no-empty-function` with `allow: ["arrowFunctions"]`)이 대체.
 
 ---
 
@@ -698,7 +703,7 @@
 | **structural-duplicates** | fingerprint 기반 유사성 | minSize threshold는 임의 (A-18) |
 | **barrel-policy** (export-star 감지) | AST 구조적 사실 | strictness 규칙은 D-06 |
 | **forwarding** (thin-wrapper 감지) | 함수 body 단일 호출 + 인자 1:1 전달 검증 | chain depth 기준은 A-17 |
-| **noop** (expression-noop, self-assignment) | AST 구문 특성 — side effect 없음 확정 | confidence 값은 F-01 |
+| ~~**noop**~~ | ~~AST 구문 특성~~ | **기능 삭제됨** — lint 규칙으로 완전 대체 (C-02, F-01~F-03) |
 | **dependencies** (cycles, layer-violations) | import graph 구조적 분석 | layer 설정은 사용자 정의 |
 
 ---

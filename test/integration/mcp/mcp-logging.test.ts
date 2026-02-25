@@ -134,7 +134,7 @@ describe('scan MCP logging notifications', () => {
     // Act
     await callToolSafe(ctx.client, 'scan', {
       targets: [],
-      detectors: ['noop'],
+      detectors: ['waste'],
     });
 
     // Assert

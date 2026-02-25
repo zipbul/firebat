@@ -33,7 +33,6 @@
         "coupling": { "$ref": "#/$defs/emptyToggle" },
         "nesting": { "$ref": "#/$defs/emptyToggle" },
         "early-return": { "$ref": "#/$defs/emptyToggle" },
-        "noop": { "$ref": "#/$defs/emptyToggle" },
         "exception-hygiene": { "$ref": "#/$defs/emptyToggle" },
 
         "implicit-state": { "$ref": "#/$defs/emptyToggle" },
@@ -75,7 +74,6 @@
                 "coupling": { "$ref": "#/$defs/emptyInheritable" },
                 "nesting": { "$ref": "#/$defs/emptyInheritable" },
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
-                "noop": { "$ref": "#/$defs/emptyInheritable" },
                 "exception-hygiene": { "$ref": "#/$defs/emptyInheritable" },
 
                 "implicit-state": { "$ref": "#/$defs/emptyInheritable" },

@@ -18,6 +18,14 @@
         "allowEmptyCatch": true,
       },
     ],
+    "no-unused-expressions": "error",
+    "no-empty-function": [
+      "error",
+      {
+        "allow": ["arrowFunctions"],
+      },
+    ],
+    "no-constant-condition": "error",
     "curly": "error",
     "no-else-return": "error",
     "no-unneeded-ternary": "error",

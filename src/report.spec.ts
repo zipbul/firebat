@@ -13,7 +13,6 @@ import type {
   ForwardingFinding,
   NestingItem,
   EarlyReturnItem,
-  NoopFinding,
   DependencyFinding,
   CouplingHotspot,
   ImplicitStateFinding,
@@ -57,7 +56,7 @@ const emptyDeps: ReadonlyArray<DependencyFinding> = [];
 const allDetectors: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates', 'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
-  'structural-duplicates', 'nesting', 'early-return', 'noop', 'forwarding',
+  'structural-duplicates', 'nesting', 'early-return', 'forwarding',
   'implicit-state', 'temporal-coupling', 'symmetry-breaking', 'invariant-blindspot',
   'modification-trap', 'modification-impact', 'variable-lifetime', 'decision-surface',
   'implementation-overhead', 'concept-scatter', 'abstraction-fitness', 'giant-file',
@@ -150,7 +149,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 27 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 26 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -168,7 +167,6 @@ describe('formatReport', () => {
       expect(out).toContain('Structural Duplicates');
       expect(out).toContain('Nesting');
       expect(out).toContain('Early Return');
-      expect(out).toContain('Noop');
       expect(out).toContain('Forwarding');
       expect(out).toContain('Implicit State');
       expect(out).toContain('Temporal Coupling');
@@ -671,21 +669,6 @@ describe('formatReport', () => {
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).toContain('fn');
-    });
-  });
-
-  // ── Noop body ───────────────────────────────────────────────────
-
-  describe('noop body', () => {
-    it('should render body with kind and evidence when findings exist', () => {
-      const finding: NoopFinding = { kind: 'expression-noop', file: testFile, span: span(50, 0), confidence: 0.9, evidence: '1;' };
-      const out = formatReport(makeReport(['noop'], { noop: [finding] }), 'text');
-
-      expect(out).toContain('Noop');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('expression-noop');
-      expect(out).toContain('1;');
-      expect(out).toContain('50:0');
     });
   });
 

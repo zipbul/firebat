@@ -187,7 +187,6 @@ const formatText = (report: FirebatReport): string => {
   const depsCycleFindings = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'circular-dependency' }> => f.kind === 'circular-dependency');
   const coupling = analyses.coupling ?? [];
   const nesting = analyses.nesting ?? [];
-  const noop = analyses.noop ?? [];
   const forwarding = analyses.forwarding ?? [];
   const implicitState = analyses['implicit-state'] ?? [];
   const temporalCoupling = analyses['temporal-coupling'] ?? [];
@@ -349,14 +348,6 @@ const formatText = (report: FirebatReport): string => {
           label: 'Exception Hygiene',
           count: exceptionHygiene.length,
           filesCount: exceptionHygiene.length === 0 ? 0 : new Set(exceptionHygiene.map(f => getFile(f))).size,
-          timingKey,
-        };
-      case 'noop':
-        return {
-          emoji: '💤',
-          label: 'Noop',
-          count: noop.length,
-          filesCount: noop.length === 0 ? 0 : new Set(noop.map(f => getFile(f))).size,
           timingKey,
         };
       case 'dependencies':
@@ -552,17 +543,6 @@ const formatText = (report: FirebatReport): string => {
         typeof finding.evidence === 'string' && finding.evidence.length > 0 ? cc(` (${finding.evidence})`, A.dim) : '';
 
       lines.push(`    ${cc('·', A.dim)} ${finding.kind} ${cc(`@ ${rel}:${start}`, A.dim)}${evidence}`);
-    }
-  }
-
-  if (selectedDetectors.has('noop') && noop.length > 0) {
-    lines.push(sectionHeader('💤', 'Noop', `${noop.length} findings`));
-
-    for (const finding of noop) {
-      const rel = path.relative(process.cwd(), getFile(finding));
-      const start = toPos(finding.span.start.line, finding.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${cc(`@ ${rel}:${start}`, A.dim)} ${cc(finding.evidence, A.dim)}`);
     }
   }
 

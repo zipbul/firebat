@@ -82,7 +82,6 @@ describe('scan', () => {
     'waste',
     'nesting',
     'early-return',
-    'noop',
     'forwarding',
     'barrel-policy',
     'unknown-proof',
@@ -224,7 +223,7 @@ describe('scan', () => {
 
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
-      detectors: ['noop'],
+      detectors: ['waste'],
       minSize: 'auto',
     });
 
@@ -276,7 +275,7 @@ describe('scan', () => {
       // Arrange
       const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
         targets: [fixture],
-        detectors: ['noop'],
+        detectors: ['waste'],
         minSize: 'auto',
       });
 

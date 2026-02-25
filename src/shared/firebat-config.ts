@@ -90,7 +90,6 @@ interface FirebatFeaturesConfig {
   readonly 'structural-duplicates'?: FeatureToggle<FirebatStructuralDuplicatesConfig> | undefined;
   readonly nesting?: boolean | undefined;
   readonly 'early-return'?: boolean | undefined;
-  readonly noop?: boolean | undefined;
   readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
@@ -122,7 +121,6 @@ interface FirebatMcpFeaturesConfig {
   readonly 'structural-duplicates'?: InheritableFeatureToggle<FirebatStructuralDuplicatesConfig> | undefined;
   readonly nesting?: boolean | 'inherit' | undefined;
   readonly 'early-return'?: boolean | 'inherit' | undefined;
-  readonly noop?: boolean | 'inherit' | undefined;
   readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
@@ -240,7 +238,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           .optional(),
         nesting: z.boolean().optional(),
         'early-return': z.boolean().optional(),
-        noop: z.boolean().optional(),
         forwarding: z
           .union([
             z.literal(false),
@@ -548,7 +545,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   .optional(),
                 nesting: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'early-return': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
-                noop: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 forwarding: z
                   .union([
                     z.literal(false),

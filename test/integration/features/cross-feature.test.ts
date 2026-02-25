@@ -13,7 +13,6 @@ import { analyzeEarlyReturn } from '../../../src/test-api';
 import { analyzeExceptionHygiene } from '../../../src/test-api';
 import { detectExactDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
-import { analyzeNoop } from '../../../src/test-api';
 
 const SOURCE = `
 import { readFileSync } from 'node:fs';
@@ -49,8 +48,6 @@ export function processItems(items: readonly string[]): string[] {
   return result;
 }
 
-export function noop(): void {}
-
 export function deepNested(x: number): string {
   if (x > 0) {
     if (x > 10) {
@@ -82,14 +79,12 @@ describe('cross-feature integration', () => {
     const exceptionHygiene = analyzeExceptionHygiene(program);
     const duplicates = detectExactDuplicates([...program], 5);
     const nesting = analyzeNesting(program);
-    const noops = analyzeNoop(program);
 
     // Assert — each returns a well-formed array
     expect(Array.isArray(earlyReturn)).toBe(true);
     expect(Array.isArray(exceptionHygiene)).toBe(true);
     expect(Array.isArray(duplicates)).toBe(true);
     expect(Array.isArray(nesting)).toBe(true);
-    expect(Array.isArray(noops)).toBe(true);
   });
 
   it('should produce findings from multiple analyzers on the same file', () => {
@@ -99,10 +94,9 @@ describe('cross-feature integration', () => {
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
     const nesting = analyzeNesting(program);
-    const noops = analyzeNoop(program);
 
     // Assert — at least some analyzers find issues in this code
-    const totalFindings = earlyReturn.length + nesting.length + noops.length;
+    const totalFindings = earlyReturn.length + nesting.length;
 
     expect(totalFindings).toBeGreaterThanOrEqual(1);
   });

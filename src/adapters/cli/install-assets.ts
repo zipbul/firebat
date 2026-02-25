@@ -54,6 +54,13 @@ const OXLINT_RC_JSONC = `{
         "allowEmptyCatch": true
       }
     ],
+    "no-unused-expressions": "error",
+    "no-empty-function": [
+      "error",
+      {
+        "allow": ["arrowFunctions"]
+      }
+    ],
     "curly": "error",
     "no-else-return": "error",
     "no-unneeded-ternary": "error",

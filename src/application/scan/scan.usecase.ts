@@ -12,7 +12,6 @@ import type {
   FirebatReport,
   ForwardingFindingKind,
   NestingKind,
-  NoopKind,
   UnknownProofFindingKind,
   WasteKind,
 } from '../../types';
@@ -39,7 +38,6 @@ import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeModificationImpact, createEmptyModificationImpact } from '../../features/modification-impact';
 import { analyzeModificationTrap, createEmptyModificationTrap } from '../../features/modification-trap';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
-import { analyzeNoop, createEmptyNoop } from '../../features/noop';
 import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
 import { analyzeSymmetryBreaking, createEmptySymmetryBreaking } from '../../features/symmetry-breaking';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
@@ -58,7 +56,6 @@ import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
 import { computeInputsDigest } from './inputs-digest';
-import { shouldIncludeNoopEmptyCatch } from './noop-gating';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
 const nowMs = (): number => {
@@ -668,31 +665,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     exceptionHygiene = createEmptyExceptionHygiene();
   }
 
-  const includeNoopEmptyCatch = shouldIncludeNoopEmptyCatch({
-    exceptionHygieneSelected: options.detectors.includes('exception-hygiene'),
-    exceptionHygieneStatus,
-  });
-  let noop: ReturnType<typeof analyzeNoop>;
-
-  if (options.detectors.includes('noop')) {
-    const t0 = nowMs();
-    const detectorKey = 'noop';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    noop = analyzeNoop(program);
-
-    if (!includeNoopEmptyCatch) {
-      noop = noop.filter(f => f.kind !== 'empty-catch');
-    }
-
-    detectorTimings.noop = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.noop) });
-  } else {
-    noop = createEmptyNoop();
-  }
-
   let forwarding: Awaited<ReturnType<typeof analyzeForwarding>>;
 
   if (options.detectors.includes('forwarding')) {
@@ -937,30 +909,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         span: item?.span,
         label: item?.label,
         confidence: item?.confidence,
-      };
-    });
-  };
-
-  const enrichNoop = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<NoopKind, FirebatCatalogCode>> = {
-      'expression-noop': 'NOOP_EXPRESSION',
-      'self-assignment': 'NOOP_SELF_ASSIGNMENT',
-      'constant-condition': 'NOOP_CONSTANT_CONDITION',
-      'empty-catch': 'NOOP_EMPTY_CATCH',
-      'empty-function-body': 'NOOP_EMPTY_FUNCTION_BODY',
-    } as const;
-
-    return items.map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item?.span,
-        confidence: item?.confidence,
-        evidence: item?.evidence,
       };
     });
   };
@@ -1387,7 +1335,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       : {}),
     ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
     ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
-    ...(selectedDetectors.has('noop') ? { noop: enrichNoop(noop as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') } : {}),

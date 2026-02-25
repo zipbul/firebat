@@ -51,9 +51,6 @@
     // Early-return / guard-clause signals.
     "early-return": true,
 
-    // No-op expressions/statements.
-    "noop": true,
-
     // Exception hygiene rules (try/catch and promise safety).
     "exception-hygiene": true,
 

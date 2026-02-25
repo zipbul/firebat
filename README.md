@@ -23,7 +23,7 @@ firebat
 firebat src/app.ts src/utils.ts
 
 # Select detectors and output JSON
-firebat --only waste,noop --format json
+firebat --only waste,lint --format json
 
 # Auto-fix lint & format issues
 firebat --fix
@@ -77,7 +77,6 @@ If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be
 | **waste** | Dead stores — variables assigned but never read, or overwritten before read |
 | **nesting** | Deep nesting that harms readability, with refactoring suggestions |
 | **early-return** | Functions that would benefit from guard clauses / early returns |
-| **noop** | No-op code: side-effect-free expression statements, constant conditions, empty catch blocks, self-assignments, empty function bodies |
 | **forwarding** | Thin wrappers that only forward calls, and long forwarding chains |
 
 ### Architecture
@@ -148,7 +147,7 @@ Create `.firebatrc.jsonc` in your project root:
 ```jsonc
 {
   // Detectors to run (default: all)
-  "detectors": ["waste", "noop", "nesting"],
+  "detectors": ["waste", "nesting", "lint"],
 
   // Per-feature configuration
   "features": {

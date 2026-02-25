@@ -20,7 +20,6 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'structural-duplicates',
   'nesting',
   'early-return',
-  'noop',
   'forwarding',
   'implicit-state',
   'temporal-coupling',
@@ -98,7 +97,6 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'structural-duplicates' &&
       selection !== 'nesting' &&
       selection !== 'early-return' &&
-      selection !== 'noop' &&
       selection !== 'forwarding' &&
       selection !== 'implicit-state' &&
       selection !== 'temporal-coupling' &&
@@ -114,7 +112,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|noop|forwarding|implicit-state|temporal-coupling|symmetry-breaking|invariant-blindspot|modification-trap|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|forwarding|implicit-state|temporal-coupling|symmetry-breaking|invariant-blindspot|modification-trap|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
       );
     }
 

@@ -64,7 +64,6 @@
     "coupling": true,
     "nesting": true,
     "early-return": true,
-    "noop": true,
     "forwarding": { "maxForwardDepth": 0 }
   },
   "mcp": "inherit"

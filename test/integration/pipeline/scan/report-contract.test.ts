@@ -469,50 +469,6 @@ exit 1
     }
   });
 
-  it('should expose noop findings as a bare array with file+code and no wrapper fields', async () => {
-    // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-noop-bare-array', '1;\nexport const a = 1;');
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            format: 'json',
-            minSize: 0,
-            maxForwardDepth: 0,
-            exitOnFindings: false,
-            detectors: ['noop'],
-            fix: false,
-            help: false,
-          },
-          { logger },
-        ),
-      );
-      // Assert
-      const noop = report.analyses.noop as any;
-
-      expect(Array.isArray(noop)).toBe(true);
-
-      const findings = noop as any[];
-      const expressionNoop = findings.find(f => f?.kind === 'expression-noop');
-
-      expect(expressionNoop).toBeDefined();
-      expect(typeof expressionNoop?.file).toBe('string');
-      expect(expressionNoop?.file).toContain('src/a.ts');
-      expect(expressionNoop?.filePath).toBeUndefined();
-      expect(expressionNoop?.message).toBeUndefined();
-      expect(expressionNoop?.why).toBeUndefined();
-      expect(expressionNoop?.suggestedRefactor).toBeUndefined();
-      expect(expressionNoop?.suggestions).toBeUndefined();
-      expect(expressionNoop?.code).toBe('NOOP_EXPRESSION');
-    } finally {
-      await project.dispose();
-    }
-  });
-
   it('should expose barrel-policy findings as a bare array with file+code and no message field', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-barrel-bare-array', {
@@ -847,8 +803,6 @@ exit 7
       expect(typeof report.catalog.BARREL_EXPORT_STAR?.think[0]).toBe('string');
       expect(typeof report.catalog.EH_THROW_NON_ERROR?.cause).toBe('string');
 
-      // catalog should not include unrelated codes
-      expect(report.catalog.NOOP_EXPRESSION).toBeUndefined();
     } finally {
       await project.dispose();
     }

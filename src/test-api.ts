@@ -30,7 +30,6 @@ export { analyzeLint } from './features/lint';
 export { analyzeModificationImpact } from './features/modification-impact';
 export { analyzeModificationTrap } from './features/modification-trap';
 export { analyzeNesting } from './features/nesting';
-export { analyzeNoop } from './features/noop';
 export { analyzeStructuralDuplicates } from './features/structural-duplicates';
 export { analyzeSymmetryBreaking } from './features/symmetry-breaking';
 export { analyzeTemporalCoupling } from './features/temporal-coupling';

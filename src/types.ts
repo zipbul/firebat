@@ -20,7 +20,6 @@ export type FirebatDetector =
   | 'structural-duplicates'
   | 'nesting'
   | 'early-return'
-  | 'noop'
   | 'forwarding'
   // Phase 1 detectors (IMPROVE.md)
   | 'implicit-state'
@@ -41,12 +40,6 @@ export type FirebatCatalogCode =
   | 'WASTE_DEAD_STORE'
   | 'WASTE_DEAD_STORE_OVERWRITE'
   | 'WASTE_MEMORY_RETENTION'
-  // noop (5)
-  | 'NOOP_EXPRESSION'
-  | 'NOOP_SELF_ASSIGNMENT'
-  | 'NOOP_CONSTANT_CONDITION'
-  | 'NOOP_EMPTY_CATCH'
-  | 'NOOP_EMPTY_FUNCTION_BODY'
   // barrel-policy (6)
   | 'BARREL_EXPORT_STAR'
   | 'BARREL_DEEP_IMPORT'
@@ -158,13 +151,6 @@ export interface GroupFinding {
     readonly span: SourceSpan;
   }>;
 }
-
-export type NoopKind =
-  | 'expression-noop'
-  | 'self-assignment'
-  | 'constant-condition'
-  | 'empty-catch'
-  | 'empty-function-body';
 
 export type CouplingKind =
   | 'god-module'
@@ -383,15 +369,6 @@ export interface EarlyReturnItem {
   readonly span: SourceSpan;
   readonly metrics: EarlyReturnMetrics;
   readonly score: number;
-}
-
-export interface NoopFinding {
-  readonly kind: NoopKind;
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly confidence: number;
-  readonly evidence: string;
 }
 
 export type BarrelPolicyFindingKind =
@@ -671,7 +648,6 @@ export interface FirebatAnalyses {
   readonly 'structural-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
-  readonly noop: ReadonlyArray<NoopFinding>;
   readonly forwarding: ReadonlyArray<ForwardingFinding>;
 
   // Phase 1 detectors (IMPROVE.md)

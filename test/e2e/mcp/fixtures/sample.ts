@@ -125,13 +125,6 @@ function earlyReturnCandidate(x: number): string {
   return 'negative';
 }
 
-// Noop block
-function withNoop(flag: boolean): void {
-  if (flag) {
-    // intentionally empty
-  }
-}
-
 // Multiple console.log for find_pattern
 function logMany(): void {
   console.log('one');
@@ -140,6 +133,6 @@ function logMany(): void {
   console.error('not a log');
 }
 
-export { hello, hello2, add, subtract, multiply, deepNest, earlyReturnCandidate, withNoop, logMany, Color, Direction };
+export { hello, hello2, add, subtract, multiply, deepNest, earlyReturnCandidate, logMany, Color, Direction };
 
 export type { Rectangle, Point, Shape };
