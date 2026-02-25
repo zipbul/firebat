@@ -45,6 +45,7 @@ import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck
 import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
+import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createArtifactStore } from '../../store/artifact';
@@ -838,6 +839,20 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
   }
 
+  let duplicatesUnified: ReturnType<typeof analyzeDuplicates> = createEmptyDuplicates();
+
+  if (options.detectors.includes('duplicates')) {
+    const t0 = nowMs();
+    const detectorKey = 'duplicates';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    duplicatesUnified = analyzeDuplicates(program, { minSize: resolvedMinSize });
+    detectorTimings[detectorKey] = nowMs() - t0;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
+  }
+
   let modificationImpact: Awaited<ReturnType<typeof analyzeModificationImpact>> = createEmptyModificationImpact();
 
   if (options.detectors.includes('modification-impact')) {
@@ -1348,6 +1363,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') } : {}),
     ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') } : {}),
     ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': enrichPhase1(abstractionFitness as any, 'ABSTRACTION_FITNESS') } : {}),
+    ...(selectedDetectors.has('duplicates') ? { duplicates: duplicatesUnified } : {}),
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as any });
   const catalog = buildCatalog({ analyses, diagnostics });

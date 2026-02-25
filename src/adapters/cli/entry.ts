@@ -106,7 +106,8 @@ const printHelp = (): void => {
     `    exception-hygiene, lint, format, typecheck, dependencies, coupling,`,
     `    implicit-state, temporal-coupling, symmetry-breaking, invariant-blindspot,`,
     `    modification-trap, modification-impact, variable-lifetime, decision-surface,`,
-    `    implementation-overhead, concept-scatter, abstraction-fitness, giant-file`,
+    `    implementation-overhead, concept-scatter, abstraction-fitness, giant-file,`,
+    `    duplicates`,
     '',
     `  ${hc('CONFIG-ONLY OPTIONS', `${H.bold}${H.yellow}`, c)}  ${hc('(set in .firebatrc.jsonc)', H.dim, c)}`,
     '',
@@ -156,6 +157,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'concept-scatter',
     'abstraction-fitness',
     'giant-file',
+    'duplicates',
   ];
 
   if (!features) {
@@ -278,9 +280,10 @@ const resolveDependenciesAllowedDependenciesFromFeatures = (
 const resolveMinSizeFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): FirebatCliOptions['minSize'] | undefined => {
-  const { 'exact-duplicates': exact, 'structural-duplicates': structural } = features ?? {};
+  const { 'exact-duplicates': exact, 'structural-duplicates': structural, duplicates: unified } = features ?? {};
   const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
   const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
+  const unifiedSize = typeof unified === 'object' && unified !== null ? (unified as Record<string, unknown>).minSize as number | undefined : undefined;
 
   if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
     throw new Error(
@@ -288,7 +291,7 @@ const resolveMinSizeFromFeatures = (
     );
   }
 
-  return exactSize ?? structuralSize;
+  return exactSize ?? structuralSize ?? unifiedSize;
 };
 
 const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {

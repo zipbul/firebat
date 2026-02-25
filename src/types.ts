@@ -33,7 +33,9 @@ export type FirebatDetector =
   | 'implementation-overhead'
   | 'concept-scatter'
   | 'abstraction-fitness'
-  | 'giant-file';
+  | 'giant-file'
+  // Unified duplicates detector
+  | 'duplicates';
 
 export type FirebatCatalogCode =
   // waste (3)
@@ -94,10 +96,11 @@ export type FirebatCatalogCode =
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
   | 'DEP_TEST_ONLY_EXPORT'
-  // duplicates (3)
+  // duplicates (4)
   | 'EXACT_DUP_TYPE_1'
   | 'STRUCT_DUP_TYPE_2_SHAPE'
   | 'STRUCT_DUP_TYPE_3_NORMALIZED'
+  | 'DUP_NEAR_MISS'
   // diagnostics (7)
   | 'DIAG_GOD_FUNCTION'
   | 'DIAG_CIRCULAR_DEPENDENCY'
@@ -207,13 +210,22 @@ export interface CloneDiff {
   readonly pairs: ReadonlyArray<CloneDiffPair>;
 }
 
-export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape' | 'type-3-normalized';
+export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape' | 'type-3-normalized' | 'type-3-near-miss';
+
+export type DuplicateFindingKind =
+  | 'exact-clone'
+  | 'structural-clone'
+  | 'near-miss-clone'
+  | 'literal-variant'
+  | 'pattern-outlier';
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
+  readonly findingKind?: DuplicateFindingKind;
   readonly code?: FirebatCatalogCode;
   readonly items: ReadonlyArray<DuplicateItem>;
   readonly suggestedParams?: CloneDiff;
+  readonly similarity?: number;
 }
 
 export interface DependencyCycle {
@@ -663,6 +675,8 @@ export interface FirebatAnalyses {
   readonly 'concept-scatter': ReadonlyArray<ConceptScatterFinding>;
   readonly 'abstraction-fitness': ReadonlyArray<AbstractionFitnessFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
+  // Unified duplicates detector
+  readonly duplicates: ReadonlyArray<DuplicateGroup>;
 }
 
 export interface FirebatReport {

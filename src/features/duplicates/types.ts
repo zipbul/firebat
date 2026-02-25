@@ -7,7 +7,7 @@
 
 import type { Node } from 'oxc-parser';
 
-import type { DuplicateCloneType, FirebatItemKind, SourceSpan } from '../../types';
+import type { DuplicateCloneType, DuplicateFindingKind, FirebatItemKind, SourceSpan } from '../../types';
 
 /**
  * 내부 처리용 클론 아이템.
@@ -30,6 +30,7 @@ export interface InternalCloneItem {
  */
 export interface InternalCloneGroup {
   readonly cloneType: DuplicateCloneType;
+  readonly findingKind?: DuplicateFindingKind;
   readonly items: ReadonlyArray<InternalCloneItem>;
   readonly similarity?: number;
 }

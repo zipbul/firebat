@@ -37,6 +37,7 @@ export { analyzeUnknownProof } from './features/unknown-proof';
 export { analyzeVariableLifetime } from './features/variable-lifetime';
 export { detectExactDuplicates } from './features/exact-duplicates';
 export { detectWaste } from './features/waste';
+export { analyzeDuplicates, createEmptyDuplicates } from './features/duplicates';
 
 // ---------------------------------------------------------------------------
 // Features — test-only internal exports

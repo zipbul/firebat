@@ -200,6 +200,7 @@ const formatText = (report: FirebatReport): string => {
   const conceptScatter = analyses['concept-scatter'] ?? [];
   const abstractionFitness = analyses['abstraction-fitness'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
+  const duplicatesUnified = analyses.duplicates ?? [];
   const lintErrors = lint.filter(d => d.severity === 'error').length;
   const typecheckErrors = typecheck.filter(i => i.severity === 'error').length;
   const formatFindings = format.length;
@@ -371,6 +372,14 @@ const formatText = (report: FirebatReport): string => {
           label: 'Coupling Hotspots',
           count: coupling.length,
           filesCount: coupling.length === 0 ? 0 : new Set(coupling.map(h => h.module)).size,
+          timingKey,
+        };
+      case 'duplicates':
+        return {
+          emoji: '🔀',
+          label: 'Duplicates (unified)',
+          count: duplicatesUnified.length,
+          filesCount: duplicatesUnified.length === 0 ? 0 : new Set(duplicatesUnified.flatMap(g => g.items.map(i => getFile(i)))).size,
           timingKey,
         };
       default:
@@ -733,6 +742,25 @@ const formatText = (report: FirebatReport): string => {
       const lineInfo = metrics ? `${metrics.lineCount}/${metrics.maxLines} lines` : '';
 
       lines.push(`    ${cc('·', A.dim)} ${rel} ${cc(lineInfo, A.yellow)}`);
+    }
+  }
+
+  if (selectedDetectors.has('duplicates') && duplicatesUnified.length > 0) {
+    lines.push(sectionHeader('🔀', 'Duplicates (unified)', `${duplicatesUnified.length} groups`));
+
+    for (const group of duplicatesUnified) {
+      const findingLabel = group.findingKind ?? group.cloneType;
+      const simLabel = group.similarity !== undefined ? ` sim=${group.similarity.toFixed(2)}` : '';
+      lines.push(`    ${cc(`${group.items.length} items`, A.yellow)} ${cc(`[${findingLabel}${simLabel}]`, A.dim)}`);
+
+      for (const item of group.items) {
+        const rel = path.relative(process.cwd(), getFile(item));
+        const start = toPos(item.span.start.line, item.span.start.column);
+        const kindPrefix = item.kind !== 'node' ? `${item.kind}: ` : '';
+        const name = item.header !== 'anonymous' ? `${kindPrefix}${item.header} ` : '';
+
+        lines.push(`      ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
+      }
     }
   }
 

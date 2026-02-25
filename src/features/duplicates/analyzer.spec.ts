@@ -224,6 +224,7 @@ describe('analyzeDuplicates', () => {
     expect(type1.length).toBeGreaterThanOrEqual(1);
     expect(type1[0]!.items.length).toBeGreaterThanOrEqual(2);
     expect(type1[0]!.items[0]!.filePath).toBe('dup.ts');
+    expect(type1[0]!.findingKind).toBe('exact-clone');
   });
 
   // ── [HP] 2. 이름만 다른 함수 2개 → type-2-shape 그룹 ──────────────────
@@ -235,6 +236,7 @@ describe('analyzeDuplicates', () => {
 
     const type2 = result.filter((g) => g.cloneType === 'type-2-shape');
     expect(type2.length).toBeGreaterThanOrEqual(1);
+    expect(type2[0]!.findingKind).toBe('structural-clone');
     // type-1에 없어야 함
     const type1 = result.filter((g) => g.cloneType === 'type-1');
     const type1Headers = type1.flatMap((g) => g.items.map((i) => i.header));
@@ -330,6 +332,8 @@ describe('analyzeDuplicates', () => {
     );
 
     expect(nmGroups.length).toBe(1);
+    expect(nmGroups[0]!.cloneType).toBe('type-3-near-miss');
+    expect(nmGroups[0]!.findingKind).toBe('near-miss-clone');
     expect(detectNearMissClonesMock).toHaveBeenCalledTimes(1);
   });
 
@@ -387,6 +391,7 @@ describe('analyzeDuplicates', () => {
     const withParams = result.filter((g) => g.suggestedParams !== undefined);
     expect(withParams.length).toBeGreaterThanOrEqual(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('literal');
+    expect(withParams[0]!.findingKind).toBe('literal-variant');
   });
 
   // ── [HP] 10. anti-unification structural-diff → no suggestedParams ──────
@@ -703,5 +708,103 @@ describe('analyzeDuplicates', () => {
     const headers1 = result1.flatMap((g) => g.items.map((i) => `${i.filePath}:${i.header}`)).sort();
     const headers2 = result2.flatMap((g) => g.items.map((i) => `${i.filePath}:${i.header}`)).sort();
     expect(headers1).toEqual(headers2);
+  });
+
+  // ── [HP] 34. findingKind: type-3-normalized → structural-clone ──────────
+
+  it('should assign findingKind structural-clone to type-3-normalized groups', () => {
+    // type-3-normalized은 이름+리터럴 정규화 후 같은 함수
+    // 직접적으로 type-3-normalized만 생성하기는 어려우므로
+    // type-2-shape에서 structural-clone 확인
+    const fileA = makeFile('a.ts', LITERAL_PAIR_A);
+    const fileB = makeFile('b.ts', LITERAL_PAIR_B);
+    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+
+    for (const group of result) {
+      if (group.cloneType === 'type-2-shape' || group.cloneType === 'type-3-normalized') {
+        expect(group.findingKind).toBe('structural-clone');
+      }
+    }
+  });
+
+  // ── [HP] 35. findingKind: near-miss 그룹에 similarity 포함 ─────────────
+
+  it('should include similarity in near-miss groups', () => {
+    const file = makeFile('a.ts', RENAMED_PAIR_A);
+    const nmGroupItems = [
+      {
+        node: {} as unknown,
+        kind: 'function' as const,
+        header: 'nmFunc',
+        filePath: 'a.ts',
+        span: { start: { line: 1, column: 0 }, end: { line: 5, column: 1 } },
+        size: 10,
+        statementFingerprints: [],
+      },
+      {
+        node: {} as unknown,
+        kind: 'function' as const,
+        header: 'nmFunc2',
+        filePath: 'b.ts',
+        span: { start: { line: 1, column: 0 }, end: { line: 5, column: 1 } },
+        size: 10,
+        statementFingerprints: [],
+      },
+    ];
+
+    detectNearMissClonesMock.mockImplementation(() => [
+      { items: nmGroupItems, similarity: 0.82 },
+    ]);
+
+    const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: true, enableAntiUnification: false });
+    const nmGroups = result.filter((g) => g.cloneType === 'type-3-near-miss');
+
+    expect(nmGroups.length).toBe(1);
+    expect(nmGroups[0]!.similarity).toBe(0.82);
+    expect(nmGroups[0]!.findingKind).toBe('near-miss-clone');
+  });
+
+  // ── [HP] 36. findingKind: rename-only에서 literal-variant override 안 됨 ─
+
+  it('should not override findingKind to literal-variant when diff is rename-only', () => {
+    classifyDiffMock.mockImplementation(() => 'rename-only');
+    antiUnifyMock.mockImplementation(() => ({
+      sharedSize: 10,
+      leftSize: 10,
+      rightSize: 10,
+      similarity: 0.9,
+      variables: [
+        { id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' },
+      ],
+    }));
+
+    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
+    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
+    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
+
+    const withParams = result.filter((g) => g.suggestedParams !== undefined);
+    expect(withParams.length).toBeGreaterThanOrEqual(1);
+    // rename-only → findingKind는 cloneType 기반 기본값 (structural-clone), literal-variant 아님
+    expect(withParams[0]!.findingKind).not.toBe('literal-variant');
+  });
+
+  // ── [HP] 37. 모든 그룹에 findingKind 존재 확인 ─────────────────────────
+
+  it('should assign findingKind to every returned group', () => {
+    const fileA = makeFile('a.ts', IDENTICAL_FUNCTIONS);
+    const fileB = makeFile('b.ts', RENAMED_PAIR_A);
+    const fileC = makeFile('c.ts', RENAMED_PAIR_B);
+    const result = analyzeDuplicates([fileA, fileB, fileC], {
+      minSize: 3,
+      enableNearMiss: false,
+      enableAntiUnification: false,
+    });
+
+    for (const group of result) {
+      expect(group.findingKind).toBeDefined();
+      expect(['exact-clone', 'structural-clone', 'near-miss-clone', 'literal-variant', 'pattern-outlier']).toContain(
+        group.findingKind,
+      );
+    }
   });
 });

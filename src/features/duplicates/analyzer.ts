@@ -14,6 +14,7 @@ import type {
   CloneDiff,
   CloneDiffPair,
   DuplicateCloneType,
+  DuplicateFindingKind,
   DuplicateGroup,
   DuplicateItem,
   FirebatItemKind,
@@ -108,7 +109,7 @@ export const analyzeDuplicates = (
 
     for (const nmGroup of nearMissGroups) {
       allGroups.push({
-        cloneType: 'type-3-normalized', // near-miss는 Type-3 계열
+        cloneType: 'type-3-near-miss',
         items: nmGroup.items.map((nmItem) => ({
           node: nmItem.node,
           kind: nmItem.kind,
@@ -250,14 +251,16 @@ const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup => {
 
   // suggestedParams 생성 (rename-only 또는 literal-variant인 경우)
   let suggestedParams: CloneDiff | undefined;
+  let findingKindOverride: DuplicateFindingKind | undefined;
 
   if (allRenameOnly && auResults.length > 0) {
     suggestedParams = buildCloneDiff('identifier', auResults[0]!.result);
   } else if (allLiteralVariant && auResults.length > 0) {
     suggestedParams = buildCloneDiff('literal', auResults[0]!.result);
+    findingKindOverride = 'literal-variant';
   }
 
-  return toDuplicateGroup(group, suggestedParams);
+  return toDuplicateGroup(group, suggestedParams, findingKindOverride);
 };
 
 const buildCloneDiff = (
@@ -275,15 +278,33 @@ const buildCloneDiff = (
   return { kind, pairs };
 };
 
+// ─── findingKind 매핑 ─────────────────────────────────────────────────────────
+
+const cloneTypeToFindingKind = (cloneType: DuplicateCloneType): DuplicateFindingKind => {
+  switch (cloneType) {
+    case 'type-1':
+      return 'exact-clone';
+    case 'type-2':
+    case 'type-2-shape':
+    case 'type-3-normalized':
+      return 'structural-clone';
+    case 'type-3-near-miss':
+      return 'near-miss-clone';
+  }
+};
+
 // ─── 변환 ─────────────────────────────────────────────────────────────────────
 
 const toDuplicateGroup = (
   group: InternalCloneGroup,
   suggestedParams: CloneDiff | undefined,
+  findingKindOverride?: DuplicateFindingKind,
 ): DuplicateGroup => ({
   cloneType: group.cloneType,
+  findingKind: findingKindOverride ?? group.findingKind ?? cloneTypeToFindingKind(group.cloneType),
   items: group.items.map(toDuplicateItem),
   ...(suggestedParams !== undefined ? { suggestedParams } : {}),
+  ...(group.similarity !== undefined ? { similarity: group.similarity } : {}),
 });
 
 const toDuplicateItem = (item: InternalCloneItem): DuplicateItem => ({
