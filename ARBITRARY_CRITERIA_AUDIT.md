@@ -174,10 +174,11 @@
 
 ### A-12. api-drift — qualified prefix 최소 출현 횟수
 
-- **파일**: `src/features/api-drift/analyzer.ts` L395
+- **파일**: ~~`src/features/api-drift/analyzer.ts` L395~~ (삭제됨)
 - **코드**: `if (count >= 3) { qualifiedPrefixes.add(prefix); }`
 - **임의 기준**: 동일 prefix가 3회 이상 등장해야 분석 그룹 형성
 - **질문**: 2회이면 왜 안 되는가? 3이라는 minimum sample size의 통계적 근거는?
+- **결론**: ✅ **기능 폐기로 무효** — C-01 결론에 따라 api-drift 전체 삭제. 이 threshold 논의는 더 이상 해당 없음.
 
 ---
 
@@ -304,13 +305,14 @@
 ---
 
 > [!NOTE]
-> ### 커플링 카테고리 진행 상태 (A-01~A-05, B-01)
+> ### 진행 상태
 >
 > | 항목 | 결론 | 코드 변경 | 테스트 | 커밋 |
 > |------|------|-----------|--------|------|
 > | A-01~A-05 | Signal → threshold configurable 전환 예정 | `computeSeverity` 삭제, `score = Math.round(distance * 100)` | ✅ 2건 추가, 전체 통과 | `08479c7` |
 > | B-01 | severity 함수 삭제 | 동일 (위와 동일 커밋) | ✅ | `08479c7` |
 > | abstractness 버그 | `type` alias 카운트 추가 | `s.kind === 'type'` 조건 추가 | ✅ 1건 추가, 전체 통과 | `08479c7` |
+> | A-12, C-01 | **api-drift 기능 전체 폐기** | 디렉토리 삭제, 전 참조 제거 (28→27 detectors) | ✅ 1214 pass, 0 fail | *(pending commit)* |
 >
 > **잔여 작업**: A-01~A-05 threshold를 `.firebatrc.jsonc`에서 configurable로 전환 (3원칙 #3). 현재 하드코딩 유지 — 별도 작업으로 분리.
 >
@@ -433,13 +435,14 @@
 
 ### C-01. api-drift — PREFIX_STOP_WORDS
 
-- **파일**: `src/features/api-drift/analyzer.ts` L210-217
+- **파일**: ~~`src/features/api-drift/analyzer.ts` L210-217~~ (삭제됨)
 - **코드**: 80개의 prefix stop words (`get`, `set`, `on`, `is`, `to`, `has`, `do`, `can`, ...)
 - **임의 기준**: 이 80개가 "API prefix로서 무의미"하다고 분류
 - **질문**:
   - `render`, `compile`, `visit` 같은 단어들이 왜 stop word인가? 이들은 특정 도메인에서 매우 유의미한 prefix
   - `withXxx`, `useXxx` 같은 React 패턴에서 `with`/`use`를 제거하면 핵심 정보 손실
   - 이 목록은 어떤 corpus 분석에서 도출되었는가?
+- **결론**: ✅ **기능 전체 폐기** — prefix 기반 패밀리 그룹핑은 구조적으로 판단 불가능. 프로젝트 전체 스코프에서 camelCase prefix만으로 "같은 계약의 함수"를 판별하는 것은 도메인 모듈러 아키텍처에서 false positive를 필연적으로 생성. stop word 목록을 어떻게 조정해도 해결 불가. api-drift의 나머지 전략(heritage chain, interface)은 타입체커(tsc/tsgo)가 이미 더 정확하게 수행. **api-drift 기능 전체 삭제 완료** (28→27 detectors).
 
 ---
 

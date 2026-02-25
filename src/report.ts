@@ -180,7 +180,6 @@ const formatText = (report: FirebatReport): string => {
   const typecheck = analyses.typecheck ?? [];
   const structDups = analyses['structural-duplicates'] ?? [];
   const earlyReturn = analyses['early-return'] ?? [];
-  const apiDrift = analyses['api-drift'] ?? [];
   const depsRaw = analyses.dependencies;
   const depsFindings: ReadonlyArray<DependencyFinding> = Array.isArray(depsRaw) ? depsRaw : [];
   const depsDead = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'dead-export' | 'test-only-export' }> => f.kind === 'dead-export' || f.kind === 'test-only-export');
@@ -381,17 +380,6 @@ const formatText = (report: FirebatReport): string => {
           label: 'Coupling Hotspots',
           count: coupling.length,
           filesCount: coupling.length === 0 ? 0 : new Set(coupling.map(h => h.module)).size,
-          timingKey,
-        };
-      case 'api-drift':
-        return {
-          emoji: '📐',
-          label: 'API Drift',
-          count: apiDrift.length,
-          filesCount:
-            apiDrift.length === 0
-              ? 0
-              : new Set(apiDrift.flatMap(g => g.outliers.map(o => o.filePath))).size,
           timingKey,
         };
       default:
@@ -630,29 +618,6 @@ const formatText = (report: FirebatReport): string => {
       const signals = hotspot.signals.join(', ');
 
       lines.push(`    ${cc('·', A.dim)} ${hotspot.module} ${cc(`score=${hotspot.score}`, A.yellow)} ${cc(signals, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('api-drift') && apiDrift.length > 0) {
-    lines.push(sectionHeader('📐', 'API Drift', `${apiDrift.length} groups`));
-
-    for (const group of apiDrift) {
-      const shape = (group as any).standard;
-      const standard = `(${shape.params ?? shape.paramsCount},${shape.optionals ?? shape.optionalCount},${shape.returnKind},${shape.async ? 'async' : 'sync'})`;
-
-      lines.push(`    ${cc('·', A.dim)} ${group.label}: standard=${standard} outliers=${group.outliers.length}`);
-
-      for (const outlier of group.outliers) {
-        const outlierFile = getFile(outlier);
-
-        if (outlierFile.length > 0) {
-          const rel = path.relative(process.cwd(), outlierFile);
-          const start = toPos(outlier.span.start.line, outlier.span.start.column);
-          const oShape = `(${(outlier.shape as any).params ?? (outlier.shape as any).paramsCount},${(outlier.shape as any).optionals ?? (outlier.shape as any).optionalCount},${outlier.shape.returnKind},${outlier.shape.async ? 'async' : 'sync'})`;
-
-          lines.push(`        ${cc('↳', A.dim)} ${oShape} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-        }
-      }
     }
   }
 

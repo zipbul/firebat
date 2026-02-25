@@ -271,64 +271,6 @@ describe('integration/scan/report-contract', () => {
     }
   });
 
-  it('should emit api-drift groups using P0 field names (standard/params/optionals, file)', async () => {
-    // Arrange
-    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-api-drift-shape', {
-      'src/a.ts': 'export function calibrateUser(id: string) { return id; }\n',
-      'src/b.ts': 'export function calibrateUser(id: string, flag?: boolean) { return id; }\n',
-      // NOTE: prefix family grouping requires >= 3 occurrences (see api-drift analyzer).
-      'src/c.ts': 'export function calibrateOrder(id: string) { return id; }\n',
-    });
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            format: 'json',
-            minSize: 0,
-            maxForwardDepth: 0,
-            exitOnFindings: false,
-            detectors: ['api-drift'],
-            fix: false,
-            help: false,
-          },
-          { logger },
-        ),
-      );
-
-      // Assert
-      expect(Array.isArray(report.analyses['api-drift'])).toBe(true);
-      expect((report.analyses['api-drift'] ?? []).length).toBeGreaterThan(0);
-
-      const group = (report.analyses['api-drift'] as unknown as any[])[0];
-
-      expect(typeof group.label).toBe('string');
-      expect(group.standardCandidate).toBeUndefined();
-      expect(typeof group.standard).toBe('object');
-      expect(typeof group.outliers).toBe('object');
-      expect(Array.isArray(group.outliers)).toBe(true);
-      expect(group.outliers.length).toBeGreaterThan(0);
-
-      const outlier = group.outliers[0];
-
-      expect(outlier.filePath).toBeUndefined();
-      expect(typeof outlier.file).toBe('string');
-      expect(typeof outlier.span).toBe('object');
-      expect(typeof outlier.kind).toBe('string');
-      expect(typeof outlier.code).toBe('string');
-      expect(typeof outlier.shape).toBe('object');
-      expect(outlier.shape.paramsCount).toBeUndefined();
-      expect(outlier.shape.optionalCount).toBeUndefined();
-      expect(typeof outlier.shape.params).toBe('number');
-      expect(typeof outlier.shape.optionals).toBe('number');
-    } finally {
-      await project.dispose();
-    }
-  });
-
   it('should emit dependencies as an array of DependencyFinding with kind and code fields', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-deps-shape', {

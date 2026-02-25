@@ -86,7 +86,6 @@ If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be
 |----------|---------------|
 | **barrel-policy** | Barrel file violations: `export *`, deep imports, missing/invalid index files |
 | **unknown-proof** | Unsafe `unknown`/`any` usage: type assertions, unvalidated unknown, inferred any |
-| **api-drift** | Functions with the same name but inconsistent signatures across files |
 | **dependencies** | Import dependency cycles and edge-cut hints |
 | **coupling** | High-coupling hotspot modules |
 

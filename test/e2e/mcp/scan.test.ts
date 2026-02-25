@@ -88,7 +88,6 @@ describe('scan', () => {
     'unknown-proof',
     'coupling',
     'dependencies',
-    'api-drift',
   ] as const;
 
   pureDetectors.forEach(detector => {

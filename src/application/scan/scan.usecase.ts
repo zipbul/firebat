@@ -20,7 +20,6 @@ import type {
 import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
 import { analyzeAbstractionFitness, createEmptyAbstractionFitness } from '../../features/abstraction-fitness';
-import { analyzeApiDrift, createEmptyApiDrift } from '../../features/api-drift';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeConceptScatter, createEmptyConceptScatter } from '../../features/concept-scatter';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
@@ -694,24 +693,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     noop = createEmptyNoop();
   }
 
-  const apiDriftPromise = options.detectors.includes('api-drift')
-    ? ((): Promise<Awaited<ReturnType<typeof analyzeApiDrift>>> => {
-        const t0 = nowMs();
-        const detectorKey = 'api-drift';
-
-        logger.debug('detector: start', { detector: detectorKey });
-
-        return analyzeApiDrift(program, { rootAbs: ctx.rootAbs, logger, gildash }).then(r => {
-          const durationMs = nowMs() - t0;
-
-          detectorTimings[detectorKey] = durationMs;
-
-          logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-
-          return r;
-        });
-      })()
-    : Promise.resolve(createEmptyApiDrift());
   let forwarding: Awaited<ReturnType<typeof analyzeForwarding>>;
 
   if (options.detectors.includes('forwarding')) {
@@ -728,13 +709,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     forwarding = createEmptyForwarding();
   }
 
-  const [barrelPolicy, unknownProof, lint, typecheck, format, apiDrift] = await Promise.all([
+  const [barrelPolicy, unknownProof, lint, typecheck, format] = await Promise.all([
     barrelPolicyPromise,
     unknownProofPromise,
     lintPromise ?? Promise.resolve(createEmptyLint()),
     typecheckPromise,
     formatPromise ?? Promise.resolve(createEmptyFormat()),
-    apiDriftPromise,
   ]);
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
@@ -1186,41 +1166,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
   };
 
-  const enrichApiDrift = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-    const kindToCode = { signature: 'API_DRIFT_SIGNATURE' } as const satisfies Record<string, FirebatCatalogCode>;
-
-    const normalizeShape = (shape: any) => {
-      return {
-        params: Number(shape?.paramsCount ?? shape?.params ?? 0),
-        optionals: Number(shape?.optionalCount ?? shape?.optionals ?? 0),
-        returnKind: String(shape?.returnKind ?? ''),
-        async: Boolean(shape?.async),
-      };
-    };
-
-    return groups.map(group => {
-      const standard = normalizeShape(group?.standardCandidate ?? group?.standard);
-      const outliers = Array.isArray(group?.outliers) ? group.outliers : [];
-
-      return {
-        label: String(group?.label ?? ''),
-        standard,
-        outliers: outliers.map((o: any) => {
-          const filePath = String(o?.filePath ?? o?.file ?? '');
-          const kind = 'signature';
-
-          return {
-            kind,
-            code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-            file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-            span: o?.span ?? zeroSpan,
-            shape: normalizeShape(o?.shape),
-          };
-        }),
-      };
-    });
-  };
 
   const enrichDependencies = (value: any): ReadonlyArray<any> => {
     const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
@@ -1443,7 +1388,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
     ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
     ...(selectedDetectors.has('noop') ? { noop: enrichNoop(noop as any) } : {}),
-    ...(selectedDetectors.has('api-drift') ? { 'api-drift': enrichApiDrift(apiDrift as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') } : {}),

@@ -21,7 +21,6 @@ export type FirebatDetector =
   | 'nesting'
   | 'early-return'
   | 'noop'
-  | 'api-drift'
   | 'forwarding'
   // Phase 1 detectors (IMPROVE.md)
   | 'implicit-state'
@@ -98,8 +97,6 @@ export type FirebatCatalogCode =
   | 'COUPLING_OFF_MAIN_SEQ'
   | 'COUPLING_UNSTABLE'
   | 'COUPLING_RIGID'
-  // api-drift (1)
-  | 'API_DRIFT_SIGNATURE'
   // dependencies (3)
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
@@ -434,34 +431,6 @@ export interface ForwardingAnalysis {
   readonly findings: ReadonlyArray<ForwardingFinding>;
 }
 
-export interface ApiDriftShape {
-  /** Phase 0 normalized field name (legacy alias of paramsCount). */
-  readonly params?: number;
-  /** Phase 0 normalized field name (legacy alias of optionalCount). */
-  readonly optionals?: number;
-  readonly paramsCount: number;
-  readonly optionalCount: number;
-  readonly returnKind: string;
-  readonly async: boolean;
-}
-
-export interface ApiDriftOutlier {
-  readonly shape: ApiDriftShape;
-  readonly filePath: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-}
-
-export interface ApiDriftGroup {
-  readonly label: string;
-  readonly standardCandidate: ApiDriftShape;
-  readonly outliers: ReadonlyArray<ApiDriftOutlier>;
-}
-
-export interface ApiDriftAnalysis {
-  readonly groups: ReadonlyArray<ApiDriftGroup>;
-}
-
 export interface WasteFinding {
   readonly kind: WasteKind;
   readonly label: string;
@@ -703,7 +672,6 @@ export interface FirebatAnalyses {
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
   readonly noop: ReadonlyArray<NoopFinding>;
-  readonly 'api-drift': ReadonlyArray<ApiDriftGroup>;
   readonly forwarding: ReadonlyArray<ForwardingFinding>;
 
   // Phase 1 detectors (IMPROVE.md)

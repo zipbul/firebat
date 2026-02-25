@@ -35,7 +35,6 @@
         "early-return": { "$ref": "#/$defs/emptyToggle" },
         "noop": { "$ref": "#/$defs/emptyToggle" },
         "exception-hygiene": { "$ref": "#/$defs/emptyToggle" },
-        "api-drift": { "$ref": "#/$defs/emptyToggle" },
 
         "implicit-state": { "$ref": "#/$defs/emptyToggle" },
         "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
@@ -78,7 +77,6 @@
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
                 "noop": { "$ref": "#/$defs/emptyInheritable" },
                 "exception-hygiene": { "$ref": "#/$defs/emptyInheritable" },
-                "api-drift": { "$ref": "#/$defs/emptyInheritable" },
 
                 "implicit-state": { "$ref": "#/$defs/emptyInheritable" },
                 "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },

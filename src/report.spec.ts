@@ -16,7 +16,6 @@ import type {
   NoopFinding,
   DependencyFinding,
   CouplingHotspot,
-  ApiDriftGroup,
   ImplicitStateFinding,
   TemporalCouplingFinding,
   SymmetryBreakingFinding,
@@ -58,7 +57,7 @@ const emptyDeps: ReadonlyArray<DependencyFinding> = [];
 const allDetectors: ReadonlyArray<FirebatDetector> = [
   'exact-duplicates', 'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
-  'structural-duplicates', 'nesting', 'early-return', 'noop', 'api-drift', 'forwarding',
+  'structural-duplicates', 'nesting', 'early-return', 'noop', 'forwarding',
   'implicit-state', 'temporal-coupling', 'symmetry-breaking', 'invariant-blindspot',
   'modification-trap', 'modification-impact', 'variable-lifetime', 'decision-surface',
   'implementation-overhead', 'concept-scatter', 'abstraction-fitness', 'giant-file',
@@ -151,7 +150,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 28 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 27 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -170,7 +169,6 @@ describe('formatReport', () => {
       expect(out).toContain('Nesting');
       expect(out).toContain('Early Return');
       expect(out).toContain('Noop');
-      expect(out).toContain('API Drift');
       expect(out).toContain('Forwarding');
       expect(out).toContain('Implicit State');
       expect(out).toContain('Temporal Coupling');
@@ -776,39 +774,6 @@ describe('formatReport', () => {
       expect(out).toContain('src/core.ts');
       expect(out).toContain('score=42');
       expect(out).toContain('high-fan-out, high-instability');
-    });
-  });
-
-  // ── API Drift body ──────────────────────────────────────────────
-
-  describe('api-drift body', () => {
-    it('should render body with label, standard shape, and outliers when findings exist', () => {
-      // report.ts reads (group as any).standard — provide `standard` as alias
-      const group = {
-        label: 'handleRequest',
-        standard: { paramsCount: 2, optionalCount: 0, returnKind: 'Promise', async: true },
-        standardCandidate: { paramsCount: 2, optionalCount: 0, returnKind: 'Promise', async: true },
-        outliers: [{ shape: { paramsCount: 3, optionalCount: 1, returnKind: 'void', async: false }, filePath: testFile, span: span(100, 0) }],
-      } as unknown as ApiDriftGroup;
-      const out = formatReport(makeReport(['api-drift'], { 'api-drift': [group] }), 'text');
-
-      expect(out).toContain('API Drift');
-      expect(out).toContain('handleRequest');
-      expect(out).toContain('outliers=1');
-      expect(out).toContain('100:0');
-    });
-
-    it('should render outlier shape details when outlier has filePath', () => {
-      const group = {
-        label: 'fn',
-        standard: { paramsCount: 1, optionalCount: 0, returnKind: 'void', async: false },
-        standardCandidate: { paramsCount: 1, optionalCount: 0, returnKind: 'void', async: false },
-        outliers: [{ shape: { paramsCount: 2, optionalCount: 1, returnKind: 'string', async: true }, filePath: testFile, span: span(5, 0) }],
-      } as unknown as ApiDriftGroup;
-      const out = formatReport(makeReport(['api-drift'], { 'api-drift': [group] }), 'text');
-
-      expect(out).toContain('async');
-      expect(out).toContain('string');
     });
   });
 

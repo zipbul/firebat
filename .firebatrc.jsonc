@@ -65,7 +65,6 @@
     "nesting": true,
     "early-return": true,
     "noop": true,
-    "api-drift": true,
     "forwarding": { "maxForwardDepth": 0 }
   },
   "mcp": "inherit"

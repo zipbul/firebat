@@ -57,9 +57,6 @@
     // Exception hygiene rules (try/catch and promise safety).
     "exception-hygiene": true,
 
-    // Public API shape drift signals.
-    "api-drift": true,
-
     // Thin-wrapper forwarding chain detection.
     "forwarding": { "maxForwardDepth": 0 },
 
