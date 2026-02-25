@@ -386,6 +386,7 @@ const analyzeDependencies = async (
       const abstract = symbols.filter(
         s =>
           s.kind === 'interface' ||
+          s.kind === 'type' ||
           (s.kind === 'class' &&
             Array.isArray((s.detail as Record<string, unknown>)?.modifiers) &&
             ((s.detail as Record<string, unknown>).modifiers as string[]).includes('abstract')),

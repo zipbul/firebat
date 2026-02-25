@@ -163,4 +163,53 @@ describe('analyzeCoupling', () => {
     expect(hubHotspot).toBeDefined();
     expect(hubHotspot?.signals).toContain('rigid-module');
   });
+
+  it('[SC] score equals Math.round(distance * 100)', () => {
+    // A imports 6 modules and nothing imports A → instability = 6/6 = 1.0
+    // abstractness = 0 → distance = |0 + 1 - 1| = 0
+    // score should be Math.round(0 * 100) = 0
+    const adjacency: Record<string, string[]> = { A: [] };
+
+    for (let i = 1; i <= 6; i++) {
+      adjacency['A']!.push(`dep${i}`);
+      adjacency[`dep${i}`] = [];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const aHotspot = result.find(h => h.module === 'A');
+    expect(aHotspot).toBeDefined();
+    // distance = |abstractness + instability - 1| = |0 + 1 - 1| = 0
+    expect(aHotspot?.metrics.distance).toBe(0);
+    expect(aHotspot?.score).toBe(0);
+  });
+
+  it('[SC] off-main-sequence score reflects distance metric', () => {
+    // Isolated S: fanIn=0, fanOut=0, instability=0, abstractness=0
+    // distance = |0 + 0 - 1| = 1 → score = 100
+    const deps: DependencyAnalysis = {
+      adjacency: { S: [] },
+      exportStats: { S: { total: 0, abstract: 0 } },
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const sHotspot = result.find(h => h.module === 'S');
+    expect(sHotspot).toBeDefined();
+    expect(sHotspot?.metrics.distance).toBe(1);
+    expect(sHotspot?.score).toBe(100);
+  });
 });

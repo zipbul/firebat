@@ -64,34 +64,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
     return Math.max(0, Math.min(1, value));
   };
 
-  const computeSeverity = (params: {
-    distance: number;
-    instability: number;
-    fanIn: number;
-    fanOut: number;
-    signals: ReadonlyArray<string>;
-  }): number => {
-    const candidates: number[] = [params.distance];
-
-    if (params.signals.includes('unstable-module')) {
-      candidates.push(0.7 + 0.3 * clamp01(params.instability));
-    }
-
-    if (params.signals.includes('rigid-module')) {
-      candidates.push(0.7 + 0.3 * clamp01(1 - params.instability));
-    }
-
-    if (params.signals.includes('god-module')) {
-      candidates.push(0.95);
-    }
-
-    if (params.signals.includes('bidirectional-coupling')) {
-      candidates.push(0.85);
-    }
-
-    return Math.max(...candidates.map(clamp01));
-  };
-
   const kindToCode: Record<string, string> = {
     'god-module': 'COUPLING_GOD_MODULE',
     'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
@@ -167,14 +139,7 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
         abstractness: clamp01(abstractness),
         distance: clamp01(distance),
       };
-      const severity = computeSeverity({
-        distance: metrics.distance,
-        instability: metrics.instability,
-        fanIn,
-        fanOut,
-        signals,
-      });
-      const score = Math.round(severity * 100);
+      const score = Math.round(metrics.distance * 100);
       const kind = pickKind(signals);
 
       const codeVal = kindToCode[kind] as import('../../types').FirebatCatalogCode | undefined;

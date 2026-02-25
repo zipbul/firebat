@@ -1,5 +1,33 @@
 # 임의 기준(Arbitrary Criteria) 전수 감사 보고서
 
+> [!IMPORTANT]
+> ## 대전제: 모든 기능은 에이전트를 위한 것이다
+>
+> firebat의 모든 기능은 **인간 사용자가 직접 읽고 판단하는 것이 아니라, 인간의 에이전트(AI)가 소비하는 것**을 전제로 설계되어야 한다.
+>
+> - 에이전트는 raw metric을 해석할 수 있다 — 인간처럼 "한눈에 파악"이 필요하지 않다
+> - 에이전트는 false positive를 필터링할 수 있다 — 다만 **근거 없는 임의 기준**은 에이전트의 판단도 오염시킨다
+> - "주의 환기"보다 **정확한 사실 전달**이 우선이다 — 에이전트에게 감으로 정한 severity를 주면 감으로 정한 우선순위로 수정한다
+>
+> 이 문서의 모든 항목은 위 관점에서 논의한다: **"이 기준이 에이전트에게 정확한 판단 근거를 제공하는가?"**
+
+> [!NOTE]
+> ## 3원칙 (논의 확정)
+>
+> ### 1. Fact / Signal 이분법
+> - **Fact**: 100% 확인된 구조적 결함. 에이전트가 반드시 수정해야 함. (예: bidirectional-coupling)
+> - **Signal**: 객관적 metric + threshold 알림. 에이전트가 판단. (예: off-main-sequence, god-module)
+> - 중간 단계 없음 — 모든 finding은 Fact 아니면 Signal.
+>
+> ### 2. severity 미도입
+> - Fact에도 Signal에도 severity level을 부여하지 않는다.
+> - Fact는 모두 동등한 "에러". Signal은 raw metric만 제공, 에이전트가 판단.
+> - 근거: warn → 에이전트가 무시 → 매 scan마다 반복 → 노이즈.
+>
+> ### 3. Signal threshold = configurable
+> - 하드코딩된 임의 수치가 아닌, 사용자/프로젝트가 설정하는 threshold.
+> - 기본값은 있을 수 있으나, 변경 가능해야 한다.
+
 > **목적**: 28개 feature + engine 핵심 모듈 전체를 코드 레벨로 읽고, "분석 데이터로부터 도출된 논리적/객관적 사실"이 **아닌** 개발자가 근거 없이 설정한 기준들을 식별한다.
 >
 > **작성일**: 2025-02-25
@@ -44,6 +72,7 @@
 - **영향**: fanIn과 fanOut이 모두 이 값을 초과하면 god-module로 판정
 - **질문**: 10%라는 비율의 근거는? 최소 10은 왜?
 - **논의 방향**: 프로젝트 규모별 벤치마크 데이터가 필요하거나, configurable로 전환
+- **결론**: ✅ Signal — threshold를 configurable로 전환 (3원칙 #3). god-module은 Fact가 아닌 Signal이므로 에이전트가 metric(fanIn, fanOut)으로 판단.
 
 ---
 
@@ -54,6 +83,7 @@
 - **임의 기준**: 전체 모듈의 15%, 최소 10
 - **영향**: `instability < 0.2 && fanIn > rigidThreshold`이면 rigid-module
 - **질문**: 0.15와 0.2는 서로 어떤 관계? god-module과 rigid의 비율 차이(10% vs 15%) 근거는?
+- **결론**: ✅ Signal — threshold를 configurable로 전환 (3원칙 #3). rigid-module은 Signal.
 
 ---
 
@@ -63,6 +93,7 @@
 - **코드**: `if (distance > 0.7) { signals.push('off-main-sequence'); }`
 - **임의 기준**: Robert C. Martin의 Main Sequence 개념을 차용했지만, 0.7이라는 컷오프는 원 논문에 없음
 - **질문**: 0.5나 0.6이 아닌 0.7인 이유? false positive/negative 비율 분석이 있었는가?
+- **결론**: ✅ Signal — threshold를 configurable로 전환 (3원칙 #3). distance는 Martin metric이므로 계산 자체는 객관적, 컷오프만 임의.
 
 ---
 
@@ -72,6 +103,7 @@
 - **코드**: `if (instability > 0.8 && fanOut > 5) { signals.push('unstable-module'); }`
 - **임의 기준**: instability 0.8과 fanOut 5 모두 임의
 - **질문**: fanOut 5는 소규모 프로젝트에서는 높지만 대규모에서는 매우 낮음. 상대적 기준이 필요한가?
+- **결론**: ✅ Signal — threshold를 configurable로 전환 (3원칙 #3). unstable-module은 Signal.
 
 ---
 
@@ -81,6 +113,7 @@
 - **코드**: `if (instability < 0.2 && fanIn > rigidThreshold)`
 - **임의 기준**: 0.2라는 instability 컷오프
 - **질문**: 0.2와 A-04의 0.8 사이가 "정상" 범위인데, 이 밴드(0.2~0.8)의 근거는?
+- **결론**: ✅ Signal — threshold를 configurable로 전환 (3원칙 #3). rigid-module은 Signal.
 
 ---
 
@@ -266,6 +299,16 @@
 - **임의 기준**: 0.7, 0.3, 0.95, 0.85 등 모든 가중치
 - **질문**: god-module이 0.95이고 bidirectional이 0.85인 이유? 이 순서와 간격은 어떤 실증 데이터에서 비롯되었는가?
 - **논의 방향**: severity 공식을 제거하고 signal 종류만 보고하는 방식(판단은 사용자에게 위임)으로 전환?
+- **결론**: ✅ **삭제 완료** — `computeSeverity` 함수 제거 (3원칙 #2 severity 미도입). score는 이제 `Math.round(distance * 100)`으로 순수 Martin metric 기반.
+
+---
+
+> [!WARNING]
+> ### 감사 중 발견된 버그: dependencies abstractness에 type alias 누락
+>
+> - **파일**: `src/features/dependencies/analyzer.ts` L386-392
+> - **증상**: `type` alias(`s.kind === 'type'`)가 abstract 카운트에서 누락. type-only 파일 abstractness=0 → off-main-sequence 오탐.
+> - **수정**: `s.kind === 'type'` 조건 추가 완료.
 
 ---
 

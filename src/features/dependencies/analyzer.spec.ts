@@ -304,6 +304,32 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.exportStats['src/mod.ts']!.abstract).toBe(2);
   });
 
+  it('should count type alias as abstract in exportStats', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/types.ts', []],
+    ]);
+    const exported = [
+      mkSymbol(1, '/project/src/types.ts', 'UserId', 'type'),
+      mkSymbol(2, '/project/src/types.ts', 'IRepo', 'interface'),
+      mkSymbol(3, '/project/src/types.ts', 'helperFn', 'function'),
+    ];
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+        if (query.isExported) return exported;
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({}),
+    });
+    expect(result.exportStats['src/types.ts']).toBeDefined();
+    expect(result.exportStats['src/types.ts']!.total).toBe(3);
+    expect(result.exportStats['src/types.ts']!.abstract).toBe(2);
+  });
+
   it('should generate edge cut hints for cycles using outDegree', async () => {
     const graph = new Map<string, string[]>([
       ['/project/a.ts', ['/project/b.ts', '/project/d.ts']],

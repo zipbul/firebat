@@ -33,7 +33,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typescript/native-preview": "^7.0.0-dev.20260213.1",
-    "@zipbul/gildash": "0.5.0",
+    "@zipbul/gildash": "0.5.1",
     "@zipbul/result": "^0.0.3",
     "drizzle-orm": "^0.45.1",
     "fastbitset": "^0.4.1",
