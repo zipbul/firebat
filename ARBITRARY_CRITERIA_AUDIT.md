@@ -303,6 +303,21 @@
 
 ---
 
+> [!NOTE]
+> ### 커플링 카테고리 진행 상태 (A-01~A-05, B-01)
+>
+> | 항목 | 결론 | 코드 변경 | 테스트 | 커밋 |
+> |------|------|-----------|--------|------|
+> | A-01~A-05 | Signal → threshold configurable 전환 예정 | `computeSeverity` 삭제, `score = Math.round(distance * 100)` | ✅ 2건 추가, 전체 통과 | `08479c7` |
+> | B-01 | severity 함수 삭제 | 동일 (위와 동일 커밋) | ✅ | `08479c7` |
+> | abstractness 버그 | `type` alias 카운트 추가 | `s.kind === 'type'` 조건 추가 | ✅ 1건 추가, 전체 통과 | `08479c7` |
+>
+> **잔여 작업**: A-01~A-05 threshold를 `.firebatrc.jsonc`에서 configurable로 전환 (3원칙 #3). 현재 하드코딩 유지 — 별도 작업으로 분리.
+>
+> **블로커**: scan 검증 불가 — gildash 0.5.1 `fullIndex()` FK constraint 버그 (`SQLITE_CONSTRAINT_FOREIGNKEY`, errno 787). gildash 패치 대기.
+
+---
+
 > [!WARNING]
 > ### 감사 중 발견된 버그: dependencies abstractness에 type alias 누락
 >
