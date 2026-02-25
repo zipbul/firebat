@@ -101,11 +101,11 @@ const printHelp = (): void => {
     '',
     `  ${hc('DETECTORS', `${H.bold}${H.yellow}`, c)}`,
     '',
-    `    exact-duplicates, structural-duplicates, waste, nesting, early-return,`,
+    `    waste, nesting, early-return,`,
     `    forwarding, barrel-policy, unknown-proof,`,
     `    exception-hygiene, lint, format, typecheck, dependencies, coupling,`,
-    `    implicit-state, temporal-coupling, symmetry-breaking, invariant-blindspot,`,
-    `    modification-trap, modification-impact, variable-lifetime, decision-surface,`,
+    `    implicit-state, temporal-coupling, invariant-blindspot,`,
+    `    modification-impact, variable-lifetime, decision-surface,`,
     `    implementation-overhead, concept-scatter, abstraction-fitness, giant-file,`,
     `    duplicates`,
     '',
@@ -131,7 +131,6 @@ const printHelp = (): void => {
 
 const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
   const all: ReadonlyArray<FirebatDetector> = [
-    'exact-duplicates',
     'waste',
     'barrel-policy',
     'unknown-proof',
@@ -141,15 +140,12 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'typecheck',
     'dependencies',
     'coupling',
-    'structural-duplicates',
     'nesting',
     'early-return',
     'forwarding',
     'implicit-state',
     'temporal-coupling',
-    'symmetry-breaking',
     'invariant-blindspot',
-    'modification-trap',
     'modification-impact',
     'variable-lifetime',
     'decision-surface',
@@ -280,18 +276,10 @@ const resolveDependenciesAllowedDependenciesFromFeatures = (
 const resolveMinSizeFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): FirebatCliOptions['minSize'] | undefined => {
-  const { 'exact-duplicates': exact, 'structural-duplicates': structural, duplicates: unified } = features ?? {};
-  const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
-  const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
+  const { duplicates: unified } = features ?? {};
   const unifiedSize = typeof unified === 'object' && unified !== null ? (unified as Record<string, unknown>).minSize as number | undefined : undefined;
 
-  if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
-    throw new Error(
-      '[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize',
-    );
-  }
-
-  return exactSize ?? structuralSize ?? unifiedSize;
+  return unifiedSize;
 };
 
 const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {

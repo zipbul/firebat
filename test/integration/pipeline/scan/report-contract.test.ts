@@ -322,7 +322,7 @@ describe('integration/scan/report-contract', () => {
     }
   });
 
-  it('should emit exact-duplicates groups using P0 field names (kind/file/params) instead of cloneType/filePath/suggestedParams', async () => {
+  it('should emit duplicates groups using P0 field names (kind/file/params) instead of cloneType/filePath/suggestedParams', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-exact-dups-shape', {
       'src/a.ts': 'export const x = () => {\n  const a = 1;\n  return a + 1;\n};\n',
@@ -340,7 +340,7 @@ describe('integration/scan/report-contract', () => {
             minSize: 0,
             maxForwardDepth: 0,
             exitOnFindings: false,
-            detectors: ['exact-duplicates'],
+            detectors: ['duplicates'],
             fix: false,
             help: false,
           },
@@ -349,9 +349,9 @@ describe('integration/scan/report-contract', () => {
       );
 
       // Assert
-      expect(Array.isArray(report.analyses['exact-duplicates'])).toBe(true);
+      expect(Array.isArray(report.analyses['duplicates'])).toBe(true);
 
-      const groups = report.analyses['exact-duplicates'] as unknown as any[];
+      const groups = report.analyses['duplicates'] as unknown as any[];
 
       expect(groups.length).toBeGreaterThan(0);
 
@@ -714,10 +714,10 @@ exit 7
     }
   });
 
-  it('should expose structural-duplicates as a bare array of groups with kind/file and no legacy wrapper fields', async () => {
+  it('should expose duplicates as a bare array of groups with kind/file and no legacy wrapper fields', async () => {
     // Arrange
     const project = await createScanProjectFixture(
-      'firebat-report-contract-structural-duplicates-bare-array',
+      'firebat-report-contract-duplicates-bare-array',
       [
         'export function a(input: number) {',
         '  const x = input + 1;',
@@ -742,7 +742,7 @@ exit 7
             minSize: 0,
             maxForwardDepth: 0,
             exitOnFindings: false,
-            detectors: ['structural-duplicates'],
+            detectors: ['duplicates'],
             fix: false,
             help: false,
           },
@@ -750,7 +750,7 @@ exit 7
         ),
       );
       // Assert
-      const groups = report.analyses['structural-duplicates'] as any;
+      const groups = report.analyses['duplicates'] as any;
 
       expect(Array.isArray(groups)).toBe(true);
 

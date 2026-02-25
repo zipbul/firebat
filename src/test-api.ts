@@ -28,14 +28,10 @@ export { analyzeImplicitState } from './features/implicit-state';
 export { analyzeInvariantBlindspot } from './features/invariant-blindspot';
 export { analyzeLint } from './features/lint';
 export { analyzeModificationImpact } from './features/modification-impact';
-export { analyzeModificationTrap } from './features/modification-trap';
 export { analyzeNesting } from './features/nesting';
-export { analyzeStructuralDuplicates } from './features/structural-duplicates';
-export { analyzeSymmetryBreaking } from './features/symmetry-breaking';
 export { analyzeTemporalCoupling } from './features/temporal-coupling';
 export { analyzeUnknownProof } from './features/unknown-proof';
 export { analyzeVariableLifetime } from './features/variable-lifetime';
-export { detectExactDuplicates } from './features/exact-duplicates';
 export { detectWaste } from './features/waste';
 export { analyzeDuplicates, createEmptyDuplicates } from './features/duplicates';
 
@@ -50,7 +46,6 @@ export { __testing__ as __testing__FormatAnalyzer } from './features/format/anal
 // ---------------------------------------------------------------------------
 export { parseSource } from './engine/ast/parse-source';
 export { PartialResultError } from './engine/partial-result-error';
-export { detectClones } from './engine/duplicate-detector';
 export type { ParsedFile } from './engine/types';
 
 // ---------------------------------------------------------------------------

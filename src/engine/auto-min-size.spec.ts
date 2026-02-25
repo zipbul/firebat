@@ -5,7 +5,7 @@ import type { ParsedFile } from './types';
 
 // ── Mocks (must be set up before the SUT module is imported) ──────────────────
 
-const duplicateDetectorAbs = path.resolve(import.meta.dir, './duplicate-detector.ts');
+const duplicateDetectorAbs = path.resolve(import.meta.dir, '../features/duplicates/analyzer.ts');
 const oxcAstUtilsAbs = path.resolve(import.meta.dir, './ast/oxc-ast-utils.ts');
 const oxcSizeCountAbs = path.resolve(import.meta.dir, './ast/oxc-size-count.ts');
 

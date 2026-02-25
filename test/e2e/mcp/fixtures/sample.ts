@@ -7,7 +7,7 @@ const hello = () => {
   return 123;
 };
 
-// Intentional duplicate of hello (exact-duplicates detector)
+// Intentional duplicate of hello (duplicates detector)
 const hello2 = () => {
   console.log('hello');
 

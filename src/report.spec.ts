@@ -17,9 +17,7 @@ import type {
   CouplingHotspot,
   ImplicitStateFinding,
   TemporalCouplingFinding,
-  SymmetryBreakingFinding,
   InvariantBlindspotFinding,
-  ModificationTrapFinding,
   ModificationImpactFinding,
   VariableLifetimeFinding,
   DecisionSurfaceFinding,
@@ -54,12 +52,13 @@ const testFile2 = `${cwd}/test-file2.ts`;
 const emptyDeps: ReadonlyArray<DependencyFinding> = [];
 
 const allDetectors: ReadonlyArray<FirebatDetector> = [
-  'exact-duplicates', 'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
+  'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
-  'structural-duplicates', 'nesting', 'early-return', 'forwarding',
-  'implicit-state', 'temporal-coupling', 'symmetry-breaking', 'invariant-blindspot',
-  'modification-trap', 'modification-impact', 'variable-lifetime', 'decision-surface',
+  'nesting', 'early-return', 'forwarding',
+  'implicit-state', 'temporal-coupling', 'invariant-blindspot',
+  'modification-impact', 'variable-lifetime', 'decision-surface',
   'implementation-overhead', 'concept-scatter', 'abstraction-fitness', 'giant-file',
+  'duplicates',
 ];
 
 const makeReport = (
@@ -149,12 +148,12 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 26 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 23 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
       expect(out).toContain('Summary');
-      expect(out).toContain('Exact Duplicates');
+      expect(out).toContain('Duplicates (unified)');
       expect(out).toContain('Waste');
       expect(out).toContain('Barrel Policy');
       expect(out).toContain('Unknown Proof');
@@ -164,15 +163,12 @@ describe('formatReport', () => {
       expect(out).toContain('Typecheck');
       expect(out).toContain('Dependencies');
       expect(out).toContain('Coupling Hotspots');
-      expect(out).toContain('Structural Duplicates');
       expect(out).toContain('Nesting');
       expect(out).toContain('Early Return');
       expect(out).toContain('Forwarding');
       expect(out).toContain('Implicit State');
       expect(out).toContain('Temporal Coupling');
-      expect(out).toContain('Symmetry Breaking');
       expect(out).toContain('Invariant Blindspot');
-      expect(out).toContain('Modification Trap');
       expect(out).toContain('Modification Impact');
       expect(out).toContain('Variable Lifetime');
       expect(out).toContain('Decision Surface');
@@ -193,7 +189,7 @@ describe('formatReport', () => {
 
       expect(out).toContain('Waste');
       expect(out).toContain('Lint');
-      expect(out).not.toContain('Exact Duplicates');
+      expect(out).not.toContain('Duplicates (unified)');
       expect(out).not.toContain('Nesting');
     });
 
@@ -269,20 +265,21 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Exact Duplicates body ───────────────────────────────────────
+  // ── Duplicates (unified) body ───────────────────────────────────
 
-  describe('exact-duplicates body', () => {
+  describe('duplicates body', () => {
     it('should render body with group items and file when findings exist', () => {
       const group: DuplicateGroup = {
         cloneType: 'type-1',
+        findingKind: 'exact-clone',
         items: [
           { kind: 'function', header: 'fnA', filePath: testFile, span: span(10, 5) },
           { kind: 'function', header: 'fnB', filePath: testFile2, span: span(20, 3) },
         ],
       };
-      const out = formatReport(makeReport(['exact-duplicates'], { 'exact-duplicates': [group] }), 'text');
+      const out = formatReport(makeReport(['duplicates'], { duplicates: [group] }), 'text');
 
-      expect(out).toContain('Exact Duplicates');
+      expect(out).toContain('Duplicates (unified)');
       expect(out).toContain('1 groups');
       expect(out).toContain('2 items');
       expect(out).toContain('function: fnA');
@@ -294,9 +291,10 @@ describe('formatReport', () => {
     it('should omit kind prefix when item kind is node', () => {
       const group: DuplicateGroup = {
         cloneType: 'type-1',
+        findingKind: 'exact-clone',
         items: [{ kind: 'node', header: 'someNode', filePath: testFile, span: span() }],
       };
-      const out = formatReport(makeReport(['exact-duplicates'], { 'exact-duplicates': [group] }), 'text');
+      const out = formatReport(makeReport(['duplicates'], { duplicates: [group] }), 'text');
 
       expect(out).not.toContain('node:');
       expect(out).toContain('someNode');
@@ -305,21 +303,52 @@ describe('formatReport', () => {
     it('should omit name when item header is anonymous', () => {
       const group: DuplicateGroup = {
         cloneType: 'type-1',
+        findingKind: 'exact-clone',
         items: [{ kind: 'function', header: 'anonymous', filePath: testFile, span: span() }],
       };
-      const out = formatReport(makeReport(['exact-duplicates'], { 'exact-duplicates': [group] }), 'text');
+      const out = formatReport(makeReport(['duplicates'], { duplicates: [group] }), 'text');
 
       expect(out).not.toContain('anonymous');
     });
 
     it('should render multiple groups when multiple duplicate groups exist', () => {
       const groups: DuplicateGroup[] = [
-        { cloneType: 'type-1', items: [{ kind: 'function', header: 'a', filePath: testFile, span: span() }] },
-        { cloneType: 'type-1', items: [{ kind: 'function', header: 'b', filePath: testFile2, span: span() }] },
+        { cloneType: 'type-1', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'a', filePath: testFile, span: span() }] },
+        { cloneType: 'type-1', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'b', filePath: testFile2, span: span() }] },
       ];
-      const out = formatReport(makeReport(['exact-duplicates'], { 'exact-duplicates': groups }), 'text');
+      const out = formatReport(makeReport(['duplicates'], { duplicates: groups }), 'text');
 
       expect(out).toContain('2 groups');
+    });
+
+    it('should render structural-clone groups with findingKind label', () => {
+      const group: DuplicateGroup = {
+        cloneType: 'type-2',
+        findingKind: 'structural-clone',
+        items: [
+          { kind: 'function', header: 'funcA', filePath: testFile, span: span(1, 0) },
+          { kind: 'function', header: 'funcB', filePath: testFile2, span: span(5, 0) },
+        ],
+      };
+      const out = formatReport(makeReport(['duplicates'], { duplicates: [group] }), 'text');
+
+      expect(out).toContain('Duplicates (unified)');
+      expect(out).toContain('1 groups');
+      expect(out).toContain('structural-clone');
+      expect(out).toContain('function: funcA');
+      expect(out).toContain('function: funcB');
+    });
+
+    it('should omit kind prefix when item kind is node for structural-clone', () => {
+      const group: DuplicateGroup = {
+        cloneType: 'type-2',
+        findingKind: 'structural-clone',
+        items: [{ kind: 'node', header: 'someExpr', filePath: testFile, span: span() }],
+      };
+      const out = formatReport(makeReport(['duplicates'], { duplicates: [group] }), 'text');
+
+      expect(out).not.toContain('node:');
+      expect(out).toContain('someExpr');
     });
   });
 
@@ -575,48 +604,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Structural Duplicates body ──────────────────────────────────
-
-  describe('structural-duplicates body', () => {
-    it('should render body with group items when findings exist', () => {
-      const group: DuplicateGroup = {
-        cloneType: 'type-2',
-        items: [
-          { kind: 'function', header: 'funcA', filePath: testFile, span: span(1, 0) },
-          { kind: 'function', header: 'funcB', filePath: testFile2, span: span(5, 0) },
-        ],
-      };
-      const out = formatReport(makeReport(['structural-duplicates'], { 'structural-duplicates': [group] }), 'text');
-
-      expect(out).toContain('Structural Duplicates');
-      expect(out).toContain('1 classes');
-      expect(out).toContain('2 items');
-      expect(out).toContain('function: funcA');
-      expect(out).toContain('function: funcB');
-    });
-
-    it('should omit kind prefix when structural-duplicates item kind is node', () => {
-      const group: DuplicateGroup = {
-        cloneType: 'type-2',
-        items: [{ kind: 'node', header: 'someExpr', filePath: testFile, span: span() }],
-      };
-      const out = formatReport(makeReport(['structural-duplicates'], { 'structural-duplicates': [group] }), 'text');
-
-      expect(out).not.toContain('node:');
-      expect(out).toContain('someExpr');
-    });
-
-    it('should omit name when structural-duplicates item header is anonymous', () => {
-      const group: DuplicateGroup = {
-        cloneType: 'type-2',
-        items: [{ kind: 'function', header: 'anonymous', filePath: testFile, span: span() }],
-      };
-      const out = formatReport(makeReport(['structural-duplicates'], { 'structural-duplicates': [group] }), 'text');
-
-      expect(out).not.toContain('anonymous');
-    });
-  });
-
   // ── Nesting body ────────────────────────────────────────────────
 
   describe('nesting body', () => {
@@ -803,21 +790,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Symmetry Breaking body ──────────────────────────────────────
-
-  describe('symmetry-breaking body', () => {
-    it('should render body with group, signature, and counts when findings exist', () => {
-      const finding: SymmetryBreakingFinding = { kind: 'symmetry-breaking', file: testFile, span: span(8, 0), group: 'handlers', signature: '(req) => void', majorityCount: 5, outlierCount: 1 };
-      const out = formatReport(makeReport(['symmetry-breaking'], { 'symmetry-breaking': [finding] }), 'text');
-
-      expect(out).toContain('Symmetry Breaking');
-      expect(out).toContain('handlers');
-      expect(out).toContain('(req) => void');
-      expect(out).toContain('majority=5');
-      expect(out).toContain('outliers=1');
-    });
-  });
-
   // ── Invariant Blindspot body ────────────────────────────────────
 
   describe('invariant-blindspot body', () => {
@@ -829,20 +801,6 @@ describe('formatReport', () => {
       expect(out).toContain('1 findings');
       expect(out).toContain('unchecked-array-length');
       expect(out).toContain('14:3');
-    });
-  });
-
-  // ── Modification Trap body ──────────────────────────────────────
-
-  describe('modification-trap body', () => {
-    it('should render body with pattern and occurrences when findings exist', () => {
-      const finding: ModificationTrapFinding = { kind: 'modification-trap', file: testFile, span: span(20, 0), pattern: 'shared-mutable', occurrences: 4 };
-      const out = formatReport(makeReport(['modification-trap'], { 'modification-trap': [finding] }), 'text');
-
-      expect(out).toContain('Modification Trap');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('shared-mutable');
-      expect(out).toContain('occurrences=4');
     });
   });
 

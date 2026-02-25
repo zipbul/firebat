@@ -17,7 +17,7 @@ describe('arg-parse', () => {
     expect(result.maxForwardDepth).toBe(0);
     expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
-      'exact-duplicates',
+      'duplicates',
       'waste',
       'barrel-policy',
       'unknown-proof',
@@ -27,15 +27,12 @@ describe('arg-parse', () => {
       'typecheck',
       'dependencies',
       'coupling',
-      'structural-duplicates',
       'nesting',
       'early-return',
       'forwarding',
       'implicit-state',
       'temporal-coupling',
-      'symmetry-breaking',
       'invariant-blindspot',
-      'modification-trap',
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
@@ -63,7 +60,7 @@ describe('arg-parse', () => {
     expect(result.maxForwardDepth).toBe(0);
     expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
-      'exact-duplicates',
+      'duplicates',
       'waste',
       'barrel-policy',
       'unknown-proof',
@@ -73,15 +70,12 @@ describe('arg-parse', () => {
       'typecheck',
       'dependencies',
       'coupling',
-      'structural-duplicates',
       'nesting',
       'early-return',
       'forwarding',
       'implicit-state',
       'temporal-coupling',
-      'symmetry-breaking',
       'invariant-blindspot',
-      'modification-trap',
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
@@ -106,7 +100,7 @@ describe('arg-parse', () => {
     expect(result.maxForwardDepth).toBe(2);
     expect(result.targets).toEqual([path.resolve('packages')]);
     expect(result.detectors).toEqual([
-      'exact-duplicates',
+      'duplicates',
       'waste',
       'barrel-policy',
       'unknown-proof',
@@ -116,15 +110,12 @@ describe('arg-parse', () => {
       'typecheck',
       'dependencies',
       'coupling',
-      'structural-duplicates',
       'nesting',
       'early-return',
       'forwarding',
       'implicit-state',
       'temporal-coupling',
-      'symmetry-breaking',
       'invariant-blindspot',
-      'modification-trap',
       'modification-impact',
       'variable-lifetime',
       'decision-surface',

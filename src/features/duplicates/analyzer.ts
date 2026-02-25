@@ -157,7 +157,7 @@ const CLONE_TARGET_TYPES = new Set([
   'TSInterfaceDeclaration',
 ]);
 
-const isCloneTarget = (node: Node): boolean =>
+export const isCloneTarget = (node: Node): boolean =>
   CLONE_TARGET_TYPES.has(getNodeType(node));
 
 const getItemKind = (node: Node): FirebatItemKind => {

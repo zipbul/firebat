@@ -11,7 +11,7 @@ describe('FirebatConfigSchema', () => {
   it('[HP] parses a minimal valid config with features', () => {
     const result = FirebatConfigSchema.safeParse({
       features: {
-        'exact-duplicates': true,
+        duplicates: true,
         waste: false,
       },
     });
@@ -21,7 +21,7 @@ describe('FirebatConfigSchema', () => {
   it('[HP] parses feature toggle as object config', () => {
     const result = FirebatConfigSchema.safeParse({
       features: {
-        'exact-duplicates': { minSize: 'auto' },
+        duplicates: { minSize: 'auto' },
         waste: { memoryRetentionThreshold: 10 },
       },
     });
@@ -46,7 +46,7 @@ describe('FirebatConfigSchema', () => {
 
   it('[NE] rejects minSize with negative number', () => {
     const result = FirebatConfigSchema.safeParse({
-      features: { 'exact-duplicates': { minSize: -1 } },
+      features: { duplicates: { minSize: -1 } },
     });
     expect(result.success).toBe(false);
   });

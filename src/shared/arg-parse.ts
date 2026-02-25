@@ -7,7 +7,7 @@ import type { FirebatDetector, MinSizeOption, OutputFormat } from '../types';
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
 const DEFAULT_MAX_FORWARD_DEPTH = 0;
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
-  'exact-duplicates',
+  'duplicates',
   'waste',
   'barrel-policy',
   'unknown-proof',
@@ -17,15 +17,12 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'typecheck',
   'dependencies',
   'coupling',
-  'structural-duplicates',
   'nesting',
   'early-return',
   'forwarding',
   'implicit-state',
   'temporal-coupling',
-  'symmetry-breaking',
   'invariant-blindspot',
-  'modification-trap',
   'modification-impact',
   'variable-lifetime',
   'decision-surface',
@@ -84,7 +81,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
 
   for (const selection of selections) {
     if (
-      selection !== 'exact-duplicates' &&
+      selection !== 'duplicates' &&
       selection !== 'waste' &&
       selection !== 'barrel-policy' &&
       selection !== 'unknown-proof' &&
@@ -94,15 +91,12 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'typecheck' &&
       selection !== 'dependencies' &&
       selection !== 'coupling' &&
-      selection !== 'structural-duplicates' &&
       selection !== 'nesting' &&
       selection !== 'early-return' &&
       selection !== 'forwarding' &&
       selection !== 'implicit-state' &&
       selection !== 'temporal-coupling' &&
-      selection !== 'symmetry-breaking' &&
       selection !== 'invariant-blindspot' &&
-      selection !== 'modification-trap' &&
       selection !== 'modification-impact' &&
       selection !== 'variable-lifetime' &&
       selection !== 'decision-surface' &&
@@ -112,7 +106,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected exact-duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|structural-duplicates|nesting|early-return|forwarding|implicit-state|temporal-coupling|symmetry-breaking|invariant-blindspot|modification-trap|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|nesting|early-return|forwarding|implicit-state|temporal-coupling|invariant-blindspot|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
       );
     }
 

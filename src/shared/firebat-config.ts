@@ -8,11 +8,7 @@ type FeatureToggle<TOptions> = false | true | TOptions;
 
 type InheritableFeatureToggle<TOptions> = false | 'inherit' | true | TOptions;
 
-interface FirebatExactDuplicatesConfig {
-  readonly minSize?: number | 'auto' | undefined;
-}
-
-interface FirebatStructuralDuplicatesConfig {
+interface FirebatDuplicatesConfig {
   readonly minSize?: number | 'auto' | undefined;
 }
 
@@ -48,16 +44,6 @@ interface FirebatAbstractionFitnessConfig {
   readonly minFitnessScore?: number | undefined;
 }
 
-interface FirebatSymmetryBreakingGroup {
-  readonly name: string;
-  readonly glob: string;
-  readonly exportPattern: string;
-}
-
-interface FirebatSymmetryBreakingConfig {
-  readonly groups?: ReadonlyArray<FirebatSymmetryBreakingGroup> | undefined;
-}
-
 interface FirebatUnknownProofConfig {
   readonly boundaryGlobs?: ReadonlyArray<string> | undefined;
 }
@@ -77,7 +63,7 @@ interface FirebatDependenciesConfig {
 }
 
 interface FirebatFeaturesConfig {
-  readonly 'exact-duplicates'?: FeatureToggle<FirebatExactDuplicatesConfig> | undefined;
+  readonly duplicates?: FeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: FeatureToggle<FirebatWasteConfig> | undefined;
   readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: FeatureToggle<FirebatUnknownProofConfig> | undefined;
@@ -87,7 +73,6 @@ interface FirebatFeaturesConfig {
   readonly typecheck?: boolean | undefined;
   readonly dependencies?: FeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly coupling?: boolean | undefined;
-  readonly 'structural-duplicates'?: FeatureToggle<FirebatStructuralDuplicatesConfig> | undefined;
   readonly nesting?: boolean | undefined;
   readonly 'early-return'?: boolean | undefined;
   readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
@@ -95,9 +80,7 @@ interface FirebatFeaturesConfig {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state'?: boolean | undefined;
   readonly 'temporal-coupling'?: boolean | undefined;
-  readonly 'symmetry-breaking'?: FeatureToggle<FirebatSymmetryBreakingConfig> | undefined;
   readonly 'invariant-blindspot'?: boolean | undefined;
-  readonly 'modification-trap'?: boolean | undefined;
   readonly 'modification-impact'?: boolean | undefined;
   readonly 'variable-lifetime'?: FeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: FeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
@@ -108,7 +91,7 @@ interface FirebatFeaturesConfig {
 }
 
 interface FirebatMcpFeaturesConfig {
-  readonly 'exact-duplicates'?: InheritableFeatureToggle<FirebatExactDuplicatesConfig> | undefined;
+  readonly duplicates?: InheritableFeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: InheritableFeatureToggle<FirebatWasteConfig> | undefined;
   readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: InheritableFeatureToggle<FirebatUnknownProofConfig> | undefined;
@@ -118,7 +101,6 @@ interface FirebatMcpFeaturesConfig {
   readonly typecheck?: boolean | 'inherit' | undefined;
   readonly dependencies?: InheritableFeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly coupling?: boolean | 'inherit' | undefined;
-  readonly 'structural-duplicates'?: InheritableFeatureToggle<FirebatStructuralDuplicatesConfig> | undefined;
   readonly nesting?: boolean | 'inherit' | undefined;
   readonly 'early-return'?: boolean | 'inherit' | undefined;
   readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
@@ -126,9 +108,7 @@ interface FirebatMcpFeaturesConfig {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state'?: boolean | 'inherit' | undefined;
   readonly 'temporal-coupling'?: boolean | 'inherit' | undefined;
-  readonly 'symmetry-breaking'?: InheritableFeatureToggle<FirebatSymmetryBreakingConfig> | undefined;
   readonly 'invariant-blindspot'?: boolean | 'inherit' | undefined;
-  readonly 'modification-trap'?: boolean | 'inherit' | undefined;
   readonly 'modification-impact'?: boolean | 'inherit' | undefined;
   readonly 'variable-lifetime'?: InheritableFeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: InheritableFeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
@@ -155,7 +135,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
     $schema: z.string().optional(),
     features: z
       .object({
-        'exact-duplicates': z
+        duplicates: z
           .union([
             z.literal(false),
             z.literal(true),
@@ -225,17 +205,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           ])
           .optional(),
         coupling: z.boolean().optional(),
-        'structural-duplicates': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                minSize: z.union([z.literal('auto'), z.number().int().nonnegative()]),
-              })
-              .strict(),
-          ])
-          .optional(),
         nesting: z.boolean().optional(),
         'early-return': z.boolean().optional(),
         forwarding: z
@@ -250,33 +219,9 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           ])
           .optional(),
 
-        // Phase 1 detectors (IMPROVE.md)
         'implicit-state': z.boolean().optional(),
         'temporal-coupling': z.boolean().optional(),
-        'symmetry-breaking': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                groups: z
-                  .array(
-                    z
-                      .object({
-                        name: z.string().min(1),
-                        glob: z.string().min(1),
-                        exportPattern: z.string().min(1),
-                      })
-                      .strict(),
-                  )
-                  .nonempty()
-                  .optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
         'invariant-blindspot': z.boolean().optional(),
-        'modification-trap': z.boolean().optional(),
         'modification-impact': z.boolean().optional(),
         'variable-lifetime': z
           .union([
@@ -354,7 +299,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           .object({
             features: z
               .object({
-                'exact-duplicates': z
+                duplicates: z
                   .union([
                     z.literal(false),
                     z.literal('inherit'),
@@ -432,31 +377,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                 // Phase 1 detectors (IMPROVE.md)
                 'implicit-state': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'temporal-coupling': z.union([z.boolean(), z.literal('inherit')]).optional(),
-                'symmetry-breaking': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        groups: z
-                          .array(
-                            z
-                              .object({
-                                name: z.string().min(1),
-                                glob: z.string().min(1),
-                                exportPattern: z.string().min(1),
-                              })
-                              .strict(),
-                          )
-                          .nonempty()
-                          .optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
                 'invariant-blindspot': z.union([z.boolean(), z.literal('inherit')]).optional(),
-                'modification-trap': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'modification-impact': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'variable-lifetime': z
                   .union([
@@ -531,18 +452,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   ])
                   .optional(),
                 coupling: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
-                'structural-duplicates': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        minSize: z.union([z.literal('auto'), z.number().int().nonnegative()]),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
                 nesting: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'early-return': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 forwarding: z
@@ -565,32 +474,18 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
       ])
       .optional(),
   })
-  .strict()
-  .superRefine((cfg, ctx) => {
-    const { 'exact-duplicates': exact, 'structural-duplicates': structural } = cfg.features ?? {};
-    const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
-    const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
-
-    if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['features', 'structural-duplicates', 'minSize'],
-        message: "minSize must match 'features.exact-duplicates.minSize' (shared threshold)",
-      });
-    }
-  });
+  .strict();
 
 export type {
   FirebatBarrelPolicyConfig,
   FirebatConfig,
-  FirebatExactDuplicatesConfig,
+  FirebatDuplicatesConfig,
   FirebatFeaturesConfig,
   FirebatForwardingConfig,
   FirebatLogLevel,
   FirebatMcpConfig,
   FirebatMcpConfigObject,
   FirebatMcpFeaturesConfig,
-  FirebatStructuralDuplicatesConfig,
   FirebatUnknownProofConfig,
 };
 

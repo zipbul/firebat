@@ -21,7 +21,7 @@ import { createGildash } from '../../store/gildash';
 import { isErr } from '@zipbul/result';
 
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
-  'exact-duplicates',
+  'duplicates',
   'waste',
   'barrel-policy',
   'unknown-proof',
@@ -31,15 +31,12 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'typecheck',
   'dependencies',
   'coupling',
-  'structural-duplicates',
   'nesting',
   'early-return',
   'forwarding',
   'implicit-state',
   'temporal-coupling',
-  'symmetry-breaking',
   'invariant-blindspot',
-  'modification-trap',
   'modification-impact',
   'variable-lifetime',
   'decision-surface',
@@ -70,17 +67,13 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
 };
 
 const resolveMinSizeFromFeatures = (features: FirebatConfig['features'] | undefined): number | 'auto' | undefined => {
-  const { 'exact-duplicates': exact, 'structural-duplicates': structural } = features ?? {};
-  const exactSize = typeof exact === 'object' && exact !== null ? exact.minSize : undefined;
-  const structuralSize = typeof structural === 'object' && structural !== null ? structural.minSize : undefined;
+  const duplicates = features?.duplicates;
 
-  if (exactSize !== undefined && structuralSize !== undefined && exactSize !== structuralSize) {
-    throw new Error(
-      '[firebat] Invalid config: features.structural-duplicates.minSize must match features.exact-duplicates.minSize',
-    );
+  if (duplicates === undefined || duplicates === false || duplicates === true) {
+    return undefined;
   }
 
-  return exactSize ?? structuralSize;
+  return duplicates.minSize;
 };
 
 const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
@@ -369,7 +362,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: exact-duplicates, structural-duplicates, waste, nesting, early-return, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, symmetry-breaking, invariant-blindspot, modification-trap, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, abstraction-fitness, giant-file.',
+            'Available: duplicates, waste, nesting, early-return, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, invariant-blindspot, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, abstraction-fitness, giant-file.',
           ].join(' '),
         ),
       minSize: z
@@ -377,7 +370,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         .optional()
         .describe(
           [
-            'Minimum AST node size for duplicate detection (exact-duplicates / structural-duplicates).',
+            'Minimum AST node size for duplicate detection (duplicates).',
             '"auto" adapts to the codebase.',
             'If omitted, uses config defaults when available.',
           ].join(' '),
@@ -430,7 +423,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         '- targets: file/dir paths to analyze. If omitted, Firebat discovers default targets under the project root.',
         '- detectors: detector names to run. If omitted, uses enabled detectors from config (including config.mcp.features overrides).',
         '  Detector guide for non-obvious names:',
-        '  invariant-blindspot=mutation without validation, modification-trap=N-place sync required,',
+        '  invariant-blindspot=mutation without validation,',
         '  modification-impact=high-fanin change radius, variable-lifetime=long-lived variable burden,',
         '  decision-surface=combinatorial branch explosion, implementation-overhead=impl complexity >> interface,',
         '  concept-scatter=one concept spread across many files, abstraction-fitness=cohesion vs coupling score.',

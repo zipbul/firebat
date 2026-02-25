@@ -15,7 +15,6 @@ import { analyzeGiantFile } from '../../../src/test-api';
 import { analyzeImplementationOverhead } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
 import { analyzeForwarding } from '../../../src/test-api';
-import { detectExactDuplicates } from '../../../src/test-api';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -161,36 +160,5 @@ describe('threshold/forwarding', () => {
     const findings = analyzeForwarding([parse(src)], 1);
 
     expect(findings).toHaveLength(0);
-  });
-});
-
-// ── exact-duplicates ─────────────────────────────────────────────────────────
-
-describe('threshold/exact-duplicates', () => {
-  it('function body below minSize → no finding', () => {
-    // Two identical tiny functions, minSize=10 → too small to flag
-    const src = [
-      'export const f1 = (x: number) => x;',
-      'export const f2 = (x: number) => x;',
-    ].join('\n');
-    const findings = detectExactDuplicates([parse(src)], 100);
-
-    // With minSize=100, trivial functions should not be flagged
-    expect(findings).toHaveLength(0);
-  });
-
-  it('function body at valid size → finds duplicate', () => {
-    // Two identical functions with enough body to exceed minSize=5
-    const body = [
-      'export function processA(items: string[]): string[] {',
-      '  return items.filter(x => x.length > 0).map(x => x.trim());',
-      '}',
-      'export function processB(items: string[]): string[] {',
-      '  return items.filter(x => x.length > 0).map(x => x.trim());',
-      '}',
-    ].join('\n');
-    const findings = detectExactDuplicates([parse(body)], 5);
-
-    expect(findings.length).toBeGreaterThan(0);
   });
 });

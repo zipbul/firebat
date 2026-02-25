@@ -24,7 +24,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['exact-duplicates', 'waste'],
+      detectors: ['duplicates', 'waste'],
       minSize: 'auto',
     });
 
@@ -56,13 +56,13 @@ describe('scan', () => {
     // Act – scan twice to verify idempotency
     const { structured: first } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['exact-duplicates'],
+      detectors: ['duplicates'],
       minSize: 'auto',
     });
 
     const { structured: second } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['exact-duplicates'],
+      detectors: ['duplicates'],
       minSize: 'auto',
     });
 
@@ -77,8 +77,7 @@ describe('scan', () => {
   // -----------------------------------------------------------------------
 
   const pureDetectors = [
-    'exact-duplicates',
-    'structural-duplicates',
+    'duplicates',
     'waste',
     'nesting',
     'early-return',
@@ -118,7 +117,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['exact-duplicates'],
+      detectors: ['duplicates'],
       minSize: 0,
     });
 
@@ -133,7 +132,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['exact-duplicates'],
+      detectors: ['duplicates'],
       minSize: 9999,
     });
 
@@ -148,7 +147,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['exact-duplicates'],
+      detectors: ['duplicates'],
       minSize: 'auto',
     });
 
@@ -205,7 +204,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets,
-      detectors: ['exact-duplicates', 'waste'],
+      detectors: ['duplicates', 'waste'],
       minSize: 'auto',
     });
 
@@ -252,7 +251,7 @@ describe('scan', () => {
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: [dir],
-      detectors: ['exact-duplicates'],
+      detectors: ['duplicates'],
       minSize: 'auto',
     });
 

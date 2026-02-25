@@ -4,11 +4,8 @@
 
   // Per-feature toggles and options.
   "features": {
-    // Detect exact duplicate code blocks/functions.
-    "exact-duplicates": { "minSize": "auto" },
-
-    // Detect structurally-similar duplicates (renames/literals can differ).
-    "structural-duplicates": { "minSize": "auto" },
+    // Detect duplicate code blocks/functions (exact and structural).
+    "duplicates": { "minSize": "auto" },
 
     // Run oxfmt in check mode (report if formatting differs).
     "format": true,
@@ -68,27 +65,8 @@
     // Time-order dependency / temporal coupling.
     "temporal-coupling": true,
 
-    // Symmetry breaking across modules. Configure groups to define "modules".
-    "symmetry-breaking": {
-      "groups": [
-        {
-          "name": "adapters",
-          "glob": "src/adapters/**",
-          "exportPattern": "src/adapters/**/index.ts"
-        },
-        {
-          "name": "application",
-          "glob": "src/application/**",
-          "exportPattern": "src/application/**/index.ts"
-        }
-      ]
-    },
-
     // Invariant blind spots.
     "invariant-blindspot": true,
-
-    // Modification traps / high friction areas.
-    "modification-trap": true,
 
     // Modification impact hotspots.
     "modification-impact": true,

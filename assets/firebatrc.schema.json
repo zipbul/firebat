@@ -10,8 +10,8 @@
       "description": "Per-feature enable/disable + feature-specific options. false disables. true enables with defaults. An object enables with explicit options (empty objects are allowed).",
       "additionalProperties": false,
       "properties": {
-        "exact-duplicates": {
-          "$ref": "#/$defs/exactDuplicatesToggle"
+        "duplicates": {
+          "$ref": "#/$defs/duplicatesToggle"
         },
         "barrel-policy": {
           "$ref": "#/$defs/barrelPolicyToggle"
@@ -20,9 +20,6 @@
           "$ref": "#/$defs/unknownProofToggle"
         },
         "format": { "$ref": "#/$defs/emptyToggle" },
-        "structural-duplicates": {
-          "$ref": "#/$defs/structuralDuplicatesToggle"
-        },
         "forwarding": {
           "$ref": "#/$defs/forwardingToggle"
         },
@@ -37,9 +34,7 @@
 
         "implicit-state": { "$ref": "#/$defs/emptyToggle" },
         "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
-        "symmetry-breaking": { "$ref": "#/$defs/symmetryBreakingToggle" },
         "invariant-blindspot": { "$ref": "#/$defs/emptyToggle" },
-        "modification-trap": { "$ref": "#/$defs/emptyToggle" },
         "modification-impact": { "$ref": "#/$defs/emptyToggle" },
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
         "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
@@ -61,11 +56,10 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "exact-duplicates": { "$ref": "#/$defs/exactDuplicatesInheritable" },
+                "duplicates": { "$ref": "#/$defs/duplicatesInheritable" },
                 "barrel-policy": { "$ref": "#/$defs/barrelPolicyInheritable" },
                 "unknown-proof": { "$ref": "#/$defs/unknownProofInheritable" },
                 "format": { "$ref": "#/$defs/emptyInheritable" },
-                "structural-duplicates": { "$ref": "#/$defs/structuralDuplicatesInheritable" },
                 "forwarding": { "$ref": "#/$defs/forwardingInheritable" },
                 "waste": { "$ref": "#/$defs/wasteInheritable" },
                 "lint": { "$ref": "#/$defs/emptyInheritable" },
@@ -78,9 +72,7 @@
 
                 "implicit-state": { "$ref": "#/$defs/emptyInheritable" },
                 "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
-                "symmetry-breaking": { "$ref": "#/$defs/symmetryBreakingInheritable" },
                 "invariant-blindspot": { "$ref": "#/$defs/emptyInheritable" },
-                "modification-trap": { "$ref": "#/$defs/emptyInheritable" },
                 "modification-impact": { "$ref": "#/$defs/emptyInheritable" },
                 "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
                 "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
@@ -178,7 +170,7 @@
         }
       ]
     },
-    "exactDuplicatesToggle": {
+    "duplicatesToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
         { "type": "boolean", "const": true },
@@ -226,19 +218,6 @@
         }
       ]
     },
-    "structuralDuplicatesToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
-          "required": ["minSize"],
-          "minProperties": 1
-        }
-      ]
-    },
     "forwardingToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
@@ -252,7 +231,7 @@
         }
       ]
     },
-    "exactDuplicatesInheritable": {
+    "duplicatesInheritable": {
       "oneOf": [
         { "type": "boolean", "const": false },
         { "type": "string", "const": "inherit" },
@@ -303,20 +282,6 @@
         }
       ]
     },
-    "structuralDuplicatesInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
-          "required": ["minSize"],
-          "minProperties": 1
-        }
-      ]
-    },
     "forwardingInheritable": {
       "oneOf": [
         { "type": "boolean", "const": false },
@@ -329,44 +294,6 @@
           "required": ["maxForwardDepth"],
           "minProperties": 1
         }
-      ]
-    },
-
-    "symmetryBreakingGroup": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "glob": { "type": "string", "minLength": 1 },
-        "exportPattern": { "type": "string", "minLength": 1 }
-      },
-      "required": ["name", "glob", "exportPattern"],
-      "minProperties": 3
-    },
-    "symmetryBreakingOptions": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "groups": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/symmetryBreakingGroup" },
-          "minItems": 1
-        }
-      }
-    },
-    "symmetryBreakingToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        { "$ref": "#/$defs/symmetryBreakingOptions" }
-      ]
-    },
-    "symmetryBreakingInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        { "$ref": "#/$defs/symmetryBreakingOptions" }
       ]
     },
 

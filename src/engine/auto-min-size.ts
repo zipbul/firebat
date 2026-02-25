@@ -1,6 +1,6 @@
 import type { ParsedFile } from './types';
 
-import { isCloneTarget } from './duplicate-detector';
+import { isCloneTarget } from '../features/duplicates/analyzer';
 import { collectOxcNodes } from './ast/oxc-ast-utils';
 import { countOxcSize } from './ast/oxc-size-count';
 

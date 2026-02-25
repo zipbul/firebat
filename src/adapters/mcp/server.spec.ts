@@ -141,7 +141,7 @@ describe('asDetectors', () => {
 
     expect(result).toContain('waste');
     expect(result).toContain('lint');
-    expect(result).not.toContain('exact-duplicates');
+    expect(result).not.toContain('duplicates');
   });
 
   it('should return all detectors when no valid names match', () => {
@@ -155,7 +155,7 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
   it('should return all when features is undefined', () => {
     const result = resolveEnabledDetectorsFromFeatures(undefined);
 
-    expect(result).toContain('exact-duplicates');
+    expect(result).toContain('duplicates');
     expect(result).toContain('waste');
   });
 
@@ -172,21 +172,12 @@ describe('resolveMinSizeFromFeatures', () => {
     expect(resolveMinSizeFromFeatures(undefined)).toBeUndefined();
   });
 
-  it('should return minSize from exact-duplicates', () => {
+  it('should return minSize from duplicates', () => {
     const result = resolveMinSizeFromFeatures({
-      'exact-duplicates': { minSize: 20 },
+      duplicates: { minSize: 20 },
     } as never);
 
     expect(result).toBe(20);
-  });
-
-  it('should throw when exact and structural minSize conflict', () => {
-    expect(() =>
-      resolveMinSizeFromFeatures({
-        'exact-duplicates': { minSize: 10 },
-        'structural-duplicates': { minSize: 20 },
-      } as never),
-    ).toThrow('must match');
   });
 });
 

@@ -7,7 +7,6 @@ export type { FirebatConfig } from './shared/firebat-config';
 export type MinSizeOption = number | 'auto';
 
 export type FirebatDetector =
-  | 'exact-duplicates'
   | 'waste'
   | 'barrel-policy'
   | 'unknown-proof'
@@ -17,16 +16,13 @@ export type FirebatDetector =
   | 'typecheck'
   | 'dependencies'
   | 'coupling'
-  | 'structural-duplicates'
   | 'nesting'
   | 'early-return'
   | 'forwarding'
   // Phase 1 detectors (IMPROVE.md)
   | 'implicit-state'
   | 'temporal-coupling'
-  | 'symmetry-breaking'
   | 'invariant-blindspot'
-  | 'modification-trap'
   | 'modification-impact'
   | 'variable-lifetime'
   | 'decision-surface'
@@ -36,6 +32,14 @@ export type FirebatDetector =
   | 'giant-file'
   // Unified duplicates detector
   | 'duplicates';
+
+/** 하위호환 별칭 — 기존 config 파일에서 사용하던 detector 이름을 현재 이름으로 매핑 */
+export const DETECTOR_ALIASES: Readonly<Record<string, FirebatDetector>> = {
+  'exact-duplicates': 'duplicates',
+  'structural-duplicates': 'duplicates',
+  'symmetry-breaking': 'invariant-blindspot', // 근사 유사 detector로 fallback
+  'modification-trap': 'duplicates',
+};
 
 export type FirebatCatalogCode =
   // waste (3)
@@ -221,7 +225,7 @@ export type DuplicateFindingKind =
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
-  readonly findingKind?: DuplicateFindingKind;
+  readonly findingKind: DuplicateFindingKind;
   readonly code?: FirebatCatalogCode;
   readonly items: ReadonlyArray<DuplicateItem>;
   readonly suggestedParams?: CloneDiff;
@@ -544,32 +548,12 @@ export interface TemporalCouplingFinding {
   readonly readers: number;
 }
 
-export interface SymmetryBreakingFinding {
-  readonly kind: 'symmetry-breaking';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly group: string;
-  readonly signature: string;
-  readonly majorityCount: number;
-  readonly outlierCount: number;
-}
-
 export interface InvariantBlindspotFinding {
   readonly kind: 'invariant-blindspot';
   readonly file: string;
   readonly span: SourceSpan;
   readonly code?: FirebatCatalogCode;
   readonly signal: string;
-}
-
-export interface ModificationTrapFinding {
-  readonly kind: 'modification-trap';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly pattern: string;
-  readonly occurrences: number;
 }
 
 export interface ModificationImpactFinding {
@@ -647,7 +631,6 @@ export interface GiantFileFinding {
 }
 
 export interface FirebatAnalyses {
-  readonly 'exact-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly waste: ReadonlyArray<WasteFinding>;
   readonly 'barrel-policy': ReadonlyArray<BarrelPolicyFinding>;
   readonly 'unknown-proof': ReadonlyArray<UnknownProofFinding>;
@@ -657,7 +640,6 @@ export interface FirebatAnalyses {
   readonly typecheck: ReadonlyArray<TypecheckItem>;
   readonly dependencies: ReadonlyArray<DependencyFinding>;
   readonly coupling: ReadonlyArray<CouplingHotspot>;
-  readonly 'structural-duplicates': ReadonlyArray<DuplicateGroup>;
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
   readonly forwarding: ReadonlyArray<ForwardingFinding>;
@@ -665,9 +647,7 @@ export interface FirebatAnalyses {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state': ReadonlyArray<ImplicitStateFinding>;
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
-  readonly 'symmetry-breaking': ReadonlyArray<SymmetryBreakingFinding>;
   readonly 'invariant-blindspot': ReadonlyArray<InvariantBlindspotFinding>;
-  readonly 'modification-trap': ReadonlyArray<ModificationTrapFinding>;
   readonly 'modification-impact': ReadonlyArray<ModificationImpactFinding>;
   readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
   readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;

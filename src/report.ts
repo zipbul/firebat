@@ -170,7 +170,6 @@ const formatText = (report: FirebatReport): string => {
     return '';
   };
 
-  const duplicates = analyses['exact-duplicates'] ?? [];
   const waste = analyses.waste ?? [];
   const barrelPolicy = analyses['barrel-policy'] ?? [];
   const unknownProof = analyses['unknown-proof'] ?? [];
@@ -178,7 +177,6 @@ const formatText = (report: FirebatReport): string => {
   const lint = analyses.lint ?? [];
   const format = analyses.format ?? [];
   const typecheck = analyses.typecheck ?? [];
-  const structDups = analyses['structural-duplicates'] ?? [];
   const earlyReturn = analyses['early-return'] ?? [];
   const depsRaw = analyses.dependencies;
   const depsFindings: ReadonlyArray<DependencyFinding> = Array.isArray(depsRaw) ? depsRaw : [];
@@ -190,9 +188,7 @@ const formatText = (report: FirebatReport): string => {
   const forwarding = analyses.forwarding ?? [];
   const implicitState = analyses['implicit-state'] ?? [];
   const temporalCoupling = analyses['temporal-coupling'] ?? [];
-  const symmetryBreaking = analyses['symmetry-breaking'] ?? [];
   const invariantBlindspot = analyses['invariant-blindspot'] ?? [];
-  const modificationTrap = analyses['modification-trap'] ?? [];
   const modificationImpact = analyses['modification-impact'] ?? [];
   const variableLifetime = analyses['variable-lifetime'] ?? [];
   const decisionSurface = analyses['decision-surface'] ?? [];
@@ -254,14 +250,6 @@ const formatText = (report: FirebatReport): string => {
 
   const summaryRowFor = (timingKey: string): SummaryTableRow => {
     switch (timingKey) {
-      case 'exact-duplicates':
-        return {
-          emoji: '🔁',
-          label: 'Exact Duplicates',
-          count: duplicates.length,
-          filesCount: duplicates.length === 0 ? 0 : new Set(duplicates.flatMap(g => g.items.map(i => getFile(i)))).size,
-          timingKey,
-        };
       case 'waste':
         return {
           emoji: '🗑️',
@@ -317,14 +305,6 @@ const formatText = (report: FirebatReport): string => {
           label: 'Forwarding',
           count: forwarding.length,
           filesCount: forwarding.length === 0 ? 0 : new Set(forwarding.map(f => getFile(f))).size,
-          timingKey,
-        };
-      case 'structural-duplicates':
-        return {
-          emoji: '🧬',
-          label: 'Structural Duplicates',
-          count: structDups.length,
-          filesCount: structDups.length === 0 ? 0 : new Set(structDups.flatMap(g => g.items.map(i => getFile(i)))).size,
           timingKey,
         };
       case 'nesting':
@@ -390,23 +370,6 @@ const formatText = (report: FirebatReport): string => {
   const summaryRows: SummaryTableRow[] = report.meta.detectors.map(d => summaryRowFor(d));
 
   // ── Detail Sections (only shown when findings > 0) ──────────────
-
-  if (selectedDetectors.has('exact-duplicates') && duplicates.length > 0) {
-    lines.push(sectionHeader('🔁', 'Exact Duplicates', `${duplicates.length} groups`));
-
-    for (const group of duplicates) {
-      lines.push(`    ${cc(`${group.items.length} items`, A.yellow)}`);
-
-      for (const item of group.items) {
-        const rel = path.relative(process.cwd(), getFile(item));
-        const start = toPos(item.span.start.line, item.span.start.column);
-        const kindPrefix = item.kind !== 'node' ? `${item.kind}: ` : '';
-        const name = item.header !== 'anonymous' ? `${kindPrefix}${item.header} ` : '';
-
-        lines.push(`      ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
-      }
-    }
-  }
 
   if (selectedDetectors.has('waste') && waste.length > 0) {
     lines.push(sectionHeader('🗑️', 'Waste', `${waste.length} findings`));
@@ -496,23 +459,6 @@ const formatText = (report: FirebatReport): string => {
       const name = finding.header !== 'anonymous' ? `${finding.header} ` : '';
 
       lines.push(`    ${cc('·', A.dim)} ${finding.kind}: ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('structural-duplicates') && structDups.length > 0) {
-    lines.push(sectionHeader('🧬', 'Structural Duplicates', `${structDups.length} classes`));
-
-    for (const group of structDups) {
-      lines.push(`    ${cc(`${group.items.length} items`, A.yellow)}`);
-
-      for (const item of group.items) {
-        const rel = path.relative(process.cwd(), getFile(item));
-        const start = toPos(item.span.start.line, item.span.start.column);
-        const kindPrefix = item.kind !== 'node' ? `${item.kind}: ` : '';
-        const name = item.header !== 'anonymous' ? `${kindPrefix}${item.header} ` : '';
-
-        lines.push(`      ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}`);
-      }
     }
   }
 
@@ -633,17 +579,6 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('symmetry-breaking') && symmetryBreaking.length > 0) {
-    lines.push(sectionHeader('⚖️', 'Symmetry Breaking', `${symmetryBreaking.length} findings`));
-
-    for (const f of symmetryBreaking) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ${f.group}: ${f.signature} ${cc(`majority=${f.majorityCount} outliers=${f.outlierCount}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
   if (selectedDetectors.has('invariant-blindspot') && invariantBlindspot.length > 0) {
     lines.push(sectionHeader('🎯', 'Invariant Blindspot', `${invariantBlindspot.length} findings`));
 
@@ -652,17 +587,6 @@ const formatText = (report: FirebatReport): string => {
       const start = toPos(f.span.start.line, f.span.start.column);
 
       lines.push(`    ${cc('·', A.dim)} ${f.signal} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('modification-trap') && modificationTrap.length > 0) {
-    lines.push(sectionHeader('🪤', 'Modification Trap', `${modificationTrap.length} findings`));
-
-    for (const f of modificationTrap) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ${f.pattern} ${cc(`occurrences=${f.occurrences}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 

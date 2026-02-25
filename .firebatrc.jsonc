@@ -3,22 +3,7 @@
   "features": {
     "implicit-state": true,
     "temporal-coupling": true,
-    "symmetry-breaking": {
-      "groups": [
-        {
-          "name": "adapters",
-          "glob": "src/adapters/**",
-          "exportPattern": "src/adapters/**/index.ts"
-        },
-        {
-          "name": "application",
-          "glob": "src/application/**",
-          "exportPattern": "src/application/**/index.ts"
-        }
-      ]
-    },
     "invariant-blindspot": true,
-    "modification-trap": true,
     "modification-impact": true,
     "variable-lifetime": {
       "maxLifetimeLines": 200
@@ -42,8 +27,7 @@
     "barrel-policy": true,
     "format": true,
     "unknown-proof": true,
-    "exact-duplicates": { "minSize": "auto" },
-    "structural-duplicates": { "minSize": "auto" },
+    "duplicates": { "minSize": "auto" },
     "lint": true,
     "waste": true,
     "typecheck": true,

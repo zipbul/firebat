@@ -124,7 +124,7 @@ describe('toJsonReport', () => {
 describe('countBlockers', () => {
   it('should return count of all findings across present detectors when all present', () => {
     const analyses: Partial<FirebatAnalyses> = {
-      'exact-duplicates': [{ cloneType: 'type-1', items: [{ kind: 'function', header: 'a', filePath: 'a.ts', span: span() }] } as DuplicateGroup],
+      duplicates: [{ findingKind: 'exact-clone', items: [{ kind: 'function', header: 'a', filePath: 'a.ts', span: span() }] } as DuplicateGroup],
       waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
       'barrel-policy': [{ kind: 'deep-import', file: 'a.ts', span: span() } as BarrelPolicyFinding],
       'unknown-proof': [{ kind: 'type-assertion', message: '', filePath: 'a.ts', span: span() } as UnknownProofFinding],
@@ -181,7 +181,7 @@ describe('countBlockers', () => {
 
   it('should return 0 when all blocking detectors have empty arrays', () => {
     const analyses: Partial<FirebatAnalyses> = {
-      'exact-duplicates': [],
+      duplicates: [],
       waste: [],
       'barrel-policy': [],
       'unknown-proof': [],
@@ -206,7 +206,7 @@ describe('countBlockers', () => {
 
   it('should count warnings from lint and typecheck as blockers when only warnings and others empty', () => {
     const analyses: Partial<FirebatAnalyses> = {
-      'exact-duplicates': [],
+      duplicates: [],
       waste: [],
       lint: [{ severity: 'warning', code: 'a', msg: 'warn', file: 'a.ts', span: span() } as LintDiagnostic],
       typecheck: [{ severity: 'warning', code: 'TS6133', msg: 'warn', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem],

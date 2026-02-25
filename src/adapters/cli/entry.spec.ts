@@ -63,18 +63,18 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
     const result = resolveEnabledDetectorsFromFeatures(undefined);
 
     expect(result.length).toBeGreaterThan(0);
-    expect(result).toContain('exact-duplicates');
+    expect(result).toContain('duplicates');
     expect(result).toContain('waste');
     expect(result).toContain('lint');
   });
 
   it('should exclude detectors set to false', () => {
     const result = resolveEnabledDetectorsFromFeatures({
-      'exact-duplicates': false,
+      duplicates: false,
       waste: false,
     } as never);
 
-    expect(result).not.toContain('exact-duplicates');
+    expect(result).not.toContain('duplicates');
     expect(result).not.toContain('waste');
     expect(result).toContain('lint');
   });
@@ -82,7 +82,7 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
   it('should include all detectors when no feature is false', () => {
     const result = resolveEnabledDetectorsFromFeatures({} as never);
 
-    expect(result).toContain('exact-duplicates');
+    expect(result).toContain('duplicates');
   });
 });
 
@@ -179,26 +179,25 @@ describe('resolveMinSizeFromFeatures', () => {
     expect(resolveMinSizeFromFeatures(undefined)).toBeUndefined();
   });
 
-  it('should return minSize from exact-duplicates config', () => {
+  it('should return minSize from duplicates config', () => {
     const result = resolveMinSizeFromFeatures({
-      'exact-duplicates': { minSize: 20 },
+      duplicates: { minSize: 20 },
     } as never);
 
     expect(result).toBe(20);
   });
 
-  it('should throw when exact and structural minSize conflict', () => {
-    expect(() =>
-      resolveMinSizeFromFeatures({
-        'exact-duplicates': { minSize: 10 },
-        'structural-duplicates': { minSize: 20 },
-      } as never),
-    ).toThrow('must match');
+  it('should return undefined when duplicates config has no minSize', () => {
+    const result = resolveMinSizeFromFeatures({
+      duplicates: {},
+    } as never);
+
+    expect(result).toBeUndefined();
   });
 
-  it('should return minSize from structural-duplicates when exact is not set', () => {
+  it('should return minSize when duplicates config provides it', () => {
     const result = resolveMinSizeFromFeatures({
-      'structural-duplicates': { minSize: 15 },
+      duplicates: { minSize: 15 },
     } as never);
 
     expect(result).toBe(15);

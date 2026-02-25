@@ -25,7 +25,6 @@ import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../features/decision-surface';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
-import { detectExactDuplicates } from '../../features/exact-duplicates';
 import type { ExceptionHygieneFindingKind } from '../../features/exception-hygiene';
 import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
@@ -36,10 +35,7 @@ import { analyzeImplicitState, createEmptyImplicitState } from '../../features/i
 import { analyzeInvariantBlindspot, createEmptyInvariantBlindspot } from '../../features/invariant-blindspot';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeModificationImpact, createEmptyModificationImpact } from '../../features/modification-impact';
-import { analyzeModificationTrap, createEmptyModificationTrap } from '../../features/modification-trap';
 import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
-import { analyzeStructuralDuplicates, createEmptyStructuralDuplicates } from '../../features/structural-duplicates';
-import { analyzeSymmetryBreaking, createEmptySymmetryBreaking } from '../../features/symmetry-breaking';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
 import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
@@ -413,23 +409,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.info('Running detectors', { detectorCount: options.detectors.length });
 
   const detectorTimings: Record<string, number> = {};
-  let exactDuplicates: ReturnType<typeof detectExactDuplicates> = [];
-
-  if (options.detectors.includes('exact-duplicates')) {
-    const t0 = nowMs();
-    const detectorKey = 'exact-duplicates';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    exactDuplicates = detectExactDuplicates(program, resolvedMinSize);
-
-    const durationMs = nowMs() - t0;
-
-    detectorTimings[detectorKey] = durationMs;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-  }
-
   let waste: ReturnType<typeof detectWaste> = [];
 
   if (options.detectors.includes('waste')) {
@@ -582,25 +561,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.coupling) });
   } else {
     coupling = createEmptyCoupling();
-  }
-
-  let structuralDuplicates: ReturnType<typeof analyzeStructuralDuplicates>;
-
-  if (options.detectors.includes('structural-duplicates')) {
-    const t0 = nowMs();
-    const detectorKey = 'structural-duplicates';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    structuralDuplicates = analyzeStructuralDuplicates(program, resolvedMinSize);
-
-    const durationMs = nowMs() - t0;
-
-    detectorTimings[detectorKey] = durationMs;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-  } else {
-    structuralDuplicates = createEmptyStructuralDuplicates();
   }
 
   let nesting: ReturnType<typeof analyzeNesting>;
@@ -797,20 +757,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
   }
 
-  let symmetryBreaking: ReturnType<typeof analyzeSymmetryBreaking> = createEmptySymmetryBreaking();
-
-  if (options.detectors.includes('symmetry-breaking')) {
-    const t0 = nowMs();
-    const detectorKey = 'symmetry-breaking';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    symmetryBreaking = analyzeSymmetryBreaking(program);
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
   let invariantBlindspot: ReturnType<typeof analyzeInvariantBlindspot> = createEmptyInvariantBlindspot();
 
   if (options.detectors.includes('invariant-blindspot')) {
@@ -820,20 +766,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     invariantBlindspot = analyzeInvariantBlindspot(program);
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
-  let modificationTrap: ReturnType<typeof analyzeModificationTrap> = createEmptyModificationTrap();
-
-  if (options.detectors.includes('modification-trap')) {
-    const t0 = nowMs();
-    const detectorKey = 'modification-trap';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    modificationTrap = analyzeModificationTrap(program);
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1194,33 +1126,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     return findings;
   };
 
-  const enrichExactDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<'type-1', FirebatCatalogCode>> = {
-      'type-1': 'EXACT_DUP_TYPE_1',
-    } as const;
-
-    return groups.map(group => {
-      const kind = String(group?.cloneType ?? group?.kind ?? '');
-      const items = Array.isArray(group?.items) ? group.items : [];
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        items: items.map((item: any) => {
-          const filePath = String(item?.filePath ?? item?.file ?? '');
-
-          return {
-            kind: item?.kind,
-            header: item?.header,
-            file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-            span: item?.span,
-          };
-        }),
-        ...(group?.suggestedParams !== undefined ? { params: group.suggestedParams } : {}),
-      };
-    });
-  };
-
   const enrichDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
     const kindToCode: Readonly<Record<Exclude<DuplicateCloneType, 'type-2'>, FirebatCatalogCode>> = {
       'type-1': 'EXACT_DUP_TYPE_1',
@@ -1331,9 +1236,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const analyses: FirebatReport['analyses'] = {
-    ...(selectedDetectors.has('exact-duplicates')
-      ? { 'exact-duplicates': enrichExactDuplicateGroups(exactDuplicates as any) }
-      : {}),
     ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste) } : {}),
     ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': enrichBarrelPolicy(barrelPolicy as any) } : {}),
     ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof as any) } : {}),
@@ -1345,9 +1247,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
     ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies as any) } : {}),
     ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling as any) } : {}),
-    ...(selectedDetectors.has('structural-duplicates')
-      ? { 'structural-duplicates': enrichDuplicateGroups(structuralDuplicates as any) }
-      : {}),
     ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
     ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
@@ -1357,9 +1256,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('implementation-overhead') ? { 'implementation-overhead': enrichPhase1(implementationOverhead as any, 'IMPL_OVERHEAD') } : {}),
     ...(selectedDetectors.has('implicit-state') ? { 'implicit-state': enrichPhase1(implicitState as any, 'IMPLICIT_STATE') } : {}),
     ...(selectedDetectors.has('temporal-coupling') ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') } : {}),
-    ...(selectedDetectors.has('symmetry-breaking') ? { 'symmetry-breaking': enrichPhase1(symmetryBreaking as any, 'SYMMETRY_BREAK') } : {}),
     ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') } : {}),
-    ...(selectedDetectors.has('modification-trap') ? { 'modification-trap': enrichPhase1(modificationTrap as any, 'MOD_TRAP') } : {}),
     ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') } : {}),
     ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') } : {}),
     ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': enrichPhase1(abstractionFitness as any, 'ABSTRACTION_FITNESS') } : {}),
