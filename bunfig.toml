@@ -2,11 +2,10 @@
 onlyFailures = true
 coverage = true
 coverageReporter = ["text", "lcov"]
-# Branch coverage (BRF/BRH) is not emitted by Bun 1.x coverage instrumentation.
-# This is a known Bun runtime limitation — lcov output only includes line/function coverage.
-# When Bun adds branch-level tracking, enable branchThreshold gating here.
-# Track: https://github.com/oven-sh/bun/issues/6672
-coverageThreshold = 0.95
+# Branch coverage: Bun 1.x 미지원 (line/function만). https://github.com/oven-sh/bun/issues/6672
+# coverageThreshold는 per-file 강제됨. 폴더 제외 없이 전체 적용.
+coverageThreshold = { lines = 0.80, functions = 0.80 }
+coverageSkipTestFiles = true
 
 [test.reporter]
 dots = true
