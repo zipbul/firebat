@@ -2,8 +2,6 @@
 
 Claude Code (claude.ai/code) 가 이 저장소에서 작업할 때 참고하는 문서.
 
-공통 규칙: @RULES.md
-
 ## 프로젝트 개요
 
 코드 품질 스캐너. 중복, 데드 스토어, 깊은 중첩, 의존성 순환 등 유지보수성 이슈를 탐지한다. Bun + oxc 기반, 28개 디텍터, MCP 서버 지원.
@@ -94,3 +92,34 @@ Bun 내장 API > Node.js API > npm 패키지 > 직접 구현. Node.js나 npm을 
 **공통:**
 - 수동 카운터/플래그 금지. 반드시 `spyOn()` / `mock()` 사용.
 - Monkey-patch (`obj.method = fake`) 금지 → `spyOn(obj, 'method')` 사용.
+
+## 에이전트 행동강령
+
+- 항상 한국어로 응답. 코드, 커밋 메시지, 변수명은 영어.
+- 읽지 않은 파일을 수정하지 마라. 사용처를 먼저 검색하라.
+- 확실하지 않으면 질문하라. 추측 기반 판단 금지.
+- 코드 변경 후 반드시 관련 테스트 실행. 검증 없이 완료 간주 금지.
+- 요청된 범위만 변경. 요청하지 않은 개선 금지.
+- 같은 접근 2회 실패 시 멈추고 대안 제시 또는 질문.
+- 작업 전환 시 `/clear` 제안. 대규모 탐색은 서브에이전트에 위임.
+- 사용자 교정 시 CLAUDE.md 업데이트 제안.
+- 모든 단계의 산출물은 전문 리뷰어 검증 필수. Critical/High 이슈는 해결 후 재리뷰.
+
+## 워크플로우
+
+7단계 라이프사이클. 자연어로 진입. 각 단계에 전문가 + 리뷰어 내장.
+작업 규모에 따라 적절한 단계에서 시작.
+
+탐색 → 기획 → 계획 → 구현 → 검증 → 출시 → 회고
+
+| 단계 | Skill | 전문가 | 리뷰어 |
+|------|-------|--------|--------|
+| 탐색 | explore | researcher | explore-reviewer |
+| 기획 | design | designer | design-reviewer |
+| 계획 | plan | architect | plan-reviewer |
+| 구현 | build | developer | code-reviewer |
+| 검증 | verify | qa-engineer | verify-reviewer |
+| 출시 | ship | release-engineer | ship-reviewer |
+| 회고 | retro | retrospector | retro-reviewer |
+
+상세: `.claude/skills/`, `.claude/agents/`
