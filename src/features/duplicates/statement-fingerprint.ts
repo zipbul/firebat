@@ -26,7 +26,7 @@ import {
 /**
  * 함수 AST 노드에서 top-level statement별 fingerprint 시퀀스를 추출한다.
  *
- * - BlockStatement.body의 각 직계 statement에 type-2-shape fingerprint 적용
+ * - BlockStatement.body의 각 직계 statement에 shape fingerprint 적용
  * - ArrowFunction expression body → 단일 statement로 취급
  * - MethodDefinition → value(FunctionExpression)에서 추출
  * - 함수 body가 없는 노드(TypeAlias, Interface 등) → 빈 배열
@@ -45,8 +45,13 @@ export const extractStatementFingerprints = (
 export const extractStatementFingerprintBag = (
   functionNode: Node,
 ): ReadonlyArray<string> => {
-  // bag은 시퀀스와 동일 — MinHash는 집합 연산이므로 순서 무시됨
-  return extractStatementFingerprints(functionNode);
+  const fps = extractStatementFingerprints(functionNode);
+  const counts = new Map<string, number>();
+  return fps.map((fp) => {
+    const count = counts.get(fp) ?? 0;
+    counts.set(fp, count + 1);
+    return count === 0 ? fp : `${fp}#${count}`;
+  });
 };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────

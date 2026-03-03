@@ -16,10 +16,10 @@ import type { Node } from 'oxc-parser';
 import type { FirebatItemKind, SourceSpan } from '../../types';
 import type { ParsedFile } from '../../engine/types';
 
-import { collectOxcNodes, getNodeHeader, getNodeType } from '../../engine/ast/oxc-ast-utils';
+import { collectOxcNodes, getNodeHeader } from '../../engine/ast/oxc-ast-utils';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
-import { getLineColumn } from '../../engine/source-position';
+import { isCloneTarget, getItemKind, resolveSpan } from './clone-targets';
 import { createMinHasher, findLshCandidates } from './minhash';
 import { computeSequenceSimilarity } from './lcs';
 import { extractStatementFingerprintBag, extractStatementFingerprints } from './statement-fingerprint';
@@ -34,6 +34,7 @@ export interface NearMissCloneItem {
   readonly span: SourceSpan;
   readonly size: number;
   readonly statementFingerprints: ReadonlyArray<string>;
+  readonly fingerprintBag: ReadonlyArray<string>;
 }
 
 export interface NearMissCloneGroup {
@@ -92,7 +93,7 @@ export const detectNearMissClones = (
   if (largeItems.length >= 2) {
     const hasher = createMinHasher(options.minHashK);
     const signatures = largeItems.map(({ item }) =>
-      hasher.computeSignature([...item.statementFingerprints]),
+      hasher.computeSignature(item.fingerprintBag),
     );
 
     const candidates = findLshCandidates(signatures, options.jaccardThreshold);
@@ -104,8 +105,8 @@ export const detectNearMissClones = (
       if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) continue;
 
       const sim = computeSequenceSimilarity(
-        [...a.item.statementFingerprints],
-        [...b.item.statementFingerprints],
+        a.item.statementFingerprints,
+        b.item.statementFingerprints,
       );
 
       if (sim >= options.similarityThreshold) {
@@ -124,8 +125,8 @@ export const detectNearMissClones = (
         if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) continue;
 
         const sim = computeSequenceSimilarity(
-          [...a.item.statementFingerprints],
-          [...b.item.statementFingerprints],
+          a.item.statementFingerprints,
+          b.item.statementFingerprints,
         );
 
         if (sim >= options.similarityThreshold) {
@@ -135,9 +136,27 @@ export const detectNearMissClones = (
     }
   }
 
+  // 6. small × large 교차 비교: 직접 pairwise LCS
+  if (smallItems.length > 0 && largeItems.length > 0) {
+    for (const small of smallItems) {
+      for (const large of largeItems) {
+        if (!passesSizeFilter(small.item, large.item, options.sizeRatio)) continue;
+
+        const sim = computeSequenceSimilarity(
+          small.item.statementFingerprints,
+          large.item.statementFingerprints,
+        );
+
+        if (sim >= options.similarityThreshold) {
+          confirmedPairs.push({ a: small.index, b: large.index, similarity: sim });
+        }
+      }
+    }
+  }
+
   if (confirmedPairs.length === 0) return [];
 
-  // 6. Union-Find 전이 폐포로 그룹 형성
+  // 7. Union-Find 전이 폐포로 그룹 형성
   const uf = new UnionFind(items.length);
   const pairSimilarities = new Map<string, number>();
 
@@ -147,7 +166,7 @@ export const detectNearMissClones = (
     pairSimilarities.set(key, similarity);
   }
 
-  // 7. 그룹별로 items + 평균 similarity 계산
+  // 8. 그룹별로 items + 평균 similarity 계산
   const groupMap = new Map<number, number[]>();
   for (let i = 0; i < items.length; i++) {
     const root = uf.find(i);
@@ -164,32 +183,116 @@ export const detectNearMissClones = (
   for (const memberIndices of groupMap.values()) {
     if (memberIndices.length < 2) continue;
 
-    // 그룹 내 쌍별 similarity의 평균
-    let simSum = 0;
-    let simCount = 0;
-    for (let p = 0; p < memberIndices.length; p++) {
-      for (let q = p + 1; q < memberIndices.length; q++) {
-        const a = memberIndices[p]!;
-        const b = memberIndices[q]!;
-        const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
-        const sim = pairSimilarities.get(key);
-        if (sim !== undefined) {
-          simSum += sim;
-          simCount++;
+    // 미비교 쌍 보충 LCS 계산
+    const fingerprints = items.map((item) => item.statementFingerprints);
+    fillMissingPairSimilarities(memberIndices, fingerprints, pairSimilarities);
+
+    // threshold 미달 쌍 제거 후 연결 컴포넌트 재계산
+    const subComponents = splitByThreshold(memberIndices, pairSimilarities, options.similarityThreshold);
+
+    for (const component of subComponents) {
+      let simSum = 0;
+      let simCount = 0;
+      for (let p = 0; p < component.length; p++) {
+        for (let q = p + 1; q < component.length; q++) {
+          const a = component[p]!;
+          const b = component[q]!;
+          const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+          const sim = pairSimilarities.get(key);
+          if (sim !== undefined) {
+            simSum += sim;
+            simCount++;
+          }
         }
       }
-    }
 
-    result.push({
-      items: memberIndices.map((i) => items[i]!),
-      similarity: simCount > 0 ? simSum / simCount : 0,
-    });
+      result.push({
+        items: component.map((i) => items[i]!),
+        similarity: simCount > 0 ? simSum / simCount : 0,
+      });
+    }
   }
 
   return result;
 };
 
 // ─── Internal ─────────────────────────────────────────────────────────────────
+
+/**
+ * threshold 미달 쌍을 제거하고 남은 간선으로 연결 컴포넌트를 재계산한다.
+ * Union-Find 전이 폐포에서 A~B, B~C이지만 A~C < threshold인 경우를 분리한다.
+ */
+const splitByThreshold = (
+  indices: readonly number[],
+  pairSimilarities: ReadonlyMap<string, number>,
+  threshold: number,
+): number[][] => {
+  const adj = new Map<number, number[]>();
+  for (const idx of indices) adj.set(idx, []);
+
+  for (let p = 0; p < indices.length; p++) {
+    for (let q = p + 1; q < indices.length; q++) {
+      const a = indices[p]!;
+      const b = indices[q]!;
+      const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+      const sim = pairSimilarities.get(key);
+      if (sim !== undefined && sim >= threshold) {
+        adj.get(a)!.push(b);
+        adj.get(b)!.push(a);
+      }
+    }
+  }
+
+  const visited = new Set<number>();
+  const components: number[][] = [];
+
+  for (const idx of indices) {
+    if (visited.has(idx)) continue;
+    const component: number[] = [];
+    const queue = [idx];
+    visited.add(idx);
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      component.push(curr);
+      for (const neighbor of adj.get(curr)!) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    if (component.length >= 2) {
+      components.push(component);
+    }
+  }
+
+  return components;
+};
+
+/**
+ * 그룹 내 직접 비교되지 않은 쌍을 보충 LCS 계산으로 채운다.
+ *
+ * Union-Find 전이 폐포로 묶인 그룹에는 A≈B, B≈C → {A,B,C} 처럼
+ * A-C 쌍이 pairSimilarities에 없는 경우가 있다.
+ * 이 함수는 누락된 쌍을 발견하면 LCS similarity를 계산해 맵에 추가한다.
+ */
+const fillMissingPairSimilarities = (
+  memberIndices: readonly number[],
+  fingerprints: readonly ReadonlyArray<string>[],
+  pairSimilarities: Map<string, number>,
+): void => {
+  for (let p = 0; p < memberIndices.length; p++) {
+    for (let q = p + 1; q < memberIndices.length; q++) {
+      const a = memberIndices[p]!;
+      const b = memberIndices[q]!;
+      const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+      if (!pairSimilarities.has(key)) {
+        const sim = computeSequenceSimilarity(fingerprints[a]!, fingerprints[b]!);
+        pairSimilarities.set(key, sim);
+      }
+    }
+  }
+};
 
 interface IndexedItem {
   readonly index: number;
@@ -201,28 +304,6 @@ interface ConfirmedPair {
   readonly b: number;
   readonly similarity: number;
 }
-
-const CLONE_TARGET_TYPES = new Set([
-  'FunctionDeclaration',
-  'ClassDeclaration',
-  'ClassExpression',
-  'MethodDefinition',
-  'FunctionExpression',
-  'ArrowFunctionExpression',
-  'TSTypeAliasDeclaration',
-  'TSInterfaceDeclaration',
-]);
-
-const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(getNodeType(node));
-
-const getItemKind = (node: Node): FirebatItemKind => {
-  const t = getNodeType(node);
-  if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') return 'function';
-  if (t === 'MethodDefinition') return 'method';
-  if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'TSTypeAliasDeclaration') return 'type';
-  if (t === 'TSInterfaceDeclaration') return 'interface';
-  return 'node';
-};
 
 const collectCloneItems = (
   files: ReadonlyArray<ParsedFile>,
@@ -250,6 +331,7 @@ const collectCloneItems = (
       // statement가 0개인 노드(빈 함수, TypeAlias 등)는 near-miss 비교 불가
       if (fingerprints.length === 0) continue;
 
+      const bag = extractStatementFingerprintBag(node);
       const span = resolveSpan(file.sourceText, node);
       const header = getNodeHeader(node);
 
@@ -261,17 +343,13 @@ const collectCloneItems = (
         span,
         size,
         statementFingerprints: fingerprints,
+        fingerprintBag: bag,
       });
     }
   }
 
   return items;
 };
-
-const resolveSpan = (sourceText: string, node: Node): SourceSpan => ({
-  start: getLineColumn(sourceText, node.start),
-  end: getLineColumn(sourceText, node.end),
-});
 
 const passesSizeFilter = (
   a: NearMissCloneItem,
@@ -317,3 +395,9 @@ class UnionFind {
     }
   }
 }
+
+// ─── Test Exports ─────────────────────────────────────────────────────────────
+
+export const __testing__ = {
+  fillMissingPairSimilarities,
+};

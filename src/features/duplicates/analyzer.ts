@@ -17,22 +17,23 @@ import type {
   DuplicateFindingKind,
   DuplicateGroup,
   DuplicateItem,
-  FirebatItemKind,
   SourceSpan,
 } from '../../types';
 import type { ParsedFile } from '../../engine/types';
 import type { InternalCloneGroup, InternalCloneItem } from './types';
 
-import { collectOxcNodes, getNodeHeader, getNodeType } from '../../engine/ast/oxc-ast-utils';
+import { collectOxcNodes, getNodeHeader } from '../../engine/ast/oxc-ast-utils';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import {
   createOxcFingerprintExact,
   createOxcFingerprintNormalized,
   createOxcFingerprintShape,
 } from '../../engine/ast/oxc-fingerprint';
-import { getLineColumn } from '../../engine/source-position';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
+import { getItemKind, isCloneTarget, resolveSpan } from './clone-targets';
 import { detectNearMissClones, type NearMissDetectorOptions } from './near-miss-detector';
+
+export { isCloneTarget };
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
 
@@ -61,29 +62,44 @@ export const analyzeDuplicates = (
   const enableNearMiss = options.enableNearMiss ?? true;
   const enableAntiUnification = options.enableAntiUnification ?? true;
 
+  // ── Step 2-6: 파일 중복 입력 방어 ─────────────────────────────────────────
+
+  const seenPaths = new Set<string>();
+  const uniqueFiles = files.filter((f) => {
+    if (seenPaths.has(f.filePath)) return false;
+    seenPaths.add(f.filePath);
+    return true;
+  });
+
+  // ── Step 2-5: fingerprint 캐시 ─────────────────────────────────────────────
+
+  const cachedExact = createCachedFingerprint(createOxcFingerprintExact);
+  const cachedShape = createCachedFingerprint(createOxcFingerprintShape);
+  const cachedNormalized = createCachedFingerprint(createOxcFingerprintNormalized);
+
   // ── Level 1: Hash 기반 그룹핑 ──────────────────────────────────────────────
 
-  const type1Groups = groupByHash(files, minSize, createOxcFingerprintExact, 'type-1');
-  const type2ShapeGroups = groupByHash(files, minSize, createOxcFingerprintShape, 'type-2-shape');
-  const type3NormGroups = groupByHash(files, minSize, createOxcFingerprintNormalized, 'type-3-normalized');
+  const exactGroups = groupByHash(uniqueFiles, minSize, cachedExact, 'exact');
+  const shapeGroups = groupByHash(uniqueFiles, minSize, cachedShape, 'shape');
+  const normalizedGroups = groupByHash(uniqueFiles, minSize, cachedNormalized, 'normalized');
 
-  // Type-1에 이미 잡힌 해시는 Type-2/3에서 제외 (중복 보고 방지)
-  const type1Hashes = new Set(type1Groups.map((g) => createOxcFingerprintShape(g.items[0]!.node)));
+  // exact에 이미 잡힌 해시는 shape/normalized에서 제외 (중복 보고 방지)
+  const exactHashes = new Set(exactGroups.map((g) => cachedShape(g.items[0]!.node)));
 
-  const filteredType2 = type2ShapeGroups.filter((g) => {
-    const hash = createOxcFingerprintShape(g.items[0]!.node);
-    return !type1Hashes.has(hash);
+  const filteredShape = shapeGroups.filter((g) => {
+    const hash = cachedShape(g.items[0]!.node);
+    return !exactHashes.has(hash);
   });
 
-  // Type-2-shape에 잡힌 해시도 Type-3에서 제외
-  const type2Hashes = new Set(filteredType2.map((g) => createOxcFingerprintNormalized(g.items[0]!.node)));
+  // shape에 잡힌 해시도 normalized에서 제외
+  const shapeHashes = new Set(filteredShape.map((g) => cachedNormalized(g.items[0]!.node)));
 
-  const filteredType3 = type3NormGroups.filter((g) => {
-    const hash = createOxcFingerprintNormalized(g.items[0]!.node);
-    return !type1Hashes.has(createOxcFingerprintShape(g.items[0]!.node)) && !type2Hashes.has(hash);
+  const filteredNormalized = normalizedGroups.filter((g) => {
+    const hash = cachedNormalized(g.items[0]!.node);
+    return !exactHashes.has(cachedShape(g.items[0]!.node)) && !shapeHashes.has(hash);
   });
 
-  let allGroups: InternalCloneGroup[] = [...type1Groups, ...filteredType2, ...filteredType3];
+  let allGroups: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
 
   // ── Level 2+3: Near-miss clone detection ───────────────────────────────────
 
@@ -92,7 +108,7 @@ export const analyzeDuplicates = (
     const excludedHashes = new Set<string>();
     for (const group of allGroups) {
       for (const item of group.items) {
-        excludedHashes.add(createOxcFingerprintShape(item.node));
+        excludedHashes.add(cachedShape(item.node));
       }
     }
 
@@ -105,11 +121,11 @@ export const analyzeDuplicates = (
       minStatementCount: options.minStatementCount ?? 5,
     };
 
-    const nearMissGroups = detectNearMissClones(files, nearMissOpts, excludedHashes);
+    const nearMissGroups = detectNearMissClones(uniqueFiles, nearMissOpts, excludedHashes);
 
     for (const nmGroup of nearMissGroups) {
       allGroups.push({
-        cloneType: 'type-3-near-miss',
+        cloneType: 'near-miss',
         items: nmGroup.items.map((nmItem) => ({
           node: nmItem.node,
           kind: nmItem.kind,
@@ -129,14 +145,14 @@ export const analyzeDuplicates = (
 
   for (const group of allGroups) {
     if (enableAntiUnification && group.items.length >= 2) {
-      const outputGroup = applyAntiUnification(group);
-      result.push(outputGroup);
+      const outputGroups = applyAntiUnification(group);
+      result.push(...outputGroups);
     } else {
       result.push(toDuplicateGroup(group, undefined));
     }
   }
 
-  return result;
+  return filterSubsumedGroups(result);
 };
 
 /**
@@ -144,30 +160,20 @@ export const analyzeDuplicates = (
  */
 export const createEmptyDuplicates = (): ReadonlyArray<DuplicateGroup> => [];
 
-// ─── Level 1: Hash 기반 그룹핑 ───────────────────────────────────────────────
+// ─── 캐시 래퍼 ───────────────────────────────────────────────────────────────
 
-const CLONE_TARGET_TYPES = new Set([
-  'FunctionDeclaration',
-  'ClassDeclaration',
-  'ClassExpression',
-  'MethodDefinition',
-  'FunctionExpression',
-  'ArrowFunctionExpression',
-  'TSTypeAliasDeclaration',
-  'TSInterfaceDeclaration',
-]);
-
-export const isCloneTarget = (node: Node): boolean =>
-  CLONE_TARGET_TYPES.has(getNodeType(node));
-
-const getItemKind = (node: Node): FirebatItemKind => {
-  const t = getNodeType(node);
-  if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') return 'function';
-  if (t === 'MethodDefinition') return 'method';
-  if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'TSTypeAliasDeclaration') return 'type';
-  if (t === 'TSInterfaceDeclaration') return 'interface';
-  return 'node';
+const createCachedFingerprint = (fn: (node: Node) => string): ((node: Node) => string) => {
+  const cache = new WeakMap<Node, string>();
+  return (node: Node): string => {
+    const cached = cache.get(node);
+    if (cached !== undefined) return cached;
+    const hash = fn(node);
+    cache.set(node, hash);
+    return hash;
+  };
 };
+
+// ─── Level 1: Hash 기반 그룹핑 ───────────────────────────────────────────────
 
 const groupByHash = (
   files: ReadonlyArray<ParsedFile>,
@@ -220,7 +226,32 @@ const groupByHash = (
 
 // ─── Level 4: Anti-unification 적용 ──────────────────────────────────────────
 
-const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup => {
+const deriveSuggestedParams = (
+  classifications: DiffClassification[],
+  auResults: ReadonlyArray<{ idx: number; result: AntiUnificationResult }>,
+): { params: CloneDiff | undefined; findingKindOverride: DuplicateFindingKind | undefined } => {
+  const allRenameOnly = classifications.every((c) => c === 'rename-only');
+  const allLiteralVariant = classifications.every((c) => c === 'literal-variant');
+  const allTypeVariant = classifications.every((c) => c === 'type-variant');
+
+  let params: CloneDiff | undefined;
+  let findingKindOverride: DuplicateFindingKind | undefined;
+
+  if (allRenameOnly && auResults.length > 0) {
+    params = buildCloneDiff('identifier', auResults[0]!.result);
+  } else if (allLiteralVariant && auResults.length > 0) {
+    params = buildCloneDiff('literal', auResults[0]!.result);
+    findingKindOverride = 'literal-variant';
+  } else if (allTypeVariant && auResults.length > 0) {
+    params = buildCloneDiff('type', auResults[0]!.result);
+  }
+
+  return { params, findingKindOverride };
+};
+
+type DiffClassification = ReturnType<typeof classifyDiff>;
+
+const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup[] => {
   const { items } = group;
 
   // representative: AST 노드 수가 median에 가장 가까운 멤버
@@ -241,26 +272,57 @@ const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup => {
   }
 
   if (auResults.length === 0) {
-    return toDuplicateGroup(group, undefined);
+    return [toDuplicateGroup(group, undefined)];
   }
 
-  // diff 분류 결정
+  // ── Outlier detection (3+ 멤버 그룹만) ──────────────────────────────────────
+
+  if (items.length >= 3) {
+    const varCounts = auResults.map(({ result }) => result.variables.length);
+    const mean = varCounts.reduce((s, v) => s + v, 0) / varCounts.length;
+    const stdDev = Math.sqrt(varCounts.reduce((s, v) => s + (v - mean) ** 2, 0) / varCounts.length);
+    const threshold = mean + 2 * stdDev;
+
+    const outlierAuIndices = auResults
+      .map(({ idx, result }, auIdx) => ({ auIdx, idx, varCount: result.variables.length }))
+      .filter(({ varCount }) => varCount > threshold);
+
+    if (outlierAuIndices.length > 0 && outlierAuIndices.length < items.length - 1) {
+      const outlierItemIndices = new Set(outlierAuIndices.map(({ idx }) => idx));
+      const coreItems = items.filter((_, i) => i === repIdx || !outlierItemIndices.has(i));
+      const outlierItems = items.filter((_, i) => outlierItemIndices.has(i));
+
+      const results: DuplicateGroup[] = [];
+
+      // core group
+      if (coreItems.length >= 2) {
+        const coreGroup: InternalCloneGroup = { ...group, items: coreItems };
+        const coreAuResults = auResults.filter(({ idx }) => !outlierItemIndices.has(idx));
+        const coreClassifications = coreAuResults.map(({ result }) => classifyDiff(result));
+        const { params, findingKindOverride } = deriveSuggestedParams(coreClassifications, coreAuResults);
+        results.push(toDuplicateGroup(coreGroup, params, findingKindOverride));
+      }
+
+      // outlier group
+      if (outlierItems.length >= 1) {
+        const outlierGroup: InternalCloneGroup = {
+          cloneType: group.cloneType,
+          items: outlierItems,
+          findingKind: 'pattern-outlier',
+        };
+        results.push(toDuplicateGroup(outlierGroup, undefined));
+      }
+
+      return results;
+    }
+  }
+
+  // ── 기존 diff 분류 로직 ──────────────────────────────────────────────────────
+
   const classifications = auResults.map(({ result }) => classifyDiff(result));
-  const allRenameOnly = classifications.every((c) => c === 'rename-only');
-  const allLiteralVariant = classifications.every((c) => c === 'literal-variant');
+  const { params: suggestedParams, findingKindOverride } = deriveSuggestedParams(classifications, auResults);
 
-  // suggestedParams 생성 (rename-only 또는 literal-variant인 경우)
-  let suggestedParams: CloneDiff | undefined;
-  let findingKindOverride: DuplicateFindingKind | undefined;
-
-  if (allRenameOnly && auResults.length > 0) {
-    suggestedParams = buildCloneDiff('identifier', auResults[0]!.result);
-  } else if (allLiteralVariant && auResults.length > 0) {
-    suggestedParams = buildCloneDiff('literal', auResults[0]!.result);
-    findingKindOverride = 'literal-variant';
-  }
-
-  return toDuplicateGroup(group, suggestedParams, findingKindOverride);
+  return [toDuplicateGroup(group, suggestedParams, findingKindOverride)];
 };
 
 const buildCloneDiff = (
@@ -268,7 +330,7 @@ const buildCloneDiff = (
   auResult: AntiUnificationResult,
 ): CloneDiff => {
   const pairs: CloneDiffPair[] = auResult.variables
-    .filter((v) => v.kind === kind || v.kind === 'identifier' || v.kind === 'literal')
+    .filter((v) => v.kind === kind)
     .map((v) => ({
       left: v.leftType,
       right: v.rightType,
@@ -282,13 +344,12 @@ const buildCloneDiff = (
 
 const cloneTypeToFindingKind = (cloneType: DuplicateCloneType): DuplicateFindingKind => {
   switch (cloneType) {
-    case 'type-1':
+    case 'exact':
       return 'exact-clone';
-    case 'type-2':
-    case 'type-2-shape':
-    case 'type-3-normalized':
+    case 'shape':
+    case 'normalized':
       return 'structural-clone';
-    case 'type-3-near-miss':
+    case 'near-miss':
       return 'near-miss-clone';
   }
 };
@@ -314,7 +375,35 @@ const toDuplicateItem = (item: InternalCloneItem): DuplicateItem => ({
   span: item.span,
 });
 
-const resolveSpan = (sourceText: string, node: Node): SourceSpan => ({
-  start: getLineColumn(sourceText, node.start),
-  end: getLineColumn(sourceText, node.end),
-});
+// ─── 중첩 그룹 필터링 (H-2) ──────────────────────────────────────────────────
+
+const isSpanContained = (inner: SourceSpan, outer: SourceSpan): boolean =>
+  (inner.start.line > outer.start.line ||
+    (inner.start.line === outer.start.line && inner.start.column >= outer.start.column)) &&
+  (inner.end.line < outer.end.line ||
+    (inner.end.line === outer.end.line && inner.end.column <= outer.end.column));
+
+const CLONE_TYPE_PRIORITY: Readonly<Record<DuplicateCloneType, number>> = {
+  exact: 0,
+  shape: 1,
+  normalized: 2,
+  'near-miss': 3,
+};
+
+const filterSubsumedGroups = (groups: DuplicateGroup[]): DuplicateGroup[] =>
+  groups.filter(
+    (child, childIdx) =>
+      !groups.some((parent, parentIdx) => {
+        if (childIdx === parentIdx) return false;
+        if (parent.items.length < child.items.length) return false;
+        // 덜 구체적인 그룹이 더 구체적인 그룹을 subsume하면 안 됨
+        if (CLONE_TYPE_PRIORITY[parent.cloneType] > CLONE_TYPE_PRIORITY[child.cloneType]) return false;
+        return child.items.every((childItem) =>
+          parent.items.some(
+            (parentItem) =>
+              childItem.filePath === parentItem.filePath &&
+              isSpanContained(childItem.span, parentItem.span),
+          ),
+        );
+      }),
+  );

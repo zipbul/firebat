@@ -101,9 +101,9 @@ export type FirebatCatalogCode =
   | 'DEP_DEAD_EXPORT'
   | 'DEP_TEST_ONLY_EXPORT'
   // duplicates (4)
-  | 'EXACT_DUP_TYPE_1'
-  | 'STRUCT_DUP_TYPE_2_SHAPE'
-  | 'STRUCT_DUP_TYPE_3_NORMALIZED'
+  | 'DUP_EXACT'
+  | 'DUP_SHAPE'
+  | 'DUP_NORMALIZED'
   | 'DUP_NEAR_MISS'
   // diagnostics (7)
   | 'DIAG_GOD_FUNCTION'
@@ -214,13 +214,14 @@ export interface CloneDiff {
   readonly pairs: ReadonlyArray<CloneDiffPair>;
 }
 
-export type DuplicateCloneType = 'type-1' | 'type-2' | 'type-2-shape' | 'type-3-normalized' | 'type-3-near-miss';
+export type DuplicateCloneType = 'exact' | 'shape' | 'normalized' | 'near-miss';
 
 export type DuplicateFindingKind =
   | 'exact-clone'
   | 'structural-clone'
   | 'near-miss-clone'
   | 'literal-variant'
+  | 'type-variant'
   | 'pattern-outlier';
 
 export interface DuplicateGroup {

@@ -46,7 +46,7 @@ export interface LshCandidate {
  *
  * @param signatures 각 아이템의 MinHash 시그니처 배열
  * @param threshold  Jaccard 임계값 (이 이상인 쌍을 찾으려는 목표). 기본값 0.5.
- * @param bands      band 수. 기본값 16. (rows = signatures[0].length / bands)
+ * @param bands      band 수. 기본값 DEFAULT_BANDS (threshold 기반 자동 계산). 명시 시 override.
  * @returns 중복 없는 후보 쌍 (i < j 보장)
  */
 export const findLshCandidates = (
@@ -57,12 +57,14 @@ export const findLshCandidates = (
   if (signatures.length < 2) return [];
 
   const k = signatures[0]!.length;
-  const rowsPerBand = Math.max(1, Math.floor(k / bands));
-  const effectiveBands = Math.floor(k / rowsPerBand);
+  const config =
+    bands !== DEFAULT_BANDS
+      ? { bands, rowsPerBand: Math.max(1, Math.floor(k / bands)) }
+      : computeOptimalBandConfig(k, threshold);
+  const rowsPerBand = config.rowsPerBand;
+  const effectiveBands = config.bands;
 
-  void threshold; // threshold는 bands/rows 파라미터 선택 시 외부에서 조정 가능, 현재는 구조 참고용
-
-  const candidateSet = new Set<string>();
+  const candidateSet = new Set<number>();
   const candidates: LshCandidate[] = [];
 
   for (let b = 0; b < effectiveBands; b++) {
@@ -92,9 +94,9 @@ export const findLshCandidates = (
           const c = bucket[q]!;
           const lo = a < c ? a : c;
           const hi = a < c ? c : a;
-          const key = BigInt(lo) * BigInt(signatures.length) + BigInt(hi);
-          if (!candidateSet.has(key.toString())) {
-            candidateSet.add(key.toString());
+          const key = lo * signatures.length + hi;
+          if (!candidateSet.has(key)) {
+            candidateSet.add(key);
             candidates.push({ i: lo, j: hi });
           }
         }
@@ -122,6 +124,33 @@ export const estimateJaccard = (
 };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * threshold를 기준으로 LSH S-curve가 0.5 확률에 가장 가까운 bands/rows 설정을 찾는다.
+ * Pr[같은 버킷] = 1 - (1 - threshold^r)^b 가 0.5에 근접하는 r을 탐색.
+ */
+const computeOptimalBandConfig = (
+  k: number,
+  threshold: number,
+): { bands: number; rowsPerBand: number } => {
+  let bestBands = DEFAULT_BANDS;
+  let bestRows = DEFAULT_ROWS_PER_BAND;
+  let bestDiff = Infinity;
+
+  for (let r = 1; r <= k; r++) {
+    const b = Math.floor(k / r);
+    if (b < 1) break;
+    const pr = 1 - Math.pow(1 - Math.pow(threshold, r), b);
+    const diff = Math.abs(pr - 0.5);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestBands = b;
+      bestRows = r;
+    }
+  }
+
+  return { bands: bestBands, rowsPerBand: bestRows };
+};
 
 const computeSignatureImpl = (
   items: ReadonlyArray<string>,

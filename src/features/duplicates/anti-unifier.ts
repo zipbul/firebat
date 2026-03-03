@@ -41,6 +41,7 @@ export interface AntiUnificationResult {
 export type DiffClassification =
   | 'rename-only'
   | 'literal-variant'
+  | 'type-variant'
   | 'structural-diff'
   | 'mixed';
 
@@ -83,11 +84,12 @@ export const antiUnify = (
 /**
  * anti-unification 결과의 diff를 분류한다.
  *
- * - variables 없음 → 'rename-only' (완전 동일 포함)
+ * - variables 없음 → 'rename-only' (완전 동일 구조 포함 — 차이점이 없으면 rename 불필요)
  * - 모든 kind가 'identifier' → 'rename-only'
  * - 모든 kind가 'literal' → 'literal-variant'
+ * - 모든 kind가 'type' → 'type-variant'
  * - 'structural' kind가 하나라도 → 'structural-diff'
- * - 그 외 (identifier+literal 혼합, type 포함 등) → 'mixed'
+ * - 그 외 (identifier+literal 혼합 등) → 'mixed'
  */
 export const classifyDiff = (
   result: AntiUnificationResult,
@@ -111,6 +113,7 @@ export const classifyDiff = (
   if (hasStructural) return 'structural-diff';
   if (hasIdentifier && !hasLiteral && !hasType) return 'rename-only';
   if (hasLiteral && !hasIdentifier && !hasType) return 'literal-variant';
+  if (hasType && !hasIdentifier && !hasLiteral && !hasStructural) return 'type-variant';
 
   return 'mixed';
 };
@@ -194,6 +197,8 @@ const traverse = (
       const rightFp = createOxcFingerprintShape(rightNode);
       if (leftFp !== rightFp) {
         pushVariable(ctx, path, leftNode.type, rightNode.type, 'type');
+      } else {
+        ctx.sharedSize += countOxcSize(leftNode) - 1;
       }
       return;
     }

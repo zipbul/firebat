@@ -1127,10 +1127,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
 
   const enrichDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<Exclude<DuplicateCloneType, 'type-2'>, FirebatCatalogCode>> = {
-      'type-1': 'EXACT_DUP_TYPE_1',
-      'type-2-shape': 'STRUCT_DUP_TYPE_2_SHAPE',
-      'type-3-normalized': 'STRUCT_DUP_TYPE_3_NORMALIZED',
+    const kindToCode: Readonly<Record<DuplicateCloneType, FirebatCatalogCode>> = {
+      exact: 'DUP_EXACT',
+      shape: 'DUP_SHAPE',
+      normalized: 'DUP_NORMALIZED',
+      'near-miss': 'DUP_NEAR_MISS',
     } as const;
 
     return groups.map(group => {

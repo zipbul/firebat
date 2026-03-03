@@ -161,10 +161,9 @@ describe('extractStatementFingerprints', () => {
     const fns = allFunctions(source);
     const fpFive = extractStatementFingerprints(fns[0]!);
     const fpTen = extractStatementFingerprints(fns[1]!);
-    // type-2-shape fingerprint: literal 값 무시 → 동일해야 함
+    // shape fingerprint: literal 값 무시 → 동일해야 함
     expect(fpFive).toEqual(fpTen);
   });
-});
 
   it('abstract 메서드(body 없는 MethodDefinition) → 빈 배열', () => {
     const source = `
@@ -183,6 +182,31 @@ describe('extractStatementFingerprints', () => {
     }
   });
 
+  it('ClassDeclaration → 빈 배열', () => {
+    const source = `
+      class Greeter {
+        greet(name: string) {
+          return 'Hello ' + name;
+        }
+      }
+    `;
+    const { program } = parse(source);
+    const classNodes = collectOxcNodes(program, (n) => n.type === 'ClassDeclaration');
+    expect(classNodes.length).toBeGreaterThan(0);
+    const fps = extractStatementFingerprints(classNodes[0]!);
+    expect(fps).toHaveLength(0);
+  });
+
+  it('TSTypeAliasDeclaration → 빈 배열', () => {
+    const source = `type Foo = string | number;`;
+    const { program } = parse(source);
+    const typeNodes = collectOxcNodes(program, (n) => n.type === 'TSTypeAliasDeclaration');
+    expect(typeNodes.length).toBeGreaterThan(0);
+    const fps = extractStatementFingerprints(typeNodes[0]!);
+    expect(fps).toHaveLength(0);
+  });
+});
+
 // ─── extractStatementFingerprintBag ───────────────────────────────────────────
 
 describe('extractStatementFingerprintBag', () => {
@@ -191,7 +215,7 @@ describe('extractStatementFingerprintBag', () => {
     expect(extractStatementFingerprintBag(node)).toHaveLength(0);
   });
 
-  it('bag 길이 = 시퀀스 길이 (동일 원소)', () => {
+  it('bag 길이 = 시퀀스 길이', () => {
     const node = firstFunction(`
       function fn() {
         const a = 1;
@@ -202,7 +226,18 @@ describe('extractStatementFingerprintBag', () => {
     const seq = extractStatementFingerprints(node);
     const bag = extractStatementFingerprintBag(node);
     expect(bag).toHaveLength(seq.length);
-    // 같은 원소를 포함 (순서는 다를 수 있지만 bag은 시퀀스와 동일 구현)
-    expect([...bag].sort()).toEqual([...seq].sort());
+  });
+
+  it('동일 shape의 statement가 반복되면 bag에 서로 다른 suffix 부착', () => {
+    // 동일 shape의 VariableDeclaration 2개
+    const node = firstFunction(`
+      function dup() {
+        const a = 1;
+        const b = 2;
+      }
+    `);
+    const bag = extractStatementFingerprintBag(node);
+    const unique = new Set(bag);
+    expect(unique.size).toBe(bag.length);
   });
 });

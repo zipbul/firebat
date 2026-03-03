@@ -186,4 +186,27 @@ describe('findLshCandidates', () => {
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(1000);
   });
+
+  it('threshold가 높으면 동일 시그니처 쌍만 후보, 부분 겹침은 제외 가능', () => {
+    const hasher = createMinHasher(128);
+    const identical1 = hasher.computeSignature(Array.from({ length: 50 }, (_, i) => `item-${i}`));
+    const identical2 = hasher.computeSignature(Array.from({ length: 50 }, (_, i) => `item-${i}`));
+    const different = hasher.computeSignature(Array.from({ length: 50 }, (_, i) => `other-${i}`));
+    // threshold=0.9에서 identical 쌍은 반드시 후보
+    const candidates = findLshCandidates([identical1, identical2, different], 0.9);
+    const hasIdenticalPair = candidates.some((c) => c.i === 0 && c.j === 1);
+    expect(hasIdenticalPair).toBe(true);
+  });
+
+  it('threshold가 낮으면 더 많은 쌍이 후보에 포함', () => {
+    const hasher = createMinHasher(128);
+    const base = Array.from({ length: 100 }, (_, i) => `base-${i}`);
+    const sig1 = hasher.computeSignature(base);
+    const sig2 = hasher.computeSignature([...base.slice(0, 50), ...Array.from({ length: 50 }, (_, i) => `extra-${i}`)]);
+    // threshold=0.3이면 ~50% 겹침도 후보가 될 수 있음
+    const lowCandidates = findLshCandidates([sig1, sig2], 0.3);
+    const highCandidates = findLshCandidates([sig1, sig2], 0.9);
+    // 낮은 threshold에서 후보가 더 많거나 같아야 함
+    expect(lowCandidates.length).toBeGreaterThanOrEqual(highCandidates.length);
+  });
 });

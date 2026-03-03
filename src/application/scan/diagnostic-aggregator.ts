@@ -432,30 +432,39 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  EXACT_DUP_TYPE_1: {
-    cause: 'Two or more code blocks are character-for-character identical (Type-1 clone), indicating copy-paste duplication.',
+  DUP_EXACT: {
+    cause: 'Two or more code blocks are character-for-character identical, indicating copy-paste duplication.',
     think: [
-      'Determine whether the duplication was intentional (e.g., generated code, test fixtures) or accidental.',
-      'Check whether the blocks should stay in sync — if so, a shared function eliminates the synchronization burden.',
-      'If they are expected to diverge, verify that a comment documents why they are separate despite current identity.',
+      'Determine why the same code exists in multiple places — a missing shared abstraction, an incomplete module API, or a concern with no clear owner.',
+      'Check whether the duplicated blocks change together historically; synchronized changes signal a missing single source of truth.',
+      'Assess whether the duplication is structural (same pattern recurring across the codebase) or isolated (one-off copy-paste).',
     ],
   },
-  STRUCT_DUP_TYPE_2_SHAPE: {
+  DUP_SHAPE: {
     cause:
-      'Two or more code blocks have identical structure but differ only in identifier names (Type-2 clone), suggesting parameterizable logic.',
+      'Two or more code blocks share identical structure but differ only in identifier names, suggesting the codebase repeatedly handles a concept without a unifying abstraction.',
     think: [
-      'Examine the differences between clones — the differing identifiers are candidate parameters for a shared function.',
-      "Check whether the differences represent domain concepts (e.g., 'user' vs 'order') that should be a parameter or generic type.",
-      'Verify that extracting a shared function with parameters preserves readability at each call site.',
+      'Identify what the varying names represent — they often reveal a domain concept (entity type, resource kind, operation) that the design does not yet model explicitly.',
+      'Check whether this pattern appears beyond the reported clones; if the same shape recurs elsewhere, the missing abstraction is systemic, not local.',
+      'Assess whether the repetition reflects an intentional design choice (e.g., explicit per-entity handling for clarity) or an accidental gap in the module structure.',
     ],
   },
-  STRUCT_DUP_TYPE_3_NORMALIZED: {
+  DUP_NORMALIZED: {
     cause:
-      'Two or more code blocks have the same normalized structure after removing cosmetic differences (Type-3 clone), indicating similar but not identical logic.',
+      'Two or more code blocks share the same normalized structure after removing cosmetic differences, indicating similar logic with minor variations.',
     think: [
-      'Identify what the variations represent: different data types, different error handling, or different business rules.',
-      'Determine whether the appropriate abstraction is a generic function, strategy pattern, or shared template.',
-      'Verify that unifying the clones does not obscure meaningful differences between the variants.',
+      'Examine what the variations between clones represent — they often encode decisions (data type, error strategy, business rule) that the codebase makes repeatedly without a shared policy.',
+      'Check whether the variations are accidental divergence from a common origin or intentional specialization; version history clarifies which.',
+      'Assess whether the responsibility for this logic is scattered across modules that should instead share a common concern.',
+    ],
+  },
+  DUP_NEAR_MISS: {
+    cause:
+      'Two or more code blocks are structurally similar but have diverged beyond simple naming or cosmetic differences, suggesting shared origin with incremental drift.',
+    think: [
+      'Identify the divergence points between clones — they reveal where requirements or assumptions differ and whether those differences are intentional design decisions.',
+      'Check whether the drift is growing over time; increasing divergence suggests the clones serve genuinely different purposes and may be better kept separate with clear documentation.',
+      'Assess whether the similar structure indicates a missing abstraction that accommodates variation, or whether forced unification would create a fragile over-generalized component.',
     ],
   },
 

@@ -158,6 +158,17 @@ describe('antiUnify', () => {
     expect(result.similarity).toBeLessThanOrEqual(1);
   });
 
+  it('TSTypeReference 동일 시 sharedSize에 자식 노드 수 반영', () => {
+    // 같은 타입 Array<number>를 사용하는 두 함수
+    const [a, b] = firstTwo(`
+      function foo(x: Array<number>): void { return; }
+      function bar(y: Array<number>): void { return; }
+    `);
+    const result = antiUnify(a, b);
+    // 두 함수의 구조가 거의 동일하므로 similarity는 높아야 함
+    expect(result.similarity).toBeGreaterThan(0.8);
+  });
+
   it('string literal만 다른 switch-case → literal-variant', () => {
     const [a, b] = firstTwo(`
       function handleA(action: string) {
@@ -178,6 +189,70 @@ describe('antiUnify', () => {
     const result = antiUnify(a, b);
     const literalVars = result.variables.filter((v) => v.kind === 'literal');
     expect(literalVars.length).toBeGreaterThan(0);
+  });
+
+  it('traverseArrayChildren bOnly (B에만 있는 노드) → structural variable 생성', () => {
+    // Arrange: left는 statement 2개, right는 동일 2개 + 추가 1개
+    const [a, b] = firstTwo(`
+      function base() {
+        const x = 1;
+        return x;
+      }
+      function extended() {
+        const x = 1;
+        return x;
+        console.log("extra");
+      }
+    `);
+
+    // Act
+    const result = antiUnify(a, b);
+
+    // Assert: bOnly 노드에 대해 leftType="missing", kind="structural" 인 변수가 생성되어야 함
+    const bOnlyVars = result.variables.filter((v) => v.kind === 'structural' && v.leftType === 'missing');
+    expect(bOnlyVars.length).toBeGreaterThan(0);
+  });
+
+  it('한쪽에만 키가 있는 경우 (optional property) → structural variable 생성', () => {
+    // Arrange: left는 for-in(left에 id 없음), right는 for-of (각각 다른 optional key 보유)
+    // 가장 단순한 방법: VariableDeclaration에서 한쪽만 init이 있는 경우
+    const [a, b] = firstTwo(`
+      function withInit() {
+        let x = 0;
+        return x;
+      }
+      function withoutInit() {
+        let x;
+        return x;
+      }
+    `);
+
+    // Act
+    const result = antiUnify(a, b);
+
+    // Assert: 한쪽에만 존재하는 키(init)로 인해 structural variable이 생성되어야 함
+    const structuralVars = result.variables.filter((v) => v.kind === 'structural');
+    expect(structuralVars.length).toBeGreaterThan(0);
+  });
+
+  it('이진 연산자 차이 (a + b vs a - b) → operator가 structural kind로 분류', () => {
+    // Arrange: 두 BinaryExpression 노드를 직접 추출하여 비교
+    // (함수를 통해 비교하면 LCS fingerprint에 operator가 포함되어 statements 자체가 비매칭됨)
+    const { program: p1 } = parseSync('test.ts', 'let _x = a + b;');
+    const { program: p2 } = parseSync('test.ts', 'let _x = a - b;');
+    const addExpr = (p1.body[0] as unknown as { declarations: Array<{ init: import('oxc-parser').Node }> }).declarations[0]!
+      .init;
+    const subExpr = (p2.body[0] as unknown as { declarations: Array<{ init: import('oxc-parser').Node }> }).declarations[0]!
+      .init;
+
+    // Act
+    const result = antiUnify(addExpr, subExpr);
+
+    // Assert: operator 차이로 인한 structural variable이 생성되어야 함
+    const operatorVars = result.variables.filter(
+      (v) => v.kind === 'structural' && v.leftType === '+' && v.rightType === '-',
+    );
+    expect(operatorVars.length).toBeGreaterThan(0);
   });
 });
 
@@ -249,7 +324,7 @@ describe('classifyDiff', () => {
     ).toBe('mixed');
   });
 
-  it('type만 → mixed (rename-only도 literal-variant도 아님)', () => {
+  it('type만 다른 변수 → type-variant', () => {
     expect(
       classifyDiff({
         sharedSize: 8,
@@ -260,7 +335,7 @@ describe('classifyDiff', () => {
           { id: 1, location: 'params[0].typeAnnotation', leftType: 'TSTypeReference', rightType: 'TSTypeReference', kind: 'type' },
         ],
       }),
-    ).toBe('mixed');
+    ).toBe('type-variant');
   });
 
   it('실제 AST 기반 classifyDiff — identifier만 다른 함수', () => {

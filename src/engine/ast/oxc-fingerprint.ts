@@ -157,15 +157,8 @@ const createOxcFingerprintCore = (node: NodeValue, options: OxcFingerprintOption
         continue;
       }
 
-      // Skip identifiers names to allow renaming-robust detection?
-      // User said "strict". Usually strict means "exact match".
-      // But renaming robust is "Type-2".
-      // Let's check original spec: "Strict: 0 FP". Duplicate usually implies structure match.
-      // If we include names, it's Type-1. If we exclude, it's Type-2.
-      // Let's include names for "Strict" equality initially?
-      // No, usually copy-paste detection ignores whitespace (Type-1).
-      // Type-2 ignores variable names.
-      // Let's ignore Identifier names for better detection but include value literals.
+      // Identifier name 처리: includeIdentifierNames 옵션으로 제어
+      // exact fingerprint → 이름 포함, shape fingerprint → 이름 제외
       if (key === 'name' && n.type === 'Identifier') {
         if (options.includeIdentifierNames) {
           const nameValue = (n as unknown as { name?: unknown }).name;

@@ -270,7 +270,7 @@ describe('formatReport', () => {
   describe('duplicates body', () => {
     it('should render body with group items and file when findings exist', () => {
       const group: DuplicateGroup = {
-        cloneType: 'type-1',
+        cloneType: 'exact',
         findingKind: 'exact-clone',
         items: [
           { kind: 'function', header: 'fnA', filePath: testFile, span: span(10, 5) },
@@ -290,7 +290,7 @@ describe('formatReport', () => {
 
     it('should omit kind prefix when item kind is node', () => {
       const group: DuplicateGroup = {
-        cloneType: 'type-1',
+        cloneType: 'exact',
         findingKind: 'exact-clone',
         items: [{ kind: 'node', header: 'someNode', filePath: testFile, span: span() }],
       };
@@ -302,7 +302,7 @@ describe('formatReport', () => {
 
     it('should omit name when item header is anonymous', () => {
       const group: DuplicateGroup = {
-        cloneType: 'type-1',
+        cloneType: 'exact',
         findingKind: 'exact-clone',
         items: [{ kind: 'function', header: 'anonymous', filePath: testFile, span: span() }],
       };
@@ -313,8 +313,8 @@ describe('formatReport', () => {
 
     it('should render multiple groups when multiple duplicate groups exist', () => {
       const groups: DuplicateGroup[] = [
-        { cloneType: 'type-1', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'a', filePath: testFile, span: span() }] },
-        { cloneType: 'type-1', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'b', filePath: testFile2, span: span() }] },
+        { cloneType: 'exact', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'a', filePath: testFile, span: span() }] },
+        { cloneType: 'exact', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'b', filePath: testFile2, span: span() }] },
       ];
       const out = formatReport(makeReport(['duplicates'], { duplicates: groups }), 'text');
 
@@ -323,7 +323,7 @@ describe('formatReport', () => {
 
     it('should render structural-clone groups with findingKind label', () => {
       const group: DuplicateGroup = {
-        cloneType: 'type-2',
+        cloneType: 'shape',
         findingKind: 'structural-clone',
         items: [
           { kind: 'function', header: 'funcA', filePath: testFile, span: span(1, 0) },
@@ -341,7 +341,7 @@ describe('formatReport', () => {
 
     it('should omit kind prefix when item kind is node for structural-clone', () => {
       const group: DuplicateGroup = {
-        cloneType: 'type-2',
+        cloneType: 'shape',
         findingKind: 'structural-clone',
         items: [{ kind: 'node', header: 'someExpr', filePath: testFile, span: span() }],
       };
