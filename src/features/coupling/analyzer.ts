@@ -1,10 +1,44 @@
+import type { FirebatCouplingConfig } from '../../shared/firebat-config';
 import type { CouplingHotspot, DependencyAnalysis } from '../../types';
 
 import { sortCouplingHotspots } from '../../engine/sort-utils';
 
 const createEmptyCoupling = (): ReadonlyArray<CouplingHotspot> => [];
 
-const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<CouplingHotspot> => {
+interface CouplingThresholds {
+  readonly godModulePercent: number;
+  readonly godModuleMin: number;
+  readonly rigidPercent: number;
+  readonly rigidMin: number;
+  readonly distanceThreshold: number;
+  readonly unstableInstability: number;
+  readonly unstableFanOut: number;
+  readonly rigidInstability: number;
+}
+
+const COUPLING_DEFAULTS: CouplingThresholds = {
+  godModulePercent: 0.1,
+  godModuleMin: 10,
+  rigidPercent: 0.15,
+  rigidMin: 10,
+  distanceThreshold: 0.7,
+  unstableInstability: 0.8,
+  unstableFanOut: 5,
+  rigidInstability: 0.2,
+};
+
+const resolveThresholds = (config?: FirebatCouplingConfig): CouplingThresholds => ({
+  godModulePercent: config?.godModulePercent ?? COUPLING_DEFAULTS.godModulePercent,
+  godModuleMin: config?.godModuleMin ?? COUPLING_DEFAULTS.godModuleMin,
+  rigidPercent: config?.rigidPercent ?? COUPLING_DEFAULTS.rigidPercent,
+  rigidMin: config?.rigidMin ?? COUPLING_DEFAULTS.rigidMin,
+  distanceThreshold: config?.distanceThreshold ?? COUPLING_DEFAULTS.distanceThreshold,
+  unstableInstability: config?.unstableInstability ?? COUPLING_DEFAULTS.unstableInstability,
+  unstableFanOut: config?.unstableFanOut ?? COUPLING_DEFAULTS.unstableFanOut,
+  rigidInstability: config?.rigidInstability ?? COUPLING_DEFAULTS.rigidInstability,
+});
+
+const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCouplingConfig): ReadonlyArray<CouplingHotspot> => {
   const adjacency = dependencies.adjacency ?? {};
   const exportStats = dependencies.exportStats ?? {};
   const modules = Object.keys(adjacency).sort((a, b) => a.localeCompare(b));
@@ -30,9 +64,10 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
     }
   }
 
+  const thresholds = resolveThresholds(config);
   const totalModules = modules.length;
-  const godModuleThreshold = Math.max(10, Math.ceil(totalModules * 0.1));
-  const rigidThreshold = Math.max(10, Math.ceil(totalModules * 0.15));
+  const godModuleThreshold = Math.max(thresholds.godModuleMin, Math.ceil(totalModules * thresholds.godModulePercent));
+  const rigidThreshold = Math.max(thresholds.rigidMin, Math.ceil(totalModules * thresholds.rigidPercent));
   const bidirectionalModules = new Set<string>();
 
   for (const cycle of dependencies.cycles) {
@@ -108,15 +143,15 @@ const analyzeCoupling = (dependencies: DependencyAnalysis): ReadonlyArray<Coupli
       const distance = Math.abs(abstractness + instability - 1);
       const signals: string[] = [];
 
-      if (distance > 0.7) {
+      if (distance > thresholds.distanceThreshold) {
         signals.push('off-main-sequence');
       }
 
-      if (instability > 0.8 && fanOut > 5) {
+      if (instability > thresholds.unstableInstability && fanOut > thresholds.unstableFanOut) {
         signals.push('unstable-module');
       }
 
-      if (instability < 0.2 && fanIn > rigidThreshold) {
+      if (instability < thresholds.rigidInstability && fanIn > rigidThreshold) {
         signals.push('rigid-module');
       }
 

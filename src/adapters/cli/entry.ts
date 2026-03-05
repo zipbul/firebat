@@ -1,4 +1,4 @@
-import type { FirebatConfig } from '../../shared/firebat-config';
+import type { FirebatConfig, FirebatCouplingConfig } from '../../shared/firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../shared/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
@@ -285,6 +285,18 @@ const resolveWasteMemoryRetentionThresholdFromFeatures = (
   return typeof threshold === 'number' && Number.isFinite(threshold) ? Math.max(0, Math.round(threshold)) : undefined;
 };
 
+const resolveCouplingConfigFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+): FirebatCouplingConfig | undefined => {
+  const coupling = features?.coupling;
+
+  if (coupling === undefined || coupling === false || coupling === true) {
+    return undefined;
+  }
+
+  return coupling;
+};
+
 const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): Promise<FirebatCliOptions> => {
   const options = parseArgs(argv);
 
@@ -314,6 +326,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
   const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(featuresCfg);
   const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(featuresCfg);
+  const cfgCouplingConfig = resolveCouplingConfigFromFeatures(featuresCfg);
 
   logger.trace('Features resolved from config', {
     detectors: cfgDetectors.length,
@@ -332,6 +345,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
     ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
     ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
+    ...(cfgCouplingConfig !== undefined ? { couplingConfig: cfgCouplingConfig } : {}),
     configPath: loaded.resolvedPath,
   };
 

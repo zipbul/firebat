@@ -227,6 +227,9 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
         }
       : {}),
+    ...(options.detectors.includes('coupling') && options.couplingConfig
+      ? { couplingConfig: options.couplingConfig as Record<string, unknown> }
+      : {}),
   });
 
   logger.trace('Artifact key computed', { artifactKey });
@@ -557,7 +560,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    coupling = analyzeCoupling(dependencies);
+    coupling = analyzeCoupling(dependencies, options.couplingConfig);
     detectorTimings.coupling = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.coupling) });

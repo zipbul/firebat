@@ -22,6 +22,7 @@ interface ComputeScanArtifactKeyInput {
   readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly couplingConfig?: Record<string, unknown>;
 }
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
@@ -48,6 +49,7 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `barrelPolicyIgnoreGlobs=${normalizedBarrelPolicyIgnoreGlobs.join(',')}`,
       `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
       `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,
+      `couplingConfig=${input.couplingConfig ? JSON.stringify(Object.entries(input.couplingConfig).sort((a, b) => a[0].localeCompare(b[0]))) : ''}`,
     ].join('|'),
   );
 };
