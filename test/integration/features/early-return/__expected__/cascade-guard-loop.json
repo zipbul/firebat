@@ -1,0 +1,35 @@
+[
+  {
+    "file": "/virtual/cascade-guard-loop.ts",
+    "header": "processItems",
+    "kind": "cascade-guard",
+    "metrics": {
+      "depthReduction": 2,
+      "maxDepth": 2,
+      "statementsAffected": 5
+    },
+    "opportunitySpans": [
+      {
+        "end": {
+          "column": 5,
+          "line": 14
+        },
+        "start": {
+          "column": 4,
+          "line": 4
+        }
+      }
+    ],
+    "score": 10,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 16
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  }
+]

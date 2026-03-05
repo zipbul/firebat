@@ -911,8 +911,9 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const enrichEarlyReturn = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
     const kindToCode: Readonly<Record<EarlyReturnKind, FirebatCatalogCode>> = {
+      'wrapping-if': 'EARLY_RETURN_WRAPPING_IF',
       'invertible-if-else': 'EARLY_RETURN_INVERTIBLE',
-      'missing-guard': 'EARLY_RETURN_MISSING_GUARD',
+      'cascade-guard': 'EARLY_RETURN_CASCADE_GUARD',
     } as const;
 
     return items.map(item => {

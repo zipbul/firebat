@@ -1,0 +1,68 @@
+[
+  {
+    "file": "/virtual/mixed-opportunities.ts",
+    "header": "mixed",
+    "kind": "invertible-if-else",
+    "metrics": {
+      "depthReduction": 1,
+      "maxDepth": 1,
+      "statementsAffected": 4
+    },
+    "opportunitySpans": [
+      {
+        "end": {
+          "column": 3,
+          "line": 10
+        },
+        "start": {
+          "column": 2,
+          "line": 3
+        }
+      }
+    ],
+    "score": 4,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 11
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  },
+  {
+    "file": "/virtual/mixed-opportunities.ts",
+    "header": "wrapOnly",
+    "kind": "wrapping-if",
+    "metrics": {
+      "depthReduction": 1,
+      "maxDepth": 1,
+      "statementsAffected": 3
+    },
+    "opportunitySpans": [
+      {
+        "end": {
+          "column": 3,
+          "line": 19
+        },
+        "start": {
+          "column": 2,
+          "line": 15
+        }
+      }
+    ],
+    "score": 3,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 20
+      },
+      "start": {
+        "column": 7,
+        "line": 14
+      }
+    }
+  }
+]

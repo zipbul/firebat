@@ -1,12 +1,12 @@
 [
   {
-    "file": "/virtual/invertible-if-else.ts",
-    "header": "invertibleIfElse",
-    "kind": "invertible-if-else",
+    "file": "/virtual/else-if-chain.ts",
+    "header": "categorize",
+    "kind": "cascade-guard",
     "metrics": {
-      "depthReduction": 1,
+      "depthReduction": 3,
       "maxDepth": 1,
-      "statementsAffected": 5
+      "statementsAffected": 3
     },
     "opportunitySpans": [
       {
@@ -16,11 +16,11 @@
         },
         "start": {
           "column": 2,
-          "line": 5
+          "line": 3
         }
       }
     ],
-    "score": 5,
+    "score": 9,
     "span": {
       "end": {
         "column": 1,
@@ -28,7 +28,7 @@
       },
       "start": {
         "column": 7,
-        "line": 4
+        "line": 2
       }
     }
   }

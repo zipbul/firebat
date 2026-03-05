@@ -4,7 +4,7 @@ import { analyzeEarlyReturn } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
 
 describe('integration/early-return/loop-guard-clause', () => {
-  it('should treat continue/break as loop guard clauses', () => {
+  it('should detect wrapping-if inside loop body with continue exit', () => {
     const sources = new Map<string, string>();
 
     sources.set(
@@ -13,14 +13,13 @@ describe('integration/early-return/loop-guard-clause', () => {
         'export function process(items: Array<{ skip: boolean; value: number }>) {',
         '  let total = 0;',
         '  for (const item of items) {',
-        '    if (item.skip) {',
-        '      continue;',
+        '    if (!item.skip) {',
+        '      total += item.value;',
+        '      total += 1;',
+        '      total += 2;',
+        '      total += 3;',
+        '      total += 4;',
         '    }',
-        '    total += item.value;',
-        '    total += 1;',
-        '    total += 2;',
-        '    total += 3;',
-        '    total += 4;',
         '  }',
         '  return total;',
         '}',
@@ -32,7 +31,7 @@ describe('integration/early-return/loop-guard-clause', () => {
     const item = analysis.find(entry => entry.header === 'process');
 
     expect(item).toBeDefined();
-    expect(item?.metrics.hasGuards).toBe(true);
-    expect(item?.metrics.guards).toBeGreaterThanOrEqual(1);
+    expect(item?.kind).toBe('wrapping-if');
+    expect(item?.metrics.statementsAffected).toBe(5);
   });
 });

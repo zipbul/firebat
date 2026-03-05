@@ -54,7 +54,7 @@ function createTryCatchSource(): string {
 }
 
 describe('integration/early-return', () => {
-  it('should include complex functions with guard clauses', () => {
+  it('should not report complex function when no actionable pattern exists', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -65,13 +65,11 @@ describe('integration/early-return', () => {
     let earlyReturn = analyzeEarlyReturn(program);
     let item = earlyReturn.find(entry => entry.header === 'complex');
 
-    // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.hasGuards).toBe(true);
-    expect(item?.metrics.guards).toBeGreaterThanOrEqual(1);
+    // Assert — guard clause (1-stmt), mid-body if (not last), loop 1-stmt if → no actionable pattern
+    expect(item).toBeUndefined();
   });
 
-  it('should include simple functions with early returns', () => {
+  it('should not include simple functions without patterns', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -82,9 +80,23 @@ describe('integration/early-return', () => {
     let earlyReturn = analyzeEarlyReturn(program);
     let item = earlyReturn.find(entry => entry.header === 'simple');
 
-    // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.returns).toBeGreaterThanOrEqual(1);
+    // Assert — simple function has no opportunities, no finding
+    expect(item).toBeUndefined();
+  });
+
+  it('should not report balanced if-else as invertible', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+
+    sources.set('/virtual/early-return/else.ts', createIfElseSource());
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let earlyReturn = analyzeEarlyReturn(program);
+    let item = earlyReturn.find(entry => entry.header === 'hasElse');
+
+    // Assert — balanced 1:1 if-else doesn't meet 2x ratio threshold
+    expect(item).toBeUndefined();
   });
 
   it('should return no findings when input is empty', () => {
@@ -98,23 +110,7 @@ describe('integration/early-return', () => {
     expect(earlyReturn.length).toBe(0);
   });
 
-  it('should include if-else functions and count returns', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/early-return/else.ts', createIfElseSource());
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.find(entry => entry.header === 'hasElse');
-
-    // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.returns).toBeGreaterThanOrEqual(2);
-  });
-
-  it('should count early returns when try/catch flows exist', () => {
+  it('should not report try-catch function without actionable patterns', () => {
     // Arrange
     let sources = new Map<string, string>();
 
@@ -125,8 +121,7 @@ describe('integration/early-return', () => {
     let earlyReturn = analyzeEarlyReturn(program);
     let item = earlyReturn.find(entry => entry.header === 'guarded');
 
-    // Assert
-    expect(item).toBeDefined();
-    expect(item?.metrics.returns).toBeGreaterThanOrEqual(2);
+    // Assert — no wrapping-if/invertible/cascade patterns → no finding
+    expect(item).toBeUndefined();
   });
 });

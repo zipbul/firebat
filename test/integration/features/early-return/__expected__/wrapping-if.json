@@ -1,8 +1,8 @@
 [
   {
-    "file": "/virtual/invertible-if-else.ts",
-    "header": "invertibleIfElse",
-    "kind": "invertible-if-else",
+    "file": "/virtual/wrapping-if.ts",
+    "header": "process",
+    "kind": "wrapping-if",
     "metrics": {
       "depthReduction": 1,
       "maxDepth": 1,
@@ -12,11 +12,11 @@
       {
         "end": {
           "column": 3,
-          "line": 13
+          "line": 9
         },
         "start": {
           "column": 2,
-          "line": 5
+          "line": 3
         }
       }
     ],
@@ -24,11 +24,11 @@
     "span": {
       "end": {
         "column": 1,
-        "line": 14
+        "line": 10
       },
       "start": {
         "column": 7,
-        "line": 4
+        "line": 2
       }
     }
   }

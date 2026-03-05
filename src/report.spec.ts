@@ -636,7 +636,7 @@ describe('formatReport', () => {
 
   describe('early-return body', () => {
     it('should render body with header and kind when findings exist', () => {
-      const item: EarlyReturnItem = { kind: 'invertible-if-else', file: testFile, header: 'handleReq', span: span(22, 0), metrics: { returns: 3, hasGuards: false, guards: 0 }, score: 3 };
+      const item: EarlyReturnItem = { kind: 'invertible-if-else', file: testFile, header: 'handleReq', span: span(22, 0), metrics: { maxDepth: 1, depthReduction: 1, statementsAffected: 3 }, score: 3 };
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).toContain('Early Return');
@@ -645,14 +645,14 @@ describe('formatReport', () => {
     });
 
     it('should omit name when early-return header is anonymous', () => {
-      const item: EarlyReturnItem = { kind: 'missing-guard', file: testFile, header: 'anonymous', span: span(), metrics: { returns: 1, hasGuards: false, guards: 0 }, score: 1 };
+      const item: EarlyReturnItem = { kind: 'wrapping-if', file: testFile, header: 'anonymous', span: span(), metrics: { maxDepth: 0, depthReduction: 1, statementsAffected: 2 }, score: 2 };
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).not.toContain('anonymous');
     });
 
     it('should omit kind suffix when early-return kind is empty', () => {
-      const item = { kind: '', file: testFile, header: 'fn', span: span(), metrics: { returns: 1, hasGuards: false, guards: 0 }, score: 1 } as unknown as EarlyReturnItem;
+      const item = { kind: '', file: testFile, header: 'fn', span: span(), metrics: { maxDepth: 0, depthReduction: 1, statementsAffected: 2 }, score: 2 } as unknown as EarlyReturnItem;
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).toContain('fn');

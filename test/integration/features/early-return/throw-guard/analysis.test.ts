@@ -4,7 +4,7 @@ import { analyzeEarlyReturn } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
 
 describe('integration/early-return/throw-guard', () => {
-  it('should treat throw as a guard clause (hasGuardClauses=true)', () => {
+  it('should not report function with only guard clauses and no actionable patterns', () => {
     const sources = new Map<string, string>();
 
     sources.set(
@@ -26,8 +26,7 @@ describe('integration/early-return/throw-guard', () => {
     const analysis = analyzeEarlyReturn(program);
     const item = analysis.find(entry => entry.header === 'guarded');
 
-    expect(item).toBeDefined();
-    expect(item?.metrics.hasGuards).toBe(true);
-    expect(item?.metrics.guards).toBeGreaterThanOrEqual(1);
+    // No wrapping-if, invertible-if-else, or cascade-guard patterns → no finding
+    expect(item).toBeUndefined();
   });
 });

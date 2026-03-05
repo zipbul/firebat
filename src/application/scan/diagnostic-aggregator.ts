@@ -362,6 +362,15 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
+  EARLY_RETURN_WRAPPING_IF: {
+    cause:
+      "A block's last statement is an if (no else) that wraps remaining code. Inverting the condition and adding an early exit (return/continue) reduces nesting by one level.",
+    think: [
+      'Check if the wrapping condition tests a precondition or error case that naturally becomes a guard.',
+      'If inside a loop, verify that a continue statement preserves the iteration intent.',
+      'Count how many lines of code would be un-indented — larger blocks benefit more.',
+    ],
+  },
   EARLY_RETURN_INVERTIBLE: {
     cause:
       'An if-else structure has a short branch (≤3 statements) ending in return/throw and a long branch, which can be inverted to reduce nesting.',
@@ -371,12 +380,13 @@ export const FIREBAT_CODE_CATALOG = {
       'If the pattern repeats across the function, verify whether each guard represents a distinct precondition.',
     ],
   },
-  EARLY_RETURN_MISSING_GUARD: {
-    cause: 'A function lacks guard clauses at the top, pushing the main logic into nested conditionals.',
+  EARLY_RETURN_CASCADE_GUARD: {
+    cause:
+      'An else-if chain has all non-final branches ending in return/throw/continue, which can be flattened to sequential guard clauses.',
     think: [
-      'Identify which conditions at the start of the function check preconditions or special cases.',
-      'Determine whether moving these to guard clauses (return/throw early) flattens the main logic.',
-      'If preconditions are complex, verify whether extraction into a validation function is warranted.',
+      'Verify that each guard tests an independent precondition rather than a shared computation.',
+      'Check whether flattening the chain makes the final "happy path" easier to follow.',
+      'If the chain exceeds 3-4 guards, consider whether a lookup table or strategy pattern is clearer.',
     ],
   },
 

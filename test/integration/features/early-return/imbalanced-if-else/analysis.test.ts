@@ -34,7 +34,7 @@ describe('integration/early-return/imbalanced-if-else', () => {
     expect(item?.kind).toBe('invertible-if-else');
   });
 
-  it("should not report 'invertible-if-else' when branch lengths are similar", () => {
+  it('should not report invertible when branch lengths are similar (balanced)', () => {
     const sources = new Map<string, string>();
 
     sources.set(
@@ -54,7 +54,7 @@ describe('integration/early-return/imbalanced-if-else', () => {
     const analysis = analyzeEarlyReturn(program);
     const item = analysis.find(entry => entry.header === 'process');
 
-    expect(item).toBeDefined();
-    expect(item?.kind).toBe('missing-guard');
+    // Balanced 1:1 branches don't meet the ratio threshold → no finding
+    expect(item).toBeUndefined();
   });
 });

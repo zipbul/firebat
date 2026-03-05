@@ -1,0 +1,35 @@
+[
+  {
+    "file": "/virtual/loop-wrapping-if.ts",
+    "header": "processAll",
+    "kind": "wrapping-if",
+    "metrics": {
+      "depthReduction": 1,
+      "maxDepth": 2,
+      "statementsAffected": 6
+    },
+    "opportunitySpans": [
+      {
+        "end": {
+          "column": 5,
+          "line": 11
+        },
+        "start": {
+          "column": 4,
+          "line": 4
+        }
+      }
+    ],
+    "score": 6,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 13
+      },
+      "start": {
+        "column": 7,
+        "line": 2
+      }
+    }
+  }
+]

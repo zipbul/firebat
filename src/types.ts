@@ -58,9 +58,10 @@ export type FirebatCatalogCode =
   | 'NESTING_HIGH_CC'
   | 'NESTING_ACCIDENTAL_QUADRATIC'
   | 'NESTING_CALLBACK_DEPTH'
-  // early-return (2)
+  // early-return (3)
+  | 'EARLY_RETURN_WRAPPING_IF'
   | 'EARLY_RETURN_INVERTIBLE'
-  | 'EARLY_RETURN_MISSING_GUARD'
+  | 'EARLY_RETURN_CASCADE_GUARD'
   // exception-hygiene (17)
   | 'EH_THROW_NON_ERROR'
   | 'EH_ASYNC_PROMISE_EXECUTOR'
@@ -370,12 +371,12 @@ export interface NestingItem {
 }
 
 export interface EarlyReturnMetrics {
-  readonly returns: number;
-  readonly hasGuards: boolean;
-  readonly guards: number;
+  readonly maxDepth: number;
+  readonly depthReduction: number;
+  readonly statementsAffected: number;
 }
 
-export type EarlyReturnKind = 'invertible-if-else' | 'missing-guard';
+export type EarlyReturnKind = 'wrapping-if' | 'invertible-if-else' | 'cascade-guard';
 
 export interface EarlyReturnItem {
   readonly kind: EarlyReturnKind;
@@ -383,6 +384,7 @@ export interface EarlyReturnItem {
   readonly code?: FirebatCatalogCode;
   readonly header: string;
   readonly span: SourceSpan;
+  readonly opportunitySpans?: ReadonlyArray<SourceSpan>;
   readonly metrics: EarlyReturnMetrics;
   readonly score: number;
 }

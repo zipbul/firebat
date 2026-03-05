@@ -1,34 +1,34 @@
 [
   {
-    "file": "/virtual/invertible-if-else.ts",
-    "header": "invertibleIfElse",
-    "kind": "invertible-if-else",
+    "file": "/virtual/tail-if.ts",
+    "header": "process",
+    "kind": "wrapping-if",
     "metrics": {
       "depthReduction": 1,
       "maxDepth": 1,
-      "statementsAffected": 5
+      "statementsAffected": 4
     },
     "opportunitySpans": [
       {
         "end": {
           "column": 3,
-          "line": 13
+          "line": 9
         },
         "start": {
           "column": 2,
-          "line": 5
+          "line": 4
         }
       }
     ],
-    "score": 5,
+    "score": 4,
     "span": {
       "end": {
         "column": 1,
-        "line": 14
+        "line": 10
       },
       "start": {
         "column": 7,
-        "line": 4
+        "line": 2
       }
     }
   }
