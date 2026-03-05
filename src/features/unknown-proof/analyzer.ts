@@ -1,87 +1,70 @@
+import type { Gildash } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
-import type { FirebatLogger } from '../../shared/logger';
-import type { SourceSpan, UnknownProofFinding } from '../../types';
+import type { UnknownProofFinding } from '../../types';
 
 import { PartialResultError } from '../../engine/partial-result-error';
-import { collectUnknownProofCandidates } from './candidates';
-import { runTsgoUnknownProofChecks } from './tsgo-checks';
+import { collectBindingCandidates, collectExpressionCandidates } from './candidates';
+import { runSemanticUnknownProofChecks } from './semantic-checks';
 
 interface AnalyzeUnknownProofInput {
   readonly rootAbs?: string;
-  readonly boundaryGlobs?: ReadonlyArray<string>;
-  readonly tsconfigPath?: string;
-  readonly logger?: FirebatLogger;
-}
-
-interface TsgoUnknownProofCandidate {
-  readonly name: string;
-  readonly offset: number;
-  readonly span: SourceSpan;
-}
-
-type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
-
-interface BoundaryUsageCandidate {
-  readonly name: string;
-  readonly offset: number;
-  readonly span: SourceSpan;
-  readonly usageKind: BoundaryUsageKind;
+  readonly gildash?: Gildash;
 }
 
 export const createEmptyUnknownProof = (): ReadonlyArray<UnknownProofFinding> => [];
 
-export const analyzeUnknownProof = async (
+export const analyzeUnknownProof = (
   program: ReadonlyArray<ParsedFile>,
   input?: AnalyzeUnknownProofInput,
-): Promise<ReadonlyArray<UnknownProofFinding>> => {
-  const rootAbs = input?.rootAbs ?? process.cwd();
-  const boundaryGlobs = input?.boundaryGlobs;
-  const collected = collectUnknownProofCandidates({
-    program,
-    rootAbs,
-    ...(boundaryGlobs !== undefined ? { boundaryGlobs } : {}),
-  });
-  const findings: UnknownProofFinding[] = [];
-  const tsgoCandidatesByFile = new Map<string, ReadonlyArray<TsgoUnknownProofCandidate>>();
-  const boundaryUsageCandidatesByFile = new Map<string, ReadonlyArray<BoundaryUsageCandidate>>();
+): ReadonlyArray<UnknownProofFinding> => {
+  const candidatesByFile = collectBindingCandidates({ program });
+  const exprCandidatesByFile = collectExpressionCandidates({ program });
 
-  for (const [filePath, perFile] of collected.perFile.entries()) {
-    findings.push(...perFile.typeAssertionFindings);
+  // expression candidates -> findings (hover not needed, AST-only)
+  const exprFindings: UnknownProofFinding[] = [];
 
-    if (perFile.nonBoundaryBindings.length > 0) {
-      tsgoCandidatesByFile.set(filePath, perFile.nonBoundaryBindings);
-    }
-
-    if (perFile.boundaryUnknownUsages.length > 0) {
-      boundaryUsageCandidatesByFile.set(filePath, perFile.boundaryUnknownUsages);
+  for (const [filePath, candidates] of exprCandidatesByFile) {
+    for (const c of candidates) {
+      exprFindings.push({
+        kind: c.kind,
+        message: c.kind === 'double-cast'
+          ? 'Double assertion bypasses type safety (as unknown as T)'
+          : 'Explicit `as any` cast removes type safety',
+        filePath,
+        span: c.span,
+        evidence: c.sourceSnippet,
+      });
     }
   }
 
-  if (tsgoCandidatesByFile.size === 0 && boundaryUsageCandidatesByFile.size === 0) {
-    return findings;
+  if (candidatesByFile.size === 0) {
+    return exprFindings;
   }
 
-  // Proof phase: ensure no `unknown|any` exists outside boundary files.
+  if (!input?.gildash) {
+    throw new PartialResultError('gildash not available for unknown-proof semantic checks', exprFindings);
+  }
+
   try {
-    const tsgoResult = await runTsgoUnknownProofChecks({
+    const result = runSemanticUnknownProofChecks({
       program,
-      rootAbs,
-      candidatesByFile: tsgoCandidatesByFile,
-      boundaryUsageCandidatesByFile,
-      ...(input?.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
-      ...(input?.logger !== undefined ? { logger: input.logger } : {}),
+      candidatesByFile,
+      gildash: input.gildash,
     });
 
-    if (tsgoResult.ok) {
-      findings.push(...tsgoResult.findings);
-
-      return findings;
+    if (result.ok) {
+      return [...result.findings, ...exprFindings];
     }
 
-    throw new PartialResultError(tsgoResult.error, [...findings, ...tsgoResult.findings]);
+    throw new PartialResultError(result.error, [...result.findings, ...exprFindings]);
   } catch (e) {
+    if (e instanceof PartialResultError) {
+      throw e;
+    }
+
     const message = e instanceof Error ? e.message : String(e);
 
-    throw new PartialResultError(message, findings);
+    throw new PartialResultError(message, exprFindings);
   }
 };

@@ -1,22 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { Gildash, GildashOptions } from '@zipbul/gildash';
-import type { GildashError } from '@zipbul/gildash';
-import { err } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 
 import { __testing__, createGildash } from './gildash';
 
-const mockOpen = mock<(options: GildashOptions) => Promise<Gildash | ReturnType<typeof err>>>(() =>
+const mockOpen = mock<(options: GildashOptions) => Promise<Gildash>>(() =>
   Promise.resolve({ projectRoot: '/test' } as unknown as Gildash),
 );
 
 describe('createGildash', () => {
+  let openSpy: ReturnType<typeof spyOn>;
+
   beforeEach(() => {
     mockOpen.mockClear();
     mockOpen.mockResolvedValue({ projectRoot: '/test' } as unknown as Gildash);
-    spyOn(__testing__, 'open').mockImplementation(mockOpen);
+    openSpy = spyOn(__testing__, 'open').mockImplementation(mockOpen);
   });
 
   afterEach(() => {
+    openSpy.mockRestore();
     mockOpen.mockRestore();
   });
 
@@ -71,10 +73,8 @@ describe('createGildash', () => {
 
   // ---------- NE ----------
 
-  it('should throw Error with formatted message when Gildash.open returns Err', async () => {
-    mockOpen.mockResolvedValue(
-      err<GildashError>({ type: 'store', message: 'DB corruption', cause: undefined }),
-    );
+  it('should throw Error with formatted message when Gildash.open throws GildashError', async () => {
+    mockOpen.mockRejectedValue(new GildashError('store', 'DB corruption'));
 
     await expect(createGildash({ projectRoot: '/proj' })).rejects.toThrow(
       'Gildash open failed: DB corruption',

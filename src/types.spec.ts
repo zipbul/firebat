@@ -127,7 +127,7 @@ describe('countBlockers', () => {
       duplicates: [{ findingKind: 'exact-clone', items: [{ kind: 'function', header: 'a', filePath: 'a.ts', span: span() }] } as DuplicateGroup],
       waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
       'barrel-policy': [{ kind: 'deep-import', file: 'a.ts', span: span() } as BarrelPolicyFinding],
-      'unknown-proof': [{ kind: 'type-assertion', message: '', filePath: 'a.ts', span: span() } as UnknownProofFinding],
+      'unknown-proof': [{ kind: 'unknown-type', message: '', filePath: 'a.ts', span: span() } as UnknownProofFinding],
       'exception-hygiene': [{ kind: 'throw-non-error', file: 'a.ts', span: span(), evidence: '' } as ExceptionHygieneFinding],
       format: [{ code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: 'a.ts', span: span() } as FormatFinding],
       lint: [{ severity: 'error', code: 'no-unused-vars', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic],

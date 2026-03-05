@@ -115,7 +115,7 @@ export const runGolden = <T = unknown>(
     const sources = readDirFixture(fixturesDir, name);
     const program = buildProgram(sources);
 
-    // Run analyzer — use partial field when tool is unavailable (e.g. tsgo)
+    // Run analyzer — use partial field when tool is unavailable (e.g. gildash semantic)
     let actual: unknown;
 
     try {

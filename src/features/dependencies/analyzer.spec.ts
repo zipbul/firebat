@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { err } from '@zipbul/result';
-import type { Gildash, GildashError, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
+import { GildashError } from '@zipbul/gildash';
+import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
 
 import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 
@@ -8,14 +8,15 @@ import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 /*  Mock gildash factory                                               */
 /* ------------------------------------------------------------------ */
 
-const gildashErr = (message: string) =>
-  err({ type: 'search' as const, message } as GildashError);
+const gildashThrow = (message: string): never => {
+  throw new GildashError('search', message);
+};
 
 interface MockGildashOverrides {
-  getImportGraph?: () => Promise<Map<string, string[]> | ReturnType<typeof gildashErr>>;
-  getCyclePaths?: (_p?: string, _o?: { maxCycles?: number }) => Promise<string[][] | ReturnType<typeof gildashErr>>;
-  searchSymbols?: (q: unknown) => SymbolSearchResult[] | ReturnType<typeof gildashErr>;
-  searchRelations?: (q: unknown) => CodeRelation[] | ReturnType<typeof gildashErr>;
+  getImportGraph?: () => Promise<Map<string, string[]>>;
+  getCyclePaths?: (_p?: string, _o?: { maxCycles?: number }) => Promise<string[][]>;
+  searchSymbols?: (q: unknown) => SymbolSearchResult[];
+  searchRelations?: (q: unknown) => CodeRelation[];
   getModuleInterface?: (fp: string) => unknown;
 }
 
@@ -433,7 +434,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
   it('should return empty when getImportGraph returns Err', async () => {
     const g = createMockGildash({
-      getImportGraph: async () => gildashErr('graph failed'),
+      getImportGraph: async () => gildashThrow('graph failed'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
     expect(result.cycles.length).toBe(0);
@@ -447,7 +448,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => gildashErr('cycle detection failed'),
+      getCyclePaths: async () => gildashThrow('cycle detection failed'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
     expect(result.cycles.length).toBe(0);
@@ -460,7 +461,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      searchSymbols: () => gildashErr('search failed'),
+      searchSymbols: () => gildashThrow('search failed'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
     expect(Object.keys(result.exportStats).length).toBe(0);
@@ -477,7 +478,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         if (query.isExported) return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
         return [];
       },
-      searchRelations: () => gildashErr('relations failed'),
+      searchRelations: () => gildashThrow('relations failed'),
     });
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
@@ -582,8 +583,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => gildashErr('cycle error'),
-      searchSymbols: () => gildashErr('search error'),
+      getCyclePaths: async () => gildashThrow('cycle error'),
+      searchSymbols: () => gildashThrow('search error'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
     expect(Object.keys(result.adjacency).length).toBe(2);

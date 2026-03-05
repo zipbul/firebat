@@ -1,8 +1,14 @@
-import { mock, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { mock, describe, it, expect, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
+import * as nodePath from 'node:path';
 
 import type { Gildash } from '@zipbul/gildash';
 import type { PatternMatch } from '@zipbul/gildash';
-import { err } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
+
+// ── Save originals before mocking ────────────────────────────────────────────
+
+const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/gildash.ts')) };
+const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +77,12 @@ beforeEach(() => {
 
 afterEach(() => {
   mock.restore();
+});
+
+afterAll(() => {
+  mock.restore();
+  mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => __origGildashStore);
+  mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
 });
 
 describe('findPatternUseCase', () => {
@@ -202,12 +214,10 @@ describe('findPatternUseCase', () => {
     cwdSpy.mockRestore();
   });
 
-  it('should return empty array when gildash.findPattern returns Err', async () => {
+  it('should return empty array when gildash.findPattern throws GildashError', async () => {
     // Arrange
     mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
-    mockFindPattern.mockImplementation(
-      async () => err({ type: 'search' as const, message: 'fail' }) as unknown as PatternMatch[],
-    );
+    mockFindPattern.mockRejectedValue(new GildashError('search', 'fail'));
 
     // Act
     const result = await findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger });
@@ -216,12 +226,10 @@ describe('findPatternUseCase', () => {
     expect(result).toEqual([]);
   });
 
-  it('should call gildash.close even when gildash.findPattern returns Err', async () => {
+  it('should call gildash.close even when gildash.findPattern throws GildashError', async () => {
     // Arrange
     mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
-    mockFindPattern.mockImplementation(
-      async () => err({ type: 'search' as const, message: 'fail' }) as unknown as PatternMatch[],
-    );
+    mockFindPattern.mockRejectedValue(new GildashError('search', 'fail'));
 
     // Act
     await findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger });

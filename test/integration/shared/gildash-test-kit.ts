@@ -9,7 +9,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { Gildash } from '@zipbul/gildash';
-import { isErr } from '@zipbul/result';
 
 export interface TempGildash {
   readonly gildash: Gildash;
@@ -27,7 +26,7 @@ export interface TempGildash {
  */
 export const createTempGildash = async (
   sources: Map<string, string> | Record<string, string>,
-  options?: { stripPrefix?: string },
+  options?: { stripPrefix?: string; semantic?: boolean },
 ): Promise<TempGildash> => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firebat-int-test-'));
   const prefix = options?.stripPrefix ?? '/virtual/';
@@ -46,19 +45,19 @@ export const createTempGildash = async (
     fs.writeFileSync(fullPath, content, 'utf8');
   }
 
-  const result = await Gildash.open({
-    projectRoot: tmpDir,
-    watchMode: false,
-    extensions: ['.ts'],
-  });
+  let gildash: Gildash;
 
-  if (isErr(result)) {
+  try {
+    gildash = await Gildash.open({
+      projectRoot: tmpDir,
+      watchMode: false,
+      extensions: ['.ts'],
+      ...(options?.semantic === true ? { semantic: true } : {}),
+    });
+  } catch (e) {
     fs.rmSync(tmpDir, { recursive: true, force: true });
-
-    throw new Error(`Gildash open failed: ${result.data.message}`);
+    throw e;
   }
-
-  const gildash = result;
 
   return {
     gildash,

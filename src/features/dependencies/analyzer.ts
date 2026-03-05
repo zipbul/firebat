@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { Gildash } from '@zipbul/gildash';
-import { isErr } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 
 import type {
   DependencyAnalysis,
@@ -284,13 +284,14 @@ const analyzeDependencies = async (
   const readFn = input?.readFileFn ?? ((p: string) => readFileSync(p, 'utf8'));
 
   // 1. Import graph
-  const graphResult = await gildash.getImportGraph();
+  let graph: Map<string, string[]>;
 
-  if (isErr(graphResult)) {
-    return empty;
+  try {
+    graph = await gildash.getImportGraph();
+  } catch (e) {
+    if (e instanceof GildashError) return empty;
+    throw e;
   }
-
-  const graph: Map<string, string[]> = graphResult;
 
   // Normalise gildash paths (may be project-relative) to absolute
   const absGraph = new Map<string, string[]>();
@@ -324,11 +325,13 @@ const analyzeDependencies = async (
   const fanOut = listFanStats(rootAbs, outDegree, 10);
 
   // 3. Cycles via gildash (Tarjan SCC + Johnson's circuits)
-  const cycleResult = await gildash.getCyclePaths(undefined, { maxCycles: 100 });
   let cyclePaths: ReadonlyArray<ReadonlyArray<string>> = [];
 
-  if (!isErr(cycleResult)) {
+  try {
+    const cycleResult = await gildash.getCyclePaths(undefined, { maxCycles: 100 });
     cyclePaths = (cycleResult as string[][]).map(p => p.map(e => resolveAbs(rootAbs, e)));
+  } catch (e) {
+    if (!(e instanceof GildashError)) throw e;
   }
 
   const cycles = cyclePaths.map(p => ({ path: p.map(entry => toRelativePath(rootAbs, entry)) }));
@@ -368,11 +371,13 @@ const analyzeDependencies = async (
 
   // 5. Export stats via searchSymbols
   const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
-  const allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+  let allExported: ReturnType<Gildash['searchSymbols']> | null = null;
 
   const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: Record<string, unknown> }>>();
 
-  if (!isErr(allExported)) {
+  try {
+    allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+
     for (const sym of allExported) {
       const absFilePath = resolveAbs(rootAbs, sym.filePath);
       const existing = exportsByFile.get(absFilePath) ?? [];
@@ -394,18 +399,33 @@ const analyzeDependencies = async (
 
       exportStats[toRelativePath(rootAbs, filePath)] = { total, abstract };
     }
+  } catch (e) {
+    if (!(e instanceof GildashError)) throw e;
   }
 
   // 6. Dead export detection
   const deadExports: DependencyDeadExportFinding[] = [];
 
-  if (!isErr(allExported) && exportsByFile.size > 0) {
-    const importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
-    const reExportRels = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
+  if (allExported !== null && exportsByFile.size > 0) {
+    let imports: ReturnType<Gildash['searchRelations']> = [];
+    let reExports: ReturnType<Gildash['searchRelations']> = [];
+    let hasRelationData = false;
 
-    if (!isErr(importRels) || !isErr(reExportRels)) {
-      const imports = isErr(importRels) ? [] : importRels;
-      const reExports = isErr(reExportRels) ? [] : reExportRels;
+    try {
+      imports = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+      hasRelationData = true;
+    } catch (e) {
+      if (!(e instanceof GildashError)) throw e;
+    }
+
+    try {
+      reExports = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
+      hasRelationData = true;
+    } catch (e) {
+      if (!(e instanceof GildashError)) throw e;
+    }
+
+    if (hasRelationData) {
 
       // Build usage map per module
       const usageByModule = new Map<

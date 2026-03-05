@@ -1,0 +1,18 @@
+[
+  {
+    "evidence": "raw as unknown as User",
+    "filePath": "/virtual/double-cast.ts",
+    "kind": "double-cast",
+    "message": "Double assertion bypasses type safety (as unknown as T)",
+    "span": {
+      "end": {
+        "column": 42,
+        "line": 4
+      },
+      "start": {
+        "column": 20,
+        "line": 4
+      }
+    }
+  }
+]

@@ -1,5 +1,5 @@
 import type { PatternMatch } from '@zipbul/gildash';
-import { isErr } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 
 import { createGildash } from '../../store/gildash';
 import { resolveTargets } from '../../shared/target-discovery';
@@ -25,12 +25,13 @@ const findPatternUseCase = async (
 
   const gildash = await createGildash({ projectRoot: root, watchMode: false });
   try {
-    const result = await gildash.findPattern(pattern, { filePaths });
-    if (isErr(result)) {
-      logger.debug('find-pattern: error', { message: result.data.message });
+    return await gildash.findPattern(pattern, { filePaths });
+  } catch (e) {
+    if (e instanceof GildashError) {
+      logger.debug('find-pattern: error', { message: e.message });
       return [];
     }
-    return result;
+    throw e;
   } finally {
     await gildash.close({ cleanup: true });
   }

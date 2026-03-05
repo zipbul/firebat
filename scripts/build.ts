@@ -177,7 +177,7 @@ const tryReadText = async (filePath: string | null): Promise<string | null> => {
 };
 
 const getApache20TextFromInstalledDeps = async (): Promise<string | null> => {
-  const candidates = ['node_modules/@typescript/native-preview/LICENSE', 'node_modules/fastbitset/LICENSE'];
+  const candidates = ['node_modules/typescript/LICENSE.txt', 'node_modules/fastbitset/LICENSE'];
 
   for (const candidate of candidates) {
     const text = await tryReadText(candidate);
@@ -285,7 +285,7 @@ const formatThirdPartyNotices = async (input: FormatThirdPartyNoticesInput): Pro
       if (!input.apache20Text) {
         throw new Error(
           `Could not locate Apache-2.0 license text to include for ${pkg.name}. ` +
-            `Expected to find it in installed deps (e.g. node_modules/@typescript/native-preview/LICENSE).`,
+            `Expected to find it in installed deps (e.g. node_modules/typescript/LICENSE.txt).`,
         );
       }
 

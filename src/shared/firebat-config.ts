@@ -44,10 +44,6 @@ interface FirebatAbstractionFitnessConfig {
   readonly minFitnessScore?: number | undefined;
 }
 
-interface FirebatUnknownProofConfig {
-  readonly boundaryGlobs?: ReadonlyArray<string> | undefined;
-}
-
 interface FirebatBarrelPolicyConfig {
   readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
 }
@@ -66,7 +62,7 @@ interface FirebatFeaturesConfig {
   readonly duplicates?: FeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: FeatureToggle<FirebatWasteConfig> | undefined;
   readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
-  readonly 'unknown-proof'?: FeatureToggle<FirebatUnknownProofConfig> | undefined;
+  readonly 'unknown-proof'?: boolean | undefined;
   readonly 'exception-hygiene'?: boolean | undefined;
   readonly format?: boolean | undefined;
   readonly lint?: boolean | undefined;
@@ -94,7 +90,7 @@ interface FirebatMcpFeaturesConfig {
   readonly duplicates?: InheritableFeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: InheritableFeatureToggle<FirebatWasteConfig> | undefined;
   readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
-  readonly 'unknown-proof'?: InheritableFeatureToggle<FirebatUnknownProofConfig> | undefined;
+  readonly 'unknown-proof'?: boolean | 'inherit' | undefined;
   readonly 'exception-hygiene'?: boolean | 'inherit' | undefined;
   readonly format?: boolean | 'inherit' | undefined;
   readonly lint?: boolean | 'inherit' | undefined;
@@ -168,17 +164,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        'unknown-proof': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                boundaryGlobs: z.array(z.string()).nonempty().optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
+        'unknown-proof': z.boolean().optional(),
         'exception-hygiene': z.boolean().optional(),
         format: z.boolean().optional(),
         lint: z.boolean().optional(),
@@ -335,18 +321,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                       .strict(),
                   ])
                   .optional(),
-                'unknown-proof': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        boundaryGlobs: z.array(z.string()).nonempty().optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
+                'unknown-proof': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'exception-hygiene': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 format: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 lint: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
@@ -486,7 +461,6 @@ export type {
   FirebatMcpConfig,
   FirebatMcpConfigObject,
   FirebatMcpFeaturesConfig,
-  FirebatUnknownProofConfig,
 };
 
 export { FirebatConfigSchema };

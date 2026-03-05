@@ -79,13 +79,12 @@ export type FirebatCatalogCode =
   | 'EH_REDUNDANT_NESTED_CATCH'
   | 'EH_OVERSCOPED_TRY'
   | 'EH_EXCEPTION_CONTROL_FLOW'
-  // unknown-proof (6)
-  | 'UNKNOWN_TYPE_ASSERTION'
-  | 'UNKNOWN_DOUBLE_ASSERTION'
+  // unknown-proof (5)
   | 'UNKNOWN_UNNARROWED'
-  | 'UNKNOWN_UNVALIDATED'
   | 'UNKNOWN_INFERRED'
   | 'UNKNOWN_ANY_INFERRED'
+  | 'UNKNOWN_ANY_CAST'
+  | 'UNKNOWN_DOUBLE_CAST'
   // forwarding (3)
   | 'FWD_THIN_WRAPPER'
   | 'FWD_FORWARD_CHAIN'
@@ -490,12 +489,11 @@ export type UnknownProofStatus = 'ok' | 'unavailable' | 'failed';
 
 export type UnknownProofFindingKind =
   | 'tool-unavailable'
-  | 'type-assertion'
-  | 'double-assertion'
   | 'unknown-type'
-  | 'unvalidated-unknown'
   | 'unknown-inferred'
-  | 'any-inferred';
+  | 'any-inferred'
+  | 'any-cast'
+  | 'double-cast';
 
 export interface UnknownProofFinding {
   readonly kind: UnknownProofFindingKind;
@@ -510,7 +508,7 @@ export interface UnknownProofFinding {
 
 export interface UnknownProofAnalysis {
   readonly status: UnknownProofStatus;
-  readonly tool: 'tsgo';
+  readonly tool: 'gildash';
   readonly error?: string;
   readonly findings: ReadonlyArray<UnknownProofFinding>;
 }

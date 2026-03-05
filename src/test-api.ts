@@ -38,7 +38,6 @@ export { analyzeDuplicates, createEmptyDuplicates } from './features/duplicates'
 // ---------------------------------------------------------------------------
 // Features — test-only internal exports
 // ---------------------------------------------------------------------------
-export { __test__ as __test__TypecheckDetector } from './features/typecheck/detector';
 export { __testing__ as __testing__FormatAnalyzer } from './features/format/analyzer';
 
 // ---------------------------------------------------------------------------
@@ -51,7 +50,7 @@ export type { ParsedFile } from './engine/types';
 // ---------------------------------------------------------------------------
 // Types  (Phase 3 에서 shared/ 이동 가능)
 // ---------------------------------------------------------------------------
-export type { DuplicateGroup, WasteFinding, FirebatReport } from './types';
+export type { DuplicateGroup, TypecheckItem, WasteFinding, FirebatReport } from './types';
 
 // ---------------------------------------------------------------------------
 // Application — scan  (Phase 2 에서 pipeline 으로 전환 예정)
@@ -88,7 +87,6 @@ export { runInstall, runUpdate } from './adapters/cli/install';
 export { blankLinesBetweenStatementGroupsRule } from './oxlint-plugin/rules/blank-lines-between-statement-groups';
 export { memberOrderingRule } from './oxlint-plugin/rules/member-ordering';
 export { noBracketNotationRule } from './oxlint-plugin/rules/no-bracket-notation';
-export { noDoubleAssertionRule } from './oxlint-plugin/rules/no-double-assertion';
 export { noDynamicImportRule } from './oxlint-plugin/rules/no-dynamic-import';
 export { noGlobalThisMutationRule } from './oxlint-plugin/rules/no-globalthis-mutation';
 export { noInlineObjectTypeRule } from './oxlint-plugin/rules/no-inline-object-type';

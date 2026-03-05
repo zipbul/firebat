@@ -32,7 +32,7 @@ src/
   infrastructure/  I/O 구현체 (SQLite + Drizzle ORM, in-memory, hybrid)
   engine/          순수 연산 (oxc-parser AST, CFG, dataflow)
   features/        디텍터별 분석 로직
-  tooling/         외부 도구 래퍼 (oxlint, oxfmt, tsgo)
+  tooling/         외부 도구 래퍼 (oxlint, oxfmt)
   shared/          로거, 설정, 인자 파서
   oxlint-plugin/   커스텀 oxlint 룰
 ```

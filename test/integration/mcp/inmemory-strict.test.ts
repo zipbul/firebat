@@ -42,7 +42,7 @@ describe('InMemory MCP strict (scan-only)', () => {
   });
 
   describe('tools/list', () => {
-    it('should list only scan tool when tools are requested', async () => {
+    it('should list scan and query tools when tools are requested', async () => {
       // Arrange
 
       // Act
@@ -50,10 +50,10 @@ describe('InMemory MCP strict (scan-only)', () => {
       const tools = asArrayOrEmpty(result.tools);
 
       // Assert
-      expect(tools.length).toBe(1);
-      expect(tools[0]?.name).toBe('scan');
-      expect(tools[0]?.description !== undefined).toBe(true);
-      expect(typeof tools[0]?.inputSchema).toBe('object');
+      expect(tools.length).toBe(4);
+      expect(tools.map((t: any) => t.name).sort()).toEqual([
+        'index-external-packages', 'query-dependencies', 'scan', 'symbols-by-file',
+      ]);
     });
   });
 

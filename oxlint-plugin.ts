@@ -1,7 +1,6 @@
 import { blankLinesBetweenStatementGroupsRule } from './src/oxlint-plugin/rules/blank-lines-between-statement-groups';
 import { memberOrderingRule } from './src/oxlint-plugin/rules/member-ordering';
 import { noBracketNotationRule } from './src/oxlint-plugin/rules/no-bracket-notation';
-import { noDoubleAssertionRule } from './src/oxlint-plugin/rules/no-double-assertion';
 import { noDynamicImportRule } from './src/oxlint-plugin/rules/no-dynamic-import';
 import { noGlobalThisMutationRule } from './src/oxlint-plugin/rules/no-globalthis-mutation';
 import { noInlineObjectTypeRule } from './src/oxlint-plugin/rules/no-inline-object-type';
@@ -24,7 +23,6 @@ const plugin = {
     'padding-line-between-statements': paddingLineBetweenStatementsRule,
     'no-unmodified-loop-condition': noUnmodifiedLoopConditionRule,
     'no-tombstone': noTombstoneRule,
-    'no-double-assertion': noDoubleAssertionRule,
     'no-inline-object-type': noInlineObjectTypeRule,
     'no-bracket-notation': noBracketNotationRule,
     'no-dynamic-import': noDynamicImportRule,

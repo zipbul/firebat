@@ -3,7 +3,6 @@ import type { Gildash } from '@zipbul/gildash';
 import type { ParsedFile } from '../engine/types';
 import type { FirebatProgramConfig } from '../interfaces';
 
-import { isErr } from '@zipbul/result';
 import { createGildash } from '../store/gildash';
 
 // Re-export ParsedFile so external callers (specs) can import it from this module
@@ -46,14 +45,9 @@ export const createFirebatProgram = async (
   const gildash = config.gildash ?? (await createGildash({ projectRoot: root, watchMode: false }));
 
   try {
-    const result = await gildash.batchParse(eligible);
+    const { parsed } = await gildash.batchParse(eligible);
 
-    if (isErr(result)) {
-      logger.warn('batchParse failed', { message: result.data.message });
-      return [];
-    }
-
-    return Array.from(result.values()) as unknown as ParsedFile[];
+    return Array.from(parsed.values()) as unknown as ParsedFile[];
   } finally {
     if (ownsGildash) {
       await gildash.close({ cleanup: false });

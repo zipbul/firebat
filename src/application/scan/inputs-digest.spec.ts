@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
 import type { Gildash } from '@zipbul/gildash';
-import { err } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 import { computeInputsDigest } from './inputs-digest';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -87,9 +87,9 @@ describe('computeInputsDigest', () => {
     expect(typeof result).toBe('string');
   });
 
-  it('[ED] getFileInfo returns Err → falls back to disk read (no throw)', async () => {
+  it('[ED] getFileInfo throws GildashError → falls back to disk read (no throw)', async () => {
     const gildash = makeGildash(
-      () => err({ type: 'closed' as const, message: 'gildash closed' }) as ReturnType<Gildash['getFileInfo']>,
+      (): ReturnType<Gildash['getFileInfo']> => { throw new GildashError('closed', 'gildash closed'); },
     );
 
     const result = await computeInputsDigest({

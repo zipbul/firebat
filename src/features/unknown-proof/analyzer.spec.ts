@@ -1,62 +1,66 @@
-import { afterAll, describe, expect, it, mock } from 'bun:test';
-import * as path from 'node:path';
-
-const __origTsgoChecks = { ...require(path.resolve(import.meta.dir, './tsgo-checks.ts')) };
-
-// mock.module must be hoisted before any imports of the target module
-mock.module(path.resolve(import.meta.dir, './tsgo-checks.ts'), () => ({
-  runTsgoUnknownProofChecks: async () => ({
-    ok: true,
-    findings: [],
-  }),
-}));
+import { describe, expect, it } from 'bun:test';
 
 import { analyzeUnknownProof, createEmptyUnknownProof } from './analyzer';
 import { parseSource } from '../../engine/ast/parse-source';
 import type { ParsedFile } from '../../engine/types';
 
-const toFile = (filePath: string, code: string): ParsedFile =>
-  parseSource(filePath, code) as ParsedFile;
+const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
 describe('features/unknown-proof/analyzer — createEmptyUnknownProof', () => {
-  it('returns empty array', () => {
+  it('createEmptyUnknownProof - returns empty array', () => {
     expect(createEmptyUnknownProof()).toEqual([]);
   });
 });
 
 describe('features/unknown-proof/analyzer — analyzeUnknownProof', () => {
-  it('returns empty array for empty program', async () => {
-    const result = await analyzeUnknownProof([]);
+  it('analyzeUnknownProof - empty program - returns empty array', () => {
+    const result = analyzeUnknownProof([]);
+
     expect(result).toEqual([]);
   });
 
-  it('returns empty array when no unknown annotations found', async () => {
-    const f = toFile('/clean.ts', `const x: number = 42;`);
-    const result = await analyzeUnknownProof([f], { rootAbs: '/tmp' });
-    expect(Array.isArray(result)).toBe(true);
+  it('analyzeUnknownProof - as any cast - returns any-cast finding', () => {
+    const f = toFile('/any-cast.ts', `const x = response as any;`);
+    // no gildash -> PartialResultError, but expression findings are still returned
+    let result: ReadonlyArray<{ kind: string }> = [];
+
+    try {
+      result = analyzeUnknownProof([f], { rootAbs: '/tmp' });
+    } catch (e: any) {
+      result = e.partial ?? [];
+    }
+
+    const anyCastFindings = result.filter(r => r.kind === 'any-cast');
+
+    expect(anyCastFindings.length).toBe(1);
   });
 
-  it('detects type assertion (as unknown) finding', async () => {
-    const f = toFile('/assert.ts', `const x = someValue as unknown;`);
-    const result = await analyzeUnknownProof([f], { rootAbs: '/tmp' });
-    expect(Array.isArray(result)).toBe(true);
-    // Type assertion findings are included in the result
+  it('analyzeUnknownProof - double cast - returns double-cast finding', () => {
+    const f = toFile('/double-cast.ts', `const x = data as unknown as User;`);
+    let result: ReadonlyArray<{ kind: string }> = [];
+
+    try {
+      result = analyzeUnknownProof([f], { rootAbs: '/tmp' });
+    } catch (e: any) {
+      result = e.partial ?? [];
+    }
+
+    const doubleCastFindings = result.filter(r => r.kind === 'double-cast');
+
+    expect(doubleCastFindings.length).toBe(1);
   });
 
-  it('accepts rootAbs option without error', async () => {
-    const f = toFile('/foo.ts', `const y = 1;`);
-    await expect(analyzeUnknownProof([f], { rootAbs: process.cwd() })).resolves.toBeDefined();
+  it('analyzeUnknownProof - code without any casts - throws PartialResultError when no gildash', () => {
+    const f = toFile('/no-cast.ts', `const x = value as string;`);
+
+    // Has binding candidates but no gildash -> PartialResultError
+    expect(() => analyzeUnknownProof([f], { rootAbs: '/tmp' })).toThrow();
   });
 
-  it('accepts boundaryGlobs option without error', async () => {
-    const f = toFile('/bar.ts', `export function bar() { return 1; }`);
-    await expect(
-      analyzeUnknownProof([f], { rootAbs: process.cwd(), boundaryGlobs: ['src/api/**'] }),
-    ).resolves.toBeDefined();
-  });
-});
+  it('analyzeUnknownProof - no binding candidates - returns expression findings only', () => {
+    // Empty program has no binding candidates
+    const result = analyzeUnknownProof([]);
 
-afterAll(() => {
-  mock.restore();
-  mock.module(path.resolve(import.meta.dir, './tsgo-checks.ts'), () => __origTsgoChecks);
+    expect(result).toEqual([]);
+  });
 });

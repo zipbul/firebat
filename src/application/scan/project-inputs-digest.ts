@@ -3,7 +3,6 @@ import * as path from 'node:path';
 
 import type { Gildash } from '@zipbul/gildash';
 
-import { isErr } from '@zipbul/result';
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
 
@@ -68,7 +67,7 @@ const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Prom
       try {
         const fileRec = input.gildash.getFileInfo(filePath);
 
-        if (!isErr(fileRec) && fileRec !== null) {
+        if (fileRec !== null) {
           partsByIndex[item.index] = `project:${filePath}:${fileRec.contentHash}`;
           return;
         }

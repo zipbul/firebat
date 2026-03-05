@@ -164,7 +164,6 @@
         ],
       },
     ],
-    "firebat/no-double-assertion": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/ban-ts-comment": [
       "error",

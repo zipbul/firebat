@@ -53,12 +53,6 @@ describe('computeScanArtifactKey', () => {
     expect(computeScanArtifactKey(base)).toBe(computeScanArtifactKey(base));
   });
 
-  it('[HP] boundary globs are sorted', () => {
-    const a = computeScanArtifactKey({ ...base, unknownProofBoundaryGlobs: ['b/**', 'a/**'] });
-    const b = computeScanArtifactKey({ ...base, unknownProofBoundaryGlobs: ['a/**', 'b/**'] });
-    expect(a).toBe(b);
-  });
-
   it('[HP] dependenciesLayers are normalized and sorted', () => {
     const a = computeScanArtifactKey({
       ...base,

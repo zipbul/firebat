@@ -19,7 +19,6 @@ interface ComputeScanArtifactKeyInput {
   readonly minSize: string;
   readonly maxForwardDepth: number;
   readonly wasteMemoryRetentionThreshold?: number;
-  readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
   readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
@@ -27,7 +26,6 @@ interface ComputeScanArtifactKeyInput {
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedDetectors = [...input.detectors].sort();
-  const normalizedUnknownProofBoundaryGlobs = input.unknownProofBoundaryGlobs ? [...input.unknownProofBoundaryGlobs].sort() : [];
   const normalizedBarrelPolicyIgnoreGlobs = input.barrelPolicyIgnoreGlobs ? [...input.barrelPolicyIgnoreGlobs].sort() : [];
   const normalizedDependenciesLayers = input.dependenciesLayers
     ? [...input.dependenciesLayers]
@@ -47,7 +45,6 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `minSize=${input.minSize}`,
       `maxForwardDepth=${String(input.maxForwardDepth)}`,
       `wasteMemoryRetentionThreshold=${String(input.wasteMemoryRetentionThreshold ?? '')}`,
-      `unknownProofBoundaryGlobs=${normalizedUnknownProofBoundaryGlobs.join(',')}`,
       `barrelPolicyIgnoreGlobs=${normalizedBarrelPolicyIgnoreGlobs.join(',')}`,
       `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
       `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,

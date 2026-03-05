@@ -13,7 +13,7 @@ import { describe, expect, it } from 'bun:test';
 import { parseSource } from '../../../src/test-api';
 import type { ParsedFile } from '../../../src/test-api';
 import { analyzeEarlyReturn } from '../../../src/test-api';
-import { detectExactDuplicates } from '../../../src/test-api';
+import { analyzeDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 
 const parse = (code: string): ParsedFile[] => [parseSource('/virtual/mutation.ts', code)];
@@ -27,8 +27,8 @@ export function b() { return 1 + 2; }
 `;
     const program = parse(code);
 
-    const strict = detectExactDuplicates([...program], 1);
-    const lenient = detectExactDuplicates([...program], 999);
+    const strict = analyzeDuplicates([...program], { minSize: 1 });
+    const lenient = analyzeDuplicates([...program], { minSize: 999 });
 
     // strict (minSize=1) should find more or equal duplicates than lenient (minSize=999)
     expect(strict.length).toBeGreaterThanOrEqual(lenient.length);

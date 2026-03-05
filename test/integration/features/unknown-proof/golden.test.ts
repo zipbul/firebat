@@ -4,14 +4,6 @@ import { analyzeUnknownProof } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 describe('golden/unknown-proof', () => {
-  runGolden(import.meta.dir, 'type-assertion', program =>
-    analyzeUnknownProof(program, { rootAbs: '/virtual' }),
-  );
-
-  runGolden(import.meta.dir, 'double-assertion', program =>
-    analyzeUnknownProof(program, { rootAbs: '/virtual' }),
-  );
-
   runGolden(import.meta.dir, 'no-findings', program =>
     analyzeUnknownProof(program, { rootAbs: '/virtual' }),
   );
@@ -21,6 +13,14 @@ describe('golden/unknown-proof', () => {
   );
 
   runGolden(import.meta.dir, 'multi-cast', program =>
+    analyzeUnknownProof(program, { rootAbs: '/virtual' }),
+  );
+
+  runGolden(import.meta.dir, 'any-cast', program =>
+    analyzeUnknownProof(program, { rootAbs: '/virtual' }),
+  );
+
+  runGolden(import.meta.dir, 'double-cast', program =>
     analyzeUnknownProof(program, { rootAbs: '/virtual' }),
   );
 });

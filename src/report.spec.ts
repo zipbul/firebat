@@ -408,11 +408,11 @@ describe('formatReport', () => {
 
   describe('unknown-proof body', () => {
     it('should render body with kind and symbol when findings exist', () => {
-      const finding: UnknownProofFinding = { kind: 'type-assertion', message: '', filePath: testFile, span: span(7, 1), symbol: 'myVar' };
+      const finding: UnknownProofFinding = { kind: 'unknown-type', message: '', filePath: testFile, span: span(7, 1), symbol: 'myVar' };
       const out = formatReport(makeReport(['unknown-proof'], { 'unknown-proof': [finding] }), 'text');
 
       expect(out).toContain('Unknown Proof');
-      expect(out).toContain('type-assertion');
+      expect(out).toContain('unknown-type');
       expect(out).toContain('myVar');
       expect(out).toContain('7:1');
     });

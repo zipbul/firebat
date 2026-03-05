@@ -22,7 +22,6 @@ export interface FirebatCliOptions {
   readonly exitOnFindings: boolean;
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly fix: boolean;
-  readonly unknownProofBoundaryGlobs?: ReadonlyArray<string>;
   readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;

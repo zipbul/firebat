@@ -68,7 +68,6 @@ describe('FirebatCliOptions', () => {
       // all optional fields omitted
     };
 
-    expect(opts.unknownProofBoundaryGlobs).toBeUndefined();
     expect(opts.barrelPolicyIgnoreGlobs).toBeUndefined();
     expect(opts.dependenciesLayers).toBeUndefined();
     expect(opts.dependenciesAllowedDependencies).toBeUndefined();

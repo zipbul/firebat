@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 
-import { err } from '@zipbul/result';
 import type { Gildash, SymbolSearchResult } from '@zipbul/gildash';
 
 import { parseSource } from '../../engine/ast/parse-source';
@@ -27,8 +26,8 @@ const mkSymbol = (
 });
 
 const createMockGildash = (overrides: {
-  searchSymbols?: (q: unknown) => SymbolSearchResult[] | ReturnType<typeof err>;
-  getAffected?: (changedFiles: string[]) => Promise<string[] | ReturnType<typeof err>>;
+  searchSymbols?: (q: unknown) => SymbolSearchResult[];
+  getAffected?: (changedFiles: string[]) => Promise<string[]>;
 } = {}): Gildash => {
   return {
     searchSymbols: overrides.searchSymbols ?? (() => []),

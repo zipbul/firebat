@@ -93,7 +93,7 @@ describe('integration/typecheck/report-integration', () => {
       const logger = createLogger();
 
       analyzeTypecheckMock.mockImplementationOnce(async () => {
-        throw new Error('tsgo failed');
+        throw new Error('typecheck failed');
       });
 
       // Act
@@ -115,7 +115,7 @@ describe('integration/typecheck/report-integration', () => {
 
       // Assert
       expect(report.meta.errors).toBeDefined();
-      expect(report.meta.errors?.typecheck ?? '').toContain('tsgo');
+      expect(report.meta.errors?.typecheck ?? '').toContain('typecheck');
       expect(report.analyses.typecheck).toBeUndefined();
     } finally {
       await project.dispose();

@@ -11,7 +11,7 @@ import { parseSource } from '../../../src/test-api';
 import type { ParsedFile } from '../../../src/test-api';
 import { analyzeEarlyReturn } from '../../../src/test-api';
 import { analyzeExceptionHygiene } from '../../../src/test-api';
-import { detectExactDuplicates } from '../../../src/test-api';
+import { analyzeDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 
 const SOURCE = `
@@ -77,7 +77,7 @@ describe('cross-feature integration', () => {
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
     const exceptionHygiene = analyzeExceptionHygiene(program);
-    const duplicates = detectExactDuplicates([...program], 5);
+    const duplicates = analyzeDuplicates([...program], { minSize: 5 });
     const nesting = analyzeNesting(program);
 
     // Assert — each returns a well-formed array

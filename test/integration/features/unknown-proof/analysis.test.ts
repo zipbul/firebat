@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import type { UnknownProofFinding } from '../../../../src/test-api';
@@ -8,16 +6,8 @@ import type { UnknownProofFinding } from '../../../../src/test-api';
 import { parseSource } from '../../../../src/test-api';
 import { PartialResultError } from '../../../../src/test-api';
 import { analyzeUnknownProof } from '../../../../src/test-api';
+import { createTempGildash } from '../../shared/gildash-test-kit';
 
-const DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS: ReadonlyArray<string> = ['src/adapters/**', 'src/infrastructure/**'];
-
-const writeText = async (filePath: string, text: string): Promise<void> => {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await Bun.write(filePath, text);
-};
-
-// Phase 0: unknown-proof should become a bare array result, and tool availability/errors
-// should be lifted out of findings at a higher layer (e.g., report.meta.errors).
 type UnknownProofRunResult =
   | { readonly ok: true; readonly findings: ReadonlyArray<UnknownProofFinding> }
   | { readonly ok: false; readonly error: unknown; readonly findings: ReadonlyArray<UnknownProofFinding> };
@@ -36,470 +26,260 @@ const runUnknownProof = async (fn: () => Promise<ReadonlyArray<UnknownProofFindi
   }
 };
 
-const assertOkOrFailed = (result: UnknownProofRunResult): void => {
-  expect([true, false]).toContain(result.ok);
-};
-
-const assertOkOrToolUnavailable = (
-  result: UnknownProofRunResult,
-  okPredicate: (findings: ReadonlyArray<UnknownProofFinding>) => boolean,
-): void => {
-  const okSatisfied = result.ok && okPredicate(result.findings);
-  const unavailableSatisfied = result.ok === false;
-
-  expect(okSatisfied || unavailableSatisfied).toBe(true);
-};
-
-const assertAnyOrToolUnavailable = (result: UnknownProofRunResult): void => {
-  const hasAny = result.findings.some((finding: UnknownProofFinding) => finding.kind === 'any-inferred');
-  const hasToolUnavailable = result.ok === false;
-
-  expect(hasAny || hasToolUnavailable).toBe(true);
-};
-
 describe('integration/unknown-proof', () => {
-  it('should allow boundary unknown when narrowed before propagation', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const adapterFile = path.join(rootAbs, 'src', 'adapters', 'entry.ts');
+  it('should return PartialResultError with expression findings when gildash not available', async () => {
+    // Arrange — code has both binding candidates (catch param) and expression candidates (as any)
+    const code = [
+      'export function fn() {',
+      '  try {} catch (e) { return e; }',
+      '  const x = {} as any;',
+      '  return x;',
+      '}',
+    ].join('\n');
+    const program = [parseSource('/virtual/mixed.ts', code)];
 
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
-        {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
-        },
-        null,
-        2,
-      ),
-    );
+    // Act — no gildash → binding candidates trigger PartialResultError
+    const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
-    await writeText(
-      adapterFile,
-      [
-        'export function handle(input: unknown) {',
-        '  if (typeof input === "string") {',
-        '    const out = input;',
-        '    return out.length > 0;',
-        '  }',
-        '',
-        '  return false;',
-        '}',
-      ].join('\n'),
-    );
-
-    const program = [parseSource(adapterFile, await Bun.file(adapterFile).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-        tsconfigPath,
-      }),
-    );
-
-    // Assert
-    assertOkOrFailed(result);
-    assertOkOrToolUnavailable(result, findings => findings.length === 0);
-
-    await rm(rootAbs, { recursive: true, force: true });
+    // Assert — partial result: expression findings returned, binding candidates not analyzed
+    expect(result.ok).toBe(false);
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.findings[0]!.kind).toBe('any-cast');
   });
 
-  it('should report propagating unknown in boundary files without narrowing', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const adapterFile = path.join(rootAbs, 'src', 'adapters', 'entry.ts');
+  it('should detect any-cast expression without gildash', async () => {
+    // Arrange — expression candidates (any-cast) don't need gildash
+    const code = 'export const x = {} as any;';
+    const program = [parseSource('/virtual/any-cast.ts', code)];
 
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
-        {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
-        },
-        null,
-        2,
-      ),
-    );
-
-    await writeText(
-      adapterFile,
-      [
-        'function forward(x: unknown) {',
-        '  return x;',
-        '}',
-        '',
-        'export function handle(input: unknown) {',
-        '  return forward(input);',
-        '}',
-      ].join('\n'),
-    );
-
-    const program = [parseSource(adapterFile, await Bun.file(adapterFile).text())];
     // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-        tsconfigPath,
-      }),
-    );
+    const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
-    // Assert
-    assertOkOrFailed(result);
-    assertOkOrToolUnavailable(result, findings =>
-      findings.some((finding: UnknownProofFinding) => finding.kind === 'unvalidated-unknown'),
-    );
-
-    await rm(rootAbs, { recursive: true, force: true });
+    // Assert — PartialResultError with any-cast finding
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.findings[0]!.kind).toBe('any-cast');
   });
 
-  it('should report type assertions when any assertion syntax is used', async () => {
+  it('should detect double-cast expression without gildash', async () => {
     // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'bad.ts');
+    const code = 'interface T { x: number; }\nexport const x = "" as unknown as T;';
+    const program = [parseSource('/virtual/double-cast.ts', code)];
 
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
-        {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
-        },
-        null,
-        2,
-      ),
-    );
-
-    await writeText(filePath, ['export function bad() {', '  const x = (1 as unknown);', '  return x;', '}'].join('\n'));
-
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
     // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
+    const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
     // Assert
-    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
-
-    await rm(rootAbs, { recursive: true, force: true });
+    expect(result.findings.length).toBeGreaterThan(0);
+    expect(result.findings[0]!.kind).toBe('double-cast');
   });
 
-  it('should report type assertions when angle-bracket assertion syntax is used', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'bad-angle.ts');
+  it('should return empty findings when no expression candidates and no gildash', async () => {
+    // Arrange — clean code without any-cast/double-cast expressions
+    const code = ['export function clean() {', '  const x: number = 42;', '  return x;', '}'].join('\n');
+    const program = [parseSource('/virtual/clean.ts', code)];
 
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
-        {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
-        },
-        null,
-        2,
-      ),
-    );
+    // Act — no gildash → PartialResultError for binding candidates, no expression candidates
+    const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
-    await writeText(filePath, ['export function badAngle() {', '  const x = (<unknown>1);', '  return x;', '}'].join('\n'));
-
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
-
-    // Assert
-    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
-
-    await rm(rootAbs, { recursive: true, force: true });
+    // Assert — partial result with 0 findings (no expression candidates found)
+    expect(result.ok).toBe(false);
+    expect(result.findings).toHaveLength(0);
   });
 
-  it('should skip const assertions when reporting type assertions', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'safe.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
-        {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+  describe('gildash semantic', () => {
+    const TSCONFIG_STRICT_UNKNOWN = JSON.stringify(
+      {
+        compilerOptions: {
+          strict: true,
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          useUnknownInCatchVariables: true,
         },
-        null,
-        2,
-      ),
+        include: ['src/**/*.ts'],
+      },
+      null,
+      2,
     );
 
-    await writeText(
-      filePath,
-      ['export function safe() {', '  const value = { a: 1 } as const;', '  return value;', '}'].join('\n'),
-    );
-
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
-
-    // Assert
-    assertOkOrToolUnavailable(result, findings =>
-      findings.every((finding: UnknownProofFinding) => finding.kind !== 'type-assertion'),
-    );
-
-    await rm(rootAbs, { recursive: true, force: true });
-  });
-
-  it('should still report type assertions when const assertions are wrapped by an outer assertion', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'wrapped.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
+    it('should detect unknown-type catch parameter', async () => {
+      // Arrange — catch (e) with unknown type, returned without narrowing
+      const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+          'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
+          '/virtual/src/catch.ts': [
+            'export function safeCatch() {',
+            '  try {} catch (e) { return e; }',
+            '}',
+          ].join('\n'),
         },
-        null,
-        2,
-      ),
-    );
+        { semantic: true },
+      );
 
-    await writeText(
-      filePath,
-      ['export function wrapped() {', '  const value = ({ a: 1 } as const) as unknown;', '  return value;', '}'].join('\n'),
-    );
+      try {
+        const filePath = path.join(tmpDir, 'src', 'catch.ts');
+        const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
+        // Act
+        const findings = analyzeUnknownProof(program, { gildash });
 
-    // Assert
-    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(true);
+        // Assert — catch param `e` is unknown and returned in untyped function → finding
+        expect(findings.some((f: UnknownProofFinding) => f.kind === 'unknown-type')).toBe(true);
+      } finally {
+        await cleanup();
+      }
+    });
 
-    await rm(rootAbs, { recursive: true, force: true });
-  });
-
-  it('should skip satisfies expressions when collecting type assertion candidates', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'satisfies.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
+    it('should suppress catch parameter narrowed by instanceof', async () => {
+      // Arrange — all usages of e are safe: instanceof narrows, throw rethrows
+      const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+          'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
+          '/virtual/src/narrowed.ts': [
+            'export function narrowed() {',
+            '  try {',
+            '    throw new Error("test");',
+            '  } catch (e) {',
+            '    if (e instanceof Error) {',
+            '      return e.message;',
+            '    }',
+            '    throw e;',
+            '  }',
+            '}',
+          ].join('\n'),
         },
-        null,
-        2,
-      ),
-    );
+        { semantic: true },
+      );
 
-    await writeText(
-      filePath,
-      [
-        'type Config = { a?: number };',
-        'export function ok() {',
-        '  const cfg = { a: 1 } satisfies Config;',
-        '  return cfg.a ?? 0;',
-        '}',
-      ].join('\n'),
-    );
+      try {
+        const filePath = path.join(tmpDir, 'src', 'narrowed.ts');
+        const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
+        // Act
+        const findings = analyzeUnknownProof(program, { gildash });
 
-    // Assert
-    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
+        // Assert — instanceof narrows type, throw is safe context → no findings
+        expect(findings.filter((f: UnknownProofFinding) => f.kind === 'unknown-type')).toHaveLength(0);
+      } finally {
+        await cleanup();
+      }
+    });
 
-    await rm(rootAbs, { recursive: true, force: true });
-  });
-
-  it('should report double-assertion for x as unknown as T and avoid duplicate single assertions', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'double.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
+    it('should suppress catch parameter in typed return function', async () => {
+      // Arrange — return e in a function with explicit return type → safe
+      const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+          'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
+          '/virtual/src/typed-return.ts': [
+            'export function typed(): unknown {',
+            '  try {} catch (e) { return e; }',
+            '  return null;',
+            '}',
+          ].join('\n'),
         },
-        null,
-        2,
-      ),
-    );
+        { semantic: true },
+      );
 
-    await writeText(
-      filePath,
-      ['export function bad() {', '  const x = (1 as unknown) as string;', '  return x;', '}'].join('\n'),
-    );
+      try {
+        const filePath = path.join(tmpDir, 'src', 'typed-return.ts');
+        const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
+        // Act
+        const findings = analyzeUnknownProof(program, { gildash });
 
-    // Assert
-    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'double-assertion')).toBe(true);
-    expect(result.findings.some((f: UnknownProofFinding) => f.kind === 'type-assertion')).toBe(false);
+        // Assert — return in typed function is safe context
+        expect(findings.filter((f: UnknownProofFinding) => f.kind === 'unknown-type')).toHaveLength(0);
+      } finally {
+        await cleanup();
+      }
+    });
 
-    await rm(rootAbs, { recursive: true, force: true });
-  });
-
-  it('should report unknown-type findings when explicit unknown appears outside boundary files', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'unknown.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
+    it('should report no findings for clean typed code', async () => {
+      // Arrange — all types are explicit, no unknown/any
+      const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+          'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
+          '/virtual/src/clean.ts': [
+            'export function clean() {',
+            '  const x: number = 42;',
+            '  return x;',
+            '}',
+          ].join('\n'),
         },
-        null,
-        2,
-      ),
-    );
+        { semantic: true },
+      );
 
-    await writeText(
-      filePath,
-      ['export function unknownCase() {', '  const value: unknown = 1;', '  return value;', '}'].join('\n'),
-    );
+      try {
+        const filePath = path.join(tmpDir, 'src', 'clean.ts');
+        const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-      }),
-    );
+        // Act
+        const findings = analyzeUnknownProof(program, { gildash });
 
-    // Assert
-    assertOkOrFailed(result);
-    assertOkOrToolUnavailable(result, findings => findings.some((f: UnknownProofFinding) => f.kind === 'unknown-type'));
+        // Assert
+        expect(findings).toHaveLength(0);
+      } finally {
+        await cleanup();
+      }
+    });
 
-    await rm(rootAbs, { recursive: true, force: true });
-  });
-
-  it('should not report unknown-type findings when explicit unknown appears in boundary files', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'adapters', 'unknown.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
+    it('should suppress catch parameter cast to typed function arg', async () => {
+      // Arrange — e is cast to Error then passed to a typed function
+      const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+          'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
+          '/virtual/src/cast-arg.ts': [
+            'function logError(err: Error): void { console.error(err); }',
+            'export function caller() {',
+            '  try {} catch (e) { logError(e as Error); }',
+            '}',
+          ].join('\n'),
         },
-        null,
-        2,
-      ),
-    );
+        { semantic: true },
+      );
 
-    await writeText(filePath, ['export function unknownBoundary(value: unknown) {', '  return value;', '}'].join('\n'));
+      try {
+        const filePath = path.join(tmpDir, 'src', 'cast-arg.ts');
+        const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-        boundaryGlobs: DEFAULT_UNKNOWN_PROOF_BOUNDARY_GLOBS,
-      }),
-    );
+        // Act
+        const findings = analyzeUnknownProof(program, { gildash });
 
-    // Assert
-    assertOkOrFailed(result);
-    assertOkOrToolUnavailable(result, findings => findings.every((f: UnknownProofFinding) => f.kind !== 'unknown-type'));
+        // Assert — `e as Error` is TSAsExpression safe context
+        expect(findings.filter((f: UnknownProofFinding) => f.kind === 'unknown-type')).toHaveLength(0);
+      } finally {
+        await cleanup();
+      }
+    });
 
-    await rm(rootAbs, { recursive: true, force: true });
-  });
-
-  it('should report any inferred when files are outside boundary (tsgo proof)', async () => {
-    // Arrange
-    const rootAbs = await mkdtemp(path.join(tmpdir(), 'firebat-unknown-proof-'));
-    const tsconfigPath = path.join(rootAbs, 'tsconfig.json');
-    const filePath = path.join(rootAbs, 'src', 'features', 'any.ts');
-
-    await writeText(
-      tsconfigPath,
-      JSON.stringify(
+    it('should detect catch parameter used unsafely in assignment', async () => {
+      // Arrange — e assigned to a variable without narrowing → unsafe
+      const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
-          compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-          include: ['src/**/*.ts'],
+          'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
+          '/virtual/src/unsafe-assign.ts': [
+            'let captured: unknown;',
+            'export function unsafe() {',
+            '  try {} catch (e) { captured = e; }',
+            '  return captured;',
+            '}',
+          ].join('\n'),
         },
-        null,
-        2,
-      ),
-    );
+        { semantic: true },
+      );
 
-    await writeText(
-      filePath,
-      ['export function anyCase() {', '  const data = JSON.parse("{}")', '  return data;', '}'].join('\n'),
-    );
+      try {
+        const filePath = path.join(tmpDir, 'src', 'unsafe-assign.ts');
+        const program = [parseSource(filePath, await Bun.file(filePath).text())];
 
-    const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    // Act
-    const result = await runUnknownProof(() =>
-      analyzeUnknownProof(program, {
-        rootAbs,
-        tsconfigPath,
-      }),
-    );
+        // Act
+        const findings = analyzeUnknownProof(program, { gildash });
 
-    // Assert
-    assertAnyOrToolUnavailable(result);
-
-    await rm(rootAbs, { recursive: true, force: true });
+        // Assert — e is assigned without narrowing → should produce finding
+        expect(findings.some((f: UnknownProofFinding) => f.kind === 'unknown-type')).toBe(true);
+      } finally {
+        await cleanup();
+      }
+    });
   });
 });

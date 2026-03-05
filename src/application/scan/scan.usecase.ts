@@ -174,9 +174,24 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Repositories created');
 
+  const needsSemantic = options.detectors.includes('unknown-proof');
   const tIndex0 = nowMs();
-  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
-  logger.info('Indexing complete (gildash)', { targetCount: options.targets.length, durationMs: Math.round(nowMs() - tIndex0) });
+  let gildash: Awaited<ReturnType<typeof createGildash>>;
+  let semanticAvailable = false;
+
+  if (needsSemantic) {
+    try {
+      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true });
+      semanticAvailable = true;
+    } catch {
+      logger.warn('Semantic init failed, falling back to AST-only');
+      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
+    }
+  } else {
+    gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
+  }
+
+  logger.info('Indexing complete (gildash)', { targetCount: options.targets.length, semantic: semanticAvailable, durationMs: Math.round(nowMs() - tIndex0) });
 
   const tNamespace0 = nowMs();
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
@@ -205,9 +220,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
     maxForwardDepth: options.maxForwardDepth,
     ...(options.detectors.includes('waste') ? { wasteMemoryRetentionThreshold: options.wasteMemoryRetentionThreshold } : {}),
-    ...(options.detectors.includes('unknown-proof')
-      ? { unknownProofBoundaryGlobs: options.unknownProofBoundaryGlobs ?? [] }
-      : {}),
     ...(options.detectors.includes('barrel-policy') ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] } : {}),
     ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
       ? {
@@ -449,46 +461,36 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         });
       })()
     : Promise.resolve(createEmptyBarrelPolicy());
-  const unknownProofPromise = options.detectors.includes('unknown-proof')
-    ? ((): Promise<UnknownProofResult> => {
-        const t0 = nowMs();
-        const detectorKey = 'unknown-proof';
+  let unknownProofResult: UnknownProofResult = createEmptyUnknownProof();
 
-        logger.info('detector: start', { detector: detectorKey });
+  if (options.detectors.includes('unknown-proof')) {
+    const t0 = nowMs();
+    const detectorKey = 'unknown-proof';
 
-        return analyzeUnknownProof(program, {
-          rootAbs: ctx.rootAbs,
-          ...(options.unknownProofBoundaryGlobs !== undefined ? { boundaryGlobs: options.unknownProofBoundaryGlobs } : {}),
-          logger,
-        })
-          .then(r => {
-            const durationMs = nowMs() - t0;
+    logger.info('detector: start', { detector: detectorKey });
 
-            detectorTimings[detectorKey] = durationMs;
+    try {
+      unknownProofResult = analyzeUnknownProof(program, {
+        rootAbs: ctx.rootAbs,
+        ...(semanticAvailable ? { gildash } : {}),
+      });
+      detectorTimings[detectorKey] = nowMs() - t0;
 
-            logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
+      logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey]!) });
+    } catch (err) {
+      detectorTimings[detectorKey] = nowMs() - t0;
 
-            return r;
-          })
-          .catch(err => {
-            const durationMs = nowMs() - t0;
+      const message = err instanceof Error ? err.message : String(err);
 
-            detectorTimings[detectorKey] = durationMs;
+      metaErrors[detectorKey] = message;
 
-            const message = err instanceof Error ? err.message : String(err);
+      const partial = (err as any)?.partial;
 
-            metaErrors[detectorKey] = message;
-
-            const partial = (err as any)?.partial;
-
-            if (Array.isArray(partial)) {
-              return partial as UnknownProofResult;
-            }
-
-            return createEmptyUnknownProof();
-          });
-      })()
-    : Promise.resolve(createEmptyUnknownProof());
+      if (Array.isArray(partial)) {
+        unknownProofResult = partial as UnknownProofResult;
+      }
+    }
+  }
   const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
     ? ((): Promise<TypecheckResult | null> => {
         const t0 = nowMs();
@@ -512,7 +514,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
             const message = err instanceof Error ? err.message : String(err);
 
-            metaErrors.typecheck = message.includes('tsgo') ? message : `tsgo: ${message}`;
+            metaErrors.typecheck = message;
 
             logger.debug('detector: failed', {
               detector: detectorKey,
@@ -642,13 +644,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     forwarding = createEmptyForwarding();
   }
 
-  const [barrelPolicy, unknownProof, lint, typecheck, format] = await Promise.all([
+  const [barrelPolicy, lint, typecheck, format] = await Promise.all([
     barrelPolicyPromise,
-    unknownProofPromise,
     lintPromise ?? Promise.resolve(createEmptyLint()),
     typecheckPromise,
     formatPromise ?? Promise.resolve(createEmptyFormat()),
   ]);
+  const unknownProof = unknownProofResult;
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 
@@ -959,12 +961,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const enrichUnknownProof = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
     const kindToCode: Record<Exclude<UnknownProofFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
-      'type-assertion': 'UNKNOWN_TYPE_ASSERTION',
-      'double-assertion': 'UNKNOWN_DOUBLE_ASSERTION',
       'unknown-type': 'UNKNOWN_UNNARROWED',
-      'unvalidated-unknown': 'UNKNOWN_UNVALIDATED',
       'unknown-inferred': 'UNKNOWN_INFERRED',
       'any-inferred': 'UNKNOWN_ANY_INFERRED',
+      'any-cast': 'UNKNOWN_ANY_CAST',
+      'double-cast': 'UNKNOWN_DOUBLE_CAST',
     };
 
     return items.filter((item: any) => item?.kind !== 'tool-unavailable').map(item => {
@@ -1151,7 +1152,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             span: item?.span,
           };
         }),
-        ...(group?.suggestedParams !== undefined ? { suggestedParams: group.suggestedParams } : {}),
+        ...(group?.suggestedParams !== undefined ? { params: group.suggestedParams } : {}),
       };
     });
   };
@@ -1261,7 +1262,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') } : {}),
     ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') } : {}),
     ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': enrichPhase1(abstractionFitness as any, 'ABSTRACTION_FITNESS') } : {}),
-    ...(selectedDetectors.has('duplicates') ? { duplicates: duplicatesUnified } : {}),
+    ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified as any) } : {}),
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as any });
   const catalog = buildCatalog({ analyses, diagnostics });

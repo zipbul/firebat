@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
 import type { Gildash } from '@zipbul/gildash';
-import { err } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ describe('computeProjectInputsDigest', () => {
   it('[ED] returns hash for non-existent rootAbs (missing files treated stably)', async () => {
     const result = await computeProjectInputsDigest({
       rootAbs: '/nonexistent/path/99999',
-      gildash: makeGildash(() => err({ type: 'closed' as const, message: 'closed' }) as ReturnType<Gildash['getFileInfo']>),
+      gildash: makeGildash((): ReturnType<Gildash['getFileInfo']> => { throw new GildashError('closed', 'closed'); }),
     });
 
     expect(typeof result).toBe('string');

@@ -49,7 +49,6 @@ import { __testing__, runCli } from './entry';
 
 const {
   resolveEnabledDetectorsFromFeatures,
-  resolveUnknownProofBoundaryGlobsFromFeatures,
   resolveBarrelPolicyIgnoreGlobsFromFeatures,
   resolveDependenciesLayersFromFeatures,
   resolveDependenciesAllowedDependenciesFromFeatures,
@@ -83,32 +82,6 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
     const result = resolveEnabledDetectorsFromFeatures({} as never);
 
     expect(result).toContain('duplicates');
-  });
-});
-
-describe('resolveUnknownProofBoundaryGlobsFromFeatures', () => {
-  it('should return undefined when features is undefined', () => {
-    expect(resolveUnknownProofBoundaryGlobsFromFeatures(undefined)).toBeUndefined();
-  });
-
-  it('should return undefined when unknown-proof is true (boolean)', () => {
-    expect(resolveUnknownProofBoundaryGlobsFromFeatures({ 'unknown-proof': true } as never)).toBeUndefined();
-  });
-
-  it('should return boundaryGlobs array when properly configured', () => {
-    const result = resolveUnknownProofBoundaryGlobsFromFeatures({
-      'unknown-proof': { boundaryGlobs: ['src/**', 'lib/**'] },
-    } as never);
-
-    expect(result).toEqual(['src/**', 'lib/**']);
-  });
-
-  it('should return undefined when boundaryGlobs contains non-strings', () => {
-    const result = resolveUnknownProofBoundaryGlobsFromFeatures({
-      'unknown-proof': { boundaryGlobs: [123, 'src/**'] },
-    } as never);
-
-    expect(result).toBeUndefined();
   });
 });
 

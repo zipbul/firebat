@@ -16,6 +16,8 @@ import { analyzeImplementationOverhead } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
 import { analyzeForwarding } from '../../../src/test-api';
 
+import { buildMockGildashFromSources } from './forwarding/mock-gildash-helper';
+
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 const parse = (src: string, path = 'src/test.ts') => parseSource(path, src);
@@ -143,21 +145,23 @@ describe('threshold/decision-surface', () => {
 // ── forwarding ───────────────────────────────────────────────────────────────
 
 describe('threshold/forwarding', () => {
-  it('direct call without forwarding → no finding', () => {
+  it('direct call without forwarding → no finding', async () => {
     const src = [
       'export const add = (a: number, b: number) => a + b;',
     ].join('\n');
-    const findings = analyzeForwarding([parse(src)], 1);
+    const emptyGildash = buildMockGildashFromSources({});
+    const findings = await analyzeForwarding(emptyGildash, [parse(src)], 1, '/virtual');
 
     expect(findings).toHaveLength(0);
   });
 
-  it('two independent functions → no finding', () => {
+  it('two independent functions → no finding', async () => {
     const src = [
       'export const double = (x: number) => x * 2;',
       'export const triple = (x: number) => x * 3;',
     ].join('\n');
-    const findings = analyzeForwarding([parse(src)], 1);
+    const emptyGildash = buildMockGildashFromSources({});
+    const findings = await analyzeForwarding(emptyGildash, [parse(src)], 1, '/virtual');
 
     expect(findings).toHaveLength(0);
   });

@@ -18,7 +18,7 @@ import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { resolveTargets } from '../../shared/target-discovery';
 import { createGildash } from '../../store/gildash';
 
-import { isErr } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
@@ -84,22 +84,6 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
   }
 
   return forwarding.maxForwardDepth;
-};
-
-const resolveUnknownProofBoundaryGlobsFromFeatures = (
-  features: FirebatConfig['features'] | undefined,
-): ReadonlyArray<string> | undefined => {
-  const { 'unknown-proof': value } = features ?? {};
-
-  if (!value || value === true || typeof value !== 'object') {
-    return undefined;
-  }
-
-  const boundaryGlobs = value.boundaryGlobs;
-
-  return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
-    ? boundaryGlobs
-    : undefined;
 };
 
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
@@ -463,17 +447,14 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         try {
           const gildash = await ensureGildash();
           const affectedResult = await gildash.getAffected(targets);
+          const expanded = new Set([...targets, ...affectedResult]);
 
-          if (!isErr(affectedResult)) {
-            const expanded = new Set([...targets, ...affectedResult]);
-
-            mcpLogger.info('expandAffected: scope expanded', {
-              original: targets.length,
-              affected: affectedResult.length,
-              total: expanded.size,
-            });
-            targets = Array.from(expanded);
-          }
+          mcpLogger.info('expandAffected: scope expanded', {
+            original: targets.length,
+            affected: affectedResult.length,
+            total: expanded.size,
+          });
+          targets = Array.from(expanded);
         } catch {
           mcpLogger.warn('expandAffected: getAffected failed, using original targets');
         }
@@ -482,7 +463,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
       const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
-      const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(effectiveFeatures);
       const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(effectiveFeatures);
       const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(effectiveFeatures);
       const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(effectiveFeatures);
@@ -494,7 +474,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         exitOnFindings: false,
         detectors: args.detectors !== undefined ? asDetectors(args.detectors) : cfgDetectors,
         fix: false,
-        ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
         ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
         ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
         ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
@@ -540,25 +519,29 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof IndexExternalPackagesInputSchema>) => {
       const gildash = await ensureGildash();
-      const result = await gildash.indexExternalPackages(args.packages);
 
-      if (isErr(result)) {
+      try {
+        const result = await gildash.indexExternalPackages(args.packages);
+
+        const summary = result.map(r => ({
+          project: r.project,
+          filesIndexed: r.filesIndexed,
+          symbolsExtracted: r.symbolsExtracted,
+          relationsExtracted: r.relationsExtracted,
+        }));
+
         return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `indexExternalPackages failed: ${result.data.message}` }],
+          content: [{ type: 'text' as const, text: JSON.stringify({ packages: args.packages, results: summary }) }],
         };
+      } catch (e) {
+        if (e instanceof GildashError) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `indexExternalPackages failed: ${e.message}` }],
+          };
+        }
+        throw e;
       }
-
-      const summary = result.map(r => ({
-        project: r.project,
-        filesIndexed: r.filesIndexed,
-        symbolsExtracted: r.symbolsExtracted,
-        relationsExtracted: r.relationsExtracted,
-      }));
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ packages: args.packages, results: summary }) }],
-      };
     }),
   );
 
@@ -586,34 +569,38 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof DependencyQueryInputSchema>) => {
       const gildash = await ensureGildash();
-      const result = args.direction === 'dependencies'
-        ? gildash.getDependencies(args.filePath)
-        : gildash.getDependents(args.filePath);
 
-      if (isErr(result)) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `query-dependencies failed: ${result.data.message}` }],
+      try {
+        const result = args.direction === 'dependencies'
+          ? gildash.getDependencies(args.filePath)
+          : gildash.getDependents(args.filePath);
+
+        const toRel = (p: string): string => {
+          const rel = p.startsWith(rootAbs) ? p.slice(rootAbs.length + 1) : p;
+
+          return rel.replaceAll('\\', '/');
         };
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              filePath: args.filePath,
+              direction: args.direction,
+              count: result.length,
+              files: result.map(toRel),
+            }),
+          }],
+        };
+      } catch (e) {
+        if (e instanceof GildashError) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `query-dependencies failed: ${e.message}` }],
+          };
+        }
+        throw e;
       }
-
-      const toRel = (p: string): string => {
-        const rel = p.startsWith(rootAbs) ? p.slice(rootAbs.length + 1) : p;
-
-        return rel.replaceAll('\\', '/');
-      };
-
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({
-            filePath: args.filePath,
-            direction: args.direction,
-            count: result.length,
-            files: result.map(toRel),
-          }),
-        }],
-      };
     }),
   );
 
@@ -637,29 +624,33 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof SymbolsByFileInputSchema>) => {
       const gildash = await ensureGildash();
-      const result = gildash.getSymbolsByFile(args.filePath);
 
-      if (isErr(result)) {
+      try {
+        const result = gildash.getSymbolsByFile(args.filePath);
+
+        const symbols = result.map(s => ({
+          name: s.name,
+          kind: s.kind,
+          isExported: s.isExported,
+          span: s.span,
+          signature: s.signature,
+        }));
+
         return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `symbols-by-file failed: ${result.data.message}` }],
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ filePath: args.filePath, count: symbols.length, symbols }),
+          }],
         };
+      } catch (e) {
+        if (e instanceof GildashError) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `symbols-by-file failed: ${e.message}` }],
+          };
+        }
+        throw e;
       }
-
-      const symbols = result.map(s => ({
-        name: s.name,
-        kind: s.kind,
-        isExported: s.isExported,
-        span: s.span,
-        signature: s.signature,
-      }));
-
-      return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify({ filePath: args.filePath, count: symbols.length, symbols }),
-        }],
-      };
     }),
   );
 

@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import * as path from 'node:path';
 
 import type { Gildash } from '@zipbul/gildash';
-import { isErr } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 
 import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
 import type { ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
@@ -486,10 +486,13 @@ const buildImportIndex = (
   gildash: Gildash,
   rootAbs: string,
 ): Map<string, Map<string, ImportTarget>> => {
-  const importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+  let importRels: ReturnType<Gildash['searchRelations']>;
 
-  if (isErr(importRels)) {
-    return new Map();
+  try {
+    importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+  } catch (e) {
+    if (e instanceof GildashError) return new Map();
+    throw e;
   }
 
   const index = new Map<string, Map<string, ImportTarget>>();
@@ -515,10 +518,13 @@ const buildExportIndex = (
   gildash: Gildash,
   rootAbs: string,
 ): Map<string, Set<string>> => {
-  const allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+  let allExported: ReturnType<Gildash['searchSymbols']>;
 
-  if (isErr(allExported)) {
-    return new Map();
+  try {
+    allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+  } catch (e) {
+    if (e instanceof GildashError) return new Map();
+    throw e;
   }
 
   const index = new Map<string, Set<string>>();

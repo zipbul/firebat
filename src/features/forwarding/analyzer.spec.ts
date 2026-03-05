@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { err } from '@zipbul/result';
-import type { Gildash, GildashError, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
+import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
 
 import type { ParsedFile } from '../../engine/types';
 
@@ -13,8 +12,8 @@ import { analyzeForwarding } from './analyzer';
 /* ------------------------------------------------------------------ */
 
 const createMockGildash = (overrides: {
-  searchRelations?: (q: unknown) => CodeRelation[] | ReturnType<typeof err>;
-  searchSymbols?: (q: unknown) => SymbolSearchResult[] | ReturnType<typeof err>;
+  searchRelations?: (q: unknown) => CodeRelation[];
+  searchSymbols?: (q: unknown) => SymbolSearchResult[];
 } = {}): Gildash => {
   return {
     searchRelations: overrides.searchRelations ?? (() => []),

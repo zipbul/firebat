@@ -18,10 +18,6 @@ interface CliLoggerInput {
   readonly logStack: FirebatCliOptions['logStack'];
 }
 
-interface UnknownProofFeatureValue {
-  readonly boundaryGlobs?: unknown;
-}
-
 interface BarrelPolicyFeatureValue {
   readonly ignoreGlobs?: unknown;
 }
@@ -111,7 +107,6 @@ const printHelp = (): void => {
     '',
     `  ${hc('CONFIG-ONLY OPTIONS', `${H.bold}${H.yellow}`, c)}  ${hc('(set in .firebatrc.jsonc)', H.dim, c)}`,
     '',
-    `    ${hc('features["unknown-proof"].boundaryGlobs', H.gray, c)}   Boundary glob patterns`,
     `    ${hc('features["barrel-policy"].ignoreGlobs', H.gray, c)}    Ignore glob patterns`,
     '',
     `  ${hc('EXAMPLES', `${H.bold}${H.yellow}`, c)}`,
@@ -188,22 +183,6 @@ const appendCliErrorLog = async (err: unknown): Promise<void> => {
   } catch (logErr) {
     process.stderr.write(`[firebat] Failed to append CLI error log: ${String(logErr)}\n`);
   }
-};
-
-const resolveUnknownProofBoundaryGlobsFromFeatures = (
-  features: FirebatConfig['features'] | undefined,
-): ReadonlyArray<string> | undefined => {
-  const { 'unknown-proof': value } = features ?? {};
-
-  if (!value || value === true || typeof value !== 'object') {
-    return undefined;
-  }
-
-  const boundaryGlobs = (value as UnknownProofFeatureValue).boundaryGlobs;
-
-  return Array.isArray(boundaryGlobs) && boundaryGlobs.every((element: unknown) => typeof element === 'string')
-    ? boundaryGlobs
-    : undefined;
 };
 
 const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
@@ -332,7 +311,6 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
   const cfgWasteMemoryRetentionThreshold = resolveWasteMemoryRetentionThresholdFromFeatures(featuresCfg);
-  const cfgUnknownProofBoundaryGlobs = resolveUnknownProofBoundaryGlobsFromFeatures(featuresCfg);
   const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
   const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(featuresCfg);
   const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(featuresCfg);
@@ -351,7 +329,6 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     ...(cfgWasteMemoryRetentionThreshold !== undefined
       ? { wasteMemoryRetentionThreshold: cfgWasteMemoryRetentionThreshold }
       : {}),
-    ...(cfgUnknownProofBoundaryGlobs !== undefined ? { unknownProofBoundaryGlobs: cfgUnknownProofBoundaryGlobs } : {}),
     ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
     ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
     ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
@@ -447,7 +424,6 @@ export { runCli };
 
 export const __testing__ = {
   resolveEnabledDetectorsFromFeatures,
-  resolveUnknownProofBoundaryGlobsFromFeatures,
   resolveBarrelPolicyIgnoreGlobsFromFeatures,
   resolveDependenciesLayersFromFeatures,
   resolveDependenciesAllowedDependenciesFromFeatures,

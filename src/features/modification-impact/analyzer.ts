@@ -1,5 +1,5 @@
 import type { Gildash } from '@zipbul/gildash';
-import { isErr } from '@zipbul/result';
+import { GildashError } from '@zipbul/gildash';
 
 import type { ParsedFile } from '../../engine/types';
 import type { ModificationImpactFinding } from '../../types';
@@ -56,13 +56,18 @@ const analyzeModificationImpact = async (
 
   /* ── Exports from gildash ── */
 
-  const allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+  let allExported: ReturnType<Gildash['searchSymbols']>;
 
-  if (isErr(allExported)) {
-    return createEmptyModificationImpact();
+  try {
+    allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+  } catch (e) {
+    if (e instanceof GildashError) return createEmptyModificationImpact();
+    throw e;
   }
 
   const exports: ExportRef[] = [];
+  /** Map fileIndex → gildash-native filePath (used for getAffected calls) */
+  const gildashPathByFile = new Map<number, string>();
 
   for (const sym of allExported) {
     const rel = normalizeFile(sym.filePath);
@@ -75,6 +80,10 @@ const analyzeModificationImpact = async (
     if (!file || file.errors.length > 0) continue;
 
     if (!rel.endsWith('.ts')) continue;
+
+    if (!gildashPathByFile.has(fileIndex)) {
+      gildashPathByFile.set(fileIndex, sym.filePath);
+    }
 
     exports.push({
       fileIndex,
@@ -100,16 +109,22 @@ const analyzeModificationImpact = async (
     let affected = affectedCache.get(ex.fileIndex);
 
     if (affected === undefined) {
-      const absPath = files[ex.fileIndex]?.filePath;
+      const gildashPath = gildashPathByFile.get(ex.fileIndex);
 
-      if (!absPath) {
+      if (!gildashPath) {
         affectedCache.set(ex.fileIndex, []);
         continue;
       }
 
-      const affectedResult = await gildash.getAffected([absPath]);
-
-      affected = isErr(affectedResult) ? [] : affectedResult;
+      try {
+        affected = await gildash.getAffected([gildashPath]);
+      } catch (e) {
+        if (e instanceof GildashError) {
+          affected = [];
+        } else {
+          throw e;
+        }
+      }
       affectedCache.set(ex.fileIndex, affected);
     }
 

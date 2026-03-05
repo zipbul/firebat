@@ -1,121 +1,36 @@
 import type { Node } from 'oxc-parser';
 
-import * as path from 'node:path';
-
 import type { ParsedFile } from '../../engine/types';
-import type { SourceSpan, UnknownProofFinding } from '../../types';
+import type { SourceSpan } from '../../types';
 
 import { isNodeRecord, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
+
+type NodeLike = Record<string, unknown>;
 
 interface BindingCandidate {
   readonly name: string;
   readonly offset: number;
   readonly span: SourceSpan;
+  readonly isCatchParam: boolean;
+  readonly initCalleeEndOffset?: number;
+  readonly initObjectEndOffset?: number;
+  readonly iterableEndOffset?: number;
+  readonly hasExplicitAnyTypeArg?: boolean;
+  readonly catchBodyRange?: { readonly start: number; readonly end: number };
+  readonly hasExplicitAnnotation?: boolean;
+  readonly scopeRange: { readonly start: number; readonly end: number };
 }
 
-type BoundaryUsageKind = 'call' | 'assign' | 'store' | 'return' | 'throw';
-
-interface BoundaryUsageCandidate {
-  readonly name: string;
-  readonly offset: number;
+interface ExpressionCandidate {
+  readonly kind: 'any-cast' | 'double-cast';
   readonly span: SourceSpan;
-  readonly usageKind: BoundaryUsageKind;
+  readonly sourceSnippet: string;
 }
 
-type NodeLike = Record<string, unknown>;
-
-interface UnknownProofCandidates {
-  readonly typeAssertionFindings: ReadonlyArray<UnknownProofFinding>;
-  readonly nonBoundaryBindings: ReadonlyArray<BindingCandidate>;
-  readonly boundaryUnknownUsages: ReadonlyArray<BoundaryUsageCandidate>;
-}
-
-interface CollectUnknownProofCandidatesInput {
+interface CollectBindingCandidatesInput {
   readonly program: ReadonlyArray<ParsedFile>;
-  readonly rootAbs: string;
-  readonly boundaryGlobs?: ReadonlyArray<string>;
 }
-
-interface CollectUnknownProofCandidatesOutput {
-  readonly boundaryGlobs: ReadonlyArray<string>;
-  readonly perFile: ReadonlyMap<string, UnknownProofCandidates>;
-}
-
-interface CollectBoundaryUnknownUsagesInput {
-  readonly program: unknown;
-  readonly sourceText: string;
-  readonly unknownBindings: ReadonlyArray<BindingCandidate>;
-}
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
-
-const toRelPath = (rootAbs: string, fileAbs: string): string => {
-  const rel = path.relative(rootAbs, fileAbs);
-
-  return normalizePath(rel);
-};
-
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const globToRegExp = (pattern: string): RegExp => {
-  // Supports: **, *, ?, and path separators '/'.
-  // - ** matches any characters including '/'
-  // - * matches any characters except '/'
-  let out = '^';
-  let i = 0;
-
-  while (i < pattern.length) {
-    const ch = pattern[i] ?? '';
-
-    if (ch === '*') {
-      const next = pattern[i + 1];
-
-      if (next === '*') {
-        out += '.*';
-        i += 2;
-
-        continue;
-      }
-
-      out += '[^/]*';
-      i += 1;
-
-      continue;
-    }
-
-    if (ch === '?') {
-      out += '[^/]';
-      i += 1;
-
-      continue;
-    }
-
-    out += escapeRegex(ch);
-    i += 1;
-  }
-
-  out += '$';
-
-  return new RegExp(out);
-};
-
-const compileGlobs = (patterns: ReadonlyArray<string>): ReadonlyArray<RegExp> => {
-  return patterns
-    .map(p => p.trim())
-    .filter(p => p.length > 0)
-    .map(p => globToRegExp(normalizePath(p)));
-};
-
-const isBoundaryFile = (rootAbs: string, fileAbs: string, boundaryGlobs: ReadonlyArray<RegExp>): boolean => {
-  const rel = toRelPath(rootAbs, fileAbs);
-
-  if (rel.startsWith('..')) {
-    return false;
-  }
-
-  return boundaryGlobs.some(re => re.test(rel));
-};
 
 const toSpanFromOffsets = (sourceText: string, startOffset: number, endOffset: number): SourceSpan => {
   const start = getLineColumn(sourceText, Math.max(0, startOffset));
@@ -130,56 +45,6 @@ const asNodeLike = (value: unknown): NodeLike | null => {
   }
 
   return value as NodeLike;
-};
-
-const collectStringsFromNode = (node: unknown): string[] => {
-  const out: string[] = [];
-
-  const visit = (value: unknown): void => {
-    if (value === null || value === undefined) {
-      return;
-    }
-
-    if (typeof value === 'string') {
-      out.push(value);
-
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        visit(entry);
-      }
-
-      return;
-    }
-
-    if (typeof value === 'object') {
-      for (const v of Object.values(value)) {
-        visit(v);
-      }
-    }
-  };
-
-  visit(node);
-
-  return out;
-};
-
-const containsTsKeyword = (node: unknown, keywordType: 'TSUnknownKeyword' | 'TSAnyKeyword'): boolean => {
-  let found = false;
-
-  walkOxcTree(node as Node, (n: Node) => {
-    if (n.type === keywordType) {
-      found = true;
-
-      return false;
-    }
-
-    return true;
-  });
-
-  return found;
 };
 
 const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> => {
@@ -201,673 +66,471 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
     return extractBindingIdentifiers(patternNode.argument);
   }
 
+  if (patternNode.type === 'ObjectPattern') {
+    const properties = patternNode.properties;
+
+    if (Array.isArray(properties)) {
+      const results: NodeLike[] = [];
+
+      for (const prop of properties) {
+        const propNode = asNodeLike(prop);
+
+        if (!propNode) continue;
+
+        if (propNode.type === 'RestElement') {
+          results.push(...extractBindingIdentifiers(propNode.argument));
+        } else {
+          // Property node — value holds the binding pattern
+          results.push(...extractBindingIdentifiers(propNode.value));
+        }
+      }
+
+      return results;
+    }
+  }
+
+  if (patternNode.type === 'ArrayPattern') {
+    const elements = patternNode.elements;
+
+    if (Array.isArray(elements)) {
+      const results: NodeLike[] = [];
+
+      for (const el of elements) {
+        if (el === null) continue; // sparse slot
+        results.push(...extractBindingIdentifiers(el));
+      }
+
+      return results;
+    }
+  }
+
   return [];
 };
 
-const collectUnknownAnnotatedBindings = (program: unknown, sourceText: string): ReadonlyArray<BindingCandidate> => {
-  const out: BindingCandidate[] = [];
-
-  const addIfUnknown = (id: unknown): void => {
-    const idNode = asNodeLike(id);
-
-    if (!idNode || idNode.type !== 'Identifier' || typeof idNode.name !== 'string') {
-      return;
-    }
-
-    const typeAnn = idNode.typeAnnotation;
-
-    if (!typeAnn || !containsTsKeyword(typeAnn, 'TSUnknownKeyword')) {
-      return;
-    }
-
-    const startOffset = typeof idNode.start === 'number' ? idNode.start : 0;
-    const endOffset = typeof idNode.end === 'number' ? idNode.end : startOffset;
-
-    out.push({ name: idNode.name, offset: startOffset, span: toSpanFromOffsets(sourceText, startOffset, endOffset) });
-  };
-
-  walkOxcTree(program as Node, (node: Node) => {
-    if (!isNodeRecord(node)) {
-      return true;
-    }
-
-    if (node.type === 'VariableDeclarator') {
-      const ids = extractBindingIdentifiers(asNodeLike(node)?.id);
-
-      for (const id of ids) {
-        addIfUnknown(id);
-      }
-    }
-
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
-      const params = asNodeLike(node)?.params;
-
-      if (Array.isArray(params)) {
-        for (const p of params) {
-          const ids = extractBindingIdentifiers(p);
-
-          for (const id of ids) {
-            addIfUnknown(id);
-          }
-        }
-      }
-    }
-
-    return true;
-  });
-
-  return out;
-};
-
-interface WalkStackEntry {
-  readonly node: unknown;
-  readonly keyInParent: string | null;
-}
-
-const walkOxcTreeWithStack = (root: unknown, visit: (node: unknown, stack: ReadonlyArray<WalkStackEntry>) => void): void => {
-  const seen = new Set<NodeLike>();
-
-  const rec = (value: unknown, keyInParent: string | null, stack: ReadonlyArray<WalkStackEntry>): void => {
-    if (value === null || value === undefined) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        rec(entry, keyInParent, stack);
-      }
-
-      return;
-    }
-
-    if (typeof value !== 'object') {
-      return;
-    }
-
-    if (!isNodeRecord(value as Node)) {
-      for (const [k, v] of Object.entries(value)) {
-        rec(v, k, stack);
-      }
-
-      return;
-    }
-
-    if (seen.has(value as NodeLike)) {
-      return;
-    }
-
-    seen.add(value as NodeLike);
-
-    const nextStack = [...stack, { node: value, keyInParent }];
-
-    visit(value, nextStack);
-
-    for (const [k, v] of Object.entries(value)) {
-      rec(v, k, nextStack);
-    }
-  };
-
-  rec(root, null, []);
-};
-
-const isInMemberPropertyPosition = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  const self = stack[stack.length - 1]?.node;
-  const parent = stack[stack.length - 2]?.node;
-
-  if (!self || !parent || !isNodeRecord(parent as Node)) {
-    return false;
+const extractMemberObjectEnd = (node: NodeLike): number | undefined => {
+  // MemberExpression: obj.prop or obj[key]
+  if (node.type === 'MemberExpression') {
+    const obj = asNodeLike(node.object);
+    return obj && typeof obj.end === 'number' ? obj.end : undefined;
   }
 
-  const parentNode = parent as NodeLike;
+  // CallExpression where callee is MemberExpression: obj.method(...)
+  if (node.type === 'CallExpression') {
+    const callee = asNodeLike(node.callee);
 
-  return parentNode.type === 'MemberExpression' && parentNode.property === self;
+    if (callee?.type === 'MemberExpression') {
+      const obj = asNodeLike(callee.object);
+      return obj && typeof obj.end === 'number' ? obj.end : undefined;
+    }
+  }
+
+  return undefined;
 };
 
-const isInTestPosition = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = 0; i < stack.length - 1; i++) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
+const getInitObjectEndOffset = (init: unknown): number | undefined => {
+  const initNode = asNodeLike(init);
 
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
+  if (!initNode) return undefined;
 
-    const nodeRecord = n as NodeLike;
+  // Unwrap AwaitExpression
+  const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
-    if (
-      (nodeRecord.type === 'IfStatement' && childKey === 'test') ||
-      (nodeRecord.type === 'WhileStatement' && childKey === 'test') ||
-      (nodeRecord.type === 'DoWhileStatement' && childKey === 'test') ||
-      (nodeRecord.type === 'ForStatement' && childKey === 'test') ||
-      (nodeRecord.type === 'ConditionalExpression' && childKey === 'test')
-    ) {
-      return true;
-    }
+  if (!target) return undefined;
+
+  const direct = extractMemberObjectEnd(target);
+
+  if (direct !== undefined) return direct;
+
+  // ConditionalExpression: cond ? a : b → check both branches
+  if (target.type === 'ConditionalExpression') {
+    const consequent = asNodeLike(target.consequent);
+    const alternate = asNodeLike(target.alternate);
+    const fromConsequent = consequent ? extractMemberObjectEnd(consequent) : undefined;
+
+    if (fromConsequent !== undefined) return fromConsequent;
+
+    return alternate ? extractMemberObjectEnd(alternate) : undefined;
+  }
+
+  // LogicalExpression: a ?? b, a || b → check left side
+  if (target.type === 'LogicalExpression') {
+    const left = asNodeLike(target.left);
+    return left ? extractMemberObjectEnd(left) : undefined;
+  }
+
+  return undefined;
+};
+
+const hasExplicitAnyTypeArgument = (init: unknown): boolean => {
+  const initNode = asNodeLike(init);
+
+  if (!initNode) return false;
+
+  // Unwrap AwaitExpression
+  const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
+
+  if (!target || target.type !== 'CallExpression') return false;
+
+  const typeArgs = target.typeArguments ?? target.typeParameters;
+  const params = asNodeLike(typeArgs);
+
+  if (!params) return false;
+
+  const paramsList = params.params ?? params.arguments;
+
+  if (!Array.isArray(paramsList)) return false;
+
+  for (const arg of paramsList) {
+    const argNode = asNodeLike(arg);
+
+    if (argNode?.type === 'TSAnyKeyword' || argNode?.type === 'TSUnknownKeyword') return true;
   }
 
   return false;
 };
 
-const isInCallArguments = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
+const containsAnyUnknownCast = (node: NodeLike): boolean => {
+  // Direct: expr as any, expr as unknown
+  if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
+    const typeAnno = asNodeLike(node.typeAnnotation);
 
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
+    if (typeAnno?.type === 'TSAnyKeyword' || typeAnno?.type === 'TSUnknownKeyword') return true;
 
-    if ((n as NodeLike).type === 'CallExpression' && childKey === 'arguments') {
-      return true;
-    }
+    // Check inner expression too (double-cast: x as unknown as T)
+    const inner = asNodeLike(node.expression);
+
+    if (inner) return containsAnyUnknownCast(inner);
+  }
+
+  // ParenthesizedExpression: (expr) → unwrap
+  if (node.type === 'ParenthesizedExpression') {
+    const inner = asNodeLike(node.expression);
+
+    if (inner) return containsAnyUnknownCast(inner);
+  }
+
+  // MemberExpression: (x as unknown as T).prop → check object
+  if (node.type === 'MemberExpression') {
+    const obj = asNodeLike(node.object);
+
+    if (obj) return containsAnyUnknownCast(obj);
+  }
+
+  // CallExpression: (x as unknown as T).method() → check callee
+  if (node.type === 'CallExpression') {
+    const callee = asNodeLike(node.callee);
+
+    if (callee) return containsAnyUnknownCast(callee);
   }
 
   return false;
 };
 
-const isInNewArguments = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
+const hasExplicitCastToAnyUnknown = (init: unknown): boolean => {
+  const initNode = asNodeLike(init);
 
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
+  if (!initNode) return false;
 
-    if ((n as NodeLike).type === 'NewExpression' && childKey === 'arguments') {
-      return true;
-    }
+  // Unwrap AwaitExpression
+  const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
+
+  if (!target) return false;
+
+  if (containsAnyUnknownCast(target)) return true;
+
+  // ConditionalExpression: cond ? (x as unknown) : y
+  if (target.type === 'ConditionalExpression') {
+    const consequent = asNodeLike(target.consequent);
+    const alternate = asNodeLike(target.alternate);
+
+    if (consequent && containsAnyUnknownCast(consequent)) return true;
+    if (alternate && containsAnyUnknownCast(alternate)) return true;
   }
 
   return false;
 };
 
-const isInReturnArgument = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
+const getCalleeEndOffset = (init: unknown): number | undefined => {
+  const initNode = asNodeLike(init);
 
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
-
-    if ((n as NodeLike).type === 'ReturnStatement' && childKey === 'argument') {
-      return true;
-    }
+  if (!initNode || initNode.type !== 'CallExpression') {
+    return undefined;
   }
 
-  return false;
+  const callee = asNodeLike(initNode.callee);
+
+  if (!callee) {
+    return undefined;
+  }
+
+  const end = typeof callee.end === 'number' ? callee.end : undefined;
+
+  return end;
 };
 
-const isInThrowArgument = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
+const getAwaitedCalleeEndOffset = (init: unknown): number | undefined => {
+  const initNode = asNodeLike(init);
 
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
-
-    if ((n as NodeLike).type === 'ThrowStatement' && childKey === 'argument') {
-      return true;
-    }
+  if (!initNode) {
+    return undefined;
   }
 
-  return false;
+  if (initNode.type === 'CallExpression') {
+    return getCalleeEndOffset(init);
+  }
+
+  if (initNode.type === 'AwaitExpression') {
+    return getCalleeEndOffset(initNode.argument);
+  }
+
+  return undefined;
 };
 
-const isInForwardingAssignment = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
-
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
-
-    const nodeRecord = n as NodeLike;
-
-    if (nodeRecord.type === 'VariableDeclarator' && childKey === 'init') {
-      return true;
-    }
-
-    if (nodeRecord.type === 'AssignmentExpression' && childKey === 'right') {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const isInPropertyValue = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
-
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
-
-    if ((n as NodeLike).type === 'Property' && childKey === 'value') {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const isInArrayElement = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  for (let i = stack.length - 2; i >= 0; i--) {
-    const n = stack[i]?.node;
-    const childKey = stack[i + 1]?.keyInParent;
-
-    if (!n || !isNodeRecord(n as Node) || typeof childKey !== 'string') {
-      continue;
-    }
-
-    if ((n as NodeLike).type === 'ArrayExpression' && childKey === 'elements') {
-      return true;
-    }
-  }
-
-  return false;
-};
-
-const isAllowedNarrowingContext = (stack: ReadonlyArray<WalkStackEntry>): boolean => {
-  const self = stack[stack.length - 1]?.node;
-  const parent = stack[stack.length - 2]?.node;
-
-  if (!self || !parent || !isNodeRecord(parent as Node)) {
-    return false;
-  }
-
-  const parentNode = parent as NodeLike;
-
-  if (parentNode.type === 'UnaryExpression' && parentNode.operator === 'typeof') {
-    return true;
-  }
-
-  if (parentNode.type === 'BinaryExpression') {
-    const op = parentNode.operator;
-
-    if (op === 'instanceof' && parentNode.left === self) {
-      return true;
-    }
-
-    if (op === 'in' && parentNode.right === self) {
-      return true;
-    }
-
-    if (op === '===' || op === '!==' || op === '==' || op === '!=') {
-      const left = parentNode.left;
-      const right = parentNode.right;
-      const other = left === self ? right : right === self ? left : null;
-      const otherNode = asNodeLike(other);
-
-      if (
-        otherNode &&
-        ((otherNode.type === 'Literal' && otherNode.value === null) ||
-          (otherNode.type === 'Identifier' && otherNode.name === 'undefined'))
-      ) {
-        return true;
-      }
-    }
-  }
-
-  // Allow calling guard functions in conditional test positions (e.g., Array.isArray(x), isFoo(x)).
-  if (isInTestPosition(stack) && (isInCallArguments(stack) || isInNewArguments(stack))) {
-    return true;
-  }
-
-  return false;
-};
-
-const collectBoundaryUnknownUsages = (input: CollectBoundaryUnknownUsagesInput): ReadonlyArray<BoundaryUsageCandidate> => {
-  const declaredOffsets = new Set<number>(input.unknownBindings.map(b => b.offset));
-  const unknownNames = new Set<string>(input.unknownBindings.map(b => b.name));
-  const out: BoundaryUsageCandidate[] = [];
-
-  if (unknownNames.size === 0) {
-    return out;
-  }
-
-  walkOxcTreeWithStack(input.program, (node, stack) => {
-    if (!isNodeRecord(node as Node)) {
-      return;
-    }
-
-    const nodeRecord = node as NodeLike;
-
-    if (nodeRecord.type !== 'Identifier') {
-      return;
-    }
-
-    const name = typeof nodeRecord.name === 'string' ? nodeRecord.name : '';
-
-    if (name.length === 0 || !unknownNames.has(name)) {
-      return;
-    }
-
-    const startOffset = typeof nodeRecord.start === 'number' ? nodeRecord.start : 0;
-    const endOffset = typeof nodeRecord.end === 'number' ? nodeRecord.end : startOffset;
-
-    // Skip the declaration identifier itself.
-    if (declaredOffsets.has(startOffset)) {
-      return;
-    }
-
-    // Skip property name in member access: obj.prop (the `prop` identifier).
-    if (isInMemberPropertyPosition(stack)) {
-      return;
-    }
-
-    // Allow explicit narrowing contexts.
-    if (isAllowedNarrowingContext(stack)) {
-      return;
-    }
-
-    let usageKind: BoundaryUsageKind | null = null;
-
-    if (isInReturnArgument(stack)) {
-      usageKind = 'return';
-    } else if (isInThrowArgument(stack)) {
-      usageKind = 'throw';
-    } else if (isInCallArguments(stack) || isInNewArguments(stack)) {
-      usageKind = 'call';
-    } else if (isInForwardingAssignment(stack)) {
-      usageKind = 'assign';
-    } else if (isInPropertyValue(stack) || isInArrayElement(stack)) {
-      usageKind = 'store';
-    }
-
-    if (usageKind === null) {
-      return;
-    }
-
-    out.push({
-      name,
-      offset: startOffset,
-      span: toSpanFromOffsets(input.sourceText, startOffset, endOffset),
-      usageKind,
-    });
-  });
-
-  return out;
-};
-
-const collectUnknownProofCandidates = (input: CollectUnknownProofCandidatesInput): CollectUnknownProofCandidatesOutput => {
-  const boundaryGlobs = (input.boundaryGlobs ?? []).map(p => normalizePath(p).trim()).filter(p => p.length > 0);
-  const boundaryMatchers = compileGlobs(boundaryGlobs);
-  const perFile = new Map<string, UnknownProofCandidates>();
+const collectBindingCandidates = (input: CollectBindingCandidatesInput): ReadonlyMap<string, ReadonlyArray<BindingCandidate>> => {
+  const perFile = new Map<string, ReadonlyArray<BindingCandidate>>();
 
   for (const file of input.program) {
     const filePath = file.filePath;
-    const boundary = boundaryGlobs.length > 0 ? isBoundaryFile(input.rootAbs, filePath, boundaryMatchers) : false;
-    const typeAssertionFindings: UnknownProofFinding[] = [];
-    const nonBoundaryBindings: BindingCandidate[] = [];
-    const boundaryUnknownUsages: BoundaryUsageCandidate[] = [];
+    const candidates: BindingCandidate[] = [];
+    const seenOffsets = new Set<number>();
+    const scopes: Array<{ start: number; end: number }> = [];
 
-    const unwrapAssertionInner = (value: unknown): NodeLike | null => {
-      let current = asNodeLike(value);
+    const findEnclosingScope = (offset: number): { start: number; end: number } | undefined => {
+      let best: { start: number; end: number } | undefined;
 
-      while (current && current.type === 'ParenthesizedExpression') {
-        current = asNodeLike(current.expression);
+      for (const s of scopes) {
+        if (s.start <= offset && offset <= s.end) {
+          if (!best || (s.end - s.start) < (best.end - best.start)) best = s;
+        }
       }
 
-      return current;
+      return best;
     };
 
-    const isConstAssertion = (value: NodeLike | null): boolean => {
-      if (!value || value.type !== 'TSAsExpression') {
-        return false;
+    const moduleScope = { start: 0, end: file.sourceText.length };
+
+    const pushCandidate = (
+      id: NodeLike,
+      isCatchParam: boolean,
+      initCalleeEndOffset: number | undefined,
+      fallbackStart: number,
+      extra?: {
+        readonly catchBodyRange?: { readonly start: number; readonly end: number };
+        readonly hasExplicitAnnotation?: boolean;
+        readonly explicitScopeRange?: { readonly start: number; readonly end: number };
+        readonly initObjectEndOffset?: number;
+        readonly iterableEndOffset?: number;
+        readonly hasExplicitAnyTypeArg?: boolean;
+      },
+    ): void => {
+      const name = typeof id.name === 'string' ? id.name : '';
+
+      if (name.length === 0) {
+        return;
       }
 
-      const typeAnn = asNodeLike(value.typeAnnotation);
+      const startOffset = typeof id.start === 'number' ? id.start : fallbackStart;
+      const endOffset = typeof id.end === 'number' ? id.end : startOffset;
 
-      if (!typeAnn || typeAnn.type !== 'TSTypeReference') {
-        return false;
+      if (seenOffsets.has(startOffset)) {
+        return;
       }
 
-      const typeName = asNodeLike(typeAnn.typeName);
+      seenOffsets.add(startOffset);
+      const resolvedScope = extra?.explicitScopeRange ?? findEnclosingScope(startOffset) ?? moduleScope;
 
-      return !!(typeName && typeName.type === 'Identifier' && typeName.name === 'const');
-    };
-
-    const pushTypeAssertion = (kind: 'type-assertion' | 'double-assertion', node: unknown, message: string): void => {
-      const nodeRecord = asNodeLike(node);
-      const startOffset = typeof nodeRecord?.start === 'number' ? nodeRecord.start : 0;
-      const endOffset = typeof nodeRecord?.end === 'number' ? nodeRecord.end : startOffset;
-      const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
-
-      typeAssertionFindings.push({
-        kind,
-        message,
-        filePath,
-        span,
+      candidates.push({
+        name,
+        offset: startOffset,
+        span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
+        isCatchParam,
+        ...(initCalleeEndOffset !== undefined ? { initCalleeEndOffset } : {}),
+        ...(extra?.initObjectEndOffset !== undefined ? { initObjectEndOffset: extra.initObjectEndOffset } : {}),
+        ...(extra?.iterableEndOffset !== undefined ? { iterableEndOffset: extra.iterableEndOffset } : {}),
+        ...(extra?.hasExplicitAnyTypeArg === true ? { hasExplicitAnyTypeArg: true } : {}),
+        ...(extra?.catchBodyRange !== undefined ? { catchBodyRange: extra.catchBodyRange } : {}),
+        ...(extra?.hasExplicitAnnotation === true ? { hasExplicitAnnotation: true } : {}),
+        scopeRange: resolvedScope,
       });
     };
 
     walkOxcTree(file.program as Node, (node: Node) => {
-      // satisfies only checks types and does not narrow; it is safe.
-      if (node.type === 'TSSatisfiesExpression') {
-        return true;
-      }
-
-      // Ban type assertions everywhere, except const assertions.
-      if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
-        if (node.type === 'TSAsExpression') {
-          const record = isNodeRecord(node) ? (node as unknown as NodeLike) : null;
-          const inner = record ? unwrapAssertionInner(record.expression) : null;
-
-          if (inner && (inner.type === 'TSAsExpression' || inner.type === 'TSTypeAssertion') && !isConstAssertion(inner)) {
-            pushTypeAssertion('double-assertion', node, 'Double type assertion bypasses type safety entirely');
-
-            // Don't report the inner assertion too.
-            return false;
-          }
-
-          const typeAnn = isNodeRecord(node) ? node.typeAnnotation : undefined;
-
-          if (typeAnn !== undefined && isNodeRecord(typeAnn) && typeAnn.type === 'TSTypeReference') {
-            const typeName = typeAnn.typeName;
-
-            if (isNodeRecord(typeName) && typeName.type === 'Identifier' && typeName.name === 'const') {
-              return true;
-            }
-          }
-        }
-
-        pushTypeAssertion('type-assertion', node, 'Type assertions are forbidden (no `as T` / `<T>expr`)');
-
-        return true;
-      }
-
       if (!isNodeRecord(node)) {
         return true;
       }
 
-      // Collect binding identifiers for tsgo proof checks.
-      if (!boundary) {
-        if (node.type === 'VariableDeclarator') {
-          const ids = extractBindingIdentifiers(asNodeLike(node)?.id);
+      // Collect function/arrow body ranges as scopes
+      if (
+        node.type === 'FunctionDeclaration' ||
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression'
+      ) {
+        const body = asNodeLike(asNodeLike(node)?.body);
 
-          for (const id of ids) {
-            const name = typeof id?.name === 'string' ? id.name : '';
+        if (body && typeof body.start === 'number' && typeof body.end === 'number') {
+          scopes.push({ start: body.start, end: body.end });
+        }
+      }
 
-            if (name.length === 0) {
-              continue;
+      if (node.type === 'VariableDeclarator') {
+        const nodeRecord = asNodeLike(node);
+        const ids = extractBindingIdentifiers(nodeRecord?.id);
+        const initCalleeEndOffset = getAwaitedCalleeEndOffset(nodeRecord?.init);
+        const initObjectEnd = getInitObjectEndOffset(nodeRecord?.init);
+        const explicitAnyTypeArg = hasExplicitAnyTypeArgument(nodeRecord?.init);
+        const explicitCast = hasExplicitCastToAnyUnknown(nodeRecord?.init);
+        const fallbackStart = typeof node.start === 'number' ? node.start : 0;
+        const declId = asNodeLike(nodeRecord?.id);
+        const hasAnnotation = declId?.typeAnnotation !== undefined && declId?.typeAnnotation !== null;
+
+        for (const id of ids) {
+          pushCandidate(id, false, initCalleeEndOffset, fallbackStart, {
+            ...(hasAnnotation ? { hasExplicitAnnotation: true } : {}),
+            ...(initObjectEnd !== undefined ? { initObjectEndOffset: initObjectEnd } : {}),
+            ...((explicitAnyTypeArg || explicitCast) ? { hasExplicitAnyTypeArg: true } : {}),
+          });
+        }
+      }
+
+      if (
+        node.type === 'FunctionDeclaration' ||
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression'
+      ) {
+        const funcNode = asNodeLike(node);
+        const params = funcNode?.params;
+        const funcBody = asNodeLike(funcNode?.body);
+        const funcBodyRange = funcBody && typeof funcBody.start === 'number' && typeof funcBody.end === 'number'
+          ? { start: funcBody.start, end: funcBody.end } : undefined;
+
+        if (Array.isArray(params)) {
+          const fallbackStart = typeof node.start === 'number' ? node.start : 0;
+
+          for (const p of params) {
+            const paramNode = asNodeLike(p);
+            const ids = extractBindingIdentifiers(p);
+            // Check annotation on the parameter node itself (covers AssignmentPattern, RestElement, etc.)
+            const paramHasAnnotation = paramNode?.typeAnnotation !== undefined && paramNode?.typeAnnotation !== null;
+
+            for (const id of ids) {
+              const idHasAnnotation = id.typeAnnotation !== undefined && id.typeAnnotation !== null;
+
+              pushCandidate(id, false, undefined, fallbackStart, {
+                ...((paramHasAnnotation || idHasAnnotation) ? { hasExplicitAnnotation: true } : {}),
+                ...(funcBodyRange !== undefined ? { explicitScopeRange: funcBodyRange } : {}),
+              });
             }
-
-            const startOffset = typeof id.start === 'number' ? id.start : typeof node.start === 'number' ? node.start : 0;
-            const endOffset = typeof id.end === 'number' ? id.end : startOffset;
-
-            nonBoundaryBindings.push({
-              name,
-              offset: startOffset,
-              span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
-            });
           }
         }
+      }
 
-        if (
-          node.type === 'FunctionDeclaration' ||
-          node.type === 'FunctionExpression' ||
-          node.type === 'ArrowFunctionExpression'
-        ) {
-          const params = asNodeLike(node)?.params;
+      if (node.type === 'CatchClause') {
+        const catchNode = asNodeLike(node);
+        const param = catchNode?.param;
+        const ids = extractBindingIdentifiers(param);
+        const fallbackStart = typeof node.start === 'number' ? node.start : 0;
+        const body = asNodeLike(catchNode?.body);
+        const bodyStart = typeof body?.start === 'number' ? body.start : undefined;
+        const bodyEnd = typeof body?.end === 'number' ? body.end : undefined;
+        const catchBodyRange = bodyStart !== undefined && bodyEnd !== undefined
+          ? { start: bodyStart, end: bodyEnd } : undefined;
 
-          if (Array.isArray(params)) {
-            for (const p of params) {
-              const ids = extractBindingIdentifiers(p);
+        for (const id of ids) {
+          pushCandidate(id, true, undefined, fallbackStart, catchBodyRange !== undefined ? { catchBodyRange } : undefined);
+        }
+      }
+
+      // ForOfStatement / ForInStatement: track iterable's end offset for loop variables
+      if (node.type === 'ForOfStatement' || node.type === 'ForInStatement') {
+        const forNode = asNodeLike(node);
+        const right = asNodeLike(forNode?.right);
+        const rightEnd = right && typeof right.end === 'number' ? right.end : undefined;
+        const left = asNodeLike(forNode?.left);
+
+        if (left?.type === 'VariableDeclaration' && rightEnd !== undefined) {
+          const declarations = left.declarations;
+
+          if (Array.isArray(declarations)) {
+            for (const decl of declarations) {
+              const declNode = asNodeLike(decl);
+              const ids = extractBindingIdentifiers(declNode?.id);
+              const fallbackStart = typeof node.start === 'number' ? node.start : 0;
 
               for (const id of ids) {
-                const name = typeof id?.name === 'string' ? id.name : '';
-
-                if (name.length === 0) {
-                  continue;
-                }
-
-                const startOffset = typeof id.start === 'number' ? id.start : typeof node.start === 'number' ? node.start : 0;
-                const endOffset = typeof id.end === 'number' ? id.end : startOffset;
-
-                nonBoundaryBindings.push({
-                  name,
-                  offset: startOffset,
-                  span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
-                });
+                pushCandidate(id, false, undefined, fallbackStart, { iterableEndOffset: rightEnd });
               }
             }
           }
         }
       }
 
-      // unknown type annotations
-      if (node.type === 'Identifier') {
-        const id = asNodeLike(node);
+      return true;
+    });
 
-        if (!id) {
-          return true;
-        }
+    if (candidates.length > 0) {
+      perFile.set(filePath, candidates);
+    }
+  }
 
-        const name = typeof id.name === 'string' ? id.name : '';
-        const typeAnn = id.typeAnnotation;
+  return perFile;
+};
 
-        if (!typeAnn || name.length === 0) {
-          return true;
-        }
+const collectExpressionCandidates = (input: CollectBindingCandidatesInput): ReadonlyMap<string, ReadonlyArray<ExpressionCandidate>> => {
+  const perFile = new Map<string, ReadonlyArray<ExpressionCandidate>>();
 
-        const hasUnknown = containsTsKeyword(typeAnn, 'TSUnknownKeyword');
+  for (const file of input.program) {
+    const candidates: ExpressionCandidate[] = [];
 
-        if (!hasUnknown) {
-          return true;
-        }
+    walkOxcTree(file.program as Node, (node: Node) => {
+      if (!isNodeRecord(node)) return true;
+      if (node.type !== 'TSAsExpression' && node.type !== 'TSTypeAssertion') return true;
 
-        const startOffset = typeof id.start === 'number' ? id.start : 0;
-        const endOffset = typeof id.end === 'number' ? id.end : startOffset;
-        const span = toSpanFromOffsets(file.sourceText, startOffset, endOffset);
+      const nodeRecord = asNodeLike(node);
+      const typeAnnotation = asNodeLike(nodeRecord?.typeAnnotation);
+      const innerExpr = asNodeLike(nodeRecord?.expression);
 
-        if (!boundary) {
-          typeAssertionFindings.push({
-            kind: 'unknown-type',
-            message: 'Explicit `unknown` type is forbidden outside boundary files',
-            filePath,
-            span,
-            symbol: name,
+      // double-cast: outer(as T) -> inner(as unknown|any)
+      if (innerExpr && (innerExpr.type === 'TSAsExpression' || innerExpr.type === 'TSTypeAssertion')) {
+        const innerType = asNodeLike(innerExpr.typeAnnotation);
+
+        if (innerType?.type === 'TSUnknownKeyword' || innerType?.type === 'TSAnyKeyword') {
+          const startOffset = typeof (node as any).start === 'number' ? (node as any).start as number : 0;
+          const endOffset = typeof (node as any).end === 'number' ? (node as any).end as number : startOffset;
+
+          candidates.push({
+            kind: 'double-cast',
+            span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
+            sourceSnippet: file.sourceText.slice(startOffset, Math.min(endOffset, startOffset + 80)),
           });
+
+          return false; // prevent re-visiting inner assertion
         }
+      }
+
+      // any-cast: as any
+      if (typeAnnotation?.type === 'TSAnyKeyword') {
+        const startOffset = typeof (node as any).start === 'number' ? (node as any).start as number : 0;
+        const endOffset = typeof (node as any).end === 'number' ? (node as any).end as number : startOffset;
+
+        candidates.push({
+          kind: 'any-cast',
+          span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
+          sourceSnippet: file.sourceText.slice(startOffset, Math.min(endOffset, startOffset + 80)),
+        });
+
+        return false;
       }
 
       return true;
     });
 
-    if (boundary) {
-      const unknownBindings = collectUnknownAnnotatedBindings(file.program, file.sourceText);
-
-      boundaryUnknownUsages.push(
-        ...collectBoundaryUnknownUsages({
-          program: file.program,
-          sourceText: file.sourceText,
-          unknownBindings,
-        }),
-      );
+    if (candidates.length > 0) {
+      perFile.set(file.filePath, candidates);
     }
-
-    // De-dupe bindings by offset.
-    const seenOffsets = new Set<number>();
-
-    const dedupBindings = (items: ReadonlyArray<BindingCandidate>): BindingCandidate[] => {
-      const out: BindingCandidate[] = [];
-
-      for (const item of items) {
-        if (seenOffsets.has(item.offset)) {
-          continue;
-        }
-
-        seenOffsets.add(item.offset);
-        out.push(item);
-      }
-
-      return out;
-    };
-
-    perFile.set(filePath, {
-      typeAssertionFindings,
-      nonBoundaryBindings: dedupBindings(nonBoundaryBindings),
-      boundaryUnknownUsages,
-    });
   }
 
-  return { boundaryGlobs, perFile };
+  return perFile;
 };
 
-const stringifyHover = (hover: unknown): string => {
-  if (!hover || typeof hover !== 'object') {
-    return '';
-  }
-
-  const contents = asNodeLike(hover)?.contents;
-  const raw = contents !== undefined ? contents : hover;
-
-  const extract = (value: unknown): string[] => {
-    if (value === null || value === undefined) {
-      return [];
-    }
-
-    if (typeof value === 'string') {
-      return [value];
-    }
-
-    if (Array.isArray(value)) {
-      return value.flatMap(v => extract(v));
-    }
-
-    if (typeof value === 'object') {
-      // MarkupContent: { kind: 'plaintext'|'markdown', value: string }
-      const valueRecord = asNodeLike(value);
-
-      if (typeof valueRecord?.value === 'string') {
-        return [valueRecord.value];
-      }
-
-      // MarkedString: { language: string, value: string }
-      if (typeof valueRecord?.language === 'string' && typeof valueRecord.value === 'string') {
-        return [valueRecord.value];
-      }
-    }
-
-    return [];
-  };
-
-  // LSP Hover.contents can be (string | MarkupContent | MarkedString | (string|MarkedString)[])
-  const parts = extract(raw);
-
-  if (parts.length > 0) {
-    return parts.join('\n');
-  }
-
-  // Fallback for odd server shapes.
-  return collectStringsFromNode(raw).join('\n');
-};
-
-export { collectUnknownProofCandidates, stringifyHover };
-export type { UnknownProofCandidates };
+export { collectBindingCandidates, collectExpressionCandidates };
+export type { BindingCandidate, ExpressionCandidate };

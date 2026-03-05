@@ -260,36 +260,12 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  UNKNOWN_TYPE_ASSERTION: {
-    cause: 'A type assertion (as T) bypasses the type checker, asserting a type without runtime validation.',
-    think: [
-      'Determine whether the assertion is backed by a runtime check earlier in the code path.',
-      'Check whether a type guard function or schema validation can replace the assertion.',
-      'Verify that removing the assertion would produce a type error that reveals the actual mismatch.',
-    ],
-  },
-  UNKNOWN_DOUBLE_ASSERTION: {
-    cause: 'A double type assertion (as unknown as T) forces an unsafe type cast through the unknown escape hatch.',
-    think: [
-      'Determine why the direct assertion fails — it usually means the types are fundamentally incompatible.',
-      'Check whether the mismatch indicates a design error or missing intermediate transformation.',
-      'Verify whether the code can be restructured to avoid the double assertion entirely.',
-    ],
-  },
   UNKNOWN_UNNARROWED: {
     cause: "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
     think: [
       'Determine where the unknown value originates (external input, catch clause, generic parameter).',
       'Identify the appropriate narrowing strategy: typeof guard, instanceof check, or schema validation.',
       'If the value crosses a trust boundary, verify that validation is at the boundary rather than each usage site.',
-    ],
-  },
-  UNKNOWN_UNVALIDATED: {
-    cause: "An 'unknown' value from a trust boundary (API input, file read, deserialization) is used without schema validation.",
-    think: [
-      'Determine whether a validation layer exists and this usage bypasses it.',
-      'Check whether the pattern repeats across multiple boundaries, indicating a missing shared validation strategy.',
-      'Verify that boundary values are validated once at entry rather than ad-hoc at each consumption site.',
     ],
   },
   UNKNOWN_INFERRED: {
@@ -306,6 +282,22 @@ export const FIREBAT_CODE_CATALOG = {
       "Identify the source of the 'any' inference: untyped import, missing type parameter, JSON.parse result, or catch clause.",
       'Trace how far the any type propagates downstream to assess the blast radius.',
       'Fix the source by adding a type annotation at the root rather than suppressing any at each usage site.',
+    ],
+  },
+  UNKNOWN_ANY_CAST: {
+    cause: "An explicit 'as any' cast removes type safety, allowing any operation on the value without type checking.",
+    think: [
+      'Determine why the cast was added — missing types for a library, workaround for a type error, or intentional escape hatch.',
+      'Check whether adding proper types or using a type assertion to a specific type eliminates the need for `as any`.',
+      'If the cast is unavoidable, verify that the scope of the `any` is minimized and does not propagate.',
+    ],
+  },
+  UNKNOWN_DOUBLE_CAST: {
+    cause: "A double assertion (e.g. `x as unknown as T`) bypasses TypeScript's type safety by casting through an intermediate type.",
+    think: [
+      'Determine whether the double assertion masks a genuine type incompatibility that should be resolved structurally.',
+      'Check whether a type guard, generic constraint, or interface refinement can replace the double assertion.',
+      'If the cast is unavoidable at a boundary, verify that it is documented and the scope is minimized.',
     ],
   },
 

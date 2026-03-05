@@ -1,6 +1,5 @@
 import type { Gildash } from '@zipbul/gildash';
 
-import { isErr } from '@zipbul/result';
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
 
@@ -38,7 +37,7 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
       try {
         const fileRec = input.gildash.getFileInfo(filePath);
 
-        if (!isErr(fileRec) && fileRec !== null) {
+        if (fileRec !== null) {
           partsByIndex[index] = `file:${filePath}:${fileRec.contentHash}`;
           return;
         }

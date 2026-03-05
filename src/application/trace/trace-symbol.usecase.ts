@@ -6,7 +6,6 @@ import type { SourceSpan } from '../../types';
 
 import { initHasher } from '../../engine/hasher';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { runTsgoTraceSymbol } from '../../tooling/tsgo/tsgo-runner';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { createArtifactStore } from '../../store/artifact';
 import { createGildash } from '../../store/gildash';
@@ -22,11 +21,6 @@ interface JsonObject {
 }
 
 type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
-
-interface StructuredTrace extends JsonObject {
-  readonly graph?: JsonValue;
-  readonly evidence?: JsonValue;
-}
 
 interface TraceNode {
   readonly id: string;
@@ -66,191 +60,32 @@ interface TraceSymbolInput {
 
 interface TraceSymbolOutput {
   readonly ok: boolean;
-  readonly tool: 'tsgo';
+  readonly tool: 'gildash';
   readonly graph: TraceGraph;
   readonly evidence: ReadonlyArray<TraceEvidenceSpan>;
   readonly error?: string;
-  readonly raw?: JsonValue;
 }
 
-interface NormalizeTraceInput {
-  readonly structured: JsonValue | undefined;
-}
-
-interface NormalizeTraceResult {
-  readonly graph: TraceGraph;
-  readonly evidence: TraceEvidenceSpan[];
-  readonly raw?: JsonValue;
-}
-
-const isObject = (value: JsonValue | undefined): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const getString = (obj: JsonObject, key: string): string | undefined => {
-  const value = obj[key];
-
-  return typeof value === 'string' ? value : undefined;
+const readFileText = async (filePath: string): Promise<string> => {
+  try {
+    return await Bun.file(filePath).text();
+  } catch {
+    return '';
+  }
 };
 
-const getArray = (obj: JsonObject, key: string): ReadonlyArray<JsonValue> | undefined => {
-  const value = obj[key];
+const splitLines = (text: string): string[] => text.split(/\r?\n/);
 
-  return Array.isArray(value) ? value : undefined;
-};
+const extractEvidenceText = async (filePath: string, span: SourceSpan): Promise<string | undefined> => {
+  const text = await readFileText(filePath);
 
-const isTraceNodeKind = (value: JsonValue | undefined): value is TraceNodeKind =>
-  typeof value === 'string' &&
-  (value === 'file' || value === 'symbol' || value === 'type' || value === 'reference' || value === 'unknown');
+  if (text.length === 0) return undefined;
 
-const isTraceEdgeKind = (value: JsonValue | undefined): value is TraceEdgeKind =>
-  typeof value === 'string' &&
-  (value === 'references' ||
-    value === 'imports' ||
-    value === 'exports' ||
-    value === 'calls' ||
-    value === 'type-of' ||
-    value === 'unknown');
+  const lines = splitLines(text);
+  const lineIdx = Math.max(0, Math.min(lines.length - 1, span.start.line - 1));
+  const lineText = lines[lineIdx] ?? '';
 
-const toTraceNodes = (value: ReadonlyArray<JsonValue>): TraceNode[] => {
-  if (value.length === 0) {
-    return [];
-  }
-
-  const out: TraceNode[] = [];
-
-  for (const item of value) {
-    if (!isObject(item)) {
-      continue;
-    }
-
-    const id = getString(item, 'id');
-    const label = getString(item, 'label');
-    const kindRaw = item.kind;
-    const kind = isTraceNodeKind(kindRaw) ? kindRaw : undefined;
-
-    if (id === undefined || id.length === 0 || label === undefined || label.length === 0 || kind === undefined) {
-      continue;
-    }
-
-    const filePath = getString(item, 'filePath');
-
-    out.push({ id, kind, label, ...(filePath !== undefined ? { filePath } : {}) });
-  }
-
-  return out;
-};
-
-const toTraceEdges = (value: ReadonlyArray<JsonValue>): TraceEdge[] => {
-  if (value.length === 0) {
-    return [];
-  }
-
-  const out: TraceEdge[] = [];
-
-  for (const item of value) {
-    if (!isObject(item)) {
-      continue;
-    }
-
-    const from = getString(item, 'from');
-    const to = getString(item, 'to');
-    const kindRaw = item.kind;
-    const kind = isTraceEdgeKind(kindRaw) ? kindRaw : undefined;
-
-    if (from === undefined || from.length === 0 || to === undefined || to.length === 0 || kind === undefined) {
-      continue;
-    }
-
-    const label = getString(item, 'label');
-
-    out.push({ from, to, kind, ...(label !== undefined ? { label } : {}) });
-  }
-
-  return out;
-};
-
-const toSourceSpan = (value: JsonValue | undefined): SourceSpan | null => {
-  if (!isObject(value)) {
-    return null;
-  }
-
-  let span: SourceSpan | null = null;
-  const start = value.start;
-  const end = value.end;
-
-  if (isObject(start) && isObject(end)) {
-    const startLine = start.line;
-    const startColumn = start.column;
-    const endLine = end.line;
-    const endColumn = end.column;
-
-    if (
-      typeof startLine === 'number' &&
-      typeof startColumn === 'number' &&
-      typeof endLine === 'number' &&
-      typeof endColumn === 'number'
-    ) {
-      span = {
-        start: { line: startLine, column: startColumn },
-        end: { line: endLine, column: endColumn },
-      };
-    }
-  }
-
-  return span;
-};
-
-const toEvidenceSpans = (value: ReadonlyArray<JsonValue>): TraceEvidenceSpan[] => {
-  if (value.length === 0) {
-    return [];
-  }
-
-  const out: TraceEvidenceSpan[] = [];
-
-  for (const item of value) {
-    if (!isObject(item)) {
-      continue;
-    }
-
-    const filePath = getString(item, 'filePath');
-    const span = toSourceSpan(item.span);
-
-    if (filePath === undefined || filePath.length === 0 || span === null) {
-      continue;
-    }
-
-    const text = getString(item, 'text');
-
-    out.push({ filePath, span, ...(text !== undefined ? { text } : {}) });
-  }
-
-  return out;
-};
-
-const normalizeTrace = (input: NormalizeTraceInput): NormalizeTraceResult => {
-  const empty: TraceGraph = { nodes: [], edges: [] };
-
-  if (!isObject(input.structured)) {
-    return input.structured === undefined
-      ? { graph: empty, evidence: [] }
-      : { graph: empty, evidence: [], raw: input.structured };
-  }
-
-  const structured = input.structured as StructuredTrace;
-  // Best-effort: if caller already returns {graph, evidence}
-  const graph = isObject(structured.graph) ? structured.graph : undefined;
-  const nodes = graph ? getArray(graph, 'nodes') : undefined;
-  const edges = graph ? getArray(graph, 'edges') : undefined;
-
-  if (graph !== undefined && nodes !== undefined && edges !== undefined) {
-    return {
-      graph: { nodes: toTraceNodes(nodes), edges: toTraceEdges(edges) },
-      evidence: Array.isArray(structured.evidence) ? toEvidenceSpans(structured.evidence) : [],
-      raw: structured,
-    };
-  }
-
-  return { graph: empty, evidence: [], raw: structured };
+  return lineText.trim().slice(0, 300);
 };
 
 const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> => {
@@ -282,7 +117,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
   const db = await getDb({ rootAbs: ctx.rootAbs, logger });
   const artifactRepository = createArtifactStore(db);
-  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
+  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true });
   const relatedFiles = await resolveRelatedFiles(input);
 
   logger.trace('trace-symbol: related files resolved', { count: relatedFiles.length });
@@ -293,7 +128,6 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     gildash,
     extraParts: [`ns:${cacheNamespace}`],
   });
-  await gildash.close({ cleanup: false });
   const artifactKey = computeTraceArtifactKey({
     entryFile: relatedFiles[0] ?? input.entryFile,
     symbol: input.symbol,
@@ -302,51 +136,124 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   });
   const cached = artifactRepository.get<TraceSymbolOutput>({
     projectKey,
-    kind: 'tsgo:traceSymbol',
+    kind: 'gildash:traceSymbol',
     artifactKey,
     inputsDigest,
   });
 
   if (cached) {
     logger.debug('trace-symbol: cache hit', { artifactKey });
+    await gildash.close({ cleanup: false });
 
     return cached;
   }
 
-  logger.debug('trace-symbol: cache miss — running tsgo trace');
+  logger.debug('trace-symbol: cache miss — running gildash trace');
 
-  const tsgoRequest: Parameters<typeof runTsgoTraceSymbol>[0] = {
-    entryFile: relatedFiles[0] ?? input.entryFile,
-    symbol: input.symbol,
-    ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
-    ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
-  };
-  const result = await runTsgoTraceSymbol(tsgoRequest);
+  const entryFile = relatedFiles[0] ?? input.entryFile;
+  const nodes: TraceNode[] = [];
+  const edges: TraceEdge[] = [];
+  const evidence: TraceEvidenceSpan[] = [];
+  const nodeIds = new Set<string>();
+  const edgeIds = new Set<string>();
 
-  logger.trace('trace-symbol: tsgo result', { ok: result.ok, error: result.error });
+  const addNode = (node: TraceNode): void => {
+    if (nodeIds.has(node.id)) return;
 
-  const normalized = normalizeTrace({ structured: result.structured as JsonValue | undefined });
-  const outputBase = {
-    ok: result.ok,
-    tool: 'tsgo' as const,
-    graph: normalized.graph,
-    evidence: normalized.evidence,
-  };
-  const output: TraceSymbolOutput = {
-    ...outputBase,
-    ...(result.error !== undefined ? { error: result.error } : {}),
-    ...(normalized.raw !== undefined ? { raw: normalized.raw } : {}),
+    nodeIds.add(node.id);
+    nodes.push(node);
   };
 
-  artifactRepository.set({
-    projectKey,
-    kind: 'tsgo:traceSymbol',
-    artifactKey,
-    inputsDigest,
-    value: output,
-  });
+  const addEdge = (edge: TraceEdge): void => {
+    const id = `${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ''}`;
 
-  return output;
+    if (edgeIds.has(id)) return;
+
+    edgeIds.add(id);
+    edges.push(edge);
+  };
+
+  try {
+    const symbolNodeId = `symbol:${input.symbol}`;
+
+    addNode({ id: symbolNodeId, kind: 'symbol', label: input.symbol, filePath: entryFile });
+
+    const entryFileNodeId = `file:${entryFile}`;
+
+    addNode({ id: entryFileNodeId, kind: 'file', label: path.basename(entryFile), filePath: entryFile });
+    addEdge({ from: symbolNodeId, to: entryFileNodeId, kind: 'references' });
+
+    // Use gildash semantic references
+    const refs = gildash.getSemanticReferences(input.symbol, entryFile);
+    const maxRefs = Math.max(1, input.maxDepth ?? 200);
+    const refsToUse = refs.slice(0, maxRefs);
+
+    for (const ref of refsToUse) {
+      const filePath = ref.filePath;
+      const span: SourceSpan = {
+        start: { line: ref.line, column: ref.column + 1 },
+        end: { line: ref.line, column: ref.column + 1 },
+      };
+      const fileNodeId = `file:${filePath}`;
+
+      addNode({ id: fileNodeId, kind: 'file', label: path.basename(filePath), filePath });
+
+      const refNodeId = `ref:${filePath}:${ref.line}:${ref.column}`;
+      const label = ref.isDefinition ? `definition:${path.basename(filePath)}:${ref.line}` : `${path.basename(filePath)}:${ref.line}`;
+
+      addNode({ id: refNodeId, kind: 'reference', label, filePath, span });
+      addEdge({
+        from: symbolNodeId,
+        to: refNodeId,
+        kind: 'references',
+        ...(ref.isDefinition ? { label: 'definition' } : {}),
+      });
+      addEdge({ from: refNodeId, to: fileNodeId, kind: 'references' });
+
+      const text = await extractEvidenceText(filePath, span);
+
+      evidence.push({ filePath, span, ...(text !== undefined ? { text } : {}) });
+    }
+
+    // Heritage chain
+    try {
+      const heritage = await gildash.getHeritageChain(input.symbol, entryFile);
+
+      if (heritage.bases && heritage.bases.length > 0) {
+        for (const base of heritage.bases) {
+          const baseNodeId = `type:${base.name}`;
+
+          addNode({ id: baseNodeId, kind: 'type', label: base.name });
+          addEdge({ from: symbolNodeId, to: baseNodeId, kind: 'type-of', label: 'extends' });
+        }
+      }
+    } catch {
+      // Heritage chain is best-effort
+    }
+
+    const output: TraceSymbolOutput = {
+      ok: true,
+      tool: 'gildash',
+      graph: { nodes, edges },
+      evidence,
+    };
+
+    artifactRepository.set({
+      projectKey,
+      kind: 'gildash:traceSymbol',
+      artifactKey,
+      inputsDigest,
+      value: output,
+    });
+
+    return output;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    return { ok: false, tool: 'gildash', graph: { nodes: [], edges: [] }, evidence: [], error: message };
+  } finally {
+    await gildash.close({ cleanup: false });
+  }
 };
 
 export { traceSymbolUseCase };

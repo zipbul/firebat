@@ -1,15 +1,20 @@
-import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { mock, describe, it, expect, beforeEach, afterEach, afterAll } from 'bun:test';
+import * as nodePath from 'node:path';
 
 import type { Gildash } from '@zipbul/gildash';
 import type { ParsedFile } from './ts-program';
-import { err } from '@zipbul/result';
 import { createNoopLogger } from './logger';
+
+// ── Save originals before mocking ────────────────────────────────────────────
+
+const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../store/gildash.ts')) };
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
 const mockBatchParse = mock(
-  async (_filePaths: string[]): Promise<Map<string, unknown>> => new Map(),
+  async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> =>
+    ({ parsed: new Map(), failures: [] }),
 );
 
 const mockGildash = {
@@ -37,8 +42,8 @@ const makeParsedFile = (filePath: string): ParsedFile => ({
 
 const batchParseReturnsOk =
   (entries: [string, ParsedFile][]) =>
-  async (_filePaths: string[]): Promise<Map<string, ParsedFile>> =>
-    new Map(entries);
+  async (_filePaths: string[]): Promise<{ parsed: Map<string, ParsedFile>; failures: Array<unknown> }> =>
+    ({ parsed: new Map(entries), failures: [] });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -50,12 +55,18 @@ beforeEach(() => {
   mockCreateGildash.mockImplementation(async (_opts: unknown) => mockGildash);
   mockClose.mockImplementation(async (_opts?: { cleanup?: boolean }) => {});
   mockBatchParse.mockImplementation(
-    async (_filePaths: string[]): Promise<Map<string, unknown>> => new Map(),
+    async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> =>
+      ({ parsed: new Map(), failures: [] }),
   );
 });
 
 afterEach(() => {
   mock.restore();
+});
+
+afterAll(() => {
+  mock.restore();
+  mock.module(nodePath.resolve(import.meta.dir, '../store/gildash.ts'), () => __origGildashStore);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -174,27 +185,20 @@ describe('createFirebatProgram', () => {
     expect(mockCreateGildash).not.toHaveBeenCalled();
   });
 
-  it('should return empty array when batchParse returns Err', async () => {
+  it('should propagate error when batchParse throws', async () => {
     // Arrange
-    mockBatchParse.mockImplementation(
-      async () => err({ type: 'closed' as const, message: 'gildash closed' }) as unknown as Map<string, unknown>,
-    );
+    mockBatchParse.mockRejectedValue(new Error('gildash closed'));
 
-    // Act
-    const result = await createFirebatProgram({ targets: ['/a.ts'], logger });
-
-    // Assert
-    expect(result).toEqual([]);
+    // Act & Assert
+    await expect(createFirebatProgram({ targets: ['/a.ts'], logger })).rejects.toThrow('gildash closed');
   });
 
-  it('should call gildash.close even when batchParse returns Err', async () => {
+  it('should call gildash.close even when batchParse throws', async () => {
     // Arrange
-    mockBatchParse.mockImplementation(
-      async () => err({ type: 'closed' as const, message: 'gildash closed' }) as unknown as Map<string, unknown>,
-    );
+    mockBatchParse.mockRejectedValue(new Error('gildash closed'));
 
     // Act
-    await createFirebatProgram({ targets: ['/a.ts'], logger });
+    await createFirebatProgram({ targets: ['/a.ts'], logger }).catch(() => {});
 
     // Assert
     expect(mockClose).toHaveBeenCalledWith({ cleanup: false });
