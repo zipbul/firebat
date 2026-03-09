@@ -17,9 +17,6 @@
     "concept-scatter": {
       "maxScatterIndex": 10
     },
-    "abstraction-fitness": {
-      "minFitnessScore": 0.5
-    },
     "giant-file": {
       "maxLines": 800
     },

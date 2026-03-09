@@ -12,7 +12,6 @@
 // ---------------------------------------------------------------------------
 // Features — analyze / detect  (Phase 2 에서 detectors/ 로 이동 예정)
 // ---------------------------------------------------------------------------
-export { analyzeAbstractionFitness } from './features/abstraction-fitness';
 export { analyzeBarrelPolicy } from './features/barrel-policy';
 export { analyzeConceptScatter } from './features/concept-scatter';
 export { analyzeCoupling } from './features/coupling';

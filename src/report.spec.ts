@@ -23,7 +23,6 @@ import type {
   DecisionSurfaceFinding,
   ImplementationOverheadFinding,
   ConceptScatterFinding,
-  AbstractionFitnessFinding,
   GiantFileFinding,
   FirebatDetector,
   FormatFinding,
@@ -57,7 +56,7 @@ const allDetectors: ReadonlyArray<FirebatDetector> = [
   'nesting', 'early-return', 'forwarding',
   'implicit-state', 'temporal-coupling', 'invariant-blindspot',
   'modification-impact', 'variable-lifetime', 'decision-surface',
-  'implementation-overhead', 'concept-scatter', 'abstraction-fitness', 'giant-file',
+  'implementation-overhead', 'concept-scatter', 'giant-file',
   'duplicates',
 ];
 
@@ -148,7 +147,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 23 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 22 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -174,7 +173,6 @@ describe('formatReport', () => {
       expect(out).toContain('Decision Surface');
       expect(out).toContain('Implementation Overhead');
       expect(out).toContain('Concept Scatter');
-      expect(out).toContain('Abstraction Fitness');
       expect(out).toContain('Giant File');
     });
 
@@ -884,22 +882,6 @@ describe('formatReport', () => {
       expect(out).toContain('scatter=0.8');
       expect(out).toContain('files=3');
       expect(out).toContain('layers=2');
-    });
-  });
-
-  // ── Abstraction Fitness body ────────────────────────────────────
-
-  describe('abstraction-fitness body', () => {
-    it('should render body with module, fitness, cohesion, and coupling when findings exist', () => {
-      const finding: AbstractionFitnessFinding = { kind: 'abstraction-fitness', file: testFile, span: span(60, 0), module: 'src/engine/parser.ts', internalCohesion: 0.35, externalCoupling: 0.85, fitness: 0.2 };
-      const out = formatReport(makeReport(['abstraction-fitness'], { 'abstraction-fitness': [finding] }), 'text');
-
-      expect(out).toContain('Abstraction Fitness');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('src/engine/parser.ts');
-      expect(out).toContain('fitness=0.20');
-      expect(out).toContain('cohesion=0.35');
-      expect(out).toContain('coupling=0.85');
     });
   });
 

@@ -641,14 +641,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that consolidating scattered files reduces the cognitive cost and the blast radius of changes.',
     ],
   },
-  ABSTRACTION_FITNESS: {
-    cause: 'A module has low internal cohesion and high external coupling, indicating it groups unrelated things while depending on many others.',
-    think: [
-      'Examine what the module exports and what it imports.',
-      'Check whether exports serve different consumer groups — if so, the module may need to be split along consumer boundaries.',
-      'Verify that imports from many unrelated areas are not a sign of accumulated responsibilities that belong elsewhere.',
-    ],
-  },
   GIANT_FILE: {
     cause: 'A source file exceeds the line threshold, concentrating too many responsibilities in a single file.',
     think: [

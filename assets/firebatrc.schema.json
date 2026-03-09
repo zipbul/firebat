@@ -40,7 +40,6 @@
         "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
         "implementation-overhead": { "$ref": "#/$defs/implementationOverheadToggle" },
         "concept-scatter": { "$ref": "#/$defs/conceptScatterToggle" },
-        "abstraction-fitness": { "$ref": "#/$defs/abstractionFitnessToggle" },
         "giant-file": { "$ref": "#/$defs/giantFileToggle" }
       }
     },
@@ -78,7 +77,6 @@
                 "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
                 "implementation-overhead": { "$ref": "#/$defs/implementationOverheadInheritable" },
                 "concept-scatter": { "$ref": "#/$defs/conceptScatterInheritable" },
-                "abstraction-fitness": { "$ref": "#/$defs/abstractionFitnessInheritable" },
                 "giant-file": { "$ref": "#/$defs/giantFileInheritable" }
               }
             }
@@ -392,30 +390,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": { "maxScatterIndex": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    },
-
-    "abstractionFitnessToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minFitnessScore": { "type": "number" } }
-        }
-      ]
-    },
-    "abstractionFitnessInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minFitnessScore": { "type": "number" } }
         }
       ]
     },

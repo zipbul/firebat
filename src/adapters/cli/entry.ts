@@ -102,7 +102,7 @@ const printHelp = (): void => {
     `    exception-hygiene, lint, format, typecheck, dependencies, coupling,`,
     `    implicit-state, temporal-coupling, invariant-blindspot,`,
     `    modification-impact, variable-lifetime, decision-surface,`,
-    `    implementation-overhead, concept-scatter, abstraction-fitness, giant-file,`,
+    `    implementation-overhead, concept-scatter, giant-file,`,
     `    duplicates`,
     '',
     `  ${hc('CONFIG-ONLY OPTIONS', `${H.bold}${H.yellow}`, c)}  ${hc('(set in .firebatrc.jsonc)', H.dim, c)}`,
@@ -147,7 +147,6 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'decision-surface',
     'implementation-overhead',
     'concept-scatter',
-    'abstraction-fitness',
     'giant-file',
     'duplicates',
   ];

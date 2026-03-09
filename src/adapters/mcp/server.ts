@@ -43,7 +43,6 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'decision-surface',
   'implementation-overhead',
   'concept-scatter',
-  'abstraction-fitness',
   'giant-file',
 ];
 
@@ -347,7 +346,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, invariant-blindspot, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, abstraction-fitness, giant-file.',
+            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, invariant-blindspot, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, giant-file.',
           ].join(' '),
         ),
       minSize: z
@@ -411,7 +410,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         '  invariant-blindspot=mutation without validation,',
         '  modification-impact=high-fanin change radius, variable-lifetime=long-lived variable burden,',
         '  decision-surface=combinatorial branch explosion, implementation-overhead=impl complexity >> interface,',
-        '  concept-scatter=one concept spread across many files, abstraction-fitness=cohesion vs coupling score.',
+        '  concept-scatter=one concept spread across many files.',
         '- minSize: minimum AST node size for duplicate detection. Use "auto" to adapt to the codebase. Typical: 30-50 for small projects.',
         '- maxForwardDepth: max re-export depth for the forwarding detector (0 disables). Typical: 2-3.',
         '- filePatterns: glob patterns to filter findings by file path. Only matching findings are returned.',

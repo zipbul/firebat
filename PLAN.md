@@ -42,7 +42,7 @@
 
 ### 파일 단위 결과 내보내기 (byFile 뷰)
 
-- 현재 출력은 detector별 그룹. 한 파일의 전체 finding을 보려면 28개 detector를 전부 순회해야 함
+- 현재 출력은 detector별 그룹. 한 파일의 전체 finding을 보려면 25개 detector를 전부 순회해야 함
 - AI 에이전트는 파일 단위로 작업. IDE도 파일 단위. 현재 구조는 파일 관점 파악이 비효율적
 - report output에 `byFile: Record<string, { detector: string; findings: Finding[] }[]>` 추가
 - CLI `--view=by-file` 옵션 또는 JSON output에 항상 포함
@@ -95,7 +95,7 @@
 ### SRP 보장
 
 - 하나의 함수/클래스가 다수 관심사를 다루는지 감지
-- concept-scatter, abstraction-fitness와의 경계 설계 필요
+- concept-scatter와의 경계 설계 필요
 
 ---
 

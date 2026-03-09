@@ -18,7 +18,6 @@ import type {
 
 import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
-import { analyzeAbstractionFitness, createEmptyAbstractionFitness } from '../../features/abstraction-fitness';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeConceptScatter, createEmptyConceptScatter } from '../../features/concept-scatter';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
@@ -683,7 +682,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     variableLifetimeMaxLifetimeLines: 30,
     implementationOverheadMinRatio: 1.0,
     conceptScatterMaxScatterIndex: 2,
-    abstractionFitnessMinFitnessScore: 0,
   };
   const resolvedGiantFileMaxLines =
     (config as any)?.features?.['giant-file']?.maxLines ?? defaultFeatureOptions.giantFileMaxLines;
@@ -695,9 +693,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     (config as any)?.features?.['implementation-overhead']?.minRatio ?? defaultFeatureOptions.implementationOverheadMinRatio;
   const resolvedConceptScatterMaxScatterIndex =
     (config as any)?.features?.['concept-scatter']?.maxScatterIndex ?? defaultFeatureOptions.conceptScatterMaxScatterIndex;
-  const resolvedAbstractionFitnessMinFitnessScore =
-    (config as any)?.features?.['abstraction-fitness']?.minFitnessScore ??
-    defaultFeatureOptions.abstractionFitnessMinFitnessScore;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
 
   if (options.detectors.includes('giant-file')) {
@@ -833,22 +828,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     conceptScatter = analyzeConceptScatter(program, { maxScatterIndex: Number(resolvedConceptScatterMaxScatterIndex) });
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
-  let abstractionFitness: ReturnType<typeof analyzeAbstractionFitness> = createEmptyAbstractionFitness();
-
-  if (options.detectors.includes('abstraction-fitness')) {
-    const t0 = nowMs();
-    const detectorKey = 'abstraction-fitness';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    abstractionFitness = analyzeAbstractionFitness(program, {
-      minFitnessScore: Number(resolvedAbstractionFitnessMinFitnessScore),
-    });
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1306,7 +1285,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') } : {}),
     ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') } : {}),
     ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') } : {}),
-    ...(selectedDetectors.has('abstraction-fitness') ? { 'abstraction-fitness': enrichPhase1(abstractionFitness as any, 'ABSTRACTION_FITNESS') } : {}),
     ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified as any) } : {}),
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as any });

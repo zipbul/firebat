@@ -39,7 +39,6 @@ describe('arg-parse', () => {
       'decision-surface',
       'implementation-overhead',
       'concept-scatter',
-      'abstraction-fitness',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -83,7 +82,6 @@ describe('arg-parse', () => {
       'decision-surface',
       'implementation-overhead',
       'concept-scatter',
-      'abstraction-fitness',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -124,7 +122,6 @@ describe('arg-parse', () => {
       'decision-surface',
       'implementation-overhead',
       'concept-scatter',
-      'abstraction-fitness',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);

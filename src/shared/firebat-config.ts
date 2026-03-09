@@ -40,10 +40,6 @@ interface FirebatConceptScatterConfig {
   readonly maxScatterIndex?: number | undefined;
 }
 
-interface FirebatAbstractionFitnessConfig {
-  readonly minFitnessScore?: number | undefined;
-}
-
 interface FirebatCouplingConfig {
   readonly godModulePercent?: number | undefined;
   readonly godModuleMin?: number | undefined;
@@ -94,7 +90,6 @@ interface FirebatFeaturesConfig {
   readonly 'decision-surface'?: FeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
   readonly 'implementation-overhead'?: FeatureToggle<FirebatImplementationOverheadConfig> | undefined;
   readonly 'concept-scatter'?: FeatureToggle<FirebatConceptScatterConfig> | undefined;
-  readonly 'abstraction-fitness'?: FeatureToggle<FirebatAbstractionFitnessConfig> | undefined;
   readonly 'giant-file'?: FeatureToggle<FirebatGiantFileConfig> | undefined;
 }
 
@@ -123,7 +118,6 @@ interface FirebatMcpFeaturesConfig {
   readonly 'decision-surface'?: InheritableFeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
   readonly 'implementation-overhead'?: InheritableFeatureToggle<FirebatImplementationOverheadConfig> | undefined;
   readonly 'concept-scatter'?: InheritableFeatureToggle<FirebatConceptScatterConfig> | undefined;
-  readonly 'abstraction-fitness'?: InheritableFeatureToggle<FirebatAbstractionFitnessConfig> | undefined;
   readonly 'giant-file'?: InheritableFeatureToggle<FirebatGiantFileConfig> | undefined;
 }
 
@@ -284,17 +278,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        'abstraction-fitness': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                minFitnessScore: z.number().optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
         'giant-file': z
           .union([
             z.literal(false),
@@ -429,18 +412,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                     z
                       .object({
                         maxScatterIndex: z.number().int().nonnegative().optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
-                'abstraction-fitness': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        minFitnessScore: z.number().optional(),
                       })
                       .strict(),
                   ])

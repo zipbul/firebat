@@ -16,8 +16,8 @@ const FILE_B = 'src/b.ts';
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('FIREBAT_CODE_CATALOG', () => {
-  it('should have exactly 78 entries', () => {
-    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(78);
+  it('should have exactly 77 entries', () => {
+    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(77);
   });
 
   it('should have a cause string for every entry', () => {

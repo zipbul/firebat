@@ -352,7 +352,7 @@
 | A-23 | `variableLifetimeMaxLifetimeLines` | `30` | 변수 선언~마지막 사용이 30줄이면 "수명이 긴" 변수? |
 | A-24 | `implementationOverheadMinRatio` | `1.0` | 구현 복잡도/인터페이스 복잡도 비율 1.0이면 보고? 거의 모든 함수가 해당 |
 | A-25 | `conceptScatterMaxScatterIndex` | `2` | scatterIndex(파일 수 + 레이어 수) > 2이면 경고? |
-| A-26 | `abstractionFitnessMinFitnessScore` | `0` | fitness score 0 미만이면 보고? 0이라는 기준의 의미는? |
+| A-26 | `abstractionFitnessMinFitnessScore` | `0` | fitness score 0 미만이면 보고? 0이라는 기준의 의미는? ✅ **기능 폐기로 무효** |
 
 ---
 
@@ -418,7 +418,7 @@
 
 ### B-02. abstraction-fitness — fitness 산출 공식
 
-- **파일**: `src/features/abstraction-fitness/analyzer.ts` L78-80
+- **파일**: ~~`src/features/abstraction-fitness/analyzer.ts` L78-80~~ (삭제됨)
 - **코드**:
   ```typescript
   const penalty = totalImports > 0 ? members.length : 0;
@@ -429,6 +429,7 @@
   - 왜 단순 빼기인가? 가중 합이나 비율이 더 적절하지 않은가?
   - `penalty = members.length`는 "파일이 많으면 무조건 불이익"인데, 이것이 fitness 측정에 합리적인가?
   - internalCohesion과 externalCoupling이 동일 단위(import 횟수)이므로 빼기는 성립하지만, penalty는 파일 수이므로 단위가 다름
+- **결론**: ✅ **기능 폐기로 무효** — abstraction-fitness 디텍터 전체 삭제 완료 (26→25 detectors).
 
 ---
 
@@ -494,7 +495,7 @@
 
 ### B-07. abstraction-fitness — external coupling 증가 규칙
 
-- **파일**: `src/features/abstraction-fitness/analyzer.ts` L63-70
+- **파일**: ~~`src/features/abstraction-fitness/analyzer.ts` L63-70~~ (삭제됨)
 - **코드**:
   ```typescript
   if (from.startsWith('../')) {
@@ -511,6 +512,7 @@
 - **질문**:
   - 같은 패키지 내 상위 디렉토리 import도 "외부"인가?
   - application/adapters/infrastructure 경로에 있다는 것만으로 무조건 +1 패널티가 적절한가?
+- **결론**: ✅ **기능 폐기로 무효** — abstraction-fitness 디텍터 전체 삭제 완료 (26→25 detectors).
 
 ---
 
@@ -612,10 +614,11 @@
 
 ### D-01. abstraction-fitness — Hexagonal Architecture 전제
 
-- **파일**: `src/features/abstraction-fitness/analyzer.ts` L68-70
+- **파일**: ~~`src/features/abstraction-fitness/analyzer.ts` L68-70~~ (삭제됨)
 - **코드**: `rel.includes('/application/') || rel.includes('/adapters/') || rel.includes('/infrastructure/')`
 - **임의 가정**: 경로에 이 문자열이 있으면 외부 결합으로 패널티 부여
 - **질문**: Hexagonal/Clean Architecture를 따르지 않는 프로젝트에서는 아무 의미 없음. Flat structure 프로젝트는?
+- **결론**: ✅ **기능 폐기로 무효** — abstraction-fitness 디텍터 전체 삭제 완료 (26→25 detectors).
 
 ---
 
@@ -672,10 +675,11 @@
 
 ### D-07. abstraction-fitness — `../` 시작 import = 외부
 
-- **파일**: `src/features/abstraction-fitness/analyzer.ts` L63
+- **파일**: ~~`src/features/abstraction-fitness/analyzer.ts` L63~~ (삭제됨)
 - **코드**: `if (from.startsWith('../')) { externalCoupling += 1; }`
 - **임의 가정**: 상위 디렉토리 import은 무조건 "외부 결합"
 - **질문**: `../shared/utils`처럼 같은 도메인 내 공유 모듈도 "외부"로 취급됨
+- **결론**: ✅ **기능 폐기로 무효** — abstraction-fitness 디텍터 전체 삭제 완료 (26→25 detectors).
 
 ---
 
@@ -798,13 +802,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 16건 | coupling, nesting, early-return, collapsible-if, 기본값 6개 |
-| B. 임의 공식/가중치 | **7건** | ✅ 1건 | coupling, abstraction-fitness, concept-scatter, implementation-overhead |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 17건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~ |
+| B. 임의 공식/가중치 | **7건** | ✅ 3건 | coupling, ~~abstraction-fitness~~, concept-scatter, implementation-overhead |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 2건 | ~~api-drift~~, ~~noop~~, symmetry-breaking, implicit-state, invariant-blindspot |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | — | abstraction-fitness, concept-scatter, modification-impact, barrel-policy |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 2건 | ~~abstraction-fitness~~, concept-scatter, modification-impact, barrel-policy |
 | E. 근사 측정 | **5건** | — | decision-surface, implementation-overhead, modification-trap, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **22건 해결** | 28개 feature 중 22개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **27건 해결** | 25개 feature 중 22개에서 최소 1건 이상 |
 
 ---
 

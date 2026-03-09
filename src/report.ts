@@ -195,7 +195,6 @@ const formatText = (report: FirebatReport): string => {
   const decisionSurface = analyses['decision-surface'] ?? [];
   const implementationOverhead = analyses['implementation-overhead'] ?? [];
   const conceptScatter = analyses['concept-scatter'] ?? [];
-  const abstractionFitness = analyses['abstraction-fitness'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
   const duplicatesUnified = analyses.duplicates ?? [];
   const lintErrors = lint.filter(d => d.severity === 'error').length;
@@ -665,17 +664,6 @@ const formatText = (report: FirebatReport): string => {
       const start = toPos(f.span.start.line, f.span.start.column);
 
       lines.push(`    ${cc('·', A.dim)} ${f.concept} ${cc(`scatter=${f.scatterIndex} files=${f.files.length} layers=${f.layers.length}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('abstraction-fitness') && abstractionFitness.length > 0) {
-    lines.push(sectionHeader('🏋️', 'Abstraction Fitness', `${abstractionFitness.length} findings`));
-
-    for (const f of abstractionFitness) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ${f.module} ${cc(`fitness=${f.fitness.toFixed(2)} cohesion=${f.internalCohesion.toFixed(2)} coupling=${f.externalCoupling.toFixed(2)}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 

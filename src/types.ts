@@ -29,7 +29,6 @@ export type FirebatDetector =
   | 'decision-surface'
   | 'implementation-overhead'
   | 'concept-scatter'
-  | 'abstraction-fitness'
   | 'giant-file'
   // Unified duplicates detector
   | 'duplicates';
@@ -129,7 +128,6 @@ export type FirebatCatalogCode =
   | 'DECISION_SURFACE'
   | 'IMPL_OVERHEAD'
   | 'CONCEPT_SCATTER'
-  | 'ABSTRACTION_FITNESS'
   | 'GIANT_FILE'
   // external tools (3)
   | 'LINT'
@@ -629,17 +627,6 @@ export interface ConceptScatterFinding {
   readonly layers: ReadonlyArray<string>;
 }
 
-export interface AbstractionFitnessFinding {
-  readonly kind: 'abstraction-fitness';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly module: string;
-  readonly internalCohesion: number;
-  readonly externalCoupling: number;
-  readonly fitness: number;
-}
-
 export interface GiantFileMetrics {
   readonly lineCount: number;
   readonly maxLines: number;
@@ -677,7 +664,6 @@ export interface FirebatAnalyses {
   readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;
   readonly 'implementation-overhead': ReadonlyArray<ImplementationOverheadFinding>;
   readonly 'concept-scatter': ReadonlyArray<ConceptScatterFinding>;
-  readonly 'abstraction-fitness': ReadonlyArray<AbstractionFitnessFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector
   readonly duplicates: ReadonlyArray<DuplicateGroup>;
