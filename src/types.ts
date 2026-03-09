@@ -23,11 +23,9 @@ export type FirebatDetector =
   // Phase 1 detectors (IMPROVE.md)
   | 'implicit-state'
   | 'temporal-coupling'
-  | 'invariant-blindspot'
   | 'modification-impact'
   | 'variable-lifetime'
   | 'decision-surface'
-  | 'concept-scatter'
   | 'giant-file'
   // Unified duplicates detector
   | 'duplicates';
@@ -121,12 +119,9 @@ export type FirebatCatalogCode =
   | 'IMPLICIT_STATE'
   | 'TEMPORAL_COUPLING'
   | 'SYMMETRY_BREAK'
-  | 'INVARIANT_BLINDSPOT'
-  | 'MOD_TRAP'
   | 'MOD_IMPACT'
   | 'VAR_LIFETIME'
   | 'DECISION_SURFACE'
-  | 'CONCEPT_SCATTER'
   | 'GIANT_FILE'
   // external tools (3)
   | 'LINT'
@@ -571,14 +566,6 @@ export interface TemporalCouplingFinding {
   readonly readers: number;
 }
 
-export interface InvariantBlindspotFinding {
-  readonly kind: 'invariant-blindspot';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly signal: string;
-}
-
 export interface ModificationImpactFinding {
   readonly kind: 'modification-impact';
   readonly file: string;
@@ -606,17 +593,6 @@ export interface DecisionSurfaceFinding {
   readonly axes: number;
   readonly combinatorialPaths: number;
   readonly repeatedChecks: number;
-}
-
-export interface ConceptScatterFinding {
-  readonly kind: 'concept-scatter';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly concept: string;
-  readonly scatterIndex: number;
-  readonly files: ReadonlyArray<string>;
-  readonly layers: ReadonlyArray<string>;
 }
 
 export interface GiantFileMetrics {
@@ -650,11 +626,9 @@ export interface FirebatAnalyses {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state': ReadonlyArray<ImplicitStateFinding>;
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
-  readonly 'invariant-blindspot': ReadonlyArray<InvariantBlindspotFinding>;
   readonly 'modification-impact': ReadonlyArray<ModificationImpactFinding>;
   readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
   readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;
-  readonly 'concept-scatter': ReadonlyArray<ConceptScatterFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector
   readonly duplicates: ReadonlyArray<DuplicateGroup>;

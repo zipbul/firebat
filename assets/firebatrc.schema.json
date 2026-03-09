@@ -34,11 +34,9 @@
 
         "implicit-state": { "$ref": "#/$defs/emptyToggle" },
         "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
-        "invariant-blindspot": { "$ref": "#/$defs/emptyToggle" },
         "modification-impact": { "$ref": "#/$defs/emptyToggle" },
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
         "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
-        "concept-scatter": { "$ref": "#/$defs/conceptScatterToggle" },
         "giant-file": { "$ref": "#/$defs/giantFileToggle" }
       }
     },
@@ -70,11 +68,9 @@
 
                 "implicit-state": { "$ref": "#/$defs/emptyInheritable" },
                 "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
-                "invariant-blindspot": { "$ref": "#/$defs/emptyInheritable" },
                 "modification-impact": { "$ref": "#/$defs/emptyInheritable" },
                 "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
                 "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
-                "concept-scatter": { "$ref": "#/$defs/conceptScatterInheritable" },
                 "giant-file": { "$ref": "#/$defs/giantFileInheritable" }
               }
             }
@@ -404,30 +400,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": { "maxAxes": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    },
-
-    "conceptScatterToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "maxScatterIndex": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    },
-    "conceptScatterInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "maxScatterIndex": { "type": "integer", "minimum": 0 } }
         }
       ]
     },

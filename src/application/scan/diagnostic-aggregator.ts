@@ -605,22 +605,6 @@ export const FIREBAT_CODE_CATALOG = {
       'If they should be uniform, verify that aligning them to the majority pattern does not break callers.',
     ],
   },
-  INVARIANT_BLINDSPOT: {
-    cause: 'A function manipulates data without validating that its structural invariants hold before or after the operation.',
-    think: [
-      'Identify what properties the data is expected to satisfy at the call site.',
-      'Determine whether the invariants are validated elsewhere or not at all.',
-      'Verify that adding assertions or type-level constraints at the boundary prevents corruption from propagating deeper.',
-    ],
-  },
-  MOD_TRAP: {
-    cause: 'A code pattern appears many times across the codebase, making any modification require many synchronized changes.',
-    think: [
-      'Determine whether the pattern is coincidental duplication or an intentional abstraction that was never named.',
-      'Check whether the instances always change together — if so, a named abstraction eliminates the synchronization burden.',
-      'If they sometimes diverge, verify that the duplication is intentional and documented.',
-    ],
-  },
   MOD_IMPACT: {
     cause: 'A function or module has a high impact radius — changes to it propagate to many callers or dependents.',
     think: [
@@ -653,15 +637,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Determine whether the implementation complexity reflects an inherently hard problem or accidental complexity from poor structure.',
       'Identify which parts can be extracted, simplified, or replaced with existing utilities.',
       'Verify that high implementation-to-interface ratios indicate missing abstractions rather than genuinely dense logic.',
-    ],
-  },
-  CONCEPT_SCATTER: {
-    cause:
-      'A single domain concept is implemented across multiple files and layers, making it hard to understand or modify as a unit.',
-    think: [
-      'Identify all the files that participate in implementing this concept.',
-      'Determine whether the scatter is structural (the concept genuinely spans layers) or accidental (it can be consolidated).',
-      'Verify that consolidating scattered files reduces the cognitive cost and the blast radius of changes.',
     ],
   },
   GIANT_FILE: {

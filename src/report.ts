@@ -189,11 +189,9 @@ const formatText = (report: FirebatReport): string => {
   const forwarding = analyses.forwarding ?? [];
   const implicitState = analyses['implicit-state'] ?? [];
   const temporalCoupling = analyses['temporal-coupling'] ?? [];
-  const invariantBlindspot = analyses['invariant-blindspot'] ?? [];
   const modificationImpact = analyses['modification-impact'] ?? [];
   const variableLifetime = analyses['variable-lifetime'] ?? [];
   const decisionSurface = analyses['decision-surface'] ?? [];
-  const conceptScatter = analyses['concept-scatter'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
   const duplicatesUnified = analyses.duplicates ?? [];
   const lintErrors = lint.filter(d => d.severity === 'error').length;
@@ -599,17 +597,6 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('invariant-blindspot') && invariantBlindspot.length > 0) {
-    lines.push(sectionHeader('🎯', 'Invariant Blindspot', `${invariantBlindspot.length} findings`));
-
-    for (const f of invariantBlindspot) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ${f.signal} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
   if (selectedDetectors.has('modification-impact') && modificationImpact.length > 0) {
     lines.push(sectionHeader('💥', 'Modification Impact', `${modificationImpact.length} findings`));
 
@@ -641,17 +628,6 @@ const formatText = (report: FirebatReport): string => {
       const start = toPos(f.span.start.line, f.span.start.column);
 
       lines.push(`    ${cc('·', A.dim)} axes=${f.axes} paths=${f.combinatorialPaths} repeats=${f.repeatedChecks} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('concept-scatter') && conceptScatter.length > 0) {
-    lines.push(sectionHeader('🌐', 'Concept Scatter', `${conceptScatter.length} findings`));
-
-    for (const f of conceptScatter) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ${f.concept} ${cc(`scatter=${f.scatterIndex} files=${f.files.length} layers=${f.layers.length}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 

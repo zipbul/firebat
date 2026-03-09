@@ -17,11 +17,9 @@ import type {
   CouplingHotspot,
   ImplicitStateFinding,
   TemporalCouplingFinding,
-  InvariantBlindspotFinding,
   ModificationImpactFinding,
   VariableLifetimeFinding,
   DecisionSurfaceFinding,
-  ConceptScatterFinding,
   GiantFileFinding,
   FirebatDetector,
   FormatFinding,
@@ -53,9 +51,9 @@ const allDetectors: ReadonlyArray<FirebatDetector> = [
   'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
   'nesting', 'early-return', 'forwarding',
-  'implicit-state', 'temporal-coupling', 'invariant-blindspot',
+  'implicit-state', 'temporal-coupling',
   'modification-impact', 'variable-lifetime', 'decision-surface',
-  'concept-scatter', 'giant-file',
+  'giant-file',
   'duplicates',
 ];
 
@@ -146,7 +144,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 21 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 19 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -166,11 +164,9 @@ describe('formatReport', () => {
       expect(out).toContain('Forwarding');
       expect(out).toContain('Implicit State');
       expect(out).toContain('Temporal Coupling');
-      expect(out).toContain('Invariant Blindspot');
       expect(out).toContain('Modification Impact');
       expect(out).toContain('Variable Lifetime');
       expect(out).toContain('Decision Surface');
-      expect(out).toContain('Concept Scatter');
       expect(out).toContain('Giant File');
     });
 
@@ -786,20 +782,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Invariant Blindspot body ────────────────────────────────────
-
-  describe('invariant-blindspot body', () => {
-    it('should render body with signal when findings exist', () => {
-      const finding: InvariantBlindspotFinding = { kind: 'invariant-blindspot', file: testFile, span: span(14, 3), signal: 'unchecked-array-length' };
-      const out = formatReport(makeReport(['invariant-blindspot'], { 'invariant-blindspot': [finding] }), 'text');
-
-      expect(out).toContain('Invariant Blindspot');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('unchecked-array-length');
-      expect(out).toContain('14:3');
-    });
-  });
-
   // ── Modification Impact body ────────────────────────────────────
 
   describe('modification-impact body', () => {
@@ -852,22 +834,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Concept Scatter body ────────────────────────────────────────
-
-  describe('concept-scatter body', () => {
-    it('should render body with concept, scatter, files, and layers when findings exist', () => {
-      const finding: ConceptScatterFinding = { kind: 'concept-scatter', file: testFile, span: span(50, 0), concept: 'logging', scatterIndex: 0.8, files: ['a.ts', 'b.ts', 'c.ts'], layers: ['adapters', 'engine'] };
-      const out = formatReport(makeReport(['concept-scatter'], { 'concept-scatter': [finding] }), 'text');
-
-      expect(out).toContain('Concept Scatter');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('logging');
-      expect(out).toContain('scatter=0.8');
-      expect(out).toContain('files=3');
-      expect(out).toContain('layers=2');
-    });
-  });
-
   // ── Giant File body ─────────────────────────────────────────────
 
   describe('giant-file body', () => {
@@ -893,11 +859,11 @@ describe('formatReport', () => {
 
   describe('cross-cutting', () => {
     it('should not render body section when detector is not in selected detectors', () => {
-      const finding: InvariantBlindspotFinding = { kind: 'invariant-blindspot', file: testFile, span: span(), signal: 'test' };
-      // detectors list does NOT include invariant-blindspot
-      const out = formatReport(makeReport(['waste'], { 'invariant-blindspot': [finding] }), 'text');
+      const finding: ImplicitStateFinding = { kind: 'implicit-state', file: testFile, span: span(), protocol: 'test' };
+      // detectors list does NOT include implicit-state
+      const out = formatReport(makeReport(['waste'], { 'implicit-state': [finding] }), 'text');
 
-      expect(out).not.toContain('Invariant Blindspot');
+      expect(out).not.toContain('Implicit State');
     });
 
     it('should not render body section when detector selected but array is empty', () => {
@@ -909,15 +875,15 @@ describe('formatReport', () => {
     });
 
     it('should render multiple findings for a single detector when array has multiple items', () => {
-      const findings: InvariantBlindspotFinding[] = [
-        { kind: 'invariant-blindspot', file: testFile, span: span(1, 0), signal: 'signal-a' },
-        { kind: 'invariant-blindspot', file: testFile2, span: span(2, 0), signal: 'signal-b' },
+      const findings: ModificationImpactFinding[] = [
+        { kind: 'modification-impact', file: testFile, span: span(1, 0), impactRadius: 3, highRiskCallers: ['a'] },
+        { kind: 'modification-impact', file: testFile2, span: span(2, 0), impactRadius: 5, highRiskCallers: ['b'] },
       ];
-      const out = formatReport(makeReport(['invariant-blindspot'], { 'invariant-blindspot': findings }), 'text');
+      const out = formatReport(makeReport(['modification-impact'], { 'modification-impact': findings }), 'text');
 
       expect(out).toContain('2 findings');
-      expect(out).toContain('signal-a');
-      expect(out).toContain('signal-b');
+      expect(out).toContain('radius=3');
+      expect(out).toContain('radius=5');
     });
 
     it('should render summary section when detectors are selected', () => {

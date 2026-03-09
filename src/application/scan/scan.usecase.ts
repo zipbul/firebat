@@ -21,7 +21,6 @@ import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
-import { analyzeConceptScatter, createEmptyConceptScatter } from '../../features/concept-scatter';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../features/decision-surface';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
@@ -32,7 +31,6 @@ import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
 import { analyzeImplicitState, createEmptyImplicitState } from '../../features/implicit-state';
-import { analyzeInvariantBlindspot, createEmptyInvariantBlindspot } from '../../features/invariant-blindspot';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeModificationImpact, createEmptyModificationImpact } from '../../features/modification-impact';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
@@ -705,7 +703,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     giantFileMaxLines: 1000,
     decisionSurfaceMaxAxes: 2,
     variableLifetimeMaxLifetimeLines: 30,
-    conceptScatterMaxScatterIndex: 2,
   };
   const resolvedGiantFileMaxLines =
     (config as any)?.features?.['giant-file']?.maxLines ?? defaultFeatureOptions.giantFileMaxLines;
@@ -713,8 +710,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     (config as any)?.features?.['decision-surface']?.maxAxes ?? defaultFeatureOptions.decisionSurfaceMaxAxes;
   const resolvedVariableLifetimeMaxLifetimeLines =
     (config as any)?.features?.['variable-lifetime']?.maxLifetimeLines ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
-  const resolvedConceptScatterMaxScatterIndex =
-    (config as any)?.features?.['concept-scatter']?.maxScatterIndex ?? defaultFeatureOptions.conceptScatterMaxScatterIndex;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
 
   if (options.detectors.includes('giant-file')) {
@@ -785,20 +780,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
   }
 
-  let invariantBlindspot: ReturnType<typeof analyzeInvariantBlindspot> = createEmptyInvariantBlindspot();
-
-  if (options.detectors.includes('invariant-blindspot')) {
-    const t0 = nowMs();
-    const detectorKey = 'invariant-blindspot';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    invariantBlindspot = analyzeInvariantBlindspot(program);
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
   let duplicatesUnified: ReturnType<typeof analyzeDuplicates> = createEmptyDuplicates();
 
   if (options.detectors.includes('duplicates')) {
@@ -822,20 +803,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     modificationImpact = await analyzeModificationImpact(gildash, program, ctx.rootAbs);
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
-  let conceptScatter: ReturnType<typeof analyzeConceptScatter> = createEmptyConceptScatter();
-
-  if (options.detectors.includes('concept-scatter')) {
-    const t0 = nowMs();
-    const detectorKey = 'concept-scatter';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    conceptScatter = analyzeConceptScatter(program, { maxScatterIndex: Number(resolvedConceptScatterMaxScatterIndex) });
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1296,14 +1263,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('temporal-coupling')
       ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') }
       : {}),
-    ...(selectedDetectors.has('invariant-blindspot')
-      ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') }
-      : {}),
     ...(selectedDetectors.has('modification-impact')
       ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') }
-      : {}),
-    ...(selectedDetectors.has('concept-scatter')
-      ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') }
       : {}),
     ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified as any) } : {}),
   };

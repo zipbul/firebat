@@ -41,10 +41,6 @@ interface FirebatNestingConfig {
   readonly maxDensity?: number | undefined;
 }
 
-interface FirebatConceptScatterConfig {
-  readonly maxScatterIndex?: number | undefined;
-}
-
 interface FirebatCouplingConfig {
   readonly godModulePercent?: number | undefined;
   readonly godModuleMin?: number | undefined;
@@ -89,11 +85,9 @@ interface FirebatFeaturesConfig {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state'?: boolean | undefined;
   readonly 'temporal-coupling'?: boolean | undefined;
-  readonly 'invariant-blindspot'?: boolean | undefined;
   readonly 'modification-impact'?: boolean | undefined;
   readonly 'variable-lifetime'?: FeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: FeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
-  readonly 'concept-scatter'?: FeatureToggle<FirebatConceptScatterConfig> | undefined;
   readonly 'giant-file'?: FeatureToggle<FirebatGiantFileConfig> | undefined;
 }
 
@@ -116,11 +110,9 @@ interface FirebatMcpFeaturesConfig {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state'?: boolean | 'inherit' | undefined;
   readonly 'temporal-coupling'?: boolean | 'inherit' | undefined;
-  readonly 'invariant-blindspot'?: boolean | 'inherit' | undefined;
   readonly 'modification-impact'?: boolean | 'inherit' | undefined;
   readonly 'variable-lifetime'?: InheritableFeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: InheritableFeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
-  readonly 'concept-scatter'?: InheritableFeatureToggle<FirebatConceptScatterConfig> | undefined;
   readonly 'giant-file'?: InheritableFeatureToggle<FirebatGiantFileConfig> | undefined;
 }
 
@@ -250,7 +242,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 
         'implicit-state': z.boolean().optional(),
         'temporal-coupling': z.boolean().optional(),
-        'invariant-blindspot': z.boolean().optional(),
         'modification-impact': z.boolean().optional(),
         'variable-lifetime': z
           .union([
@@ -270,17 +261,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
             z
               .object({
                 maxAxes: z.number().int().nonnegative().optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
-        'concept-scatter': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                maxScatterIndex: z.number().int().nonnegative().optional(),
               })
               .strict(),
           ])
@@ -373,7 +353,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                 // Phase 1 detectors (IMPROVE.md)
                 'implicit-state': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'temporal-coupling': z.union([z.boolean(), z.literal('inherit')]).optional(),
-                'invariant-blindspot': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'modification-impact': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'variable-lifetime': z
                   .union([
@@ -395,18 +374,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                     z
                       .object({
                         maxAxes: z.number().int().nonnegative().optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
-                'concept-scatter': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        maxScatterIndex: z.number().int().nonnegative().optional(),
                       })
                       .strict(),
                   ])

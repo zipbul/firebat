@@ -65,9 +65,6 @@
     // Time-order dependency / temporal coupling.
     "temporal-coupling": true,
 
-    // Invariant blind spots.
-    "invariant-blindspot": true,
-
     // Modification impact hotspots.
     "modification-impact": true,
 
@@ -76,9 +73,6 @@
 
     // High-dimensional decision surfaces (optional threshold).
     "decision-surface": { "maxAxes": 10 },
-
-    // Concept scatter index (optional threshold).
-    "concept-scatter": { "maxScatterIndex": 10 },
 
     // Giant files (optional line threshold).
     "giant-file": { "maxLines": 800 }

@@ -33,11 +33,9 @@ describe('arg-parse', () => {
       'forwarding',
       'implicit-state',
       'temporal-coupling',
-      'invariant-blindspot',
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
-      'concept-scatter',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -75,11 +73,9 @@ describe('arg-parse', () => {
       'forwarding',
       'implicit-state',
       'temporal-coupling',
-      'invariant-blindspot',
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
-      'concept-scatter',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -114,11 +110,9 @@ describe('arg-parse', () => {
       'forwarding',
       'implicit-state',
       'temporal-coupling',
-      'invariant-blindspot',
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
-      'concept-scatter',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);

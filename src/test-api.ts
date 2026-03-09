@@ -13,7 +13,6 @@
 // Features — analyze / detect  (Phase 2 에서 detectors/ 로 이동 예정)
 // ---------------------------------------------------------------------------
 export { analyzeBarrelPolicy } from './features/barrel-policy';
-export { analyzeConceptScatter } from './features/concept-scatter';
 export { analyzeCoupling } from './features/coupling';
 export { analyzeDecisionSurface } from './features/decision-surface';
 export { analyzeDependencies } from './features/dependencies';
@@ -23,7 +22,6 @@ export { analyzeFormat } from './features/format';
 export { analyzeForwarding } from './features/forwarding';
 export { analyzeGiantFile } from './features/giant-file';
 export { analyzeImplicitState } from './features/implicit-state';
-export { analyzeInvariantBlindspot } from './features/invariant-blindspot';
 export { analyzeLint } from './features/lint';
 export { analyzeModificationImpact } from './features/modification-impact';
 export { analyzeNesting } from './features/nesting';

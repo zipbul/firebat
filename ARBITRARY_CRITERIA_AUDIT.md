@@ -270,10 +270,11 @@
 
 ### A-13. concept-scatter — 토큰 최소 길이
 
-- **파일**: `src/features/concept-scatter/analyzer.ts` L56
+- **파일**: ~~`src/features/concept-scatter/analyzer.ts` L56~~ (삭제됨)
 - **코드**: `if (p.length < 3) { continue; }`
 - **임의 기준**: camelCase 분할 후 3글자 미만 제외
 - **질문**: `id`, `db`, `io` 같은 2글자 약어가 중요한 concept일 수 있음. 왜 3인가?
+- **결론**: ✅ **기능 폐기로 무효** — concept-scatter 디텍터 전체 삭제 완료 (24 detectors).
 
 ---
 
@@ -440,12 +441,13 @@
 
 ### B-03. concept-scatter — scatterIndex 공식
 
-- **파일**: `src/features/concept-scatter/analyzer.ts` L99
+- **파일**: ~~`src/features/concept-scatter/analyzer.ts` L99~~ (삭제됨)
 - **코드**: `const scatterIndex = filesSet.size + layersSet.size;`
 - **임의 기준**: 파일 수와 레이어 수를 동일 가중치(1:1)로 합산
 - **질문**:
   - 1개 레이어에 10개 파일(index=11)과 5개 레이어에 6개 파일(index=11)이 같은 심각도인가?
   - 레이어 분산이 더 심각하지 않은가?
+- **결론**: ✅ **기능 폐기로 무효** — concept-scatter 디텍터 전체 삭제 완료 (24 detectors).
 
 ---
 
@@ -557,7 +559,7 @@
 
 ### C-06. invariant-blindspot — 5개 regex signal
 
-- **파일**: `src/features/invariant-blindspot/analyzer.ts` L24-28
+- **파일**: ~~`src/features/invariant-blindspot/analyzer.ts` L24-28~~ (삭제됨)
 - **코드**:
   ```typescript
   const signals = [
@@ -573,6 +575,7 @@
   - 코멘트 내 "must/always/never"가 불변 조건을 의미한다는 것은 매우 subjective
   - `assert`, `invariant`, `precondition` 같은 함수 호출은?
   - 이 패턴 중 하나라도 매치되면 **파일당 1건만** 보고하는데, 이것으로 충분한가?
+- **결론**: ✅ **기능 폐기로 무효** — invariant-blindspot 디텍터 전체 삭제 완료 (23 detectors). Rice's Theorem에 의해 invariant 검증은 정적 분석으로 결정불가능. 파일당 1건 제약, signal 미분류, must-comment 주관성, exception-hygiene과 부분 중복.
 
 ---
 
@@ -603,10 +606,11 @@
 
 ### D-02. concept-scatter / modification-impact — layerOf 함수
 
-- **파일**: `src/features/concept-scatter/analyzer.ts` L23-39, `src/features/modification-impact/analyzer.ts` L18-35
+- **파일**: ~~`src/features/concept-scatter/analyzer.ts` L23-39~~ (삭제됨), `src/features/modification-impact/analyzer.ts` L18-35
 - **코드**: `src/adapters/`, `src/application/`, `src/infrastructure/`, `src/ports/` → 레이어 분류
 - **임의 가정**: 4-레이어 Clean Architecture가 전제
 - **질문**: 동일 `layerOf` 함수가 2개 feature에 중복 존재. 프로젝트의 실제 구조를 설정으로 받아야 하지 않는가?
+- **부분 결론**: concept-scatter 측 중복은 기능 폐기로 해소. modification-impact 측 `layerOf`는 여전히 미해결.
 
 ---
 
@@ -688,10 +692,11 @@
 
 ### E-03. modification-trap — case label 일치 기반 감지
 
-- **파일**: `src/features/modification-trap/analyzer.ts` L49-60
+- **파일**: ~~`src/features/modification-trap/analyzer.ts` L49-60~~ (삭제됨)
 - **방식**: 2개 파일에서 동일한 switch case label 세트 → "함께 수정해야 하는" 코드
 - **부정확성**: 같은 enum을 switch 하는 것이 반드시 "수정 트랩"은 아님. 각 switch가 다른 동작이라면 정상
 - **질문**: import graph 기반으로 공유 타입을 추적하는 것이 더 정확하지 않은가?
+- **결론**: ✅ **기능 폐기로 무효** — modification-trap은 커밋 `1e69bd0`에서 duplicates 통합 리팩토링으로 삭제됨. MOD_TRAP 카탈로그 잔여도 정리 완료.
 
 ---
 
@@ -778,13 +783,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 21건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~ |
-| B. 임의 공식/가중치 | **7건** | ✅ 3건 | coupling, ~~abstraction-fitness~~, concept-scatter, implementation-overhead |
-| C. 이름/패턴 휴리스틱 | **7건** | ✅ 4건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, implicit-state, invariant-blindspot |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 3건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, concept-scatter, modification-impact, barrel-policy |
-| E. 근사 측정 | **5건** | ✅ 1건 | decision-surface, implementation-overhead, modification-trap, ~~symmetry-breaking~~, temporal-coupling |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 22건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~ |
+| B. 임의 공식/가중치 | **7건** | ✅ 4건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead |
+| C. 이름/패턴 휴리스틱 | **7건** | ✅ 5건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, implicit-state, ~~invariant-blindspot~~ |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 4건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, modification-impact, barrel-policy |
+| E. 근사 측정 | **5건** | ✅ 2건 | decision-surface, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **35건 해결** | 25개 feature 중 22개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **39건 해결** | 23개 feature 중 20개에서 최소 1건 이상 |
 
 ---
 

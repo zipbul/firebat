@@ -3,16 +3,12 @@
   "features": {
     "implicit-state": true,
     "temporal-coupling": true,
-    "invariant-blindspot": true,
     "modification-impact": true,
     "variable-lifetime": {
       "maxLifetimeLines": 200
     },
     "decision-surface": {
       "maxAxes": 10
-    },
-    "concept-scatter": {
-      "maxScatterIndex": 10
     },
     "giant-file": {
       "maxLines": 800
