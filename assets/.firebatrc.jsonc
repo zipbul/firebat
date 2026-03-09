@@ -77,9 +77,6 @@
     // High-dimensional decision surfaces (optional threshold).
     "decision-surface": { "maxAxes": 10 },
 
-    // Implementation overhead (optional ratio threshold).
-    "implementation-overhead": { "minRatio": 1.5 },
-
     // Concept scatter index (optional threshold).
     "concept-scatter": { "maxScatterIndex": 10 },
 

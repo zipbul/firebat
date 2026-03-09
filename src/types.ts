@@ -27,7 +27,6 @@ export type FirebatDetector =
   | 'modification-impact'
   | 'variable-lifetime'
   | 'decision-surface'
-  | 'implementation-overhead'
   | 'concept-scatter'
   | 'giant-file'
   // Unified duplicates detector
@@ -125,7 +124,6 @@ export type FirebatCatalogCode =
   | 'MOD_IMPACT'
   | 'VAR_LIFETIME'
   | 'DECISION_SURFACE'
-  | 'IMPL_OVERHEAD'
   | 'CONCEPT_SCATTER'
   | 'GIANT_FILE'
   // external tools (3)
@@ -605,16 +603,6 @@ export interface DecisionSurfaceFinding {
   readonly repeatedChecks: number;
 }
 
-export interface ImplementationOverheadFinding {
-  readonly kind: 'implementation-overhead';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly interfaceComplexity: number;
-  readonly implementationComplexity: number;
-  readonly ratio: number;
-}
-
 export interface ConceptScatterFinding {
   readonly kind: 'concept-scatter';
   readonly file: string;
@@ -661,7 +649,6 @@ export interface FirebatAnalyses {
   readonly 'modification-impact': ReadonlyArray<ModificationImpactFinding>;
   readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
   readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;
-  readonly 'implementation-overhead': ReadonlyArray<ImplementationOverheadFinding>;
   readonly 'concept-scatter': ReadonlyArray<ConceptScatterFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector

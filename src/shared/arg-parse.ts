@@ -27,7 +27,6 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'modification-impact',
   'variable-lifetime',
   'decision-surface',
-  'implementation-overhead',
   'concept-scatter',
   'giant-file',
 ];
@@ -101,12 +100,11 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'modification-impact' &&
       selection !== 'variable-lifetime' &&
       selection !== 'decision-surface' &&
-      selection !== 'implementation-overhead' &&
       selection !== 'concept-scatter' &&
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|forwarding|implicit-state|temporal-coupling|invariant-blindspot|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|forwarding|implicit-state|temporal-coupling|invariant-blindspot|modification-impact|variable-lifetime|decision-surface|concept-scatter|giant-file`,
       );
     }
 

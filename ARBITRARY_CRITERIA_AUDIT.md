@@ -456,41 +456,13 @@
 
 ### B-05. implementation-overhead — interface complexity 추정
 
-- **파일**: `src/features/implementation-overhead/analyzer.ts` L121
-- **코드**:
-  ```typescript
-  const estimateInterfaceComplexity = (signature: string, paramsText: string): number => {
-    const hasReturnType = signature.includes('):') || signature.includes(') :');
-    const paramCount = countTopLevelParams(paramsText);
-    const raw = paramCount + (hasReturnType ? 1 : 0);
-    return Math.max(1, raw);
-  };
-  ```
-- **임의 기준**: params 수 + return type 유무(0 or 1) = 인터페이스 복잡도
-- **질문**:
-  - generic type parameters는 복잡도를 높이지 않는가?
-  - object 파라미터 `{ a, b, c }: Options`는 1로 카운트되는데, 실제로는 3개 필드
+- **결론**: ✅ **기능 폐기로 무효** — implementation-overhead 디텍터 전체 삭제 완료 (25→24 detectors). ratio 모델의 구조적 한계 (분모 조작으로 메트릭 게이밍 가능, 인터페이스 복잡도 정의 모호). 방향 전환으로 복잡도 밀도(CC/LOC) finding kind를 nesting 디텍터에 추가하는 안을 백로그로 이관.
 
 ---
 
 ### B-06. implementation-overhead — implementation complexity 추정
 
-- **파일**: `src/features/implementation-overhead/analyzer.ts` L127-134
-- **코드**:
-  ```typescript
-  const estimateImplementationComplexity = (body: string): number => {
-    const semicolons = (body.match(/;/g) ?? []).length;
-    const ifs = (body.match(/\bif\b/g) ?? []).length;
-    const fors = (body.match(/\bfor\b/g) ?? []).length;
-    // ... C-style for 보정 ...
-    return Math.max(1, adjustedSemicolons + ifs + fors);
-  };
-  ```
-- **임의 기준**: 세미콜론 + if + for 카운트 = 구현 복잡도
-- **질문**:
-  - `console.log('debug');`의 세미콜론도 1 복잡도?
-  - `while`, `switch`, `try/catch`는 무시되는가?
-  - 문자열 내 `if`나 `for`가 카운트될 수 있음 (regex 기반이므로)
+- **결론**: ✅ **기능 폐기로 무효** — B-05와 동일.
 
 ---
 
@@ -706,12 +678,7 @@
 
 ### E-02. implementation-overhead — regex 기반 복잡도
 
-- **파일**: `src/features/implementation-overhead/analyzer.ts` L127-134
-- **부정확성**:
-  - 문자열/주석 내 `if`, `for`, `;`도 카운트
-  - `while`, `switch`, `try/catch`는 누락
-  - 빈 줄이나 선언문도 세미콜론으로 +1
-- **질문**: AST 기반 측정으로 전환해야 하는가?
+- **결론**: ✅ **기능 폐기로 무효** — B-05와 동일.
 
 ---
 

@@ -22,7 +22,6 @@ export { analyzeExceptionHygiene } from './features/exception-hygiene';
 export { analyzeFormat } from './features/format';
 export { analyzeForwarding } from './features/forwarding';
 export { analyzeGiantFile } from './features/giant-file';
-export { analyzeImplementationOverhead } from './features/implementation-overhead';
 export { analyzeImplicitState } from './features/implicit-state';
 export { analyzeInvariantBlindspot } from './features/invariant-blindspot';
 export { analyzeLint } from './features/lint';

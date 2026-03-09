@@ -12,7 +12,6 @@ import { describe, expect, it } from 'bun:test';
 import { parseSource } from '../../../src/test-api';
 import { analyzeDecisionSurface } from '../../../src/test-api';
 import { analyzeGiantFile } from '../../../src/test-api';
-import { analyzeImplementationOverhead } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
 import { analyzeForwarding } from '../../../src/test-api';
 
@@ -85,31 +84,6 @@ describe('threshold/variable-lifetime', () => {
     const xFindings = findings.filter(f => f.variable === 'x');
 
     expect(xFindings.length).toBeGreaterThan(0);
-  });
-});
-
-// ── implementation-overhead ──────────────────────────────────────────────────
-
-describe('threshold/implementation-overhead', () => {
-  it('ratio exactly at minRatio → no finding', () => {
-    // Simple function: interface=1 param, implementation=2 statements → ratio=2
-    const src = [
-      'export function simple(x: number): number {',
-      '  const doubled = x * 2;',
-      '  return doubled;',
-      '}',
-    ].join('\n');
-    const findings = analyzeImplementationOverhead([parse(src)], { minRatio: 2 });
-
-    // ratio <= 2 should not trigger (needs ratio > minRatio)
-    expect(findings.filter(f => f.file.includes('test'))).toHaveLength(0);
-  });
-
-  it('returns empty for a trivial function', () => {
-    const src = 'export const id = (x: number): number => x;';
-    const findings = analyzeImplementationOverhead([parse(src)], { minRatio: 2 });
-
-    expect(findings).toHaveLength(0);
   });
 });
 

@@ -11,9 +11,6 @@
     "decision-surface": {
       "maxAxes": 10
     },
-    "implementation-overhead": {
-      "minRatio": 1.5
-    },
     "concept-scatter": {
       "maxScatterIndex": 10
     },

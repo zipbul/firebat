@@ -38,7 +38,6 @@
         "modification-impact": { "$ref": "#/$defs/emptyToggle" },
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
         "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
-        "implementation-overhead": { "$ref": "#/$defs/implementationOverheadToggle" },
         "concept-scatter": { "$ref": "#/$defs/conceptScatterToggle" },
         "giant-file": { "$ref": "#/$defs/giantFileToggle" }
       }
@@ -75,7 +74,6 @@
                 "modification-impact": { "$ref": "#/$defs/emptyInheritable" },
                 "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
                 "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
-                "implementation-overhead": { "$ref": "#/$defs/implementationOverheadInheritable" },
                 "concept-scatter": { "$ref": "#/$defs/conceptScatterInheritable" },
                 "giant-file": { "$ref": "#/$defs/giantFileInheritable" }
               }
@@ -342,30 +340,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": { "maxAxes": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    },
-
-    "implementationOverheadToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minRatio": { "type": "number", "minimum": 0 } }
-        }
-      ]
-    },
-    "implementationOverheadInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minRatio": { "type": "number", "minimum": 0 } }
         }
       ]
     },

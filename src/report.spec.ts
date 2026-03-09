@@ -21,7 +21,6 @@ import type {
   ModificationImpactFinding,
   VariableLifetimeFinding,
   DecisionSurfaceFinding,
-  ImplementationOverheadFinding,
   ConceptScatterFinding,
   GiantFileFinding,
   FirebatDetector,
@@ -56,7 +55,7 @@ const allDetectors: ReadonlyArray<FirebatDetector> = [
   'nesting', 'early-return', 'forwarding',
   'implicit-state', 'temporal-coupling', 'invariant-blindspot',
   'modification-impact', 'variable-lifetime', 'decision-surface',
-  'implementation-overhead', 'concept-scatter', 'giant-file',
+  'concept-scatter', 'giant-file',
   'duplicates',
 ];
 
@@ -147,7 +146,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 22 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 21 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -171,7 +170,6 @@ describe('formatReport', () => {
       expect(out).toContain('Modification Impact');
       expect(out).toContain('Variable Lifetime');
       expect(out).toContain('Decision Surface');
-      expect(out).toContain('Implementation Overhead');
       expect(out).toContain('Concept Scatter');
       expect(out).toContain('Giant File');
     });
@@ -851,21 +849,6 @@ describe('formatReport', () => {
       expect(out).toContain('axes=4');
       expect(out).toContain('paths=16');
       expect(out).toContain('repeats=2');
-    });
-  });
-
-  // ── Implementation Overhead body ────────────────────────────────
-
-  describe('implementation-overhead body', () => {
-    it('should render body with ratio, impl, and iface when findings exist', () => {
-      const finding: ImplementationOverheadFinding = { kind: 'implementation-overhead', file: testFile, span: span(40, 0), interfaceComplexity: 3, implementationComplexity: 21, ratio: 7 };
-      const out = formatReport(makeReport(['implementation-overhead'], { 'implementation-overhead': [finding] }), 'text');
-
-      expect(out).toContain('Implementation Overhead');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('ratio=7.0');
-      expect(out).toContain('impl=21');
-      expect(out).toContain('iface=3');
     });
   });
 

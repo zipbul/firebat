@@ -32,10 +32,6 @@ interface FirebatGiantFileConfig {
   readonly maxLines?: number | undefined;
 }
 
-interface FirebatImplementationOverheadConfig {
-  readonly minRatio?: number | undefined;
-}
-
 interface FirebatConceptScatterConfig {
   readonly maxScatterIndex?: number | undefined;
 }
@@ -88,7 +84,6 @@ interface FirebatFeaturesConfig {
   readonly 'modification-impact'?: boolean | undefined;
   readonly 'variable-lifetime'?: FeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: FeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
-  readonly 'implementation-overhead'?: FeatureToggle<FirebatImplementationOverheadConfig> | undefined;
   readonly 'concept-scatter'?: FeatureToggle<FirebatConceptScatterConfig> | undefined;
   readonly 'giant-file'?: FeatureToggle<FirebatGiantFileConfig> | undefined;
 }
@@ -116,7 +111,6 @@ interface FirebatMcpFeaturesConfig {
   readonly 'modification-impact'?: boolean | 'inherit' | undefined;
   readonly 'variable-lifetime'?: InheritableFeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: InheritableFeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
-  readonly 'implementation-overhead'?: InheritableFeatureToggle<FirebatImplementationOverheadConfig> | undefined;
   readonly 'concept-scatter'?: InheritableFeatureToggle<FirebatConceptScatterConfig> | undefined;
   readonly 'giant-file'?: InheritableFeatureToggle<FirebatGiantFileConfig> | undefined;
 }
@@ -256,17 +250,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        'implementation-overhead': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                minRatio: z.number().nonnegative().optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
         'concept-scatter': z
           .union([
             z.literal(false),
@@ -388,18 +371,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                     z
                       .object({
                         maxAxes: z.number().int().nonnegative().optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
-                'implementation-overhead': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        minRatio: z.number().nonnegative().optional(),
                       })
                       .strict(),
                   ])

@@ -30,7 +30,6 @@ import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../feat
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
-import { analyzeImplementationOverhead, createEmptyImplementationOverhead } from '../../features/implementation-overhead';
 import { analyzeImplicitState, createEmptyImplicitState } from '../../features/implicit-state';
 import { analyzeInvariantBlindspot, createEmptyInvariantBlindspot } from '../../features/invariant-blindspot';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
@@ -680,7 +679,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     giantFileMaxLines: 1000,
     decisionSurfaceMaxAxes: 2,
     variableLifetimeMaxLifetimeLines: 30,
-    implementationOverheadMinRatio: 1.0,
     conceptScatterMaxScatterIndex: 2,
   };
   const resolvedGiantFileMaxLines =
@@ -689,8 +687,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     (config as any)?.features?.['decision-surface']?.maxAxes ?? defaultFeatureOptions.decisionSurfaceMaxAxes;
   const resolvedVariableLifetimeMaxLifetimeLines =
     (config as any)?.features?.['variable-lifetime']?.maxLifetimeLines ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
-  const resolvedImplementationOverheadMinRatio =
-    (config as any)?.features?.['implementation-overhead']?.minRatio ?? defaultFeatureOptions.implementationOverheadMinRatio;
   const resolvedConceptScatterMaxScatterIndex =
     (config as any)?.features?.['concept-scatter']?.maxScatterIndex ?? defaultFeatureOptions.conceptScatterMaxScatterIndex;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
@@ -730,20 +726,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     variableLifetime = analyzeVariableLifetime(program, { maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines) });
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
-  let implementationOverhead: ReturnType<typeof analyzeImplementationOverhead> = createEmptyImplementationOverhead();
-
-  if (options.detectors.includes('implementation-overhead')) {
-    const t0 = nowMs();
-    const detectorKey = 'implementation-overhead';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    implementationOverhead = analyzeImplementationOverhead(program, { minRatio: Number(resolvedImplementationOverheadMinRatio) });
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1279,7 +1261,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') } : {}),
     ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') } : {}),
-    ...(selectedDetectors.has('implementation-overhead') ? { 'implementation-overhead': enrichPhase1(implementationOverhead as any, 'IMPL_OVERHEAD') } : {}),
     ...(selectedDetectors.has('implicit-state') ? { 'implicit-state': enrichPhase1(implicitState as any, 'IMPLICIT_STATE') } : {}),
     ...(selectedDetectors.has('temporal-coupling') ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') } : {}),
     ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') } : {}),

@@ -37,7 +37,6 @@ describe('arg-parse', () => {
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
-      'implementation-overhead',
       'concept-scatter',
       'giant-file',
     ]);
@@ -80,7 +79,6 @@ describe('arg-parse', () => {
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
-      'implementation-overhead',
       'concept-scatter',
       'giant-file',
     ]);
@@ -120,7 +118,6 @@ describe('arg-parse', () => {
       'modification-impact',
       'variable-lifetime',
       'decision-surface',
-      'implementation-overhead',
       'concept-scatter',
       'giant-file',
     ]);

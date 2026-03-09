@@ -193,7 +193,6 @@ const formatText = (report: FirebatReport): string => {
   const modificationImpact = analyses['modification-impact'] ?? [];
   const variableLifetime = analyses['variable-lifetime'] ?? [];
   const decisionSurface = analyses['decision-surface'] ?? [];
-  const implementationOverhead = analyses['implementation-overhead'] ?? [];
   const conceptScatter = analyses['concept-scatter'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
   const duplicatesUnified = analyses.duplicates ?? [];
@@ -642,17 +641,6 @@ const formatText = (report: FirebatReport): string => {
       const start = toPos(f.span.start.line, f.span.start.column);
 
       lines.push(`    ${cc('·', A.dim)} axes=${f.axes} paths=${f.combinatorialPaths} repeats=${f.repeatedChecks} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('implementation-overhead') && implementationOverhead.length > 0) {
-    lines.push(sectionHeader('⚙️', 'Implementation Overhead', `${implementationOverhead.length} findings`));
-
-    for (const f of implementationOverhead) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} ratio=${f.ratio.toFixed(1)} impl=${f.implementationComplexity} iface=${f.interfaceComplexity} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 
