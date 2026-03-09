@@ -24,6 +24,7 @@ import { analyzeConceptScatter, createEmptyConceptScatter } from '../../features
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../features/decision-surface';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
+import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import type { ExceptionHygieneFindingKind } from '../../features/exception-hygiene';
 import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
@@ -603,6 +604,25 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     earlyReturn = createEmptyEarlyReturn();
   }
 
+  let collapsibleIf: ReturnType<typeof analyzeCollapsibleIf>;
+
+  if (options.detectors.includes('collapsible-if')) {
+    const t0 = nowMs();
+    const detectorKey = 'collapsible-if';
+
+    logger.debug('detector: start', { detector: detectorKey });
+
+    collapsibleIf = analyzeCollapsibleIf(program);
+
+    const durationMs = nowMs() - t0;
+
+    detectorTimings[detectorKey] = durationMs;
+
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
+  } else {
+    collapsibleIf = createEmptyCollapsibleIf();
+  }
+
   let exceptionHygiene: ReturnType<typeof analyzeExceptionHygiene>;
   let exceptionHygieneStatus: 'ok' | 'failed' = 'ok';
 
@@ -914,6 +934,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'wrapping-if': 'EARLY_RETURN_WRAPPING_IF',
       'invertible-if-else': 'EARLY_RETURN_INVERTIBLE',
       'cascade-guard': 'EARLY_RETURN_CASCADE_GUARD',
+      'implicit-else': 'EARLY_RETURN_IMPLICIT_ELSE',
     } as const;
 
     return items.map(item => {
@@ -923,6 +944,25 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       return {
         ...item,
         code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
+        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+      };
+    });
+  };
+
+  const enrichCollapsibleIf = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode = {
+      'collapsible-if': 'COLLAPSIBLE_IF',
+      'collapsible-else-if': 'COLLAPSIBLE_ELSE_IF',
+    } as const satisfies Record<string, FirebatCatalogCode>;
+
+    return items.map(item => {
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+      const kind = String(item?.kind ?? 'collapsible-if');
+      const code = kindToCode[kind as keyof typeof kindToCode] ?? 'COLLAPSIBLE_IF';
+
+      return {
+        ...item,
+        code,
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
       };
     });
@@ -1255,6 +1295,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling as any) } : {}),
     ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
     ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
+    ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') } : {}),

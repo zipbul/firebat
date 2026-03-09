@@ -209,6 +209,28 @@ const isLoopNodeType = (nodeType: string): boolean => {
   );
 };
 
+// ── Consecutive trailing-if detection ────────────────────────────────
+
+export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<NodeValue>): number => {
+  let count = 0;
+  let startIdx = stmts.length - 1;
+
+  // Allow skipping a final exit statement — dispatch patterns often end with a default return/throw
+  if (startIdx >= 0 && isExitStatement(stmts[startIdx]!)) {
+    startIdx -= 1;
+  }
+
+  for (let i = startIdx; i >= 0; i--) {
+    const stmt = stmts[i]!;
+    if (isOxcNode(stmt) && stmt.type === 'IfStatement' && isNodeRecord(stmt) && stmt.alternate == null) {
+      count += 1;
+    } else {
+      break;
+    }
+  }
+  return count;
+};
+
 // ── Wrapping-if detection ───────────────────────────────────────────
 
 /** Count statements in the consequent block of an if statement */
@@ -271,6 +293,90 @@ const detectWrappingIf = (
   };
 };
 
+// ── Implicit-else detection ─────────────────────────────────────────
+
+/**
+ * Detect implicit-else: an if (no else) whose consequent ends with exit,
+ * followed by a short remaining tail — the implicit "else" branch.
+ * Inverting the condition turns the tail into a guard clause and unindents the consequent.
+ */
+const detectImplicitElse = (
+  bodyStatements: ReadonlyArray<NodeValue>,
+  insideLoop: boolean,
+  sourceText: string,
+): ReadonlyArray<Opportunity> => {
+  if (bodyStatements.length < 2) {
+    return [];
+  }
+
+  const results: Opportunity[] = [];
+
+  for (let i = 0; i < bodyStatements.length; i++) {
+    const stmt = bodyStatements[i]!;
+
+    if (!isOxcNode(stmt) || stmt.type !== 'IfStatement') {
+      continue;
+    }
+
+    if (!isNodeRecord(stmt)) {
+      continue;
+    }
+
+    // Must have no alternate (no else)
+    if (stmt.alternate !== null && stmt.alternate !== undefined) {
+      continue;
+    }
+
+    const consequent = stmt.consequent as NodeValue;
+
+    // Consequent must end with exit (return/throw) or loop-exit (continue/break)
+    const exits = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
+
+    if (!exits) {
+      continue;
+    }
+
+    const consequentCount = countStatements(consequent);
+    const remainingCount = bodyStatements.length - i - 1;
+
+    if (remainingCount === 0) {
+      continue; // no tail → wrapping-if territory
+    }
+
+    // Only detect when consequent is the long side (the code that benefits from unindenting)
+    if (consequentCount < remainingCount * 2) {
+      continue;
+    }
+
+    if (remainingCount > 3) {
+      continue;
+    }
+
+    // In function context: remaining (short side) must end with exit so it can become a guard
+    // In loop context: no requirement — loop naturally continues
+    if (!insideLoop) {
+      const lastRemaining = bodyStatements[bodyStatements.length - 1]!;
+
+      if (!isExitStatement(lastRemaining as NodeValue)) {
+        continue;
+      }
+    }
+
+    const ifNode = stmt as Node;
+    const spanStart = getLineColumn(sourceText, ifNode.start);
+    const spanEnd = getLineColumn(sourceText, ifNode.end);
+
+    results.push({
+      kind: 'implicit-else',
+      span: { start: spanStart, end: spanEnd },
+      depthReduction: 1,
+      statementsAffected: consequentCount,
+    });
+  }
+
+  return results;
+};
+
 // ── Cascade-guard detection ─────────────────────────────────────────
 
 /**
@@ -296,6 +402,7 @@ const detectCascadeGuard = (
   }
 
   let chainLength = 0;
+  let singleExitCount = 0;
   let current: NodeValue = ifNode;
 
   // Walk the chain: each link must have consequent ending in exit
@@ -311,6 +418,10 @@ const detectCascadeGuard = (
     }
 
     chainLength += 1;
+
+    if (countStatements(consequent) <= 1) {
+      singleExitCount += 1;
+    }
 
     // If alternate is another IfStatement, continue the chain
     if (isOxcNode(alternate) && (alternate as Node).type === 'IfStatement') {
@@ -334,12 +445,42 @@ const detectCascadeGuard = (
   const finalBranch = current.alternate as NodeValue;
 
   if (finalBranch === null || finalBranch === undefined) {
-    return null;
+    // Tail-less: all consequents in the chain already end with exit (verified by the while loop).
+    // The entire chain can be flattened to sequential guards.
+    let totalConsequentCount = 0;
+    let recount: NodeValue = ifNode;
+
+    while (isOxcNode(recount) && recount.type === 'IfStatement' && isNodeRecord(recount)) {
+      totalConsequentCount += countStatements(recount.consequent as NodeValue);
+      const alt = recount.alternate;
+
+      if (isOxcNode(alt) && (alt as Node).type === 'IfStatement') {
+        recount = alt as NodeValue;
+      } else {
+        break;
+      }
+    }
+
+    const taillessNode = ifNode as Node;
+    const taillessStart = getLineColumn(sourceText, taillessNode.start);
+    const taillessEnd = getLineColumn(sourceText, taillessNode.end);
+
+    return {
+      kind: 'cascade-guard',
+      span: { start: taillessStart, end: taillessEnd },
+      depthReduction: 1,
+      statementsAffected: totalConsequentCount,
+    };
   }
 
   const finalCount = countStatements(finalBranch);
 
   if (finalCount === 0) {
+    return null;
+  }
+
+  // Filter B: all branches (including final else) are single-exit → already maximally flat dispatch
+  if (singleExitCount === chainLength && finalCount <= 1) {
     return null;
   }
 
@@ -373,10 +514,10 @@ const analyzeFunctionNode = (
   const opportunities: Opportunity[] = [];
   const skipNodes = new WeakSet<object>();
 
-  const visit = (value: NodeValue, depth: number, insideLoop: boolean): void => {
+  const visit = (value: NodeValue, depth: number, insideLoop: boolean, inTailPosition: boolean): void => {
     if (isOxcNodeArray(value)) {
       for (const entry of value) {
-        visit(entry, depth, insideLoop);
+        visit(entry, depth, insideLoop, inTailPosition);
       }
 
       return;
@@ -462,17 +603,41 @@ const analyzeFunctionNode = (
       }
     }
 
-    // Check for wrapping-if in block statements
+    // Check for wrapping-if and implicit-else in block statements
     if (nodeType === 'BlockStatement' && isNodeRecord(value)) {
       const bodyArr = value.body;
 
       if (Array.isArray(bodyArr) && bodyArr.length > 0) {
-        const wrapping = detectWrappingIf(bodyArr as ReadonlyArray<NodeValue>, sourceText);
+        const bodyStmts = bodyArr as ReadonlyArray<NodeValue>;
 
-        if (wrapping !== null) {
-          opportunities.push(wrapping);
+        // Only detect wrapping-if/implicit-else when early exit is safe:
+        // - inTailPosition: block is at end of function scope → return is safe
+        // - insideLoop: can use continue/break
+        // Also skip blocks with consecutive trailing bare ifs (sequential dispatch pattern)
+        if ((inTailPosition || insideLoop) && countConsecutiveTrailingIfs(bodyStmts) < 2) {
+          const wrapping = detectWrappingIf(bodyStmts, sourceText);
+
+          if (wrapping !== null) {
+            opportunities.push(wrapping);
+          }
+
+          const implicitElses = detectImplicitElse(bodyStmts, insideLoop, sourceText);
+
+          for (const ie of implicitElses) {
+            opportunities.push(ie);
+          }
+        }
+
+        // Visit body children with tail position tracking:
+        // only the last child inherits tail position from this block
+        for (let i = 0; i < bodyStmts.length; i++) {
+          const isLast = i === bodyStmts.length - 1;
+
+          visit(bodyStmts[i] as NodeValue, nextDepth, insideLoop, isLast && inTailPosition);
         }
       }
+
+      return;
     }
 
     if (!isNodeRecord(value)) {
@@ -481,12 +646,13 @@ const analyzeFunctionNode = (
 
     visitOxcChildren(value, entry => {
       const isLoop = isLoopNodeType(nodeType);
+      const childTailPos = isLoop ? true : inTailPosition;
 
-      visit(entry, nextDepth, insideLoop || isLoop);
+      visit(entry, nextDepth, insideLoop || isLoop, childTailPos);
     });
   };
 
-  visit(bodyValue as NodeValue, 0, false);
+  visit(bodyValue as NodeValue, 0, false, true);
 
   if (opportunities.length === 0) {
     return null;

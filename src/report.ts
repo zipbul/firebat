@@ -178,6 +178,7 @@ const formatText = (report: FirebatReport): string => {
   const format = analyses.format ?? [];
   const typecheck = analyses.typecheck ?? [];
   const earlyReturn = analyses['early-return'] ?? [];
+  const collapsibleIf = analyses['collapsible-if'] ?? [];
   const depsRaw = analyses.dependencies;
   const depsFindings: ReadonlyArray<DependencyFinding> = Array.isArray(depsRaw) ? depsRaw : [];
   const depsDead = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'dead-export' | 'test-only-export' }> => f.kind === 'dead-export' || f.kind === 'test-only-export');
@@ -321,6 +322,14 @@ const formatText = (report: FirebatReport): string => {
           label: 'Early Return',
           count: earlyReturn.length,
           filesCount: earlyReturn.length === 0 ? 0 : new Set(earlyReturn.map(i => getFile(i))).size,
+          timingKey,
+        };
+      case 'collapsible-if':
+        return {
+          emoji: '🔀',
+          label: 'Collapsible If',
+          count: collapsibleIf.length,
+          filesCount: collapsibleIf.length === 0 ? 0 : new Set(collapsibleIf.map(i => getFile(i))).size,
           timingKey,
         };
       case 'exception-hygiene':
@@ -479,6 +488,19 @@ const formatText = (report: FirebatReport): string => {
     lines.push(sectionHeader('↩️', 'Early Return', `${earlyReturn.length} items`));
 
     for (const item of earlyReturn) {
+      const rel = path.relative(process.cwd(), getFile(item));
+      const start = toPos(item.span.start.line, item.span.start.column);
+      const name = item.header !== 'anonymous' ? `${item.header} ` : '';
+      const kind = typeof item.kind === 'string' && item.kind.length > 0 ? cc(` (${item.kind})`, A.dim) : '';
+
+      lines.push(`    ${cc('·', A.dim)} ${name}${cc(`@ ${rel}:${start}`, A.dim)}${kind}`);
+    }
+  }
+
+  if (selectedDetectors.has('collapsible-if') && collapsibleIf.length > 0) {
+    lines.push(sectionHeader('🔀', 'Collapsible If', `${collapsibleIf.length} items`));
+
+    for (const item of collapsibleIf) {
       const rel = path.relative(process.cwd(), getFile(item));
       const start = toPos(item.span.start.line, item.span.start.column);
       const name = item.header !== 'anonymous' ? `${item.header} ` : '';

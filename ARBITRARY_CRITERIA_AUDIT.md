@@ -148,19 +148,101 @@
 
 ### A-09. early-return — invertible-if-else 기준
 
-- **파일**: `src/features/early-return/analyzer.ts` L175
-- **코드**: `if (shortCount <= 3 && endsWithReturnOrThrow(shortNode) && longCount >= shortCount * 2)`
+- **파일**: `src/features/early-return/analyzer.ts` L588
+- **코드**: `if (shortCount <= 3 && shortExits && longCount >= shortCount * 2)`
 - **임의 기준**: short branch 최대 3 statements, long branch가 short의 2배 이상
 - **질문**: "3 statements 이하면 짧다"는 어떤 기준? 2배라는 ratio의 근거는?
+- **결론**: ✅ Signal — 75개 엣지케이스 검증 완료. `shortCount <= 3`은 guard clause가 1~3줄인 실무 관행에 부합. `2x ratio`는 반전 시 가독성 이득이 유의미한 최소 비율. ESLint `no-else-return`은 ratio 없이 무조건 감지하나, firebat는 score 기반 우선순위를 제공하므로 ratio로 노이즈 감소가 합리적. RuboCop `MinBodyLength`와 유사한 접근.
 
 ---
 
 ### A-10. early-return — 최소 depth 필터
 
-- **파일**: `src/features/early-return/analyzer.ts` L187
+- **파일**: ~~`src/features/early-return/analyzer.ts` L187~~ (삭제됨)
 - **코드**: `if (hasGuardClauses === false && maxDepth < 2 && earlyReturnCount === 0) { return null; }`
 - **임의 기준**: 2
 - **질문**: depth 1인 함수를 분석에서 제외하는 것이 적절한가? 단순 함수에도 guard clause가 유의미할 수 있음
+- **결론**: ✅ **코드 삭제로 무효** — 리팩토링 과정에서 이 필터가 제거됨. 현재는 depth에 관계없이 패턴 매칭 + score 기반 필터링(`totalScore < 2`)만 적용.
+
+---
+
+### A-10a. early-return — wrapping-if 최소 statement 수
+
+- **파일**: `src/features/early-return/analyzer.ts` L276
+- **코드**: `if (stmtCount < 2) { return null; }`
+- **임의 기준**: consequent에 최소 2개 statement 필요
+- **질문**: 1개 statement wrapping-if도 refactoring 대상일 수 있지 않은가?
+- **결론**: ✅ Signal — 1개 statement wrapping-if는 `if(x) { doA(); }` → 반전 시 `if(!x) return; doA();`로 가독성 이득이 거의 없음. score=1로 `totalScore < 2` 필터에 의해 자연 제거됨. 업계 도구(RuboCop `MinBodyLength`)도 최소 body 길이 설정 지원. 합리적 기준.
+
+---
+
+### A-10b. early-return — implicit-else remaining 최대 수
+
+- **파일**: `src/features/early-return/analyzer.ts` L351
+- **코드**: `if (remainingCount > 3) { continue; }`
+- **임의 기준**: if 이후 remaining이 3개 초과면 감지 안 함
+- **질문**: remaining 4개여도 consequent가 충분히 길면 반전이 유의미할 수 있음
+- **결론**: ✅ Signal — remaining이 길면 반전 후에도 else 블록이 길어져 가독성 이득 감소. 업계에서 implicit-else 패턴 자체를 탐지하는 도구가 없으므로(ESLint `no-else-return`은 명시적 else만 처리) firebat 고유 기준. 3은 guard clause 1~3줄 실무 관행에 부합.
+
+---
+
+### A-10c. early-return — implicit-else ratio
+
+- **파일**: `src/features/early-return/analyzer.ts` L347
+- **코드**: `if (consequentCount < remainingCount * 2) { continue; }`
+- **임의 기준**: consequent가 remaining의 2배 이상이어야 감지
+- **질문**: 1.5배여도 반전이 가치 있을 수 있음
+- **결론**: ✅ Signal — 2x ratio는 "long side unindent 이득 > short side guard clause 비용"의 최소 조건. A-09의 invertible-if-else ratio와 동일한 2x로 일관성 유지. 합리적 기준.
+
+---
+
+### A-10d. early-return — 최소 score 필터
+
+- **파일**: `src/features/early-return/analyzer.ts` L664
+- **코드**: `if (totalScore < 2) { return null; }`
+- **임의 기준**: `depthReduction × statementsAffected` 합산이 2 미만이면 보고 안 함
+- **질문**: score=1인 finding도 에이전트가 판단할 수 있지 않은가?
+- **결론**: ✅ Signal — score=1은 depth 1감소 × 1 statement → 극소 영향. 노이즈 감소 효과가 큼. 업계 도구에는 score 개념 자체가 없으나(binary 감지), firebat의 차별점인 score 기반 필터로서 합리적.
+
+---
+
+### A-10e. early-return — consecutive trailing-ifs dispatch 임계값
+
+- **파일**: `src/features/early-return/analyzer.ts` L617
+- **코드**: `countConsecutiveTrailingIfs(bodyStmts) < 2`
+- **임의 기준**: body 끝에 연속 bare IfStatement 2개 이상이면 dispatch 패턴으로 간주, wrapping-if/implicit-else 감지 skip
+- **질문**: 독립적인 조건 2개를 dispatch로 오인할 수 있음. 3이 더 안전하지 않은가?
+- **결론**: ✅ Signal — RuboCop `AllowConsecutiveConditionals`와 동일 원리. 임계값 2는 실제 FP 4건(score 12~22) 제거로 검증됨. 3으로 올리면 `waste-detector-oxc.ts`의 3개 trailing-if dispatch가 FP로 재등장. 2는 precision/recall 균형점. 추가로 tail position 필터가 보완하므로 단독이 아닌 복합 필터로 동작.
+
+---
+
+### A-10f. early-return — single-exit dispatch 필터
+
+- **파일**: `src/features/early-return/analyzer.ts` L482-484
+- **코드**: `if (singleExitCount === chainLength && finalCount <= 1) { return null; }`
+- **임의 기준**: else-if 체인의 모든 가지 consequent ≤ 1 statement이면 "이미 flat한 dispatch"로 간주
+- **질문**: consequent 1개가 "flat"의 기준인 이유?
+- **결론**: ✅ Signal — Clippy `single_inner_if_else`에서 차용. `if(a) { return 'x'; } else if(b) { return 'y'; } else { return 'z'; }` → 이미 maximally flat, 추가 flatten 불필요. consequent 2개 이상이면 guard clause 추출로 가독성 이득 발생. 합리적 기준.
+
+---
+
+### A-10g. collapsible-if — MIN_INNER_STMTS
+
+- **파일**: `src/features/collapsible-if/analyzer.ts` L51
+- **코드**: `const MIN_INNER_STMTS = 3;`
+- **임의 기준**: inner if consequent에 최소 3개 statement 필요
+- **질문**: PMD, SonarJS, Clippy는 statement 수 관계없이 감지. 1~2개에서도 collapsible은 사실(Fact)이 아닌가?
+- **결론**: ✅ Signal — 리서치 결과 PMD/SonarJS/Clippy 모두 임계값 없이 감지하지만, firebat는 score 기반 우선순위 시스템을 사용하므로 극소 영향(1~2 stmt)은 노이즈. `if(a) { if(b) { doA(); } }` → 반전 시 `if(a && b) { doA(); }` — 가독성 이득이 미미. 3은 "collapse 시 시각적 이득이 유의미한" 경험적 하한. 합리적 기준.
+
+---
+
+### A-10h. collapsible-if — 최소 score 필터
+
+- **파일**: `src/features/collapsible-if/analyzer.ts` L262
+- **코드**: `if (totalScore < MIN_INNER_STMTS) { return null; }`
+- **임의 기준**: `totalScore < 3` (MIN_INNER_STMTS와 동일)
+- **질문**: 개별 opportunity에서 이미 `innerCount < MIN_INNER_STMTS` 필터가 적용되므로, 이 함수 레벨 필터는 사실상 redundant
+- **결론**: ✅ Signal — QA 검증에서 dead code에 가깝다고 확인됨. 개별 opportunity 필터가 이미 score >= 3을 보장. 방어적 코드로서 해가 없으므로 유지. 값 자체는 A-10g와 동일 근거.
 
 ---
 
@@ -318,6 +400,10 @@
 > | F-01~F-03 | noop 삭제로 무효 | 동일 | ✅ | *(완료)* |
 > | unknown-proof | **tsgo 제거 후 리팩토링 완료** | semantic-checks 도입, catch-narrowing/hover-parser/tsgo-checks 삭제, 시그니처 변경 | ✅ 1807 pass, 0 fail | `5b98c47` |
 > | A-01~A-05 configurable | **threshold configurable 전환 완료** | `FirebatCouplingConfig` 인터페이스 + Zod/JSON schema, analyzer에서 config 수신, CLI entry에서 config 추출 | ✅ 1807 pass, 0 fail | *(pending)* |
+> | A-09 | Signal — 75개 엣지케이스 검증, 업계 비교 완료 | 라인 번호 업데이트 (L175→L588) | ✅ 1917 pass | *(완료)* |
+> | A-10 | **코드 삭제로 무효** | `maxDepth < 2` 필터 제거됨 | ✅ | *(완료)* |
+> | A-10a~A-10f | Signal — 새 기준 6건 문서화 | FP 필터 3종 (trailing-if, single-exit, tail-position) + implicit-else 기준 3종 추가 | ✅ 75개 엣지케이스, 1917 pass | *(완료)* |
+> | A-10g~A-10h | Signal — collapsible-if 기준 2건 문서화 | `MIN_INNER_STMTS=3`, 최소 score 필터 | ✅ 38개 엣지케이스, 1917 pass | *(완료)* |
 
 ---
 
@@ -710,15 +796,15 @@
 
 ## 요약 통계
 
-| 카테고리 | 건수 | 주요 영향 feature |
-|---|---|---|
-| A. 임의 수치 임계값 | **26건** | coupling, nesting, early-return, 기본값 6개 |
-| B. 임의 공식/가중치 | **7건** | coupling, abstraction-fitness, concept-scatter, implementation-overhead |
-| C. 이름/패턴 휴리스틱 | **7건** | api-drift, noop, symmetry-breaking, implicit-state, invariant-blindspot |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | abstraction-fitness, concept-scatter, modification-impact, barrel-policy |
-| E. 근사 측정 | **5건** | decision-surface, implementation-overhead, modification-trap, temporal-coupling |
-| F. 임의 confidence | **4건** | noop, waste |
-| **합계** | **56건** | 28개 feature 중 22개에서 최소 1건 이상 |
+| 카테고리 | 건수 | 해결 | 주요 영향 feature |
+|---|---|---|---|
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 16건 | coupling, nesting, early-return, collapsible-if, 기본값 6개 |
+| B. 임의 공식/가중치 | **7건** | ✅ 1건 | coupling, abstraction-fitness, concept-scatter, implementation-overhead |
+| C. 이름/패턴 휴리스틱 | **7건** | ✅ 2건 | ~~api-drift~~, ~~noop~~, symmetry-breaking, implicit-state, invariant-blindspot |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | — | abstraction-fitness, concept-scatter, modification-impact, barrel-policy |
+| E. 근사 측정 | **5건** | — | decision-surface, implementation-overhead, modification-trap, temporal-coupling |
+| F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
+| **합계** | **64건** | ✅ **22건 해결** | 28개 feature 중 22개에서 최소 1건 이상 |
 
 ---
 

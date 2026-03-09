@@ -137,6 +137,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'coupling',
     'nesting',
     'early-return',
+    'collapsible-if',
     'forwarding',
     'implicit-state',
     'temporal-coupling',

@@ -389,6 +389,34 @@ export const FIREBAT_CODE_CATALOG = {
       'If the chain exceeds 3-4 guards, consider whether a lookup table or strategy pattern is clearer.',
     ],
   },
+  EARLY_RETURN_IMPLICIT_ELSE: {
+    cause:
+      'An if block (no else) ends with return/throw/continue, followed by a short tail that acts as an implicit else. Inverting the condition and using the tail as a guard clause reduces nesting.',
+    think: [
+      'Check whether the tail represents an error/edge case that naturally becomes a guard clause.',
+      'Verify that inverting the condition reads clearly — the guard should express the exceptional case.',
+      'If inside a loop, confirm that adding a continue to the guard preserves iteration semantics.',
+    ],
+  },
+
+  COLLAPSIBLE_IF: {
+    cause:
+      'Nested if statements with no else branches can be merged into a single if with a combined condition (&&), reducing one level of nesting.',
+    think: [
+      'Check whether the two conditions are logically independent or if one depends on the other being true.',
+      'Verify that merging the conditions does not reduce readability — named variables may be clearer than a long && chain.',
+      'If either condition has side effects, confirm that short-circuit evaluation preserves the intended behavior.',
+    ],
+  },
+  COLLAPSIBLE_ELSE_IF: {
+    cause:
+      'An else block contains a single if statement that can be collapsed into else-if, removing unnecessary braces and one level of nesting.',
+    think: [
+      'Check whether the inner if was wrapped in braces intentionally (e.g., for a comment or future expansion) or by accident.',
+      'Verify that collapsing to else-if does not obscure the logical grouping — sometimes the brace separation aids readability.',
+      'If the inner if has its own else, confirm that the resulting else-if-else chain reads clearly and maintains the intended branching logic.',
+    ],
+  },
 
   COUPLING_GOD_MODULE: {
     cause: 'A module has both high fan-in and high fan-out, meaning many modules depend on it and it depends on many modules.',

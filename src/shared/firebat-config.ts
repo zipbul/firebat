@@ -82,6 +82,7 @@ interface FirebatFeaturesConfig {
   readonly coupling?: FeatureToggle<FirebatCouplingConfig> | undefined;
   readonly nesting?: boolean | undefined;
   readonly 'early-return'?: boolean | undefined;
+  readonly 'collapsible-if'?: boolean | undefined;
   readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
@@ -110,6 +111,7 @@ interface FirebatMcpFeaturesConfig {
   readonly coupling?: InheritableFeatureToggle<FirebatCouplingConfig> | undefined;
   readonly nesting?: boolean | 'inherit' | undefined;
   readonly 'early-return'?: boolean | 'inherit' | undefined;
+  readonly 'collapsible-if'?: boolean | 'inherit' | undefined;
   readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
@@ -221,6 +223,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           .optional(),
         nesting: z.boolean().optional(),
         'early-return': z.boolean().optional(),
+        'collapsible-if': z.boolean().optional(),
         forwarding: z
           .union([
             z.literal(false),
@@ -475,6 +478,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   .optional(),
                 nesting: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'early-return': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
+                'collapsible-if': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 forwarding: z
                   .union([
                     z.literal(false),

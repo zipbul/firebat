@@ -33,6 +33,7 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'coupling',
   'nesting',
   'early-return',
+  'collapsible-if',
   'forwarding',
   'implicit-state',
   'temporal-coupling',
@@ -346,7 +347,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: duplicates, waste, nesting, early-return, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, invariant-blindspot, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, abstraction-fitness, giant-file.',
+            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, invariant-blindspot, modification-impact, variable-lifetime, decision-surface, implementation-overhead, concept-scatter, abstraction-fitness, giant-file.',
           ].join(' '),
         ),
       minSize: z

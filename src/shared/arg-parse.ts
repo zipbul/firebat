@@ -19,6 +19,7 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'coupling',
   'nesting',
   'early-return',
+  'collapsible-if',
   'forwarding',
   'implicit-state',
   'temporal-coupling',
@@ -93,6 +94,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'coupling' &&
       selection !== 'nesting' &&
       selection !== 'early-return' &&
+      selection !== 'collapsible-if' &&
       selection !== 'forwarding' &&
       selection !== 'implicit-state' &&
       selection !== 'temporal-coupling' &&
@@ -106,7 +108,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|nesting|early-return|forwarding|implicit-state|temporal-coupling|invariant-blindspot|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|exception-hygiene|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|forwarding|implicit-state|temporal-coupling|invariant-blindspot|modification-impact|variable-lifetime|decision-surface|implementation-overhead|concept-scatter|abstraction-fitness|giant-file`,
       );
     }
 

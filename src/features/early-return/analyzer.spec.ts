@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 
 import {
+  analyzeEarlyReturn,
+  countConsecutiveTrailingIfs,
   countStatements,
   endsWithReturnOrThrow,
   isExitBlock,
   isExitStatement,
   isLoopGuardBlock,
 } from './analyzer';
-import { analyzeEarlyReturn } from './analyzer';
 import { parseSource } from '../../engine/ast/parse-source';
 
 const node = (type: string, extra: Record<string, unknown> = {}) => ({ type, ...extra });
@@ -259,6 +260,74 @@ describe('early-return/analyzer helpers', () => {
     });
   });
 
+  describe('countConsecutiveTrailingIfs', () => {
+    it('should return 0 when array is empty', () => {
+      // Arrange
+      const stmts: any[] = [];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert
+      expect(result).toBe(0);
+    });
+
+    it('should return 1 when last stmt is IfStatement (no alternate) preceded by non-if', () => {
+      // Arrange
+      const stmts = [node('ExpressionStatement'), node('IfStatement')] as any[];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert
+      expect(result).toBe(1);
+    });
+
+    it('should return 2 when last 2 stmts are IfStatement (no alternate) preceded by non-if', () => {
+      // Arrange
+      const stmts = [node('ExpressionStatement'), node('IfStatement'), node('IfStatement')] as any[];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert
+      expect(result).toBe(2);
+    });
+
+    it('should return 3 when all 3 stmts are IfStatement (no alternate)', () => {
+      // Arrange
+      const stmts = [node('IfStatement'), node('IfStatement'), node('IfStatement')] as any[];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert
+      expect(result).toBe(3);
+    });
+
+    it('should return 1 when IfStatements are non-consecutive (interrupted by ExprStmt)', () => {
+      // Arrange
+      const stmts = [node('IfStatement'), node('ExpressionStatement'), node('IfStatement')] as any[];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert
+      expect(result).toBe(1);
+    });
+
+    it('should skip a trailing ReturnStatement and count preceding IfStatements', () => {
+      // Arrange
+      const stmts = [node('IfStatement'), node('IfStatement'), node('ReturnStatement')] as any[];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert
+      expect(result).toBe(2);
+    });
+
+    it('should not count IfStatement with alternate', () => {
+      // Arrange — if-else followed by bare if
+      const stmts = [
+        node('IfStatement', { alternate: node('BlockStatement', { body: [] }) }),
+        node('IfStatement'),
+      ] as any[];
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts);
+      // Assert — only the last if (no alternate) is counted, then the if-else breaks the chain
+      expect(result).toBe(1);
+    });
+  });
+
   describe('countStatements', () => {
     it('should return 0 when node is not an oxc node', () => {
       // Arrange
@@ -442,10 +511,10 @@ export function process(data: unknown) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('wrapping-if');
-    expect(result[0]!.score).toBe(5);
-    expect(result[0]!.metrics.depthReduction).toBe(1);
-    expect(result[0]!.metrics.statementsAffected).toBe(5);
+    expect(result[0]?.kind).toBe('wrapping-if');
+    expect(result[0]?.score).toBe(5);
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+    expect(result[0]?.metrics.statementsAffected).toBe(5);
   });
 
   it('analyzeEarlyReturn - wrapping-if: tail-if (last stmt with preceding code, 4 stmts) - returns wrapping-if with score 4', () => {
@@ -466,8 +535,8 @@ export function process(data: unknown) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('wrapping-if');
-    expect(result[0]!.score).toBe(4);
+    expect(result[0]?.kind).toBe('wrapping-if');
+    expect(result[0]?.score).toBe(4);
   });
 
   it('analyzeEarlyReturn - wrapping-if: loop body wrapping (6 stmts) - returns wrapping-if with score 6', () => {
@@ -491,10 +560,10 @@ export function processAll(items: string[]) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('wrapping-if');
-    expect(result[0]!.score).toBe(6);
-    expect(result[0]!.metrics.depthReduction).toBe(1);
-    expect(result[0]!.metrics.statementsAffected).toBe(6);
+    expect(result[0]?.kind).toBe('wrapping-if');
+    expect(result[0]?.score).toBe(6);
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+    expect(result[0]?.metrics.statementsAffected).toBe(6);
   });
 
   it('analyzeEarlyReturn - invertible-if-else: short 1 stmt + long 6 stmts - returns invertible-if-else with score 6', () => {
@@ -518,10 +587,10 @@ export function process(x: string | null): string {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('invertible-if-else');
-    expect(result[0]!.score).toBe(6);
-    expect(result[0]!.metrics.depthReduction).toBe(1);
-    expect(result[0]!.metrics.statementsAffected).toBe(6);
+    expect(result[0]?.kind).toBe('invertible-if-else');
+    expect(result[0]?.score).toBe(6);
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+    expect(result[0]?.metrics.statementsAffected).toBe(6);
   });
 
   it('analyzeEarlyReturn - invertible-if-else: loop continue + long side - returns invertible-if-else', () => {
@@ -547,9 +616,9 @@ export function filterItems(items: string[]) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('invertible-if-else');
-    expect(result[0]!.opportunitySpans).toBeDefined();
-    expect(result[0]!.opportunitySpans!.length).toBeGreaterThan(0);
+    expect(result[0]?.kind).toBe('invertible-if-else');
+    expect(result[0]?.opportunitySpans).toBeDefined();
+    expect(result[0]?.opportunitySpans?.length).toBeGreaterThan(0);
   });
 
   it('analyzeEarlyReturn - cascade-guard: 3-branch chain, final 4 stmts - returns cascade-guard with score 12', () => {
@@ -575,10 +644,10 @@ export function handle(x: number): string {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('cascade-guard');
-    expect(result[0]!.score).toBe(12);
-    expect(result[0]!.metrics.depthReduction).toBe(3);
-    expect(result[0]!.metrics.statementsAffected).toBe(4);
+    expect(result[0]?.kind).toBe('cascade-guard');
+    expect(result[0]?.score).toBe(12);
+    expect(result[0]?.metrics.depthReduction).toBe(3);
+    expect(result[0]?.metrics.statementsAffected).toBe(4);
   });
 
   it('analyzeEarlyReturn - cascade-guard: loop continue chain (2-branch, final 5 stmts) - returns cascade-guard with score 10', () => {
@@ -605,10 +674,10 @@ export function processItems(items: Array<{ type: string; value: string }>) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('cascade-guard');
-    expect(result[0]!.score).toBe(10);
-    expect(result[0]!.metrics.depthReduction).toBe(2);
-    expect(result[0]!.metrics.statementsAffected).toBe(5);
+    expect(result[0]?.kind).toBe('cascade-guard');
+    expect(result[0]?.score).toBe(10);
+    expect(result[0]?.metrics.depthReduction).toBe(2);
+    expect(result[0]?.metrics.statementsAffected).toBe(5);
   });
 
   it('analyzeEarlyReturn - wrapping-if + invertible coexist - reports higher impact kind with summed score', () => {
@@ -637,8 +706,8 @@ export function mixed(a: boolean, b: string | null): string {
     expect(result).toHaveLength(1);
     // invertible contributes 1×4=4, wrapping-if contributes 1×3=3
     // primary kind is invertible-if-else (higher impact)
-    expect(result[0]!.kind).toBe('invertible-if-else');
-    expect(result[0]!.score).toBe(7);
+    expect(result[0]?.kind).toBe('invertible-if-else');
+    expect(result[0]?.score).toBe(7);
   });
 
   it('analyzeEarlyReturn - score < 2 returns null (1-stmt wrapping-if)', () => {
@@ -691,8 +760,8 @@ export class Handler {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('wrapping-if');
-    expect(result[0]!.score).toBe(3);
+    expect(result[0]?.kind).toBe('wrapping-if');
+    expect(result[0]?.score).toBe(3);
   });
 
   it('analyzeEarlyReturn - async function - detects pattern normally', () => {
@@ -713,7 +782,7 @@ export async function fetchAll(urls: string[]) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('wrapping-if');
+    expect(result[0]?.kind).toBe('wrapping-if');
   });
 
   it('analyzeEarlyReturn - maxDepth is tracked', () => {
@@ -734,7 +803,7 @@ export function deep(x: boolean, y: boolean) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.metrics.maxDepth).toBeGreaterThanOrEqual(2);
+    expect(result[0]?.metrics.maxDepth).toBeGreaterThanOrEqual(2);
   });
 
   it('analyzeEarlyReturn - empty files array - returns empty', () => {
@@ -791,8 +860,8 @@ export function f(x: boolean) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('invertible-if-else');
-    expect(result[0]!.metrics.statementsAffected).toBe(6);
+    expect(result[0]?.kind).toBe('invertible-if-else');
+    expect(result[0]?.metrics.statementsAffected).toBe(6);
   });
 
   it('analyzeEarlyReturn - invertible-if-else in loop with break exit', () => {
@@ -816,7 +885,7 @@ export function f(items: string[]) {
 
     // Assert
     expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('invertible-if-else');
+    expect(result[0]?.kind).toBe('invertible-if-else');
   });
 
   it('analyzeEarlyReturn - else-if chain alternate skipped for invertible (no false positive)', () => {
@@ -857,7 +926,313 @@ export function f(x: boolean) {
 
     // Assert — score=2 passes threshold (>= 2)
     expect(result).toHaveLength(1);
-    expect(result[0]!.score).toBe(2);
+    expect(result[0]?.score).toBe(2);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: function body if(exit) + 1 stmt remaining - returns implicit-else', () => {
+    // Arrange
+    const files = parse(`
+export function process(data: { isValid: boolean }) {
+  if (data.isValid) {
+    doA();
+    doB();
+    doC();
+    doD();
+    doE();
+    return 'result';
+  }
+  return null;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('implicit-else');
+    expect(result[0]?.metrics.statementsAffected).toBe(6);
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: loop body if(continue) + 1 stmt remaining - returns implicit-else', () => {
+    // Arrange
+    const files = parse(`
+export function processAll(items: string[]) {
+  for (const item of items) {
+    if (item.length > 5) {
+      processA(item);
+      processB(item);
+      processC(item);
+      processD(item);
+      continue;
+    }
+    handleShort(item);
+  }
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('implicit-else');
+    expect(result[0]?.metrics.statementsAffected).toBe(5);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: remaining 2 stmts (short side) + consequent 6 stmts (long side) - returns implicit-else', () => {
+    // Arrange
+    const files = parse(`
+export function process(data: { isValid: boolean }) {
+  if (data.isValid) {
+    doA();
+    doB();
+    doC();
+    doD();
+    doE();
+    return 'ok';
+  }
+  logError();
+  return null;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('implicit-else');
+    expect(result[0]?.metrics.statementsAffected).toBe(6);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: ratio not met (4 < 3*2) - returns no findings', () => {
+    // Arrange — consequent: 4 stmts, remaining: 3 stmts → 4 < 3*2=6
+    const files = parse(`
+export function f(x: boolean) {
+  if (x) {
+    doA();
+    doB();
+    doC();
+    return 'done';
+  }
+  logA();
+  logB();
+  return null;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toEqual([]);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: remaining > 3 stmts - returns no findings', () => {
+    // Arrange — remaining: 4 stmts (exceeds limit of 3)
+    const files = parse(`
+export function f(x: boolean) {
+  if (x) {
+    doA();
+    doB();
+    doC();
+    doD();
+    doE();
+    doF();
+    doG();
+    doH();
+    return 'done';
+  }
+  logA();
+  logB();
+  logC();
+  return null;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toEqual([]);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: consequent has no exit - returns no findings', () => {
+    // Arrange — consequent does NOT end with return/throw, and if is not the last stmt → no pattern
+    const files = parse(`
+export function f(x: boolean) {
+  if (x) {
+    doA();
+    doB();
+    doC();
+    doD();
+  }
+  return null;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert — consequent has no exit → implicit-else skipped; if is not last stmt → wrapping-if skipped
+    expect(result).toEqual([]);
+  });
+
+  it('analyzeEarlyReturn - implicit-else: has else branch - returns no findings for implicit-else', () => {
+    // Arrange — has explicit else → invertible-if-else territory
+    const files = parse(`
+export function f(x: boolean) {
+  if (x) {
+    doA();
+    doB();
+    doC();
+    doD();
+    doE();
+    return 'done';
+  } else {
+    return null;
+  }
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert — should be invertible-if-else, not implicit-else
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('invertible-if-else');
+  });
+
+  it('analyzeEarlyReturn - implicit-else: function remaining without exit - returns no findings', () => {
+    // Arrange — in function context, remaining doesn't end with return/throw
+    const files = parse(`
+export function f(x: boolean) {
+  if (x) {
+    doA();
+    doB();
+    doC();
+    doD();
+    doE();
+    return 'done';
+  }
+  logError();
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert — remaining (logError()) doesn't end with exit → not detected
+    expect(result).toEqual([]);
+  });
+
+  // ── tail-less cascade-guard ─────────────────────────────────────────
+
+  it('analyzeEarlyReturn - tail-less cascade-guard: 3-branch chain without final else - returns cascade-guard', () => {
+    // Arrange — all branches end with return, no final else
+    const files = parse(`
+export function handle(x: number): string {
+  if (x < 0) {
+    return 'neg';
+  } else if (x === 0) {
+    return 'zero';
+  } else if (x > 100) {
+    return 'big';
+  }
+  return 'normal';
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('cascade-guard');
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+    expect(result[0]?.metrics.statementsAffected).toBe(3);
+  });
+
+  it('analyzeEarlyReturn - tail-less cascade-guard: 2-branch chain without final else - returns cascade-guard', () => {
+    // Arrange
+    const files = parse(`
+export function validate(x: string): string {
+  if (x === '') {
+    return 'empty';
+  } else if (x.length > 100) {
+    return 'too-long';
+  }
+  return x;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('cascade-guard');
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+    expect(result[0]?.metrics.statementsAffected).toBe(2);
+    expect(result[0]?.score).toBe(2); // 1 * 2 = 2, passes threshold (>= 2)
+  });
+
+  it('analyzeEarlyReturn - tail-less cascade-guard: throw-ending branches - returns cascade-guard', () => {
+    // Arrange — all branches end with throw, no final else
+    const files = parse(`
+export function validate(x: number): number {
+  if (x < 0) {
+    throw new Error('negative');
+  } else if (x > 100) {
+    throw new Error('too big');
+  }
+  return x;
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('cascade-guard');
+    expect(result[0]?.metrics.depthReduction).toBe(1);
+    expect(result[0]?.metrics.statementsAffected).toBe(2);
+  });
+
+  it('analyzeEarlyReturn - tail-less cascade-guard: middle branch without exit - NOT detected', () => {
+    // Arrange — middle branch (if(b)) has no exit in tail-less chain
+    const files = parse(`
+export function f(a: boolean, b: boolean, c: boolean) {
+  if (a) {
+    return 'a';
+  } else if (b) {
+    console.log('b');
+  } else if (c) {
+    return 'c';
+  }
+  return 'default';
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert — while loop breaks at if(b) because isGuard=false
+    expect(result).toEqual([]);
+  });
+
+  it('analyzeEarlyReturn - tail-less cascade-guard: loop context with continue - returns cascade-guard', () => {
+    // Arrange
+    const files = parse(`
+export function processItems(items: Array<{ type: string; value: string }>) {
+  for (const item of items) {
+    if (item.type === 'skip') {
+      continue;
+    } else if (item.type === 'done') {
+      break;
+    }
+    process(item);
+  }
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]?.kind).toBe('cascade-guard');
+    expect(result[0]?.metrics.depthReduction).toBe(1);
   });
 
   it('analyzeEarlyReturn - wrapping-if + cascade-guard coexist with summed score', () => {
@@ -883,8 +1258,33 @@ export function f(x: boolean, y: number): string {
 
     // Assert — wrapping-if (1×2=2) + cascade-guard (2×3=6) = 8
     expect(result).toHaveLength(1);
-    expect(result[0]!.score).toBe(8);
-    expect(result[0]!.metrics.depthReduction).toBe(3);
-    expect(result[0]!.metrics.statementsAffected).toBe(5);
+    expect(result[0]?.score).toBe(8);
+    expect(result[0]?.metrics.depthReduction).toBe(3);
+    expect(result[0]?.metrics.statementsAffected).toBe(5);
+  });
+
+  it('analyzeEarlyReturn - wrapping-if + tail-less cascade-guard coexist with summed score', () => {
+    // Arrange — outer wrapping-if (3 stmts) + inner tail-less cascade-guard (2-branch, no final else)
+    const files = parse(`
+export function f(x: boolean, y: number): string {
+  if (x) {
+    if (y < 0) {
+      return 'neg';
+    } else if (y === 0) {
+      return 'zero';
+    }
+    doA();
+    return 'ok';
+  }
+}
+`);
+    // Act
+    const result = analyzeEarlyReturn(files);
+
+    // Assert — wrapping-if detects the outer if (3 stmts inside: tail-less-chain + doA + return)
+    //          tail-less cascade-guard (depthReduction=1, statementsAffected=2, score=2)
+    expect(result).toHaveLength(1);
+    expect(result[0]?.score).toBeGreaterThanOrEqual(4);
+    expect(result[0]?.metrics.depthReduction).toBeGreaterThanOrEqual(2);
   });
 });

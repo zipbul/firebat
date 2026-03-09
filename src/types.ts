@@ -18,6 +18,7 @@ export type FirebatDetector =
   | 'coupling'
   | 'nesting'
   | 'early-return'
+  | 'collapsible-if'
   | 'forwarding'
   // Phase 1 detectors (IMPROVE.md)
   | 'implicit-state'
@@ -58,10 +59,14 @@ export type FirebatCatalogCode =
   | 'NESTING_HIGH_CC'
   | 'NESTING_ACCIDENTAL_QUADRATIC'
   | 'NESTING_CALLBACK_DEPTH'
-  // early-return (3)
+  // early-return (4)
   | 'EARLY_RETURN_WRAPPING_IF'
   | 'EARLY_RETURN_INVERTIBLE'
   | 'EARLY_RETURN_CASCADE_GUARD'
+  | 'EARLY_RETURN_IMPLICIT_ELSE'
+  // collapsible-if (2)
+  | 'COLLAPSIBLE_IF'
+  | 'COLLAPSIBLE_ELSE_IF'
   // exception-hygiene (17)
   | 'EH_THROW_NON_ERROR'
   | 'EH_ASYNC_PROMISE_EXECUTOR'
@@ -376,7 +381,7 @@ export interface EarlyReturnMetrics {
   readonly statementsAffected: number;
 }
 
-export type EarlyReturnKind = 'wrapping-if' | 'invertible-if-else' | 'cascade-guard';
+export type EarlyReturnKind = 'wrapping-if' | 'invertible-if-else' | 'cascade-guard' | 'implicit-else';
 
 export interface EarlyReturnItem {
   readonly kind: EarlyReturnKind;
@@ -386,6 +391,23 @@ export interface EarlyReturnItem {
   readonly span: SourceSpan;
   readonly opportunitySpans?: ReadonlyArray<SourceSpan>;
   readonly metrics: EarlyReturnMetrics;
+  readonly score: number;
+}
+
+export interface CollapsibleIfMetrics {
+  readonly maxDepth: number;
+  readonly depthReduction: number;
+  readonly statementsAffected: number;
+}
+
+export interface CollapsibleIfItem {
+  readonly kind: 'collapsible-if' | 'collapsible-else-if';
+  readonly file: string;
+  readonly code?: FirebatCatalogCode;
+  readonly header: string;
+  readonly span: SourceSpan;
+  readonly opportunitySpans?: ReadonlyArray<SourceSpan>;
+  readonly metrics: CollapsibleIfMetrics;
   readonly score: number;
 }
 
@@ -643,6 +665,7 @@ export interface FirebatAnalyses {
   readonly coupling: ReadonlyArray<CouplingHotspot>;
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
+  readonly 'collapsible-if': ReadonlyArray<CollapsibleIfItem>;
   readonly forwarding: ReadonlyArray<ForwardingFinding>;
 
   // Phase 1 detectors (IMPROVE.md)

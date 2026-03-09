@@ -62,7 +62,6 @@ const OXLINT_RC_JSONC = `{
       }
     ],
     "curly": "error",
-    "no-else-return": "error",
     "no-unneeded-ternary": "error",
     "default-case": "error",
     "default-case-last": "error",
