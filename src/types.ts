@@ -37,7 +37,6 @@ export type FirebatDetector =
 export const DETECTOR_ALIASES: Readonly<Record<string, FirebatDetector>> = {
   'exact-duplicates': 'duplicates',
   'structural-duplicates': 'duplicates',
-  'symmetry-breaking': 'invariant-blindspot', // 근사 유사 detector로 fallback
   'modification-trap': 'duplicates',
 };
 

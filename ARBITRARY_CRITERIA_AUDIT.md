@@ -276,10 +276,11 @@
 
 ### A-14. symmetry-breaking — 그룹 최소 크기
 
-- **파일**: `src/features/symmetry-breaking/analyzer.ts` L104
+- **파일**: ~~`src/features/symmetry-breaking/analyzer.ts` L104~~ (삭제됨)
 - **코드**: `if (items.length < 3) { continue; }`
 - **임의 기준**: handler/controller 파일이 3개 미만이면 분석 불가
 - **질문**: 2개일 때도 대칭성 비교가 가능하지 않은가?
+- **결론**: ✅ **기능 폐기로 무효** — symmetry-breaking 디텍터 전체 삭제 완료 (25 detectors 유지).
 
 ---
 
@@ -549,21 +550,23 @@
 
 ### C-03. symmetry-breaking — Handler/Controller 이름 패턴
 
-- **파일**: `src/features/symmetry-breaking/analyzer.ts` L47
+- **파일**: ~~`src/features/symmetry-breaking/analyzer.ts` L47~~ (삭제됨)
 - **코드**: `const re = /\bexport\s+function\s+([a-zA-Z_$][\w$]*(?:Handler|Controller))\s*\(/g;`
 - **임의 기준**: 함수 이름이 `Handler` 또는 `Controller`로 끝나는 경우만 감지
 - **질문**:
   - `Service`, `Processor`, `Worker`, `Middleware`, `Resolver` 접미사는?
   - 이름 기반이 아닌 export 구조 기반 감지가 더 견고하지 않은가?
+- **결론**: ✅ **기능 폐기로 무효** — symmetry-breaking 디텍터 전체 삭제 완료.
 
 ---
 
 ### C-04. symmetry-breaking — extractCallSequence
 
-- **파일**: `src/features/symmetry-breaking/analyzer.ts` L56-59
+- **파일**: ~~`src/features/symmetry-breaking/analyzer.ts` L56-59~~ (삭제됨)
 - **코드**: 인자 없는 `foo();` 호출만 추출하여 시퀀스 비교
 - **임의 기준**: 인자 있는 호출(`foo(bar)`)은 무시
 - **질문**: `validate(input); process(input); save(result);`도 시퀀스인데, 인자가 있어서 무시됨
+- **결론**: ✅ **기능 폐기로 무효** — symmetry-breaking 디텍터 전체 삭제 완료.
 
 ---
 
@@ -649,10 +652,11 @@
 
 ### D-04. symmetry-breaking — groupKeyAuto 경로 패턴
 
-- **파일**: `src/features/symmetry-breaking/analyzer.ts` L18-35
+- **파일**: ~~`src/features/symmetry-breaking/analyzer.ts` L18-35~~ (삭제됨)
 - **코드**: `/handlers/`, `/controllers/` 경로를 감지하여 그룹화
 - **임의 가정**: `handlers`, `controllers` 디렉토리가 존재한다는 전제
 - **질문**: MVC가 아닌 프로젝트에서는? 사용자 정의 그룹 설정이 필요
+- **결론**: ✅ **기능 폐기로 무효** — symmetry-breaking 디텍터 전체 삭제 완료.
 
 ---
 
@@ -722,9 +726,10 @@
 
 ### E-04. symmetry-breaking — 호출 시퀀스 비교
 
-- **파일**: `src/features/symmetry-breaking/analyzer.ts` L56-59
+- **파일**: ~~`src/features/symmetry-breaking/analyzer.ts` L56-59~~ (삭제됨)
 - **부정확성**: `validate(); process(); respond();`처럼 인자 없는 호출만 추출하므로, 실제 로직 유사성과 무관할 수 있음
 - **질문**: AST 기반으로 함수 body 구조 (call expression 순서 + branch 패턴)를 비교하는 것이 견고하지 않은가?
+- **결론**: ✅ **기능 폐기로 무효** — symmetry-breaking 디텍터 전체 삭제 완료.
 
 ---
 
@@ -802,13 +807,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 17건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 18건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~ |
 | B. 임의 공식/가중치 | **7건** | ✅ 3건 | coupling, ~~abstraction-fitness~~, concept-scatter, implementation-overhead |
-| C. 이름/패턴 휴리스틱 | **7건** | ✅ 2건 | ~~api-drift~~, ~~noop~~, symmetry-breaking, implicit-state, invariant-blindspot |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 2건 | ~~abstraction-fitness~~, concept-scatter, modification-impact, barrel-policy |
-| E. 근사 측정 | **5건** | — | decision-surface, implementation-overhead, modification-trap, temporal-coupling |
+| C. 이름/패턴 휴리스틱 | **7건** | ✅ 4건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, implicit-state, invariant-blindspot |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 3건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, concept-scatter, modification-impact, barrel-policy |
+| E. 근사 측정 | **5건** | ✅ 1건 | decision-surface, implementation-overhead, modification-trap, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **27건 해결** | 25개 feature 중 22개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **32건 해결** | 25개 feature 중 22개에서 최소 1건 이상 |
 
 ---
 
