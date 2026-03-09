@@ -1,6 +1,7 @@
 // MUST: MUST-1
 import * as path from 'node:path';
 
+import type { ExceptionHygieneFindingKind } from '../../features/exception-hygiene';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../shared/logger';
 import type {
@@ -19,13 +20,13 @@ import type {
 import { computeAutoMinSize } from '../../engine/auto-min-size';
 import { initHasher } from '../../engine/hasher';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
+import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeConceptScatter, createEmptyConceptScatter } from '../../features/concept-scatter';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../features/decision-surface';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
-import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
+import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
-import type { ExceptionHygieneFindingKind } from '../../features/exception-hygiene';
 import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
@@ -34,20 +35,19 @@ import { analyzeImplicitState, createEmptyImplicitState } from '../../features/i
 import { analyzeInvariantBlindspot, createEmptyInvariantBlindspot } from '../../features/invariant-blindspot';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeModificationImpact, createEmptyModificationImpact } from '../../features/modification-impact';
-import { analyzeNesting, createEmptyNesting } from '../../features/nesting';
+import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
 import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
-import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
-import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { createArtifactStore } from '../../store/artifact';
-import { createGildash } from '../../store/gildash';
+import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { computeToolVersion } from '../../shared/tool-version';
 import { createFirebatProgram } from '../../shared/ts-program';
+import { createArtifactStore } from '../../store/artifact';
+import { createGildash } from '../../store/gildash';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
@@ -190,7 +190,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
   }
 
-  logger.info('Indexing complete (gildash)', { targetCount: options.targets.length, semantic: semanticAvailable, durationMs: Math.round(nowMs() - tIndex0) });
+  logger.info('Indexing complete (gildash)', {
+    targetCount: options.targets.length,
+    semantic: semanticAvailable,
+    durationMs: Math.round(nowMs() - tIndex0),
+  });
 
   const tNamespace0 = nowMs();
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
@@ -567,6 +571,28 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     coupling = createEmptyCoupling();
   }
 
+  const nestingCfg = (config as any)?.features?.nesting;
+  const resolvedNestingOptions = {
+    maxCognitiveComplexity:
+      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCognitiveComplexity : undefined) ??
+      DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
+    maxCallbackDepth:
+      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCallbackDepth : undefined) ??
+      DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
+    maxPromiseChainDepth:
+      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxPromiseChainDepth : undefined) ??
+      DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
+    maxNestingDepth:
+      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxNestingDepth : undefined) ??
+      DEFAULT_NESTING_OPTIONS.maxNestingDepth,
+    minDensityLoc:
+      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.minDensityLoc : undefined) ??
+      DEFAULT_NESTING_OPTIONS.minDensityLoc,
+    maxDensity:
+      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxDensity : undefined) ??
+      DEFAULT_NESTING_OPTIONS.maxDensity,
+  };
+
   let nesting: ReturnType<typeof analyzeNesting>;
 
   if (options.detectors.includes('nesting')) {
@@ -575,7 +601,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    nesting = analyzeNesting(program);
+    nesting = analyzeNesting(program, resolvedNestingOptions);
     detectorTimings.nesting = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.nesting) });
@@ -876,6 +902,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'high-cognitive-complexity': 'NESTING_HIGH_CC',
       'accidental-quadratic': 'NESTING_ACCIDENTAL_QUADRATIC',
       'callback-depth': 'NESTING_CALLBACK_DEPTH',
+      'promise-chain-depth': 'NESTING_PROMISE_CHAIN',
+      'complexity-density': 'NESTING_COMPLEXITY_DENSITY',
     } as const;
 
     return items.map(item => {
@@ -950,18 +978,20 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'exception-control-flow': 'EH_EXCEPTION_CONTROL_FLOW',
     };
 
-    return items.filter((item: any) => item?.kind !== 'tool-unavailable').map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
+    return items
+      .filter((item: any) => item?.kind !== 'tool-unavailable')
+      .map(item => {
+        const kind = String(item?.kind ?? '');
+        const filePath = String(item?.filePath ?? item?.file ?? '');
 
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item?.span,
-        evidence: item?.evidence,
-      };
-    });
+        return {
+          kind,
+          code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
+          file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+          span: item?.span,
+          evidence: item?.evidence,
+        };
+      });
   };
 
   const enrichUnknownProof = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
@@ -973,20 +1003,22 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'double-cast': 'UNKNOWN_DOUBLE_CAST',
     };
 
-    return items.filter((item: any) => item?.kind !== 'tool-unavailable').map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
+    return items
+      .filter((item: any) => item?.kind !== 'tool-unavailable')
+      .map(item => {
+        const kind = String(item?.kind ?? '');
+        const filePath = String(item?.filePath ?? item?.file ?? '');
 
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item?.span,
-        symbol: item?.symbol,
-        evidence: item?.evidence,
-        typeText: item?.typeText,
-      };
-    });
+        return {
+          kind,
+          code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
+          file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
+          span: item?.span,
+          symbol: item?.symbol,
+          evidence: item?.evidence,
+          typeText: item?.typeText,
+        };
+      });
   };
 
   const enrichForwarding = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
@@ -1067,18 +1099,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
   };
 
-
   const enrichDependencies = (value: any): ReadonlyArray<any> => {
     const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
 
     const deadExports = Array.isArray(value?.deadExports) ? value.deadExports : [];
     const layerViolations = Array.isArray(value?.layerViolations) ? value.layerViolations : [];
     const cycles = Array.isArray(value?.cycles) ? value.cycles : [];
-    const cuts = Array.isArray(value?.edgeCutHints)
-      ? value.edgeCutHints
-      : Array.isArray(value?.cuts)
-        ? value.cuts
-        : [];
+    const cuts = Array.isArray(value?.edgeCutHints) ? value.edgeCutHints : Array.isArray(value?.cuts) ? value.cuts : [];
 
     const findings: any[] = [];
 
@@ -1114,9 +1141,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     for (const c of cycles) {
       const pathModules = Array.isArray(c?.path) ? c.path : [];
-      const bestCut = cuts.find((h: any) =>
-        pathModules.includes(h?.from) && pathModules.includes(h?.to),
-      );
+      const bestCut = cuts.find((h: any) => pathModules.includes(h?.from) && pathModules.includes(h?.to));
 
       findings.push({
         kind: 'circular-dependency',
@@ -1259,13 +1284,27 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
-    ...(selectedDetectors.has('decision-surface') ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') } : {}),
-    ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') } : {}),
-    ...(selectedDetectors.has('implicit-state') ? { 'implicit-state': enrichPhase1(implicitState as any, 'IMPLICIT_STATE') } : {}),
-    ...(selectedDetectors.has('temporal-coupling') ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') } : {}),
-    ...(selectedDetectors.has('invariant-blindspot') ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') } : {}),
-    ...(selectedDetectors.has('modification-impact') ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') } : {}),
-    ...(selectedDetectors.has('concept-scatter') ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') } : {}),
+    ...(selectedDetectors.has('decision-surface')
+      ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') }
+      : {}),
+    ...(selectedDetectors.has('variable-lifetime')
+      ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') }
+      : {}),
+    ...(selectedDetectors.has('implicit-state')
+      ? { 'implicit-state': enrichPhase1(implicitState as any, 'IMPLICIT_STATE') }
+      : {}),
+    ...(selectedDetectors.has('temporal-coupling')
+      ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') }
+      : {}),
+    ...(selectedDetectors.has('invariant-blindspot')
+      ? { 'invariant-blindspot': enrichPhase1(invariantBlindspot as any, 'INVARIANT_BLINDSPOT') }
+      : {}),
+    ...(selectedDetectors.has('modification-impact')
+      ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') }
+      : {}),
+    ...(selectedDetectors.has('concept-scatter')
+      ? { 'concept-scatter': enrichPhase1(conceptScatter as any, 'CONCEPT_SCATTER') }
+      : {}),
     ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified as any) } : {}),
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as any });

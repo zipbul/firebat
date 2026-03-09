@@ -12,9 +12,9 @@ import { describe, expect, it } from 'bun:test';
 import { parseSource } from '../../../src/test-api';
 import { analyzeDecisionSurface } from '../../../src/test-api';
 import { analyzeGiantFile } from '../../../src/test-api';
+import { analyzeNesting } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
 import { analyzeForwarding } from '../../../src/test-api';
-
 import { buildMockGildashFromSources } from './forwarding/mock-gildash-helper';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -54,13 +54,7 @@ describe('threshold/giant-file', () => {
 describe('threshold/variable-lifetime', () => {
   it('lifetime exactly at maxLifetimeLines → no finding', () => {
     // definition on line 2, last use on line 4 → lifetime = 2 lines (4-2)
-    const src = [
-      'export function f() {',
-      '  const x = 1;',
-      '  const y = 2;',
-      '  return x + y;',
-      '}',
-    ].join('\n');
+    const src = ['export function f() {', '  const x = 1;', '  const y = 2;', '  return x + y;', '}'].join('\n');
     const findings = analyzeVariableLifetime([parse(src)], { maxLifetimeLines: 2 });
 
     // x: def line2, use line4 → lifetime=2 → should NOT fire (>2 required)
@@ -92,11 +86,7 @@ describe('threshold/variable-lifetime', () => {
 describe('threshold/decision-surface', () => {
   it('axes count below maxAxes → no finding', () => {
     // 1 axis (a), maxAxes=2 → 1 < 2 → no finding
-    const src = [
-      'export function f(a: boolean): void {',
-      '  if (a) { return; }',
-      '}',
-    ].join('\n');
+    const src = ['export function f(a: boolean): void {', '  if (a) { return; }', '}'].join('\n');
     const findings = analyzeDecisionSurface([parse(src)], { maxAxes: 2 });
 
     expect(findings).toHaveLength(0);
@@ -104,15 +94,57 @@ describe('threshold/decision-surface', () => {
 
   it('axes count equals maxAxes → finding', () => {
     // 2 axes (a, b), maxAxes=2 → 2 >= 2 → finding
-    const src = [
-      'export function f(a: boolean, b: boolean): void {',
-      '  if (a) { return; }',
-      '  if (b) { return; }',
-      '}',
-    ].join('\n');
+    const src = ['export function f(a: boolean, b: boolean): void {', '  if (a) { return; }', '  if (b) { return; }', '}'].join(
+      '\n',
+    );
     const findings = analyzeDecisionSurface([parse(src)], { maxAxes: 2 });
 
     expect(findings).toHaveLength(1);
+  });
+});
+
+// ── nesting ─────────────────────────────────────────────────────────────────
+
+describe('threshold/nesting', () => {
+  it('depth exactly at maxNestingDepth → no finding (< threshold)', () => {
+    // depth=2, maxNestingDepth=3 → 2 < 3 → no finding
+    const src = ['export function f(a: boolean, b: boolean) {', '  if (a) { if (b) { return 1; } }', '  return 0;', '}'].join(
+      '\n',
+    );
+    const findings = analyzeNesting([parse(src)], { maxNestingDepth: 3, maxCognitiveComplexity: 999 });
+
+    expect(findings).toHaveLength(0);
+  });
+
+  it('depth at maxNestingDepth → finding (>= threshold)', () => {
+    // depth=3, maxNestingDepth=3 → 3 >= 3 → finding
+    const src = [
+      'export function f(a: boolean, b: boolean, c: boolean) {',
+      '  if (a) { if (b) { if (c) { return 1; } } }',
+      '  return 0;',
+      '}',
+    ].join('\n');
+    const findings = analyzeNesting([parse(src)], { maxNestingDepth: 3, maxCognitiveComplexity: 999 });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.kind).toBe('deep-nesting');
+  });
+
+  it('CC below maxCognitiveComplexity → no finding', () => {
+    // Simple if → CC=1, threshold=15 → no finding
+    const src = ['export function f(a: boolean) {', '  if (a) { return 1; }', '  return 0;', '}'].join('\n');
+    const findings = analyzeNesting([parse(src)], { maxCognitiveComplexity: 15 });
+
+    expect(findings).toHaveLength(0);
+  });
+
+  it('CC at maxCognitiveComplexity → finding', () => {
+    // Build a function with CC=2: if(+1) else(+1) = 2
+    const src = ['export function f(x: boolean) {', '  if (x) { return 1; }', '  else { return 0; }', '}'].join('\n');
+    const findings = analyzeNesting([parse(src)], { maxCognitiveComplexity: 2, maxNestingDepth: 999 });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.kind).toBe('high-cognitive-complexity');
   });
 });
 
@@ -120,9 +152,7 @@ describe('threshold/decision-surface', () => {
 
 describe('threshold/forwarding', () => {
   it('direct call without forwarding → no finding', async () => {
-    const src = [
-      'export const add = (a: number, b: number) => a + b;',
-    ].join('\n');
+    const src = ['export const add = (a: number, b: number) => a + b;'].join('\n');
     const emptyGildash = buildMockGildashFromSources({});
     const findings = await analyzeForwarding(emptyGildash, [parse(src)], 1, '/virtual');
 
@@ -130,10 +160,7 @@ describe('threshold/forwarding', () => {
   });
 
   it('two independent functions → no finding', async () => {
-    const src = [
-      'export const double = (x: number) => x * 2;',
-      'export const triple = (x: number) => x * 3;',
-    ].join('\n');
+    const src = ['export const double = (x: number) => x * 2;', 'export const triple = (x: number) => x * 3;'].join('\n');
     const emptyGildash = buildMockGildashFromSources({});
     const findings = await analyzeForwarding(emptyGildash, [parse(src)], 1, '/virtual');
 

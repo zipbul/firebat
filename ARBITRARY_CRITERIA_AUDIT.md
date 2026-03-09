@@ -125,6 +125,7 @@
 - **임의 기준**: 15
 - **참고**: SonarQube의 기본값도 15이지만, SonarQube의 인지 복잡도 계산 방식과 이 코드의 계산 방식이 동일한지 검증 필요
 - **질문**: 이 코드의 `cognitiveComplexity` 계산 공식은 `1 + depth`를 누적하는 방식인데, SonarQube 논문의 정의와 일치하는가?
+- **결론**: ✅ Signal — SonarQube Cognitive Complexity whitepaper 정합성 검증 완료. 계산 방식: increment(if/for/while/catch/switch/ternary/&&/||/??) + nesting bonus(depth × 1). SonarQube, PMD(`cognitiveComplexity`), detekt(`CognitiveComplexMethod`) 모두 기본 임계값 15. configurable 전환 완료 (`maxCognitiveComplexity`). 추가로 Halstead Volume/Difficulty 보충 메트릭, multi-signal 수집, complexity-density(CC/LOC) kind 구현.
 
 ---
 
@@ -134,6 +135,7 @@
 - **코드**: `if (callbackDepth >= 3) { return 'callback-depth'; }`
 - **임의 기준**: 3
 - **질문**: callback depth 2와 3의 차이가 유의미한 근거는? Node.js callback hell 논의에서 통상적인 수치인가?
+- **결론**: ✅ Signal — configurable 전환 완료 (`maxCallbackDepth`). 테스트 러너 콜백(describe/it/test/beforeEach/afterEach/beforeAll/afterAll) 제외는 업계 관행에 부합 (SonarQube: test file 분리, Code Climate: test dir 제외, eslint-plugin-jest: `max-nested-describe` 별도 규칙). Promise chain depth도 별도 kind(`promise-chain-depth`)로 추가.
 
 ---
 
@@ -143,6 +145,7 @@
 - **코드**: `if (maxDepth >= 3) { return 'deep-nesting'; }`
 - **임의 기준**: 3
 - **질문**: A-07과 동일한 3이지만 측정 대상이 다름(control flow depth vs callback depth). 같은 수치를 쓰는 것이 적절한가?
+- **결론**: ✅ Signal — configurable 전환 완료 (`maxNestingDepth`). SonarQube, ESLint `max-depth` 모두 유사 메트릭 제공. 기본값 3은 conservative하며 프로젝트별 조정 가능.
 
 ---
 
@@ -405,6 +408,7 @@
 > | A-10 | **코드 삭제로 무효** | `maxDepth < 2` 필터 제거됨 | ✅ | *(완료)* |
 > | A-10a~A-10f | Signal — 새 기준 6건 문서화 | FP 필터 3종 (trailing-if, single-exit, tail-position) + implicit-else 기준 3종 추가 | ✅ 75개 엣지케이스, 1917 pass | *(완료)* |
 > | A-10g~A-10h | Signal — collapsible-if 기준 2건 문서화 | `MIN_INNER_STMTS=3`, 최소 score 필터 | ✅ 38개 엣지케이스, 1917 pass | *(완료)* |
+> | A-06~A-08 | Signal → nesting threshold configurable 전환 | multi-signal, Halstead, promise-chain, complexity-density, test runner 제외 | ✅ 1912 pass | *(완료)* |
 
 ---
 
@@ -456,7 +460,7 @@
 
 ### B-05. implementation-overhead — interface complexity 추정
 
-- **결론**: ✅ **기능 폐기로 무효** — implementation-overhead 디텍터 전체 삭제 완료 (25→24 detectors). ratio 모델의 구조적 한계 (분모 조작으로 메트릭 게이밍 가능, 인터페이스 복잡도 정의 모호). 방향 전환으로 복잡도 밀도(CC/LOC) finding kind를 nesting 디텍터에 추가하는 안을 백로그로 이관.
+- **결론**: ✅ **기능 폐기로 무효** — implementation-overhead 디텍터 전체 삭제 완료 (25→24 detectors). ratio 모델의 구조적 한계 (분모 조작으로 메트릭 게이밍 가능, 인터페이스 복잡도 정의 모호). 방향 전환으로 복잡도 밀도(CC/LOC) finding kind를 nesting 디텍터에 `complexity-density` kind로 구현 완료.
 
 ---
 
@@ -774,13 +778,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 18건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 21건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~ |
 | B. 임의 공식/가중치 | **7건** | ✅ 3건 | coupling, ~~abstraction-fitness~~, concept-scatter, implementation-overhead |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 4건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, implicit-state, invariant-blindspot |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 3건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, concept-scatter, modification-impact, barrel-policy |
 | E. 근사 측정 | **5건** | ✅ 1건 | decision-surface, implementation-overhead, modification-trap, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **32건 해결** | 25개 feature 중 22개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **35건 해결** | 25개 feature 중 22개에서 최소 1건 이상 |
 
 ---
 

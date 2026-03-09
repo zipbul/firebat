@@ -192,7 +192,7 @@ export const FIREBAT_CODE_CATALOG = {
   EH_FLOATING_PROMISES: {
     cause: 'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
     think: [
-      "Determine whether the fire-and-forget is intentional or accidental.",
+      'Determine whether the fire-and-forget is intentional or accidental.',
       "Check whether the Promise's result or error matters for correctness.",
       'If truly fire-and-forget, verify that errors are handled inside the called function and consider adding void prefix for clarity.',
     ],
@@ -293,7 +293,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   UNKNOWN_DOUBLE_CAST: {
-    cause: "A double assertion (e.g. `x as unknown as T`) bypasses TypeScript's type safety by casting through an intermediate type.",
+    cause:
+      "A double assertion (e.g. `x as unknown as T`) bypasses TypeScript's type safety by casting through an intermediate type.",
     think: [
       'Determine whether the double assertion masks a genuine type incompatibility that should be resolved structurally.',
       'Check whether a type guard, generic constraint, or interface refinement can replace the double assertion.',
@@ -359,6 +360,24 @@ export const FIREBAT_CODE_CATALOG = {
       'Determine whether the nesting reflects genuine sequential async steps or structural accumulation.',
       'Check whether async/await can flatten the callback chain while preserving the same sequencing.',
       'If callbacks are nested for event handling, verify whether extracting each level into a named function makes the flow explicit.',
+    ],
+  },
+  NESTING_PROMISE_CHAIN: {
+    cause:
+      'A function contains a deeply chained or nested Promise chain (.then/.catch/.finally), creating hard-to-follow asynchronous control flow that cognitive complexity metrics miss.',
+    think: [
+      'Determine whether the chain can be converted to async/await to flatten the control flow.',
+      'Check whether intermediate .then() callbacks contain logic that should be extracted into named functions.',
+      'If the chain must remain, verify that error handling (.catch) is placed at appropriate points rather than only at the end.',
+    ],
+  },
+  NESTING_COMPLEXITY_DENSITY: {
+    cause:
+      'A function has high cognitive complexity relative to its size (CC/LOC), indicating dense decision logic packed into a small number of lines.',
+    think: [
+      'Determine whether the density reflects inherently complex logic or multiple concerns compressed together.',
+      'Check whether extracting sub-decisions into named helper functions reduces the density without increasing total complexity.',
+      'Verify that the function size is not artificially small due to missing error handling or edge cases.',
     ],
   },
 
@@ -578,7 +597,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   SYMMETRY_BREAK: {
-    cause: 'Functions in the same group have inconsistent shapes — different parameter patterns, return types, or async modifiers — breaking expected symmetry.',
+    cause:
+      'Functions in the same group have inconsistent shapes — different parameter patterns, return types, or async modifiers — breaking expected symmetry.',
     think: [
       'Examine the outliers to determine whether their differences are intentional variations or accidental drift.',
       'If the differences represent distinct responsibilities, check whether renaming clarifies the distinct roles.',
@@ -610,7 +630,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   VAR_LIFETIME: {
-    cause: 'A variable has a longer lifetime than necessary — it is declared far from its use or lives across multiple unrelated operations.',
+    cause:
+      'A variable has a longer lifetime than necessary — it is declared far from its use or lives across multiple unrelated operations.',
     think: [
       'Determine the actual first read and last write of the variable.',
       'Check whether the variable can be introduced closer to its use or eliminated by restructuring the flow.',
@@ -626,7 +647,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   IMPL_OVERHEAD: {
-    cause: 'A module or function has significantly more implementation complexity than its interface complexity suggests, hiding complexity from callers.',
+    cause:
+      'A module or function has significantly more implementation complexity than its interface complexity suggests, hiding complexity from callers.',
     think: [
       'Determine whether the implementation complexity reflects an inherently hard problem or accidental complexity from poor structure.',
       'Identify which parts can be extracted, simplified, or replaced with existing utilities.',
@@ -634,7 +656,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   CONCEPT_SCATTER: {
-    cause: 'A single domain concept is implemented across multiple files and layers, making it hard to understand or modify as a unit.',
+    cause:
+      'A single domain concept is implemented across multiple files and layers, making it hard to understand or modify as a unit.',
     think: [
       'Identify all the files that participate in implementing this concept.',
       'Determine whether the scatter is structural (the concept genuinely spans layers) or accidental (it can be consolidated).',

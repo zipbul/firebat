@@ -1,24 +1,30 @@
 [
   {
+    "kind": "deep-nesting",
+    "signals": [
+      "deep-nesting"
+    ],
     "file": "/virtual/deep-if.ts",
     "header": "deepCheck",
-    "kind": "deep-nesting",
-    "metrics": {
-      "callbackDepth": 0,
-      "cognitiveComplexity": 6,
-      "depth": 3,
-      "quadraticTargets": []
-    },
-    "score": 6,
     "span": {
-      "end": {
-        "column": 1,
-        "line": 15
-      },
       "start": {
-        "column": 7,
-        "line": 1
+        "line": 1,
+        "column": 7
+      },
+      "end": {
+        "line": 15,
+        "column": 1
       }
-    }
+    },
+    "metrics": {
+      "depth": 3,
+      "cognitiveComplexity": 6,
+      "callbackDepth": 0,
+      "quadraticTargets": [],
+      "density": 0.4,
+      "halsteadVolume": 23.22,
+      "halsteadDifficulty": 1
+    },
+    "score": 6
   }
 ]

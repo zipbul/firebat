@@ -51,11 +51,13 @@ export type FirebatCatalogCode =
   | 'BARREL_MISSING_INDEX'
   | 'BARREL_INVALID_INDEX_STMT'
   | 'BARREL_SIDE_EFFECT_IMPORT'
-  // nesting (4)
+  // nesting (6)
   | 'NESTING_DEEP'
   | 'NESTING_HIGH_CC'
   | 'NESTING_ACCIDENTAL_QUADRATIC'
   | 'NESTING_CALLBACK_DEPTH'
+  | 'NESTING_PROMISE_CHAIN'
+  | 'NESTING_COMPLEXITY_DENSITY'
   // early-return (4)
   | 'EARLY_RETURN_WRAPPING_IF'
   | 'EARLY_RETURN_INVERTIBLE'
@@ -159,12 +161,7 @@ export interface GroupFinding {
   }>;
 }
 
-export type CouplingKind =
-  | 'god-module'
-  | 'bidirectional-coupling'
-  | 'off-main-sequence'
-  | 'unstable-module'
-  | 'rigid-module';
+export type CouplingKind = 'god-module' | 'bidirectional-coupling' | 'off-main-sequence' | 'unstable-module' | 'rigid-module';
 
 export type FirebatTraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
 
@@ -317,10 +314,7 @@ export interface DepCycleFinding {
   };
 }
 
-export type DependencyFinding =
-  | DepLayerViolationFinding
-  | DepDeadExportFinding
-  | DepCycleFinding;
+export type DependencyFinding = DepLayerViolationFinding | DepDeadExportFinding | DepCycleFinding;
 
 export interface FormatFinding {
   readonly code: FirebatCatalogCode;
@@ -355,13 +349,24 @@ export interface NestingMetrics {
   readonly depth: number;
   readonly cognitiveComplexity: number;
   readonly callbackDepth: number;
+  readonly promiseChainDepth?: number | undefined;
   readonly quadraticTargets: ReadonlyArray<string>;
+  readonly density: number;
+  readonly halsteadVolume: number;
+  readonly halsteadDifficulty: number;
 }
 
-export type NestingKind = 'deep-nesting' | 'high-cognitive-complexity' | 'accidental-quadratic' | 'callback-depth';
+export type NestingKind =
+  | 'deep-nesting'
+  | 'high-cognitive-complexity'
+  | 'accidental-quadratic'
+  | 'callback-depth'
+  | 'promise-chain-depth'
+  | 'complexity-density';
 
 export interface NestingItem {
   readonly kind: NestingKind;
+  readonly signals: ReadonlyArray<NestingKind>;
   readonly file: string;
   readonly code?: FirebatCatalogCode;
   readonly header: string;
@@ -675,9 +680,7 @@ export const countBlockers = (analyses: Partial<FirebatAnalyses>): number => {
 
 export const toJsonReport = (report: FirebatReport): FirebatJsonReport => ({
   detectors: report.meta.detectors,
-  ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0
-    ? { errors: report.meta.errors }
-    : {}),
+  ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0 ? { errors: report.meta.errors } : {}),
   blockers: countBlockers(report.analyses),
   analyses: report.analyses,
   catalog: report.catalog,

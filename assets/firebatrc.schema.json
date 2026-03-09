@@ -28,7 +28,7 @@
         "typecheck": { "$ref": "#/$defs/emptyToggle" },
         "dependencies": { "$ref": "#/$defs/dependenciesToggle" },
         "coupling": { "$ref": "#/$defs/couplingToggle" },
-        "nesting": { "$ref": "#/$defs/emptyToggle" },
+        "nesting": { "$ref": "#/$defs/nestingToggle" },
         "early-return": { "$ref": "#/$defs/emptyToggle" },
         "exception-hygiene": { "$ref": "#/$defs/emptyToggle" },
 
@@ -64,7 +64,7 @@
                 "typecheck": { "$ref": "#/$defs/emptyInheritable" },
                 "dependencies": { "$ref": "#/$defs/dependenciesInheritable" },
                 "coupling": { "$ref": "#/$defs/couplingInheritable" },
-                "nesting": { "$ref": "#/$defs/emptyInheritable" },
+                "nesting": { "$ref": "#/$defs/nestingInheritable" },
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
                 "exception-hygiene": { "$ref": "#/$defs/emptyInheritable" },
 
@@ -85,7 +85,10 @@
   },
   "$defs": {
     "minSize": {
-      "oneOf": [{ "type": "string", "const": "auto" }, { "type": "integer", "minimum": 0 }]
+      "oneOf": [
+        { "type": "string", "const": "auto" },
+        { "type": "integer", "minimum": 0 }
+      ]
     },
     "emptyToggle": {
       "description": "false disables; true enables.",
@@ -266,18 +269,79 @@
       ]
     },
 
+    "nestingOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxCognitiveComplexity": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Cognitive complexity threshold (default: 15)"
+        },
+        "maxCallbackDepth": { "type": "integer", "minimum": 0, "description": "Callback nesting depth threshold (default: 3)" },
+        "maxPromiseChainDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Promise chain depth threshold (default: 3)"
+        },
+        "maxNestingDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Control-flow nesting depth threshold (default: 3)"
+        },
+        "minDensityLoc": { "type": "integer", "minimum": 0, "description": "Minimum LOC for density check (default: 8)" },
+        "maxDensity": { "type": "number", "minimum": 0, "maximum": 1, "description": "Max CC/LOC density (default: 0.5)" }
+      }
+    },
+    "nestingToggle": {
+      "oneOf": [{ "type": "boolean", "const": false }, { "type": "boolean", "const": true }, { "$ref": "#/$defs/nestingOptions" }]
+    },
+    "nestingInheritable": {
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "string", "const": "inherit" },
+        { "type": "boolean", "const": true },
+        { "$ref": "#/$defs/nestingOptions" }
+      ]
+    },
+
     "couplingOptions": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "godModulePercent": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fraction of total modules for god-module fanIn/fanOut threshold (default: 0.1)" },
+        "godModulePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of total modules for god-module fanIn/fanOut threshold (default: 0.1)"
+        },
         "godModuleMin": { "type": "integer", "minimum": 0, "description": "Minimum absolute god-module threshold (default: 10)" },
-        "rigidPercent": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fraction of total modules for rigid fanIn threshold (default: 0.15)" },
+        "rigidPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of total modules for rigid fanIn threshold (default: 0.15)"
+        },
         "rigidMin": { "type": "integer", "minimum": 0, "description": "Minimum absolute rigid threshold (default: 10)" },
-        "distanceThreshold": { "type": "number", "minimum": 0, "maximum": 1, "description": "Off-main-sequence distance threshold (default: 0.7)" },
-        "unstableInstability": { "type": "number", "minimum": 0, "maximum": 1, "description": "Instability threshold for unstable-module (default: 0.8)" },
+        "distanceThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Off-main-sequence distance threshold (default: 0.7)"
+        },
+        "unstableInstability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Instability threshold for unstable-module (default: 0.8)"
+        },
         "unstableFanOut": { "type": "integer", "minimum": 0, "description": "FanOut threshold for unstable-module (default: 5)" },
-        "rigidInstability": { "type": "number", "minimum": 0, "maximum": 1, "description": "Instability upper bound for rigid-module (default: 0.2)" }
+        "rigidInstability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Instability upper bound for rigid-module (default: 0.2)"
+        }
       }
     },
     "couplingToggle": {

@@ -32,6 +32,15 @@ interface FirebatGiantFileConfig {
   readonly maxLines?: number | undefined;
 }
 
+interface FirebatNestingConfig {
+  readonly maxCognitiveComplexity?: number | undefined;
+  readonly maxCallbackDepth?: number | undefined;
+  readonly maxPromiseChainDepth?: number | undefined;
+  readonly maxNestingDepth?: number | undefined;
+  readonly minDensityLoc?: number | undefined;
+  readonly maxDensity?: number | undefined;
+}
+
 interface FirebatConceptScatterConfig {
   readonly maxScatterIndex?: number | undefined;
 }
@@ -72,7 +81,7 @@ interface FirebatFeaturesConfig {
   readonly typecheck?: boolean | undefined;
   readonly dependencies?: FeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly coupling?: FeatureToggle<FirebatCouplingConfig> | undefined;
-  readonly nesting?: boolean | undefined;
+  readonly nesting?: FeatureToggle<FirebatNestingConfig> | undefined;
   readonly 'early-return'?: boolean | undefined;
   readonly 'collapsible-if'?: boolean | undefined;
   readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
@@ -99,7 +108,7 @@ interface FirebatMcpFeaturesConfig {
   readonly typecheck?: boolean | 'inherit' | undefined;
   readonly dependencies?: InheritableFeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly coupling?: InheritableFeatureToggle<FirebatCouplingConfig> | undefined;
-  readonly nesting?: boolean | 'inherit' | undefined;
+  readonly nesting?: InheritableFeatureToggle<FirebatNestingConfig> | undefined;
   readonly 'early-return'?: boolean | 'inherit' | undefined;
   readonly 'collapsible-if'?: boolean | 'inherit' | undefined;
   readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
@@ -209,7 +218,22 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        nesting: z.boolean().optional(),
+        nesting: z
+          .union([
+            z.literal(false),
+            z.literal(true),
+            z
+              .object({
+                maxCognitiveComplexity: z.number().int().nonnegative().optional(),
+                maxCallbackDepth: z.number().int().nonnegative().optional(),
+                maxPromiseChainDepth: z.number().int().nonnegative().optional(),
+                maxNestingDepth: z.number().int().nonnegative().optional(),
+                minDensityLoc: z.number().int().nonnegative().optional(),
+                maxDensity: z.number().min(0).max(1).optional(),
+              })
+              .strict(),
+          ])
+          .optional(),
         'early-return': z.boolean().optional(),
         'collapsible-if': z.boolean().optional(),
         forwarding: z
@@ -418,7 +442,23 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                       .strict(),
                   ])
                   .optional(),
-                nesting: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
+                nesting: z
+                  .union([
+                    z.literal(false),
+                    z.literal('inherit'),
+                    z.literal(true),
+                    z
+                      .object({
+                        maxCognitiveComplexity: z.number().int().nonnegative().optional(),
+                        maxCallbackDepth: z.number().int().nonnegative().optional(),
+                        maxPromiseChainDepth: z.number().int().nonnegative().optional(),
+                        maxNestingDepth: z.number().int().nonnegative().optional(),
+                        minDensityLoc: z.number().int().nonnegative().optional(),
+                        maxDensity: z.number().min(0).max(1).optional(),
+                      })
+                      .strict(),
+                  ])
+                  .optional(),
                 'early-return': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'collapsible-if': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 forwarding: z
@@ -454,6 +494,7 @@ export type {
   FirebatMcpConfig,
   FirebatMcpConfigObject,
   FirebatMcpFeaturesConfig,
+  FirebatNestingConfig,
 };
 
 export { FirebatConfigSchema };
