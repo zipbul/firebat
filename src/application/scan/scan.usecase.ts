@@ -22,7 +22,6 @@ import { initHasher } from '../../engine/hasher';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
-import { analyzeDecisionSurface, createEmptyDecisionSurface } from '../../features/decision-surface';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
@@ -30,7 +29,6 @@ import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../feat
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
-import { analyzeImplicitState, createEmptyImplicitState } from '../../features/implicit-state';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
@@ -700,13 +698,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const defaultFeatureOptions = {
     giantFileMaxLines: 1000,
-    decisionSurfaceMaxAxes: 2,
     variableLifetimeMaxLifetimeLines: 30,
   };
   const resolvedGiantFileMaxLines =
     (config as any)?.features?.['giant-file']?.maxLines ?? defaultFeatureOptions.giantFileMaxLines;
-  const resolvedDecisionSurfaceMaxAxes =
-    (config as any)?.features?.['decision-surface']?.maxAxes ?? defaultFeatureOptions.decisionSurfaceMaxAxes;
   const resolvedVariableLifetimeMaxLifetimeLines =
     (config as any)?.features?.['variable-lifetime']?.maxLifetimeLines ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
@@ -723,20 +718,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
   }
 
-  let decisionSurface: ReturnType<typeof analyzeDecisionSurface> = createEmptyDecisionSurface();
-
-  if (options.detectors.includes('decision-surface')) {
-    const t0 = nowMs();
-    const detectorKey = 'decision-surface';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    decisionSurface = analyzeDecisionSurface(program, { maxAxes: Number(resolvedDecisionSurfaceMaxAxes) });
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
   let variableLifetime: ReturnType<typeof analyzeVariableLifetime> = createEmptyVariableLifetime();
 
   if (options.detectors.includes('variable-lifetime')) {
@@ -746,20 +727,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     variableLifetime = analyzeVariableLifetime(program, { maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines) });
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
-  let implicitState: ReturnType<typeof analyzeImplicitState> = createEmptyImplicitState();
-
-  if (options.detectors.includes('implicit-state')) {
-    const t0 = nowMs();
-    const detectorKey = 'implicit-state';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    implicitState = analyzeImplicitState(program);
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1236,14 +1203,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf as any) } : {}),
     ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
-    ...(selectedDetectors.has('decision-surface')
-      ? { 'decision-surface': enrichPhase1(decisionSurface as any, 'DECISION_SURFACE') }
-      : {}),
     ...(selectedDetectors.has('variable-lifetime')
       ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') }
-      : {}),
-    ...(selectedDetectors.has('implicit-state')
-      ? { 'implicit-state': enrichPhase1(implicitState as any, 'IMPLICIT_STATE') }
       : {}),
     ...(selectedDetectors.has('temporal-coupling')
       ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') }

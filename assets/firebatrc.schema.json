@@ -32,10 +32,8 @@
         "early-return": { "$ref": "#/$defs/emptyToggle" },
         "exception-hygiene": { "$ref": "#/$defs/emptyToggle" },
 
-        "implicit-state": { "$ref": "#/$defs/emptyToggle" },
         "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
-        "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
         "giant-file": { "$ref": "#/$defs/giantFileToggle" }
       }
     },
@@ -65,10 +63,8 @@
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
                 "exception-hygiene": { "$ref": "#/$defs/emptyInheritable" },
 
-                "implicit-state": { "$ref": "#/$defs/emptyInheritable" },
                 "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
                 "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
-                "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
                 "giant-file": { "$ref": "#/$defs/giantFileInheritable" }
               }
             }
@@ -374,30 +370,6 @@
           "type": "object",
           "additionalProperties": false,
           "properties": { "maxLifetimeLines": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    },
-
-    "decisionSurfaceToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "maxAxes": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    },
-    "decisionSurfaceInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "maxAxes": { "type": "integer", "minimum": 0 } }
         }
       ]
     },

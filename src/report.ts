@@ -187,10 +187,8 @@ const formatText = (report: FirebatReport): string => {
   const coupling = analyses.coupling ?? [];
   const nesting = analyses.nesting ?? [];
   const forwarding = analyses.forwarding ?? [];
-  const implicitState = analyses['implicit-state'] ?? [];
   const temporalCoupling = analyses['temporal-coupling'] ?? [];
   const variableLifetime = analyses['variable-lifetime'] ?? [];
-  const decisionSurface = analyses['decision-surface'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
   const duplicatesUnified = analyses.duplicates ?? [];
   const lintErrors = lint.filter(d => d.severity === 'error').length;
@@ -573,18 +571,6 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('implicit-state') && implicitState.length > 0) {
-    lines.push(sectionHeader('🧠', 'Implicit State', `${implicitState.length} findings`));
-
-    for (const f of implicitState) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-      const key = typeof (f as any).key === 'string' && (f as any).key.length > 0 ? ` key=${(f as any).key}` : '';
-
-      lines.push(`    ${cc('·', A.dim)} ${f.protocol}${key} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
   if (selectedDetectors.has('temporal-coupling') && temporalCoupling.length > 0) {
     lines.push(sectionHeader('⏱️', 'Temporal Coupling', `${temporalCoupling.length} findings`));
 
@@ -604,17 +590,6 @@ const formatText = (report: FirebatReport): string => {
       const start = toPos(f.span.start.line, f.span.start.column);
 
       lines.push(`    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('decision-surface') && decisionSurface.length > 0) {
-    lines.push(sectionHeader('🔀', 'Decision Surface', `${decisionSurface.length} findings`));
-
-    for (const f of decisionSurface) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-
-      lines.push(`    ${cc('·', A.dim)} axes=${f.axes} paths=${f.combinatorialPaths} repeats=${f.repeatedChecks} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 

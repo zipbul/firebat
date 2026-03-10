@@ -31,10 +31,8 @@ describe('arg-parse', () => {
       'early-return',
       'collapsible-if',
       'forwarding',
-      'implicit-state',
       'temporal-coupling',
       'variable-lifetime',
-      'decision-surface',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -70,10 +68,8 @@ describe('arg-parse', () => {
       'early-return',
       'collapsible-if',
       'forwarding',
-      'implicit-state',
       'temporal-coupling',
       'variable-lifetime',
-      'decision-surface',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -106,10 +102,8 @@ describe('arg-parse', () => {
       'early-return',
       'collapsible-if',
       'forwarding',
-      'implicit-state',
       'temporal-coupling',
       'variable-lifetime',
-      'decision-surface',
       'giant-file',
     ]);
     expect(result.fix).toBe(false);
@@ -140,12 +134,12 @@ describe('arg-parse', () => {
 
   it('should parse P1 detectors when --only is provided', () => {
     // Arrange
-    let argv = ['--only', 'decision-surface', 'packages'];
+    let argv = ['--only', 'temporal-coupling', 'packages'];
     // Act
     let result = parseArgs(argv);
 
     // Assert
-    expect(result.detectors).toEqual(['decision-surface']);
+    expect(result.detectors).toEqual(['temporal-coupling']);
   });
 
   it('should parse configPath and logLevel when provided', () => {

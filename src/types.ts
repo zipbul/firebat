@@ -21,10 +21,8 @@ export type FirebatDetector =
   | 'collapsible-if'
   | 'forwarding'
   // Phase 1 detectors (IMPROVE.md)
-  | 'implicit-state'
   | 'temporal-coupling'
   | 'variable-lifetime'
-  | 'decision-surface'
   | 'giant-file'
   // Unified duplicates detector
   | 'duplicates';
@@ -115,11 +113,9 @@ export type FirebatCatalogCode =
   | 'DIAG_OVER_INDIRECTION'
   | 'DIAG_MIXED_ABSTRACTION'
   // Phase 1 detectors (11)
-  | 'IMPLICIT_STATE'
   | 'TEMPORAL_COUPLING'
   | 'SYMMETRY_BREAK'
   | 'VAR_LIFETIME'
-  | 'DECISION_SURFACE'
   | 'GIANT_FILE'
   // external tools (3)
   | 'LINT'
@@ -545,15 +541,6 @@ export interface FirebatMeta {
   readonly errors?: Readonly<Record<string, string>>;
 }
 
-export interface ImplicitStateFinding {
-  readonly kind: 'implicit-state';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly protocol: string;
-  readonly key?: string;
-}
-
 export interface TemporalCouplingFinding {
   readonly kind: 'temporal-coupling';
   readonly file: string;
@@ -572,16 +559,6 @@ export interface VariableLifetimeFinding {
   readonly variable: string;
   readonly lifetimeLines: number;
   readonly contextBurden: number;
-}
-
-export interface DecisionSurfaceFinding {
-  readonly kind: 'decision-surface';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly axes: number;
-  readonly combinatorialPaths: number;
-  readonly repeatedChecks: number;
 }
 
 export interface GiantFileMetrics {
@@ -613,10 +590,8 @@ export interface FirebatAnalyses {
   readonly forwarding: ReadonlyArray<ForwardingFinding>;
 
   // Phase 1 detectors (IMPROVE.md)
-  readonly 'implicit-state': ReadonlyArray<ImplicitStateFinding>;
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
   readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
-  readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector
   readonly duplicates: ReadonlyArray<DuplicateGroup>;

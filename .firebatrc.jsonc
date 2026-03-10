@@ -1,13 +1,9 @@
 {
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
   "features": {
-    "implicit-state": true,
     "temporal-coupling": true,
     "variable-lifetime": {
       "maxLifetimeLines": 200
-    },
-    "decision-surface": {
-      "maxAxes": 10
     },
     "giant-file": {
       "maxLines": 800

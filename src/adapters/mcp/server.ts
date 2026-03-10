@@ -35,10 +35,8 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'early-return',
   'collapsible-if',
   'forwarding',
-  'implicit-state',
   'temporal-coupling',
   'variable-lifetime',
-  'decision-surface',
   'giant-file',
 ];
 
@@ -342,7 +340,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, implicit-state, temporal-coupling, variable-lifetime, decision-surface, giant-file.',
+            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, temporal-coupling, variable-lifetime, giant-file.',
           ].join(' '),
         ),
       minSize: z
@@ -403,8 +401,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         '- targets: file/dir paths to analyze. If omitted, Firebat discovers default targets under the project root.',
         '- detectors: detector names to run. If omitted, uses enabled detectors from config (including config.mcp.features overrides).',
         '  Detector guide for non-obvious names:',
-        '  variable-lifetime=long-lived variable burden,',
-        '  decision-surface=combinatorial branch explosion.',
+        '  variable-lifetime=long-lived variable burden.',
         '- minSize: minimum AST node size for duplicate detection. Use "auto" to adapt to the codebase. Typical: 30-50 for small projects.',
         '- maxForwardDepth: max re-export depth for the forwarding detector (0 disables). Typical: 2-3.',
         '- filePatterns: glob patterns to filter findings by file path. Only matching findings are returned.',

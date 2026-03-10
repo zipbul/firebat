@@ -10,7 +10,6 @@
 import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../../src/test-api';
-import { analyzeDecisionSurface } from '../../../src/test-api';
 import { analyzeGiantFile } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
@@ -78,28 +77,6 @@ describe('threshold/variable-lifetime', () => {
     const xFindings = findings.filter(f => f.variable === 'x');
 
     expect(xFindings.length).toBeGreaterThan(0);
-  });
-});
-
-// ── decision-surface ─────────────────────────────────────────────────────────
-
-describe('threshold/decision-surface', () => {
-  it('axes count below maxAxes → no finding', () => {
-    // 1 axis (a), maxAxes=2 → 1 < 2 → no finding
-    const src = ['export function f(a: boolean): void {', '  if (a) { return; }', '}'].join('\n');
-    const findings = analyzeDecisionSurface([parse(src)], { maxAxes: 2 });
-
-    expect(findings).toHaveLength(0);
-  });
-
-  it('axes count equals maxAxes → finding', () => {
-    // 2 axes (a, b), maxAxes=2 → 2 >= 2 → finding
-    const src = ['export function f(a: boolean, b: boolean): void {', '  if (a) { return; }', '  if (b) { return; }', '}'].join(
-      '\n',
-    );
-    const findings = analyzeDecisionSurface([parse(src)], { maxAxes: 2 });
-
-    expect(findings).toHaveLength(1);
   });
 });
 

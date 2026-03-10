@@ -59,17 +59,11 @@
 
     // --- Phase 1 detectors (IMPROVE.md) ---
 
-    // Hidden mutable state / implicit side effects.
-    "implicit-state": true,
-
     // Time-order dependency / temporal coupling.
     "temporal-coupling": true,
 
     // Long-lived variables (optional threshold).
     "variable-lifetime": { "maxLifetimeLines": 200 },
-
-    // High-dimensional decision surfaces (optional threshold).
-    "decision-surface": { "maxAxes": 10 },
 
     // Giant files (optional line threshold).
     "giant-file": { "maxLines": 800 }

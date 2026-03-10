@@ -580,14 +580,6 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  IMPLICIT_STATE: {
-    cause: 'A module relies on implicit shared state that is not made explicit through function parameters or return values.',
-    think: [
-      'Identify the state variables that are read or written implicitly.',
-      'Determine whether they represent configuration (inject at startup), accumulated results (accumulate explicitly), or coordination signals (use explicit channels).',
-      'Verify that making the state explicit reduces unexpected coupling between callers.',
-    ],
-  },
   TEMPORAL_COUPLING: {
     cause: 'Two or more operations must be called in a specific order, but this constraint is not expressed in the type system.',
     think: [
@@ -612,14 +604,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Determine the actual first read and last write of the variable.',
       'Check whether the variable can be introduced closer to its use or eliminated by restructuring the flow.',
       'Verify that reducing the lifetime does not break readability by scattering related declarations.',
-    ],
-  },
-  DECISION_SURFACE: {
-    cause: 'A function contains many independent decision axes, creating a large combinatorial space of possible paths.',
-    think: [
-      'Identify which axes are truly independent and which interact.',
-      'Check whether independent axes are candidates for extraction into separate single-axis functions.',
-      'If axes are not independent, verify whether expressing the rule as a table or policy object replaces nested conditionals.',
     ],
   },
   IMPL_OVERHEAD: {

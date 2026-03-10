@@ -20,10 +20,6 @@ interface FirebatForwardingConfig {
   readonly maxForwardDepth?: number | undefined;
 }
 
-interface FirebatDecisionSurfaceConfig {
-  readonly maxAxes?: number | undefined;
-}
-
 interface FirebatVariableLifetimeConfig {
   readonly maxLifetimeLines?: number | undefined;
 }
@@ -83,10 +79,8 @@ interface FirebatFeaturesConfig {
   readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
-  readonly 'implicit-state'?: boolean | undefined;
   readonly 'temporal-coupling'?: boolean | undefined;
   readonly 'variable-lifetime'?: FeatureToggle<FirebatVariableLifetimeConfig> | undefined;
-  readonly 'decision-surface'?: FeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
   readonly 'giant-file'?: FeatureToggle<FirebatGiantFileConfig> | undefined;
 }
 
@@ -107,10 +101,8 @@ interface FirebatMcpFeaturesConfig {
   readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
-  readonly 'implicit-state'?: boolean | 'inherit' | undefined;
   readonly 'temporal-coupling'?: boolean | 'inherit' | undefined;
   readonly 'variable-lifetime'?: InheritableFeatureToggle<FirebatVariableLifetimeConfig> | undefined;
-  readonly 'decision-surface'?: InheritableFeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
   readonly 'giant-file'?: InheritableFeatureToggle<FirebatGiantFileConfig> | undefined;
 }
 
@@ -238,7 +230,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           ])
           .optional(),
 
-        'implicit-state': z.boolean().optional(),
         'temporal-coupling': z.boolean().optional(),
         'variable-lifetime': z
           .union([
@@ -247,17 +238,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
             z
               .object({
                 maxLifetimeLines: z.number().int().nonnegative().optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
-        'decision-surface': z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                maxAxes: z.number().int().nonnegative().optional(),
               })
               .strict(),
           ])
@@ -348,7 +328,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   .optional(),
 
                 // Phase 1 detectors (IMPROVE.md)
-                'implicit-state': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'temporal-coupling': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'variable-lifetime': z
                   .union([
@@ -358,18 +337,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                     z
                       .object({
                         maxLifetimeLines: z.number().int().nonnegative().optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
-                'decision-surface': z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        maxAxes: z.number().int().nonnegative().optional(),
                       })
                       .strict(),
                   ])

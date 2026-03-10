@@ -15,10 +15,8 @@ import type {
   EarlyReturnItem,
   DependencyFinding,
   CouplingHotspot,
-  ImplicitStateFinding,
   TemporalCouplingFinding,
   VariableLifetimeFinding,
-  DecisionSurfaceFinding,
   GiantFileFinding,
   FirebatDetector,
   FormatFinding,
@@ -50,8 +48,8 @@ const allDetectors: ReadonlyArray<FirebatDetector> = [
   'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
   'nesting', 'early-return', 'forwarding',
-  'implicit-state', 'temporal-coupling',
-  'variable-lifetime', 'decision-surface',
+  'temporal-coupling',
+  'variable-lifetime',
   'giant-file',
   'duplicates',
 ];
@@ -143,7 +141,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 18 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 16 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -161,10 +159,8 @@ describe('formatReport', () => {
       expect(out).toContain('Nesting');
       expect(out).toContain('Early Return');
       expect(out).toContain('Forwarding');
-      expect(out).toContain('Implicit State');
       expect(out).toContain('Temporal Coupling');
       expect(out).toContain('Variable Lifetime');
-      expect(out).toContain('Decision Surface');
       expect(out).toContain('Giant File');
     });
 
@@ -737,34 +733,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Implicit State body ─────────────────────────────────────────
-
-  describe('implicit-state body', () => {
-    it('should render body with protocol when findings exist', () => {
-      const finding: ImplicitStateFinding = { kind: 'implicit-state', file: testFile, span: span(2, 0), protocol: 'process.env' };
-      const out = formatReport(makeReport(['implicit-state'], { 'implicit-state': [finding] }), 'text');
-
-      expect(out).toContain('Implicit State');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('process.env');
-      expect(out).toContain('2:0');
-    });
-
-    it('should render key when key is present', () => {
-      const finding = { kind: 'implicit-state', file: testFile, span: span(), protocol: 'process.env', key: 'DATABASE_URL' } as ImplicitStateFinding & { key: string };
-      const out = formatReport(makeReport(['implicit-state'], { 'implicit-state': [finding] }), 'text');
-
-      expect(out).toContain('key=DATABASE_URL');
-    });
-
-    it('should omit key when key is absent', () => {
-      const finding: ImplicitStateFinding = { kind: 'implicit-state', file: testFile, span: span(), protocol: 'process.env' };
-      const out = formatReport(makeReport(['implicit-state'], { 'implicit-state': [finding] }), 'text');
-
-      expect(out).not.toContain('key=');
-    });
-  });
-
   // ── Temporal Coupling body ──────────────────────────────────────
 
   describe('temporal-coupling body', () => {
@@ -795,21 +763,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Decision Surface body ───────────────────────────────────────
-
-  describe('decision-surface body', () => {
-    it('should render body with axes, paths, and repeats when findings exist', () => {
-      const finding: DecisionSurfaceFinding = { kind: 'decision-surface', file: testFile, span: span(33, 0), axes: 4, combinatorialPaths: 16, repeatedChecks: 2 };
-      const out = formatReport(makeReport(['decision-surface'], { 'decision-surface': [finding] }), 'text');
-
-      expect(out).toContain('Decision Surface');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('axes=4');
-      expect(out).toContain('paths=16');
-      expect(out).toContain('repeats=2');
-    });
-  });
-
   // ── Giant File body ─────────────────────────────────────────────
 
   describe('giant-file body', () => {
@@ -835,11 +788,11 @@ describe('formatReport', () => {
 
   describe('cross-cutting', () => {
     it('should not render body section when detector is not in selected detectors', () => {
-      const finding: ImplicitStateFinding = { kind: 'implicit-state', file: testFile, span: span(), protocol: 'test' };
-      // detectors list does NOT include implicit-state
-      const out = formatReport(makeReport(['waste'], { 'implicit-state': [finding] }), 'text');
+      const finding: TemporalCouplingFinding = { kind: 'temporal-coupling', file: testFile, span: span(), state: 'test', writers: 1, readers: 1 };
+      // detectors list does NOT include temporal-coupling
+      const out = formatReport(makeReport(['waste'], { 'temporal-coupling': [finding] }), 'text');
 
-      expect(out).not.toContain('Implicit State');
+      expect(out).not.toContain('Temporal Coupling');
     });
 
     it('should not render body section when detector selected but array is empty', () => {
@@ -870,11 +823,11 @@ describe('formatReport', () => {
     });
 
     it('should use default summary row for Phase 1 detectors not in summaryRowFor switch', () => {
-      const finding: ImplicitStateFinding = { kind: 'implicit-state', file: testFile, span: span(), protocol: 'process.env' };
-      const out = formatReport(makeReport(['implicit-state'], { 'implicit-state': [finding] }), 'text');
+      const finding: TemporalCouplingFinding = { kind: 'temporal-coupling', file: testFile, span: span(), state: 'dbConn', writers: 1, readers: 1 };
+      const out = formatReport(makeReport(['temporal-coupling'], { 'temporal-coupling': [finding] }), 'text');
 
-      // Should still render "Implicit State" in summary via humanizeDetectorKey default
-      expect(out).toContain('Implicit State');
+      // Should still render "Temporal Coupling" in summary via humanizeDetectorKey default
+      expect(out).toContain('Temporal Coupling');
     });
 
     it('should handle analyses with missing detector data gracefully when detector selected', () => {

@@ -300,7 +300,7 @@
 
 ### A-16. implicit-state — 다중 파일 기준 (4건 통합)
 
-- **파일**: `src/features/implicit-state/analyzer.ts` L90, L133, L297, L327
+- **파일**: ~~`src/features/implicit-state/analyzer.ts` L90, L133, L297, L327~~ (삭제됨)
 - **코드들**:
   - `if (idxs.size < 2) { continue; }` — process.env 키가 2개 파일 이상에서 사용
   - `if (getInstanceFiles.length >= 2)` — getInstance가 2+ 파일
@@ -308,6 +308,7 @@
   - `if (refCount >= 2)` — mutable var 참조 2회 이상
 - **임의 기준**: 전부 "2"라는 동일 숫자
 - **질문**: 모든 상황에 2가 적절한가? 각 패턴의 특성에 맞는 개별 임계값이 필요하지 않은가?
+- **결론**: ✅ **기능 폐기로 무효** — implicit-state 디텍터 전체 삭제 완료 (17 detectors). module-state는 temporal-coupling 중복, shared-env는 lint 영역, singleton-access/event-channel은 이름 기반 FP/FN 구조적 한계.
 
 ---
 
@@ -354,7 +355,7 @@
 | # | 옵션 | 기본값 | 질문 |
 |---|---|---|---|
 | A-21 | `giantFileMaxLines` | `1000` | 1000줄이 "거대"의 기준인 근거? 생성된 파일은? |
-| A-22 | `decisionSurfaceMaxAxes` | `2` | if 조건에 고유 변수 2개 이상이면 경고? 거의 모든 함수가 해당될 수 있음 |
+| A-22 | `decisionSurfaceMaxAxes` | `2` | if 조건에 고유 변수 2개 이상이면 경고? 거의 모든 함수가 해당될 수 있음. ✅ **기능 폐기로 무효** |
 | A-23 | `variableLifetimeMaxLifetimeLines` | `30` | 변수 선언~마지막 사용이 30줄이면 "수명이 긴" 변수? |
 | A-24 | `implementationOverheadMinRatio` | `1.0` | 구현 복잡도/인터페이스 복잡도 비율 1.0이면 보고? 거의 모든 함수가 해당 |
 | A-25 | `conceptScatterMaxScatterIndex` | `2` | scatterIndex(파일 수 + 레이어 수) > 2이면 경고? |
@@ -454,10 +455,11 @@
 
 ### B-04. decision-surface — combinatorialPaths
 
-- **파일**: `src/features/decision-surface/analyzer.ts` L114
+- **파일**: ~~`src/features/decision-surface/analyzer.ts` L114~~ (삭제됨)
 - **코드**: `const combinatorialPaths = Math.pow(2, axes);`
 - **임의 가정**: 모든 결정 축이 boolean(2-way)이라고 가정
 - **질문**: `status === 'active' | 'pending' | 'closed'`처럼 3+ way인 경우는? 실제 path 수를 과소평가할 수 있음
+- **결론**: ✅ **기능 폐기로 무효** — decision-surface 디텍터 전체 삭제 완료. 학술 선례 없는 독자 메트릭, CC와 간접 중복, AST 개선해도 CC 중복이거나 정상 코드 오탐.
 
 ---
 
@@ -551,10 +553,11 @@
 
 ### C-05. implicit-state — emit/on 이름 감지
 
-- **파일**: `src/features/implicit-state/analyzer.ts` L165
+- **파일**: ~~`src/features/implicit-state/analyzer.ts` L165~~ (삭제됨)
 - **코드**: `if (calleeName !== 'emit' && calleeName !== 'on') { continue; }`
 - **임의 기준**: 이벤트 시스템 감지가 `emit`/`on` 이름에만 의존
 - **질문**: `addEventListener`, `subscribe`, `dispatch`, `trigger`, `publish`, `broadcast`는?
+- **결론**: ✅ **기능 폐기로 무효** — implicit-state 디텍터 전체 삭제 완료.
 
 ---
 
@@ -677,12 +680,13 @@
 
 ### E-01. decision-surface — 결정 축(axis) 식별
 
-- **파일**: `src/features/decision-surface/analyzer.ts` L80-95
+- **파일**: ~~`src/features/decision-surface/analyzer.ts` L80-95~~ (삭제됨)
 - **방식**: if 조건 내 identifier/property access를 "결정 축"으로 추출
 - **부정확성**:
   - `user.name.length > 0 && user.name !== ''` → `user.name.length`, `user.name` 2개 축으로 카운트되지만 실질 1개
   - 상수(`MAX_RETRIES`)도 축으로 카운트될 수 있음
 - **질문**: AST 기반으로 실제 결정 변수만 추출하는 것이 가능한가?
+- **결론**: ✅ **기능 폐기로 무효** — decision-surface 디텍터 전체 삭제 완료.
 
 ---
 
@@ -785,13 +789,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 23건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~ |
-| B. 임의 공식/가중치 | **7건** | ✅ 4건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead |
-| C. 이름/패턴 휴리스틱 | **7건** | ✅ 5건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, implicit-state, ~~invariant-blindspot~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 25건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~ |
+| B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
+| C. 이름/패턴 휴리스틱 | **7건** | ✅ 6건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~ |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
-| E. 근사 측정 | **5건** | ✅ 2건 | decision-surface, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
+| E. 근사 측정 | **5건** | ✅ 3건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **42건 해결** | 22개 feature 중 19개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **48건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
