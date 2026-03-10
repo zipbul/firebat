@@ -17,7 +17,6 @@ import type {
   CouplingHotspot,
   ImplicitStateFinding,
   TemporalCouplingFinding,
-  ModificationImpactFinding,
   VariableLifetimeFinding,
   DecisionSurfaceFinding,
   GiantFileFinding,
@@ -52,7 +51,7 @@ const allDetectors: ReadonlyArray<FirebatDetector> = [
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
   'nesting', 'early-return', 'forwarding',
   'implicit-state', 'temporal-coupling',
-  'modification-impact', 'variable-lifetime', 'decision-surface',
+  'variable-lifetime', 'decision-surface',
   'giant-file',
   'duplicates',
 ];
@@ -144,7 +143,7 @@ describe('formatReport', () => {
   // ── Text summary (empty) ────────────────────────────────────────
 
   describe('text summary', () => {
-    it('should render summary table with all 19 detectors when all detectors selected and no findings', () => {
+    it('should render summary table with all 18 detectors when all detectors selected and no findings', () => {
       const report = makeReport([...allDetectors], { dependencies: [] });
       const out = formatReport(report, 'text');
 
@@ -164,7 +163,6 @@ describe('formatReport', () => {
       expect(out).toContain('Forwarding');
       expect(out).toContain('Implicit State');
       expect(out).toContain('Temporal Coupling');
-      expect(out).toContain('Modification Impact');
       expect(out).toContain('Variable Lifetime');
       expect(out).toContain('Decision Surface');
       expect(out).toContain('Giant File');
@@ -782,28 +780,6 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Modification Impact body ────────────────────────────────────
-
-  describe('modification-impact body', () => {
-    it('should render body with radius and callers when highRiskCallers populated', () => {
-      const finding: ModificationImpactFinding = { kind: 'modification-impact', file: testFile, span: span(25, 0), impactRadius: 7, highRiskCallers: ['callerA', 'callerB'] };
-      const out = formatReport(makeReport(['modification-impact'], { 'modification-impact': [finding] }), 'text');
-
-      expect(out).toContain('Modification Impact');
-      expect(out).toContain('1 findings');
-      expect(out).toContain('radius=7');
-      expect(out).toContain('callers=callerA,callerB');
-    });
-
-    it('should omit callers when highRiskCallers is empty', () => {
-      const finding: ModificationImpactFinding = { kind: 'modification-impact', file: testFile, span: span(), impactRadius: 3, highRiskCallers: [] };
-      const out = formatReport(makeReport(['modification-impact'], { 'modification-impact': [finding] }), 'text');
-
-      expect(out).toContain('radius=3');
-      expect(out).not.toContain('callers=');
-    });
-  });
-
   // ── Variable Lifetime body ──────────────────────────────────────
 
   describe('variable-lifetime body', () => {
@@ -875,15 +851,15 @@ describe('formatReport', () => {
     });
 
     it('should render multiple findings for a single detector when array has multiple items', () => {
-      const findings: ModificationImpactFinding[] = [
-        { kind: 'modification-impact', file: testFile, span: span(1, 0), impactRadius: 3, highRiskCallers: ['a'] },
-        { kind: 'modification-impact', file: testFile2, span: span(2, 0), impactRadius: 5, highRiskCallers: ['b'] },
+      const findings: VariableLifetimeFinding[] = [
+        { kind: 'variable-lifetime', file: testFile, span: span(1, 0), variable: 'a', lifetimeLines: 3, contextBurden: 1 },
+        { kind: 'variable-lifetime', file: testFile2, span: span(2, 0), variable: 'b', lifetimeLines: 5, contextBurden: 2 },
       ];
-      const out = formatReport(makeReport(['modification-impact'], { 'modification-impact': findings }), 'text');
+      const out = formatReport(makeReport(['variable-lifetime'], { 'variable-lifetime': findings }), 'text');
 
       expect(out).toContain('2 findings');
-      expect(out).toContain('radius=3');
-      expect(out).toContain('radius=5');
+      expect(out).toContain('lifetime=3L');
+      expect(out).toContain('lifetime=5L');
     });
 
     it('should render summary section when detectors are selected', () => {

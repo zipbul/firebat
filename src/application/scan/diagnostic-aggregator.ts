@@ -605,14 +605,6 @@ export const FIREBAT_CODE_CATALOG = {
       'If they should be uniform, verify that aligning them to the majority pattern does not break callers.',
     ],
   },
-  MOD_IMPACT: {
-    cause: 'A function or module has a high impact radius — changes to it propagate to many callers or dependents.',
-    think: [
-      'Assess whether the high-impact function is a stable abstraction (acceptable) or an unstable utility that changes frequently (problematic).',
-      'If it changes often, check whether introducing a stable interface layer shields callers from implementation changes.',
-      'Verify that regression tests at the boundary exist before making any modification.',
-    ],
-  },
   VAR_LIFETIME: {
     cause:
       'A variable has a longer lifetime than necessary — it is declared far from its use or lives across multiple unrelated operations.',

@@ -34,7 +34,6 @@
 
         "implicit-state": { "$ref": "#/$defs/emptyToggle" },
         "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
-        "modification-impact": { "$ref": "#/$defs/emptyToggle" },
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
         "decision-surface": { "$ref": "#/$defs/decisionSurfaceToggle" },
         "giant-file": { "$ref": "#/$defs/giantFileToggle" }
@@ -68,7 +67,6 @@
 
                 "implicit-state": { "$ref": "#/$defs/emptyInheritable" },
                 "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
-                "modification-impact": { "$ref": "#/$defs/emptyInheritable" },
                 "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
                 "decision-surface": { "$ref": "#/$defs/decisionSurfaceInheritable" },
                 "giant-file": { "$ref": "#/$defs/giantFileInheritable" }

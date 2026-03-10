@@ -65,9 +65,6 @@
     // Time-order dependency / temporal coupling.
     "temporal-coupling": true,
 
-    // Modification impact hotspots.
-    "modification-impact": true,
-
     // Long-lived variables (optional threshold).
     "variable-lifetime": { "maxLifetimeLines": 200 },
 

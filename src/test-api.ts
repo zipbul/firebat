@@ -23,7 +23,6 @@ export { analyzeForwarding } from './features/forwarding';
 export { analyzeGiantFile } from './features/giant-file';
 export { analyzeImplicitState } from './features/implicit-state';
 export { analyzeLint } from './features/lint';
-export { analyzeModificationImpact } from './features/modification-impact';
 export { analyzeNesting } from './features/nesting';
 export { analyzeTemporalCoupling } from './features/temporal-coupling';
 export { analyzeUnknownProof } from './features/unknown-proof';

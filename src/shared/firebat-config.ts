@@ -85,7 +85,6 @@ interface FirebatFeaturesConfig {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state'?: boolean | undefined;
   readonly 'temporal-coupling'?: boolean | undefined;
-  readonly 'modification-impact'?: boolean | undefined;
   readonly 'variable-lifetime'?: FeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: FeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
   readonly 'giant-file'?: FeatureToggle<FirebatGiantFileConfig> | undefined;
@@ -110,7 +109,6 @@ interface FirebatMcpFeaturesConfig {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state'?: boolean | 'inherit' | undefined;
   readonly 'temporal-coupling'?: boolean | 'inherit' | undefined;
-  readonly 'modification-impact'?: boolean | 'inherit' | undefined;
   readonly 'variable-lifetime'?: InheritableFeatureToggle<FirebatVariableLifetimeConfig> | undefined;
   readonly 'decision-surface'?: InheritableFeatureToggle<FirebatDecisionSurfaceConfig> | undefined;
   readonly 'giant-file'?: InheritableFeatureToggle<FirebatGiantFileConfig> | undefined;
@@ -242,7 +240,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 
         'implicit-state': z.boolean().optional(),
         'temporal-coupling': z.boolean().optional(),
-        'modification-impact': z.boolean().optional(),
         'variable-lifetime': z
           .union([
             z.literal(false),
@@ -353,7 +350,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                 // Phase 1 detectors (IMPROVE.md)
                 'implicit-state': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'temporal-coupling': z.union([z.boolean(), z.literal('inherit')]).optional(),
-                'modification-impact': z.union([z.boolean(), z.literal('inherit')]).optional(),
                 'variable-lifetime': z
                   .union([
                     z.literal(false),

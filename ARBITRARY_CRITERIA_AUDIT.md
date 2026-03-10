@@ -290,10 +290,11 @@
 
 ### A-15. modification-impact — 최소 impact radius
 
-- **파일**: `src/features/modification-impact/analyzer.ts` L101
+- **파일**: ~~`src/features/modification-impact/analyzer.ts` L101~~ (삭제됨)
 - **코드**: `if (impactRadius < 2) { continue; }`
 - **임의 기준**: 영향 파일이 2개 미만이면 무시
 - **질문**: 자기 자신만 포함되면 의미 없으므로 1 초과인 것은 이해되나, 2가 의미 있는 최소인지?
+- **결론**: ✅ **기능 폐기로 무효** — modification-impact 디텍터 전체 삭제 완료 (22 detectors). impactRadius는 코드 품질 문제가 아닌 영향 범위 조회이며, coupling이 이미 구조적 문제를 탐지.
 
 ---
 
@@ -606,17 +607,17 @@
 
 ### D-02. concept-scatter / modification-impact — layerOf 함수
 
-- **파일**: ~~`src/features/concept-scatter/analyzer.ts` L23-39~~ (삭제됨), `src/features/modification-impact/analyzer.ts` L18-35
+- **파일**: ~~`src/features/concept-scatter/analyzer.ts` L23-39~~ (삭제됨), ~~`src/features/modification-impact/analyzer.ts` L18-35~~ (삭제됨)
 - **코드**: `src/adapters/`, `src/application/`, `src/infrastructure/`, `src/ports/` → 레이어 분류
 - **임의 가정**: 4-레이어 Clean Architecture가 전제
 - **질문**: 동일 `layerOf` 함수가 2개 feature에 중복 존재. 프로젝트의 실제 구조를 설정으로 받아야 하지 않는가?
-- **부분 결론**: concept-scatter 측 중복은 기능 폐기로 해소. modification-impact 측 `layerOf`는 여전히 미해결.
+- **결론**: ✅ **기능 폐기로 무효** — concept-scatter, modification-impact 모두 삭제 완료.
 
 ---
 
 ### D-03. modification-impact — highRiskCallers 판단
 
-- **파일**: `src/features/modification-impact/analyzer.ts` L112-116
+- **파일**: ~~`src/features/modification-impact/analyzer.ts` L112-116~~ (삭제됨)
 - **코드**:
   ```typescript
   const highRiskCallers = affected.filter(p => {
@@ -627,6 +628,7 @@
   ```
 - **임의 가정**: "application 레이어 코드를 adapters/infrastructure가 호출하면 고위험"
 - **질문**: 이 방향의 의존성이 왜 "고위험"인가? Dependency Inversion 원칙상 이 방향이 정상 아닌가?
+- **결론**: ✅ **기능 폐기로 무효** — modification-impact 디텍터 전체 삭제 완료.
 
 ---
 
@@ -783,13 +785,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 22건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 23건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~ |
 | B. 임의 공식/가중치 | **7건** | ✅ 4건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 5건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, implicit-state, ~~invariant-blindspot~~ |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 4건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, modification-impact, barrel-policy |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
 | E. 근사 측정 | **5건** | ✅ 2건 | decision-surface, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **39건 해결** | 23개 feature 중 20개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **42건 해결** | 22개 feature 중 19개에서 최소 1건 이상 |
 
 ---
 

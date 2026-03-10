@@ -32,7 +32,6 @@ import { analyzeForwarding, createEmptyForwarding } from '../../features/forward
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
 import { analyzeImplicitState, createEmptyImplicitState } from '../../features/implicit-state';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
-import { analyzeModificationImpact, createEmptyModificationImpact } from '../../features/modification-impact';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
@@ -794,20 +793,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
   }
 
-  let modificationImpact: Awaited<ReturnType<typeof analyzeModificationImpact>> = createEmptyModificationImpact();
-
-  if (options.detectors.includes('modification-impact')) {
-    const t0 = nowMs();
-    const detectorKey = 'modification-impact';
-
-    logger.debug('detector: start', { detector: detectorKey });
-
-    modificationImpact = await analyzeModificationImpact(gildash, program, ctx.rootAbs);
-    detectorTimings[detectorKey] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
-
   const selectedDetectors = new Set(options.detectors);
 
   const toProjectRelative = (filePath: string): string => {
@@ -1262,9 +1247,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       : {}),
     ...(selectedDetectors.has('temporal-coupling')
       ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') }
-      : {}),
-    ...(selectedDetectors.has('modification-impact')
-      ? { 'modification-impact': enrichPhase1(modificationImpact as any, 'MOD_IMPACT') }
       : {}),
     ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified as any) } : {}),
   };

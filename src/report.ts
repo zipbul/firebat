@@ -189,7 +189,6 @@ const formatText = (report: FirebatReport): string => {
   const forwarding = analyses.forwarding ?? [];
   const implicitState = analyses['implicit-state'] ?? [];
   const temporalCoupling = analyses['temporal-coupling'] ?? [];
-  const modificationImpact = analyses['modification-impact'] ?? [];
   const variableLifetime = analyses['variable-lifetime'] ?? [];
   const decisionSurface = analyses['decision-surface'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
@@ -594,18 +593,6 @@ const formatText = (report: FirebatReport): string => {
       const start = toPos(f.span.start.line, f.span.start.column);
 
       lines.push(`    ${cc('·', A.dim)} ${f.state} ${cc(`writers=${f.writers} readers=${f.readers}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
-    }
-  }
-
-  if (selectedDetectors.has('modification-impact') && modificationImpact.length > 0) {
-    lines.push(sectionHeader('💥', 'Modification Impact', `${modificationImpact.length} findings`));
-
-    for (const f of modificationImpact) {
-      const rel = path.relative(process.cwd(), getFile(f));
-      const start = toPos(f.span.start.line, f.span.start.column);
-      const callers = f.highRiskCallers.length > 0 ? cc(` callers=${f.highRiskCallers.join(',')}`, A.dim) : '';
-
-      lines.push(`    ${cc('·', A.dim)} radius=${f.impactRadius}${callers} ${cc(`@ ${rel}:${start}`, A.dim)}`);
     }
   }
 

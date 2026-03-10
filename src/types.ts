@@ -23,7 +23,6 @@ export type FirebatDetector =
   // Phase 1 detectors (IMPROVE.md)
   | 'implicit-state'
   | 'temporal-coupling'
-  | 'modification-impact'
   | 'variable-lifetime'
   | 'decision-surface'
   | 'giant-file'
@@ -115,11 +114,10 @@ export type FirebatCatalogCode =
   | 'DIAG_SHOTGUN_SURGERY'
   | 'DIAG_OVER_INDIRECTION'
   | 'DIAG_MIXED_ABSTRACTION'
-  // Phase 1 detectors (12)
+  // Phase 1 detectors (11)
   | 'IMPLICIT_STATE'
   | 'TEMPORAL_COUPLING'
   | 'SYMMETRY_BREAK'
-  | 'MOD_IMPACT'
   | 'VAR_LIFETIME'
   | 'DECISION_SURFACE'
   | 'GIANT_FILE'
@@ -566,15 +564,6 @@ export interface TemporalCouplingFinding {
   readonly readers: number;
 }
 
-export interface ModificationImpactFinding {
-  readonly kind: 'modification-impact';
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly impactRadius: number;
-  readonly highRiskCallers: ReadonlyArray<string>;
-}
-
 export interface VariableLifetimeFinding {
   readonly kind: 'variable-lifetime';
   readonly file: string;
@@ -626,7 +615,6 @@ export interface FirebatAnalyses {
   // Phase 1 detectors (IMPROVE.md)
   readonly 'implicit-state': ReadonlyArray<ImplicitStateFinding>;
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
-  readonly 'modification-impact': ReadonlyArray<ModificationImpactFinding>;
   readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
   readonly 'decision-surface': ReadonlyArray<DecisionSurfaceFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;

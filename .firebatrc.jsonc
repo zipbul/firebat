@@ -3,7 +3,6 @@
   "features": {
     "implicit-state": true,
     "temporal-coupling": true,
-    "modification-impact": true,
     "variable-lifetime": {
       "maxLifetimeLines": 200
     },
