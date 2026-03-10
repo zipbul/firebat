@@ -133,30 +133,12 @@
       ]
     },
     "wasteToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "memoryRetentionThreshold": { "type": "integer", "minimum": 0, "default": 10 }
-          }
-        }
-      ]
+      "type": "boolean"
     },
     "wasteInheritable": {
       "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        { "type": "string", "const": "inherit" },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "memoryRetentionThreshold": { "type": "integer", "minimum": 0, "default": 10 }
-          }
-        }
+        { "type": "boolean" },
+        { "type": "string", "const": "inherit" }
       ]
     },
     "duplicatesToggle": {

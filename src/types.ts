@@ -35,10 +35,9 @@ export const DETECTOR_ALIASES: Readonly<Record<string, FirebatDetector>> = {
 };
 
 export type FirebatCatalogCode =
-  // waste (3)
+  // waste (2)
   | 'WASTE_DEAD_STORE'
   | 'WASTE_DEAD_STORE_OVERWRITE'
-  | 'WASTE_MEMORY_RETENTION'
   // barrel-policy (6)
   | 'BARREL_EXPORT_STAR'
   | 'BARREL_DEEP_IMPORT'
@@ -124,7 +123,7 @@ export type FirebatCatalogCode =
 
 export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'node';
 
-export type WasteKind = 'dead-store' | 'dead-store-overwrite' | 'memory-retention';
+export type WasteKind = 'dead-store' | 'dead-store-overwrite';
 
 export interface SourcePosition {
   readonly line: number;
@@ -444,7 +443,6 @@ export interface WasteFinding {
   readonly filePath: string;
   readonly span: SourceSpan;
   readonly code?: FirebatCatalogCode;
-  readonly confidence?: number;
 }
 
 export type TypecheckSeverity = 'error' | 'warning';

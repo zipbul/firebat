@@ -18,7 +18,6 @@ interface ComputeScanArtifactKeyInput {
   readonly detectors: ReadonlyArray<string>;
   readonly minSize: string;
   readonly maxForwardDepth: number;
-  readonly wasteMemoryRetentionThreshold?: number;
   readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
@@ -45,7 +44,6 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `detectors=${normalizedDetectors.join(',')}`,
       `minSize=${input.minSize}`,
       `maxForwardDepth=${String(input.maxForwardDepth)}`,
-      `wasteMemoryRetentionThreshold=${String(input.wasteMemoryRetentionThreshold ?? '')}`,
       `barrelPolicyIgnoreGlobs=${normalizedBarrelPolicyIgnoreGlobs.join(',')}`,
       `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
       `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,

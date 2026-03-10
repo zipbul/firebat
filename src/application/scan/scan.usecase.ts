@@ -217,7 +217,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     detectors: options.detectors,
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
     maxForwardDepth: options.maxForwardDepth,
-    ...(options.detectors.includes('waste') ? { wasteMemoryRetentionThreshold: options.wasteMemoryRetentionThreshold } : {}),
     ...(options.detectors.includes('barrel-policy') ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] } : {}),
     ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
       ? {
@@ -430,12 +429,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    waste = detectWaste(
-      program,
-      options.wasteMemoryRetentionThreshold !== undefined
-        ? { memoryRetentionThreshold: options.wasteMemoryRetentionThreshold }
-        : {},
-    );
+    waste = detectWaste(program);
     detectorTimings.waste = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.waste) });
@@ -773,7 +767,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     const kindToCode: Readonly<Record<WasteKind, FirebatCatalogCode>> = {
       'dead-store': 'WASTE_DEAD_STORE',
       'dead-store-overwrite': 'WASTE_DEAD_STORE_OVERWRITE',
-      'memory-retention': 'WASTE_MEMORY_RETENTION',
     } as const;
 
     return items.map(item => {
@@ -786,7 +779,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
         span: item?.span,
         label: item?.label,
-        confidence: item?.confidence,
       };
     });
   };

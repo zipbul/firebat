@@ -112,4 +112,20 @@ describe('variable-collector', () => {
     // Assert
     expect(valueReads).toBeGreaterThan(0);
   });
+
+  it('collectVariables - object rest element with static object literal - should track rest variable as declaration write', () => {
+    // Arrange
+    // const { a, ...rest } = { a: 1, b: 2, c: 3 };
+    const statement = getFunctionBodyStatement(
+      ['function f() {', '  const { a, ...rest } = { a: 1, b: 2, c: 3 };', '}'].join('\n'),
+      0,
+    );
+
+    // Act
+    const usages = collectVariables(statement, { includeNestedFunctions: false });
+    const restWrites = usages.filter(u => u.name === 'rest' && u.isWrite && u.writeKind === 'declaration');
+
+    // Assert
+    expect(restWrites.length).toBeGreaterThan(0);
+  });
 });

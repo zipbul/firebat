@@ -78,7 +78,7 @@ describe('formatReport', () => {
 
     it('should output detectors at root level and omit meta key when format is json', () => {
       const report = makeReport(['waste'], {
-        waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span(), confidence: 1 }],
+        waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span() }],
       });
       const parsed = JSON.parse(formatReport(report, 'json'));
 
@@ -181,8 +181,8 @@ describe('formatReport', () => {
 
     it('should include Blockers count in summary when blocking findings exist', () => {
       const findings: WasteFinding[] = [
-        { kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span(), confidence: 1 },
-        { kind: 'dead-store', label: 'y', message: '', filePath: testFile2, span: span(), confidence: 1 },
+        { kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span() },
+        { kind: 'dead-store', label: 'y', message: '', filePath: testFile2, span: span() },
       ];
       const out = formatReport(makeReport(['waste'], { waste: findings }), 'text');
 
@@ -342,7 +342,7 @@ describe('formatReport', () => {
 
   describe('waste body', () => {
     it('should render body with kind and label when findings exist', () => {
-      const finding: WasteFinding = { kind: 'dead-store', label: 'unusedVar', message: '', filePath: testFile, span: span(5, 2), confidence: 1 };
+      const finding: WasteFinding = { kind: 'dead-store', label: 'unusedVar', message: '', filePath: testFile, span: span(5, 2) };
       const out = formatReport(makeReport(['waste'], { waste: [finding] }), 'text');
 
       expect(out).toContain('Waste');

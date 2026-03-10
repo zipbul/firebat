@@ -75,7 +75,6 @@ describe('FirebatCliOptions', () => {
     expect(opts.logLevel).toBeUndefined();
     expect(opts.logStack).toBeUndefined();
     expect(opts.explicit).toBeUndefined();
-    expect(opts.wasteMemoryRetentionThreshold).toBeUndefined();
   });
 
   it('should accept empty array targets when assigned', () => {

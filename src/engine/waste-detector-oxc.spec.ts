@@ -36,7 +36,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       }
     `);
     const result = detectWasteOxc([f]);
-    expect(Array.isArray(result)).toBe(true);
+    expect(result).toEqual([]);
   });
 
   it('detects unused variable (declared but never read)', () => {
@@ -47,23 +47,20 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       }
     `);
     const result = detectWasteOxc([f]);
-    // OXC may detect as dead-write or unused-variable depending on analysis
-    expect(Array.isArray(result)).toBe(true);
-    // At least one waste finding expected
-    // (lax assertion: some compilers may not find it depending on CFG depth)
-    expect(result.length).toBeGreaterThanOrEqual(0);
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'unused')).toBe(true);
   });
 
   it('detects dead write (variable written then immediately overwritten)', () => {
     const f = toFile('/dead.ts', `
       function compute() {
-        let x = 1;
+        let x;
+        x = 1;
         x = 2;
         return x;
       }
     `);
     const result = detectWasteOxc([f]);
-    expect(Array.isArray(result)).toBe(true);
+    expect(result.some(r => r.kind === 'dead-store-overwrite' && r.label === 'x')).toBe(true);
   });
 
   it('findings have required shape: kind, filePath, span, evidence', () => {
@@ -92,85 +89,133 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it('memoryRetentionThreshold option is accepted without error', () => {
-    const f = toFile('/opt.ts', 'function f(x: number) { return x; }');
-    expect(() => detectWasteOxc([f], { memoryRetentionThreshold: 5 })).not.toThrow();
+  // Bug 1: CFG try/catch exception edge 누락
+  it('detectWasteOxc - variable used only in catch after mid-try exception - should not report dead-store', () => {
+    // Arrange
+    const source = `function f() {
+      let x = getResource();
+      try {
+        mayThrow();
+        x = transform(x);
+      } catch {
+        release(x);
+      }
+    }`;
+    const f = toFile('/try-catch.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
   });
 
-  it('should not report memory-retention for primitive-typed variables', () => {
-    // Arrange — variable with number type annotation should not trigger memory-retention
-    const code = [
-      'function process() {',
-      '  const count: number = computeCount();',
-      '  console.log(count);',
-      '  // ... many lines of code ...',
-      '  doSomething();',
-      '  doSomethingElse();',
-      '  doMore();',
-      '  return;',
-      '}',
-    ].join('\n');
-    const f = toFile('/prim.ts', code);
-    const result = detectWasteOxc([f], { memoryRetentionThreshold: 1 });
-    const memRetention = result.filter(r => r.kind === 'memory-retention' && r.label === 'count');
-    expect(memRetention.length).toBe(0);
+  // Bug 2: localIndexByName.size===0 early return이 중첩 함수 방문을 차단
+  it('detectWasteOxc - outer function with no locals - should detect dead-store in nested function', () => {
+    // Arrange
+    const source = `function outer() {
+      function inner() {
+        const dead = 1;
+        return 2;
+      }
+      return inner();
+    }`;
+    const f = toFile('/nested.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'dead')).toBe(true);
   });
 
-  it('should not report memory-retention for union primitive types (string | null)', () => {
-    const code = [
-      'function process() {',
-      '  let value: string | null = getString();',
-      '  console.log(value);',
-      '  doSomething();',
-      '  doSomethingElse();',
-      '  doMore();',
-      '  return;',
-      '}',
-    ].join('\n');
-    const f = toFile('/union-prim.ts', code);
-    const result = detectWasteOxc([f], { memoryRetentionThreshold: 1 });
-    const memRetention = result.filter(r => r.kind === 'memory-retention' && r.label === 'value');
-    expect(memRetention.length).toBe(0);
+  // Bug 3: ObjectPattern RestElement write 누락
+  it('detectWasteOxc - rest sibling destructuring with object literal - rest variable used - should not report dead-store', () => {
+    // Arrange
+    const source = `function f() {
+      const { a, ...rest } = { a: 1, b: 2, c: 3 };
+      return rest;
+    }`;
+    const f = toFile('/rest-sibling.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'rest')).toBe(false);
   });
 
-  it('should not report memory-retention for literal-initialized variables without annotation', () => {
-    const code = [
-      'function process() {',
-      '  const count = 42;',
-      '  const name = "hello";',
-      '  const flag = true;',
-      '  console.log(count, name, flag);',
-      '  doSomething();',
-      '  doSomethingElse();',
-      '  doMore();',
-      '  return;',
-      '}',
-    ].join('\n');
-    const f = toFile('/literal-prim.ts', code);
-    const result = detectWasteOxc([f], { memoryRetentionThreshold: 1 });
-    const memRetention = result.filter(
-      r => r.kind === 'memory-retention' && (r.label === 'count' || r.label === 'name' || r.label === 'flag'),
-    );
-    expect(memRetention.length).toBe(0);
+  // Bug 5: switch case test 표현식 CFG 노드 추가
+  it('detectWasteOxc - variable read only in switch case test - should not report dead-store', () => {
+    // Arrange
+    const source = `function f(x: string) {
+      const target = 'hello';
+      switch (x) {
+        case target:
+          return 'found';
+      }
+      return 'not found';
+    }`;
+    const f = toFile('/switch-case-test.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'target')).toBe(false);
   });
 
-  it('should still report memory-retention for union with non-primitive (string | Date)', () => {
-    const code = [
-      'function process() {',
-      '  let value: string | Date = getStuff();',
-      '  console.log(value);',
-      '  doSomething();',
-      '  doSomethingElse();',
-      '  doMore();',
-      '  doEvenMore();',
-      '  doFinally();',
-      '  return;',
-      '}',
-    ].join('\n');
-    const f = toFile('/union-nonprim.ts', code);
-    const result = detectWasteOxc([f], { memoryRetentionThreshold: 1 });
-    // string | Date has a non-primitive (Date = TSTypeReference), so should NOT be filtered
-    // May or may not report depending on CFG analysis, but should NOT be filtered by primitive check
-    expect(Array.isArray(result)).toBe(true);
+  // Bug 6: ?? 연산자 short-circuit 모델링 — non-nullish left는 right를 평가하지 않음
+  it('detectWasteOxc - variable read only in never-evaluated right of ?? - should report dead-store', () => {
+    // Arrange
+    const source = `function f() {
+      const fallback = 99;
+      const x = 1 ?? fallback;
+      return x;
+    }`;
+    const f = toFile('/nullish-never.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(true);
   });
+
+  it('detectWasteOxc - variable read in evaluated right of ?? with null left - should not report dead-store', () => {
+    // Arrange
+    const source = `function f() {
+      const fallback = 99;
+      const x = null ?? fallback;
+      return x;
+    }`;
+    const f = toFile('/nullish-eval.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
+  });
+
+  // Bug 7: for-of 기존 변수 대입 write 추적
+  it('detectWasteOxc - existing variable assigned in for-of and used after loop - should not report dead-store', () => {
+    // Arrange
+    const source = `function f(items: number[]) {
+      let current = 0;
+      for (current of items) {
+        process(current);
+      }
+      return current;
+    }`;
+    const f = toFile('/for-of-existing.ts', source);
+
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'current')).toBe(false);
+  });
+
 });
+

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { NodeRecord, NodeWithBody, OxcBuiltFunctionCfg } from '../types';
 
 import { OxcCFGBuilder } from './cfg-builder';
+import { EdgeType } from './cfg-types';
 import { isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
 
@@ -96,6 +97,24 @@ const hasEdge = (edges: Int32Array, fromNode: number, toNode: number): boolean =
   return false;
 };
 
+const hasEdgeWithType = (edges: Int32Array, fromNode: number, toNode: number, edgeType: EdgeType): boolean => {
+  for (let index = 0; index < edges.length; index += 3) {
+    const from = edges[index];
+    const to = edges[index + 1];
+    const type = edges[index + 2];
+
+    if (from === undefined || to === undefined || type === undefined) {
+      continue;
+    }
+
+    if (from === fromNode && to === toNode && type === edgeType) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const buildAdjacency = (edges: Int32Array, nodeCount: number): number[][] => {
   const adjacency: number[][] = Array.from({ length: nodeCount }, () => []);
 
@@ -164,6 +183,39 @@ describe('cfg-builder', () => {
 
     // Assert
     expect(hasDirectEdgeToExit).toBe(false);
+  });
+
+  it('should add exception edge from try block statement to catch entry', () => {
+    // Arrange
+    const fn = getFirstFunction(
+      ['function f() {', '  try {', '    const x = 1;', '  } catch (e) {', '    return 0;', '  }', '}'].join('\n'),
+    );
+    const builder = new OxcCFGBuilder();
+    // Act
+    const built = builder.buildFunctionBody(getFunctionBody(fn));
+    const edges = built.cfg.getEdges();
+
+    // Collect all (from, to) pairs connected by an Exception edge
+    const exceptionEdges: Array<{ from: number; to: number }> = [];
+
+    for (let index = 0; index < edges.length; index += 3) {
+      const from = edges[index];
+      const to = edges[index + 1];
+      const type = edges[index + 2];
+
+      if (type === EdgeType.Exception && from !== undefined && to !== undefined) {
+        exceptionEdges.push({ from, to });
+      }
+    }
+
+    // Assert: at least one exception edge was emitted from the try block to a catch entry
+    expect(exceptionEdges.length).toBeGreaterThan(0);
+
+    // Assert: the exception edge target (catch entry) is a valid node id
+    const catchEntryId = exceptionEdges[0]?.to;
+
+    expect(catchEntryId).toBeGreaterThanOrEqual(0);
+    expect(hasEdgeWithType(edges, exceptionEdges[0]?.from ?? -1, catchEntryId ?? -1, EdgeType.Exception)).toBe(true);
   });
 
   it('should preserve a path after the labeled loop when a labeled break is used', () => {

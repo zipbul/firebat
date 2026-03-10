@@ -1,4 +1,5 @@
-// primitive-skip: primitive type variables should NOT trigger memory-retention
+// primitive-skip: primitive type variables (number, string, boolean) should NOT trigger dead-store findings
+// Dead-store detection targets assigned-but-never-read variables; primitives that are read before scope exit are valid.
 
 export function primitiveLifetime(): number {
   const count: number = 42;

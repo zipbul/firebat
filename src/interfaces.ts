@@ -18,7 +18,6 @@ export interface FirebatCliOptions {
   readonly format: OutputFormat;
   readonly minSize: MinSizeOption;
   readonly maxForwardDepth: number;
-  readonly wasteMemoryRetentionThreshold?: number;
   readonly exitOnFindings: boolean;
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly fix: boolean;

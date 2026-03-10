@@ -341,10 +341,11 @@
 
 ### A-20. waste — memory retention threshold
 
-- **파일**: `src/engine/waste-detector-oxc.ts` L556
+- **파일**: ~~`src/engine/waste-detector-oxc.ts` L556~~ (삭제됨)
 - **코드**: `const memoryRetentionThreshold = Math.max(0, Math.round(options?.memoryRetentionThreshold ?? 10));`
 - **임의 기준**: 기본값 10 (CFG payload steps)
 - **질문**: "마지막 사용 후 exit까지 10 step 이상이면 memory retention 문제"라는 기준의 근거는?
+- **결론**: ✅ **memory-retention 기능 전체 폐기로 무효** — 정밀도 ~50% (confidence 0.5 자가 인정), 학술/업계 선례 없음 (GCC, Clang, Coverity, SonarQube, Infer 등 어떤 도구도 GC 언어에서 이 분석 미제공), 정적 분석으로 GC 압력 판단 구조적 불가 (객체 크기 × 잔존 시간 × 호출 빈도 = 런타임 정보). 최고 알고리즘 적용해도 불변.
 
 ---
 
@@ -589,6 +590,7 @@
 - **코드**: `if (meta.name.startsWith('_')) { continue; }`
 - **임의 기준**: `_` prefix가 "의도적 미사용"이라는 컨벤션 가정
 - **질문**: TypeScript 공식 컨벤션이 아님. Python에서 차용된 관습이며, 팀마다 다를 수 있음. ESLint의 `no-unused-vars`와 일관성은?
+- **결론**: ✅ **채용 (유지)** — `const [_, second] = pair`, `arr.map((_, i) => i)` 등 구조분해/콜백 파라미터에서 언어 구조상 수정 불가능한 dead-store가 존재. `_` prefix 스킵을 제거하면 사용자가 해결할 수 없는 finding이 노출됨. Precision-first 원칙에 부합 (수정 불가능한 오탐 제거). ESLint `no-unused-vars`도 동일하게 `argsIgnorePattern: "^_"` 옵션 제공.
 
 ---
 
@@ -762,6 +764,7 @@
 - **파일**: `src/engine/waste-detector-oxc.ts` L788
 - **값**: `confidence: 0.5`
 - **질문**: 0.5는 "반반 확률"인데, 이 수준의 finding을 사용자에게 보여주는 것이 적절한가? noise가 너무 많지 않은가?
+- **결론**: ✅ **memory-retention 기능 전체 폐기로 무효** — confidence 0.5 자가 인정이 정밀도 문제를 증명. A-20과 동일 근거. 기능 삭제로 해당 confidence 값 자체가 제거됨.
 
 ---
 
@@ -771,7 +774,7 @@
 
 | 기능 | 판단 근거 | 비고 |
 |---|---|---|
-| **waste** (dead-store/overwrite) | CFG 기반 reaching-definition 데이터흐름 분석 | memory-retention은 제외 (A-20, F-04) |
+| **waste** (dead-store/overwrite) | CFG 기반 reaching-definition 데이터흐름 분석 | memory-retention 폐기 완료 (A-20, F-04) |
 | **exception-hygiene** (useless-catch, unsafe-finally 등) | AST 구조 패턴 매칭 — syntax적으로 확정 | overscoped-try는 제외 (A-11) |
 | **typecheck** | tsgo LSP 진단 결과 | 외부 도구 위임 |
 | **lint** | oxlint 규칙 적용 결과 | 외부 도구 위임 |
@@ -789,13 +792,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 25건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 26건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste |
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
-| C. 이름/패턴 휴리스틱 | **7건** | ✅ 6건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~ |
+| C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
 | E. 근사 측정 | **5건** | ✅ 3건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
-| F. 임의 confidence | **4건** | ✅ 3건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **48건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
+| **합계** | **64건** | ✅ **51건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 

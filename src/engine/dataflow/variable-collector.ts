@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, VariableCollectorOptions, VariableUsage } from '../types';
 
 import { getLiteralString, getNodeName, getNodeType, isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
-import { evalStaticTruthiness, unwrapExpression } from '../ast/oxc-expression-utils';
+import { evalStaticNullish, evalStaticTruthiness, unwrapExpression } from '../ast/oxc-expression-utils';
 
 const getNodeStart = (node: Node): number => node.start;
 
@@ -172,6 +172,29 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
         return;
       }
 
+      if (operator === '??') {
+        // ?? short-circuits on nullish (null/undefined), not on falsy.
+        // evalStaticTruthiness is not appropriate here; use evalStaticNullish.
+        const leftNullish = evalStaticNullish(left);
+
+        if (leftNullish === false) {
+          // Left is statically non-nullish → right is never evaluated.
+          return;
+        }
+
+        if (leftNullish === true) {
+          // Left is statically nullish → only right is evaluated.
+          visit(right, allowNestedFunctions, false);
+
+          return;
+        }
+
+        // Unknown: both branches may execute.
+        visit(right, allowNestedFunctions, false);
+
+        return;
+      }
+
       // For unknown operators or unknown truthiness, be conservative.
       visit(right, allowNestedFunctions, false);
 
@@ -260,6 +283,16 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
             continue;
           }
 
+          if (prop.type === 'RestElement') {
+            const argument = isNodeRecord(prop) ? prop.argument : undefined;
+
+            if (isOxcNode(argument)) {
+              visit(argument, allowNestedFunctions, true, 'declaration');
+            }
+
+            continue;
+          }
+
           if (prop.type !== 'Property') {
             continue;
           }
@@ -313,6 +346,87 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       return;
     }
 
+    if (current.type === 'CatchClause') {
+      const param = current.param;
+      const body = current.body;
+
+      if (isOxcNode(param)) {
+        visit(param, allowNestedFunctions, true, 'declaration');
+      }
+
+      visit(body, allowNestedFunctions, false);
+
+      return;
+    }
+
+    if (current.type === 'ObjectPattern') {
+      const properties = isOxcNodeArray(current.properties) ? current.properties : [];
+
+      for (const prop of properties) {
+        if (!isOxcNode(prop)) {
+          continue;
+        }
+
+        if (prop.type === 'RestElement') {
+          const argument = isNodeRecord(prop) ? prop.argument : undefined;
+
+          if (isOxcNode(argument)) {
+            visit(argument, allowNestedFunctions, isWriteContext, writeKind);
+          }
+
+          continue;
+        }
+
+        if (prop.type !== 'Property') {
+          continue;
+        }
+
+        const valueNode = prop.value;
+
+        if (isOxcNode(valueNode) && valueNode.type === 'AssignmentPattern') {
+          visit(valueNode.left, allowNestedFunctions, isWriteContext, writeKind);
+          visit(valueNode.right, allowNestedFunctions, false);
+
+          continue;
+        }
+
+        visit(valueNode, allowNestedFunctions, isWriteContext, writeKind);
+      }
+
+      return;
+    }
+
+    if (current.type === 'ArrayPattern') {
+      const elements = isOxcNodeArray(current.elements) ? current.elements : [];
+
+      for (const element of elements) {
+        if (!isOxcNode(element)) {
+          continue;
+        }
+
+        if (element.type === 'RestElement') {
+          const argument = isNodeRecord(element) ? element.argument : undefined;
+
+          if (isOxcNode(argument)) {
+            visit(argument, allowNestedFunctions, isWriteContext, writeKind);
+          }
+
+          continue;
+        }
+
+        if (element.type === 'AssignmentPattern') {
+          visit(element.left, allowNestedFunctions, isWriteContext, writeKind);
+          visit(element.right, allowNestedFunctions, false);
+
+          continue;
+        }
+
+        visit(element, allowNestedFunctions, isWriteContext, writeKind);
+      }
+
+      return;
+    }
+
     if (nodeType === 'CallExpression') {
       if (!isNodeRecord(current)) {
         return;
@@ -346,7 +460,7 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
         continue;
       }
 
-      visit(value, allowNestedFunctions, isWriteContext);
+      visit(value, allowNestedFunctions, false);
     }
   };
 

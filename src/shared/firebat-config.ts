@@ -12,10 +12,6 @@ interface FirebatDuplicatesConfig {
   readonly minSize?: number | 'auto' | undefined;
 }
 
-interface FirebatWasteConfig {
-  readonly memoryRetentionThreshold?: number | undefined;
-}
-
 interface FirebatForwardingConfig {
   readonly maxForwardDepth?: number | undefined;
 }
@@ -64,7 +60,7 @@ interface FirebatDependenciesConfig {
 
 interface FirebatFeaturesConfig {
   readonly duplicates?: FeatureToggle<FirebatDuplicatesConfig> | undefined;
-  readonly waste?: FeatureToggle<FirebatWasteConfig> | undefined;
+  readonly waste?: boolean | undefined;
   readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: boolean | undefined;
   readonly 'exception-hygiene'?: boolean | undefined;
@@ -86,7 +82,7 @@ interface FirebatFeaturesConfig {
 
 interface FirebatMcpFeaturesConfig {
   readonly duplicates?: InheritableFeatureToggle<FirebatDuplicatesConfig> | undefined;
-  readonly waste?: InheritableFeatureToggle<FirebatWasteConfig> | undefined;
+  readonly waste?: boolean | 'inherit' | undefined;
   readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: boolean | 'inherit' | undefined;
   readonly 'exception-hygiene'?: boolean | 'inherit' | undefined;
@@ -134,17 +130,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        waste: z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                memoryRetentionThreshold: z.number().int().nonnegative().optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
+        waste: z.boolean().optional(),
         'barrel-policy': z
           .union([
             z.literal(false),
@@ -275,18 +261,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                       .strict(),
                   ])
                   .optional(),
-                waste: z
-                  .union([
-                    z.literal(false),
-                    z.literal('inherit'),
-                    z.literal(true),
-                    z
-                      .object({
-                        memoryRetentionThreshold: z.number().int().nonnegative().optional(),
-                      })
-                      .strict(),
-                  ])
-                  .optional(),
+                waste: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'barrel-policy': z
                   .union([
                     z.literal(false),

@@ -54,7 +54,6 @@ const {
   resolveDependenciesAllowedDependenciesFromFeatures,
   resolveMinSizeFromFeatures,
   resolveMaxForwardDepthFromFeatures,
-  resolveWasteMemoryRetentionThresholdFromFeatures,
 } = __testing__;
 
 describe('resolveEnabledDetectorsFromFeatures', () => {
@@ -191,40 +190,6 @@ describe('resolveMaxForwardDepthFromFeatures', () => {
     const result = resolveMaxForwardDepthFromFeatures({ forwarding: { maxForwardDepth: 5 } } as never);
 
     expect(result).toBe(5);
-  });
-});
-
-describe('resolveWasteMemoryRetentionThresholdFromFeatures', () => {
-  it('should return undefined when features is undefined', () => {
-    expect(resolveWasteMemoryRetentionThresholdFromFeatures(undefined)).toBeUndefined();
-  });
-
-  it('should return undefined when waste is not an object', () => {
-    expect(resolveWasteMemoryRetentionThresholdFromFeatures({ waste: true } as never)).toBeUndefined();
-  });
-
-  it('should return rounded threshold when valid', () => {
-    const result = resolveWasteMemoryRetentionThresholdFromFeatures({
-      waste: { memoryRetentionThreshold: 3.7 },
-    } as never);
-
-    expect(result).toBe(4);
-  });
-
-  it('should clamp negative threshold to 0', () => {
-    const result = resolveWasteMemoryRetentionThresholdFromFeatures({
-      waste: { memoryRetentionThreshold: -5 },
-    } as never);
-
-    expect(result).toBe(0);
-  });
-
-  it('should return undefined for non-finite threshold', () => {
-    const result = resolveWasteMemoryRetentionThresholdFromFeatures({
-      waste: { memoryRetentionThreshold: Infinity },
-    } as never);
-
-    expect(result).toBeUndefined();
   });
 });
 

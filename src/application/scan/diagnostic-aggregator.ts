@@ -25,15 +25,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Check whether this pattern repeats across the function; if so, the function may be accumulating unrelated setup steps that should be separated.',
     ],
   },
-  WASTE_MEMORY_RETENTION: {
-    cause:
-      'A large object or collection is captured in a closure or long-lived scope and remains reachable after its logical use ends.',
-    think: [
-      'Investigate why the reference persists — the closure may capture more than it needs, or the variable scope may be unnecessarily broad.',
-      'Determine whether the value can be passed as a parameter instead of captured to narrow the retention window.',
-      'Verify whether restructuring the enclosing scope or nullifying the reference after use can shorten the lifetime.',
-    ],
-  },
 
   FWD_THIN_WRAPPER: {
     cause:
@@ -604,15 +595,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Determine the actual first read and last write of the variable.',
       'Check whether the variable can be introduced closer to its use or eliminated by restructuring the flow.',
       'Verify that reducing the lifetime does not break readability by scattering related declarations.',
-    ],
-  },
-  IMPL_OVERHEAD: {
-    cause:
-      'A module or function has significantly more implementation complexity than its interface complexity suggests, hiding complexity from callers.',
-    think: [
-      'Determine whether the implementation complexity reflects an inherently hard problem or accidental complexity from poor structure.',
-      'Identify which parts can be extracted, simplified, or replaced with existing utilities.',
-      'Verify that high implementation-to-interface ratios indicate missing abstractions rather than genuinely dense logic.',
     ],
   },
   GIANT_FILE: {

@@ -22,7 +22,7 @@ describe('FirebatConfigSchema', () => {
     const result = FirebatConfigSchema.safeParse({
       features: {
         duplicates: { minSize: 'auto' },
-        waste: { memoryRetentionThreshold: 10 },
+        waste: true,
       },
     });
     expect(result.success).toBe(true);
