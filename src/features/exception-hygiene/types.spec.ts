@@ -7,7 +7,7 @@ import { describe, expect, it } from 'bun:test';
 describe('features/exception-hygiene/types — structural shape', () => {
   it('ExceptionHygieneFinding shape satisfies expected keys', () => {
     const finding = {
-      kind: 'silent-catch' as const,
+      kind: 'useless-catch' as const,
       file: '/src/foo.ts',
       span: {
         start: { line: 10, column: 2 },
@@ -15,7 +15,7 @@ describe('features/exception-hygiene/types — structural shape', () => {
       },
       evidence: 'catch block is empty',
     };
-    expect(finding.kind).toBe('silent-catch');
+    expect(finding.kind).toBe('useless-catch');
     expect(finding.file).toBe('/src/foo.ts');
     expect(finding.span.start.line).toBe(10);
     expect(finding.span.end.column).toBe(20);
@@ -63,13 +63,10 @@ describe('features/exception-hygiene/types — structural shape', () => {
       'floating-promises',
       'misused-promises',
       'return-await-policy',
-      'silent-catch',
       'catch-transform-hygiene',
       'redundant-nested-catch',
-      'overscoped-try',
-      'exception-control-flow',
     ] satisfies import('./types').ExceptionHygieneFindingKind[];
-    expect(kinds.length).toBe(18);
+    expect(kinds.length).toBe(15);
     expect(kinds[0]).toBe('tool-unavailable');
   });
 });

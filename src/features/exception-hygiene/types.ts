@@ -14,11 +14,8 @@ export type ExceptionHygieneFindingKind =
   | 'floating-promises'
   | 'misused-promises'
   | 'return-await-policy'
-  | 'silent-catch'
   | 'catch-transform-hygiene'
-  | 'redundant-nested-catch'
-  | 'overscoped-try'
-  | 'exception-control-flow';
+  | 'redundant-nested-catch';
 
 export interface SourcePosition {
   readonly line: number;

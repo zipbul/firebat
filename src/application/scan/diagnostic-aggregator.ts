@@ -206,14 +206,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the fix matches the project policy for return-await consistency.',
     ],
   },
-  EH_SILENT_CATCH: {
-    cause: 'A catch block suppresses the error without logging, rethrowing, or handling it in any visible way.',
-    think: [
-      'Determine whether the error suppression is intentional and if so, verify that it is documented.',
-      'Check whether the same pattern exists in related error handlers — systematic silent catches suggest a missing strategy.',
-      'If not intentional, identify what logging or handling should be added to prevent silent failures.',
-    ],
-  },
   EH_CATCH_TRANSFORM: {
     cause:
       'A catch block modifies the error object or its message before rethrowing, potentially losing original error information.',
@@ -232,25 +224,6 @@ export const FIREBAT_CODE_CATALOG = {
       'If handling is identical, verify that removing the inner try-catch does not alter error propagation behavior.',
     ],
   },
-  EH_OVERSCOPED_TRY: {
-    cause:
-      'A try block wraps significantly more code than the statements that can actually throw, obscuring which operation the catch is protecting.',
-    think: [
-      'Identify which statements within the try block can actually throw.',
-      'Determine whether narrowing the try block makes the error source explicit.',
-      'Check whether multiple throwing statements share error handling logic or need distinct handling.',
-    ],
-  },
-  EH_EXCEPTION_CONTROL_FLOW: {
-    cause:
-      'Exceptions are used for normal control flow (e.g., throwing to break out of a loop or signal a condition), not for error signaling.',
-    think: [
-      'Determine whether the thrown value represents an actual error condition or a control signal.',
-      'Check whether return values, result types, or explicit control flow constructs can replace the exception.',
-      'Verify that downstream error handlers are not confused by non-error exceptions mixed with real errors.',
-    ],
-  },
-
   UNKNOWN_UNNARROWED: {
     cause: "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
     think: [

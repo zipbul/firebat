@@ -882,11 +882,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'floating-promises': 'EH_FLOATING_PROMISES',
       'misused-promises': 'EH_MISUSED_PROMISES',
       'return-await-policy': 'EH_RETURN_AWAIT_POLICY',
-      'silent-catch': 'EH_SILENT_CATCH',
       'catch-transform-hygiene': 'EH_CATCH_TRANSFORM',
       'redundant-nested-catch': 'EH_REDUNDANT_NESTED_CATCH',
-      'overscoped-try': 'EH_OVERSCOPED_TRY',
-      'exception-control-flow': 'EH_EXCEPTION_CONTROL_FLOW',
     };
 
     return items

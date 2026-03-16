@@ -291,135 +291,6 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   const tryCatchStack: TryCatchEntry[] = [];
   let functionTryCatchDepth = 0;
 
-  const reportOverscopedTryIfNeeded = (node: NodeValue): void => {
-    if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'TryStatement') {
-      return;
-    }
-
-    const handler = node.handler;
-    const block = node.block;
-
-    if (!isOxcNode(handler) || handler.type !== 'CatchClause') {
-      return;
-    }
-
-    if (!isOxcNode(block) || block.type !== 'BlockStatement' || !isNodeRecord(block)) {
-      return;
-    }
-
-    const stmts = Array.isArray(block.body) ? (block.body as ReadonlyArray<NodeValue>) : [];
-
-    // Objective-only heuristic (spec): many top-level statements
-    if (stmts.length >= 10) {
-      pushFinding(findings, {
-        kind: 'overscoped-try',
-        node,
-        filePath,
-        sourceText,
-        message: 'try scope is too broad and hides error boundaries',
-        evidence: getEvidenceLineAt(sourceText, node.start),
-        recipes: ['RCP-16'],
-      });
-    }
-  };
-
-  const reportExceptionControlFlowIfNeeded = (node: NodeValue): void => {
-    if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'TryStatement') {
-      return;
-    }
-
-    const handler = node.handler;
-    const finalizer = node.finalizer;
-    const block = node.block;
-
-    if (!isOxcNode(handler) || handler.type !== 'CatchClause' || finalizer !== null) {
-      return;
-    }
-
-    if (!isOxcNode(block) || block.type !== 'BlockStatement' || !isNodeRecord(block)) {
-      return;
-    }
-
-    const stmts = Array.isArray(block.body) ? (block.body as ReadonlyArray<NodeValue>) : [];
-
-    if (stmts.length !== 1) {
-      return;
-    }
-
-    const catchBody = handler.body;
-
-    if (!isOxcNode(catchBody) || catchBody.type !== 'BlockStatement' || !isNodeRecord(catchBody)) {
-      return;
-    }
-
-    const catchStmts = Array.isArray(catchBody.body) ? (catchBody.body as ReadonlyArray<NodeValue>) : [];
-    const hasThrow = containsThrowStatement(catchBody);
-
-    if (hasThrow) {
-      return;
-    }
-
-    const hasDefaultReturn = catchStmts.some(
-      s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'),
-    );
-
-    if (!hasDefaultReturn) {
-      return;
-    }
-
-    pushFinding(findings, {
-      kind: 'exception-control-flow',
-      node,
-      filePath,
-      sourceText,
-      message: 'try/catch is used for control flow with default fallback',
-      evidence: getEvidenceLineAt(sourceText, node.start),
-      recipes: ['RCP-17', 'RCP-11'],
-    });
-  };
-
-  const reportSilentCatchIfNeeded = (catchClause: NodeValue): void => {
-    if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
-      return;
-    }
-
-    const param = catchClause.param;
-    const body = catchClause.body;
-
-    if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
-      return;
-    }
-
-    const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
-    const hasThrow = containsThrowStatement(body);
-
-    if (hasThrow) {
-      return;
-    }
-
-    const hasReturnOrJump = stmts.some(
-      s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'),
-    );
-    const isEmpty = stmts.length === 0;
-    const isOnlyConsole = stmts.length > 0 && stmts.every(isConsoleLikeCall);
-
-    if (!(isEmpty || isOnlyConsole || hasReturnOrJump)) {
-      return;
-    }
-
-    pushFinding(findings, {
-      kind: 'silent-catch',
-      node: catchClause,
-      filePath,
-      sourceText,
-      message: 'catch swallows an error without propagation or explicit handling',
-      evidence: getEvidenceLineAt(sourceText, catchClause.start),
-      recipes: ['RCP-01', 'RCP-02', 'RCP-11'],
-    });
-
-    void param;
-  };
-
   const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
       return;
@@ -519,7 +390,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    // If inner catch is useless-catch OR silent-catch style, report redundancy.
+    // If inner catch is useless-catch OR absorbs silently (empty/console-only body), report redundancy.
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
       return;
     }
@@ -625,9 +496,6 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     // Pre-order hooks
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
-      reportOverscopedTryIfNeeded(node);
-      reportExceptionControlFlowIfNeeded(node);
-
       const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
       const hasFinalizer = isOxcNode(node.finalizer);
 
@@ -748,7 +616,6 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     if (node.type === 'CatchClause' && isNodeRecord(node)) {
       reportRedundantNestedCatchIfNeeded(node);
-      reportSilentCatchIfNeeded(node);
       reportCatchTransformHygieneIfNeeded(node);
       // Keep visiting for other rules
     }
