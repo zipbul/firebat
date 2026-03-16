@@ -766,6 +766,49 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
+  it('should not report unsafe-finally when labeled break targets a label inside finally', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/finally-labeled-inner.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } finally {',
+      '    outer: for (let i = 0; i < 10; i++) {',
+      '      for (let j = 0; j < 10; j++) {',
+      '        if (j === 5) break outer;',
+      '      }',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unsafe-finally for .finally callback with return inside nested function', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/finally-cb-nested-fn.ts';
+    const source = [
+      'export function f() {',
+      '  return Promise.resolve(1).finally(() => {',
+      '    const cleanup = () => { return 1; };',
+      '    cleanup();',
+      '  });',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
   // --- missing-error-cause: extensions ---
 
   it('should report missing-error-cause for vibe pattern — catch param in Error message', async () => {
@@ -858,6 +901,66 @@ describe('error-flow/analyzer', () => {
       '    doSomething();',
       '  } catch (e) {',
       '    throw new AggregateError([], "multiple failures", { cause: e });',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should report missing-error-cause for vibe pattern with e.message', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/vibe-message.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    throw new Error(e.message);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should report missing-error-cause for vibe pattern with template literal', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/vibe-template.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    throw new Error(`Failed: ${e}`);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report missing-error-cause when catch returns without throwing', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/catch-return.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    return doSomething();',
+      '  } catch (e) {',
+      '    return defaultValue;',
       '  }',
       '}',
     ].join('\n');
@@ -1059,6 +1162,25 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).not.toContain('promise-constructor-hygiene');
   });
 
+  it('should not report promise-constructor-hygiene for throw inside nested function in executor', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/executor-throw-nested.ts';
+    const source = [
+      'export const p = new Promise((resolve) => {',
+      '  setTimeout(() => { throw new Error("timeout"); }, 100);',
+      '  resolve(42);',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(
+      f => f.kind === 'promise-constructor-hygiene' && f.evidence.includes('new Promise'),
+    );
+
+    // Assert — throw is inside setTimeout callback, not executor itself
+    expect(hits.length).toBe(0);
+  });
+
   it('should report promise-constructor-hygiene for throw in sync executor', async () => {
     // Arrange
     const filePath = '/virtual/src/features/executor-throw.ts';
@@ -1209,6 +1331,68 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'always-return');
 
     // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report always-return when then callback has expression body', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/always-return-expr.ts';
+    const source = 'export const p = Promise.resolve(1).then(x => console.log(x));';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'always-return');
+
+    // Assert — expression body always returns implicitly
+    expect(hits.length).toBe(0);
+  });
+
+  it('should report always-return when then callback has nested return only in inner function', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/always-return-nested-fn.ts';
+    const source = [
+      'export const p = Promise.resolve(1).then(x => {',
+      '  const log = () => { return x; };',
+      '  log();',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'always-return');
+
+    // Assert — inner function's return doesn't count as callback return
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // --- no-return-wrap: additional ---
+
+  it('should report no-return-wrap for Promise.reject wrapping in then callback', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-wrap-reject.ts';
+    const source = 'export const p = Promise.resolve(1).then(x => Promise.reject(new Error("fail")));';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // --- catch-or-return: additional ---
+
+  it('should not report catch-or-return when catch comes before then', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/catch-before-then.ts';
+    const source = [
+      'export function f() {',
+      '  doThing().catch(() => 0).then(() => 1);',
+      '}',
+      'function doThing() { return Promise.resolve(1); }',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
+
+    // Assert — catch is already in the chain, even if before then
     expect(hits.length).toBe(0);
   });
 

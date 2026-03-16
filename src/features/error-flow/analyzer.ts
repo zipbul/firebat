@@ -138,6 +138,28 @@ const isPromiseFactoryCall = (expr: NodeValue): boolean => {
   return name === 'resolve' || name === 'reject' || name === 'all' || name === 'race' || name === 'any' || name === 'allSettled';
 };
 
+const chainHasCatch = (expr: NodeValue): boolean => {
+  let current = expr;
+
+  while (isOxcNode(current) && current.type === 'CallExpression' && isNodeRecord(current)) {
+    const callee = current.callee;
+    const method = getMemberPropertyName(callee);
+
+    if (method === 'catch') {
+      return true;
+    }
+
+    // Walk down the chain: expr.callee.object is the previous call
+    if (isOxcNode(callee) && callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+      current = callee.object;
+    } else {
+      break;
+    }
+  }
+
+  return false;
+};
+
 const containsReturnStatement = (node: NodeValue): boolean => {
   let found = false;
 
@@ -145,6 +167,15 @@ const containsReturnStatement = (node: NodeValue): boolean => {
     if (inner.type === 'ReturnStatement') {
       found = true;
 
+      return false;
+    }
+
+    // Don't cross function boundaries
+    if (
+      inner.type === 'FunctionDeclaration' ||
+      inner.type === 'FunctionExpression' ||
+      inner.type === 'ArrowFunctionExpression'
+    ) {
       return false;
     }
 
@@ -158,6 +189,29 @@ type UnsafeControlFlowKind = 'return' | 'throw' | 'break' | 'continue';
 
 const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlowKind | null => {
   let result: UnsafeControlFlowKind | null = null;
+  const localLabels = new Set<string>();
+
+  // Pre-collect all labels defined inside the finalizer
+  walkOxcTree(finalizer, node => {
+    if (node.type === 'LabeledStatement' && isNodeRecord(node)) {
+      const label = node.label;
+
+      if (isOxcNode(label) && label.type === 'Identifier' && isNodeRecord(label) && typeof label.name === 'string') {
+        localLabels.add(label.name);
+      }
+    }
+
+    // Don't cross function boundaries
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 
   const walk = (node: NodeValue, loopDepth: number, switchDepth: number): void => {
     if (result !== null) {
@@ -198,7 +252,21 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
     }
 
     if (node.type === 'BreakStatement' && isNodeRecord(node)) {
-      if (isOxcNode(node.label) || (loopDepth === 0 && switchDepth === 0)) {
+      const label = node.label;
+      const labelName =
+        isOxcNode(label) && label.type === 'Identifier' && isNodeRecord(label) && typeof label.name === 'string'
+          ? label.name
+          : null;
+
+      if (labelName !== null) {
+        // labeled break: unsafe only if label is defined outside finally
+        if (!localLabels.has(labelName)) {
+          result = 'break';
+
+          return;
+        }
+      } else if (loopDepth === 0 && switchDepth === 0) {
+        // unlabeled break without enclosing loop/switch in finally
         result = 'break';
 
         return;
@@ -206,7 +274,19 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
     }
 
     if (node.type === 'ContinueStatement' && isNodeRecord(node)) {
-      if (isOxcNode(node.label) || loopDepth === 0) {
+      const label = node.label;
+      const labelName =
+        isOxcNode(label) && label.type === 'Identifier' && isNodeRecord(label) && typeof label.name === 'string'
+          ? label.name
+          : null;
+
+      if (labelName !== null) {
+        if (!localLabels.has(labelName)) {
+          result = 'continue';
+
+          return;
+        }
+      } else if (loopDepth === 0) {
         result = 'continue';
 
         return;
@@ -1412,12 +1492,12 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
-      // EF-08 catch-or-return: top-level then call without catch
+      // EF-08 catch-or-return: top-level then call without catch anywhere in chain
       if (isOxcNode(expr) && expr.type === 'CallExpression' && isNodeRecord(expr)) {
         const callee = expr.callee;
         const method = getMemberPropertyName(callee);
 
-        if (method === 'then') {
+        if (method === 'then' && !chainHasCatch(expr)) {
           pushFinding(findings, {
             kind: 'catch-or-return',
             node,
@@ -1521,8 +1601,8 @@ const verifyCustomErrorClasses = async (
     return findings;
   }
 
-  // Extract constructor names from evidence lines
-  const constructorRegex = /new\s+(\w+)\s*\(/;
+  // Extract constructor names from evidence lines (supports namespaced: new ns.Err())
+  const constructorRegex = /new\s+([\w.]+)\s*\(/;
   const toVerify = new Map<string, ConstructorToVerify>();
 
   for (const finding of customErrorFindings) {
