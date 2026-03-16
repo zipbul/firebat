@@ -1,20 +1,5 @@
 [
   {
-    "evidence": "} catch (e) {",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "useless-catch",
-    "span": {
-      "end": {
-        "column": 3,
-        "line": 28
-      },
-      "start": {
-        "column": 4,
-        "line": 26
-      }
-    }
-  },
-  {
     "evidence": "return Promise.resolve('value').finally(() => {",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "unsafe-finally",
@@ -56,6 +41,21 @@
       "start": {
         "column": 4,
         "line": 25
+      }
+    }
+  },
+  {
+    "evidence": "} catch (e) {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "useless-catch",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 28
+      },
+      "start": {
+        "column": 4,
+        "line": 26
       }
     }
   },

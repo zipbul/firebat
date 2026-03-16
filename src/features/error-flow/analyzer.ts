@@ -568,7 +568,7 @@ const collectUnobservedVariables = (
         }
       }
 
-      // x.then(...), x.catch(...)
+      // x.then(...), x.catch(...), or x passed as function argument
       if (node.type === 'CallExpression' && isNodeRecord(node)) {
         const callee = node.callee;
 
@@ -584,6 +584,15 @@ const collectUnobservedVariables = (
             (method === 'then' || method === 'catch' || method === 'finally')
           ) {
             observed.add(obj.name);
+          }
+        }
+
+        // fn(p) — passed as function argument, considered observed
+        const callArgs = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+
+        for (const callArg of callArgs) {
+          if (isOxcNode(callArg) && callArg.type === 'Identifier' && isNodeRecord(callArg) && typeof callArg.name === 'string') {
+            observed.add(callArg.name);
           }
         }
       }
@@ -819,54 +828,52 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     return tryCatchStack.slice(0, -1).some(e => e.hasCatch);
   };
 
-  const reportRedundantNestedCatchIfNeeded = (catchClause: NodeValue): void => {
-    if (!isNestedUnderOuterCatch()) {
-      return;
-    }
-
-    // If inner catch is useless rethrow (catch(e) { throw e }), report as redundant nested catch.
+  const isUselessRethrow = (catchClause: NodeValue): boolean => {
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
-      return;
+      return false;
     }
 
     const param = catchClause.param;
     const body = catchClause.body;
-    const isUselessRethrow = (() => {
-      if (!isOxcNode(param) || param.type !== 'Identifier' || !isNodeRecord(param)) {
-        return false;
-      }
 
-      if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
-        return false;
-      }
+    if (!isOxcNode(param) || param.type !== 'Identifier' || !isNodeRecord(param)) {
+      return false;
+    }
 
-      const name = param.name;
-      const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
+    if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
+      return false;
+    }
 
-      if (stmts.length !== 1) {
-        return false;
-      }
+    const name = param.name;
+    const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
 
-      const only = stmts[0];
+    if (stmts.length !== 1) {
+      return false;
+    }
 
-      if (!isOxcNode(only) || only.type !== 'ThrowStatement' || !isNodeRecord(only)) {
-        return false;
-      }
+    const only = stmts[0];
 
-      return isIdentifierName(only.argument, name);
-    })();
+    if (!isOxcNode(only) || only.type !== 'ThrowStatement' || !isNodeRecord(only)) {
+      return false;
+    }
 
-    if (!isUselessRethrow) {
+    return isIdentifierName(only.argument, name);
+  };
+
+  const reportUselessCatchIfNeeded = (catchClause: NodeValue): void => {
+    if (!isUselessRethrow(catchClause)) {
       return;
     }
+
+    const isNested = isNestedUnderOuterCatch();
 
     pushFinding(findings, {
       kind: 'useless-catch',
       node: catchClause,
       filePath,
       sourceText,
-      message: 'nested catch is redundant under an outer catch',
-      evidence: getEvidenceLineAt(sourceText, catchClause.start),
+      message: isNested ? 'nested catch is redundant under an outer catch' : 'catch rethrows without adding context',
+      evidence: getEvidenceLineAt(sourceText, (catchClause as Node).start),
       recipes: ['RCP-01', 'RCP-02'],
     });
   };
@@ -924,8 +931,9 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
       const hasFinalizer = isOxcNode(node.finalizer);
 
-      // Nested try/catch: flag try/catch inside another try block (SonarQube S1141)
-      if (hasCatch && inTryBlockDepth > 0) {
+      // Nested try/catch: flag try/catch inside another try block that has catch (SonarQube S1141)
+      // Allowed: inner try/catch inside outer try/finally (no catch) — cleanup pattern
+      if (hasCatch && inTryBlockWithCatchDepth > 0) {
         pushFinding(findings, {
           kind: 'useless-catch',
           node,
@@ -1134,7 +1142,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         }
 
         // unnecessary new Promise in async function (GAP-14)
-        if (inAsyncFunction) {
+        // Skip if already flagged as async executor — avoid duplicate on same node
+        const isAsyncExecutor = isInlineExecutor && executor.async === true;
+
+        if (inAsyncFunction && !isAsyncExecutor) {
           const hasCallbackWrapping =
             isInlineExecutor && containsCallbackApiCall(executor.body as NodeValue);
 
@@ -1154,7 +1165,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     if (node.type === 'CatchClause' && isNodeRecord(node)) {
-      reportRedundantNestedCatchIfNeeded(node);
+      reportUselessCatchIfNeeded(node);
       reportCatchTransformHygieneIfNeeded(node);
       // Keep visiting for other rules
     }
@@ -1198,43 +1209,8 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    // EF-01 useless-catch: catch rethrows same identifier without adding anything
-    if (node.type === 'CatchClause' && isNodeRecord(node)) {
-
-      const param = node.param;
-      const body = node.body;
-
-      if (
-        isOxcNode(param) &&
-        param.type === 'Identifier' &&
-        isNodeRecord(param) &&
-        isOxcNode(body) &&
-        body.type === 'BlockStatement'
-      ) {
-        const name = param.name;
-        const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
-
-        if (stmts.length === 1) {
-          const only = stmts[0];
-
-          if (isOxcNode(only) && only.type === 'ThrowStatement' && isNodeRecord(only)) {
-            const arg = only.argument;
-
-            if (isIdentifierName(arg, name)) {
-              pushFinding(findings, {
-                kind: 'useless-catch',
-                node,
-                filePath,
-                sourceText,
-                message: 'catch rethrows without adding context',
-                evidence: getEvidenceLineAt(sourceText, node.start),
-                recipes: ['RCP-01', 'RCP-02'],
-              });
-            }
-          }
-        }
-      }
-    }
+    // EF-01 useless-catch is now handled in visit() via reportUselessCatchIfNeeded
+    // to avoid double-reporting with the nested variant.
 
     // EF-03 return-in-finally: .finally(() => { return ... })
     if (node.type === 'CallExpression' && isNodeRecord(node)) {
