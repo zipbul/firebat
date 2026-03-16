@@ -2,9 +2,11 @@ import type { Node } from 'oxc-parser';
 
 import type { Gildash } from '@zipbul/gildash';
 
-import type { ParsedFile } from '../../engine/types';
+import type { CfgNodePayload, ParsedFile } from '../../engine/types';
 import type { TemporalCouplingFinding } from '../../types';
 
+import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
+import { EdgeType } from '../../engine/cfg/cfg-types';
 import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
@@ -413,37 +415,143 @@ interface CallerKey {
   readonly srcSymbolName: string | null;
 }
 
-/** Collect offset ranges of conditional/loop nodes in a function body. */
-const collectConditionalRanges = (funcBody: Node): Array<{ start: number; end: number }> => {
-  const ranges: Array<{ start: number; end: number }> = [];
-  const conditionalTypes = new Set([
-    'IfStatement',
-    'ConditionalExpression',
-    'SwitchStatement',
-    'LogicalExpression',
-    'WhileStatement',
-    'ForStatement',
-    'ForInStatement',
-    'ForOfStatement',
-    'TryStatement',
-  ]);
+/**
+ * Find the CFG node IDs whose payload contains a CallExpression with a callee name
+ * matching one of the targetNames.
+ */
+const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, targetNames: ReadonlySet<string>): number[] => {
+  const ids: number[] = [];
 
-  walkOxcTree(funcBody, node => {
-    if (conditionalTypes.has(node.type) && isNodeRecord(node)) {
-      ranges.push({ start: node.start, end: node.end });
+  for (let i = 0; i < nodePayloads.length; i++) {
+    const payload = nodePayloads[i];
+
+    if (payload === null || payload === undefined) {
+      continue;
     }
 
-    return true;
-  });
+    const callNodes = collectOxcNodes(payload as Node, n => n.type === 'CallExpression');
 
-  return ranges;
+    for (const callNode of callNodes) {
+      if (!isNodeRecord(callNode)) continue;
+
+      const callee = callNode.callee;
+
+      if (!isOxcNode(callee)) continue;
+
+      let callName: string | null = null;
+
+      if (callee.type === 'Identifier') {
+        callName = getNodeName(callee);
+      } else if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+        callName = getNodeName(callee.property);
+      }
+
+      if (callName !== null && targetNames.has(callName)) {
+        ids.push(i);
+        break;
+      }
+    }
+  }
+
+  return ids;
 };
 
-/** Check if an offset falls inside any of the given ranges. */
-const isInsideRange = (offset: number, ranges: ReadonlyArray<{ start: number; end: number }>): boolean => {
-  for (const range of ranges) {
-    if (offset >= range.start && offset <= range.end) {
-      return true;
+/**
+ * BFS from entryId forbidding writerNodeIds. Returns true if readerNodeId is unreachable
+ * (meaning all paths to reader go through at least one writer — set domination).
+ */
+const writerSetDominatesReader = (
+  adj: Int32Array[],
+  entryId: number,
+  writerNodeIds: ReadonlyArray<number>,
+  readerNodeId: number,
+): boolean => {
+  const writerSet = new Set(writerNodeIds);
+
+  // If entry itself is a writer or reader, handle edge cases
+  if (writerSet.has(entryId)) return true;
+  if (readerNodeId === entryId) return false;
+
+  const visited = new Set<number>();
+  const queue: number[] = [entryId];
+
+  visited.add(entryId);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const neighbors = adj[current];
+
+    if (neighbors === undefined) continue;
+
+    for (const neighbor of neighbors) {
+      if (neighbor === readerNodeId) return false; // reached reader without going through all writers
+      if (writerSet.has(neighbor)) continue; // skip writer nodes
+      if (visited.has(neighbor)) continue;
+
+      visited.add(neighbor);
+      queue.push(neighbor);
+    }
+  }
+
+  return true; // reader never reached → writers dominate
+};
+
+/**
+ * Check if there is an exception-edge bypass: remove normal edges from writer nodes,
+ * keep only exception edges from writers, then BFS from entry to reader.
+ * Returns true if reader is reachable via exception paths (suppression not safe).
+ */
+const exceptionBypassExists = (
+  edges: Int32Array,
+  nodeCount: number,
+  entryId: number,
+  writerNodeIds: ReadonlyArray<number>,
+  readerNodeId: number,
+): boolean => {
+  const writerSet = new Set(writerNodeIds);
+
+  // Build a modified adjacency: for writer nodes, only keep exception edges outgoing;
+  // for non-writer nodes, keep all edges.
+  const modAdj: number[][] = Array.from({ length: nodeCount }, () => []);
+
+  const edgeCount = edges.length / 3;
+
+  for (let i = 0; i < edgeCount; i++) {
+    const offset = i * 3;
+    const from = edges[offset];
+    const to = edges[offset + 1];
+    const type = edges[offset + 2];
+
+    if (from === undefined || to === undefined || type === undefined) continue;
+
+    if (writerSet.has(from)) {
+      // Only allow exception edges out of writer nodes
+      if (type === EdgeType.Exception) {
+        modAdj[from]?.push(to);
+      }
+    } else {
+      modAdj[from]?.push(to);
+    }
+  }
+
+  // BFS from entry to reader in modified graph
+  const visited = new Set<number>();
+  const queue: number[] = [entryId];
+
+  visited.add(entryId);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const neighbors = modAdj[current];
+
+    if (neighbors === undefined) continue;
+
+    for (const neighbor of neighbors) {
+      if (neighbor === readerNodeId) return true;
+      if (visited.has(neighbor)) continue;
+
+      visited.add(neighbor);
+      queue.push(neighbor);
     }
   }
 
@@ -540,84 +648,30 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 };
 
 /**
- * Collect call expression offsets for names in the given set within a function body.
- * Returns null if any matching call is inside a conditional/loop (conservative).
+ * Verify caller order using CFG dominator analysis.
  *
- * allowBareIdentifier: if false, bare `name()` calls (Identifier callee) are not matched.
- * Use false for class method names to prevent `otherObj.init()` from matching a `Service.init` writer.
- */
-const collectCallOffsetsStrict = (
-  funcBody: Node,
-  names: ReadonlySet<string>,
-  conditionalRanges: ReadonlyArray<{ start: number; end: number }>,
-  allowBareIdentifier: boolean,
-): number[] | null => {
-  const offsets: number[] = [];
-
-  let hasConditional = false;
-
-  walkOxcTree(funcBody, node => {
-    if (node.type !== 'CallExpression' || !isNodeRecord(node)) return true;
-
-    const callee = node.callee;
-
-    if (!isOxcNode(callee)) return true;
-
-    let callName: string | null = null;
-
-    if (callee.type === 'Identifier') {
-      if (!allowBareIdentifier) return true;
-
-      callName = getNodeName(callee);
-    } else if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
-      callName = getNodeName(callee.property);
-    }
-
-    if (callName === null || !names.has(callName)) return true;
-
-    if (isInsideRange(node.start, conditionalRanges)) {
-      hasConditional = true;
-
-      return false;
-    }
-
-    offsets.push(node.start);
-
-    return true;
-  });
-
-  if (hasConditional) return null;
-
-  return offsets;
-};
-
-/**
- * Verify that in every caller, at least one writer call appears before at least one reader call,
- * and no writer call is inside a conditional block.
+ * For each caller: build CFG of the caller function, find CFG node IDs containing
+ * writer/reader calls, then check if all writers set-dominate the reader and no
+ * exception bypass exists.
  *
- * Returns true (allow suppression) only when all callers have writer-before-reader ordering
- * with no conditional branching around the writer calls.
+ * Returns true (allow suppression) only when all callers satisfy domination.
  */
-const verifyCallerOrder = (
+const verifyCallerOrderByCfg = (
   gildash: Gildash,
   writerNames: ReadonlyArray<string>,
   readerNames: ReadonlyArray<string>,
   callerKeys: ReadonlyArray<CallerKey>,
 ): boolean => {
-  // Determine whether names are class methods (contain '.') or plain module-scope functions
-  const writersAreMethod = writerNames.some(n => n.includes('.'));
-  const readersAreMethod = readerNames.some(n => n.includes('.'));
-
-  // Extract bare function names (strip ClassName. prefix) for call-site matching
-  const writerBareNames = new Set(writerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
-  const readerBareNames = new Set(readerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
-
   const getParsedAst = (gildash as any).getParsedAst as ((filePath: string) => unknown) | undefined;
 
   if (typeof getParsedAst !== 'function') {
-    // gildash does not support AST retrieval → skip Phase 3, trust Phase 2 result
+    // gildash does not support AST retrieval → skip Phase 4, trust Phase 2 result
     return true;
   }
+
+  // Extract bare names (strip ClassName. prefix) for call-site matching
+  const writerBareNames = new Set(writerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
+  const readerBareNames = new Set(readerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
 
   for (const caller of callerKeys) {
     if (caller.srcSymbolName === null) continue;
@@ -626,26 +680,37 @@ const verifyCallerOrder = (
 
     if (parsed === undefined || parsed === null) return false;
 
-    const funcBody = findFunctionBody(parsed.program as Node, caller.srcSymbolName);
+    const funcNode = findFunctionBody(parsed.program as Node, caller.srcSymbolName);
 
-    if (funcBody === null) return false;
+    if (funcNode === null || !isNodeRecord(funcNode)) return false;
 
-    const conditionalRanges = collectConditionalRanges(funcBody);
+    const funcBodyRaw = funcNode.body;
 
-    const writerOffsets = collectCallOffsetsStrict(funcBody, writerBareNames, conditionalRanges, !writersAreMethod);
+    if (!isOxcNode(funcBodyRaw)) return false;
 
-    if (writerOffsets === null) return false; // writer inside branch → conservative
+    const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+    const { cfg, entryId, nodePayloads } = built;
 
-    const readerOffsets = collectCallOffsetsStrict(funcBody, readerBareNames, conditionalRanges, !readersAreMethod);
+    const writerNodeIds = findCallNodeIds(nodePayloads, writerBareNames);
+    const readerNodeIds = findCallNodeIds(nodePayloads, readerBareNames);
 
-    if (readerOffsets === null) return false;
+    if (writerNodeIds.length === 0 || readerNodeIds.length === 0) return false;
 
-    if (writerOffsets.length === 0 || readerOffsets.length === 0) return false;
+    const adj = cfg.buildAdjacency('forward');
+    const edges = cfg.getEdges();
+    const nodeCount = cfg.nodeCount;
 
-    const minWriter = Math.min(...writerOffsets);
-    const minReader = Math.min(...readerOffsets);
+    for (const readerNodeId of readerNodeIds) {
+      // Check: do all writer nodes (as a set) dominate this reader?
+      if (!writerSetDominatesReader(adj, entryId, writerNodeIds, readerNodeId)) {
+        return false; // reader reachable without going through all writers
+      }
 
-    if (minReader < minWriter) return false; // reader before writer
+      // Check: is there an exception edge bypass allowing reader execution even if writer throws?
+      if (exceptionBypassExists(edges, nodeCount, entryId, writerNodeIds, readerNodeId)) {
+        return false; // exception path reaches reader without writer completing
+      }
+    }
   }
 
   return true;
@@ -697,8 +762,8 @@ const shouldSuppressByCallGraph = (
     }
   }
 
-  // Phase 3: verify caller AST order
-  return verifyCallerOrder(gildash, writerNames, readerNames, callerKeys);
+  // Phase 4: verify caller order via CFG dominator
+  return verifyCallerOrderByCfg(gildash, writerNames, readerNames, callerKeys);
 };
 
 const analyzeTemporalCoupling = (

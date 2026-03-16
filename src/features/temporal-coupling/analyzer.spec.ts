@@ -726,4 +726,119 @@ describe('temporal-coupling/analyzer', () => {
     // Assert — AST unavailable → conservative, finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
+
+  // --- Phase 4: CFG dominator 기반 검사 ---
+
+  it('analyzeTemporalCoupling - both if/else branches have writer via CFG - suppresses finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = [
+      "import { init, query } from './a';",
+      'declare const cond: boolean;',
+      'export function main() { if (cond) { init(); } else { init(); } query(); }',
+    ].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — 양쪽 분기 모두 writer → CFG 집합 dominate → suppression
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - single if branch writer via CFG - keeps finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = [
+      "import { init, query } from './a';",
+      'declare const cond: boolean;',
+      'export function main() { if (cond) { init(); } query(); }',
+    ].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — 단측 분기 → CFG dominate 안 함 → finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - try writer catch then reader via CFG - keeps finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = [
+      "import { init, query } from './a';",
+      'export function main() { try { init(); } catch {} query(); }',
+    ].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — exception edge로 초기화 없이 query 실행 가능 → finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - try writer and reader same block via CFG - suppresses finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = [
+      "import { init, query } from './a';",
+      'export function main() { try { init(); query(); } catch {} }',
+    ].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — init throw 시 query도 미실행 → suppression
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - loop writer via CFG - keeps finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = [
+      "import { init, query } from './a';",
+      'declare const xs: any[];',
+      'export function main() { for (const x of xs) { init(); } query(); }',
+    ].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — 루프 0회 가능 → CFG dominate 안 함 → finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
 });
