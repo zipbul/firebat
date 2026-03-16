@@ -235,6 +235,83 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
   return result;
 };
 
+const containsThrowInExecutor = (body: NodeValue): boolean => {
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (node.type === 'ThrowStatement') {
+      found = true;
+
+      return false;
+    }
+
+    // Don't cross function boundaries
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
+const containsNonEmptyReturnInExecutor = (body: NodeValue): boolean => {
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+      const arg = node.argument;
+
+      // return; (no argument) is fine
+      if (isOxcNode(arg)) {
+        found = true;
+
+        return false;
+      }
+    }
+
+    // Don't cross function boundaries
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
+const callbackApiMethods = new Set(['addEventListener', 'on', 'once', 'subscribe', 'addListener']);
+
+const containsCallbackApiCall = (body: NodeValue): boolean => {
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (node.type === 'CallExpression' && isNodeRecord(node)) {
+      const method = getMemberPropertyName(node.callee);
+
+      if (method !== null && callbackApiMethods.has(method)) {
+        found = true;
+
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
 interface TryCatchEntry {
   readonly hasCatch: boolean;
 }
@@ -325,6 +402,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   const tryCatchStack: TryCatchEntry[] = [];
   let functionTryCatchDepth = 0;
   let inTryBlockDepth = 0;
+  let inAsyncFunction = false;
 
   const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
@@ -570,9 +648,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     ) {
       const savedDepth = functionTryCatchDepth;
       const savedTryBlockDepth = inTryBlockDepth;
+      const savedAsync = inAsyncFunction;
 
       functionTryCatchDepth = 0;
       inTryBlockDepth = 0;
+      inAsyncFunction = node.async === true;
 
       const entries = Object.entries(node);
 
@@ -586,6 +666,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       functionTryCatchDepth = savedDepth;
       inTryBlockDepth = savedTryBlockDepth;
+      inAsyncFunction = savedAsync;
 
       return;
     }
@@ -686,7 +767,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    // P3-2 async-promise-executor
+    // P3-2 promise-constructor-hygiene
     if (node.type === 'NewExpression' && isNodeRecord(node)) {
       const callee = node.callee;
       const isPromiseIdent =
@@ -708,23 +789,105 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       if (isPromiseIdent || isPromiseMember) {
         const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const executor = args[0];
-        const isAsyncExecutor =
+        const isInlineExecutor =
           executor !== undefined &&
           isOxcNode(executor) &&
           (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression') &&
-          isNodeRecord(executor) &&
-          executor.async === true;
+          isNodeRecord(executor);
 
-        if (isAsyncExecutor) {
-          pushFinding(findings, {
-            kind: 'async-promise-executor',
-            node,
-            filePath,
-            sourceText,
-            message: 'Promise executor is async; thrown errors will not reject',
-            evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: [],
-          });
+        if (isInlineExecutor) {
+          const isAsync = executor.async === true;
+
+          // async executor: thrown errors silently swallowed
+          if (isAsync) {
+            pushFinding(findings, {
+              kind: 'promise-constructor-hygiene',
+              node,
+              filePath,
+              sourceText,
+              message: 'Promise executor is async; thrown errors will not reject',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
+          }
+
+          // sync executor throw: throw in executor does NOT reject, it throws synchronously
+          if (!isAsync) {
+            const executorBody = executor.body;
+
+            if (isOxcNode(executorBody) && executorBody.type === 'BlockStatement') {
+              if (containsThrowInExecutor(executorBody)) {
+                pushFinding(findings, {
+                  kind: 'promise-constructor-hygiene',
+                  node,
+                  filePath,
+                  sourceText,
+                  message: 'throw in sync Promise executor does not reject — use reject() instead',
+                  evidence: getEvidenceLineAt(sourceText, node.start),
+                  recipes: [],
+                });
+              }
+            }
+          }
+
+          // executor return value: return in executor is ignored
+          if (!isAsync) {
+            const executorBody = executor.body;
+
+            if (isOxcNode(executorBody) && executorBody.type === 'BlockStatement') {
+              if (containsNonEmptyReturnInExecutor(executorBody)) {
+                pushFinding(findings, {
+                  kind: 'promise-constructor-hygiene',
+                  node,
+                  filePath,
+                  sourceText,
+                  message: 'return value in Promise executor is ignored — use resolve() instead',
+                  evidence: getEvidenceLineAt(sourceText, node.start),
+                  recipes: [],
+                });
+              }
+            }
+          }
+
+          // param order: first param should be resolve, not reject
+          const executorParams = Array.isArray(executor.params) ? (executor.params as ReadonlyArray<NodeValue>) : [];
+          const firstParam = executorParams[0];
+
+          if (
+            firstParam !== undefined &&
+            isOxcNode(firstParam) &&
+            firstParam.type === 'Identifier' &&
+            isNodeRecord(firstParam) &&
+            firstParam.name === 'reject'
+          ) {
+            pushFinding(findings, {
+              kind: 'promise-constructor-hygiene',
+              node,
+              filePath,
+              sourceText,
+              message: 'Promise executor first param should be resolve, not reject — params appear swapped',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
+          }
+        }
+
+        // unnecessary new Promise in async function (GAP-14)
+        if (inAsyncFunction) {
+          const hasCallbackWrapping =
+            isInlineExecutor && containsCallbackApiCall(executor.body as NodeValue);
+
+          if (!hasCallbackWrapping) {
+            pushFinding(findings, {
+              kind: 'promise-constructor-hygiene',
+              node,
+              filePath,
+              sourceText,
+              message: 'unnecessary new Promise in async function — use await instead',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
+          }
         }
       }
     }

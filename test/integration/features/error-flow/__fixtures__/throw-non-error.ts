@@ -1,4 +1,4 @@
-// throw-non-error: throw literal, throw primitive wrapper, async-promise-executor
+// throw-non-error: throw literal, throw primitive wrapper, promise-constructor-hygiene
 
 export function throwString(): never {
   throw 'something went wrong';

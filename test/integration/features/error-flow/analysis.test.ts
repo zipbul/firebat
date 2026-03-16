@@ -293,7 +293,7 @@ describe('integration/error-flow', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report async-promise-executor when Promise executor is async', () => {
+  it('should report promise-constructor-hygiene when Promise executor is async', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/async-promise-executor.ts';
@@ -304,7 +304,7 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'async-promise-executor');
+    let hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);

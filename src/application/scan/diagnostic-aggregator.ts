@@ -111,13 +111,13 @@ export const FIREBAT_CODE_CATALOG = {
       'If the thrown value carries domain information, verify that wrapping it in a custom Error subclass preserves that information.',
     ],
   },
-  EF_ASYNC_PROMISE_EXECUTOR: {
+  EF_PROMISE_CONSTRUCTOR_HYGIENE: {
     cause:
-      'A Promise constructor receives an async executor function, which can silently swallow rejections from awaited expressions.',
+      'The Promise constructor has a hygiene issue: async executor, throw in sync executor, return value in executor, swapped params, or unnecessary new Promise in async function.',
     think: [
-      'Identify why the Promise constructor is used with an async function instead of returning an async function directly.',
-      'Check whether the code wraps a callback-based API where the async keyword in the executor is accidental.',
-      'Verify whether refactoring to a plain async function eliminates the Promise constructor entirely.',
+      'Identify why the Promise constructor is used instead of a plain async function.',
+      'Check whether the code wraps a callback-based API where the Promise constructor is justified.',
+      'Verify whether refactoring to async/await eliminates the Promise constructor entirely.',
     ],
   },
   EF_MISSING_ERROR_CAUSE: {

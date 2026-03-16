@@ -3,7 +3,7 @@ import type { FirebatCatalogCode } from '../../types';
 export type ErrorFlowFindingKind =
   | 'tool-unavailable'
   | 'throw-non-error'
-  | 'async-promise-executor'
+  | 'promise-constructor-hygiene'
   | 'missing-error-cause'
   | 'useless-catch'
   | 'unsafe-finally'

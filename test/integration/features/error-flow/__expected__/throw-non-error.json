@@ -47,7 +47,7 @@
   {
     "evidence": "return new Promise(async (resolve) => {",
     "file": "/virtual/throw-non-error.ts",
-    "kind": "async-promise-executor",
+    "kind": "promise-constructor-hygiene",
     "span": {
       "end": {
         "column": 4,

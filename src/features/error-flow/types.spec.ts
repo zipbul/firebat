@@ -52,7 +52,7 @@ describe('features/error-flow/types — structural shape', () => {
     const kinds = [
       'tool-unavailable',
       'throw-non-error',
-      'async-promise-executor',
+      'promise-constructor-hygiene',
       'missing-error-cause',
       'useless-catch',
       'unsafe-finally',

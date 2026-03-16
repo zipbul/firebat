@@ -871,7 +871,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   const enrichErrorFlow = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
     const kindToCode: Record<Exclude<ErrorFlowFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
       'throw-non-error': 'EF_THROW_NON_ERROR',
-      'async-promise-executor': 'EF_ASYNC_PROMISE_EXECUTOR',
+      'promise-constructor-hygiene': 'EF_PROMISE_CONSTRUCTOR_HYGIENE',
       'missing-error-cause': 'EF_MISSING_ERROR_CAUSE',
       'useless-catch': 'EF_USELESS_CATCH',
       'unsafe-finally': 'EF_UNSAFE_FINALLY',

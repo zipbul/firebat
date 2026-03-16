@@ -924,9 +924,9 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).not.toContain('throw-non-error');
   });
 
-  // --- P3-2 async-promise-executor ---
+  // --- P3-2 promise-constructor-hygiene ---
 
-  it('should report async-promise-executor for async executor', () => {
+  it('should report promise-constructor-hygiene for async executor', () => {
     // Arrange
     const filePath = '/virtual/src/features/async-executor.ts';
     const source = 'export const p = new Promise(async () => { await fetch("/"); });';
@@ -934,10 +934,10 @@ describe('error-flow/analyzer', () => {
     const analysis = analyzeSingle(filePath, source);
 
     // Assert
-    expect(kinds(analysis)).toContain('async-promise-executor');
+    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should report async-promise-executor for globalThis.Promise', () => {
+  it('should report promise-constructor-hygiene for globalThis.Promise async executor', () => {
     // Arrange
     const filePath = '/virtual/src/features/async-executor-global.ts';
     const source = 'export const p = new globalThis.Promise(async () => { await fetch("/"); });';
@@ -945,10 +945,10 @@ describe('error-flow/analyzer', () => {
     const analysis = analyzeSingle(filePath, source);
 
     // Assert
-    expect(kinds(analysis)).toContain('async-promise-executor');
+    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should not report async-promise-executor for sync executor', () => {
+  it('should not report promise-constructor-hygiene for sync executor with resolve', () => {
     // Arrange
     const filePath = '/virtual/src/features/sync-executor.ts';
     const source = 'export const p = new Promise((resolve) => { resolve(42); });';
@@ -956,6 +956,83 @@ describe('error-flow/analyzer', () => {
     const analysis = analyzeSingle(filePath, source);
 
     // Assert
-    expect(kinds(analysis)).not.toContain('async-promise-executor');
+    expect(kinds(analysis)).not.toContain('promise-constructor-hygiene');
+  });
+
+  it('should report promise-constructor-hygiene for throw in sync executor', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/executor-throw.ts';
+    const source = [
+      'export const p = new Promise((resolve) => {',
+      '  if (!valid) throw new Error("invalid");',
+      '  resolve(42);',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+  });
+
+  it('should report promise-constructor-hygiene for return value in executor', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/executor-return.ts';
+    const source = [
+      'export const p = new Promise((resolve) => {',
+      '  return 42;',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+  });
+
+  it('should report promise-constructor-hygiene for swapped params (reject, resolve)', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/swapped-params.ts';
+    const source = 'export const p = new Promise((reject, resolve) => { resolve(42); });';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+  });
+
+  it('should report promise-constructor-hygiene for unnecessary new Promise in async function', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/unnecessary-promise.ts';
+    const source = [
+      'export async function f() {',
+      '  return new Promise((resolve) => {',
+      '    resolve(42);',
+      '  });',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+  });
+
+  it('should not report unnecessary new Promise when wrapping callback API', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/callback-wrap.ts';
+    const source = [
+      'export async function f() {',
+      '  return new Promise((resolve) => {',
+      '    emitter.on("data", resolve);',
+      '  });',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
+
+    // Assert — callback wrapping is allowed, so no finding
+    expect(hits.length).toBe(0);
   });
 });
