@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { CodeRelation } from '@zipbul/gildash';
+import type { CodeRelation, ParsedFile as GildashParsedFile } from '@zipbul/gildash';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer';
@@ -598,6 +598,102 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
     // Assert — anonymous class cannot be suppressed, finding must remain
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // --- Phase 3: caller AST 순서 검사 ---
+
+  const createMockGildashWithAst = (relations: CodeRelation[], astMap: Record<string, GildashParsedFile>) => ({
+    searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
+      return relations.filter(r => {
+        if (query.type !== undefined && r.type !== query.type) return false;
+        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) return false;
+        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) return false;
+
+        return true;
+      });
+    },
+    getInternalRelations: (filePath: string) => {
+      return relations.filter(r => r.srcFilePath === filePath && r.dstFilePath === filePath);
+    },
+    getParsedAst: (filePath: string): GildashParsedFile | undefined => astMap[filePath],
+  });
+
+  it('analyzeTemporalCoupling - caller calls writer before reader (correct order) - suppresses finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = ["import { init, query } from './a';", 'export function main() { init(); query(); }'].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — writer before reader → suppression maintained
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - caller calls reader before writer (reverse order) - keeps finding', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = ["import { init, query } from './a';", 'export function main() { query(); init(); }'].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — reader before writer → finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - caller calls writer inside if branch - keeps finding conservatively', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const callerSource = [
+      "import { init, query } from './a';",
+      'declare const needInit: boolean;',
+      'export function main() { if (needInit) { init(); } query(); }',
+    ].join('\n');
+    const callerParsed = parseSource('src/main.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — writer inside branch → conservative, finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - getParsedAst returns undefined - keeps finding conservatively', () => {
+    // Arrange
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+      ],
+      {}, // no entry for src/main.ts → getParsedAst returns undefined
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — AST unavailable → conservative, finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 });

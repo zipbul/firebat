@@ -408,6 +408,238 @@ const analyzeClassTemporalCoupling = (
   return findings;
 };
 
+interface CallerKey {
+  readonly srcFilePath: string;
+  readonly srcSymbolName: string | null;
+}
+
+/** Collect offset ranges of conditional/loop nodes in a function body. */
+const collectConditionalRanges = (funcBody: Node): Array<{ start: number; end: number }> => {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const conditionalTypes = new Set([
+    'IfStatement',
+    'ConditionalExpression',
+    'SwitchStatement',
+    'LogicalExpression',
+    'WhileStatement',
+    'ForStatement',
+    'ForInStatement',
+    'ForOfStatement',
+  ]);
+
+  walkOxcTree(funcBody, node => {
+    if (conditionalTypes.has(node.type) && isNodeRecord(node)) {
+      ranges.push({ start: node.start, end: node.end });
+    }
+
+    return true;
+  });
+
+  return ranges;
+};
+
+/** Check if an offset falls inside any of the given ranges. */
+const isInsideRange = (offset: number, ranges: ReadonlyArray<{ start: number; end: number }>): boolean => {
+  for (const range of ranges) {
+    if (offset >= range.start && offset <= range.end) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/** Find a function body node for the given symbol name in the program. */
+const findFunctionBody = (program: Node, symbolName: string): Node | null => {
+  let result: Node | null = null;
+
+  // Handle ClassName.method format
+  const dotIndex = symbolName.indexOf('.');
+  const isMethod = dotIndex !== -1;
+
+  if (isMethod) {
+    const className = symbolName.slice(0, dotIndex);
+    const methodName = symbolName.slice(dotIndex + 1);
+
+    walkOxcTree(program, node => {
+      if (result !== null) return false;
+
+      if ((node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && isNodeRecord(node)) {
+        const name = getNodeName(node.id);
+
+        if (name !== className) return true;
+
+        const classBody = node.body;
+
+        if (!isOxcNode(classBody) || classBody.type !== 'ClassBody' || !isNodeRecord(classBody)) return false;
+
+        const bodyItems = (classBody as any).body;
+
+        if (!Array.isArray(bodyItems)) return false;
+
+        for (const item of bodyItems) {
+          if (!isOxcNode(item) || item.type !== 'MethodDefinition' || !isNodeRecord(item)) continue;
+
+          const mName = getNodeName(item.key);
+
+          if (mName !== methodName) continue;
+
+          const methodValue = item.value;
+
+          if (isOxcNode(methodValue) && isNodeRecord(methodValue)) {
+            result = methodValue as Node;
+          }
+
+          return false;
+        }
+
+        return false;
+      }
+
+      return true;
+    });
+
+    return result;
+  }
+
+  // Plain function name
+  walkOxcTree(program, node => {
+    if (result !== null) return false;
+
+    // FunctionDeclaration: function foo() {}
+    if (node.type === 'FunctionDeclaration' && isNodeRecord(node)) {
+      if (getNodeName(node.id) === symbolName) {
+        result = node as Node;
+
+        return false;
+      }
+    }
+
+    // VariableDeclarator: const foo = () => {} or function() {}
+    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+      if (getNodeName(node.id) === symbolName) {
+        const init = node.init;
+
+        if (
+          isOxcNode(init) &&
+          isNodeRecord(init) &&
+          (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+        ) {
+          result = init as Node;
+
+          return false;
+        }
+      }
+    }
+
+    return true;
+  });
+
+  return result;
+};
+
+/**
+ * Collect call expression offsets for names in the given set within a function body.
+ * Returns null if any matching call is inside a conditional/loop (conservative).
+ */
+const collectCallOffsetsStrict = (
+  funcBody: Node,
+  names: ReadonlySet<string>,
+  conditionalRanges: ReadonlyArray<{ start: number; end: number }>,
+): number[] | null => {
+  const offsets: number[] = [];
+
+  let hasConditional = false;
+
+  walkOxcTree(funcBody, node => {
+    if (node.type !== 'CallExpression' || !isNodeRecord(node)) return true;
+
+    const callee = node.callee;
+
+    if (!isOxcNode(callee)) return true;
+
+    let callName: string | null = null;
+
+    if (callee.type === 'Identifier') {
+      callName = getNodeName(callee);
+    } else if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+      callName = getNodeName(callee.property);
+    }
+
+    if (callName === null || !names.has(callName)) return true;
+
+    if (isInsideRange(node.start, conditionalRanges)) {
+      hasConditional = true;
+
+      return false;
+    }
+
+    offsets.push(node.start);
+
+    return true;
+  });
+
+  if (hasConditional) return null;
+
+  return offsets;
+};
+
+/**
+ * Verify that in every caller, at least one writer call appears before at least one reader call,
+ * and no writer call is inside a conditional block.
+ *
+ * Returns true (allow suppression) only when all callers have writer-before-reader ordering
+ * with no conditional branching around the writer calls.
+ */
+const verifyCallerOrder = (
+  gildash: Gildash,
+  writerNames: ReadonlyArray<string>,
+  readerNames: ReadonlyArray<string>,
+  callerKeys: ReadonlyArray<CallerKey>,
+): boolean => {
+  // Extract bare function names (strip ClassName. prefix) for call-site matching
+  const writerBareNames = new Set(writerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
+  const readerBareNames = new Set(readerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
+
+  const getParsedAst = (gildash as any).getParsedAst as ((filePath: string) => unknown) | undefined;
+
+  if (typeof getParsedAst !== 'function') {
+    // gildash does not support AST retrieval → skip Phase 3, trust Phase 2 result
+    return true;
+  }
+
+  for (const caller of callerKeys) {
+    if (caller.srcSymbolName === null) continue;
+
+    const parsed = getParsedAst.call(gildash, caller.srcFilePath) as { program: Node } | undefined;
+
+    if (parsed === undefined || parsed === null) return false;
+
+    const funcBody = findFunctionBody(parsed.program as Node, caller.srcSymbolName);
+
+    if (funcBody === null) return false;
+
+    const conditionalRanges = collectConditionalRanges(funcBody);
+
+    const writerOffsets = collectCallOffsetsStrict(funcBody, writerBareNames, conditionalRanges);
+
+    if (writerOffsets === null) return false; // writer inside branch → conservative
+
+    const readerOffsets = collectCallOffsetsStrict(funcBody, readerBareNames, conditionalRanges);
+
+    if (readerOffsets === null) return false;
+
+    if (writerOffsets.length === 0 || readerOffsets.length === 0) return false;
+
+    const minWriter = Math.min(...writerOffsets);
+    const minReader = Math.min(...readerOffsets);
+
+    if (minReader < minWriter) return false; // reader before writer
+  }
+
+  return true;
+};
+
 /**
  * Returns true if every caller of every reader also calls at least one writer,
  * meaning temporal coupling is handled correctly at the call site.
@@ -425,6 +657,7 @@ const shouldSuppressByCallGraph = (
   // Pre-fetch callers of all writers (dstFilePath+dstSymbolName keyed lookup)
   // key: `${srcFilePath}:${srcSymbolName}`
   const writerCallerSet = new Set<string>();
+  const callerKeys: CallerKey[] = [];
 
   for (const writer of writerNames) {
     const writerCallers = gildash.searchRelations({ type: 'calls', dstFilePath: relPath, dstSymbolName: writer });
@@ -448,10 +681,13 @@ const shouldSuppressByCallGraph = (
       if (!writerCallerSet.has(callerKey)) {
         return false;
       }
+
+      callerKeys.push({ srcFilePath: rc.srcFilePath, srcSymbolName: rc.srcSymbolName ?? null });
     }
   }
 
-  return true;
+  // Phase 3: verify caller AST order
+  return verifyCallerOrder(gildash, writerNames, readerNames, callerKeys);
 };
 
 const analyzeTemporalCoupling = (
