@@ -61,7 +61,7 @@ describe('features/error-flow/types — structural shape', () => {
       'prefer-await-to-then',
       'floating-promises',
       'misused-promises',
-      'return-await-policy',
+      'return-await-in-try',
     ] satisfies import('./types').ErrorFlowFindingKind[];
     expect(kinds.length).toBe(12);
     expect(kinds[0]).toBe('tool-unavailable');

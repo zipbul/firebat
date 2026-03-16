@@ -924,6 +924,104 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).not.toContain('throw-non-error');
   });
 
+  // --- return-await-in-try ---
+
+  it('should report return-await-in-try when returning a call without await in try block with catch', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-no-await.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    handleError(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report return-await-in-try when return uses await', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-with-await.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return await fetchData();',
+      '  } catch (e) {',
+      '    handleError(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report return-await-in-try when return is outside try block', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-outside-try.ts';
+    const source = [
+      'export async function f() {',
+      '  return fetchData();',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report return-await-in-try for literal return in try block', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-literal-in-try.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    return "ok";',
+      '  } catch (e) {',
+      '    return "error";',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report return-await-in-try when try has only finally (no catch)', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-try-finally.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } finally {',
+      '    cleanup();',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
   // --- P3-2 promise-constructor-hygiene ---
 
   it('should report promise-constructor-hygiene for async executor', () => {

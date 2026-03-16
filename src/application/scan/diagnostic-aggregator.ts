@@ -189,13 +189,13 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the fix preserves iteration order and error propagation semantics.',
     ],
   },
-  EF_RETURN_AWAIT_POLICY: {
+  EF_RETURN_AWAIT_IN_TRY: {
     cause:
-      'An async function returns await expression unnecessarily (or vice versa: should use return-await inside try blocks to catch errors properly).',
+      'A return statement inside a try block does not await a promise-returning expression, so the catch clause cannot intercept rejections.',
     think: [
-      "Determine the context: inside a try block, 'return await' is needed to catch rejections.",
-      "Outside try blocks, check whether 'return await' adds an unnecessary microtask tick.",
-      'Verify that the fix matches the project policy for return-await consistency.',
+      'Verify that the returned expression actually produces a Promise (function call, new Promise, etc.).',
+      "Add 'await' before the returned expression so that rejections are caught by the surrounding catch.",
+      'Consider whether the try/catch is meant to handle this rejection or if it should propagate.',
     ],
   },
   UNKNOWN_UNNARROWED: {

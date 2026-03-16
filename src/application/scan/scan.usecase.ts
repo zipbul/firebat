@@ -880,7 +880,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'prefer-await-to-then': 'EF_PREFER_AWAIT_TO_THEN',
       'floating-promises': 'EF_FLOATING_PROMISES',
       'misused-promises': 'EF_MISUSED_PROMISES',
-      'return-await-policy': 'EF_RETURN_AWAIT_POLICY',
+      'return-await-in-try': 'EF_RETURN_AWAIT_IN_TRY',
     };
 
     return items

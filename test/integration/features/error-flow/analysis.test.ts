@@ -327,96 +327,16 @@ describe('integration/error-flow', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-await-policy when return await is used outside try/catch', () => {
+  it('should report return-await-in-try when call is returned without await in try with catch', () => {
     // Arrange
     let sources = new Map<string, string>();
-    let filePath = '/virtual/src/features/return-await.ts';
-    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
-      '\n',
-    );
-
-    sources.set(filePath, source);
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
-
-    // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('should report return-await-policy when return await is used outside try/catch (adapter file)', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-    let filePath = '/virtual/src/adapters/cli/entry.ts';
-    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
-      '\n',
-    );
-
-    sources.set(filePath, source);
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
-
-    // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('should report return-await-policy when return await is used outside try/catch (MCP adapter file)', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-    let filePath = '/virtual/src/adapters/mcp/server.ts';
-    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
-      '\n',
-    );
-
-    sources.set(filePath, source);
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
-
-    // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('should report return-await-policy when return await is used outside try/catch (infrastructure file)', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-    let filePath = '/virtual/src/tooling/resolve-bin.ts';
-    let source = ['async function g() {', '  return 1;', '}', '', 'export async function f() {', '  return await g();', '}'].join(
-      '\n',
-    );
-
-    sources.set(filePath, source);
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
-
-    // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('should not report return-await-policy when return await is used inside same-function try/catch (adapter file)', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-    let filePath = '/virtual/src/adapters/cli/entry.ts';
+    let filePath = '/virtual/src/features/return-no-await.ts';
     let source = [
-      'async function g() {',
-      '  return 1;',
-      '}',
-      '',
       'export async function f() {',
       '  try {',
-      '    return await g();',
+      '    return fetchData();',
       '  } catch (e) {',
-      '    throw e;',
+      '    handleError(e);',
       '  }',
       '}',
     ].join('\n');
@@ -426,26 +346,22 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
+    let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report return-await-policy when return await is used inside same-function try/catch', () => {
+  it('should not report return-await-in-try when return uses await in try with catch', () => {
     // Arrange
     let sources = new Map<string, string>();
-    let filePath = '/virtual/src/features/return-await-try-non-boundary.ts';
+    let filePath = '/virtual/src/features/return-with-await.ts';
     let source = [
-      'async function g() {',
-      '  return 1;',
-      '}',
-      '',
       'export async function f() {',
       '  try {',
-      '    return await g();',
+      '    return await fetchData();',
       '  } catch (e) {',
-      '    throw e;',
+      '    handleError(e);',
       '  }',
       '}',
     ].join('\n');
@@ -455,25 +371,67 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
+    let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-await-policy when return await is in a nested function even if outer has try/catch', () => {
+  it('should not report return-await-in-try when return is outside try block', () => {
     // Arrange
     let sources = new Map<string, string>();
-    let filePath = '/virtual/src/features/return-await-cross-scope.ts';
+    let filePath = '/virtual/src/features/return-outside-try.ts';
     let source = [
-      'async function g() {',
-      '  return 1;',
+      'export async function f() {',
+      '  return fetchData();',
       '}',
-      '',
+    ].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeErrorFlow(program);
+    let hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report return-await-in-try for literal return in try block', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/return-literal-try.ts';
+    let source = [
+      'export function f() {',
+      '  try {',
+      '    return "ok";',
+      '  } catch (e) {',
+      '    return "error";',
+      '  }',
+      '}',
+    ].join('\n');
+
+    sources.set(filePath, source);
+
+    // Act
+    let program = createProgramFromMap(sources);
+    let analysis = analyzeErrorFlow(program);
+    let hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report return-await-in-try in nested function even if outer has try/catch', () => {
+    // Arrange
+    let sources = new Map<string, string>();
+    let filePath = '/virtual/src/features/return-nested-fn.ts';
+    let source = [
       'export async function outer() {',
       '  try {',
       '    const inner = async () => {',
-      '      return await g();',
+      '      return fetchData();',
       '    };',
       '    return await inner();',
       '  } catch (e) {',
@@ -487,11 +445,10 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'return-await-policy');
+    let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
-    // Assert — inner arrow's return await is NOT inside its own try/catch, should be flagged
-    expect(hits.length).toBe(1);
-    expect(hits[0]!.evidence).toContain('return await g()');
+    // Assert — inner arrow's return is NOT inside its own try/catch, so should not be flagged
+    expect(hits.length).toBe(0);
   });
 
   it('should report missing-error-cause when catch throws a new Error without { cause }', () => {

@@ -12,7 +12,7 @@ export type ErrorFlowFindingKind =
   | 'prefer-await-to-then'
   | 'floating-promises'
   | 'misused-promises'
-  | 'return-await-policy';
+  | 'return-await-in-try';
 
 export interface SourcePosition {
   readonly line: number;

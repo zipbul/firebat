@@ -30,6 +30,36 @@
     }
   },
   {
+    "evidence": "return String(a + b + c + d + e + f + g + h + i + j + k);",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "return-await-in-try",
+    "span": {
+      "end": {
+        "column": 61,
+        "line": 17
+      },
+      "start": {
+        "column": 4,
+        "line": 17
+      }
+    }
+  },
+  {
+    "evidence": "return JSON.parse('{}');",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "return-await-in-try",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 25
+      },
+      "start": {
+        "column": 4,
+        "line": 25
+      }
+    }
+  },
+  {
     "evidence": "try {",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "useless-catch",
@@ -45,6 +75,21 @@
     }
   },
   {
+    "evidence": "return JSON.parse('{}');",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "return-await-in-try",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 34
+      },
+      "start": {
+        "column": 6,
+        "line": 34
+      }
+    }
+  },
+  {
     "evidence": "throw new Error('wrapped');",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "missing-error-cause",
@@ -56,21 +101,6 @@
       "start": {
         "column": 4,
         "line": 47
-      }
-    }
-  },
-  {
-    "evidence": "return await Promise.resolve('data');",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "return-await-policy",
-    "span": {
-      "end": {
-        "column": 39,
-        "line": 52
-      },
-      "start": {
-        "column": 2,
-        "line": 52
       }
     }
   }

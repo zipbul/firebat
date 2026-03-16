@@ -403,6 +403,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   let functionTryCatchDepth = 0;
   let inTryBlockDepth = 0;
   let inAsyncFunction = false;
+  let inTryBlockWithCatchDepth = 0;
 
   const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
@@ -649,10 +650,12 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       const savedDepth = functionTryCatchDepth;
       const savedTryBlockDepth = inTryBlockDepth;
       const savedAsync = inAsyncFunction;
+      const savedTryWithCatch = inTryBlockWithCatchDepth;
 
       functionTryCatchDepth = 0;
       inTryBlockDepth = 0;
       inAsyncFunction = node.async === true;
+      inTryBlockWithCatchDepth = 0;
 
       const entries = Object.entries(node);
 
@@ -667,6 +670,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       functionTryCatchDepth = savedDepth;
       inTryBlockDepth = savedTryBlockDepth;
       inAsyncFunction = savedAsync;
+      inTryBlockWithCatchDepth = savedTryWithCatch;
 
       return;
     }
@@ -695,10 +699,18 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         functionTryCatchDepth++;
       }
 
-      // Visit block with inTryBlockDepth tracking
+      // Visit block with depth tracking
       inTryBlockDepth++;
 
+      if (hasCatch) {
+        inTryBlockWithCatchDepth++;
+      }
+
       visit(node.block);
+
+      if (hasCatch) {
+        inTryBlockWithCatchDepth--;
+      }
 
       inTryBlockDepth--;
 
@@ -715,19 +727,24 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    // EF-06 return-await-policy: return await outside same-function try-catch is redundant
-    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+    // EF-06 return-await-in-try: return without await in try block misses rejection
+    if (node.type === 'ReturnStatement' && isNodeRecord(node) && inTryBlockWithCatchDepth > 0) {
       const arg = node.argument;
 
-      if (isOxcNode(arg) && arg.type === 'AwaitExpression' && functionTryCatchDepth === 0) {
+      // Only flag non-awaited expressions that likely return a Promise
+      if (
+        isOxcNode(arg) &&
+        arg.type !== 'AwaitExpression' &&
+        (arg.type === 'CallExpression' || arg.type === 'NewExpression')
+      ) {
         pushFinding(findings, {
-          kind: 'return-await-policy',
+          kind: 'return-await-in-try',
           node,
           filePath,
           sourceText,
-          message: 'return await is redundant outside try/catch',
+          message: 'return without await in try block — catch cannot intercept rejections',
           evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: ['RCP-14', 'RCP-15'],
+          recipes: [],
         });
       }
     }

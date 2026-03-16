@@ -72,7 +72,7 @@ export type FirebatCatalogCode =
   | 'EF_PREFER_AWAIT_TO_THEN'
   | 'EF_FLOATING_PROMISES'
   | 'EF_MISUSED_PROMISES'
-  | 'EF_RETURN_AWAIT_POLICY'
+  | 'EF_RETURN_AWAIT_IN_TRY'
   // unknown-proof (5)
   | 'UNKNOWN_UNNARROWED'
   | 'UNKNOWN_INFERRED'
