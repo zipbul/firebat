@@ -1,289 +1,345 @@
 # TEMPORAL_COUPLING_PLAN.md
 
 temporal-coupling 디텍터 정밀도 개선 계획.
-기존 버그 수정 + gildash call graph 통합 + caller AST 순서 검사.
 
 ---
 
-## 1. 현재 문제
+## 진행 상태
 
-### 1-1. 정밀도 한계 (AST-only)
-
-writer/reader 존재만 감지 → 의도적 설계 패턴(connection pool, config loader, cache)도 오탐.
-호출 순서를 모르므로 "temporal coupling이 실제로 문제인지" 판단 불가.
-
-### 1-2. 기존 구현 버그
-
-| # | 버그 | 위치 | 영향 |
-|---|------|------|------|
-| B-1 | `getEnclosingExportedFunction`이 `export function` 선언만 인식 | L24-33 | `export const fn = () => {}`, `export { fn }`, `export default function` 전부 누락 → 다량 False Negative |
-| B-2 | class 분석에서 `constructor`가 writer로 포함됨 | L206-213 | 객체 생성 시 정상 초기화도 finding 발생 → False Positive |
-| B-3 | identifier마다 전체 AST 재순회 (O(n²)) | L102-143 | 성능 비효율. 정확도에는 영향 없음 |
+| Phase | 상태 | 커밋 |
+|-------|------|------|
+| 1. 기존 버그 수정 | ✅ 완료 | `0697834` |
+| 2. gildash caller 공존 검사 | ✅ 완료 | `afce543` |
+| 3. caller AST 순서 검사 (offset 기반) | ✅ 완료 | `be52717` |
+| 3a. 코드 리뷰 이슈 수정 | ✅ 완료 | `3e2e522` |
+| 4. Phase 3 → CFG dominator 교체 | 미착수 | |
+| 5. guard 패턴 인식 | 미착수 | |
+| 6. dead writer 제외 | 미착수 | |
 
 ---
 
-## 2. 구현 순서 (3단계)
+## Phase 4: CFG dominator로 Phase 3 교체
 
-### Phase 1: 기존 버그 수정
+### 4-1. 문제
 
-gildash 통합 이전에 기반 로직부터 수정. 이것 없이는 어떤 개선도 의미 없음.
+현재 Phase 3은 caller AST에서 W/R 호출의 source offset을 비교한다. 이건 텍스트 위치이지 실행 순서가 아니다.
 
-**B-1 수정: export 패턴 확장**
+**offset 비교가 틀리는 케이스:**
 
-현재 인식하는 것:
 ```ts
-export function query() { ... }
+// 양쪽 분기 모두 writer → 사실상 항상 실행
+if (cond) { init(); } else { init(); }
+query();
+// offset: init < query → 억제. 하지만 보수적으로 conditional이므로 유지 (오판)
+
+// else 안 writer → 항상 실행 아님
+if (cond) { } else { init(); }
+query();
+// offset: init < query → 억제 가능 (오판)
+
+// init(); if(c) { query(); } → 항상 init 먼저
+// offset: 보수적으로 query가 conditional → 유지 (오판)
 ```
 
-추가로 인식해야 하는 것:
-```ts
-export const query = () => { ... };              // VariableDeclaration + ArrowFunctionExpression
-export const query = function() { ... };          // VariableDeclaration + FunctionExpression
-const query = () => { ... }; export { query };    // ExportNamedDeclaration with specifiers
-export default function query() { ... };          // ExportDefaultDeclaration
+### 4-2. 해결: CFG dominator 검증
+
+이 프로젝트의 기존 CFG 엔진 사용:
+- `src/engine/cfg/cfg-builder.ts` — `OxcCFGBuilder`: 13종 statement + try/catch exception edge
+- `src/engine/cfg/cfg.ts` — `IntegerCFG`: `buildAdjacency('forward'|'backward')`
+
+### 4-3. 알고리즘
+
+"W가 R을 dominate하는가" = "W를 제거하면 entry에서 R에 도달 불가능한가"
+
+```
+1. caller 함수 body 취득
+   - findFunctionBody()로 함수 AST 노드 확보
+   - ⚠ 함수 노드가 아닌 함수의 body(BlockStatement)를 추출하여 전달
+   - funcNode.body를 buildFunctionBody에 전달 (waste-detector-oxc.ts L418-419 패턴)
+
+2. CFG 빌드
+   - const built = new OxcCFGBuilder().buildFunctionBody(funcNode.body)
+   - built.cfg, built.nodePayloads, built.exitId 사용
+
+3. nodePayloads에서 W/R CallExpression 포함 CFG 노드 식별
+   - findCallNodeIds(nodePayloads, targetNames): number[]
+   - 각 payload(CfgNodePayload = Node | ReadonlyArray<Node>)에 대해:
+     - collectOxcNodes(payload, n => n.type === 'CallExpression')로 모든 CallExpression 수집
+     - callee가 Identifier → name 비교
+     - callee가 MemberExpression → property name 비교
+   - 매칭된 payload의 인덱스(= CFG 노드 ID) 반환
+
+4. dominator BFS
+   - cfg.buildAdjacency('forward')로 successor adjacency 확보
+   - ⚠ exception edge 포함됨 — 이는 올바른 동작:
+     try { init(); } catch { } query();에서 init 노드에서 catch로의 exception edge가
+     있으면 init을 제거해도 catch 경로로 query 도달 가능 → dominate 안 함 → 유지 (정확)
+   - W 노드를 방문 금지로 마킹
+   - entryId(0)에서 BFS → R 노드 도달 여부 확인
+   - 도달 불가 → W가 R을 dominate → 억제 안전
+   - 도달 가능 → 억제 불가
+
+5. 여러 writer 처리
+   - writerNodeIds.some(wId => dominates(adj, nodeCount, entryId, wId, rNodeId))
+   - "하나라도 dominate하면 억제" — 이는 올바름:
+     if(c) { w1(); } else { w2(); } r();에서 w1 제거 시 w2 경로로 R 도달 → dominate 안 함.
+     w2 제거 시 w1 경로로 R 도달 → dominate 안 함. some() = false. 올바르게 유지.
+     if(c) { w1(); } w1(); r();에서 두 번째 w1 제거 시 첫 번째 w1 경로 → dominate. some() = true. 억제.
+
+6. edge case 처리
+   - entryId === rNodeId: BFS 시작 시 즉시 도달 → return false (dominate 안 함). 올바름.
+   - wNodeId === rNodeId: W=R 같은 노드 — 방문 금지이므로 도달 불가 → return true.
+     이 경우는 같은 ExpressionStatement에 init()과 query()가 함께 있을 수 없으므로 실제로 발생 안 함.
+     복합 payload(배열)인 경우: ForStatement init/update 등이지만 CallExpression 이름 매칭으로 구분 가능.
 ```
 
-구현 — 2단계 접근:
+### 4-4. exception edge 처리 방침
 
-1단계: `collectExportedFunctionNames(program)` 함수 신규 추가. Program 전체에서 export된 함수 이름 집합 수집.
-- `ExportNamedDeclaration` → `declaration`이 `FunctionDeclaration`이면 이름 추가
-- `ExportNamedDeclaration` → `declaration`이 `VariableDeclaration`이면 init이 ArrowFunctionExpression/FunctionExpression인 declarator의 이름 추가
-- `ExportNamedDeclaration` → `specifiers` 배열이 있으면 각 `ExportSpecifier.local.name` 추가
-- `ExportDefaultDeclaration` → declaration이 FunctionDeclaration이면 이름 추가
+`buildAdjacency('forward')`는 `EdgeType.Exception` edge도 포함한다. 이는 dominator 분석에서 **올바르게 동작**한다:
 
-2단계: `getEnclosingExportedFunction` 로직 전환.
-- 현재: "offset이 ExportNamedDeclaration 안의 FunctionDeclaration에 있는가" 체크
-- 변경: "offset이 어떤 함수에 있는가" 체크 → 그 함수 이름이 export 집합에 있는가" 체크
-- 함수 탐색: `FunctionDeclaration`, `VariableDeclarator`의 init이 ArrowFunctionExpression/FunctionExpression인 경우 모두 후보
+- `try { init(); } catch { } query();` — init 노드에서 catch entry로 exception edge 존재. init을 제거하면 catch entry에서 query로 도달 가능 → dominate 안 함 → finding 유지. **정확.**
+- `try { init(); query(); } catch { }` — init에서 exception → catch, init에서 normal → query. init 제거 시 catch에서 query 도달 불가(query는 try 안에 있고 init 이후), entry에서도 query 도달 불가 → dominate → 억제. **정확.**
 
-**B-2 수정: constructor 제외**
+exception edge를 포함하는 것이 보수적이면서 정확한 결과를 낸다. 별도 필터링 불필요.
 
-`analyzeClassTemporalCoupling`의 method 순회(L206)에서 `methodName === 'constructor'`이면 skip.
-
-**B-3 수정: O(n²) → O(n)**
-
-`classifyExportedFunctions`에서 identifier마다 `walkOxcTree`를 호출하지 않고, 전체 AST를 1회 순회하면서 AssignmentExpression/UpdateExpression의 left 위치를 Set으로 수집. 이후 각 identifier의 offset이 Set에 있으면 write, 없으면 read.
-
-### Phase 2: gildash caller 공존 검사
-
-**핵심 알고리즘:**
-
-1. 기존 AST 분석으로 writer 함수 집합 W, reader 함수 집합 R 식별
-2. gildash로 각 reader의 caller 집합 수집:
-   - `getInternalRelations(filePath)` → intra-file calls (파일당 1회, 캐시)
-   - `searchRelations({ type: 'calls', dstSymbolName: reader, dstFilePath: filePath })` → cross-file calls
-3. **억제 조건: 모든 reader의 모든 caller가 W 중 하나를 호출 → 억제**
-4. **유지 조건: R의 caller 중 W를 전혀 호출하지 않는 caller가 1개라도 있음 → finding 유지**
-5. **보수적 처리: caller가 0명인 reader → finding 유지**
-6. gildash 에러 시 try-catch → fallback (AST-only)
-
-**`dstFilePath` 필수 포함** — 동명 함수 충돌 방지. 경로 형식은 `dependencies/analyzer.ts`의 `resolveAbs` 패턴 적용 (gildash가 프로젝트 상대경로를 반환할 수 있음). **구현 전 bun 스크립트로 실측 필수.**
-
-**class method:** `${className}.${methodName}` 형태로 gildash 검색.
-- class name 추출: `getNodeName(classNode.id)` 사용
-- anonymous class (`const MyClass = class { ... }`): parent VariableDeclarator의 `id.name` 사용. parent 추적 순회 필요.
-- 이름 확정 불가 시 (진짜 anonymous): Phase 2 대상에서 제외, AST-only 결과 유지
-
-### Phase 3: caller AST 순서 검사
-
-Phase 2에서 "모든 caller가 W도 호출"하여 억제 후보가 된 finding에 대해, caller AST에서 호출 순서 확인.
-
-**caller AST 취득: `gildash.getParsedAst(srcFilePath)`**
-- LRU cache 조회, I/O 없음, features/ 순수 규칙 준수
-- undefined 반환 시 (gildash 미인덱싱 파일): 보수적으로 finding 유지
-
-**순서 검사 알고리즘:**
-1. caller 함수 body에서 W 호출의 `start` offset과 R 호출의 `start` offset 수집
-2. W offset < R offset → 올바른 순서 (억제 유지)
-3. R offset < W offset → **역순 호출, 억제 취소 → finding 유지**
-4. 분기/반복문 내부 → 순서 불명확, **보수적으로 finding 유지**
-
-**분기 내 호출 판정 방법:**
-- conditional ancestor 타입 집합: `IfStatement`, `ConditionalExpression`, `SwitchStatement`, `LogicalExpression`, `WhileStatement`, `ForStatement`, `ForInStatement`, `ForOfStatement`
-- 모든 conditional 노드를 수집하고 offset 범위 체크: W 또는 R 호출이 conditional 노드의 자식 범위 안에 있으면 "분기 내 호출"
-- `walkOxcTree`는 parent 참조를 제공하지 않으므로, 별도 재귀 순회 함수로 conditional depth를 추적
-
----
-
-## 3. gildash API (실측 확인 완료)
-
-| API | 용도 | 동기/비동기 |
-|-----|------|-------------|
-| `searchRelations({ type: 'calls', dstSymbolName, dstFilePath })` | cross-file caller 조회 | 동기 |
-| `getInternalRelations(filePath)` | intra-file caller 조회 | 동기 |
-| `getParsedAst(filePath)` | caller AST 취득 (Phase 3) | 동기, LRU cache |
-
-### 실측 결과
-
-| 항목 | 결과 |
-|------|------|
-| `meta` 필드 | `scope`, `isNew`만 존재. position/offset **없음** (17,069건 전수) |
-| `getInternalRelations` intra-file calls | **포함** (scan.usecase.ts에서 350건 반환) |
-| class method `srcSymbolName` 형태 | **`ClassName.methodName`** (e.g. `Scanner.next`) |
-| `searchRelations` 반환 타입 | `StoredCodeRelation` (타입 선언과 불일치) |
-| semantic 필요 여부 | **불필요** — calls는 AST-level 추출 |
-| `dstFilePath` 경로 형식 | **미확인** — 구현 전 실측 필수. `resolveAbs` 패턴 임시 적용 |
-
----
-
-## 4. 수정 파일
-
-### Phase 1
+### 4-5. 수정 파일
 
 | 파일 | 변경 |
 |------|------|
-| `src/features/temporal-coupling/analyzer.ts` | B-1: `collectExportedFunctionNames` 추가 + `getEnclosingExportedFunction` 로직 전환, B-2: constructor 제외, B-3: O(n) 리팩토링 |
-| `src/features/temporal-coupling/analyzer.spec.ts` | 누락 패턴 테스트 추가 (arrow export, re-export, default export, constructor 제외) |
+| `src/features/temporal-coupling/analyzer.ts` | `verifyCallerOrder` + 보조함수 4개 삭제 → `verifyCallerOrderByCfg` + `findCallNodeIds` + `dominates` 추가. `OxcCFGBuilder` import 추가. `findFunctionBody` 반환값에서 `.body` 추출 로직 추가 |
+| `src/features/temporal-coupling/analyzer.spec.ts` | Phase 3 테스트 4건 수정 (offset 기반 → CFG 기반 동작으로 기대값 변경) + 새 케이스 추가 |
 
-### Phase 2
+### 4-6. 테스트 전략
+
+| 테스트 | 시나리오 | 기대 |
+|--------|----------|------|
+| 정순 linear | `init(); query();` | 억제 유지 |
+| 역순 linear | `query(); init();` | finding 유지 |
+| 양쪽 분기 writer | `if(c) { init(); } else { init(); } query();` | 억제 (양쪽 모두 dominate) |
+| 단측 분기 writer | `if(c) { init(); } query();` | finding 유지 (dominate 안 함) |
+| try writer 성공 | `try { init(); query(); } catch {}` | 억제 |
+| try writer 실패 경로 | `try { init(); } catch {} query();` | finding 유지 |
+| 루프 writer | `for(x of xs) { init(); } query();` | finding 유지 (0회 가능) |
+| init 후 분기 reader | `init(); if(c) { query(); }` | 억제 (init dominate) |
+| getParsedAst undefined | caller 미인덱싱 | finding 유지 |
+| 기존 Phase 2 테스트 | gildash mock without getParsedAst | Phase 3 skip, Phase 2만 동작 |
+
+### 4-7. offset 비교 대비 정밀도 향상
+
+| 케이스 | offset 비교 | CFG dominator |
+|--------|------------|---------------|
+| `if(c) { init(); } else { init(); } query();` | 보수적 유지 (오판) | 억제 (정확) |
+| `if(c) {} else { init(); } query();` | 억제 가능 (오판) | 유지 (정확) |
+| `try { init(); } catch {} query();` | 보수적 유지 | 유지 (정확, exception edge) |
+| `init(); if(c) { query(); }` | 보수적 유지 (오판) | 억제 (정확) |
+| `for(x of xs) { init(); } query();` | 보수적 유지 | 유지 (정확) |
+
+---
+
+## Phase 5: guard 패턴 인식
+
+### 5-1. 문제
+
+reader 함수가 스스로를 보호하는 guard 패턴이 있어도 finding이 발생한다.
+
+```ts
+export function query() {
+  if (!initialized) throw new Error('not ready');
+  return db.execute(sql);
+}
+```
+
+### 5-2. 알고리즘
+
+reader 함수 body를 CFG로 빌드하여 guard가 state 접근을 dominate하는지 확인.
+
+```
+1. reader 함수 body의 AST에서 guard 패턴 식별
+   - IfStatement를 순회하며:
+     - test에 state 변수 참조 포함 (Identifier name === stateName, 또는 this.stateName)
+     - consequent에 ThrowStatement 또는 ReturnStatement (early exit)
+
+2. reader 함수 body → OxcCFGBuilder.buildFunctionBody(readerBody)
+   ⚠ readerBody는 함수의 body(BlockStatement). findFunctionBody 반환값의 .body 추출 필요.
+
+3. guard의 CFG 노드 식별
+   - OxcCFGBuilder는 IfStatement를 condition 노드 + true entry + false entry + merge로 분해
+   - guard의 "early exit" 분기(throw/return)는 exitId로 연결됨
+   - guard의 "통과" 분기는 merge 노드로 계속
+   - dominator 관점에서 필요한 것: "guard condition 노드" 자체가 아니라
+     "guard를 통과한 후의 merge 노드"가 state 접근을 dominate하는가
+   - 실제로는 더 단순: guard의 throw/return 분기가 exitId로 가므로,
+     guard 이후의 코드는 "guard 조건이 false인 경우"에만 도달
+   - 즉 guard condition 노드가 state 접근 노드를 dominate하면 충분
+
+4. dominator 검증 (Phase 4와 동일 BFS)
+   - guard condition 노드를 제거한 그래프에서 entry → state 접근 노드 BFS
+   - 도달 불가 → guard가 dominate → self-protecting reader
+
+5. 중첩 guard 처리
+   - if (!a) throw; if (!b) throw; use(a, b);
+   - 각 guard condition이 use 노드를 dominate하는지 개별 확인
+   - 모든 state 변수에 대해 guard가 있으면 self-protecting
+```
+
+### 5-3. guard 패턴 종류
+
+| 패턴 | AST 구조 | 인식 방법 |
+|------|---------|----------|
+| throw guard | `if (!x) throw new Error()` | IfStatement + consequent.type === ThrowStatement |
+| return guard | `if (!x) return null` | IfStatement + consequent.type === ReturnStatement |
+| assert guard | `assert(x !== null)` | ExpressionStatement + CallExpression callee name === 'assert' |
+| nullish guard | `if (x == null) throw` | IfStatement + BinaryExpression(==, null) + ThrowStatement |
+
+### 5-4. 조건부 init 흡수
+
+`if (!initialized) init(); query();` 패턴:
+- reader에 `if (!initialized) throw` guard가 있으면 self-protecting
+- caller가 `if (!initialized) init()` 호출 → init이 initialized를 설정 → guard 통과 보장
+- guard 패턴 인식으로 자연스럽게 커버 (별도 변수값 추적 불필요)
+
+### 5-5. stateName 접근 패턴 매칭
+
+- module-scope 변수: `stateName` → Identifier name === stateName
+- class 속성: `this.stateName` → MemberExpression(ThisExpression, Identifier name === stateName)
+- `isReaderSelfProtecting(readerBody, stateName, isClassProp)` — isClassProp 플래그로 구분
+
+### 5-6. 수정 파일
 
 | 파일 | 변경 |
 |------|------|
-| `src/features/temporal-coupling/analyzer.ts` | `AnalyzeTemporalCouplingInput` 추가, `shouldSuppressByCallGraph` 추가, 시그니처 변경, anonymous class 처리 |
-| `src/application/scan/scan.usecase.ts` | `analyzeTemporalCoupling(program, { gildash })` 전달. `needsSemantic` 변경 없음 |
-| `src/features/temporal-coupling/analyzer.spec.ts` | gildash mock 주입 테스트 6건 추가 |
+| `src/features/temporal-coupling/analyzer.ts` | `isReaderSelfProtecting` 함수 추가. Pattern 1/2 finding 생성 전에 호출. OxcCFGBuilder 재사용 |
+| `src/features/temporal-coupling/analyzer.spec.ts` | guard 패턴 테스트 추가 |
 
-### Phase 3
+### 5-7. 테스트 전략
+
+| 테스트 | 시나리오 | 기대 |
+|--------|----------|------|
+| throw guard | `if (!x) throw; return x.exec();` | self-protecting → finding 억제 |
+| return guard | `if (!x) return null; return x.exec();` | self-protecting → finding 억제 |
+| guard 없음 | `return x.exec();` | finding 유지 |
+| guard 후 분기 접근 | `if (!x) throw; if (c) { x.exec(); }` | guard dominate → 억제 |
+| 중첩 guard | `if (!a) throw; if (!b) throw; use(a,b);` | 모든 state guarded → 억제 |
+| class this guard | `if (!this.x) throw; return this.x;` | self-protecting → 억제 |
+| assert guard | `assert(x !== null); x.exec();` | self-protecting → 억제 |
+
+---
+
+## Phase 6: dead writer 제외
+
+### 6-1. 문제
+
+unreachable writer가 writer로 카운트되면 잘못된 finding 발생.
+
+```ts
+export function setup() {
+  return;
+  db = createConnection();  // unreachable → writer가 아님
+}
+```
+
+### 6-2. 알고리즘
+
+```
+1. writer 함수 body → OxcCFGBuilder.buildFunctionBody(writerBody)
+   ⚠ writerBody는 함수의 body(BlockStatement)
+2. cfg.buildAdjacency('forward')
+3. write statement가 포함된 CFG 노드 식별 (findCallNodeIds 변형 — write 패턴 매칭)
+4. entryId에서 해당 노드까지 BFS
+5. 도달 불가 → dead writer → writer 집합에서 제외
+```
+
+### 6-3. waste 디텍터와의 관계
+
+waste 디텍터는 dead-store(write 후 read 없이 덮어쓰기)를 감지하지만, unreachable code 자체를 감지하지는 않는다. temporal-coupling의 dead writer 제외는 **writer 분류 정확도 개선**이지 dead code 감지가 아니므로 중복이 아니다.
+
+### 6-4. 수정 파일
 
 | 파일 | 변경 |
 |------|------|
-| `src/features/temporal-coupling/analyzer.ts` | caller AST 순서 검사: `gildash.getParsedAst` 사용, 분기 판정 함수 추가 |
-| `src/features/temporal-coupling/analyzer.spec.ts` | 순서 검사 테스트 추가 (정순/역순/분기) |
+| `src/features/temporal-coupling/analyzer.ts` | `isWriterReachable` 함수 추가. `classifyExportedFunctions` 결과에서 dead writer 필터링 |
+| `src/features/temporal-coupling/analyzer.spec.ts` | dead writer 테스트 추가 |
 
-### 변경 불필요 (검증 완료)
-
-| 파일 | 이유 |
-|------|------|
-| `src/types.ts` | `TemporalCouplingFinding` 구조 변경 없음. finding 억제는 배열에서 제거하는 방식 |
-| `src/report.ts` | 출력 형식 변경 없음 |
-| `.firebatrc.jsonc` / `assets/firebatrc.schema.json` | 설정 옵션 추가 없음 |
-| `src/types.ts` `FirebatCatalogCode` | 코드 추가 없음 |
-| 기존 테스트 | Phase 1은 내부 로직만 변경, Phase 2는 optional param → 기존 호출 호환 |
-| 기존 golden fixture | `export function` 패턴만 사용하므로 영향 없음 |
-
-### 새로 추가 필요
-
-| 파일 | 내용 |
-|------|------|
-| golden fixture (Phase 1) | arrow export, re-export 패턴 fixture + expected JSON |
-| integration test (Phase 2) | gildash 억제 동작 검증 테스트 |
-
----
-
-## 5. 테스트 전략
-
-### Phase 1 테스트
+### 6-5. 테스트 전략
 
 | 테스트 | 시나리오 | 기대 |
 |--------|----------|------|
-| arrow export writer | `export const init = () => { x = 1; }` | writer로 인식 |
-| arrow export reader | `export const query = () => x;` | reader로 인식 |
-| function expression export | `export const init = function() { x = 1; }` | writer로 인식 |
-| re-export | `const init = () => { x = 1; }; export { init };` | writer로 인식 |
-| default export | `export default function init() { x = 1; }` | writer로 인식 |
-| constructor 제외 | `constructor() { this.x = 1; }` | writer에서 제외, finding 없음 |
-| 기존 테스트 회귀 | 전부 통과 확인 | 깨지지 않음 |
-
-### Phase 2 테스트
-
-| 테스트 | 시나리오 | 기대 |
-|--------|----------|------|
-| 억제 성공 | mock: 모든 caller가 W+R 호출 | finding 0건 |
-| 억제 실패 | mock: R만 호출하는 caller 존재 | finding 유지 |
-| caller 0명 | mock: reader의 caller 없음 | finding 유지 |
-| gildash 에러 | mock: searchRelations throw | fallback → AST-only |
-| class method | mock: `ClassName.method` 억제 | 동작 확인 |
-| 동명 함수 | mock: 다른 파일의 동명 함수 | `dstFilePath` 필터링 확인 |
-| anonymous class | mock: 이름 없는 class | Phase 2 대상 제외, AST-only 유지 |
-
-### Phase 3 테스트
-
-| 테스트 | 시나리오 | 기대 |
-|--------|----------|------|
-| 정순 | caller: `init(); query();` | 억제 유지 |
-| 역순 | caller: `query(); init();` | 억제 취소 → finding 유지 |
-| 분기 내 W | caller: `if(x) { init(); } query();` | 보수적 → finding 유지 |
-| 분기 내 R | caller: `init(); if(x) { query(); }` | 보수적 → finding 유지 |
-| getParsedAst undefined | mock: caller 파일 미인덱싱 | 보수적 → finding 유지 |
+| reachable writer | `export function init() { db = 1; }` | writer 유지 |
+| dead writer (return 후) | `export function init() { return; db = 1; }` | writer 제외 → finding 없음 |
+| dead writer (throw 후) | `export function init() { throw e; db = 1; }` | writer 제외 |
+| conditional writer | `export function init() { if(c) { db = 1; } }` | writer 유지 (도달 가능) |
 
 ---
 
-## 6. 아키텍처 규칙 준수
+## 정밀도 분석 (전체)
 
-| 규칙 | 준수 | 설명 |
-|------|------|------|
-| `features/` → 순수, I/O 없음 | ✅ | gildash DI 주입. SQLite in-memory 조회, getParsedAst는 LRU cache |
-| `application/` → `ports/`만 의존 | ✅ | 기존 gildash import 경로 유지 |
-| `engine/` + `features/` → import 제한 | ✅ | `@zipbul/gildash` type import만 |
+### Phase별 개선
 
----
+| Phase | 유형 | 개선 내용 |
+|-------|------|----------|
+| 1 ✅ | FN 감소 | arrow/re-export 누락 해소 |
+| 1 ✅ | FP 감소 | constructor 오탐 제거 |
+| 2 ✅ | FP 감소 | 의도적 설계 패턴 억제 |
+| 3 ✅ | FP 감소 | R→W 역순 오억제 방지 |
+| 4 | 정확도 | offset 근사 → CFG dominator (분기/try/루프 정확 처리) |
+| 5 | FP 감소 | self-protecting reader 인식 |
+| 6 | FP 감소 | dead writer 제외 |
 
-## 7. 성능
-
-- `searchRelations`: 동기 SQLite, finding당 reader 수 × 1회
-- `getInternalRelations`: 파일당 1회, 캐시 재사용
-- Phase 3 `getParsedAst`: LRU cache hit, 재파싱 없음
-
----
-
-## 8. 정밀도 분석
-
-### Phase별 정밀도 개선
-
-| Phase | False Positive 감소 | False Negative 감소 | 비용 |
-|-------|-------------------|-------------------|------|
-| 1 (버그 수정) | B-2 constructor 오탐 제거 | B-1 arrow/re-export 누락 해소 | 낮음 |
-| 2 (caller 공존) | 의도적 설계 패턴 억제 | - | 중간 |
-| 3 (순서 검사) | R→W 역순 오억제 방지 | - | 높음 |
-
-### 잔존 한계 (Phase 3 이후에도)
+### 잔존 한계 (Phase 6 이후에도)
 
 | 한계 | 설명 | 해결 필요 도구 |
 |------|------|---------------|
-| 간접 write | `reset() { cleanup(); }` + `cleanup() { x = null; }` | transitive call graph |
-| 조건부 init | `if (!x) init(); query();` | dominator analysis (CFG 필요) |
-| cross-file state | 파일 A에 state, B에 writer, C에 reader | scope 재정의 |
-| async 순서 | `await init(); await query();` | async-aware analysis |
+| 간접 write | `reset() → cleanup() → x = null` | transitive call graph |
+| cross-file state | 파일 A state, B writer, C reader | scope 재정의 |
+| async 순서 | `await init(); await query();` | async-aware CFG |
 | 이벤트 기반 | `emitter.on('ready', query)` | event flow analysis |
 | class 상속 | 부모 `init()` → 자식 reader | heritage chain analysis |
 
----
-
-## 9. 학술적 배경
-
-- **Typestate Analysis** (Strom 1983): 변수를 FSM으로 모델링. "초기화 전 사용" 탐지의 이론적 기반. 완전한 구현에는 data-flow 엔진 필요 → 현재 scope 밖.
-- **업계 도구**: SonarQube, NDepend, Structure101 중 temporal coupling을 정적으로 직접 탐지하는 도구 없음. firebat의 차별화 포인트.
-- **Mark Seemann (2011)**: "Design Smell: Temporal Coupling" — Sequencing, Waiting, Circumstance. 현재 구현은 Sequencing만 대상.
+이 5개는 현재 도구(oxc-parser + gildash + IntegerCFG)의 구조적 한계.
 
 ---
 
-## 10. 재사용 패턴
+## 실현 가능성
 
-| 코드 | 용도 |
-|------|------|
-| `error-flow/analyzer.ts` — `AnalyzeErrorFlowInput` | optional gildash 주입 패턴 |
-| `dependencies/analyzer.ts` — `searchRelations` 호출 + `resolveAbs` | 호출 방법, 경로 정규화, 에러 처리 |
-| `dependencies/analyzer.spec.ts` — mock gildash | unit test mock 패턴 |
-| `engine/ast/oxc-ast-utils.ts` — `collectFunctionNodesWithParent` | parent 추적 순회 패턴 (anonymous class name 추출) |
+| Phase | 실현 | 근거 |
+|-------|------|------|
+| 4 | ✅ | `OxcCFGBuilder` + `IntegerCFG.buildAdjacency` 이미 존재. waste-detector에서 사용 중 |
+| 5 | ✅ | Phase 4와 동일 CFG + dominator BFS 재사용 |
+| 6 | ✅ | CFG reachability BFS만으로 충분 |
+
+추가 라이브러리/API 불필요. 모든 도구가 `src/engine/` 내에 이미 존재.
 
 ---
 
-## 11. Scope Out (명시적 제외)
+## Scope Out
 
 | 항목 | 제외 이유 |
 |------|----------|
-| cross-file temporal coupling | scope 재정의 필요, 별도 작업 |
-| async/Promise 순서 의존 | async-aware analysis 필요 |
+| cross-file temporal coupling | scope 재정의 필요 |
+| async/Promise 순서 의존 | async-aware CFG 필요 |
 | 이벤트 기반 temporal coupling | event flow analysis 필요 |
 | class 상속 체인 | heritage chain + cross-class analysis 필요 |
-| 간접 write (`reset() → cleanup() → x = null`) | transitive call graph 필요. False Negative만 발생, precision 영향 없음 |
-| dominator analysis / typestate analysis | CFG 필요, oxc-parser 미제공 |
-| `needsSemantic` 조건 변경 | calls는 AST-level 추출, semantic 불필요 |
+| 간접 write | transitive call graph 비용 대비 효과 낮음 |
+| `needsSemantic` 조건 변경 | calls는 AST-level, semantic 불필요 |
 
 ---
 
-## 12. 구현 전 선행 확인 (Phase 2 착수 전)
+## 아키텍처 규칙 준수
 
-| 항목 | 방법 |
-|------|------|
-| `dstFilePath` 경로 형식 | bun 스크립트로 `searchRelations({ type: 'calls' })` 결과의 `dstFilePath` 샘플 출력 |
+| 규칙 | 준수 | 설명 |
+|------|------|------|
+| `features/` → 순수, I/O 없음 | ✅ | gildash DI, CFG는 `engine/` import (허용) |
+| `features/` → `engine/` 참조 | ✅ | 기존 패턴 (`waste-detector-oxc.ts`가 동일 경로 사용) |
+| `application/` → `ports/`만 의존 | ✅ | 기존 경로 유지 |
+
+---
+
+## 재사용 패턴
+
+| 코드 | Phase | 용도 |
+|------|-------|------|
+| `engine/cfg/cfg-builder.ts` — `OxcCFGBuilder` | 4, 5, 6 | CFG 빌드 |
+| `engine/cfg/cfg.ts` — `IntegerCFG.buildAdjacency` | 4, 5, 6 | adjacency list |
+| `engine/ast/oxc-ast-utils.ts` — `collectOxcNodes` | 4, 5 | nodePayloads에서 CallExpression 검색 |
+| `waste-detector-oxc.ts` L418-419 | 4, 5, 6 | body 추출 패턴 (`node.body`) |
+| `dominates` BFS | 4, 5 | 공유 함수 |
