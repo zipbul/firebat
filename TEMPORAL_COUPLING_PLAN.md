@@ -69,38 +69,43 @@ query();
      - callee가 MemberExpression → property name 비교
    - 매칭된 payload의 인덱스(= CFG 노드 ID) 반환
 
-4. dominator BFS
+4. writer 집합 dominator BFS
    - cfg.buildAdjacency('forward')로 successor adjacency 확보
-   - ⚠ exception edge 포함됨 — 이는 올바른 동작:
-     try { init(); } catch { } query();에서 init 노드에서 catch로의 exception edge가
-     있으면 init을 제거해도 catch 경로로 query 도달 가능 → dominate 안 함 → 유지 (정확)
-   - W 노드를 방문 금지로 마킹
+   - ⚠ 모든 writer 노드를 **동시에** 방문 금지로 마킹 (some()이 아닌 집합 제거)
+     이유: if(c) { w1(); } else { w2(); } r();에서 w1, w2 각각은 R을 dominate하지 않지만
+     집합 {w1, w2}는 R을 dominate한다. 개별 제거로는 양쪽 분기 writer를 감지 못함.
    - entryId(0)에서 BFS → R 노드 도달 여부 확인
-   - 도달 불가 → W가 R을 dominate → 억제 안전
+   - 도달 불가 → writer 집합이 R을 dominate → 다음 단계(exception 검증)로 진행
    - 도달 가능 → 억제 불가
 
-5. 여러 writer 처리
-   - writerNodeIds.some(wId => dominates(adj, nodeCount, entryId, wId, rNodeId))
-   - "하나라도 dominate하면 억제" — 이는 올바름:
-     if(c) { w1(); } else { w2(); } r();에서 w1 제거 시 w2 경로로 R 도달 → dominate 안 함.
-     w2 제거 시 w1 경로로 R 도달 → dominate 안 함. some() = false. 올바르게 유지.
-     if(c) { w1(); } w1(); r();에서 두 번째 w1 제거 시 첫 번째 w1 경로 → dominate. some() = true. 억제.
+5. exception edge 검증 (dominate 확인 후 추가 검사)
+   - dominate = true여도 writer가 try 블록 안에 있으면 throw 시 초기화 없이 R 실행 가능
+   - 예: try { init(); } catch {} query(); — init dominate이지만 init throw 시 catch → query
+   - 검증: writer 노드의 normal edge만 제거하고 exception edge만 남긴 그래프에서 entry→R BFS
+     도달 가능 → "writer throw 시 R 실행 가능" → 억제 불가
+     도달 불가 → 안전 → 억제
+   - 구현: cfg.getEdges()에서 EdgeType(edges[offset+2])을 확인하여 exception/normal 구분
+     writer 노드에서 나가는 edge 중 Exception 타입만 남긴 adjacency를 별도 구성
 
 6. edge case 처리
    - entryId === rNodeId: BFS 시작 시 즉시 도달 → return false (dominate 안 함). 올바름.
-   - wNodeId === rNodeId: W=R 같은 노드 — 방문 금지이므로 도달 불가 → return true.
-     이 경우는 같은 ExpressionStatement에 init()과 query()가 함께 있을 수 없으므로 실제로 발생 안 함.
-     복합 payload(배열)인 경우: ForStatement init/update 등이지만 CallExpression 이름 매칭으로 구분 가능.
+   - writer 노드에 rNodeId가 포함된 경우: 같은 ExpressionStatement에 init()과 query()가
+     함께 있을 수 없으므로 실제 발생 안 함.
 ```
 
 ### 4-4. exception edge 처리 방침
 
-`buildAdjacency('forward')`는 `EdgeType.Exception` edge도 포함한다. 이는 dominator 분석에서 **올바르게 동작**한다:
+`buildAdjacency('forward')`는 `EdgeType.Exception` edge도 포함한다. dominator BFS에서 exception edge는 두 가지 역할을 한다:
 
-- `try { init(); } catch { } query();` — init 노드에서 catch entry로 exception edge 존재. init을 제거하면 catch entry에서 query로 도달 가능 → dominate 안 함 → finding 유지. **정확.**
-- `try { init(); query(); } catch { }` — init에서 exception → catch, init에서 normal → query. init 제거 시 catch에서 query 도달 불가(query는 try 안에 있고 init 이후), entry에서도 query 도달 불가 → dominate → 억제. **정확.**
+**Step 4(집합 dominator)에서:** exception edge가 포함된 adjacency를 사용한다. 이 단계에서는 "writer를 완전히 거치지 않고 R에 도달 가능한가"를 확인하므로 모든 edge를 포함해야 한다.
 
-exception edge를 포함하는 것이 보수적이면서 정확한 결과를 낸다. 별도 필터링 불필요.
+**Step 5(exception 검증)에서:** dominate가 확인된 후, writer가 throw하여 초기화 없이 R이 실행되는 경우를 추가로 걸러낸다.
+
+실측 검증 결과:
+
+- `try { init(); } catch {} query();` — CFG: init(5)→catch(4), init(5)→query(6). 집합 dominator에서 init 제거 시 catch/query 도달 불가 → dominate. exception 검증에서 init의 exception edge(→catch)만 남긴 그래프: entry→...→catch(4)→query(6) 도달 가능 → **억제 불가. 정확.**
+- `try { init(); query(); } catch {}` — init(5)→exception→catch, init(5)→normal→query(6). exception 검증: init exception edge만 남기면 catch→exit 경로만 있고 query(6) 도달 불가 → **억제. 정확.** (query가 try 안에 있으므로 init throw 시 query도 실행 안 됨)
+- `init(); query();` (try 없음) — writer에 exception edge 없음. Step 5 skip → **억제. 정확.**
 
 ### 4-5. 수정 파일
 
@@ -117,8 +122,8 @@ exception edge를 포함하는 것이 보수적이면서 정확한 결과를 낸
 | 역순 linear | `query(); init();` | finding 유지 |
 | 양쪽 분기 writer | `if(c) { init(); } else { init(); } query();` | 억제 (양쪽 모두 dominate) |
 | 단측 분기 writer | `if(c) { init(); } query();` | finding 유지 (dominate 안 함) |
-| try writer 성공 | `try { init(); query(); } catch {}` | 억제 |
-| try writer 실패 경로 | `try { init(); } catch {} query();` | finding 유지 |
+| try writer+reader 동일 블록 | `try { init(); query(); } catch {}` | 억제 (throw 시 query도 미실행) |
+| try writer, catch 후 reader | `try { init(); } catch {} query();` | finding 유지 (throw 시 초기화 없이 실행) |
 | 루프 writer | `for(x of xs) { init(); } query();` | finding 유지 (0회 가능) |
 | init 후 분기 reader | `init(); if(c) { query(); }` | 억제 (init dominate) |
 | getParsedAst undefined | caller 미인덱싱 | finding 유지 |
