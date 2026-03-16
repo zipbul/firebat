@@ -30,6 +30,21 @@
     }
   },
   {
+    "evidence": "try {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "useless-catch",
+    "span": {
+      "end": {
+        "column": 5,
+        "line": 37
+      },
+      "start": {
+        "column": 4,
+        "line": 33
+      }
+    }
+  },
+  {
     "evidence": "throw new Error('wrapped');",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "missing-error-cause",

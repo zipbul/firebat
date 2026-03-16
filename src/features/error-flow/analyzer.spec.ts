@@ -573,6 +573,300 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(1);
   });
 
+  // --- useless-catch: nested try/catch ---
+
+  it('should report useless-catch for nested try/catch inside try block', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/nested-try.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    try {',
+      '      doSomething();',
+      '    } catch (inner) {',
+      '      handleInner(inner);',
+      '    }',
+      '  } catch (outer) {',
+      '    handleOuter(outer);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/nested-try-finally.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    try {',
+      '      doSomething();',
+      '    } finally {',
+      '      cleanup();',
+      '    }',
+      '  } catch (e) {',
+      '    handleError(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report useless-catch (nested variant) for try/catch in catch block (cleanup pattern)', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/nested-in-catch.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    try {',
+      '      cleanup();',
+      '    } catch (inner) {',
+      '      console.log(inner);',
+      '    }',
+      '    throw new Error("failed", { cause: e });',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report useless-catch (nested variant) for try/catch inside a function defined in try block', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/nested-in-function.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    const handler = () => {',
+      '      try {',
+      '        riskyOp();',
+      '      } catch (e) {',
+      '        handleError(e);',
+      '      }',
+      '    };',
+      '    handler();',
+      '  } catch (e) {',
+      '    handleOuter(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- unsafe-finally: break/continue ---
+
+  it('should report unsafe-finally when finally contains break targeting outer loop', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/finally-break.ts';
+    const source = [
+      'export function f() {',
+      '  for (let i = 0; i < 10; i++) {',
+      '    try {',
+      '      doSomething();',
+      '    } finally {',
+      '      break;',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should report unsafe-finally when finally contains continue targeting outer loop', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/finally-continue.ts';
+    const source = [
+      'export function f() {',
+      '  for (let i = 0; i < 10; i++) {',
+      '    try {',
+      '      doSomething();',
+      '    } finally {',
+      '      continue;',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report unsafe-finally when break is inside a loop within finally', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/finally-break-in-loop.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } finally {',
+      '    for (let i = 0; i < 10; i++) {',
+      '      if (i === 5) break;',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unsafe-finally when return is inside a nested function in finally', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/finally-fn-return.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } finally {',
+      '    const fn = () => { return 1; };',
+      '    fn();',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- missing-error-cause: extensions ---
+
+  it('should report missing-error-cause for vibe pattern — catch param in Error message', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/vibe-pattern.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    throw new Error(String(e));',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should report missing-error-cause for optional catch binding', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/optional-catch.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch {',
+      '    throw new Error("operation failed");',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should report missing-error-cause for catch param reassignment', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/catch-reassign.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    e = new Error("replaced");',
+      '    throw e;',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should report missing-error-cause for AggregateError without cause', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/aggregate-error.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    throw new AggregateError([], "multiple failures");',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report missing-error-cause for AggregateError with cause', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/aggregate-error-ok.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    doSomething();',
+      '  } catch (e) {',
+      '    throw new AggregateError([], "multiple failures", { cause: e });',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
   // --- P3-1 throw-non-error ---
 
   it('should report throw-non-error for string literal throw', () => {

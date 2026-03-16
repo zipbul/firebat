@@ -89,7 +89,8 @@ const isErrorConstructor = (callee: NodeValue): boolean => {
     name === 'ReferenceError' ||
     name === 'SyntaxError' ||
     name === 'URIError' ||
-    name === 'EvalError'
+    name === 'EvalError' ||
+    name === 'AggregateError'
   );
 };
 
@@ -147,36 +148,91 @@ const containsReturnStatement = (node: NodeValue): boolean => {
   return found;
 };
 
-const containsReturnOrThrowStatement = (node: NodeValue): boolean => {
-  let found = false;
+type UnsafeControlFlowKind = 'return' | 'throw' | 'break' | 'continue';
 
-  walkOxcTree(node, inner => {
-    if (inner.type === 'ReturnStatement' || inner.type === 'ThrowStatement') {
-      found = true;
+const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlowKind | null => {
+  let result: UnsafeControlFlowKind | null = null;
 
-      return false;
+  const walk = (node: NodeValue, loopDepth: number, switchDepth: number): void => {
+    if (result !== null) {
+      return;
     }
 
-    return true;
-  });
+    if (Array.isArray(node)) {
+      for (const entry of node) {
+        walk(entry, loopDepth, switchDepth);
+      }
 
-  return found;
-};
-
-const containsThrowStatement = (node: NodeValue): boolean => {
-  let found = false;
-
-  walkOxcTree(node, inner => {
-    if (inner.type === 'ThrowStatement') {
-      found = true;
-
-      return false;
+      return;
     }
 
-    return true;
-  });
+    if (!isOxcNode(node)) {
+      return;
+    }
 
-  return found;
+    // Don't cross function boundaries
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return;
+    }
+
+    if (node.type === 'ReturnStatement') {
+      result = 'return';
+
+      return;
+    }
+
+    if (node.type === 'ThrowStatement') {
+      result = 'throw';
+
+      return;
+    }
+
+    if (node.type === 'BreakStatement' && isNodeRecord(node)) {
+      if (isOxcNode(node.label) || (loopDepth === 0 && switchDepth === 0)) {
+        result = 'break';
+
+        return;
+      }
+    }
+
+    if (node.type === 'ContinueStatement' && isNodeRecord(node)) {
+      if (isOxcNode(node.label) || loopDepth === 0) {
+        result = 'continue';
+
+        return;
+      }
+    }
+
+    const isLoop =
+      node.type === 'ForStatement' ||
+      node.type === 'WhileStatement' ||
+      node.type === 'DoWhileStatement' ||
+      node.type === 'ForInStatement' ||
+      node.type === 'ForOfStatement';
+    const isSwitch = node.type === 'SwitchStatement';
+    const nextLoop = isLoop ? loopDepth + 1 : loopDepth;
+    const nextSwitch = isSwitch ? switchDepth + 1 : switchDepth;
+
+    if (!isNodeRecord(node)) {
+      return;
+    }
+
+    for (const [key, child] of Object.entries(node)) {
+      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+        continue;
+      }
+
+      walk(child as NodeValue, nextLoop, nextSwitch);
+    }
+  };
+
+  walk(finalizer, 0, 0);
+
+  return result;
 };
 
 interface TryCatchEntry {
@@ -237,28 +293,6 @@ const hasCausePropertyWithIdentifier = (node: NodeValue, name: string): boolean 
   return found;
 };
 
-const isConsoleLikeCall = (stmt: NodeValue): boolean => {
-  if (!isOxcNode(stmt) || !isNodeRecord(stmt) || stmt.type !== 'ExpressionStatement') {
-    return false;
-  }
-
-  const expr = stmt.expression;
-
-  if (!isOxcNode(expr) || !isNodeRecord(expr) || expr.type !== 'CallExpression') {
-    return false;
-  }
-
-  const callee = expr.callee;
-
-  if (!isOxcNode(callee) || !isNodeRecord(callee) || callee.type !== 'MemberExpression') {
-    return false;
-  }
-
-  const obj = callee.object;
-
-  return isOxcNode(obj) && isNodeRecord(obj) && obj.type === 'Identifier' && obj.name === 'console';
-};
-
 const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
   if (!isOxcNode(arg)) {
     return false;
@@ -290,6 +324,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   const findings: ErrorFlowFinding[] = [];
   const tryCatchStack: TryCatchEntry[] = [];
   let functionTryCatchDepth = 0;
+  let inTryBlockDepth = 0;
 
   const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
@@ -299,15 +334,84 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     const param = catchClause.param;
     const body = catchClause.body;
 
-    if (!isOxcNode(param) || param.type !== 'Identifier' || !isNodeRecord(param)) {
-      return;
-    }
-
     if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
       return;
     }
 
+    // Optional catch binding: catch { throw new Error('fail'); }
+    if (!isOxcNode(param)) {
+      walkOxcTree(body, node => {
+        if (node.type !== 'ThrowStatement' || !isNodeRecord(node)) {
+          return true;
+        }
+
+        const arg = node.argument;
+
+        if (!isOxcNode(arg) || arg.type !== 'NewExpression' || !isNodeRecord(arg)) {
+          return true;
+        }
+
+        if (isErrorConstructor(arg.callee)) {
+          pushFinding(findings, {
+            kind: 'missing-error-cause',
+            node,
+            filePath,
+            sourceText,
+            message: 'catch block has no error binding — cannot preserve error cause',
+            evidence: getEvidenceLineAt(sourceText, node.start),
+            recipes: [],
+          });
+        }
+
+        return true;
+      });
+
+      return;
+    }
+
+    // Non-identifier param (e.g., destructured): skip
+    if (param.type !== 'Identifier' || !isNodeRecord(param)) {
+      return;
+    }
+
     const name = param.name;
+    // Catch param reassignment: catch(e) { e = new Error(); throw e; }
+    let hasReassignment = false;
+
+    walkOxcTree(body, node => {
+      if (node.type === 'AssignmentExpression' && isNodeRecord(node)) {
+        if (isIdentifierName(node.left, name)) {
+          hasReassignment = true;
+
+          return false;
+        }
+      }
+
+      // Don't cross function boundaries for reassignment check
+      if (
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression' ||
+        node.type === 'FunctionDeclaration'
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (hasReassignment) {
+      pushFinding(findings, {
+        kind: 'missing-error-cause',
+        node: catchClause,
+        filePath,
+        sourceText,
+        message: `catch param '${name}' is reassigned — original error context destroyed`,
+        evidence: getEvidenceLineAt(sourceText, catchClause.start),
+        recipes: [],
+      });
+
+      return;
+    }
 
     // Find throw new X(...)
     walkOxcTree(body, node => {
@@ -326,12 +430,19 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         const hasCause = hasCausePropertyWithIdentifier(arg, name);
 
         if (!hasCause) {
+          // Check for vibe pattern: catch param used in Error message position
+          const constructorArgs = Array.isArray(arg.arguments) ? (arg.arguments as ReadonlyArray<NodeValue>) : [];
+          const firstArg = constructorArgs[0];
+          const isVibePattern = firstArg !== undefined && containsIdentifierUse(firstArg, name);
+
           pushFinding(findings, {
             kind: 'missing-error-cause',
             node,
             filePath,
             sourceText,
-            message: `new Error() in catch block without { cause: ${name} }`,
+            message: isVibePattern
+              ? `catch param '${name}' used in Error message instead of { cause: ${name} } — loses stack trace`
+              : `new Error() in catch block without { cause: ${name} }`,
             evidence: getEvidenceLineAt(sourceText, node.start),
             recipes: [],
           });
@@ -421,6 +532,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       return isIdentifierName(only.argument, name);
     })();
+
     if (!isUselessRethrow) {
       return;
     }
@@ -457,8 +569,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       isNodeRecord(node)
     ) {
       const savedDepth = functionTryCatchDepth;
+      const savedTryBlockDepth = inTryBlockDepth;
 
       functionTryCatchDepth = 0;
+      inTryBlockDepth = 0;
 
       const entries = Object.entries(node);
 
@@ -471,6 +585,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
 
       functionTryCatchDepth = savedDepth;
+      inTryBlockDepth = savedTryBlockDepth;
 
       return;
     }
@@ -480,15 +595,34 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
       const hasFinalizer = isOxcNode(node.finalizer);
 
+      // Nested try/catch: flag try/catch inside another try block (SonarQube S1141)
+      if (hasCatch && inTryBlockDepth > 0) {
+        pushFinding(findings, {
+          kind: 'useless-catch',
+          node,
+          filePath,
+          sourceText,
+          message: 'nested try/catch inside try block increases error flow complexity',
+          evidence: getEvidenceLineAt(sourceText, node.start),
+          recipes: [],
+        });
+      }
+
       tryCatchStack.push({ hasCatch });
 
       if (hasCatch || hasFinalizer) {
         functionTryCatchDepth++;
       }
 
-      // Visit children in structure order
+      // Visit block with inTryBlockDepth tracking
+      inTryBlockDepth++;
+
       visit(node.block);
+
+      inTryBlockDepth--;
+
       visit(node.handler);
+
       visit(node.finalizer);
 
       if (hasCatch || hasFinalizer) {
@@ -619,19 +753,21 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
   // Existing rule set (EF-01..08) still uses walkOxcTree.
   walkOxcTree(program, node => {
-    // EF-03 unsafe-finally: try/finally that throws/returns in finalizer
+    // EF-03 unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
       const finalizer = node.finalizer;
 
       if (isOxcNode(finalizer) && finalizer.type === 'BlockStatement' && isNodeRecord(finalizer)) {
-        if (containsReturnOrThrowStatement(finalizer)) {
+        const unsafeKind = findUnsafeControlFlowInFinally(finalizer);
+
+        if (unsafeKind !== null) {
           pushFinding(findings, {
             kind: 'unsafe-finally',
             node,
             filePath,
             sourceText,
-            message: 'finally masks original control flow with return/throw',
-            evidence: 'finally contains return/throw',
+            message: `finally masks original control flow with ${unsafeKind}`,
+            evidence: `finally contains ${unsafeKind}`,
             recipes: ['RCP-03'],
           });
         }
