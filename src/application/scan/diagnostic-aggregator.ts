@@ -146,14 +146,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the finally block contains only cleanup logic (close connections, release resources) that cannot affect control flow.',
     ],
   },
-  EF_RETURN_IN_FINALLY: {
-    cause: 'A finally block contains a return statement that will override any return or throw from the try/catch blocks.',
-    think: [
-      'Identify what value the finally return produces and whether it silently replaces try/catch results.',
-      'Determine whether the return should be moved to the try block instead.',
-      'Verify that the finally block performs only cleanup after moving the return.',
-    ],
-  },
   EF_CATCH_OR_RETURN: {
     cause: 'A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.',
     think: [
@@ -204,24 +196,6 @@ export const FIREBAT_CODE_CATALOG = {
       "Determine the context: inside a try block, 'return await' is needed to catch rejections.",
       "Outside try blocks, check whether 'return await' adds an unnecessary microtask tick.",
       'Verify that the fix matches the project policy for return-await consistency.',
-    ],
-  },
-  EF_CATCH_TRANSFORM: {
-    cause:
-      'A catch block modifies the error object or its message before rethrowing, potentially losing original error information.',
-    think: [
-      'Determine whether the transformation preserves the error chain via the cause property.',
-      'Check whether the original stack trace remains accessible after the message is altered.',
-      'Verify that downstream handlers still recognize the transformed error type.',
-    ],
-  },
-  EF_REDUNDANT_NESTED_CATCH: {
-    cause:
-      'A try-catch is nested inside another try-catch that already handles the same error types, creating redundant handling.',
-    think: [
-      'Determine whether the inner catch handles a specific error type differently from the outer catch.',
-      'Check whether the outer catch expects transformed errors from the inner catch.',
-      'If handling is identical, verify that removing the inner try-catch does not alter error propagation behavior.',
     ],
   },
   UNKNOWN_UNNARROWED: {

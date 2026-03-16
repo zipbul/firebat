@@ -875,15 +875,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'missing-error-cause': 'EF_MISSING_ERROR_CAUSE',
       'useless-catch': 'EF_USELESS_CATCH',
       'unsafe-finally': 'EF_UNSAFE_FINALLY',
-      'return-in-finally': 'EF_RETURN_IN_FINALLY',
       'catch-or-return': 'EF_CATCH_OR_RETURN',
       'prefer-catch': 'EF_PREFER_CATCH',
       'prefer-await-to-then': 'EF_PREFER_AWAIT_TO_THEN',
       'floating-promises': 'EF_FLOATING_PROMISES',
       'misused-promises': 'EF_MISUSED_PROMISES',
       'return-await-policy': 'EF_RETURN_AWAIT_POLICY',
-      'catch-transform-hygiene': 'EF_CATCH_TRANSFORM',
-      'redundant-nested-catch': 'EF_REDUNDANT_NESTED_CATCH',
     };
 
     return items

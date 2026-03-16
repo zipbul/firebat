@@ -1,5 +1,5 @@
-// nested-try-catch: useless-catch, redundant-nested-catch,
-//   missing-error-cause, return-await outside try, return-in-finally
+// nested-try-catch: useless-catch (dead catch + nested),
+//   missing-error-cause, return-await-policy, unsafe-finally
 
 export function overscopedTry(): string {
   try {

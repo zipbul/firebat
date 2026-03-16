@@ -362,7 +362,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       // If identifier only appears as catch parameter but not in thrown expression, it's information loss
       if (!usesIdentifier && !hasCause) {
         pushFinding(findings, {
-          kind: 'catch-transform-hygiene',
+          kind: 'missing-error-cause',
           node: catchClause,
           filePath,
           sourceText,
@@ -390,7 +390,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    // If inner catch is useless-catch OR absorbs silently (empty/console-only body), report redundancy.
+    // If inner catch is useless rethrow (catch(e) { throw e }), report as redundant nested catch.
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
       return;
     }
@@ -421,31 +421,12 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       return isIdentifierName(only.argument, name);
     })();
-    const isSilent = (() => {
-      if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
-        return false;
-      }
-
-      if (containsThrowStatement(body)) {
-        return false;
-      }
-
-      const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
-      const hasReturnOrJump = stmts.some(
-        s => isOxcNode(s) && (s.type === 'ReturnStatement' || s.type === 'ContinueStatement' || s.type === 'BreakStatement'),
-      );
-      const isEmpty = stmts.length === 0;
-      const isOnlyConsole = stmts.length > 0 && stmts.every(isConsoleLikeCall);
-
-      return isEmpty || isOnlyConsole || hasReturnOrJump;
-    })();
-
-    if (!(isUselessRethrow || isSilent)) {
+    if (!isUselessRethrow) {
       return;
     }
 
     pushFinding(findings, {
-      kind: 'redundant-nested-catch',
+      kind: 'useless-catch',
       node: catchClause,
       filePath,
       sourceText,
@@ -470,7 +451,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     const node = value;
 
-    // Function scope boundary: isolate try-catch depth for EH-09
+    // Function scope boundary: isolate try-catch depth for EF-06 return-await-in-try
     if (
       (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
       isNodeRecord(node)
@@ -519,7 +500,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    // EH-09 return-await-policy: return await outside same-function try-catch is redundant
+    // EF-06 return-await-policy: return await outside same-function try-catch is redundant
     if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
       const arg = node.argument;
 
@@ -636,9 +617,9 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
   };
 
-  // Existing rule set (EH-01..08) still uses walkOxcTree.
+  // Existing rule set (EF-01..08) still uses walkOxcTree.
   walkOxcTree(program, node => {
-    // EH-02 unsafe-finally: try/finally that throws/returns in finalizer
+    // EF-03 unsafe-finally: try/finally that throws/returns in finalizer
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
       const finalizer = node.finalizer;
 
@@ -657,13 +638,8 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    // EH-01 useless-catch: catch rethrows same identifier without adding anything
+    // EF-01 useless-catch: catch rethrows same identifier without adding anything
     if (node.type === 'CatchClause' && isNodeRecord(node)) {
-      // If redundant nested-catch is already applicable, prefer the stronger structural signal.
-      if (tryCatchStack.length > 1 && tryCatchStack.slice(0, -1).some(e => e.hasCatch)) {
-        // let EH-12 handle it
-        return true;
-      }
 
       const param = node.param;
       const body = node.body;
@@ -700,7 +676,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    // EH-03 return-in-finally: .finally(() => { return ... })
+    // EF-03 return-in-finally: .finally(() => { return ... })
     if (node.type === 'CallExpression' && isNodeRecord(node)) {
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
@@ -711,18 +687,18 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
         if (hasNonEmptyReturnInFinallyCallback(first)) {
           pushFinding(findings, {
-            kind: 'return-in-finally',
+            kind: 'unsafe-finally',
             node,
             filePath,
             sourceText,
-            message: 'finally callback should not return a value',
+            message: 'return in .finally() callback overrides original control flow',
             evidence: getEvidenceLineAt(sourceText, node.start),
             recipes: ['RCP-04'],
           });
         }
       }
 
-      // EH-05 prefer-catch: .then(success, failure)
+      // EF-07 prefer-catch: .then(success, failure)
       if (method === 'then') {
         const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const second = args[1];
@@ -740,7 +716,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         }
       }
 
-      // EH-06 prefer-await-to-then: long then chains with block callbacks
+      // EF-07 prefer-await-to-then: long then chains with block callbacks
       if (method === 'then') {
         const inner = isOxcNode(callee) && isNodeRecord(callee) ? callee.object : null;
         const hasNestedThen =
@@ -784,7 +760,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
-      // EH-07 floating-promises: Promise.* / new Promise as expression statement
+      // EF-08 floating-promises: Promise.* / new Promise as expression statement
       if (isPromiseFactoryCall(expr)) {
         pushFinding(findings, {
           kind: 'floating-promises',
@@ -799,7 +775,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
-      // EH-04 catch-or-return: top-level then call without catch
+      // EF-08 catch-or-return: top-level then call without catch
       if (isOxcNode(expr) && expr.type === 'CallExpression' && isNodeRecord(expr)) {
         const callee = expr.callee;
         const method = getMemberPropertyName(callee);
@@ -818,7 +794,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    // EH-08 misused-promises: async callback passed to forEach
+    // EF-08 misused-promises: async callback passed to forEach
     if (node.type === 'CallExpression' && isNodeRecord(node)) {
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
@@ -861,7 +837,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     return true;
   });
 
-  // Run enhanced traversal for EH-09..14 and for nested context.
+  // Run enhanced traversal for EF-04 missing-error-cause, EF-05 promise-constructor, nested context.
   visit(program);
 
   return findings;

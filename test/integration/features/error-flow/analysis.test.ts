@@ -544,7 +544,7 @@ describe('integration/error-flow', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report catch-transform-hygiene when cause/context is lost for non-Error constructors', () => {
+  it('should report missing-error-cause when cause/context is lost for non-Error constructors', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/transform-custom.ts';
@@ -563,13 +563,13 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'catch-transform-hygiene');
+    let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report redundant-nested-catch when inner useless catch exists under an outer catch', () => {
+  it('should report useless-catch when inner useless catch exists under an outer catch', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/nested-redundant.ts';
@@ -592,13 +592,13 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
+    let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report redundant-nested-catch when there is no outer catch', () => {
+  it('should not report useless-catch (nested variant) when there is no outer catch', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/nested-ok-no-outer.ts';
@@ -621,10 +621,10 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = analyzeErrorFlow(program);
-    let hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
+    let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
 });

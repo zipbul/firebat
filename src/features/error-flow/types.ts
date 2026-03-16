@@ -7,15 +7,12 @@ export type ErrorFlowFindingKind =
   | 'missing-error-cause'
   | 'useless-catch'
   | 'unsafe-finally'
-  | 'return-in-finally'
   | 'catch-or-return'
   | 'prefer-catch'
   | 'prefer-await-to-then'
   | 'floating-promises'
   | 'misused-promises'
-  | 'return-await-policy'
-  | 'catch-transform-hygiene'
-  | 'redundant-nested-catch';
+  | 'return-await-policy';
 
 export interface SourcePosition {
   readonly line: number;

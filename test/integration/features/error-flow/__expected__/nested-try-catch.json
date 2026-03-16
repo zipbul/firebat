@@ -17,7 +17,7 @@
   {
     "evidence": "return Promise.resolve('value').finally(() => {",
     "file": "/virtual/nested-try-catch.ts",
-    "kind": "return-in-finally",
+    "kind": "unsafe-finally",
     "span": {
       "end": {
         "column": 4,
@@ -26,21 +26,6 @@
       "start": {
         "column": 9,
         "line": 56
-      }
-    }
-  },
-  {
-    "evidence": "} catch (inner) {",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "redundant-nested-catch",
-    "span": {
-      "end": {
-        "column": 5,
-        "line": 37
-      },
-      "start": {
-        "column": 6,
-        "line": 35
       }
     }
   },

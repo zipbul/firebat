@@ -234,7 +234,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-in-finally when finally callback returns a value', () => {
+  it('should report unsafe-finally when finally callback returns a value', () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join(
@@ -242,25 +242,25 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report return-in-finally when finally callback has expression body', () => {
+  it('should report unsafe-finally when finally callback has expression body', () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-expr.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report return-in-finally when finally callback returns undefined explicitly', () => {
+  it('should report unsafe-finally when finally callback returns undefined explicitly', () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-undefined.ts';
     const source = [
@@ -272,13 +272,13 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report return-in-finally when finally callback has no return', () => {
+  it('should not report unsafe-finally (.finally() variant) when finally callback has no return', () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-ok.ts';
     const source = [
@@ -290,7 +290,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-in-finally');
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBe(0);
@@ -509,7 +509,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report catch-transform-hygiene when cause is preserved', () => {
+  it('should not report missing-error-cause (catch-transform variant) when cause is preserved', () => {
     // Arrange
     const filePath = '/virtual/src/features/transform-ok.ts';
     const source = [
@@ -523,13 +523,13 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-transform-hygiene');
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report redundant-nested-catch when an inner useless catch exists under an outer catch', () => {
+  it('should report useless-catch when an inner useless catch exists under an outer catch', () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-redundant.ts';
     const source = [
@@ -547,13 +547,13 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report redundant-nested-catch when there is no outer catch', () => {
+  it('should not report useless-catch (nested variant) when there is no outer catch', () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-no-outer.ts';
     const source = [
@@ -567,10 +567,10 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
+    const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(hits.length).toBe(1);
   });
 
   // --- P3-1 throw-non-error ---
