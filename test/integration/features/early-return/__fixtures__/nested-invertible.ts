@@ -9,7 +9,9 @@ export function processItems(items: string[]): string[] {
       const trimmed = item.trim();
       const upper = trimmed.toUpperCase();
       const result = upper.replace(/\s+/g, '-');
+
       console.log(result);
+
       results.push(result);
       doExtra(result);
     }

@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'bun:test';
-import type {
-  FirebatCliExplicitFlags,
-  FirebatCliOptions,
-  FirebatProgramConfig,
-} from './interfaces';
+
+import type { FirebatCliExplicitFlags, FirebatCliOptions, FirebatProgramConfig } from './interfaces';
+
 import { createNoopLogger } from './shared/logger';
 
 describe('FirebatCliExplicitFlags', () => {

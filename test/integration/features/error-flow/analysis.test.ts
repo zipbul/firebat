@@ -381,11 +381,7 @@ describe('integration/error-flow', () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-outside-try.ts';
-    let source = [
-      'export async function f() {',
-      '  return fetchData();',
-      '}',
-    ].join('\n');
+    let source = ['export async function f() {', '  return fetchData();', '}'].join('\n');
 
     sources.set(filePath, source);
 
@@ -583,5 +579,4 @@ describe('integration/error-flow', () => {
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
-
 });

@@ -178,7 +178,6 @@ const detectCollapsibleElseIf = (ifNode: NodeValue, sourceText: string): Opportu
   }
 
   const statementsAffected = Math.max(innerTotal, MIN_INNER_STMTS);
-
   const node = ifNode as Node;
   const spanStart = getLineColumn(sourceText, node.start);
   const spanEnd = getLineColumn(sourceText, node.end);
@@ -267,7 +266,6 @@ const analyzeFunctionNode = (
   const primaryOpportunity = opportunities.reduce((best, o) =>
     o.depthReduction * o.statementsAffected > best.depthReduction * best.statementsAffected ? o : best,
   );
-
   const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
 

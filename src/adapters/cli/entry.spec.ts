@@ -215,4 +215,3 @@ afterAll(() => {
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origLogging);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origPrettyLogger);
 });
-

@@ -1,4 +1,5 @@
 import { describe, it, expect, spyOn, afterEach } from 'bun:test';
+
 import { resolveToolRcPath } from './scan.usecase';
 
 // resolveToolRcPath is a pure utility that only uses Bun.file().exists()
@@ -39,8 +40,10 @@ describe('resolveToolRcPath', () => {
 
   it('should join root and basename correctly', async () => {
     let capturedPath: string | undefined;
+
     fileSpy = spyOn(Bun, 'file').mockImplementation(((p: string) => {
       capturedPath = p;
+
       return { exists: async () => false } as never;
     }) as unknown as typeof Bun.file);
 

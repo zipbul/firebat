@@ -5,6 +5,7 @@ import { FirebatConfigSchema } from './firebat-config';
 describe('FirebatConfigSchema', () => {
   it('[HP] parses an empty config object', () => {
     const result = FirebatConfigSchema.safeParse({});
+
     expect(result.success).toBe(true);
   });
 
@@ -15,6 +16,7 @@ describe('FirebatConfigSchema', () => {
         waste: false,
       },
     });
+
     expect(result.success).toBe(true);
   });
 
@@ -25,6 +27,7 @@ describe('FirebatConfigSchema', () => {
         waste: true,
       },
     });
+
     expect(result.success).toBe(true);
   });
 
@@ -34,6 +37,7 @@ describe('FirebatConfigSchema', () => {
         'barrel-policy': { ignoreGlobs: ['src/generated/**'] },
       },
     });
+
     expect(result.success).toBe(true);
   });
 
@@ -41,6 +45,7 @@ describe('FirebatConfigSchema', () => {
     const result = FirebatConfigSchema.safeParse({
       features: { 'barrel-policy': { ignoreGlobs: [] } },
     });
+
     expect(result.success).toBe(false);
   });
 
@@ -48,11 +53,13 @@ describe('FirebatConfigSchema', () => {
     const result = FirebatConfigSchema.safeParse({
       features: { duplicates: { minSize: -1 } },
     });
+
     expect(result.success).toBe(false);
   });
 
   it('[NE] rejects unknown top-level keys (strict mode)', () => {
     const result = FirebatConfigSchema.safeParse({ unknownField: true });
+
     // May or may not fail depending on strict mode
     // At minimum, should not throw
     expect(typeof result.success).toBe('boolean');
@@ -62,6 +69,7 @@ describe('FirebatConfigSchema', () => {
     const result = FirebatConfigSchema.safeParse({
       $schema: 'https://example.com/schema.json',
     });
+
     expect(result.success).toBe(true);
   });
 });

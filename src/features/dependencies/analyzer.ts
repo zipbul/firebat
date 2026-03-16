@@ -282,14 +282,13 @@ const analyzeDependencies = async (
   const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
   const allowedDependencies = input?.allowedDependencies ?? {};
   const readFn = input?.readFileFn ?? ((p: string) => readFileSync(p, 'utf8'));
-
   // 1. Import graph
   let graph: Map<string, string[]>;
 
   try {
     graph = await gildash.getImportGraph();
   } catch (e) {
-    if (e instanceof GildashError) return empty;
+    if (e instanceof GildashError) {return empty;}
     throw e;
   }
 
@@ -323,20 +322,19 @@ const analyzeDependencies = async (
 
   const fanIn = listFanStats(rootAbs, inDegree, 10);
   const fanOut = listFanStats(rootAbs, outDegree, 10);
-
   // 3. Cycles via gildash (Tarjan SCC + Johnson's circuits)
   let cyclePaths: ReadonlyArray<ReadonlyArray<string>> = [];
 
   try {
     const cycleResult = await gildash.getCyclePaths(undefined, { maxCycles: 100 });
+
     cyclePaths = (cycleResult as string[][]).map(p => p.map(e => resolveAbs(rootAbs, e)));
   } catch (e) {
-    if (!(e instanceof GildashError)) throw e;
+    if (!(e instanceof GildashError)) {throw e;}
   }
 
   const cycles = cyclePaths.map(p => ({ path: p.map(entry => toRelativePath(rootAbs, entry)) }));
   const cuts = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
-
   // 4. Layer violations
   const layerViolations: DependencyLayerViolation[] = [];
 
@@ -372,7 +370,6 @@ const analyzeDependencies = async (
   // 5. Export stats via searchSymbols
   const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
   let allExported: ReturnType<Gildash['searchSymbols']> | null = null;
-
   const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: Record<string, unknown> }>>();
 
   try {
@@ -400,7 +397,7 @@ const analyzeDependencies = async (
       exportStats[toRelativePath(rootAbs, filePath)] = { total, abstract };
     }
   } catch (e) {
-    if (!(e instanceof GildashError)) throw e;
+    if (!(e instanceof GildashError)) {throw e;}
   }
 
   // 6. Dead export detection
@@ -415,14 +412,14 @@ const analyzeDependencies = async (
       imports = gildash.searchRelations({ type: 'imports', limit: 100_000 });
       hasRelationData = true;
     } catch (e) {
-      if (!(e instanceof GildashError)) throw e;
+      if (!(e instanceof GildashError)) {throw e;}
     }
 
     try {
       reExports = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
       hasRelationData = true;
     } catch (e) {
-      if (!(e instanceof GildashError)) throw e;
+      if (!(e instanceof GildashError)) {throw e;}
     }
 
     if (hasRelationData) {
@@ -442,7 +439,6 @@ const analyzeDependencies = async (
         const consumer = resolveAbs(rootAbs, rel.srcFilePath);
         const isTestConsumer = isTestLikePath(consumer);
         const kind: 'test' | 'prod' = isTestConsumer ? 'test' : 'prod';
-
         const state = usageByModule.get(target) ?? {
           usesAll: false,
           names: new Set<string>(),

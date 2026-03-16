@@ -35,6 +35,7 @@ export const extractStatementFingerprints = (
   functionNode: Node,
 ): ReadonlyArray<string> => {
   const statements = getBodyStatements(functionNode);
+
   return statements.map((s) => createOxcFingerprintShape(s));
 };
 
@@ -47,9 +48,12 @@ export const extractStatementFingerprintBag = (
 ): ReadonlyArray<string> => {
   const fps = extractStatementFingerprints(functionNode);
   const counts = new Map<string, number>();
+
   return fps.map((fp) => {
     const count = counts.get(fp) ?? 0;
+
     counts.set(fp, count + 1);
+
     return count === 0 ? fp : `${fp}#${count}`;
   });
 };
@@ -61,7 +65,7 @@ export const extractStatementFingerprintBag = (
  * 중첩 함수는 하나의 statement(FunctionDeclaration 등)로 취급 — 내부 재귀 없음.
  */
 const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
-  if (!isNodeRecord(node)) return [];
+  if (!isNodeRecord(node)) {return [];}
 
   const record = node as NodeRecord;
   const type = record.type as string;
@@ -69,7 +73,9 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
   // MethodDefinition → value는 FunctionExpression
   if (type === 'MethodDefinition') {
     const value = record.value;
-    if (isOxcNode(value)) return getBodyStatements(value);
+
+    if (isOxcNode(value)) {return getBodyStatements(value);}
+
     return [];
   }
 
@@ -81,14 +87,16 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
   ) {
     const body = record.body;
 
-    if (!isOxcNode(body)) return [];
+    if (!isOxcNode(body)) {return [];}
 
     const bodyRecord = body as NodeRecord;
 
     // BlockStatement → .body 배열
     if ((bodyRecord.type as string) === 'BlockStatement') {
       const stmts = bodyRecord.body;
-      if (isOxcNodeArray(stmts)) return stmts;
+
+      if (isOxcNodeArray(stmts)) {return stmts;}
+
       return [];
     }
 

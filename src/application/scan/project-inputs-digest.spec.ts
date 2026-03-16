@@ -1,7 +1,8 @@
+import type { Gildash } from '@zipbul/gildash';
+
+import { GildashError } from '@zipbul/gildash';
 import { describe, it, expect } from 'bun:test';
 
-import type { Gildash } from '@zipbul/gildash';
-import { GildashError } from '@zipbul/gildash';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -15,9 +16,7 @@ const makeFileRecord = (filePath: string, contentHash = 'abc123') => ({
   updatedAt: new Date().toISOString(),
 });
 
-const makeGildash = (
-  getFileInfoImpl: (filePath: string) => ReturnType<Gildash['getFileInfo']>,
-): Gildash =>
+const makeGildash = (getFileInfoImpl: (filePath: string) => ReturnType<Gildash['getFileInfo']>): Gildash =>
   ({
     getFileInfo: getFileInfoImpl,
   }) as unknown as Gildash;
@@ -39,7 +38,6 @@ describe('computeProjectInputsDigest', () => {
 
   it('[HP] getFileInfo returns FileRecord → uses contentHash from index', async () => {
     const gildash = makeGildash(() => makeFileRecord('/proj/package.json', 'cached-hash'));
-
     const result = await computeProjectInputsDigest({
       rootAbs: process.cwd(),
       gildash,
@@ -60,7 +58,9 @@ describe('computeProjectInputsDigest', () => {
   it('[ED] returns hash for non-existent rootAbs (missing files treated stably)', async () => {
     const result = await computeProjectInputsDigest({
       rootAbs: '/nonexistent/path/99999',
-      gildash: makeGildash((): ReturnType<Gildash['getFileInfo']> => { throw new GildashError('closed', 'closed'); }),
+      gildash: makeGildash((): ReturnType<Gildash['getFileInfo']> => {
+        throw new GildashError('closed', 'closed');
+      }),
     });
 
     expect(typeof result).toBe('string');

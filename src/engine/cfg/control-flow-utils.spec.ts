@@ -7,6 +7,7 @@ const functionNodeOf = (src: string) => {
   const program = parseSource('test.ts', src).program;
   // program.body[0] should be the function declaration
   const body = (program as { body: unknown[] }).body;
+
   return body[0] as Parameters<typeof resolveFunctionBody>[0];
 };
 
@@ -41,13 +42,15 @@ describe('resolveFunctionBody', () => {
   it('[HP] returns the body node for a function declaration', () => {
     const node = functionNodeOf('function f() { return 1; }');
     const body = resolveFunctionBody(node);
+
     expect(body).not.toBeNull();
     expect((body as { type: string }).type).toBe('BlockStatement');
   });
 
   it('[NE] returns null for a non-function node (VariableDeclaration)', () => {
     const program = parseSource('test.ts', 'const x = 1;').program;
-    const stmt = ((program as { body: unknown[] }).body)[0] as Parameters<typeof resolveFunctionBody>[0];
+    const stmt = (program as { body: unknown[] }).body[0] as Parameters<typeof resolveFunctionBody>[0];
+
     expect(resolveFunctionBody(stmt)).toBeNull();
   });
 });

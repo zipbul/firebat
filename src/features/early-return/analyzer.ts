@@ -222,12 +222,14 @@ export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<NodeValue>): nu
 
   for (let i = startIdx; i >= 0; i--) {
     const stmt = stmts[i]!;
+
     if (isOxcNode(stmt) && stmt.type === 'IfStatement' && isNodeRecord(stmt) && stmt.alternate == null) {
       count += 1;
     } else {
       break;
     }
   }
+
   return count;
 };
 
@@ -328,7 +330,6 @@ const detectImplicitElse = (
     }
 
     const consequent = stmt.consequent as NodeValue;
-
     // Consequent must end with exit (return/throw) or loop-exit (continue/break)
     const exits = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
 
@@ -409,7 +410,6 @@ const detectCascadeGuard = (
   while (isOxcNode(current) && current.type === 'IfStatement' && isNodeRecord(current)) {
     const consequent = current.consequent as NodeValue;
     const alternate = current.alternate;
-
     // Check if consequent ends with exit (for loop context: also allow continue/break)
     const isGuard = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
 
@@ -452,6 +452,7 @@ const detectCascadeGuard = (
 
     while (isOxcNode(recount) && recount.type === 'IfStatement' && isNodeRecord(recount)) {
       totalConsequentCount += countStatements(recount.consequent as NodeValue);
+
       const alt = recount.alternate;
 
       if (isOxcNode(alt) && (alt as Node).type === 'IfStatement') {
@@ -562,6 +563,7 @@ const analyzeFunctionNode = (
 
             if (isOxcNode(alt) && (alt as Node).type === 'IfStatement') {
               skipNodes.add(alt as object);
+
               chainNode = alt as NodeValue;
             } else {
               break;
@@ -582,7 +584,6 @@ const analyzeFunctionNode = (
             const shortCount = consequentCount <= alternateCount ? consequentCount : alternateCount;
             const longCount = consequentCount <= alternateCount ? alternateCount : consequentCount;
             const shortNode = consequentCount <= alternateCount ? consequentValue : alternateNode;
-
             const shortExits = endsWithReturnOrThrow(shortNode) || (insideLoop && endsWithLoopExit(shortNode));
 
             if (shortCount <= 3 && shortExits && longCount >= shortCount * 2) {
@@ -669,7 +670,6 @@ const analyzeFunctionNode = (
   const primaryOpportunity = opportunities.reduce((best, o) =>
     o.depthReduction * o.statementsAffected > best.depthReduction * best.statementsAffected ? o : best,
   );
-
   const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
 

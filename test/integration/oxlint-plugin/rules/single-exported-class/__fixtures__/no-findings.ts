@@ -1,3 +1,5 @@
 export class UserService {
-  get() { return 1; }
+  get() {
+    return 1;
+  }
 }

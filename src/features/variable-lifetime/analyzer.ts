@@ -1,8 +1,8 @@
 import type { ParsedFile } from '../../engine/types';
 import type { VariableLifetimeFinding } from '../../types';
 
-import { collectOxcNodes, getNodeName } from '../../engine/ast/oxc-ast-utils';
 import { normalizeFile } from '../../engine/ast/normalize-file';
+import { collectOxcNodes, getNodeName } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyVariableLifetime = (): ReadonlyArray<VariableLifetimeFinding> => [];
@@ -93,7 +93,10 @@ const analyzeVariableLifetime = (
       // Find last AST identifier node with matching name at or after the declaration.
       let lastOffset = defOffset;
 
-      for (const idNode of collectOxcNodes(file.program, n => n.type === 'Identifier' && getNodeName(n) === name && n.start >= defOffset)) {
+      for (const idNode of collectOxcNodes(
+        file.program,
+        n => n.type === 'Identifier' && getNodeName(n) === name && n.start >= defOffset,
+      )) {
         if (idNode.start > lastOffset) {
           lastOffset = idNode.start;
         }

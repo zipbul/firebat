@@ -10,6 +10,7 @@ export function handle(x: number): string {
     const a = String(x);
     const b = a.padStart(2, '0');
     const c = b + '!';
+
     return c;
   }
 }

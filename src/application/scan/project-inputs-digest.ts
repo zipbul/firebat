@@ -61,6 +61,7 @@ const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Prom
 
       if (isEmptyPath) {
         partsByIndex[item.index] = `project:missing:${filePath}`;
+
         return;
       }
 
@@ -69,6 +70,7 @@ const computeProjectInputsDigest = async (input: ProjectInputsDigestInput): Prom
 
         if (fileRec !== null) {
           partsByIndex[item.index] = `project:${filePath}:${fileRec.contentHash}`;
+
           return;
         }
 

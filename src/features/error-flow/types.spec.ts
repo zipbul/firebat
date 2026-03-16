@@ -15,6 +15,7 @@ describe('features/error-flow/types — structural shape', () => {
       },
       evidence: 'catch block is empty',
     };
+
     expect(finding.kind).toBe('useless-catch');
     expect(finding.file).toBe('/src/foo.ts');
     expect(finding.span.start.line).toBe(10);
@@ -36,12 +37,14 @@ describe('features/error-flow/types — structural shape', () => {
       span: { start: { line: 2, column: 0 }, end: { line: 2, column: 5 } },
       evidence: 'no code provided',
     };
+
     expect(withCode.code).toBeDefined();
     expect((withoutCode as { code?: unknown }).code).toBeUndefined();
   });
 
   it('SourceSpan start/end are SourcePosition with line and column', () => {
     const span = { start: { line: 3, column: 4 }, end: { line: 5, column: 6 } };
+
     expect(span.start.line).toBe(3);
     expect(span.start.column).toBe(4);
     expect(span.end.line).toBe(5);
@@ -67,6 +70,7 @@ describe('features/error-flow/types — structural shape', () => {
       'always-return',
       'no-callback-in-promise',
     ] satisfies import('./types').ErrorFlowFindingKind[];
+
     expect(kinds.length).toBe(16);
     expect(kinds[0]).toBe('tool-unavailable');
   });

@@ -1120,11 +1120,7 @@ describe('error-flow/analyzer', () => {
   it('should not report return-await-in-try when return is outside try block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-outside-try.ts';
-    const source = [
-      'export async function f() {',
-      '  return fetchData();',
-      '}',
-    ].join('\n');
+    const source = ['export async function f() {', '  return fetchData();', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
@@ -1244,11 +1240,7 @@ describe('error-flow/analyzer', () => {
   it('should report promise-constructor-hygiene for return value in executor', async () => {
     // Arrange
     const filePath = '/virtual/src/features/executor-return.ts';
-    const source = [
-      'export const p = new Promise((resolve) => {',
-      '  return 42;',
-      '});',
-    ].join('\n');
+    const source = ['export const p = new Promise((resolve) => {', '  return 42;', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
 
@@ -1270,13 +1262,9 @@ describe('error-flow/analyzer', () => {
   it('should report promise-constructor-hygiene for unnecessary new Promise in async function', async () => {
     // Arrange
     const filePath = '/virtual/src/features/unnecessary-promise.ts';
-    const source = [
-      'export async function f() {',
-      '  return new Promise((resolve) => {',
-      '    resolve(42);',
-      '  });',
-      '}',
-    ].join('\n');
+    const source = ['export async function f() {', '  return new Promise((resolve) => {', '    resolve(42);', '  });', '}'].join(
+      '\n',
+    );
     // Act
     const analysis = await analyzeSingle(filePath, source);
 
@@ -1319,11 +1307,7 @@ describe('error-flow/analyzer', () => {
   it('should report no-return-wrap for Promise.resolve in then callback block body', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-wrap-block.ts';
-    const source = [
-      'export const p = Promise.resolve(1).then(x => {',
-      '  return Promise.resolve(x + 1);',
-      '});',
-    ].join('\n');
+    const source = ['export const p = Promise.resolve(1).then(x => {', '  return Promise.resolve(x + 1);', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
@@ -1349,11 +1333,7 @@ describe('error-flow/analyzer', () => {
   it('should report always-return when then callback has block body without return', async () => {
     // Arrange
     const filePath = '/virtual/src/features/always-return.ts';
-    const source = [
-      'export const p = Promise.resolve(1).then(x => {',
-      '  console.log(x);',
-      '});',
-    ].join('\n');
+    const source = ['export const p = Promise.resolve(1).then(x => {', '  console.log(x);', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'always-return');
@@ -1365,11 +1345,7 @@ describe('error-flow/analyzer', () => {
   it('should not report always-return when then callback returns a value', async () => {
     // Arrange
     const filePath = '/virtual/src/features/always-return-ok.ts';
-    const source = [
-      'export const p = Promise.resolve(1).then(x => {',
-      '  return x + 1;',
-      '});',
-    ].join('\n');
+    const source = ['export const p = Promise.resolve(1).then(x => {', '  return x + 1;', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'always-return');
@@ -1464,11 +1440,7 @@ describe('error-flow/analyzer', () => {
   it('should not report no-callback-in-promise when no callback API is used', async () => {
     // Arrange
     const filePath = '/virtual/src/features/no-callback-ok.ts';
-    const source = [
-      'export const p = fetch("/api").then(res => {',
-      '  return res.json();',
-      '});',
-    ].join('\n');
+    const source = ['export const p = fetch("/api").then(res => {', '  return res.json();', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
@@ -1482,12 +1454,7 @@ describe('error-flow/analyzer', () => {
   it('should report unobserved-variable when call result is assigned but never awaited', async () => {
     // Arrange
     const filePath = '/virtual/src/features/unobserved-var.ts';
-    const source = [
-      'export function f() {',
-      '  const p = fetchData();',
-      '  console.log("done");',
-      '}',
-    ].join('\n');
+    const source = ['export function f() {', '  const p = fetchData();', '  console.log("done");', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
@@ -1499,12 +1466,7 @@ describe('error-flow/analyzer', () => {
   it('should not report unobserved-variable when call result is awaited', async () => {
     // Arrange
     const filePath = '/virtual/src/features/observed-var.ts';
-    const source = [
-      'export async function f() {',
-      '  const p = fetchData();',
-      '  await p;',
-      '}',
-    ].join('\n');
+    const source = ['export async function f() {', '  const p = fetchData();', '  await p;', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
@@ -1516,12 +1478,7 @@ describe('error-flow/analyzer', () => {
   it('should not report unobserved-variable when call result is returned', async () => {
     // Arrange
     const filePath = '/virtual/src/features/returned-var.ts';
-    const source = [
-      'export function f() {',
-      '  const p = fetchData();',
-      '  return p;',
-      '}',
-    ].join('\n');
+    const source = ['export function f() {', '  const p = fetchData();', '  return p;', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');

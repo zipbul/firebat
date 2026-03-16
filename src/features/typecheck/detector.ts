@@ -101,7 +101,6 @@ const analyzeTypecheck = async (
 ): Promise<ReadonlyArray<TypecheckItem>> => {
   const root = input?.rootAbs ?? process.cwd();
   const logger = input?.logger ?? createNoopLogger();
-
   const tsconfigPath = findTsconfigPath(root);
 
   if (!tsconfigPath) {
@@ -126,12 +125,12 @@ const analyzeTypecheck = async (
   for (const file of program) {
     const sourceFile = tsProgram.getSourceFile(file.filePath);
 
-    if (!sourceFile) continue;
+    if (!sourceFile) {continue;}
 
     const diagnostics = ts.getPreEmitDiagnostics(tsProgram, sourceFile);
 
     for (const diag of diagnostics) {
-      if (!shouldIncludeDiagnostic(diag.category)) continue;
+      if (!shouldIncludeDiagnostic(diag.category)) {continue;}
 
       const filePath = diag.file?.fileName ?? file.filePath;
       let span: SourceSpan;
@@ -161,8 +160,9 @@ const analyzeTypecheck = async (
   const itemsWithFrames = attachCodeFrames(program, itemsWithoutFrames);
 
   return itemsWithFrames.sort((left, right) => {
-    if (left.file !== right.file) return left.file.localeCompare(right.file);
-    if (left.span.start.line !== right.span.start.line) return left.span.start.line - right.span.start.line;
+    if (left.file !== right.file) {return left.file.localeCompare(right.file);}
+
+    if (left.span.start.line !== right.span.start.line) {return left.span.start.line - right.span.start.line;}
 
     return left.span.start.column - right.span.start.column;
   });

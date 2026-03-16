@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeUnknownProof, createEmptyUnknownProof } from './analyzer';
-import { parseSource } from '../../engine/ast/parse-source';
 import type { ParsedFile } from '../../engine/types';
+
+import { parseSource } from '../../engine/ast/parse-source';
+import { analyzeUnknownProof, createEmptyUnknownProof } from './analyzer';
 
 const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 

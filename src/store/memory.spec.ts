@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { type MemoryStore, createMemoryStore } from './memory';
 
 describe('createMemoryStore', () => {
@@ -30,8 +31,11 @@ describe('createMemoryStore', () => {
 
   it('should return entries sorted by updatedAt DESC when listing keys', () => {
     nowValue = 1000;
+
     store.write({ projectKey: 'proj', memoryKey: 'older', payloadJson: '{}' });
+
     nowValue = 2000;
+
     store.write({ projectKey: 'proj', memoryKey: 'newer', payloadJson: '{}' });
 
     const result = store.listKeys({ projectKey: 'proj' });
@@ -74,6 +78,7 @@ describe('createMemoryStore', () => {
 
   it('should create new record with createdAt equal to updatedAt when writing new key', () => {
     nowValue = 5000;
+
     store.write({ projectKey: 'proj', memoryKey: 'new', payloadJson: '{}' });
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'new' });
@@ -84,9 +89,11 @@ describe('createMemoryStore', () => {
 
   it('should preserve original createdAt when updating existing record', () => {
     nowValue = 1000;
+
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":1}' });
 
     nowValue = 2000;
+
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":2}' });
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'k' });
@@ -120,21 +127,26 @@ describe('createMemoryStore', () => {
     const malicious = "'; DROP TABLE memories; --";
 
     store.write({ projectKey: malicious, memoryKey: malicious, payloadJson: 'safe' });
+
     const result = store.read({ projectKey: malicious, memoryKey: malicious });
 
     expect(result!.payloadJson).toBe('safe');
+
     // Table still exists
     const count = db.prepare('SELECT COUNT(*) as c FROM memories').get() as { c: number };
+
     expect(count.c).toBeGreaterThanOrEqual(1);
   });
 
   it('should assign new createdAt when writing after delete of same key', () => {
     nowValue = 1000;
+
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":1}' });
 
     store.delete({ projectKey: 'proj', memoryKey: 'k' });
 
     nowValue = 5000;
+
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":2}' });
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'k' });
@@ -188,9 +200,11 @@ describe('createMemoryStore', () => {
     const store2 = createMemoryStore(db);
 
     nowValue = 1000;
+
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: 'from-store1' });
 
     nowValue = 2000;
+
     store2.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: 'from-store2' });
 
     const result = store.read({ projectKey: 'proj', memoryKey: 'k' });
@@ -204,6 +218,7 @@ describe('createMemoryStore', () => {
     const store2 = createMemoryStore(db);
 
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{}' });
+
     const result = store2.read({ projectKey: 'proj', memoryKey: 'k' });
 
     expect(result!.payloadJson).toBe('{}');
@@ -222,13 +237,18 @@ describe('createMemoryStore', () => {
 
   it('should return entries with latest updatedAt first when listing keys after sequential writes', () => {
     nowValue = 100;
+
     store.write({ projectKey: 'proj', memoryKey: 'first', payloadJson: '{}' });
+
     nowValue = 200;
+
     store.write({ projectKey: 'proj', memoryKey: 'second', payloadJson: '{}' });
+
     nowValue = 300;
+
     store.write({ projectKey: 'proj', memoryKey: 'third', payloadJson: '{}' });
 
-    const keys = store.listKeys({ projectKey: 'proj' }).map((e) => e.memoryKey);
+    const keys = store.listKeys({ projectKey: 'proj' }).map(e => e.memoryKey);
 
     expect(keys).toEqual(['third', 'second', 'first']);
   });

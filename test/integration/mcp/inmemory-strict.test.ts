@@ -52,7 +52,10 @@ describe('InMemory MCP strict (scan-only)', () => {
       // Assert
       expect(tools.length).toBe(4);
       expect(tools.map((t: any) => t.name).sort()).toEqual([
-        'index-external-packages', 'query-dependencies', 'scan', 'symbols-by-file',
+        'index-external-packages',
+        'query-dependencies',
+        'scan',
+        'symbols-by-file',
       ]);
     });
   });

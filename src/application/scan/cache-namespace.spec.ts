@@ -13,6 +13,7 @@ describe('CACHE_SCHEMA_VERSION', () => {
 describe('computeCacheNamespace', () => {
   it('[HP] returns a non-empty hash string', async () => {
     const result = await computeCacheNamespace({ toolVersion: '1.0.0' });
+
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
   });
@@ -20,6 +21,7 @@ describe('computeCacheNamespace', () => {
   it('[HP] different toolVersions produce different namespaces', async () => {
     const a = await computeCacheNamespace({ toolVersion: '1.0.0' });
     const b = await computeCacheNamespace({ toolVersion: '2.0.0' });
+
     expect(a).not.toBe(b);
   });
 
@@ -27,6 +29,7 @@ describe('computeCacheNamespace', () => {
     // Same process, same Bun.argv[1] → same buildId
     const a = await computeCacheNamespace({ toolVersion: '1.0.0' });
     const b = await computeCacheNamespace({ toolVersion: '1.0.0' });
+
     expect(a).toBe(b);
   });
 });

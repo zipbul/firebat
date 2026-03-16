@@ -1,27 +1,27 @@
+import type { Gildash } from '@zipbul/gildash';
+
 import { mock, describe, it, expect, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as nodePath from 'node:path';
 
-import type { Gildash } from '@zipbul/gildash';
 import type { ParsedFile } from './ts-program';
+
 import { createNoopLogger } from './logger';
 
 // ── Save originals before mocking ────────────────────────────────────────────
 
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../store/gildash.ts')) };
-
 // ── Mocks ─────────────────────────────────────────────────────────────────────
-
 const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
 const mockBatchParse = mock(
-  async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> =>
-    ({ parsed: new Map(), failures: [] }),
+  async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
+    parsed: new Map(),
+    failures: [],
+  }),
 );
-
 const mockGildash = {
   batchParse: mockBatchParse,
   close: mockClose,
 } as unknown as Gildash;
-
 const mockCreateGildash = mock(async (_opts: unknown) => mockGildash);
 
 mock.module('../store/gildash', () => ({ createGildash: mockCreateGildash }));
@@ -42,8 +42,10 @@ const makeParsedFile = (filePath: string): ParsedFile => ({
 
 const batchParseReturnsOk =
   (entries: [string, ParsedFile][]) =>
-  async (_filePaths: string[]): Promise<{ parsed: Map<string, ParsedFile>; failures: Array<unknown> }> =>
-    ({ parsed: new Map(entries), failures: [] });
+  async (_filePaths: string[]): Promise<{ parsed: Map<string, ParsedFile>; failures: Array<unknown> }> => ({
+    parsed: new Map(entries),
+    failures: [],
+  });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,8 +57,10 @@ beforeEach(() => {
   mockCreateGildash.mockImplementation(async (_opts: unknown) => mockGildash);
   mockClose.mockImplementation(async (_opts?: { cleanup?: boolean }) => {});
   mockBatchParse.mockImplementation(
-    async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> =>
-      ({ parsed: new Map(), failures: [] }),
+    async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
+      parsed: new Map(),
+      failures: [],
+    }),
   );
 });
 
@@ -75,6 +79,7 @@ describe('createFirebatProgram', () => {
   it('should return ParsedFile array when batchParse succeeds with eligible targets', async () => {
     // Arrange
     const pf = makeParsedFile('/proj/src/a.ts');
+
     mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
 
     // Act
@@ -88,6 +93,7 @@ describe('createFirebatProgram', () => {
   it('should exclude node_modules path from batchParse call', async () => {
     // Arrange
     const pf = makeParsedFile('/proj/src/a.ts');
+
     mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
 
     // Act
@@ -98,12 +104,14 @@ describe('createFirebatProgram', () => {
 
     // Assert
     const [calledWith] = mockBatchParse.mock.calls[0] as [string[]];
+
     expect(calledWith).toEqual(['/proj/src/a.ts']);
   });
 
   it('should exclude .d.ts files from batchParse call', async () => {
     // Arrange
     const pf = makeParsedFile('/proj/src/a.ts');
+
     mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
 
     // Act
@@ -114,6 +122,7 @@ describe('createFirebatProgram', () => {
 
     // Assert
     const [calledWith] = mockBatchParse.mock.calls[0] as [string[]];
+
     expect(calledWith).toEqual(['/proj/src/a.ts']);
   });
 
@@ -136,9 +145,7 @@ describe('createFirebatProgram', () => {
     await createFirebatProgram({ targets: ['/a.ts'], logger });
 
     // Assert
-    expect(mockCreateGildash).toHaveBeenCalledWith(
-      expect.objectContaining({ watchMode: false }),
-    );
+    expect(mockCreateGildash).toHaveBeenCalledWith(expect.objectContaining({ watchMode: false }));
   });
 
   it('should pass eligible file paths to batchParse', async () => {
@@ -211,9 +218,7 @@ describe('createFirebatProgram', () => {
     });
 
     // Act & Assert
-    await expect(
-      createFirebatProgram({ targets: ['/a.ts'], logger }),
-    ).rejects.toThrow('open failed');
+    await expect(createFirebatProgram({ targets: ['/a.ts'], logger })).rejects.toThrow('open failed');
   });
 
   it('should return early with empty array and call nothing when all targets are mixed excluded', async () => {

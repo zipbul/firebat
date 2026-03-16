@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  computeLcsAlignment,
-  computeLcsLength,
-  computeSequenceSimilarity,
-} from './lcs';
+
+import { computeLcsAlignment, computeLcsLength, computeSequenceSimilarity } from './lcs';
 
 // ─── computeLcsLength ─────────────────────────────────────────────────────────
 
@@ -19,6 +16,7 @@ describe('computeLcsLength', () => {
 
   it('동일 배열 → 배열 길이', () => {
     const a = ['a', 'b', 'c', 'd'];
+
     expect(computeLcsLength(a, a)).toBe(4);
   });
 
@@ -46,6 +44,7 @@ describe('computeLcsLength', () => {
     const n = 5;
     const a = ['a', 'b', 'c', 'd', 'e'];
     const b = ['a', 'b', 'X', 'd', 'e'];
+
     expect(computeLcsLength(a, b)).toBe(n - 1);
   });
 
@@ -58,9 +57,10 @@ describe('computeLcsLength', () => {
     const size = 1000;
     const a = Array.from({ length: size }, (_, i) => `token-${i}`);
     const b = Array.from({ length: size }, (_, i) => `token-${i % 2 === 0 ? i : i + 1}`);
-
     const start = performance.now();
+
     computeLcsLength(a, b);
+
     const elapsed = performance.now() - start;
 
     expect(elapsed).toBeLessThan(100);
@@ -76,6 +76,7 @@ describe('computeSequenceSimilarity', () => {
 
   it('동일 배열 → 1.0', () => {
     const a = ['a', 'b', 'c'];
+
     expect(computeSequenceSimilarity(a, a)).toBe(1.0);
   });
 
@@ -100,6 +101,7 @@ describe('computeSequenceSimilarity', () => {
     const a = ['a', 'b', 'c', 'd', 'e', 'f'];
     const b = ['a', 'b', 'c', 'd', 'e', 'X'];
     const expected = (2 * (n - 1)) / (2 * n);
+
     expect(computeSequenceSimilarity(a, b)).toBeCloseTo(expected, 5);
   });
 
@@ -107,6 +109,7 @@ describe('computeSequenceSimilarity', () => {
     const a = ['x', 'y', 'a', 'b'];
     const b = ['a', 'b', 'z', 'w'];
     const sim = computeSequenceSimilarity(a, b);
+
     expect(sim).toBeGreaterThanOrEqual(0);
     expect(sim).toBeLessThanOrEqual(1);
   });
@@ -117,6 +120,7 @@ describe('computeSequenceSimilarity', () => {
 describe('computeLcsAlignment', () => {
   it('빈 배열 × 빈 배열 → 모두 빈 결과', () => {
     const result = computeLcsAlignment([], []);
+
     expect(result.matched).toHaveLength(0);
     expect(result.aOnly).toHaveLength(0);
     expect(result.bOnly).toHaveLength(0);
@@ -124,6 +128,7 @@ describe('computeLcsAlignment', () => {
 
   it('빈 A × 비어 있지 않은 B → bOnly만 존재', () => {
     const result = computeLcsAlignment([], ['x', 'y']);
+
     expect(result.matched).toHaveLength(0);
     expect(result.aOnly).toHaveLength(0);
     expect(result.bOnly).toEqual([0, 1]);
@@ -131,6 +136,7 @@ describe('computeLcsAlignment', () => {
 
   it('비어 있지 않은 A × 빈 B → aOnly만 존재', () => {
     const result = computeLcsAlignment(['x', 'y'], []);
+
     expect(result.matched).toHaveLength(0);
     expect(result.aOnly).toEqual([0, 1]);
     expect(result.bOnly).toHaveLength(0);
@@ -139,6 +145,7 @@ describe('computeLcsAlignment', () => {
   it('동일 배열 → 모두 matched, aOnly/bOnly 빈 배열', () => {
     const arr = ['a', 'b', 'c'];
     const result = computeLcsAlignment(arr, arr);
+
     expect(result.matched).toHaveLength(3);
     expect(result.matched[0]).toEqual({ aIndex: 0, bIndex: 0 });
     expect(result.matched[1]).toEqual({ aIndex: 1, bIndex: 1 });
@@ -151,6 +158,7 @@ describe('computeLcsAlignment', () => {
     const a = ['a', 'b'];
     const b = ['x', 'y', 'z'];
     const result = computeLcsAlignment(a, b);
+
     expect(result.matched).toHaveLength(0);
     expect(result.aOnly).toEqual([0, 1]);
     expect(result.bOnly).toEqual([0, 1, 2]);
@@ -160,6 +168,7 @@ describe('computeLcsAlignment', () => {
     const a = ['b', 'c'];
     const b = ['x', 'b', 'c'];
     const result = computeLcsAlignment(a, b);
+
     expect(result.matched).toHaveLength(2);
     expect(result.aOnly).toHaveLength(0);
     expect(result.bOnly).toEqual([0]); // 'x' 만 bOnly
@@ -169,6 +178,7 @@ describe('computeLcsAlignment', () => {
     const a = ['a', 'c'];
     const b = ['a', 'x', 'c'];
     const result = computeLcsAlignment(a, b);
+
     expect(result.matched).toHaveLength(2);
     expect(result.aOnly).toHaveLength(0);
     expect(result.bOnly).toEqual([1]); // 'x' 만 bOnly
@@ -178,6 +188,7 @@ describe('computeLcsAlignment', () => {
     const a = ['a', 'b'];
     const b = ['a', 'b', 'x'];
     const result = computeLcsAlignment(a, b);
+
     expect(result.matched).toHaveLength(2);
     expect(result.aOnly).toHaveLength(0);
     expect(result.bOnly).toEqual([2]); // 'x' 만 bOnly
@@ -187,6 +198,7 @@ describe('computeLcsAlignment', () => {
     const a = ['a', 'b', 'c', 'd'];
     const b = ['d', 'a', 'b', 'c'];
     const result = computeLcsAlignment(a, b);
+
     for (let i = 1; i < result.matched.length; i++) {
       expect(result.matched[i]!.aIndex).toBeGreaterThan(result.matched[i - 1]!.aIndex);
       expect(result.matched[i]!.bIndex).toBeGreaterThan(result.matched[i - 1]!.bIndex);
@@ -197,20 +209,13 @@ describe('computeLcsAlignment', () => {
     const a = ['a', 'x', 'b', 'c'];
     const b = ['a', 'b', 'y', 'c'];
     const result = computeLcsAlignment(a, b);
-
-    const aIndexes = new Set([
-      ...result.matched.map((m) => m.aIndex),
-      ...result.aOnly,
-    ]);
-    const bIndexes = new Set([
-      ...result.matched.map((m) => m.bIndex),
-      ...result.bOnly,
-    ]);
+    const aIndexes = new Set([...result.matched.map(m => m.aIndex), ...result.aOnly]);
+    const bIndexes = new Set([...result.matched.map(m => m.bIndex), ...result.bOnly]);
 
     // 모든 A 인덱스가 포함됨
-    for (let i = 0; i < a.length; i++) expect(aIndexes.has(i)).toBe(true);
+    for (let i = 0; i < a.length; i++) {expect(aIndexes.has(i)).toBe(true);}
     // 모든 B 인덱스가 포함됨
-    for (let j = 0; j < b.length; j++) expect(bIndexes.has(j)).toBe(true);
+    for (let j = 0; j < b.length; j++) {expect(bIndexes.has(j)).toBe(true);}
     // matched의 값이 실제로 일치함
     for (const { aIndex, bIndex } of result.matched) {
       expect(a[aIndex]).toBe(b[bIndex]);
@@ -222,6 +227,7 @@ describe('computeLcsAlignment', () => {
     const b = ['b', 'x', 'c', 'y', 'e'];
     const result = computeLcsAlignment(a, b);
     const length = computeLcsLength(a, b);
+
     expect(result.matched).toHaveLength(length);
   });
 });

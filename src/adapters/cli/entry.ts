@@ -1,17 +1,17 @@
-import type { FirebatConfig, FirebatCouplingConfig } from '../../shared/firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
+import type { FirebatConfig, FirebatCouplingConfig } from '../../shared/firebat-config';
 import type { FirebatLogger } from '../../shared/logger';
 import type { FirebatDetector, FirebatReport } from '../../types';
-import { countBlockers } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
+import { formatReport } from '../../report';
 import { parseArgs } from '../../shared/arg-parse';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../shared/firebat-config.loader';
 import { appendFirebatLog } from '../../shared/logger';
 import { createPrettyConsoleLogger } from '../../shared/logger';
-import { formatReport } from '../../report';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { resolveTargets } from '../../shared/target-discovery';
+import { countBlockers } from '../../types';
 
 interface CliLoggerInput {
   readonly level: FirebatCliOptions['logLevel'];
@@ -117,8 +117,6 @@ const printHelp = (): void => {
 
   writeStdout(lines.join('\n'));
 };
-
-
 
 const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
   const all: ReadonlyArray<FirebatDetector> = [
@@ -246,7 +244,10 @@ const resolveMinSizeFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): FirebatCliOptions['minSize'] | undefined => {
   const { duplicates: unified } = features ?? {};
-  const unifiedSize = typeof unified === 'object' && unified !== null ? (unified as Record<string, unknown>).minSize as number | undefined : undefined;
+  const unifiedSize =
+    typeof unified === 'object' && unified !== null
+      ? ((unified as Record<string, unknown>).minSize as number | undefined)
+      : undefined;
 
   return unifiedSize;
 };

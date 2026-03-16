@@ -14,8 +14,8 @@ mock.module('node:fs/promises', () => ({
   rm: mockRm,
 }));
 
-import { runCache } from './cache';
 import { createNoopLogger } from '../../shared/logger';
+import { runCache } from './cache';
 
 const logger = createNoopLogger('error');
 let fileSpy: ReturnType<typeof spyOn>;
@@ -61,6 +61,7 @@ describe('runCache', () => {
 
   it('should return 0 for "clean" when files are removed successfully', async () => {
     mockRm.mockResolvedValue(undefined as never);
+
     fileSpy = spyOn(Bun, 'file').mockReturnValue({ exists: async () => true } as never);
 
     const result = await runCache(['clean'], logger);

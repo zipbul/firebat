@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
+import { parseSource } from '../../engine/ast/parse-source';
 import {
   analyzeEarlyReturn,
   countConsecutiveTrailingIfs,
@@ -9,7 +10,6 @@ import {
   isExitStatement,
   isLoopGuardBlock,
 } from './analyzer';
-import { parseSource } from '../../engine/ast/parse-source';
 
 const node = (type: string, extra: Record<string, unknown> = {}) => ({ type, ...extra });
 
@@ -266,6 +266,7 @@ describe('early-return/analyzer helpers', () => {
       const stmts: any[] = [];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert
       expect(result).toBe(0);
     });
@@ -275,6 +276,7 @@ describe('early-return/analyzer helpers', () => {
       const stmts = [node('ExpressionStatement'), node('IfStatement')] as any[];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert
       expect(result).toBe(1);
     });
@@ -284,6 +286,7 @@ describe('early-return/analyzer helpers', () => {
       const stmts = [node('ExpressionStatement'), node('IfStatement'), node('IfStatement')] as any[];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert
       expect(result).toBe(2);
     });
@@ -293,6 +296,7 @@ describe('early-return/analyzer helpers', () => {
       const stmts = [node('IfStatement'), node('IfStatement'), node('IfStatement')] as any[];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert
       expect(result).toBe(3);
     });
@@ -302,6 +306,7 @@ describe('early-return/analyzer helpers', () => {
       const stmts = [node('IfStatement'), node('ExpressionStatement'), node('IfStatement')] as any[];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert
       expect(result).toBe(1);
     });
@@ -311,18 +316,17 @@ describe('early-return/analyzer helpers', () => {
       const stmts = [node('IfStatement'), node('IfStatement'), node('ReturnStatement')] as any[];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert
       expect(result).toBe(2);
     });
 
     it('should not count IfStatement with alternate', () => {
       // Arrange — if-else followed by bare if
-      const stmts = [
-        node('IfStatement', { alternate: node('BlockStatement', { body: [] }) }),
-        node('IfStatement'),
-      ] as any[];
+      const stmts = [node('IfStatement', { alternate: node('BlockStatement', { body: [] }) }), node('IfStatement')] as any[];
       // Act
       const result = countConsecutiveTrailingIfs(stmts);
+
       // Assert — only the last if (no alternate) is counted, then the if-else breaks the chain
       expect(result).toBe(1);
     });

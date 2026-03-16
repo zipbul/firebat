@@ -6,6 +6,7 @@ export function mixed(a: boolean, b: string | null): string {
     const x = b.trim();
     const y = x.toUpperCase();
     const z = y + '!';
+
     return z;
   }
 }
@@ -20,5 +21,7 @@ export function wrapOnly(data: unknown) {
 }
 
 function doA() {}
+
 function doB() {}
+
 function doC() {}

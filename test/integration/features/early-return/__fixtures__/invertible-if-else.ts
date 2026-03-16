@@ -8,7 +8,9 @@ export function invertibleIfElse(value: string | null): string {
     const trimmed = value.trim();
     const upper = trimmed.toUpperCase();
     const result = upper.replace(/\s+/g, '-');
+
     console.log(result);
+
     return result;
   }
 }
@@ -22,6 +24,7 @@ export function loopContinueGuard(items: Array<{ active: boolean; name: string }
     }
 
     const processed = item.name.trim().toUpperCase();
+
     result.push(processed);
   }
 

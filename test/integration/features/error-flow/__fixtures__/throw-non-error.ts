@@ -13,8 +13,9 @@ export function throwPrimitiveWrapper(): never {
 }
 
 export function asyncPromiseExecutor(): Promise<string> {
-  return new Promise(async (resolve) => {
+  return new Promise(async resolve => {
     const result = await Promise.resolve('data');
+
     resolve(result);
   });
 }

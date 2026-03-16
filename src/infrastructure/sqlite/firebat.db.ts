@@ -95,7 +95,9 @@ const getOrmDb = async (input: DbOpenInput): Promise<FirebatDrizzleDb> => {
         const msg = String(err).toLowerCase();
 
         if (msg.includes('busy') || msg.includes('locked')) {
-          input.logger.warn('sqlite: migrations busy/locked; waiting for schema', { dbFilePath: path.relative(rootAbs, dbFilePath) });
+          input.logger.warn('sqlite: migrations busy/locked; waiting for schema', {
+            dbFilePath: path.relative(rootAbs, dbFilePath),
+          });
         } else {
           input.logger.warn('sqlite: migration failed', { dbFilePath: path.relative(rootAbs, dbFilePath) }, err);
         }

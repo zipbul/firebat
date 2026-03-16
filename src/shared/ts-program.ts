@@ -30,11 +30,11 @@ export const createFirebatProgram = async (
   config: FirebatProgramConfig & { readonly gildash?: Gildash },
 ): Promise<ParsedFile[]> => {
   const { logger } = config;
-
   const eligible = config.targets.filter(shouldIncludeFile);
 
   if (eligible.length === 0) {
     logger.debug('No eligible files to parse');
+
     return [];
   }
 

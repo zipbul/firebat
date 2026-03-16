@@ -56,6 +56,7 @@ describe('normalizeFile', () => {
   // ID-1: 동일 입력 2회 호출 → 동일 결과
   it('should return the same result when called twice with the same input', () => {
     const input = '/home/revil/projects/firebat/src/engine/types.ts';
+
     expect(normalizeFile(input)).toBe(normalizeFile(input));
   });
 });

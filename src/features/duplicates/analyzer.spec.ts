@@ -1,19 +1,16 @@
 import { mock, afterAll, describe, it, expect, beforeEach } from 'bun:test';
 import path from 'node:path';
 
-import type { DuplicateGroup } from '../../types';
 import type { ParsedFile } from '../../engine/types';
-import type { NearMissCloneGroup } from './near-miss-detector';
+import type { DuplicateGroup } from '../../types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
+import type { NearMissCloneGroup } from './near-miss-detector';
 
 import { parseSource } from '../../engine/ast/parse-source';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-const detectNearMissClonesMock = mock(
-  (_files: unknown, _opts: unknown, _excluded?: unknown): NearMissCloneGroup[] => [],
-);
-
+const detectNearMissClonesMock = mock((_files: unknown, _opts: unknown, _excluded?: unknown): NearMissCloneGroup[] => []);
 const antiUnifyMock = mock(
   (_left: unknown, _right: unknown): AntiUnificationResult => ({
     sharedSize: 10,
@@ -23,17 +20,11 @@ const antiUnifyMock = mock(
     variables: [],
   }),
 );
-
-const classifyDiffMock = mock(
-  (_result: unknown): DiffClassification => 'rename-only',
-);
-
+const classifyDiffMock = mock((_result: unknown): DiffClassification => 'rename-only');
 // Save originals
-
 const __origAntiUnifier = {
   ...require(path.resolve(import.meta.dir, './anti-unifier.ts')),
 };
-
 const __origNearMissDetector = {
   ...require(path.resolve(import.meta.dir, './near-miss-detector.ts')),
 };
@@ -55,8 +46,7 @@ const { analyzeDuplicates, createEmptyDuplicates } = await import('./analyzer');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const makeFile = (fileName: string, source: string): ParsedFile =>
-  parseSource(fileName, source);
+const makeFile = (fileName: string, source: string): ParsedFile => parseSource(fileName, source);
 
 // 정확히 동일한 함수 2개가 있는 파일
 const IDENTICAL_FUNCTIONS = `
@@ -68,7 +58,6 @@ function add(a: number, b: number): number {
   return a + b;
 }
 `;
-
 // 이름/리터럴만 다른 함수 쌍 (shape 동일, exact 다름)
 const RENAMED_PAIR_A = `
 function calcSum(x: number, y: number): number {
@@ -76,14 +65,12 @@ function calcSum(x: number, y: number): number {
   return result;
 }
 `;
-
 const RENAMED_PAIR_B = `
 function addValues(a: number, b: number): number {
   const result = a + b;
   return result;
 }
 `;
-
 // 리터럴만 다른 함수 (shape 동일)
 const LITERAL_PAIR_A = `
 function getTimeout(): number {
@@ -91,19 +78,16 @@ function getTimeout(): number {
   return base * 2;
 }
 `;
-
 const LITERAL_PAIR_B = `
 function getTimeout(): number {
   const base = 5000;
   return base * 3;
 }
 `;
-
 // 작은 함수 (minSize 이하)
 const TINY_FUNCTION = `
 function id(x: number) { return x; }
 `;
-
 // 다양한 노드 타입
 const FUNCTION_DECLARATION = `
 function process(x: number): number {
@@ -111,7 +95,6 @@ function process(x: number): number {
   return doubled;
 }
 `;
-
 const CLASS_DECLARATION_A = `
 class Handler {
   handle(x: number): number {
@@ -122,7 +105,6 @@ class Handler {
   run(): void {}
 }
 `;
-
 const CLASS_DECLARATION_B = `
 class Handler {
   handle(x: number): number {
@@ -133,7 +115,6 @@ class Handler {
   run(): void {}
 }
 `;
-
 const INTERFACE_DECLARATION_A = `
 interface Config {
   readonly host: string;
@@ -141,7 +122,6 @@ interface Config {
   readonly timeout: number;
 }
 `;
-
 const INTERFACE_DECLARATION_B = `
 interface Config {
   readonly host: string;
@@ -149,7 +129,6 @@ interface Config {
   readonly timeout: number;
 }
 `;
-
 const ARROW_FUNCTION = `
 const process = (x: number): number => {
   const doubled = x * 2;
@@ -169,14 +148,8 @@ const makeErrorFile = (fileName: string): ParsedFile => ({
 // ─── Teardown ─────────────────────────────────────────────────────────────────
 
 afterAll(() => {
-  mock.module(
-    path.resolve(import.meta.dir, './anti-unifier.ts'),
-    () => __origAntiUnifier,
-  );
-  mock.module(
-    path.resolve(import.meta.dir, './near-miss-detector.ts'),
-    () => __origNearMissDetector,
-  );
+  mock.module(path.resolve(import.meta.dir, './anti-unifier.ts'), () => __origAntiUnifier);
+  mock.module(path.resolve(import.meta.dir, './near-miss-detector.ts'), () => __origNearMissDetector);
 });
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -184,6 +157,7 @@ afterAll(() => {
 describe('createEmptyDuplicates', () => {
   it('should return an empty ReadonlyArray when called', () => {
     const result = createEmptyDuplicates();
+
     expect(result).toEqual([]);
     expect(result).toHaveLength(0);
   });
@@ -210,7 +184,7 @@ describe('analyzeDuplicates', () => {
   it('should return a exact group when two identical functions exist in one file', () => {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
-    const exact = result.filter((g) => g.cloneType === 'exact');
+    const exact = result.filter(g => g.cloneType === 'exact');
 
     expect(exact.length).toBeGreaterThanOrEqual(1);
     expect(exact[0]!.items.length).toBeGreaterThanOrEqual(2);
@@ -224,13 +198,15 @@ describe('analyzeDuplicates', () => {
     const fileA = makeFile('a.ts', RENAMED_PAIR_A);
     const fileB = makeFile('b.ts', RENAMED_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const shape = result.filter(g => g.cloneType === 'shape');
 
-    const shape = result.filter((g) => g.cloneType === 'shape');
     expect(shape.length).toBeGreaterThanOrEqual(1);
     expect(shape[0]!.findingKind).toBe('structural-clone');
+
     // exact에 없어야 함
-    const exact = result.filter((g) => g.cloneType === 'exact');
-    const exactHeaders = exact.flatMap((g) => g.items.map((i) => i.header));
+    const exact = result.filter(g => g.cloneType === 'exact');
+    const exactHeaders = exact.flatMap(g => g.items.map(i => i.header));
+
     expect(exactHeaders).not.toContain(shape[0]?.items[0]?.header);
   });
 
@@ -240,9 +216,9 @@ describe('analyzeDuplicates', () => {
     const fileA = makeFile('a.ts', LITERAL_PAIR_A);
     const fileB = makeFile('b.ts', LITERAL_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
-
     // shape fingerprint strips both identifiers and literals → same shape
-    const shape = result.filter((g) => g.cloneType === 'shape');
+    const shape = result.filter(g => g.cloneType === 'shape');
+
     expect(shape.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -251,18 +227,17 @@ describe('analyzeDuplicates', () => {
   it('should filter out shape groups that overlap with exact groups', () => {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
-
     // 정확히 동일한 함수 2개 → exact에 잡힘 → shape에 중복 보고 없음
-    const exact = result.filter((g) => g.cloneType === 'exact');
-    const shape = result.filter((g) => g.cloneType === 'shape');
+    const exact = result.filter(g => g.cloneType === 'exact');
+    const shape = result.filter(g => g.cloneType === 'shape');
 
     expect(exact.length).toBeGreaterThanOrEqual(1);
+
     // shape에 같은 함수가 잡히면 안 됨
     for (const g2 of shape) {
       for (const item of g2.items) {
-        const inExact = exact.some((g1) =>
-          g1.items.some((i1) => i1.header === item.header && i1.filePath === item.filePath),
-        );
+        const inExact = exact.some(g1 => g1.items.some(i1 => i1.header === item.header && i1.filePath === item.filePath));
+
         // 같은 header+filePath가 exact에도 있으면 shape에 중복 안 됨을 확인
         // (shape hash가 같은 경우 필터링됨)
         if (inExact) {
@@ -271,6 +246,7 @@ describe('analyzeDuplicates', () => {
         }
       }
     }
+
     // exact에 중복이 잡혔으므로 shape에서 같은 shape hash 그룹은 제거됨
     // 이 assertion은 shape가 exact과 중복 그룹을 갖지 않는지 확인
     expect(shape.length).toBe(0);
@@ -283,8 +259,8 @@ describe('analyzeDuplicates', () => {
     // → normalized는 필터링되어야 함
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const normalized = result.filter(g => g.cloneType === 'normalized');
 
-    const normalized = result.filter((g) => g.cloneType === 'normalized');
     expect(normalized.length).toBe(0);
   });
 
@@ -313,14 +289,10 @@ describe('analyzeDuplicates', () => {
       },
     ];
 
-    detectNearMissClonesMock.mockImplementation(() => [
-      { items: nmGroupItems, similarity: 0.85 },
-    ]);
+    detectNearMissClonesMock.mockImplementation(() => [{ items: nmGroupItems, similarity: 0.85 }]);
 
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: true, enableAntiUnification: false });
-    const nmGroups = result.filter((g) =>
-      g.items.some((i) => i.header === 'nmFunc' || i.header === 'nmFunc2'),
-    );
+    const nmGroups = result.filter(g => g.items.some(i => i.header === 'nmFunc' || i.header === 'nmFunc2'));
 
     expect(nmGroups.length).toBe(1);
     expect(nmGroups[0]!.cloneType).toBe('near-miss');
@@ -332,6 +304,7 @@ describe('analyzeDuplicates', () => {
 
   it('should not call detectNearMissClones when enableNearMiss is false', () => {
     const file = makeFile('a.ts', RENAMED_PAIR_A);
+
     analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
 
     expect(detectNearMissClonesMock).not.toHaveBeenCalled();
@@ -346,16 +319,14 @@ describe('analyzeDuplicates', () => {
       leftSize: 10,
       rightSize: 10,
       similarity: 0.9,
-      variables: [
-        { id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' },
-      ],
+      variables: [{ id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' }],
     }));
 
     const fileA = makeFile('a.ts', RENAMED_PAIR_A);
     const fileB = makeFile('b.ts', RENAMED_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
+    const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    const withParams = result.filter((g) => g.suggestedParams !== undefined);
     expect(withParams.length).toBeGreaterThanOrEqual(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('identifier');
     expect(withParams[0]!.suggestedParams!.pairs.length).toBeGreaterThanOrEqual(1);
@@ -370,16 +341,14 @@ describe('analyzeDuplicates', () => {
       leftSize: 10,
       rightSize: 10,
       similarity: 0.9,
-      variables: [
-        { id: 1, location: 'body.value', leftType: '1000', rightType: '5000', kind: 'literal' },
-      ],
+      variables: [{ id: 1, location: 'body.value', leftType: '1000', rightType: '5000', kind: 'literal' }],
     }));
 
     const fileA = makeFile('a.ts', LITERAL_PAIR_A);
     const fileB = makeFile('b.ts', LITERAL_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
+    const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    const withParams = result.filter((g) => g.suggestedParams !== undefined);
     expect(withParams.length).toBeGreaterThanOrEqual(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('literal');
     expect(withParams[0]!.findingKind).toBe('literal-variant');
@@ -402,8 +371,8 @@ describe('analyzeDuplicates', () => {
     const fileA = makeFile('a.ts', RENAMED_PAIR_A);
     const fileB = makeFile('b.ts', RENAMED_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
+    const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    const withParams = result.filter((g) => g.suggestedParams !== undefined);
     expect(withParams.length).toBeGreaterThanOrEqual(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('type');
   });
@@ -446,6 +415,7 @@ describe('analyzeDuplicates', () => {
     for (const group of result) {
       expect(group.suggestedParams).toBeUndefined();
     }
+
     expect(antiUnifyMock).not.toHaveBeenCalled();
   });
 
@@ -455,8 +425,8 @@ describe('analyzeDuplicates', () => {
     const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
     const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const exact = result.filter(g => g.cloneType === 'exact');
 
-    const exact = result.filter((g) => g.cloneType === 'exact');
     expect(exact.length).toBeGreaterThanOrEqual(1);
     expect(exact[0]!.items[0]!.kind).toBe('function');
   });
@@ -485,8 +455,8 @@ class Beta {
     const fileA = makeFile('a.ts', srcA);
     const fileB = makeFile('b.ts', srcB);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const methodItems = result.flatMap(g => g.items).filter(i => i.kind === 'method');
 
-    const methodItems = result.flatMap((g) => g.items).filter((i) => i.kind === 'method');
     expect(methodItems.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -496,8 +466,8 @@ class Beta {
     const fileA = makeFile('a.ts', CLASS_DECLARATION_A);
     const fileB = makeFile('b.ts', CLASS_DECLARATION_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const classItems = result.flatMap(g => g.items).filter(i => i.kind === 'type');
 
-    const classItems = result.flatMap((g) => g.items).filter((i) => i.kind === 'type');
     expect(classItems.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -507,8 +477,8 @@ class Beta {
     const fileA = makeFile('a.ts', INTERFACE_DECLARATION_A);
     const fileB = makeFile('b.ts', INTERFACE_DECLARATION_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const ifItems = result.flatMap(g => g.items).filter(i => i.kind === 'interface');
 
-    const ifItems = result.flatMap((g) => g.items).filter((i) => i.kind === 'interface');
     expect(ifItems.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -518,8 +488,8 @@ class Beta {
     const fileA = makeFile('a.ts', ARROW_FUNCTION);
     const fileB = makeFile('b.ts', ARROW_FUNCTION);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const arrowItems = result.flatMap(g => g.items).filter(i => i.kind === 'function');
 
-    const arrowItems = result.flatMap((g) => g.items).filter((i) => i.kind === 'function');
     expect(arrowItems.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -527,13 +497,16 @@ class Beta {
 
   it('should pass excludedHashes from Level 1 to near-miss detector', () => {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
+
     detectNearMissClonesMock.mockImplementation(() => []);
 
     analyzeDuplicates([file], { minSize: 3, enableNearMiss: true, enableAntiUnification: false });
 
     expect(detectNearMissClonesMock).toHaveBeenCalledTimes(1);
+
     const callArgs = detectNearMissClonesMock.mock.calls[0]!;
     const excludedHashes = callArgs[2] as Set<string>;
+
     expect(excludedHashes).toBeInstanceOf(Set);
     expect(excludedHashes.size).toBeGreaterThan(0);
   });
@@ -554,8 +527,8 @@ class Beta {
     `;
     const file = makeFile('triple.ts', tripleSource);
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const exact = result.filter(g => g.cloneType === 'exact');
 
-    const exact = result.filter((g) => g.cloneType === 'exact');
     expect(exact.length).toBeGreaterThanOrEqual(1);
     expect(exact[0]!.items.length).toBe(3);
   });
@@ -564,6 +537,7 @@ class Beta {
 
   it('should return empty array when files array is empty', () => {
     const result = analyzeDuplicates([], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+
     expect(result).toEqual([]);
   });
 
@@ -577,9 +551,9 @@ class Beta {
       enableNearMiss: false,
       enableAntiUnification: false,
     });
-
     // 에러 파일은 무시, 정상 파일 1개만 → 그룹 없음
-    const itemsFromBad = result.flatMap((g) => g.items).filter((i) => i.filePath === 'bad.ts');
+    const itemsFromBad = result.flatMap(g => g.items).filter(i => i.filePath === 'bad.ts');
+
     expect(itemsFromBad).toHaveLength(0);
   });
 
@@ -634,8 +608,8 @@ class Beta {
     const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
     const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const exact = result.filter(g => g.cloneType === 'exact');
 
-    const exact = result.filter((g) => g.cloneType === 'exact');
     expect(exact.length).toBeGreaterThanOrEqual(1);
     expect(exact[0]!.items).toHaveLength(2);
   });
@@ -644,6 +618,7 @@ class Beta {
 
   it('should pass custom nearMissSimilarityThreshold to near-miss detector', () => {
     const file = makeFile('a.ts', FUNCTION_DECLARATION);
+
     detectNearMissClonesMock.mockImplementation(() => []);
 
     analyzeDuplicates([file], {
@@ -654,7 +629,9 @@ class Beta {
     });
 
     expect(detectNearMissClonesMock).toHaveBeenCalledTimes(1);
+
     const opts = detectNearMissClonesMock.mock.calls[0]![1] as Record<string, unknown>;
+
     expect(opts.similarityThreshold).toBe(0.9);
   });
 
@@ -665,7 +642,7 @@ class Beta {
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
 
     expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result[0]!.items.every((i) => i.filePath === 'single.ts')).toBe(true);
+    expect(result[0]!.items.every(i => i.filePath === 'single.ts')).toBe(true);
   });
 
   // ── [CO] 29. 에러 파일 + 정상 파일 혼합 ────────────────────────────────
@@ -681,7 +658,9 @@ class Beta {
     });
 
     expect(result.length).toBeGreaterThanOrEqual(1);
-    const allFilePaths = result.flatMap((g) => g.items.map((i) => i.filePath));
+
+    const allFilePaths = result.flatMap(g => g.items.map(i => i.filePath));
+
     expect(allFilePaths).not.toContain('bad.ts');
   });
 
@@ -701,12 +680,15 @@ class Beta {
   it('should exclude exact shape hashes from near-miss detection', () => {
     const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
     const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
+
     detectNearMissClonesMock.mockImplementation(() => []);
 
     analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: true, enableAntiUnification: false });
 
     expect(detectNearMissClonesMock).toHaveBeenCalledTimes(1);
+
     const excludedHashes = detectNearMissClonesMock.mock.calls[0]![2] as Set<string>;
+
     // Level 1에서 exact 그룹이 생겼으므로 excludedHashes에 해시가 포함
     expect(excludedHashes.size).toBeGreaterThan(0);
   });
@@ -716,7 +698,6 @@ class Beta {
   it('should produce identical results when called twice with the same input', () => {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const opts = { minSize: 3, enableNearMiss: false, enableAntiUnification: false } as const;
-
     const result1 = analyzeDuplicates([file], opts);
     const result2 = analyzeDuplicates([file], opts);
 
@@ -731,23 +712,24 @@ class Beta {
     const fileA = makeFile('a.ts', CLASS_DECLARATION_A);
     const fileB = makeFile('b.ts', CLASS_DECLARATION_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
-
     // type 그룹(ClassDeclaration)이 존재해야 함
-    const classGroups = result.filter((g) => g.items.some((i) => i.kind === 'type'));
+    const classGroups = result.filter(g => g.items.some(i => i.kind === 'type'));
+
     expect(classGroups.length).toBeGreaterThanOrEqual(1);
 
     // method 그룹이 있다면, class 그룹에 내포된 method 그룹은 없어야 함
     // 즉, class 그룹의 span 안에 완전히 포함되는 method 그룹은 결과에서 제거됨
     for (const classGroup of classGroups) {
       for (const methodGroup of result) {
-        if (methodGroup === classGroup) continue;
-        if (!methodGroup.items.every((mi) => mi.kind === 'method')) continue;
+        if (methodGroup === classGroup) {continue;}
+
+        if (!methodGroup.items.every(mi => mi.kind === 'method')) {continue;}
 
         // method 그룹의 모든 아이템이 대응하는 class 그룹 아이템의 span에 완전히 포함되면
         // filterSubsumedGroups가 제거했어야 함
-        const allSubsumed = methodGroup.items.every((methodItem) =>
+        const allSubsumed = methodGroup.items.every(methodItem =>
           classGroup.items.some(
-            (classItem) =>
+            classItem =>
               methodItem.filePath === classItem.filePath &&
               (methodItem.span.start.line > classItem.span.start.line ||
                 (methodItem.span.start.line === classItem.span.start.line &&
@@ -773,8 +755,10 @@ class Beta {
     // 같은 filePath의 동일 span 아이템이 한 그룹에 2개 있으면 안 됨
     for (const group of result) {
       const seenKeys = new Set<string>();
+
       for (const item of group.items) {
         const key = `${item.filePath}:${item.span.start.line}:${item.span.start.column}`;
+
         expect(seenKeys.has(key)).toBe(false);
         seenKeys.add(key);
       }
@@ -787,15 +771,16 @@ class Beta {
     const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
     const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
     const opts = { minSize: 3, enableNearMiss: false, enableAntiUnification: false } as const;
-
     const result1 = analyzeDuplicates([fileA, fileB], opts);
     const result2 = analyzeDuplicates([fileB, fileA], opts);
 
     // 그룹 수 동일
     expect(result1.length).toBe(result2.length);
+
     // 아이템 집합 동일 (순서 무관)
-    const headers1 = result1.flatMap((g) => g.items.map((i) => `${i.filePath}:${i.header}`)).sort();
-    const headers2 = result2.flatMap((g) => g.items.map((i) => `${i.filePath}:${i.header}`)).sort();
+    const headers1 = result1.flatMap(g => g.items.map(i => `${i.filePath}:${i.header}`)).sort();
+    const headers2 = result2.flatMap(g => g.items.map(i => `${i.filePath}:${i.header}`)).sort();
+
     expect(headers1).toEqual(headers2);
   });
 
@@ -841,12 +826,10 @@ class Beta {
       },
     ];
 
-    detectNearMissClonesMock.mockImplementation(() => [
-      { items: nmGroupItems, similarity: 0.82 },
-    ]);
+    detectNearMissClonesMock.mockImplementation(() => [{ items: nmGroupItems, similarity: 0.82 }]);
 
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: true, enableAntiUnification: false });
-    const nmGroups = result.filter((g) => g.cloneType === 'near-miss');
+    const nmGroups = result.filter(g => g.cloneType === 'near-miss');
 
     expect(nmGroups.length).toBe(1);
     expect(nmGroups[0]!.similarity).toBe(0.82);
@@ -862,16 +845,14 @@ class Beta {
       leftSize: 10,
       rightSize: 10,
       similarity: 0.9,
-      variables: [
-        { id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' },
-      ],
+      variables: [{ id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' }],
     }));
 
     const fileA = makeFile('a.ts', RENAMED_PAIR_A);
     const fileB = makeFile('b.ts', RENAMED_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
+    const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    const withParams = result.filter((g) => g.suggestedParams !== undefined);
     expect(withParams.length).toBeGreaterThanOrEqual(1);
     // rename-only → findingKind는 cloneType 기반 기본값 (structural-clone), literal-variant 아님
     expect(withParams[0]!.findingKind).not.toBe('literal-variant');
@@ -890,15 +871,26 @@ class Beta {
     // 100 > 91.3 → outlier 탐지!
     for (let i = 0; i < 5; i++) {
       antiUnifyMock.mockImplementationOnce(() => ({
-        sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 0.95,
+        sharedSize: 10,
+        leftSize: 10,
+        rightSize: 10,
+        similarity: 0.95,
         variables: [{ id: 1, location: `loc${i}`, leftType: 'x', rightType: 'y', kind: 'identifier' as const }],
       }));
       classifyDiffMock.mockImplementationOnce(() => 'rename-only');
     }
+
     antiUnifyMock.mockImplementationOnce(() => ({
-      sharedSize: 5, leftSize: 10, rightSize: 50, similarity: 0.2,
+      sharedSize: 5,
+      leftSize: 10,
+      rightSize: 50,
+      similarity: 0.2,
       variables: Array.from({ length: 100 }, (_, j) => ({
-        id: j + 1, location: `s${j}`, leftType: 'A', rightType: 'B', kind: 'structural' as const,
+        id: j + 1,
+        location: `s${j}`,
+        leftType: 'A',
+        rightType: 'B',
+        kind: 'structural' as const,
       })),
     }));
     classifyDiffMock.mockImplementationOnce(() => 'structural-diff');
@@ -912,14 +904,15 @@ function compute(x: number, y: number): number {
 }
 `;
     const files = Array.from({ length: 7 }, (_, i) => makeFile(`f${i}.ts`, source));
-
     // Act
     const result = analyzeDuplicates(files, {
-      minSize: 3, enableNearMiss: false, enableAntiUnification: true,
+      minSize: 3,
+      enableNearMiss: false,
+      enableAntiUnification: true,
     });
-
     // Assert: outlier 그룹이 생성되어야 함
-    const outlierGroups = result.filter((g) => g.findingKind === 'pattern-outlier');
+    const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
+
     expect(outlierGroups.length).toBeGreaterThanOrEqual(1);
     expect(outlierGroups[0]!.items.length).toBeGreaterThanOrEqual(1);
   });
@@ -929,9 +922,16 @@ function compute(x: number, y: number): number {
   it('applyAntiUnification - 2 members - no outlier detection applied', () => {
     // Arrange: 2개 함수 (auResults 1개 → items.length < 3 → outlier 로직 미적용)
     antiUnifyMock.mockImplementation(() => ({
-      sharedSize: 5, leftSize: 10, rightSize: 20, similarity: 0.4,
+      sharedSize: 5,
+      leftSize: 10,
+      rightSize: 20,
+      similarity: 0.4,
       variables: Array.from({ length: 30 }, (_, i) => ({
-        id: i + 1, location: `loc${i}`, leftType: 'A', rightType: 'B', kind: 'structural' as const,
+        id: i + 1,
+        location: `loc${i}`,
+        leftType: 'A',
+        rightType: 'B',
+        kind: 'structural' as const,
       })),
     }));
     classifyDiffMock.mockImplementation(() => 'structural-diff');
@@ -945,14 +945,15 @@ function compute(x: number, y: number): number {
 `;
     const fileA = makeFile('a.ts', source);
     const fileB = makeFile('b.ts', source);
-
     // Act
     const result = analyzeDuplicates([fileA, fileB], {
-      minSize: 3, enableNearMiss: false, enableAntiUnification: true,
+      minSize: 3,
+      enableNearMiss: false,
+      enableAntiUnification: true,
     });
-
     // Assert: pattern-outlier 그룹이 생성되지 않아야 함 (2멤버는 outlier 미적용)
-    const outlierGroups = result.filter((g) => g.findingKind === 'pattern-outlier');
+    const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
+
     expect(outlierGroups.length).toBe(0);
   });
 
@@ -961,11 +962,17 @@ function compute(x: number, y: number): number {
   it('applyAntiUnification - 3 members all similar - no outlier group created', () => {
     // Arrange: 3 items (1 rep + 2 auResults), 모두 rename-only (변수 수 비슷)
     antiUnifyMock.mockImplementationOnce(() => ({
-      sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1.0,
+      sharedSize: 10,
+      leftSize: 10,
+      rightSize: 10,
+      similarity: 1.0,
       variables: [{ id: 1, location: 'a', leftType: 'x', rightType: 'y', kind: 'identifier' as const }],
     }));
     antiUnifyMock.mockImplementationOnce(() => ({
-      sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 0.99,
+      sharedSize: 10,
+      leftSize: 10,
+      rightSize: 10,
+      similarity: 0.99,
       variables: [{ id: 1, location: 'b', leftType: 'p', rightType: 'q', kind: 'identifier' as const }],
     }));
     classifyDiffMock.mockImplementation(() => 'rename-only');
@@ -980,14 +987,15 @@ function compute(x: number, y: number): number {
     const fileA = makeFile('a.ts', source);
     const fileB = makeFile('b.ts', source);
     const fileC = makeFile('c.ts', source);
-
     // Act
     const result = analyzeDuplicates([fileA, fileB, fileC], {
-      minSize: 3, enableNearMiss: false, enableAntiUnification: true,
+      minSize: 3,
+      enableNearMiss: false,
+      enableAntiUnification: true,
     });
-
     // Assert: pattern-outlier 그룹 없음, 단일 그룹만 존재
-    const outlierGroups = result.filter((g) => g.findingKind === 'pattern-outlier');
+    const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
+
     expect(outlierGroups.length).toBe(0);
   });
 
@@ -1005,8 +1013,8 @@ export const MyClass = class {
     const fileA = makeFile('a.ts', source);
     const fileB = makeFile('b.ts', source);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const exact = result.filter(g => g.cloneType === 'exact');
 
-    const exact = result.filter((g) => g.cloneType === 'exact');
     expect(exact.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -1022,8 +1030,8 @@ export const compute = function(x: number): number {
     const fileA = makeFile('a.ts', source);
     const fileB = makeFile('b.ts', source);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
+    const exact = result.filter(g => g.cloneType === 'exact');
 
-    const exact = result.filter((g) => g.cloneType === 'exact');
     expect(exact.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -1041,9 +1049,14 @@ export const compute = function(x: number): number {
 
     for (const group of result) {
       expect(group.findingKind).toBeDefined();
-      expect(['exact-clone', 'structural-clone', 'near-miss-clone', 'literal-variant', 'type-variant', 'pattern-outlier']).toContain(
-        group.findingKind,
-      );
+      expect([
+        'exact-clone',
+        'structural-clone',
+        'near-miss-clone',
+        'literal-variant',
+        'type-variant',
+        'pattern-outlier',
+      ]).toContain(group.findingKind);
     }
   });
 });

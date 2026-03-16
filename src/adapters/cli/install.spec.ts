@@ -80,7 +80,7 @@ describe('sortJsonValue', () => {
     const result = sortJsonValue({ b: { z: 1, a: 2 }, a: 0 }) as Record<string, unknown>;
 
     expect(Object.keys(result)).toEqual(['a', 'b']);
-    expect(Object.keys(result['b'] as Record<string, number>)).toEqual(['a', 'z']);
+    expect(Object.keys(result.b as Record<string, number>)).toEqual(['a', 'z']);
   });
 
   it('should preserve arrays order', () => {

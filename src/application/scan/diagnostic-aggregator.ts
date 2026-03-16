@@ -617,7 +617,6 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   const nesting = asArray<any>(input.analyses['nesting']);
   const coupling = asArray<any>(input.analyses['coupling']);
   const dependencies = input.analyses['dependencies'] as any;
-
   // DIAG_GOD_FUNCTION: nesting(CC>=15) + waste co-occur in same file
   const hasHighCcInFile = new Set(
     nesting
@@ -637,7 +636,7 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   if (godFunctionResolves > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_FUNCTION;
 
-    if (entry !== undefined) catalog.DIAG_GOD_FUNCTION = entry;
+    if (entry !== undefined) {catalog.DIAG_GOD_FUNCTION = entry;}
   }
 
   // DIAG_CIRCULAR_DEPENDENCY
@@ -646,7 +645,7 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   if (cycles.length > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_CIRCULAR_DEPENDENCY;
 
-    if (entry !== undefined) catalog.DIAG_CIRCULAR_DEPENDENCY = entry;
+    if (entry !== undefined) {catalog.DIAG_CIRCULAR_DEPENDENCY = entry;}
   }
 
   // DIAG_GOD_MODULE
@@ -655,7 +654,7 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   if (godModules.length > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_MODULE;
 
-    if (entry !== undefined) catalog.DIAG_GOD_MODULE = entry;
+    if (entry !== undefined) {catalog.DIAG_GOD_MODULE = entry;}
   }
 
   return { catalog };

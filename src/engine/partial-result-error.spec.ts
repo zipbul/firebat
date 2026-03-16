@@ -14,7 +14,6 @@ describe('PartialResultError', () => {
   it('should store the partial array passed to the constructor', () => {
     // Arrange
     const partial = [{ file: 'a.ts', line: 1 }];
-
     // Act
     const err = new PartialResultError('partial', partial);
 

@@ -71,7 +71,8 @@ export const detectNearMissClones = (
 ): ReadonlyArray<NearMissCloneGroup> => {
   // 1. 모든 파일에서 clone 대상 노드 추출
   const items = collectCloneItems(files, options.minSize, excludedHashes);
-  if (items.length < 2) return [];
+
+  if (items.length < 2) {return [];}
 
   // 2. 소규모/대규모 분류
   const smallItems: IndexedItem[] = [];
@@ -79,6 +80,7 @@ export const detectNearMissClones = (
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
+
     if (item.statementFingerprints.length < options.minStatementCount) {
       smallItems.push({ index: i, item });
     } else {
@@ -95,14 +97,13 @@ export const detectNearMissClones = (
     const signatures = largeItems.map(({ item }) =>
       hasher.computeSignature(item.fingerprintBag),
     );
-
     const candidates = findLshCandidates(signatures, options.jaccardThreshold);
 
     for (const { i, j } of candidates) {
       const a = largeItems[i]!;
       const b = largeItems[j]!;
 
-      if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) continue;
+      if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) {continue;}
 
       const sim = computeSequenceSimilarity(
         a.item.statementFingerprints,
@@ -122,7 +123,7 @@ export const detectNearMissClones = (
         const a = smallItems[p]!;
         const b = smallItems[q]!;
 
-        if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) continue;
+        if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) {continue;}
 
         const sim = computeSequenceSimilarity(
           a.item.statementFingerprints,
@@ -140,7 +141,7 @@ export const detectNearMissClones = (
   if (smallItems.length > 0 && largeItems.length > 0) {
     for (const small of smallItems) {
       for (const large of largeItems) {
-        if (!passesSizeFilter(small.item, large.item, options.sizeRatio)) continue;
+        if (!passesSizeFilter(small.item, large.item, options.sizeRatio)) {continue;}
 
         const sim = computeSequenceSimilarity(
           small.item.statementFingerprints,
@@ -154,7 +155,7 @@ export const detectNearMissClones = (
     }
   }
 
-  if (confirmedPairs.length === 0) return [];
+  if (confirmedPairs.length === 0) {return [];}
 
   // 7. Union-Find 전이 폐포로 그룹 형성
   const uf = new UnionFind(items.length);
@@ -162,15 +163,19 @@ export const detectNearMissClones = (
 
   for (const { a, b, similarity } of confirmedPairs) {
     uf.union(a, b);
+
     const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+
     pairSimilarities.set(key, similarity);
   }
 
   // 8. 그룹별로 items + 평균 similarity 계산
   const groupMap = new Map<number, number[]>();
+
   for (let i = 0; i < items.length; i++) {
     const root = uf.find(i);
     const group = groupMap.get(root);
+
     if (group === undefined) {
       groupMap.set(root, [i]);
     } else {
@@ -181,10 +186,11 @@ export const detectNearMissClones = (
   const result: NearMissCloneGroup[] = [];
 
   for (const memberIndices of groupMap.values()) {
-    if (memberIndices.length < 2) continue;
+    if (memberIndices.length < 2) {continue;}
 
     // 미비교 쌍 보충 LCS 계산
     const fingerprints = items.map((item) => item.statementFingerprints);
+
     fillMissingPairSimilarities(memberIndices, fingerprints, pairSimilarities);
 
     // threshold 미달 쌍 제거 후 연결 컴포넌트 재계산
@@ -193,12 +199,14 @@ export const detectNearMissClones = (
     for (const component of subComponents) {
       let simSum = 0;
       let simCount = 0;
+
       for (let p = 0; p < component.length; p++) {
         for (let q = p + 1; q < component.length; q++) {
           const a = component[p]!;
           const b = component[q]!;
           const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
           const sim = pairSimilarities.get(key);
+
           if (sim !== undefined) {
             simSum += sim;
             simCount++;
@@ -228,7 +236,8 @@ const splitByThreshold = (
   threshold: number,
 ): number[][] => {
   const adj = new Map<number, number[]>();
-  for (const idx of indices) adj.set(idx, []);
+
+  for (const idx of indices) {adj.set(idx, []);}
 
   for (let p = 0; p < indices.length; p++) {
     for (let q = p + 1; q < indices.length; q++) {
@@ -236,6 +245,7 @@ const splitByThreshold = (
       const b = indices[q]!;
       const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
       const sim = pairSimilarities.get(key);
+
       if (sim !== undefined && sim >= threshold) {
         adj.get(a)!.push(b);
         adj.get(b)!.push(a);
@@ -247,13 +257,18 @@ const splitByThreshold = (
   const components: number[][] = [];
 
   for (const idx of indices) {
-    if (visited.has(idx)) continue;
+    if (visited.has(idx)) {continue;}
+
     const component: number[] = [];
     const queue = [idx];
+
     visited.add(idx);
+
     while (queue.length > 0) {
       const curr = queue.shift()!;
+
       component.push(curr);
+
       for (const neighbor of adj.get(curr)!) {
         if (!visited.has(neighbor)) {
           visited.add(neighbor);
@@ -261,6 +276,7 @@ const splitByThreshold = (
         }
       }
     }
+
     if (component.length >= 2) {
       components.push(component);
     }
@@ -286,8 +302,10 @@ const fillMissingPairSimilarities = (
       const a = memberIndices[p]!;
       const b = memberIndices[q]!;
       const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
+
       if (!pairSimilarities.has(key)) {
         const sim = computeSequenceSimilarity(fingerprints[a]!, fingerprints[b]!);
+
         pairSimilarities.set(key, sim);
       }
     }
@@ -313,23 +331,26 @@ const collectCloneItems = (
   const items: NearMissCloneItem[] = [];
 
   for (const file of files) {
-    if (file.errors.length > 0) continue;
+    if (file.errors.length > 0) {continue;}
 
     const nodes = collectOxcNodes(file.program, isCloneTarget);
 
     for (const node of nodes) {
       const size = countOxcSize(node);
-      if (size < minSize) continue;
+
+      if (size < minSize) {continue;}
 
       // excludedHashes로 Level 1 그룹핑된 노드 제외
       if (excludedHashes !== undefined) {
         const hash = createOxcFingerprintShape(node);
-        if (excludedHashes.has(hash)) continue;
+
+        if (excludedHashes.has(hash)) {continue;}
       }
 
       const fingerprints = extractStatementFingerprints(node);
+
       // statement가 0개인 노드(빈 함수, TypeAlias 등)는 near-miss 비교 불가
-      if (fingerprints.length === 0) continue;
+      if (fingerprints.length === 0) {continue;}
 
       const bag = extractStatementFingerprintBag(node);
       const span = resolveSpan(file.sourceText, node);
@@ -358,7 +379,9 @@ const passesSizeFilter = (
 ): boolean => {
   const minSize = Math.min(a.size, b.size);
   const maxSize = Math.max(a.size, b.size);
-  if (maxSize === 0) return false;
+
+  if (maxSize === 0) {return false;}
+
   return minSize / maxSize >= sizeRatio;
 };
 
@@ -377,13 +400,15 @@ class UnionFind {
     if (this.parent[x] !== x) {
       this.parent[x] = this.find(this.parent[x]!);
     }
+
     return this.parent[x]!;
   }
 
   union(x: number, y: number): void {
     const rx = this.find(x);
     const ry = this.find(y);
-    if (rx === ry) return;
+
+    if (rx === ry) {return;}
 
     if (this.rank[rx]! < this.rank[ry]!) {
       this.parent[rx] = ry;
@@ -391,6 +416,7 @@ class UnionFind {
       this.parent[ry] = rx;
     } else {
       this.parent[ry] = rx;
+
       this.rank[rx]!++;
     }
   }

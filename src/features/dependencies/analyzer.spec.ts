@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'bun:test';
-import { GildashError } from '@zipbul/gildash';
 import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
+
+import { GildashError } from '@zipbul/gildash';
+import { describe, expect, it } from 'bun:test';
 
 import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 
@@ -26,10 +27,12 @@ const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
     getCyclePaths: overrides.getCyclePaths ?? (async () => []),
     searchSymbols: overrides.searchSymbols ?? (() => []),
     searchRelations: overrides.searchRelations ?? (() => []),
-    getModuleInterface: overrides.getModuleInterface ?? ((fp: string) => ({
-      filePath: fp,
-      exports: [],
-    })),
+    getModuleInterface:
+      overrides.getModuleInterface ??
+      ((fp: string) => ({
+        filePath: fp,
+        exports: [],
+      })),
   } as unknown as Gildash;
 };
 
@@ -51,11 +54,7 @@ const mkSymbol = (
   detail,
 });
 
-const mkImport = (
-  srcFilePath: string,
-  dstFilePath: string,
-  dstSymbolName: string | null = null,
-): CodeRelation => ({
+const mkImport = (srcFilePath: string, dstFilePath: string, dstSymbolName: string | null = null): CodeRelation => ({
   type: 'imports',
   srcFilePath,
   srcSymbolName: null,
@@ -63,11 +62,7 @@ const mkImport = (
   dstSymbolName,
 });
 
-const mkReExport = (
-  srcFilePath: string,
-  dstFilePath: string,
-  dstSymbolName: string | null = null,
-): CodeRelation => ({
+const mkReExport = (srcFilePath: string, dstFilePath: string, dstSymbolName: string | null = null): CodeRelation => ({
   type: 're-exports',
   srcFilePath,
   srcSymbolName: null,
@@ -82,6 +77,7 @@ const mkReExport = (
 describe('features/dependencies/analyzer — createEmptyDependencies', () => {
   it('should return the empty DependencyAnalysis shape', () => {
     const empty = createEmptyDependencies();
+
     expect(Array.isArray(empty.cycles)).toBe(true);
     expect(empty.cycles.length).toBe(0);
     expect(typeof empty.adjacency).toBe('object');
@@ -105,6 +101,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   it('should return empty analysis when import graph is empty', async () => {
     const g = createMockGildash({ getImportGraph: async () => new Map() });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.cycles.length).toBe(0);
     expect(Object.keys(result.adjacency).length).toBe(0);
     expect(result.fanIn.length).toBe(0);
@@ -119,6 +116,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({ getImportGraph: async () => graph });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.adjacency['src/a.ts']).toEqual(['src/b.ts']);
     expect(result.adjacency['src/b.ts']).toEqual([]);
   });
@@ -152,6 +150,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getCyclePaths: async () => [['/project/a.ts', '/project/b.ts', '/project/a.ts']],
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.cycles.length).toBe(1);
     expect(result.cycles[0]!.path).toEqual(['a.ts', 'b.ts', 'a.ts']);
   });
@@ -170,6 +169,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       ],
       allowedDependencies: {},
     });
+
     expect(result.layerViolations.length).toBe(1);
     expect(result.layerViolations[0]!.fromLayer).toBe('ui');
     expect(result.layerViolations[0]!.toLayer).toBe('domain');
@@ -189,6 +189,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       ],
       allowedDependencies: { ui: ['domain'] },
     });
+
     expect(result.layerViolations.length).toBe(0);
   });
 
@@ -203,6 +204,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       layers: [{ name: 'ui', glob: 'src/ui/**' }],
       allowedDependencies: {},
     });
+
     expect(result.layerViolations.length).toBe(0);
   });
 
@@ -215,7 +217,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];}
+
         return [];
       },
       searchRelations: () => [],
@@ -224,6 +228,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(result.deadExports.length).toBe(1);
     expect(result.deadExports[0]!.kind).toBe('dead-export');
     expect(result.deadExports[0]!.name).toBe('unusedFn');
@@ -239,13 +244,16 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/util.ts', 'helperFn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/util.ts', 'helperFn')];}
+
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
-        if (query.type === 'imports')
-          return [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')];
+
+        if (query.type === 'imports') {return [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')];}
+
         return [];
       },
     });
@@ -253,6 +261,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(result.deadExports.length).toBe(1);
     expect(result.deadExports[0]!.kind).toBe('test-only-export');
     expect(result.deadExports[0]!.name).toBe('helperFn');
@@ -267,7 +276,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/lib.ts', 'publicFn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'publicFn')];}
+
         return [];
       },
       searchRelations: () => [],
@@ -276,13 +287,12 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
     });
+
     expect(result.deadExports.length).toBe(0);
   });
 
   it('should compute exportStats from searchSymbols (total + abstract)', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/mod.ts', []],
-    ]);
+    const graph = new Map<string, string[]>([['/project/src/mod.ts', []]]);
     const exported = [
       mkSymbol(1, '/project/src/mod.ts', 'doSomething', 'function'),
       mkSymbol(2, '/project/src/mod.ts', 'IFoo', 'interface'),
@@ -292,7 +302,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return exported;
+
+        if (query.isExported) {return exported;}
+
         return [];
       },
     });
@@ -300,15 +312,14 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(result.exportStats['src/mod.ts']).toBeDefined();
     expect(result.exportStats['src/mod.ts']!.total).toBe(3);
     expect(result.exportStats['src/mod.ts']!.abstract).toBe(2);
   });
 
   it('should count type alias as abstract in exportStats', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/types.ts', []],
-    ]);
+    const graph = new Map<string, string[]>([['/project/src/types.ts', []]]);
     const exported = [
       mkSymbol(1, '/project/src/types.ts', 'UserId', 'type'),
       mkSymbol(2, '/project/src/types.ts', 'IRepo', 'interface'),
@@ -318,7 +329,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return exported;
+
+        if (query.isExported) {return exported;}
+
         return [];
       },
     });
@@ -326,6 +339,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(result.exportStats['src/types.ts']).toBeDefined();
     expect(result.exportStats['src/types.ts']!.total).toBe(3);
     expect(result.exportStats['src/types.ts']!.abstract).toBe(2);
@@ -343,6 +357,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getCyclePaths: async () => [['/project/a.ts', '/project/b.ts', '/project/c.ts', '/project/a.ts']],
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.cuts.length).toBeGreaterThanOrEqual(1);
     expect(result.cuts[0]!.from).toBe('a.ts');
     expect(result.cuts[0]!.score).toBe(2);
@@ -357,13 +372,16 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];}
+
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
-        if (query.type === 'imports')
-          return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null)];
+
+        if (query.type === 'imports') {return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null)];}
+
         return [];
       },
     });
@@ -371,6 +389,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(result.deadExports.length).toBe(0);
   });
 
@@ -383,13 +402,16 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')];}
+
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
-        if (query.type === 're-exports')
-          return [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')];
+
+        if (query.type === 're-exports') {return [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')];}
+
         return [];
       },
     });
@@ -397,6 +419,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(result.deadExports.length).toBe(0);
   });
 
@@ -411,6 +434,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       layers: [{ name: 'domain', glob: 'src/domain/**' }],
       allowedDependencies: {},
     });
+
     expect(result.layerViolations.length).toBe(0);
   });
 
@@ -423,6 +447,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({ getImportGraph: async () => graph });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.adjacency['a.ts']).toEqual(['b.ts', 'c.ts']);
     expect(result.fanIn[0]!.module).toBe('d.ts');
     expect(result.fanIn[0]!.count).toBe(2);
@@ -437,6 +462,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => gildashThrow('graph failed'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.cycles.length).toBe(0);
     expect(Object.keys(result.adjacency).length).toBe(0);
   });
@@ -451,31 +477,31 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getCyclePaths: async () => gildashThrow('cycle detection failed'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.cycles.length).toBe(0);
     expect(Object.keys(result.adjacency).length).toBe(2);
   });
 
   it('should skip file exportStats when searchSymbols returns Err', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/mod.ts', []],
-    ]);
+    const graph = new Map<string, string[]>([['/project/src/mod.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: () => gildashThrow('search failed'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(Object.keys(result.exportStats).length).toBe(0);
   });
 
   it('should produce empty dead exports when searchRelations returns Err', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/orphan.ts', []],
-    ]);
+    const graph = new Map<string, string[]>([['/project/src/orphan.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];}
+
         return [];
       },
       searchRelations: () => gildashThrow('relations failed'),
@@ -484,33 +510,38 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({}),
     });
+
     expect(Array.isArray(result.deadExports)).toBe(true);
   });
 
   it('should apply defaults when input is undefined', async () => {
     const g = createMockGildash({ getImportGraph: async () => new Map() });
     const result = await analyzeDependencies(g);
+
     expect(result.cycles.length).toBe(0);
     expect(Object.keys(result.adjacency).length).toBe(0);
   });
 
   it('should handle readPackageEntrypoints failure gracefully', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/orphan.ts', []],
-    ]);
+    const graph = new Map<string, string[]>([['/project/src/orphan.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];}
+
         return [];
       },
       searchRelations: () => [],
     });
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
-      readFileFn: () => { throw new Error('read failed'); },
+      readFileFn: () => {
+        throw new Error('read failed');
+      },
     });
+
     expect(result.deadExports.length).toBe(1);
     expect(result.deadExports[0]!.kind).toBe('dead-export');
   });
@@ -518,25 +549,23 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   /* ---------- ED: Edge Cases ---------- */
 
   it('should handle single file with no imports', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/lone.ts', []],
-    ]);
+    const graph = new Map<string, string[]>([['/project/src/lone.ts', []]]);
     const g = createMockGildash({ getImportGraph: async () => graph });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.adjacency['src/lone.ts']).toEqual([]);
     expect(result.fanIn.length).toBe(0);
     expect(result.fanOut.length).toBe(0);
   });
 
   it('should handle self-importing file as self-loop cycle', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/a.ts', ['/project/a.ts']],
-    ]);
+    const graph = new Map<string, string[]>([['/project/a.ts', ['/project/a.ts']]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
       getCyclePaths: async () => [['/project/a.ts', '/project/a.ts']],
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.cycles.length).toBe(1);
     expect(result.cycles[0]!.path).toEqual(['a.ts', 'a.ts']);
   });
@@ -549,6 +578,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({ getImportGraph: async () => graph });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(result.fanIn.length).toBe(0);
     expect(result.fanOut.length).toBe(0);
   });
@@ -560,6 +590,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({ getImportGraph: async () => graph });
     const result = await analyzeDependencies(g, { rootAbs: '/project' });
+
     expect(result.adjacency['src/a.ts']).toBeDefined();
   });
 
@@ -572,6 +603,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       layers: [{ name: 'ui', glob: 'src/ui/**' }],
       allowedDependencies: {},
     });
+
     expect(result.layerViolations.length).toBe(0);
     expect(result.cycles.length).toBe(0);
   });
@@ -587,6 +619,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: () => gildashThrow('search error'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
     expect(Object.keys(result.adjacency).length).toBe(2);
     expect(result.cycles.length).toBe(0);
     expect(Object.keys(result.exportStats).length).toBe(0);
@@ -600,9 +633,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => [
-        ['/project/src/ui/comp.ts', '/project/src/domain/svc.ts', '/project/src/ui/comp.ts'],
-      ],
+      getCyclePaths: async () => [['/project/src/ui/comp.ts', '/project/src/domain/svc.ts', '/project/src/ui/comp.ts']],
     });
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
@@ -612,6 +643,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       ],
       allowedDependencies: {},
     });
+
     expect(result.cycles.length).toBe(1);
     expect(result.layerViolations.length).toBe(2);
   });
@@ -621,21 +653,21 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       ['/project/src/lib.ts', []],
       ['/project/test/lib.spec.ts', ['/project/src/lib.ts']],
     ]);
-    const exported = [
-      mkSymbol(1, '/project/src/lib.ts', 'deadFn'),
-      mkSymbol(2, '/project/src/lib.ts', 'testOnlyFn'),
-    ];
+    const exported = [mkSymbol(1, '/project/src/lib.ts', 'deadFn'), mkSymbol(2, '/project/src/lib.ts', 'testOnlyFn')];
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
-        if (query.isExported) return exported;
+
+        if (query.isExported) {return exported;}
+
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
-        if (query.type === 'imports')
-          return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'testOnlyFn')];
+
+        if (query.type === 'imports') {return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'testOnlyFn')];}
+
         return [];
       },
     });
@@ -645,6 +677,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     });
     const dead = result.deadExports.filter(d => d.kind === 'dead-export');
     const testOnly = result.deadExports.filter(d => d.kind === 'test-only-export');
+
     expect(dead.length).toBe(1);
     expect(dead[0]!.name).toBe('deadFn');
     expect(testOnly.length).toBe(1);

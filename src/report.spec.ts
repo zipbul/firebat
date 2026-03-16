@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
-import { formatReport } from './report';
+import type { ErrorFlowFinding } from './features/error-flow/types';
 import type {
   FirebatReport,
   SourceSpan,
@@ -22,7 +22,8 @@ import type {
   FormatFinding,
   FirebatCatalogCode,
 } from './types';
-import type { ErrorFlowFinding } from './features/error-flow/types';
+
+import { formatReport } from './report';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -41,13 +42,20 @@ const span = (line = 1, col = 0): SourceSpan => ({
 const cwd = process.cwd();
 const testFile = `${cwd}/test-file.ts`;
 const testFile2 = `${cwd}/test-file2.ts`;
-
 const emptyDeps: ReadonlyArray<DependencyFinding> = [];
-
 const allDetectors: ReadonlyArray<FirebatDetector> = [
-  'waste', 'barrel-policy', 'unknown-proof', 'error-flow',
-  'format', 'lint', 'typecheck', 'dependencies', 'coupling',
-  'nesting', 'early-return', 'forwarding',
+  'waste',
+  'barrel-policy',
+  'unknown-proof',
+  'error-flow',
+  'format',
+  'lint',
+  'typecheck',
+  'dependencies',
+  'coupling',
+  'nesting',
+  'early-return',
+  'forwarding',
   'temporal-coupling',
   'variable-lifetime',
   'giant-file',
@@ -217,8 +225,24 @@ describe('formatReport', () => {
 
     it('should show total DependencyFinding count in dependencies summary', () => {
       const deps: ReadonlyArray<DependencyFinding> = [
-        { kind: 'layer-violation', code: 'DEP_LAYER_VIOLATION', file: 'src/a.ts', span: span(), from: 'a', to: 'b', fromLayer: 'x', toLayer: 'y' },
-        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/a.ts', span: span() }, { file: 'src/b.ts', span: span() }] },
+        {
+          kind: 'layer-violation',
+          code: 'DEP_LAYER_VIOLATION',
+          file: 'src/a.ts',
+          span: span(),
+          from: 'a',
+          to: 'b',
+          fromLayer: 'x',
+          toLayer: 'y',
+        },
+        {
+          kind: 'circular-dependency',
+          code: 'DIAG_CIRCULAR_DEPENDENCY',
+          items: [
+            { file: 'src/a.ts', span: span() },
+            { file: 'src/b.ts', span: span() },
+          ],
+        },
         { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/c.ts', span: span(), module: 'c', name: 'd' },
       ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
@@ -231,7 +255,6 @@ describe('formatReport', () => {
       // Arrange
       const finding: WasteFinding = { kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span() };
       const report = makeReport(['waste'], { waste: [finding] });
-
       // Act
       const out = formatReport(report, 'text');
 
@@ -242,7 +265,6 @@ describe('formatReport', () => {
     it('should not start with a newline when no findings exist', () => {
       // Arrange
       const report = makeReport(['waste'], { waste: [] });
-
       // Act
       const out = formatReport(report, 'text');
 
@@ -299,8 +321,16 @@ describe('formatReport', () => {
 
     it('should render multiple groups when multiple duplicate groups exist', () => {
       const groups: DuplicateGroup[] = [
-        { cloneType: 'exact', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'a', filePath: testFile, span: span() }] },
-        { cloneType: 'exact', findingKind: 'exact-clone', items: [{ kind: 'function', header: 'b', filePath: testFile2, span: span() }] },
+        {
+          cloneType: 'exact',
+          findingKind: 'exact-clone',
+          items: [{ kind: 'function', header: 'a', filePath: testFile, span: span() }],
+        },
+        {
+          cloneType: 'exact',
+          findingKind: 'exact-clone',
+          items: [{ kind: 'function', header: 'b', filePath: testFile2, span: span() }],
+        },
       ];
       const out = formatReport(makeReport(['duplicates'], { duplicates: groups }), 'text');
 
@@ -365,7 +395,12 @@ describe('formatReport', () => {
 
   describe('barrel-policy body', () => {
     it('should render body with kind and evidence when findings exist', () => {
-      const finding: BarrelPolicyFinding = { kind: 'deep-import', file: testFile, span: span(3, 0), evidence: 'suggest: ./utils' };
+      const finding: BarrelPolicyFinding = {
+        kind: 'deep-import',
+        file: testFile,
+        span: span(3, 0),
+        evidence: 'suggest: ./utils',
+      };
       const out = formatReport(makeReport(['barrel-policy'], { 'barrel-policy': [finding] }), 'text');
 
       expect(out).toContain('Barrel Policy');
@@ -394,7 +429,13 @@ describe('formatReport', () => {
 
   describe('unknown-proof body', () => {
     it('should render body with kind and symbol when findings exist', () => {
-      const finding: UnknownProofFinding = { kind: 'unknown-type', message: '', filePath: testFile, span: span(7, 1), symbol: 'myVar' };
+      const finding: UnknownProofFinding = {
+        kind: 'unknown-type',
+        message: '',
+        filePath: testFile,
+        span: span(7, 1),
+        symbol: 'myVar',
+      };
       const out = formatReport(makeReport(['unknown-proof'], { 'unknown-proof': [finding] }), 'text');
 
       expect(out).toContain('Unknown Proof');
@@ -422,7 +463,12 @@ describe('formatReport', () => {
 
   describe('error-flow body', () => {
     it('should render body with kind and evidence when findings exist', () => {
-      const finding: ErrorFlowFinding = { kind: 'throw-non-error', file: testFile, span: span(12, 4), evidence: 'string literal' };
+      const finding: ErrorFlowFinding = {
+        kind: 'throw-non-error',
+        file: testFile,
+        span: span(12, 4),
+        evidence: 'string literal',
+      };
       const out = formatReport(makeReport(['error-flow'], { 'error-flow': [finding] }), 'text');
 
       expect(out).toContain('Error Flow');
@@ -483,7 +529,13 @@ describe('formatReport', () => {
 
   describe('lint body', () => {
     it('should render body with error severity, code, and msg when error diagnostic exists', () => {
-      const diag: LintDiagnostic = { severity: 'error', code: 'no-unused-vars', msg: 'x is unused', file: testFile, span: span(4, 6) };
+      const diag: LintDiagnostic = {
+        severity: 'error',
+        code: 'no-unused-vars',
+        msg: 'x is unused',
+        file: testFile,
+        span: span(4, 6),
+      };
       const out = formatReport(makeReport(['lint'], { lint: [diag] }), 'text');
 
       expect(out).toContain('Lint');
@@ -521,7 +573,14 @@ describe('formatReport', () => {
 
   describe('typecheck body', () => {
     it('should render body with error severity, code, msg, and codeFrame when error exists', () => {
-      const item: TypecheckItem = { severity: 'error', code: 'TS2322', msg: 'Type mismatch', file: testFile, span: span(15, 8), codeFrame: 'let x: number = "oops";' };
+      const item: TypecheckItem = {
+        severity: 'error',
+        code: 'TS2322',
+        msg: 'Type mismatch',
+        file: testFile,
+        span: span(15, 8),
+        codeFrame: 'let x: number = "oops";',
+      };
       const out = formatReport(makeReport(['typecheck'], { typecheck: [item] }), 'text');
 
       expect(out).toContain('Typecheck');
@@ -533,7 +592,14 @@ describe('formatReport', () => {
     });
 
     it('should render warn for typecheck warnings', () => {
-      const item: TypecheckItem = { severity: 'warning', code: 'TS6133', msg: 'unused var', file: testFile, span: span(), codeFrame: '' };
+      const item: TypecheckItem = {
+        severity: 'warning',
+        code: 'TS6133',
+        msg: 'unused var',
+        file: testFile,
+        span: span(),
+        codeFrame: '',
+      };
       const out = formatReport(makeReport(['typecheck'], { typecheck: [item] }), 'text');
 
       expect(out).toContain('warn');
@@ -546,6 +612,7 @@ describe('formatReport', () => {
       const tsLineIdx = lines.findIndex(l => l.includes('TS2322'));
 
       expect(tsLineIdx).toBeGreaterThan(-1);
+
       // Next non-empty line should not be an indented codeFrame
       const nextLine = lines[tsLineIdx + 1] ?? '';
 
@@ -560,7 +627,14 @@ describe('formatReport', () => {
     });
 
     it('should render multi-line codeFrame when codeFrame has newlines', () => {
-      const item: TypecheckItem = { severity: 'error', code: 'TS2322', msg: 'err', file: testFile, span: span(), codeFrame: 'line1\nline2' };
+      const item: TypecheckItem = {
+        severity: 'error',
+        code: 'TS2322',
+        msg: 'err',
+        file: testFile,
+        span: span(),
+        codeFrame: 'line1\nline2',
+      };
       const out = formatReport(makeReport(['typecheck'], { typecheck: [item] }), 'text');
 
       expect(out).toContain('line1');
@@ -572,7 +646,14 @@ describe('formatReport', () => {
 
   describe('forwarding body', () => {
     it('should render body with kind and header when findings exist', () => {
-      const finding: ForwardingFinding = { kind: 'thin-wrapper', filePath: testFile, span: span(30, 0), header: 'wrapFn', depth: 2, evidence: 'direct forward' };
+      const finding: ForwardingFinding = {
+        kind: 'thin-wrapper',
+        filePath: testFile,
+        span: span(30, 0),
+        header: 'wrapFn',
+        depth: 2,
+        evidence: 'direct forward',
+      };
       const out = formatReport(makeReport(['forwarding'], { forwarding: [finding] }), 'text');
 
       expect(out).toContain('Forwarding');
@@ -583,7 +664,14 @@ describe('formatReport', () => {
     });
 
     it('should omit name when forwarding header is anonymous', () => {
-      const finding: ForwardingFinding = { kind: 'thin-wrapper', filePath: testFile, span: span(), header: 'anonymous', depth: 1, evidence: '' };
+      const finding: ForwardingFinding = {
+        kind: 'thin-wrapper',
+        filePath: testFile,
+        span: span(),
+        header: 'anonymous',
+        depth: 1,
+        evidence: '',
+      };
       const out = formatReport(makeReport(['forwarding'], { forwarding: [finding] }), 'text');
 
       expect(out).not.toContain('anonymous');
@@ -594,7 +682,14 @@ describe('formatReport', () => {
 
   describe('nesting body', () => {
     it('should render body with header and kind when findings exist', () => {
-      const item: NestingItem = { kind: 'deep-nesting', file: testFile, header: 'processData', span: span(8, 2), metrics: { depth: 5, cognitiveComplexity: 12, callbackDepth: 0, quadraticTargets: [] }, score: 5 };
+      const item: NestingItem = {
+        kind: 'deep-nesting',
+        file: testFile,
+        header: 'processData',
+        span: span(8, 2),
+        metrics: { depth: 5, cognitiveComplexity: 12, callbackDepth: 0, quadraticTargets: [] },
+        score: 5,
+      };
       const out = formatReport(makeReport(['nesting'], { nesting: [item] }), 'text');
 
       expect(out).toContain('Nesting');
@@ -604,14 +699,28 @@ describe('formatReport', () => {
     });
 
     it('should omit name when nesting header is anonymous', () => {
-      const item: NestingItem = { kind: 'deep-nesting', file: testFile, header: 'anonymous', span: span(), metrics: { depth: 5, cognitiveComplexity: 12, callbackDepth: 0, quadraticTargets: [] }, score: 5 };
+      const item: NestingItem = {
+        kind: 'deep-nesting',
+        file: testFile,
+        header: 'anonymous',
+        span: span(),
+        metrics: { depth: 5, cognitiveComplexity: 12, callbackDepth: 0, quadraticTargets: [] },
+        score: 5,
+      };
       const out = formatReport(makeReport(['nesting'], { nesting: [item] }), 'text');
 
       expect(out).not.toContain('anonymous');
     });
 
     it('should omit kind suffix when nesting kind is empty', () => {
-      const item = { kind: '', file: testFile, header: 'fn', span: span(), metrics: { depth: 5, cognitiveComplexity: 12, callbackDepth: 0, quadraticTargets: [] }, score: 5 } as unknown as NestingItem;
+      const item = {
+        kind: '',
+        file: testFile,
+        header: 'fn',
+        span: span(),
+        metrics: { depth: 5, cognitiveComplexity: 12, callbackDepth: 0, quadraticTargets: [] },
+        score: 5,
+      } as unknown as NestingItem;
       const out = formatReport(makeReport(['nesting'], { nesting: [item] }), 'text');
 
       expect(out).toContain('fn');
@@ -622,7 +731,14 @@ describe('formatReport', () => {
 
   describe('early-return body', () => {
     it('should render body with header and kind when findings exist', () => {
-      const item: EarlyReturnItem = { kind: 'invertible-if-else', file: testFile, header: 'handleReq', span: span(22, 0), metrics: { maxDepth: 1, depthReduction: 1, statementsAffected: 3 }, score: 3 };
+      const item: EarlyReturnItem = {
+        kind: 'invertible-if-else',
+        file: testFile,
+        header: 'handleReq',
+        span: span(22, 0),
+        metrics: { maxDepth: 1, depthReduction: 1, statementsAffected: 3 },
+        score: 3,
+      };
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).toContain('Early Return');
@@ -631,14 +747,28 @@ describe('formatReport', () => {
     });
 
     it('should omit name when early-return header is anonymous', () => {
-      const item: EarlyReturnItem = { kind: 'wrapping-if', file: testFile, header: 'anonymous', span: span(), metrics: { maxDepth: 0, depthReduction: 1, statementsAffected: 2 }, score: 2 };
+      const item: EarlyReturnItem = {
+        kind: 'wrapping-if',
+        file: testFile,
+        header: 'anonymous',
+        span: span(),
+        metrics: { maxDepth: 0, depthReduction: 1, statementsAffected: 2 },
+        score: 2,
+      };
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).not.toContain('anonymous');
     });
 
     it('should omit kind suffix when early-return kind is empty', () => {
-      const item = { kind: '', file: testFile, header: 'fn', span: span(), metrics: { maxDepth: 0, depthReduction: 1, statementsAffected: 2 }, score: 2 } as unknown as EarlyReturnItem;
+      const item = {
+        kind: '',
+        file: testFile,
+        header: 'fn',
+        span: span(),
+        metrics: { maxDepth: 0, depthReduction: 1, statementsAffected: 2 },
+        score: 2,
+      } as unknown as EarlyReturnItem;
       const out = formatReport(makeReport(['early-return'], { 'early-return': [item] }), 'text');
 
       expect(out).toContain('fn');
@@ -650,7 +780,14 @@ describe('formatReport', () => {
   describe('dependencies body', () => {
     it('should render dead exports sub-section when dead-export findings exist', () => {
       const deps: ReadonlyArray<DependencyFinding> = [
-        { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/utils.ts', span: span(), module: 'src/utils.ts', name: 'helperFn' },
+        {
+          kind: 'dead-export',
+          code: 'DEP_DEAD_EXPORT',
+          file: 'src/utils.ts',
+          span: span(),
+          module: 'src/utils.ts',
+          name: 'helperFn',
+        },
       ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
@@ -662,7 +799,16 @@ describe('formatReport', () => {
 
     it('should render layer violations sub-section when layer-violation findings exist', () => {
       const deps: ReadonlyArray<DependencyFinding> = [
-        { kind: 'layer-violation', code: 'DEP_LAYER_VIOLATION', file: 'src/a.ts', span: span(), from: 'src/a.ts', to: 'src/b.ts', fromLayer: 'adapters', toLayer: 'engine' },
+        {
+          kind: 'layer-violation',
+          code: 'DEP_LAYER_VIOLATION',
+          file: 'src/a.ts',
+          span: span(),
+          from: 'src/a.ts',
+          to: 'src/b.ts',
+          fromLayer: 'adapters',
+          toLayer: 'engine',
+        },
       ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
@@ -673,7 +819,15 @@ describe('formatReport', () => {
 
     it('should render cycles sub-section when cycle findings exist', () => {
       const deps: ReadonlyArray<DependencyFinding> = [
-        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/a.ts', span: span() }, { file: 'src/b.ts', span: span() }, { file: 'src/a.ts', span: span() }] },
+        {
+          kind: 'circular-dependency',
+          code: 'DIAG_CIRCULAR_DEPENDENCY',
+          items: [
+            { file: 'src/a.ts', span: span() },
+            { file: 'src/b.ts', span: span() },
+            { file: 'src/a.ts', span: span() },
+          ],
+        },
       ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
@@ -684,7 +838,15 @@ describe('formatReport', () => {
 
     it('should render cut hint inside cycle when cycle has cut property', () => {
       const deps: ReadonlyArray<DependencyFinding> = [
-        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/x.ts', span: span() }, { file: 'src/y.ts', span: span() }], cut: { from: 'src/x.ts', to: 'src/y.ts' } },
+        {
+          kind: 'circular-dependency',
+          code: 'DIAG_CIRCULAR_DEPENDENCY',
+          items: [
+            { file: 'src/x.ts', span: span() },
+            { file: 'src/y.ts', span: span() },
+          ],
+          cut: { from: 'src/x.ts', to: 'src/y.ts' },
+        },
       ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
 
@@ -696,8 +858,8 @@ describe('formatReport', () => {
     it('should not render dependencies body when findings array is empty', () => {
       const out = formatReport(makeReport(['dependencies'], { dependencies: emptyDeps }), 'text');
       const lines = out.split('\n');
-      const hasDepsBody = lines.some(l =>
-        l.includes('dead exports:') || l.includes('cycles:') || l.includes('layer violations:'),
+      const hasDepsBody = lines.some(
+        l => l.includes('dead exports:') || l.includes('cycles:') || l.includes('layer violations:'),
       );
 
       expect(hasDepsBody).toBe(false);
@@ -705,8 +867,25 @@ describe('formatReport', () => {
 
     it('should render all three sub-sections when all three finding kinds are present', () => {
       const deps: ReadonlyArray<DependencyFinding> = [
-        { kind: 'circular-dependency', code: 'DIAG_CIRCULAR_DEPENDENCY', items: [{ file: 'src/a.ts', span: span() }, { file: 'src/b.ts', span: span() }], cut: { from: 'a', to: 'b' } },
-        { kind: 'layer-violation', code: 'DEP_LAYER_VIOLATION', file: 'src/b.ts', span: span(), from: 'a', to: 'b', fromLayer: 'x', toLayer: 'y' },
+        {
+          kind: 'circular-dependency',
+          code: 'DIAG_CIRCULAR_DEPENDENCY',
+          items: [
+            { file: 'src/a.ts', span: span() },
+            { file: 'src/b.ts', span: span() },
+          ],
+          cut: { from: 'a', to: 'b' },
+        },
+        {
+          kind: 'layer-violation',
+          code: 'DEP_LAYER_VIOLATION',
+          file: 'src/b.ts',
+          span: span(),
+          from: 'a',
+          to: 'b',
+          fromLayer: 'x',
+          toLayer: 'y',
+        },
         { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/c.ts', span: span(), module: 'c', name: 'd' },
       ];
       const out = formatReport(makeReport(['dependencies'], { dependencies: deps }), 'text');
@@ -722,7 +901,14 @@ describe('formatReport', () => {
 
   describe('coupling body', () => {
     it('should render body with module, score, and signals when findings exist', () => {
-      const hotspot: CouplingHotspot = { module: 'src/core.ts', score: 42, signals: ['high-fan-out', 'high-instability'], metrics: { fanIn: 1, fanOut: 20, instability: 0.95, abstractness: 0, distance: 0.95 }, why: '', suggestedRefactor: '' };
+      const hotspot: CouplingHotspot = {
+        module: 'src/core.ts',
+        score: 42,
+        signals: ['high-fan-out', 'high-instability'],
+        metrics: { fanIn: 1, fanOut: 20, instability: 0.95, abstractness: 0, distance: 0.95 },
+        why: '',
+        suggestedRefactor: '',
+      };
       const out = formatReport(makeReport(['coupling'], { coupling: [hotspot] }), 'text');
 
       expect(out).toContain('Coupling Hotspots');
@@ -737,7 +923,14 @@ describe('formatReport', () => {
 
   describe('temporal-coupling body', () => {
     it('should render body with state, writers, and readers when findings exist', () => {
-      const finding: TemporalCouplingFinding = { kind: 'temporal-coupling', file: testFile, span: span(5, 0), state: 'dbConn', writers: 3, readers: 7 };
+      const finding: TemporalCouplingFinding = {
+        kind: 'temporal-coupling',
+        file: testFile,
+        span: span(5, 0),
+        state: 'dbConn',
+        writers: 3,
+        readers: 7,
+      };
       const out = formatReport(makeReport(['temporal-coupling'], { 'temporal-coupling': [finding] }), 'text');
 
       expect(out).toContain('Temporal Coupling');
@@ -752,7 +945,14 @@ describe('formatReport', () => {
 
   describe('variable-lifetime body', () => {
     it('should render body with variable, lifetimeLines, and contextBurden when findings exist', () => {
-      const finding: VariableLifetimeFinding = { kind: 'variable-lifetime', file: testFile, span: span(10, 6), variable: 'config', lifetimeLines: 80, contextBurden: 5 };
+      const finding: VariableLifetimeFinding = {
+        kind: 'variable-lifetime',
+        file: testFile,
+        span: span(10, 6),
+        variable: 'config',
+        lifetimeLines: 80,
+        contextBurden: 5,
+      };
       const out = formatReport(makeReport(['variable-lifetime'], { 'variable-lifetime': [finding] }), 'text');
 
       expect(out).toContain('Variable Lifetime');
@@ -767,7 +967,13 @@ describe('formatReport', () => {
 
   describe('giant-file body', () => {
     it('should render body with file and metrics when findings exist', () => {
-      const finding: GiantFileFinding = { kind: 'giant-file', file: testFile, span: span(), code: 'GIANT_FILE', metrics: { lineCount: 2500, maxLines: 1000 } };
+      const finding: GiantFileFinding = {
+        kind: 'giant-file',
+        file: testFile,
+        span: span(),
+        code: 'GIANT_FILE',
+        metrics: { lineCount: 2500, maxLines: 1000 },
+      };
       const out = formatReport(makeReport(['giant-file'], { 'giant-file': [finding] }), 'text');
 
       expect(out).toContain('Giant File');
@@ -788,7 +994,14 @@ describe('formatReport', () => {
 
   describe('cross-cutting', () => {
     it('should not render body section when detector is not in selected detectors', () => {
-      const finding: TemporalCouplingFinding = { kind: 'temporal-coupling', file: testFile, span: span(), state: 'test', writers: 1, readers: 1 };
+      const finding: TemporalCouplingFinding = {
+        kind: 'temporal-coupling',
+        file: testFile,
+        span: span(),
+        state: 'test',
+        writers: 1,
+        readers: 1,
+      };
       // detectors list does NOT include temporal-coupling
       const out = formatReport(makeReport(['waste'], { 'temporal-coupling': [finding] }), 'text');
 
@@ -823,7 +1036,14 @@ describe('formatReport', () => {
     });
 
     it('should use default summary row for Phase 1 detectors not in summaryRowFor switch', () => {
-      const finding: TemporalCouplingFinding = { kind: 'temporal-coupling', file: testFile, span: span(), state: 'dbConn', writers: 1, readers: 1 };
+      const finding: TemporalCouplingFinding = {
+        kind: 'temporal-coupling',
+        file: testFile,
+        span: span(),
+        state: 'dbConn',
+        writers: 1,
+        readers: 1,
+      };
       const out = formatReport(makeReport(['temporal-coupling'], { 'temporal-coupling': [finding] }), 'text');
 
       // Should still render "Temporal Coupling" in summary via humanizeDetectorKey default

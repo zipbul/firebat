@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { Gildash, GildashOptions } from '@zipbul/gildash';
+
 import { GildashError } from '@zipbul/gildash';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
 import { __testing__, createGildash } from './gildash';
 
@@ -14,6 +15,7 @@ describe('createGildash', () => {
   beforeEach(() => {
     mockOpen.mockClear();
     mockOpen.mockResolvedValue({ projectRoot: '/test' } as unknown as Gildash);
+
     openSpy = spyOn(__testing__, 'open').mockImplementation(mockOpen);
   });
 
@@ -26,6 +28,7 @@ describe('createGildash', () => {
 
   it('should return Gildash instance when called with projectRoot only', async () => {
     const fakeGildash = { projectRoot: '/my/project' } as unknown as Gildash;
+
     mockOpen.mockResolvedValue(fakeGildash);
 
     const result = await createGildash({ projectRoot: '/my/project' });
@@ -37,7 +40,9 @@ describe('createGildash', () => {
     await createGildash({ projectRoot: '/proj', watchMode: true });
 
     expect(mockOpen).toHaveBeenCalledTimes(1);
+
     const calledWith = mockOpen.mock.calls[0]![0]!;
+
     expect(calledWith.watchMode).toBe(true);
   });
 
@@ -51,7 +56,9 @@ describe('createGildash', () => {
     await createGildash(opts);
 
     expect(mockOpen).toHaveBeenCalledTimes(1);
+
     const calledWith = mockOpen.mock.calls[0]![0]!;
+
     expect(calledWith.projectRoot).toBe('/proj');
     expect(calledWith.watchMode).toBe(true);
     expect(calledWith.extensions).toEqual(['.ts', '.tsx']);
@@ -61,6 +68,7 @@ describe('createGildash', () => {
     await createGildash({ projectRoot: '/proj' });
 
     const calledWith = mockOpen.mock.calls[0]![0]!;
+
     expect(calledWith.watchMode).toBe(false);
   });
 
@@ -68,6 +76,7 @@ describe('createGildash', () => {
     await createGildash({ projectRoot: '/proj' });
 
     const calledWith = mockOpen.mock.calls[0]![0]!;
+
     expect(calledWith.extensions).toEqual(['.ts', '.mts', '.cts', '.tsx']);
   });
 
@@ -76,17 +85,13 @@ describe('createGildash', () => {
   it('should throw Error with formatted message when Gildash.open throws GildashError', async () => {
     mockOpen.mockRejectedValue(new GildashError('store', 'DB corruption'));
 
-    await expect(createGildash({ projectRoot: '/proj' })).rejects.toThrow(
-      'Gildash open failed: DB corruption',
-    );
+    await expect(createGildash({ projectRoot: '/proj' })).rejects.toThrow('Gildash open failed: DB corruption');
   });
 
   it('should propagate rejection when Gildash.open throws', async () => {
     mockOpen.mockRejectedValue(new Error('unexpected crash'));
 
-    await expect(createGildash({ projectRoot: '/proj' })).rejects.toThrow(
-      'unexpected crash',
-    );
+    await expect(createGildash({ projectRoot: '/proj' })).rejects.toThrow('unexpected crash');
   });
 
   // ---------- ED ----------
@@ -95,6 +100,7 @@ describe('createGildash', () => {
     await createGildash({ projectRoot: '/proj', extensions: [] });
 
     const calledWith = mockOpen.mock.calls[0]![0]!;
+
     expect(calledWith.extensions).toEqual([]);
   });
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { collectBindingCandidates, collectExpressionCandidates } from './candidates';
-import { parseSource } from '../../engine/ast/parse-source';
 import type { ParsedFile } from '../../engine/types';
+
+import { parseSource } from '../../engine/ast/parse-source';
+import { collectBindingCandidates, collectExpressionCandidates } from './candidates';
 
 const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
@@ -176,9 +177,11 @@ describe('features/unknown-proof/candidates — collectBindingCandidates', () =>
 
     expect(zCandidate).toBeDefined();
     expect(zCandidate!.scopeRange).toBeDefined();
+
     // inner body is narrower than outer body
     const outerBody = f.sourceText.indexOf('{ function inner');
     const innerBody = f.sourceText.indexOf('{ const z');
+
     expect(zCandidate!.scopeRange!.start).toBeGreaterThanOrEqual(innerBody);
   });
 
@@ -191,8 +194,10 @@ describe('features/unknown-proof/candidates — collectBindingCandidates', () =>
 
     expect(barCandidate).toBeDefined();
     expect(barCandidate!.scopeRange).toBeDefined();
+
     // Param's scope should be the function body
     const bodyStart = code.indexOf('{ return');
+
     expect(barCandidate!.scopeRange.start).toBe(bodyStart);
   });
 

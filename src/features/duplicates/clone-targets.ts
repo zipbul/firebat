@@ -26,10 +26,15 @@ export const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(get
 
 export const getItemKind = (node: Node): FirebatItemKind => {
   const t = getNodeType(node);
-  if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') return 'function';
-  if (t === 'MethodDefinition') return 'method';
-  if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'TSTypeAliasDeclaration') return 'type';
-  if (t === 'TSInterfaceDeclaration') return 'interface';
+
+  if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') {return 'function';}
+
+  if (t === 'MethodDefinition') {return 'method';}
+
+  if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'TSTypeAliasDeclaration') {return 'type';}
+
+  if (t === 'TSInterfaceDeclaration') {return 'interface';}
+
   return 'node';
 };
 

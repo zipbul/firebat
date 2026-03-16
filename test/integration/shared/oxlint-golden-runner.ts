@@ -349,7 +349,6 @@ const runRuleOnSource = (
 ): GoldenRuleResult => {
   const filename = opts.filename ?? 'fixture.ts';
   const options = opts.options ?? [];
-
   const parsed = oxcParseSync(filename, fixtureSource);
   const programValue = (parsed as unknown as { program: AstNodeValue }).program;
 
@@ -362,7 +361,6 @@ const runRuleOnSource = (
   const tokens = buildCommaTokens(fixtureSource);
   const sourceCode = createSourceCode(fixtureSource, null, null, tokens);
   const getDeclaredVariables = buildGetDeclaredVariables(programValue);
-
   const extras: import('../oxlint-plugin/utils/rule-test-kit').RuleContextExtras = {};
 
   if (typeof filename === 'string' && filename !== 'fixture.ts') {
@@ -387,7 +385,6 @@ const runRuleOnSource = (
     const range = Array.isArray(node?.range) && node.range.length === 2
       ? (node.range as [number, number])
       : undefined;
-
     const entry: GoldenReport = { messageId: r.messageId };
 
     if (r.data && Object.keys(r.data).length > 0) {
@@ -400,7 +397,6 @@ const runRuleOnSource = (
 
     return entry;
   });
-
   const result: GoldenRuleResult = { reports: goldenReports };
 
   if (reports.some(r => typeof r.fix === 'function')) {
@@ -445,11 +441,11 @@ export const runGoldenRule = (
     const source = readFixtureSource(fixturesDir, name);
     const actual = runRuleOnSource(source, rule, opts);
     const actualJson = toGoldenJson(actual);
-
     const expectedJson = readExpected(expectedDir, name);
 
     if (expectedJson === null) {
       writeExpected(expectedDir, name, actualJson);
+
       throw new Error(
         `[golden] Created new expected file for "${name}". ` +
           `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,

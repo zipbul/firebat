@@ -802,7 +802,6 @@ exit 7
       expect(typeof report.catalog.WASTE_DEAD_STORE?.cause).toBe('string');
       expect(typeof report.catalog.BARREL_EXPORT_STAR?.think[0]).toBe('string');
       expect(typeof report.catalog.EF_THROW_NON_ERROR?.cause).toBe('string');
-
     } finally {
       await project.dispose();
     }
@@ -833,7 +832,6 @@ exit 7
           { logger },
         ),
       );
-
       // Assert
       const entries = Object.values(report.catalog);
 

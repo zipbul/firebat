@@ -146,6 +146,7 @@ const writeIfChanged = async (filePath: string, prevText: string, nextText: stri
 
 const reindexFile = async (rootAbs: string, _fileAbs: string, _logger: FirebatLogger): Promise<void> => {
   const gildash = await createGildash({ projectRoot: rootAbs, watchMode: false }).catch(() => undefined);
+
   if (gildash) {
     await gildash.close({ cleanup: false });
   }

@@ -176,7 +176,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
       };
       const score = Math.round(metrics.distance * 100);
       const kind = pickKind(signals);
-
       const codeVal = kindToCode[kind] as import('../../types').FirebatCatalogCode | undefined;
 
       return {

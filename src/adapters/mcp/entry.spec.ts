@@ -4,7 +4,6 @@ import * as nodePath from 'node:path';
 const __origServer = { ...require(nodePath.resolve(import.meta.dir, './server.ts')) };
 const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 const __origRootResolver = { ...require(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts')) };
-
 const mockRunMcpServer = mock(async () => undefined);
 
 mock.module(nodePath.resolve(import.meta.dir, './server.ts'), () => ({

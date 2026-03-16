@@ -31,7 +31,6 @@ describe('sortCouplingHotspots', () => {
   it('should sort by score descending when scores differ', () => {
     // Arrange
     const items = [makeHotspot('a', 10), makeHotspot('b', 90), makeHotspot('c', 50)];
-
     // Act
     const result = sortCouplingHotspots(items);
 
@@ -42,7 +41,6 @@ describe('sortCouplingHotspots', () => {
   it('should sort by module name ascending when scores are equal', () => {
     // Arrange
     const items = [makeHotspot('zoo', 5), makeHotspot('alpha', 5), makeHotspot('beta', 5)];
-
     // Act
     const result = sortCouplingHotspots(items);
 
@@ -61,7 +59,6 @@ describe('sortCouplingHotspots', () => {
   it('should return a one-element array unchanged', () => {
     // Arrange
     const item = makeHotspot('only', 42);
-
     // Act
     const result = sortCouplingHotspots([item]);
 
@@ -73,7 +70,6 @@ describe('sortCouplingHotspots', () => {
   it('should produce correct descending order for three elements in arbitrary input order', () => {
     // Arrange — provide in ascending order (reversed from expected)
     const items = [makeHotspot('a', 1), makeHotspot('b', 2), makeHotspot('c', 3)];
-
     // Act
     const result = sortCouplingHotspots(items);
 
@@ -93,7 +89,6 @@ describe('sortCouplingHotspots', () => {
   it('should return the same result on two successive calls with the same input', () => {
     // Arrange
     const items = [makeHotspot('b', 5), makeHotspot('a', 10)];
-
     // Act
     const first = sortCouplingHotspots(items);
     const second = sortCouplingHotspots(items);
@@ -121,7 +116,6 @@ describe('sortDependencyFanStats', () => {
   it('should sort by count descending when counts differ', () => {
     // Arrange
     const items = [makeFan('a', 3), makeFan('b', 10), makeFan('c', 1)];
-
     // Act
     const result = sortDependencyFanStats(items);
 
@@ -132,7 +126,6 @@ describe('sortDependencyFanStats', () => {
   it('should sort by module name ascending when counts are equal', () => {
     // Arrange
     const items = [makeFan('zig', 4), makeFan('ant', 4), makeFan('moo', 4)];
-
     // Act
     const result = sortDependencyFanStats(items);
 
@@ -151,7 +144,6 @@ describe('sortDependencyFanStats', () => {
   it('should return a one-element array unchanged', () => {
     // Arrange
     const item = makeFan('solo', 99);
-
     // Act
     const result = sortDependencyFanStats([item]);
 
@@ -163,7 +155,6 @@ describe('sortDependencyFanStats', () => {
   it('should produce correct descending order for three elements in arbitrary input order', () => {
     // Arrange
     const items = [makeFan('x', 2), makeFan('y', 8), makeFan('z', 5)];
-
     // Act
     const result = sortDependencyFanStats(items);
 

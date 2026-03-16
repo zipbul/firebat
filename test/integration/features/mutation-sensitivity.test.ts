@@ -10,8 +10,9 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../../src/test-api';
 import type { ParsedFile } from '../../../src/test-api';
+
+import { parseSource } from '../../../src/test-api';
 import { analyzeEarlyReturn } from '../../../src/test-api';
 import { analyzeDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
@@ -26,7 +27,6 @@ export function a() { return 1 + 2; }
 export function b() { return 1 + 2; }
 `;
     const program = parse(code);
-
     const strict = analyzeDuplicates([...program], { minSize: 1 });
     const lenient = analyzeDuplicates([...program], { minSize: 999 });
 
@@ -63,7 +63,6 @@ export function f(x: number): string {
   return 'huge';
 }
 `);
-
     const deepFindings = analyzeNesting(deep);
     const flatFindings = analyzeNesting(flat);
 
@@ -94,7 +93,6 @@ export function process(x: number | null): number {
   return x * 2;
 }
 `);
-
     const opFindings = analyzeEarlyReturn(withOpportunity);
     const flatFindings = analyzeEarlyReturn(flattened);
 

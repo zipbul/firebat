@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
 import type { DependencyAnalysis } from '../../types';
+
 import { analyzeCoupling, createEmptyCoupling } from './analyzer';
 
 const noCycles: DependencyAnalysis['cycles'] = [];
@@ -42,6 +43,7 @@ describe('analyzeCoupling', () => {
       deadExports: [],
     };
     const result = analyzeCoupling(deps);
+
     expect(result.every(h => h.module !== 'A')).toBe(true);
   });
 
@@ -50,7 +52,8 @@ describe('analyzeCoupling', () => {
     const adjacency: Record<string, string[]> = { A: [] };
 
     for (let i = 1; i <= 6; i++) {
-      adjacency['A']!.push(`dep${i}`);
+      adjacency.A!.push(`dep${i}`);
+
       adjacency[`dep${i}`] = [];
     }
 
@@ -66,6 +69,7 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
+
     expect(aHotspot).toBeDefined();
     expect(aHotspot?.signals).toContain('unstable-module');
   });
@@ -78,7 +82,9 @@ describe('analyzeCoupling', () => {
 
     for (let i = 1; i <= 11; i++) {
       adjacency[`up${i}`] = ['hub'];
-      adjacency['hub']!.push(`down${i}`);
+
+      adjacency.hub!.push(`down${i}`);
+
       adjacency[`down${i}`] = [];
     }
 
@@ -94,6 +100,7 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
+
     expect(hubHotspot).toBeDefined();
     expect(hubHotspot?.signals).toContain('god-module');
   });
@@ -112,11 +119,14 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const modules = result.map(h => h.module);
+
     expect(modules).toContain('A');
     expect(modules).toContain('B');
-    result.filter(h => h.module === 'A' || h.module === 'B').forEach(h => {
-      expect(h.signals).toContain('bidirectional-coupling');
-    });
+    result
+      .filter(h => h.module === 'A' || h.module === 'B')
+      .forEach(h => {
+        expect(h.signals).toContain('bidirectional-coupling');
+      });
   });
 
   it('[HP] detects off-main-sequence for isolated module (abstractness=0, instability=0)', () => {
@@ -134,6 +144,7 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const sHotspot = result.find(h => h.module === 'S');
+
     expect(sHotspot).toBeDefined();
     expect(sHotspot?.signals).toContain('off-main-sequence');
   });
@@ -160,6 +171,7 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
+
     expect(hubHotspot).toBeDefined();
     expect(hubHotspot?.signals).toContain('rigid-module');
   });
@@ -171,7 +183,8 @@ describe('analyzeCoupling', () => {
     const adjacency: Record<string, string[]> = { A: [] };
 
     for (let i = 1; i <= 6; i++) {
-      adjacency['A']!.push(`dep${i}`);
+      adjacency.A!.push(`dep${i}`);
+
       adjacency[`dep${i}`] = [];
     }
 
@@ -187,6 +200,7 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
+
     expect(aHotspot).toBeDefined();
     // distance = |abstractness + instability - 1| = |0 + 1 - 1| = 0
     expect(aHotspot?.metrics.distance).toBe(0);
@@ -208,6 +222,7 @@ describe('analyzeCoupling', () => {
     };
     const result = analyzeCoupling(deps);
     const sHotspot = result.find(h => h.module === 'S');
+
     expect(sHotspot).toBeDefined();
     expect(sHotspot?.metrics.distance).toBe(1);
     expect(sHotspot?.score).toBe(100);

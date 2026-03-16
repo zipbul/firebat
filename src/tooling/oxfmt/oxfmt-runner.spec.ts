@@ -4,14 +4,14 @@ import * as path from 'node:path';
 // mock.module must come BEFORE importing oxfmt-runner (which imports these at module level)
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxfmt' as string | null };
 const mockVersionOnce = { logExternalToolVersionOnce: async (_args: unknown) => {} };
-
 const __origResolveBin = { ...require(path.resolve(import.meta.dir, '../resolve-bin.ts')) };
 const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '../external-tool-version.ts')) };
 
 mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => mockResolveBin);
 mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => mockVersionOnce);
-import { runOxfmt } from './oxfmt-runner';
+
 import { createNoopLogger } from '../../shared/logger';
+import { runOxfmt } from './oxfmt-runner';
 
 const logger = createNoopLogger('error');
 
@@ -75,8 +75,10 @@ describe('runOxfmt', () => {
   it('should include --config in args when configPath is provided', async () => {
     // Arrange
     let capturedCmd: string[] | undefined;
-    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) =>  {
+
+    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) => {
       capturedCmd = cmd;
+
       return makeProc() as ReturnType<typeof Bun.spawn>;
     }) as unknown as typeof Bun.spawn);
 
@@ -91,8 +93,10 @@ describe('runOxfmt', () => {
   it('should not include --config when configPath is whitespace only', async () => {
     // Arrange
     let capturedCmd: string[] | undefined;
-    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) =>  {
+
+    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) => {
       capturedCmd = cmd;
+
       return makeProc() as ReturnType<typeof Bun.spawn>;
     }) as unknown as typeof Bun.spawn);
 
@@ -126,6 +130,7 @@ describe('runOxfmt', () => {
 
     // Assert
     const spawnCall = (spawnSpy.mock.calls[0] as [{ cmd: string[] }])[0];
+
     expect(spawnCall.cmd).toContain('--config');
     expect(spawnCall.cmd).toContain('/cfg/.oxfmtrc');
   });
@@ -139,6 +144,7 @@ describe('runOxfmt', () => {
 
     // Assert
     const spawnCall = (spawnSpy.mock.calls[0] as [{ cmd: string[] }])[0];
+
     expect(spawnCall.cmd).not.toContain('--config');
   });
 });
@@ -148,4 +154,3 @@ afterAll(() => {
   mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => __origResolveBin);
   mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => __origExternalToolVersion);
 });
-

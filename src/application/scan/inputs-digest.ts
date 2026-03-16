@@ -31,6 +31,7 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
 
       if (isEmptyPath) {
         partsByIndex[index] = `missing:${filePath}`;
+
         return;
       }
 
@@ -39,6 +40,7 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
 
         if (fileRec !== null) {
           partsByIndex[index] = `file:${filePath}:${fileRec.contentHash}`;
+
           return;
         }
 
@@ -55,6 +57,7 @@ const computeInputsDigest = async (input: ComputeInputsDigestInput): Promise<str
 
   for (let i = 0; i < partsByIndex.length; i += 1) {
     const part = partsByIndex[i];
+
     parts.push(part ?? `missing:${normalizedTargets[i] ?? ''}`);
   }
 

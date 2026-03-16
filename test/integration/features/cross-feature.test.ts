@@ -7,8 +7,9 @@
  */
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../../src/test-api';
 import type { ParsedFile } from '../../../src/test-api';
+
+import { parseSource } from '../../../src/test-api';
 import { analyzeEarlyReturn } from '../../../src/test-api';
 import { analyzeErrorFlow } from '../../../src/test-api';
 import { analyzeDuplicates } from '../../../src/test-api';
@@ -73,7 +74,6 @@ describe('cross-feature integration', () => {
   it('should run all analyzers on the same source without crashes', async () => {
     // Arrange
     const program = buildProgram(SOURCE);
-
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
     const errorFlow = await analyzeErrorFlow(program);
@@ -90,11 +90,9 @@ describe('cross-feature integration', () => {
   it('should produce findings from multiple analyzers on the same file', async () => {
     // Arrange
     const program = buildProgram(SOURCE);
-
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
     const nesting = analyzeNesting(program);
-
     // Assert — at least some analyzers find issues in this code
     const totalFindings = earlyReturn.length + nesting.length;
 
@@ -104,7 +102,6 @@ describe('cross-feature integration', () => {
   it('should produce consistent results on repeated runs', async () => {
     // Arrange
     const program = buildProgram(SOURCE);
-
     // Act — run twice
     const run1 = analyzeEarlyReturn(program);
     const run2 = analyzeEarlyReturn(program);

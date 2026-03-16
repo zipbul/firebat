@@ -430,7 +430,6 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
           const reachingInByNode = analysis.reachingInByNode;
           const nodePayloads = analysis.nodePayloads;
           const varHasAnyUsedDef: boolean[] = Array.from({ length: localIndexByName.size }, () => false);
-
           const allReads = collectVariables(functionBodyNode, { includeNestedFunctions: true }).filter(u => u.isRead);
           const outerReads = collectVariables(functionBodyNode, { includeNestedFunctions: false }).filter(u => u.isRead);
           const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));

@@ -249,22 +249,24 @@ const createMcpLogger = (server: McpServer, baseLogger: FirebatLogger): FirebatL
 const extractFindingFilePaths = (finding: unknown): ReadonlyArray<string> => {
   const f = finding as Record<string, unknown>;
 
-  if (typeof f['file'] === 'string' && f['file'].length > 0) return [f['file']];
-  if (typeof f['filePath'] === 'string' && f['filePath'].length > 0) return [f['filePath']];
-  if (typeof f['module'] === 'string' && f['module'].length > 0) return [f['module']];
+  if (typeof f.file === 'string' && f.file.length > 0) {return [f['file']];}
 
-  if (Array.isArray(f['items'])) {
-    return (f['items'] as Record<string, unknown>[])
+  if (typeof f.filePath === 'string' && f.filePath.length > 0) {return [f['filePath']];}
+
+  if (typeof f.module === 'string' && f.module.length > 0) {return [f['module']];}
+
+  if (Array.isArray(f.items)) {
+    return (f.items as Record<string, unknown>[])
       .flatMap(item => [
-        typeof item['filePath'] === 'string' ? item['filePath'] : '',
-        typeof item['file'] === 'string' ? item['file'] : '',
+        typeof item.filePath === 'string' ? item.filePath : '',
+        typeof item.file === 'string' ? item.file : '',
       ])
       .filter(Boolean);
   }
 
-  if (Array.isArray(f['outliers'])) {
-    return (f['outliers'] as Record<string, unknown>[])
-      .map(item => (typeof item['filePath'] === 'string' ? item['filePath'] : ''))
+  if (Array.isArray(f.outliers)) {
+    return (f.outliers as Record<string, unknown>[])
+      .map(item => (typeof item.filePath === 'string' ? item.filePath : ''))
       .filter(Boolean);
   }
 
@@ -289,6 +291,7 @@ const filterAnalysesByFilePatterns = (
   for (const [key, value] of Object.entries(analyses)) {
     if (!Array.isArray(value)) {
       filtered[key] = value;
+
       continue;
     }
 
@@ -309,7 +312,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     { capabilities: { logging: {} } },
   );
   // ── Shared gildash for query tools ──────────────────────────────────────────
-
   let sharedGildash: Awaited<ReturnType<typeof createGildash>> | null = null;
 
   const ensureGildash = async () => {
@@ -445,11 +447,13 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             affected: affectedResult.length,
             total: expanded.size,
           });
+
           targets = Array.from(expanded);
         } catch {
           mcpLogger.warn('expandAffected: getAffected failed, using original targets');
         }
       }
+
       const effectiveFeatures = resolveMcpFeatures(config);
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
@@ -472,7 +476,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       };
       const report = await scanUseCase(cliOptions, { logger: mcpLogger });
       const jsonReport = toJsonReport(report);
-
       const filePatterns = args.filePatterns ?? [];
       const filteredAnalyses = filterAnalysesByFilePatterns(
         jsonReport.analyses as unknown as Record<string, unknown>,
@@ -513,7 +516,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       try {
         const result = await gildash.indexExternalPackages(args.packages);
-
         const summary = result.map(r => ({
           project: r.project,
           filesIndexed: r.filesIndexed,
@@ -618,7 +620,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
       try {
         const result = gildash.getSymbolsByFile(args.filePath);
-
         const symbols = result.map(s => ({
           name: s.name,
           kind: s.kind,

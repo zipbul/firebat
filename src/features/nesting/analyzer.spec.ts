@@ -26,6 +26,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       comments: [],
       sourceText: '',
     };
+
     expect(analyzeNesting([bad])).toEqual([]);
   });
 
@@ -48,8 +49,11 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `,
     );
     const items = analyzeNesting([f]);
+
     expect(items.length).toBeGreaterThanOrEqual(1);
+
     const item = items[0]!;
+
     expect(item.file).toBe('/deep3.ts');
     expect(typeof item.header).toBe('string');
     expect(typeof item.metrics.depth).toBe('number');
@@ -83,6 +87,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
     const flatItems = analyzeNesting([flat]);
     const deepItems = analyzeNesting([deep]);
+
     // flat function should NOT be a finding
     expect(flatItems.length).toBe(0);
     // deep function SHOULD be a finding
@@ -108,8 +113,11 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `,
     );
     const items = analyzeNesting([f]);
+
     expect(items.length).toBeGreaterThanOrEqual(1);
+
     const item = items[0]!;
+
     expect(typeof item.file).toBe('string');
     expect(typeof item.header).toBe('string');
     expect(typeof item.metrics.depth).toBe('number');
@@ -126,8 +134,11 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     const f1 = toFile('/a.ts', nested);
     const f2 = toFile('/b.ts', nested);
     const items = analyzeNesting([f1, f2]);
+
     expect(items.length).toBeGreaterThanOrEqual(2);
+
     const paths = items.map(i => i.file);
+
     expect(paths.some(p => p === '/a.ts')).toBe(true);
     expect(paths.some(p => p === '/b.ts')).toBe(true);
   });
@@ -150,6 +161,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `,
     );
     const items = analyzeNesting([f]);
+
     expect(items.length).toBeGreaterThanOrEqual(1);
     expect(typeof items[0]!.score).toBe('number');
   });
@@ -172,6 +184,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `,
     );
     const items = analyzeNesting([f]);
+
     expect(items.length).toBeGreaterThanOrEqual(1);
     expect(items[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
   });
@@ -381,6 +394,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
+
     expect(analyzeNesting([f]).length).toBe(0);
     expect(analyzeNesting([f], { maxNestingDepth: 2 }).length).toBe(1);
     expect(analyzeNesting([f], { maxNestingDepth: 2 })[0]!.kind).toBe('deep-nesting');
@@ -547,11 +561,11 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
     // CC=8 for 8 ifs at depth 0, verify density is populated
     const baseItems = analyzeNesting([f]);
+
     expect(baseItems.length).toBe(1);
     expect(baseItems[0]!.kind).toBe('complexity-density');
 
     const actualDensity = baseItems[0]!.metrics.density;
-
     // Verify density > maxDensity triggers, density <= maxDensity does not
     const noDensity = analyzeNesting([f], {
       maxCognitiveComplexity: 999,
@@ -602,7 +616,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 3, maxCallbackDepth: 99, maxNestingDepth: 3, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 3,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 3,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -625,7 +646,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -653,7 +681,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 3, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 999,
+      maxCallbackDepth: 3,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     // describe/it/beforeEach callbacks are excluded → depth stays 0
@@ -675,7 +710,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 3, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 999,
+      maxCallbackDepth: 3,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -694,7 +736,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 2 };
+    const opts = {
+      maxCognitiveComplexity: 999,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 2,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -711,7 +760,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 3 };
+    const opts = {
+      maxCognitiveComplexity: 999,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 3,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -727,7 +783,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 2 };
+    const opts = {
+      maxCognitiveComplexity: 999,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 2,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -743,7 +806,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 3 };
+    const opts = {
+      maxCognitiveComplexity: 999,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 3,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(0);
@@ -796,7 +866,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -829,7 +906,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const elseIfItems = analyzeNesting([elseIf], opts);
     const nestedIfItems = analyzeNesting([nestedIf], opts);
 
@@ -859,7 +943,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const itemsWithCalls = analyzeNesting([withCalls], opts);
     const itemsWithoutCalls = analyzeNesting([withoutCalls], opts);
 
@@ -882,7 +973,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);
@@ -911,7 +1009,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const itemsAwait = analyzeNesting([withAwaitNew], opts);
     const itemsSimple = analyzeNesting([simpleIf], opts);
 
@@ -932,7 +1037,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1, maxPromiseChainDepth: 99 };
+    const opts = {
+      maxCognitiveComplexity: 1,
+      maxCallbackDepth: 99,
+      maxNestingDepth: 99,
+      minDensityLoc: 999,
+      maxDensity: 1,
+      maxPromiseChainDepth: 99,
+    };
     const items = analyzeNesting([f], opts);
 
     expect(items.length).toBe(1);

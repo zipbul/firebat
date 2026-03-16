@@ -2,9 +2,11 @@
 export function handle(input: unknown): string {
   if (!input) {
     console.log('invalid input');
+
     return 'error';
   }
 
   const str = String(input);
+
   return str.toUpperCase();
 }

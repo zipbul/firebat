@@ -36,7 +36,6 @@ describe('integration/coupling', () => {
 
     try {
       const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
       // Act
       const hotspots = analyzeCoupling(dependencies);
 

@@ -13,8 +13,13 @@ export function processAll(items: string[]) {
 }
 
 function doA(_s: string) {}
+
 function doB(_s: string) {}
+
 function doC(_s: string) {}
+
 function doD(_s: string) {}
+
 function doE(_s: string) {}
+
 function doF(_s: string) {}

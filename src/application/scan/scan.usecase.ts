@@ -179,6 +179,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       semanticAvailable = true;
     } catch {
       logger.warn('Semantic init failed, falling back to AST-only');
+
       gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
     }
   } else {
@@ -486,6 +487,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       }
     }
   }
+
   const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
     ? ((): Promise<TypecheckResult | null> => {
         const t0 = nowMs();
@@ -581,7 +583,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxDensity : undefined) ??
       DEFAULT_NESTING_OPTIONS.maxDensity,
   };
-
   let nesting: ReturnType<typeof analyzeNesting>;
 
   if (options.detectors.includes('nesting')) {
@@ -646,9 +647,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     try {
-      errorFlow = await analyzeErrorFlow(program, {
-        ...(semanticAvailable ? { gildash } : {}),
-      });
+      errorFlow = await analyzeErrorFlow(program, (semanticAvailable ? { gildash } : {}));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
@@ -1019,12 +1018,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const enrichDependencies = (value: any): ReadonlyArray<any> => {
     const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-
     const deadExports = Array.isArray(value?.deadExports) ? value.deadExports : [];
     const layerViolations = Array.isArray(value?.layerViolations) ? value.layerViolations : [];
     const cycles = Array.isArray(value?.cycles) ? value.cycles : [];
     const cuts = Array.isArray(value?.edgeCutHints) ? value.edgeCutHints : Array.isArray(value?.cuts) ? value.cuts : [];
-
     const findings: any[] = [];
 
     for (const v of layerViolations) {

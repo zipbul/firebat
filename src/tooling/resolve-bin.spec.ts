@@ -5,6 +5,7 @@ import { tryResolveBunxCommand, tryResolveLocalBin } from './resolve-bin';
 describe('tryResolveBunxCommand', () => {
   it('[HP] returns a BunxCommand or null (does not throw)', () => {
     const result = tryResolveBunxCommand();
+
     if (result !== null) {
       expect(typeof result.command).toBe('string');
       expect(Array.isArray(result.prefixArgs)).toBe(true);
@@ -15,6 +16,7 @@ describe('tryResolveBunxCommand', () => {
 
   it('[HP] if resolved, command is non-empty', () => {
     const result = tryResolveBunxCommand();
+
     if (result !== null) {
       expect(result.command.length).toBeGreaterThan(0);
     }
@@ -29,6 +31,7 @@ describe('tryResolveLocalBin', () => {
       callerDir: '/tmp',
       resolveMode: 'project-only',
     });
+
     expect(result).toBeNull();
   });
 
@@ -40,6 +43,7 @@ describe('tryResolveLocalBin', () => {
       callerDir: import.meta.dir,
       resolveMode: 'default',
     });
+
     // may or may not be in node_modules/.bin but as PATH fallback should be non-null
     if (result !== null) {
       expect(typeof result).toBe('string');

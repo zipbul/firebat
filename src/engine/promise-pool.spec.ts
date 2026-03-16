@@ -7,6 +7,7 @@ describe('runWithConcurrency', () => {
     // Arrange
     const items = [1, 2, 3];
     const processed: number[] = [];
+
     const worker = async (item: number): Promise<void> => {
       processed.push(item);
     };
@@ -22,6 +23,7 @@ describe('runWithConcurrency', () => {
     // Arrange
     const items = [10, 20, 30];
     const order: number[] = [];
+
     const worker = async (item: number): Promise<void> => {
       order.push(item);
     };
@@ -37,6 +39,7 @@ describe('runWithConcurrency', () => {
     // Arrange
     const items = [1, 2, 3];
     const calls: number[] = [];
+
     const worker = async (item: number): Promise<void> => {
       calls.push(item);
     };
@@ -63,6 +66,7 @@ describe('runWithConcurrency', () => {
     // Arrange: 2 items but concurrency=10 → only 2 runners launched
     const items = ['a', 'b'];
     const processed: string[] = [];
+
     const worker = async (item: string): Promise<void> => {
       processed.push(item);
     };
@@ -75,6 +79,7 @@ describe('runWithConcurrency', () => {
   it('should await all workers before resolving', async () => {
     // Arrange: workers have staggered delays
     const results: string[] = [];
+
     const worker = async (label: string): Promise<void> => {
       await new Promise<void>(resolve => setTimeout(resolve, 1));
       results.push(label);
@@ -90,15 +95,20 @@ describe('runWithConcurrency', () => {
   it('should produce the same outcome on two successive calls with identical inputs', async () => {
     // Arrange
     const sums: number[] = [];
+
     const worker = async (n: number): Promise<void> => {
       sums.push(n * 2);
     };
 
     // Act
     await runWithConcurrency([1, 2, 3], 2, worker);
+
     const firstRun = [...sums].sort();
+
     sums.length = 0;
+
     await runWithConcurrency([1, 2, 3], 2, worker);
+
     const secondRun = [...sums].sort();
 
     // Assert
@@ -108,6 +118,7 @@ describe('runWithConcurrency', () => {
   it('should clamp fractional concurrency via Math.floor', async () => {
     // Arrange: concurrency=1.9 → floor=1 → sequential
     const order: number[] = [];
+
     const worker = async (item: number): Promise<void> => {
       order.push(item);
     };

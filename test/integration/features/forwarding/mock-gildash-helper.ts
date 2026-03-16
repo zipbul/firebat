@@ -11,14 +11,14 @@ import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash'
 /* ------------------------------------------------------------------ */
 
 const resolveSpecifier = (fromPath: string, specifier: string): string => {
-  if (!specifier.startsWith('.')) return specifier;
+  if (!specifier.startsWith('.')) {return specifier;}
 
   const dir = fromPath.replace(/\/[^/]+$/, '');
   const segments = [...dir.split('/'), ...specifier.split('/')];
   const resolved: string[] = [];
 
   for (const seg of segments) {
-    if (seg === '.') continue;
+    if (seg === '.') {continue;}
 
     if (seg === '..') {
       resolved.pop();
@@ -40,15 +40,11 @@ const resolveSpecifier = (fromPath: string, specifier: string): string => {
 /*  Public API                                                         */
 /* ------------------------------------------------------------------ */
 
-export const buildMockGildashFromSources = (
-  sources: Map<string, string> | Record<string, string>,
-): Gildash => {
+export const buildMockGildashFromSources = (sources: Map<string, string> | Record<string, string>): Gildash => {
   const relations: CodeRelation[] = [];
   const symbols: SymbolSearchResult[] = [];
   let symbolId = 0;
-
-  const entries: Array<[string, string]> =
-    sources instanceof Map ? [...sources.entries()] : Object.entries(sources);
+  const entries: Array<[string, string]> = sources instanceof Map ? [...sources.entries()] : Object.entries(sources);
 
   for (const [filePath, source] of entries) {
     // ── Import: namespace ──
@@ -87,6 +83,7 @@ export const buildMockGildashFromSources = (
     // export function|const|let|var|class NAME
     for (const m of source.matchAll(/export\s+(?:function|const|let|var|class)\s+(\w+)/g)) {
       symbolId += 1;
+
       symbols.push({
         id: symbolId,
         filePath,
@@ -105,12 +102,13 @@ export const buildMockGildashFromSources = (
   const reverseAdj = new Map<string, string[]>();
 
   for (const rel of relations) {
-    if (rel.type !== 'imports') continue;
+    if (rel.type !== 'imports') {continue;}
 
     let list = reverseAdj.get(rel.dstFilePath);
 
     if (!list) {
       list = [];
+
       reverseAdj.set(rel.dstFilePath, list);
     }
 

@@ -7,9 +7,9 @@ import type { SourceSpan } from '../../types';
 import { initHasher } from '../../engine/hasher';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { computeToolVersion } from '../../shared/tool-version';
 import { createArtifactStore } from '../../store/artifact';
 import { createGildash } from '../../store/gildash';
-import { computeToolVersion } from '../../shared/tool-version';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
 import { computeCacheNamespace } from '../scan/cache-namespace';
 import { computeInputsDigest } from '../scan/inputs-digest';
@@ -79,7 +79,7 @@ const splitLines = (text: string): string[] => text.split(/\r?\n/);
 const extractEvidenceText = async (filePath: string, span: SourceSpan): Promise<string | undefined> => {
   const text = await readFileText(filePath);
 
-  if (text.length === 0) return undefined;
+  if (text.length === 0) {return undefined;}
 
   const lines = splitLines(text);
   const lineIdx = Math.max(0, Math.min(lines.length - 1, span.start.line - 1));
@@ -143,6 +143,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
 
   if (cached) {
     logger.debug('trace-symbol: cache hit', { artifactKey });
+
     await gildash.close({ cleanup: false });
 
     return cached;
@@ -158,7 +159,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const edgeIds = new Set<string>();
 
   const addNode = (node: TraceNode): void => {
-    if (nodeIds.has(node.id)) return;
+    if (nodeIds.has(node.id)) {return;}
 
     nodeIds.add(node.id);
     nodes.push(node);
@@ -167,7 +168,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const addEdge = (edge: TraceEdge): void => {
     const id = `${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ''}`;
 
-    if (edgeIds.has(id)) return;
+    if (edgeIds.has(id)) {return;}
 
     edgeIds.add(id);
     edges.push(edge);
@@ -199,7 +200,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
       addNode({ id: fileNodeId, kind: 'file', label: path.basename(filePath), filePath });
 
       const refNodeId = `ref:${filePath}:${ref.line}:${ref.column}`;
-      const label = ref.isDefinition ? `definition:${path.basename(filePath)}:${ref.line}` : `${path.basename(filePath)}:${ref.line}`;
+      const label = ref.isDefinition
+        ? `definition:${path.basename(filePath)}:${ref.line}`
+        : `${path.basename(filePath)}:${ref.line}`;
 
       addNode({ id: refNodeId, kind: 'reference', label, filePath, span });
       addEdge({

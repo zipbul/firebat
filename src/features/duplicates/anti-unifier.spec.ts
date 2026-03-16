@@ -8,12 +8,15 @@ import { antiUnify, classifyDiff } from './anti-unifier';
 
 const parseFunctions = (source: string) => {
   const { program } = parseSync('test.ts', source);
+
   return collectFunctionNodes(program);
 };
 
 const firstTwo = (source: string) => {
   const fns = parseFunctions(source);
-  if (fns.length < 2) throw new Error('함수 2개 이상 필요');
+
+  if (fns.length < 2) {throw new Error('함수 2개 이상 필요');}
+
   return [fns[0]!, fns[1]!] as const;
 };
 
@@ -28,6 +31,7 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(fn!, fn!);
+
     expect(result.variables).toHaveLength(0);
     expect(result.similarity).toBe(1.0);
     expect(result.sharedSize).toBe(result.leftSize);
@@ -44,10 +48,13 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(a, b);
+
     expect(result.variables.length).toBeGreaterThan(0);
+
     for (const v of result.variables) {
       expect(v.kind).toBe('identifier');
     }
+
     expect(result.similarity).toBeGreaterThan(0.5);
   });
 
@@ -61,10 +68,13 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(a, b);
+
     expect(result.variables.length).toBeGreaterThan(0);
+
     for (const v of result.variables) {
       expect(v.kind).toBe('literal');
     }
+
     expect(result.similarity).toBeGreaterThan(0.5);
   });
 
@@ -81,7 +91,8 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(a, b);
-    const structuralVars = result.variables.filter((v) => v.kind === 'structural');
+    const structuralVars = result.variables.filter(v => v.kind === 'structural');
+
     expect(structuralVars.length).toBeGreaterThan(0);
     expect(result.similarity).toBeGreaterThan(0);
     expect(result.similarity).toBeLessThan(1);
@@ -99,6 +110,7 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(a, b);
+
     expect(result.variables.length).toBeGreaterThan(0);
     expect(result.similarity).toBeLessThan(0.5);
   });
@@ -119,7 +131,9 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(a, b);
+
     expect(result.variables.length).toBeGreaterThan(0);
+
     // location이 비어있지 않아야 함
     for (const v of result.variables) {
       expect(typeof v.location).toBe('string');
@@ -132,6 +146,7 @@ describe('antiUnify', () => {
       function f2(y: number) { return y + 2; }
     `);
     const result = antiUnify(a, b);
+
     for (let i = 0; i < result.variables.length; i++) {
       expect(result.variables[i]!.id).toBe(i + 1);
     }
@@ -143,6 +158,7 @@ describe('antiUnify', () => {
       function longer() { const x = 1; const y = 2; return x + y; }
     `);
     const result = antiUnify(a, b);
+
     expect(result.leftSize).toBeGreaterThan(0);
     expect(result.rightSize).toBeGreaterThan(0);
     expect(result.rightSize).toBeGreaterThan(result.leftSize);
@@ -154,6 +170,7 @@ describe('antiUnify', () => {
       function fb() { while(true) { break; } }
     `);
     const result = antiUnify(a, b);
+
     expect(result.similarity).toBeGreaterThanOrEqual(0);
     expect(result.similarity).toBeLessThanOrEqual(1);
   });
@@ -165,6 +182,7 @@ describe('antiUnify', () => {
       function bar(y: Array<number>): void { return; }
     `);
     const result = antiUnify(a, b);
+
     // 두 함수의 구조가 거의 동일하므로 similarity는 높아야 함
     expect(result.similarity).toBeGreaterThan(0.8);
   });
@@ -187,7 +205,8 @@ describe('antiUnify', () => {
       }
     `);
     const result = antiUnify(a, b);
-    const literalVars = result.variables.filter((v) => v.kind === 'literal');
+    const literalVars = result.variables.filter(v => v.kind === 'literal');
+
     expect(literalVars.length).toBeGreaterThan(0);
   });
 
@@ -204,12 +223,11 @@ describe('antiUnify', () => {
         console.log("extra");
       }
     `);
-
     // Act
     const result = antiUnify(a, b);
-
     // Assert: bOnly 노드에 대해 leftType="missing", kind="structural" 인 변수가 생성되어야 함
-    const bOnlyVars = result.variables.filter((v) => v.kind === 'structural' && v.leftType === 'missing');
+    const bOnlyVars = result.variables.filter(v => v.kind === 'structural' && v.leftType === 'missing');
+
     expect(bOnlyVars.length).toBeGreaterThan(0);
   });
 
@@ -226,12 +244,11 @@ describe('antiUnify', () => {
         return x;
       }
     `);
-
     // Act
     const result = antiUnify(a, b);
-
     // Assert: 한쪽에만 존재하는 키(init)로 인해 structural variable이 생성되어야 함
-    const structuralVars = result.variables.filter((v) => v.kind === 'structural');
+    const structuralVars = result.variables.filter(v => v.kind === 'structural');
+
     expect(structuralVars.length).toBeGreaterThan(0);
   });
 
@@ -240,18 +257,13 @@ describe('antiUnify', () => {
     // (함수를 통해 비교하면 LCS fingerprint에 operator가 포함되어 statements 자체가 비매칭됨)
     const { program: p1 } = parseSync('test.ts', 'let _x = a + b;');
     const { program: p2 } = parseSync('test.ts', 'let _x = a - b;');
-    const addExpr = (p1.body[0] as unknown as { declarations: Array<{ init: import('oxc-parser').Node }> }).declarations[0]!
-      .init;
-    const subExpr = (p2.body[0] as unknown as { declarations: Array<{ init: import('oxc-parser').Node }> }).declarations[0]!
-      .init;
-
+    const addExpr = (p1.body[0] as unknown as { declarations: Array<{ init: import('oxc-parser').Node }> }).declarations[0]!.init;
+    const subExpr = (p2.body[0] as unknown as { declarations: Array<{ init: import('oxc-parser').Node }> }).declarations[0]!.init;
     // Act
     const result = antiUnify(addExpr, subExpr);
-
     // Assert: operator 차이로 인한 structural variable이 생성되어야 함
-    const operatorVars = result.variables.filter(
-      (v) => v.kind === 'structural' && v.leftType === '+' && v.rightType === '-',
-    );
+    const operatorVars = result.variables.filter(v => v.kind === 'structural' && v.leftType === '+' && v.rightType === '-');
+
     expect(operatorVars.length).toBeGreaterThan(0);
   });
 });
@@ -260,9 +272,7 @@ describe('antiUnify', () => {
 
 describe('classifyDiff', () => {
   it('variables 없음 → rename-only', () => {
-    expect(
-      classifyDiff({ sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1, variables: [] }),
-    ).toBe('rename-only');
+    expect(classifyDiff({ sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1, variables: [] })).toBe('rename-only');
   });
 
   it('identifier만 → rename-only', () => {
@@ -287,9 +297,7 @@ describe('classifyDiff', () => {
         leftSize: 10,
         rightSize: 10,
         similarity: 0.8,
-        variables: [
-          { id: 1, location: 'body.body[0].value', leftType: '42', rightType: '99', kind: 'literal' },
-        ],
+        variables: [{ id: 1, location: 'body.body[0].value', leftType: '42', rightType: '99', kind: 'literal' }],
       }),
     ).toBe('literal-variant');
   });
@@ -332,7 +340,13 @@ describe('classifyDiff', () => {
         rightSize: 10,
         similarity: 0.8,
         variables: [
-          { id: 1, location: 'params[0].typeAnnotation', leftType: 'TSTypeReference', rightType: 'TSTypeReference', kind: 'type' },
+          {
+            id: 1,
+            location: 'params[0].typeAnnotation',
+            leftType: 'TSTypeReference',
+            rightType: 'TSTypeReference',
+            kind: 'type',
+          },
         ],
       }),
     ).toBe('type-variant');
@@ -344,6 +358,7 @@ describe('classifyDiff', () => {
       function addA(a: number, b: number) { return a + b; }
     `);
     const result = antiUnify(fns[0]!, fns[1]!);
+
     expect(classifyDiff(result)).toBe('rename-only');
   });
 
@@ -353,6 +368,7 @@ describe('classifyDiff', () => {
       function getConst() { return 200; }
     `);
     const result = antiUnify(fns[0]!, fns[1]!);
+
     expect(classifyDiff(result)).toBe('literal-variant');
   });
 
@@ -362,6 +378,7 @@ describe('classifyDiff', () => {
       function complex() { console.log("hi"); return 1; }
     `);
     const result = antiUnify(fns[0]!, fns[1]!);
+
     expect(classifyDiff(result)).toBe('structural-diff');
   });
 });

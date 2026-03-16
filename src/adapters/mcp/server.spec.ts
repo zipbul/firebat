@@ -96,29 +96,26 @@ describe('filterAnalysesByFilePatterns', () => {
 
   it('should filter array findings by file pattern', () => {
     const analyses = {
-      waste: [
-        { file: 'src/a.ts' },
-        { file: 'lib/b.ts' },
-      ],
+      waste: [{ file: 'src/a.ts' }, { file: 'lib/b.ts' }],
     };
     const result = filterAnalysesByFilePatterns(analyses, ['src/**']);
 
-    expect((result['waste'] as unknown[]).length).toBe(1);
-    expect((result['waste'] as { file: string }[])[0]!.file).toBe('src/a.ts');
+    expect((result.waste as unknown[]).length).toBe(1);
+    expect((result.waste as { file: string }[])[0]!.file).toBe('src/a.ts');
   });
 
   it('should preserve findings with no file info', () => {
     const analyses = { lint: [{ message: 'no file' }] };
     const result = filterAnalysesByFilePatterns(analyses, ['src/**']);
 
-    expect((result['lint'] as unknown[]).length).toBe(1);
+    expect((result.lint as unknown[]).length).toBe(1);
   });
 
   it('should preserve non-array values as-is', () => {
     const analyses = { meta: { count: 5 } };
     const result = filterAnalysesByFilePatterns(analyses as never, ['src/**']);
 
-    expect(result['meta']).toEqual({ count: 5 });
+    expect(result.meta).toEqual({ count: 5 });
   });
 });
 
@@ -229,4 +226,3 @@ afterAll(() => {
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => __origConfigLoader);
   mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origPrettyLogger);
 });
-

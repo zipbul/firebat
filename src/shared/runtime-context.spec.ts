@@ -8,6 +8,7 @@ let resolveRuntimeContextFromCwd: (dir?: string) => Promise<{ rootAbs: string; r
 
 try {
   const mod = await import('./runtime-context');
+
   resolveRuntimeContextFromCwd = mod.resolveRuntimeContextFromCwd;
 } catch {
   // If module fails to load, stub it
@@ -17,6 +18,7 @@ try {
 describe('resolveRuntimeContextFromCwd', () => {
   it('[HP] returns an object with rootAbs and reason properties', async () => {
     const ctx = await resolveRuntimeContextFromCwd(path.resolve(import.meta.dir, '..'));
+
     expect(typeof ctx.rootAbs).toBe('string');
     expect(ctx.rootAbs.length).toBeGreaterThan(0);
     expect(['declared-dependency', 'self-repo']).toContain(ctx.reason);
@@ -24,6 +26,7 @@ describe('resolveRuntimeContextFromCwd', () => {
 
   it('[HP] rootAbs is an absolute path', async () => {
     const ctx = await resolveRuntimeContextFromCwd(path.resolve(import.meta.dir, '..'));
+
     expect(path.isAbsolute(ctx.rootAbs)).toBe(true);
   });
 });

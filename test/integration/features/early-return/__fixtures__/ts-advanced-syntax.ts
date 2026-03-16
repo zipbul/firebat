@@ -50,10 +50,7 @@ namespace Guards {
   }
 }
 
-export function processAll<T>(
-  items: readonly T[],
-  handler: (item: T) => boolean,
-): { passed: T[]; failed: T[] } {
+export function processAll<T>(items: readonly T[], handler: (item: T) => boolean): { passed: T[]; failed: T[] } {
   const passed: T[] = [];
   const failed: T[] = [];
 

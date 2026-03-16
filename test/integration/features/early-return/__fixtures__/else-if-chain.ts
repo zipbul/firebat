@@ -8,7 +8,9 @@ export function categorize(value: number): string {
     return 'small';
   } else {
     const msg = `large: ${value}`;
+
     console.log(msg);
+
     return msg;
   }
 }

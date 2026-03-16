@@ -1,1 +1,1 @@
-src/app.ts
+src / app.ts;

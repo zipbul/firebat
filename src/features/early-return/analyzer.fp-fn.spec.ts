@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeEarlyReturn } from './analyzer';
 import { parseSource } from '../../engine/ast/parse-source';
+import { analyzeEarlyReturn } from './analyzer';
 
-describe('analyzeEarlyReturn - false negative / false positive scenarios', () => { // eslint-disable-line firebat/test-describe-sut-name -- FP/FN 시나리오 전용 파일
+describe('analyzeEarlyReturn - false negative / false positive scenarios', () => {
+  // eslint-disable-line firebat/test-describe-sut-name -- FP/FN 시나리오 전용 파일
   const parse = (source: string) => [parseSource('/virtual/test.ts', source)];
 
   // ── 거짓 음성 후보 (감지되어야 하는 것) ──────────────────────────────────

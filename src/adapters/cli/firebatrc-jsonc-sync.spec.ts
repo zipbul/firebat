@@ -16,6 +16,7 @@ describe('syncJsoncTextToTemplateKeys', () => {
     });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.changed).toBe(false);
       expect(result.text).toBe('{"key": "value"}');
@@ -25,10 +26,10 @@ describe('syncJsoncTextToTemplateKeys', () => {
   it('should return ok:true with unchanged text when already in sync', () => {
     const template = { name: 'test', version: '1.0.0' };
     const userText = JSON.stringify(template, null, 2);
-
     const result = syncJsoncTextToTemplateKeys({ userText, templateJson: template });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.changed).toBe(false);
     }
@@ -37,10 +38,10 @@ describe('syncJsoncTextToTemplateKeys', () => {
   it('should insert missing keys from template', () => {
     const userText = '{\n  "name": "test"\n}';
     const templateJson = { name: 'test', version: '1.0.0' };
-
     const result = syncJsoncTextToTemplateKeys({ userText, templateJson });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.changed).toBe(true);
       expect(result.text).toContain('"version"');
@@ -50,10 +51,10 @@ describe('syncJsoncTextToTemplateKeys', () => {
   it('should remove keys not present in template', () => {
     const userText = '{\n  "name": "test",\n  "extra": "should-be-removed"\n}';
     const templateJson = { name: 'test' };
-
     const result = syncJsoncTextToTemplateKeys({ userText, templateJson });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.changed).toBe(true);
       expect(result.text).not.toContain('"extra"');
@@ -67,6 +68,7 @@ describe('syncJsoncTextToTemplateKeys', () => {
     });
 
     expect(result.ok).toBe(false);
+
     if (!result.ok) {
       expect(typeof result.error).toBe('string');
     }
@@ -84,10 +86,10 @@ describe('syncJsoncTextToTemplateKeys', () => {
   it('should preserve JSONC comments in unchanged sections', () => {
     const userText = '{\n  // a comment\n  "name": "test"\n}';
     const templateJson = { name: 'test' };
-
     const result = syncJsoncTextToTemplateKeys({ userText, templateJson });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       // Comments preserved — no change needed
       expect(result.changed).toBe(false);
@@ -101,6 +103,7 @@ describe('syncJsoncTextToTemplateKeys', () => {
     });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.changed).toBe(true);
       expect(result.text).toContain('"key"');
@@ -111,10 +114,10 @@ describe('syncJsoncTextToTemplateKeys', () => {
   it('should handle nested objects from template', () => {
     const userText = '{\n  "top": {}\n}';
     const templateJson = { top: { nested: 'value' } };
-
     const result = syncJsoncTextToTemplateKeys({ userText, templateJson });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       expect(result.text).toContain('"nested"');
     }
@@ -123,10 +126,10 @@ describe('syncJsoncTextToTemplateKeys', () => {
   it('should preserve existing values even if template has different values', () => {
     const userText = '{\n  "name": "my-custom-name"\n}';
     const templateJson = { name: 'template-name' };
-
     const result = syncJsoncTextToTemplateKeys({ userText, templateJson });
 
     expect(result.ok).toBe(true);
+
     if (result.ok) {
       // Key exists in both — no structural change needed
       expect(result.text).toContain('"my-custom-name"');

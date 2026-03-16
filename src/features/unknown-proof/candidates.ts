@@ -75,7 +75,7 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
       for (const prop of properties) {
         const propNode = asNodeLike(prop);
 
-        if (!propNode) continue;
+        if (!propNode) {continue;}
 
         if (propNode.type === 'RestElement') {
           results.push(...extractBindingIdentifiers(propNode.argument));
@@ -96,7 +96,8 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
       const results: NodeLike[] = [];
 
       for (const el of elements) {
-        if (el === null) continue; // sparse slot
+        if (el === null) {continue;} // sparse slot
+
         results.push(...extractBindingIdentifiers(el));
       }
 
@@ -111,6 +112,7 @@ const extractMemberObjectEnd = (node: NodeLike): number | undefined => {
   // MemberExpression: obj.prop or obj[key]
   if (node.type === 'MemberExpression') {
     const obj = asNodeLike(node.object);
+
     return obj && typeof obj.end === 'number' ? obj.end : undefined;
   }
 
@@ -120,6 +122,7 @@ const extractMemberObjectEnd = (node: NodeLike): number | undefined => {
 
     if (callee?.type === 'MemberExpression') {
       const obj = asNodeLike(callee.object);
+
       return obj && typeof obj.end === 'number' ? obj.end : undefined;
     }
   }
@@ -130,16 +133,16 @@ const extractMemberObjectEnd = (node: NodeLike): number | undefined => {
 const getInitObjectEndOffset = (init: unknown): number | undefined => {
   const initNode = asNodeLike(init);
 
-  if (!initNode) return undefined;
+  if (!initNode) {return undefined;}
 
   // Unwrap AwaitExpression
   const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
-  if (!target) return undefined;
+  if (!target) {return undefined;}
 
   const direct = extractMemberObjectEnd(target);
 
-  if (direct !== undefined) return direct;
+  if (direct !== undefined) {return direct;}
 
   // ConditionalExpression: cond ? a : b → check both branches
   if (target.type === 'ConditionalExpression') {
@@ -147,7 +150,7 @@ const getInitObjectEndOffset = (init: unknown): number | undefined => {
     const alternate = asNodeLike(target.alternate);
     const fromConsequent = consequent ? extractMemberObjectEnd(consequent) : undefined;
 
-    if (fromConsequent !== undefined) return fromConsequent;
+    if (fromConsequent !== undefined) {return fromConsequent;}
 
     return alternate ? extractMemberObjectEnd(alternate) : undefined;
   }
@@ -155,6 +158,7 @@ const getInitObjectEndOffset = (init: unknown): number | undefined => {
   // LogicalExpression: a ?? b, a || b → check left side
   if (target.type === 'LogicalExpression') {
     const left = asNodeLike(target.left);
+
     return left ? extractMemberObjectEnd(left) : undefined;
   }
 
@@ -164,26 +168,26 @@ const getInitObjectEndOffset = (init: unknown): number | undefined => {
 const hasExplicitAnyTypeArgument = (init: unknown): boolean => {
   const initNode = asNodeLike(init);
 
-  if (!initNode) return false;
+  if (!initNode) {return false;}
 
   // Unwrap AwaitExpression
   const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
-  if (!target || target.type !== 'CallExpression') return false;
+  if (!target || target.type !== 'CallExpression') {return false;}
 
   const typeArgs = target.typeArguments ?? target.typeParameters;
   const params = asNodeLike(typeArgs);
 
-  if (!params) return false;
+  if (!params) {return false;}
 
   const paramsList = params.params ?? params.arguments;
 
-  if (!Array.isArray(paramsList)) return false;
+  if (!Array.isArray(paramsList)) {return false;}
 
   for (const arg of paramsList) {
     const argNode = asNodeLike(arg);
 
-    if (argNode?.type === 'TSAnyKeyword' || argNode?.type === 'TSUnknownKeyword') return true;
+    if (argNode?.type === 'TSAnyKeyword' || argNode?.type === 'TSUnknownKeyword') {return true;}
   }
 
   return false;
@@ -194,33 +198,33 @@ const containsAnyUnknownCast = (node: NodeLike): boolean => {
   if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
     const typeAnno = asNodeLike(node.typeAnnotation);
 
-    if (typeAnno?.type === 'TSAnyKeyword' || typeAnno?.type === 'TSUnknownKeyword') return true;
+    if (typeAnno?.type === 'TSAnyKeyword' || typeAnno?.type === 'TSUnknownKeyword') {return true;}
 
     // Check inner expression too (double-cast: x as unknown as T)
     const inner = asNodeLike(node.expression);
 
-    if (inner) return containsAnyUnknownCast(inner);
+    if (inner) {return containsAnyUnknownCast(inner);}
   }
 
   // ParenthesizedExpression: (expr) → unwrap
   if (node.type === 'ParenthesizedExpression') {
     const inner = asNodeLike(node.expression);
 
-    if (inner) return containsAnyUnknownCast(inner);
+    if (inner) {return containsAnyUnknownCast(inner);}
   }
 
   // MemberExpression: (x as unknown as T).prop → check object
   if (node.type === 'MemberExpression') {
     const obj = asNodeLike(node.object);
 
-    if (obj) return containsAnyUnknownCast(obj);
+    if (obj) {return containsAnyUnknownCast(obj);}
   }
 
   // CallExpression: (x as unknown as T).method() → check callee
   if (node.type === 'CallExpression') {
     const callee = asNodeLike(node.callee);
 
-    if (callee) return containsAnyUnknownCast(callee);
+    if (callee) {return containsAnyUnknownCast(callee);}
   }
 
   return false;
@@ -229,22 +233,23 @@ const containsAnyUnknownCast = (node: NodeLike): boolean => {
 const hasExplicitCastToAnyUnknown = (init: unknown): boolean => {
   const initNode = asNodeLike(init);
 
-  if (!initNode) return false;
+  if (!initNode) {return false;}
 
   // Unwrap AwaitExpression
   const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
-  if (!target) return false;
+  if (!target) {return false;}
 
-  if (containsAnyUnknownCast(target)) return true;
+  if (containsAnyUnknownCast(target)) {return true;}
 
   // ConditionalExpression: cond ? (x as unknown) : y
   if (target.type === 'ConditionalExpression') {
     const consequent = asNodeLike(target.consequent);
     const alternate = asNodeLike(target.alternate);
 
-    if (consequent && containsAnyUnknownCast(consequent)) return true;
-    if (alternate && containsAnyUnknownCast(alternate)) return true;
+    if (consequent && containsAnyUnknownCast(consequent)) {return true;}
+
+    if (alternate && containsAnyUnknownCast(alternate)) {return true;}
   }
 
   return false;
@@ -300,7 +305,7 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
 
       for (const s of scopes) {
         if (s.start <= offset && offset <= s.end) {
-          if (!best || (s.end - s.start) < (best.end - best.start)) best = s;
+          if (!best || (s.end - s.start) < (best.end - best.start)) {best = s;}
         }
       }
 
@@ -337,6 +342,7 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
       }
 
       seenOffsets.add(startOffset);
+
       const resolvedScope = extra?.explicitScopeRange ?? findEnclosingScope(startOffset) ?? moduleScope;
 
       candidates.push({
@@ -482,8 +488,9 @@ const collectExpressionCandidates = (input: CollectBindingCandidatesInput): Read
     const candidates: ExpressionCandidate[] = [];
 
     walkOxcTree(file.program as Node, (node: Node) => {
-      if (!isNodeRecord(node)) return true;
-      if (node.type !== 'TSAsExpression' && node.type !== 'TSTypeAssertion') return true;
+      if (!isNodeRecord(node)) {return true;}
+
+      if (node.type !== 'TSAsExpression' && node.type !== 'TSTypeAssertion') {return true;}
 
       const nodeRecord = asNodeLike(node);
       const typeAnnotation = asNodeLike(nodeRecord?.typeAnnotation);

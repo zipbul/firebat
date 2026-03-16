@@ -1,12 +1,11 @@
-import { describe, expect, it } from 'bun:test';
 import type { Node } from 'oxc-parser';
 
-import { parseSource } from '../../engine/ast/parse-source';
+import { describe, expect, it } from 'bun:test';
 
+import { parseSource } from '../../engine/ast/parse-source';
 import { __testing__ } from './semantic-checks';
 
 const { containsUnknownOrAny, collectSafeContextRanges, isSafelyUsed } = __testing__;
-
 // ResolvedType factory helpers
 const TYPE_FLAG_ANY = 1;
 const TYPE_FLAG_UNKNOWN = 2;
@@ -49,49 +48,61 @@ describe('containsUnknownOrAny', () => {
   });
 
   it('unknown in typeArguments - isDirect false', () => {
-    const result = containsUnknownOrAny(makeType({
-      isGeneric: true,
-      typeArguments: [makeType({ flags: TYPE_FLAG_UNKNOWN })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isGeneric: true,
+        typeArguments: [makeType({ flags: TYPE_FLAG_UNKNOWN })],
+      }),
+    );
 
     expect(result).toEqual({ unknown: true, any: false, isDirect: false });
   });
 
   it('any in typeArguments - isDirect false', () => {
-    const result = containsUnknownOrAny(makeType({
-      isGeneric: true,
-      typeArguments: [makeType({ flags: 0 }), makeType({ flags: TYPE_FLAG_ANY })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isGeneric: true,
+        typeArguments: [makeType({ flags: 0 }), makeType({ flags: TYPE_FLAG_ANY })],
+      }),
+    );
 
     expect(result).toEqual({ unknown: false, any: true, isDirect: false });
   });
 
   it('unknown in union members - isDirect true (direct member)', () => {
-    const result = containsUnknownOrAny(makeType({
-      isUnion: true,
-      members: [makeType({ flags: 0, text: 'string' }), makeType({ flags: TYPE_FLAG_UNKNOWN })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isUnion: true,
+        members: [makeType({ flags: 0, text: 'string' }), makeType({ flags: TYPE_FLAG_UNKNOWN })],
+      }),
+    );
 
     expect(result).toEqual({ unknown: true, any: false, isDirect: true });
   });
 
   it('any in intersection members - isDirect true (direct member)', () => {
-    const result = containsUnknownOrAny(makeType({
-      isIntersection: true,
-      members: [makeType({ flags: TYPE_FLAG_ANY })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isIntersection: true,
+        members: [makeType({ flags: TYPE_FLAG_ANY })],
+      }),
+    );
 
     expect(result).toEqual({ unknown: false, any: true, isDirect: true });
   });
 
   it('unknown nested in member typeArguments - isDirect false', () => {
-    const result = containsUnknownOrAny(makeType({
-      isUnion: true,
-      members: [makeType({
-        isGeneric: true,
-        typeArguments: [makeType({ flags: TYPE_FLAG_UNKNOWN })],
-      })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isUnion: true,
+        members: [
+          makeType({
+            isGeneric: true,
+            typeArguments: [makeType({ flags: TYPE_FLAG_UNKNOWN })],
+          }),
+        ],
+      }),
+    );
 
     expect(result).toEqual({ unknown: true, any: false, isDirect: false });
   });
@@ -103,10 +114,12 @@ describe('containsUnknownOrAny', () => {
   });
 
   it('union members with any first then unknown - both accumulated', () => {
-    const result = containsUnknownOrAny(makeType({
-      isUnion: true,
-      members: [makeType({ flags: TYPE_FLAG_ANY }), makeType({ flags: TYPE_FLAG_UNKNOWN })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isUnion: true,
+        members: [makeType({ flags: TYPE_FLAG_ANY }), makeType({ flags: TYPE_FLAG_UNKNOWN })],
+      }),
+    );
 
     expect(result).toEqual({ unknown: true, any: true, isDirect: true });
   });
@@ -118,12 +131,14 @@ describe('containsUnknownOrAny', () => {
   });
 
   it('members with unknown + typeArguments with any - both accumulated', () => {
-    const result = containsUnknownOrAny(makeType({
-      isUnion: true,
-      isGeneric: true,
-      members: [makeType({ flags: TYPE_FLAG_UNKNOWN })],
-      typeArguments: [makeType({ flags: TYPE_FLAG_ANY })],
-    }));
+    const result = containsUnknownOrAny(
+      makeType({
+        isUnion: true,
+        isGeneric: true,
+        members: [makeType({ flags: TYPE_FLAG_UNKNOWN })],
+        typeArguments: [makeType({ flags: TYPE_FLAG_ANY })],
+      }),
+    );
 
     expect(result).toEqual({ unknown: true, any: true, isDirect: true });
   });
@@ -161,7 +176,7 @@ describe('collectSafeContextRanges', () => {
   ): boolean => {
     const pos = code.indexOf(substring);
 
-    if (pos === -1) throw new Error(`Substring "${substring}" not found in code`);
+    if (pos === -1) {throw new Error(`Substring "${substring}" not found in code`);}
 
     return ranges.some(r => r.start <= pos && pos < r.end);
   };
@@ -228,7 +243,6 @@ describe('collectSafeContextRanges', () => {
   it('CallExpression - chained call a()(e) calleeEnd points to paren', () => {
     const code = 'a()(e);';
     const ctx = getCtx(code);
-
     // Two CallExpressions: a() and a()(e)
     // The outer call a()(e) has callee "a()" — calleeEnd-1 → ')'
     const outerArg = ctx.callArgRanges.find(r => code.substring(r.start, r.end) === 'e');
@@ -513,7 +527,7 @@ describe('isSafelyUsed', () => {
     collectTypeAt: (_filePath: string, position: number) => {
       const entry = typeMap[position];
 
-      if (!entry) return null;
+      if (!entry) {return null;}
 
       return isResolvedType(entry) ? entry : makeType({ flags: entry.flags });
     },
@@ -521,7 +535,10 @@ describe('isSafelyUsed', () => {
     findReferences: () => [],
   });
 
-  const makeRef = (position: number, isDefinition: boolean): { filePath: string; position: number; line: number; column: number; isDefinition: boolean; isWrite: boolean } => ({
+  const makeRef = (
+    position: number,
+    isDefinition: boolean,
+  ): { filePath: string; position: number; line: number; column: number; isDefinition: boolean; isWrite: boolean } => ({
     filePath: '/test.ts',
     position,
     line: 1,
@@ -530,7 +547,10 @@ describe('isSafelyUsed', () => {
     isWrite: false,
   });
 
-  const emptySafeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }> };
+  const emptySafeCtx = {
+    ranges: [] as Array<{ start: number; end: number }>,
+    callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }>,
+  };
 
   it('underscore prefix - always safe', () => {
     const result = isSafelyUsed(
@@ -589,8 +609,13 @@ describe('isSafelyUsed', () => {
   });
 
   it('all usages in unconditional safe ranges - safe', () => {
-    const safeCtx = { ranges: [{ start: 8, end: 15 }, { start: 18, end: 25 }], callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }> };
-
+    const safeCtx = {
+      ranges: [
+        { start: 8, end: 15 },
+        { start: 18, end: 25 },
+      ],
+      callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }>,
+    };
     const result = isSafelyUsed(
       makeSemantic(),
       '/test.ts',
@@ -605,8 +630,10 @@ describe('isSafelyUsed', () => {
   });
 
   it('one usage in safe context, another NOT - unsafe', () => {
-    const safeCtx = { ranges: [{ start: 8, end: 15 }], callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }> };
-
+    const safeCtx = {
+      ranges: [{ start: 8, end: 15 }],
+      callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }>,
+    };
     const result = isSafelyUsed(
       makeSemantic(),
       '/test.ts',
@@ -622,7 +649,6 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with typed callee - safe', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 5 }] };
-
     const result = isSafelyUsed(
       makeSemantic({ 4: { flags: 0 } }),
       '/test.ts',
@@ -638,7 +664,6 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with any callee - unsafe (propagation)', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 5 }] };
-
     const result = isSafelyUsed(
       makeSemantic({ 4: { flags: TYPE_FLAG_ANY } }),
       '/test.ts',
@@ -745,7 +770,6 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with unknown callee - unsafe (propagation)', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 5 }] };
-
     const result = isSafelyUsed(
       makeSemantic({ 4: { flags: TYPE_FLAG_UNKNOWN } }),
       '/test.ts',
@@ -761,7 +785,6 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with calleeEnd=0 - unsafe (no callee info)', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 0 }] };
-
     const result = isSafelyUsed(
       makeSemantic(),
       '/test.ts',
@@ -777,7 +800,6 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with callee type null (gildash miss) - safe (benefit of doubt)', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 5 }] };
-
     // No type at position 4 → collectTypeAt returns null
     const result = isSafelyUsed(
       makeSemantic(),
@@ -794,7 +816,6 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with isDirect=true any callee - unsafe', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 5 }] };
-
     // Callee type has direct any flag → isDirect=true → propagation, not safe
     const result = isSafelyUsed(
       makeSemantic({ 4: { flags: TYPE_FLAG_ANY } }),
@@ -811,13 +832,11 @@ describe('isSafelyUsed', () => {
 
   it('usage in call arg with isDirect=false any callee (e.g. Array<any>) - safe', () => {
     const safeCtx = { ranges: [] as Array<{ start: number; end: number }>, callArgRanges: [{ start: 8, end: 15, calleeEnd: 5 }] };
-
     // Callee type: generic container with any in typeArguments → isDirect=false → safe
     const calleeType = makeType({
       isGeneric: true,
       typeArguments: [makeType({ flags: TYPE_FLAG_ANY })],
     });
-
     const result = isSafelyUsed(
       makeSemantic({ 4: calleeType }),
       '/test.ts',
@@ -833,8 +852,10 @@ describe('isSafelyUsed', () => {
   });
 
   it('collectTypeAt null for usage - falls through to safe context check', () => {
-    const safeCtx = { ranges: [{ start: 8, end: 15 }], callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }> };
-
+    const safeCtx = {
+      ranges: [{ start: 8, end: 15 }],
+      callArgRanges: [] as Array<{ start: number; end: number; calleeEnd: number }>,
+    };
     // No type info for usage at position 10, but position is in safe range
     const result = isSafelyUsed(
       makeSemantic(),

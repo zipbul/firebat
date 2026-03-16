@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'bun:test';
 import type { Node } from 'oxc-parser';
+
+import { describe, expect, it } from 'bun:test';
 
 import { getFunctionSpan } from './function-span';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const makeNode = (start: number, end: number): Node =>
-  ({ start, end }) as unknown as Node;
+const makeNode = (start: number, end: number): Node => ({ start, end }) as unknown as Node;
 
 // ── getFunctionSpan ───────────────────────────────────────────────────────────
 
@@ -15,7 +15,6 @@ describe('getFunctionSpan', () => {
     // Arrange: "function foo() {}" — start=9, end=12 → "foo"
     const source = 'function foo() {}';
     const node = makeNode(9, 12);
-
     // Act
     const span = getFunctionSpan(node, source);
 
@@ -42,7 +41,6 @@ describe('getFunctionSpan', () => {
     // Arrange
     const source = 'abc';
     const node = makeNode(0, 3);
-
     // Act
     const span = getFunctionSpan(node, source);
 

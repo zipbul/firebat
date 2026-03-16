@@ -1,3 +1,4 @@
+import { Gildash } from '@zipbul/gildash';
 /**
  * Gildash test helper for integration tests.
  *
@@ -7,8 +8,6 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-
-import { Gildash } from '@zipbul/gildash';
 
 export interface TempGildash {
   readonly gildash: Gildash;
@@ -56,6 +55,7 @@ export const createTempGildash = async (
     });
   } catch (e) {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+
     throw e;
   }
 

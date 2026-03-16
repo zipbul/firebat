@@ -8,13 +8,16 @@ const file = (sourceText: string) => parseSource('test.ts', sourceText);
 describe('collectFunctionItems', () => {
   it('[ED] returns [] for empty files array', () => {
     const result = collectFunctionItems([], () => 'item');
+
     expect(result).toEqual([]);
   });
 
   it('[ED] skips files with parse errors', () => {
     const called = { count: 0 };
+
     collectFunctionItems([file('const = ;')], () => {
       called.count++;
+
       return null;
     });
     expect(called.count).toBe(0);
@@ -22,34 +25,30 @@ describe('collectFunctionItems', () => {
 
   it('[HP] calls analyzer for each function node', () => {
     const called: string[] = [];
-    collectFunctionItems([file('function a() {} function b() {}')], (node) => {
+
+    collectFunctionItems([file('function a() {} function b() {}')], node => {
       called.push(node.type);
+
       return node.type;
     });
     expect(called.length).toBeGreaterThan(0);
   });
 
   it('[HP] collects returned items from analyzer', () => {
-    const result = collectFunctionItems(
-      [file('function f() { return 1; }')],
-      (_node, filePath) => filePath,
-    );
+    const result = collectFunctionItems([file('function f() { return 1; }')], (_node, filePath) => filePath);
+
     expect(result).toContain('test.ts');
   });
 
   it('[NE] skips items returned as null by analyzer', () => {
-    const result = collectFunctionItems(
-      [file('function f() {}')],
-      () => null,
-    );
+    const result = collectFunctionItems([file('function f() {}')], () => null);
+
     expect(result).toEqual([]);
   });
 
   it('[NE] skips items returned as undefined by analyzer', () => {
-    const result = collectFunctionItems(
-      [file('function f() {}')],
-      () => undefined as unknown as null,
-    );
+    const result = collectFunctionItems([file('function f() {}')], () => undefined as unknown as null);
+
     expect(result).toEqual([]);
   });
 });

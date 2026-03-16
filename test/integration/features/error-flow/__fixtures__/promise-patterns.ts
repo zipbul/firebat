@@ -27,6 +27,7 @@ export function preferAwaitToThen(): void {
     })
     .then((upper) => {
       console.log(upper);
+
       return upper;
     });
 }

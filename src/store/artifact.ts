@@ -39,7 +39,6 @@ CREATE TABLE IF NOT EXISTS artifacts (
   PRIMARY KEY (projectKey, kind, artifactKey, inputsDigest)
 );
 `;
-
 const ENSURE_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_artifacts_projectKey_kind ON artifacts(projectKey, kind);',
   'CREATE INDEX IF NOT EXISTS idx_artifacts_createdAt ON artifacts(createdAt);',
@@ -64,21 +63,18 @@ export const createArtifactStore = (db: Database): ArtifactStore => {
   const getStmt = db.prepare<{ payloadJson: string }, [string, string, string, string]>(
     'SELECT payloadJson FROM artifacts WHERE projectKey = ? AND kind = ? AND artifactKey = ? AND inputsDigest = ?',
   );
-
   const upsertStmt = db.prepare<void, [string, string, string, string, number, string]>(
     `INSERT INTO artifacts (projectKey, kind, artifactKey, inputsDigest, createdAt, payloadJson)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (projectKey, kind, artifactKey, inputsDigest)
      DO UPDATE SET createdAt = excluded.createdAt, payloadJson = excluded.payloadJson`,
   );
-
   // L1 in-memory cache
   const cache = new Map<string, string>();
 
   return {
     get<T>(input: GetArtifactInput): T | null {
       const key = cacheKey(input);
-
       // L1 hit
       const cached = cache.get(key);
 

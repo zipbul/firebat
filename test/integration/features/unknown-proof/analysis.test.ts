@@ -37,7 +37,6 @@ describe('integration/unknown-proof', () => {
       '}',
     ].join('\n');
     const program = [parseSource('/virtual/mixed.ts', code)];
-
     // Act — no gildash → binding candidates trigger PartialResultError
     const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
@@ -51,7 +50,6 @@ describe('integration/unknown-proof', () => {
     // Arrange — expression candidates (any-cast) don't need gildash
     const code = 'export const x = {} as any;';
     const program = [parseSource('/virtual/any-cast.ts', code)];
-
     // Act
     const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
@@ -64,7 +62,6 @@ describe('integration/unknown-proof', () => {
     // Arrange
     const code = 'interface T { x: number; }\nexport const x = "" as unknown as T;';
     const program = [parseSource('/virtual/double-cast.ts', code)];
-
     // Act
     const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
@@ -77,7 +74,6 @@ describe('integration/unknown-proof', () => {
     // Arrange — clean code without any-cast/double-cast expressions
     const code = ['export function clean() {', '  const x: number = 42;', '  return x;', '}'].join('\n');
     const program = [parseSource('/virtual/clean.ts', code)];
-
     // Act — no gildash → PartialResultError for binding candidates, no expression candidates
     const result = await runUnknownProof(async () => analyzeUnknownProof(program));
 
@@ -107,11 +103,7 @@ describe('integration/unknown-proof', () => {
       const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
           'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
-          '/virtual/src/catch.ts': [
-            'export function safeCatch() {',
-            '  try {} catch (e) { return e; }',
-            '}',
-          ].join('\n'),
+          '/virtual/src/catch.ts': ['export function safeCatch() {', '  try {} catch (e) { return e; }', '}'].join('\n'),
         },
         { semantic: true },
       );
@@ -119,7 +111,6 @@ describe('integration/unknown-proof', () => {
       try {
         const filePath = path.join(tmpDir, 'src', 'catch.ts');
         const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
         // Act
         const findings = analyzeUnknownProof(program, { gildash });
 
@@ -154,7 +145,6 @@ describe('integration/unknown-proof', () => {
       try {
         const filePath = path.join(tmpDir, 'src', 'narrowed.ts');
         const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
         // Act
         const findings = analyzeUnknownProof(program, { gildash });
 
@@ -183,7 +173,6 @@ describe('integration/unknown-proof', () => {
       try {
         const filePath = path.join(tmpDir, 'src', 'typed-return.ts');
         const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
         // Act
         const findings = analyzeUnknownProof(program, { gildash });
 
@@ -199,12 +188,7 @@ describe('integration/unknown-proof', () => {
       const { gildash, tmpDir, cleanup } = await createTempGildash(
         {
           'tsconfig.json': TSCONFIG_STRICT_UNKNOWN,
-          '/virtual/src/clean.ts': [
-            'export function clean() {',
-            '  const x: number = 42;',
-            '  return x;',
-            '}',
-          ].join('\n'),
+          '/virtual/src/clean.ts': ['export function clean() {', '  const x: number = 42;', '  return x;', '}'].join('\n'),
         },
         { semantic: true },
       );
@@ -212,7 +196,6 @@ describe('integration/unknown-proof', () => {
       try {
         const filePath = path.join(tmpDir, 'src', 'clean.ts');
         const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
         // Act
         const findings = analyzeUnknownProof(program, { gildash });
 
@@ -241,7 +224,6 @@ describe('integration/unknown-proof', () => {
       try {
         const filePath = path.join(tmpDir, 'src', 'cast-arg.ts');
         const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
         // Act
         const findings = analyzeUnknownProof(program, { gildash });
 
@@ -271,7 +253,6 @@ describe('integration/unknown-proof', () => {
       try {
         const filePath = path.join(tmpDir, 'src', 'unsafe-assign.ts');
         const program = [parseSource(filePath, await Bun.file(filePath).text())];
-
         // Act
         const findings = analyzeUnknownProof(program, { gildash });
 

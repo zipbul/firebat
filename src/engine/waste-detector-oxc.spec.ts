@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 
-import { detectWasteOxc } from './waste-detector-oxc';
-import { parseSource } from './ast/parse-source';
 import type { ParsedFile } from './types';
 
-const toFile = (filePath: string, code: string): ParsedFile =>
-  parseSource(filePath, code) as ParsedFile;
+import { parseSource } from './ast/parse-source';
+import { detectWasteOxc } from './waste-detector-oxc';
+
+const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
 describe('engine/waste-detector-oxc — detectWasteOxc', () => {
   it('returns empty array for non-array input (guard)', () => {
     const result = detectWasteOxc(null as unknown as ParsedFile[]);
+
     expect(result).toEqual([]);
   });
 
@@ -26,45 +27,60 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       sourceText: 'const x = ;',
     };
     const result = detectWasteOxc([badFile]);
+
     expect(result).toEqual([]);
   });
 
   it('returns empty array for file with no wasted variables', () => {
-    const f = toFile('/clean.ts', `
+    const f = toFile(
+      '/clean.ts',
+      `
       function add(a: number, b: number): number {
         return a + b;
       }
-    `);
+    `,
+    );
     const result = detectWasteOxc([f]);
+
     expect(result).toEqual([]);
   });
 
   it('detects unused variable (declared but never read)', () => {
-    const f = toFile('/unused.ts', `
+    const f = toFile(
+      '/unused.ts',
+      `
       function foo() {
         const unused = 42;
         return 1;
       }
-    `);
+    `,
+    );
     const result = detectWasteOxc([f]);
+
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'unused')).toBe(true);
   });
 
   it('detects dead write (variable written then immediately overwritten)', () => {
-    const f = toFile('/dead.ts', `
+    const f = toFile(
+      '/dead.ts',
+      `
       function compute() {
         let x;
         x = 1;
         x = 2;
         return x;
       }
-    `);
+    `,
+    );
     const result = detectWasteOxc([f]);
+
     expect(result.some(r => r.kind === 'dead-store-overwrite' && r.label === 'x')).toBe(true);
   });
 
   it('findings have required shape: kind, filePath, span, evidence', () => {
-    const f = toFile('/shape.ts', `
+    const f = toFile(
+      '/shape.ts',
+      `
       function waste() {
         const dead = 10;
         const dead2 = dead + 1;
@@ -72,8 +88,10 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
         const unreachable = 99;
         return 0;
       }
-    `);
+    `,
+    );
     const result = detectWasteOxc([f]);
+
     for (const finding of result) {
       expect(typeof finding.kind).toBe('string');
       expect(typeof finding.filePath).toBe('string');
@@ -86,6 +104,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const f1 = toFile('/a.ts', 'function a(x: number) { return x; }');
     const f2 = toFile('/b.ts', 'function b(y: number) { return y; }');
     const result = detectWasteOxc([f1, f2]);
+
     expect(Array.isArray(result)).toBe(true);
   });
 
@@ -102,7 +121,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       }
     }`;
     const f = toFile('/try-catch.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
@@ -121,7 +139,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       return inner();
     }`;
     const f = toFile('/nested.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
@@ -137,7 +154,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       return rest;
     }`;
     const f = toFile('/rest-sibling.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
@@ -157,7 +173,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       return 'not found';
     }`;
     const f = toFile('/switch-case-test.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
@@ -174,7 +189,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       return x;
     }`;
     const f = toFile('/nullish-never.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
@@ -190,7 +204,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       return x;
     }`;
     const f = toFile('/nullish-eval.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
@@ -209,13 +222,10 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       return current;
     }`;
     const f = toFile('/for-of-existing.ts', source);
-
     // Act
     const result = detectWasteOxc([f]);
 
     // Assert
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'current')).toBe(false);
   });
-
 });
-

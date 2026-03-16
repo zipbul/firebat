@@ -4,14 +4,14 @@ import * as path from 'node:path';
 // mock.module must come BEFORE importing oxlint-runner (which imports these at module level)
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxlint' as string | null };
 const mockVersionOnce = { logExternalToolVersionOnce: async (_args: unknown) => {} };
-
 const __origResolveBin = { ...require(path.resolve(import.meta.dir, '../resolve-bin.ts')) };
 const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '../external-tool-version.ts')) };
 
 mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => mockResolveBin);
 mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => mockVersionOnce);
-import { runOxlint, __testing__ } from './oxlint-runner';
+
 import { createNoopLogger } from '../../shared/logger';
+import { runOxlint, __testing__ } from './oxlint-runner';
 
 const logger = createNoopLogger('error');
 
@@ -44,9 +44,7 @@ describe('parseOxlintOutput', () => {
   });
 
   it('should parse array-style output and normalize fields', () => {
-    const raw = JSON.stringify([
-      { message: 'use const', severity: 'warning', line: 3, column: 5, filePath: '/src/a.ts' },
-    ]);
+    const raw = JSON.stringify([{ message: 'use const', severity: 'warning', line: 3, column: 5, filePath: '/src/a.ts' }]);
     const result = __testing__.parseOxlintOutput(raw);
 
     expect(result).toHaveLength(1);
@@ -69,9 +67,7 @@ describe('parseOxlintOutput', () => {
   });
 
   it('should fall back to text/level field aliases', () => {
-    const raw = JSON.stringify([
-      { text: 'aliased message', level: 'info', row: 10, col: 2, path: '/x.ts', ruleId: 'rule-x' },
-    ]);
+    const raw = JSON.stringify([{ text: 'aliased message', level: 'info', row: 10, col: 2, path: '/x.ts', ruleId: 'rule-x' }]);
     const result = __testing__.parseOxlintOutput(raw);
 
     expect(result[0]!.message).toBe('aliased message');
@@ -117,9 +113,8 @@ describe('runOxlint', () => {
   });
 
   it('should return ok:true with diagnostics when stdout is valid JSON array', async () => {
-    const diagnosticsJson = JSON.stringify([
-      { message: 'no-var', severity: 'error', line: 2, column: 1, filePath: '/a.ts' },
-    ]);
+    const diagnosticsJson = JSON.stringify([{ message: 'no-var', severity: 'error', line: 2, column: 1, filePath: '/a.ts' }]);
+
     spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc(diagnosticsJson, '', 1) as ReturnType<typeof Bun.spawn>);
 
     const result = await runOxlint({ targets: ['/a.ts'], logger });
@@ -133,6 +128,7 @@ describe('runOxlint', () => {
 
   it('should parse stderr diagnostics when stdout has no JSON', async () => {
     const diagnosticsJson = JSON.stringify([{ message: 'stderr-diag', severity: 'warning', line: 1, column: 1 }]);
+
     spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc('not-json', diagnosticsJson, 1) as ReturnType<typeof Bun.spawn>);
 
     const result = await runOxlint({ targets: ['/a.ts'], logger });
@@ -157,4 +153,3 @@ afterAll(() => {
   mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => __origResolveBin);
   mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => __origExternalToolVersion);
 });
-

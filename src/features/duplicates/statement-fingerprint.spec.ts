@@ -2,25 +2,24 @@ import { describe, expect, it } from 'bun:test';
 import { parseSync } from 'oxc-parser';
 
 import { collectFunctionNodes, collectOxcNodes } from '../../engine/ast/oxc-ast-utils';
-import {
-  extractStatementFingerprintBag,
-  extractStatementFingerprints,
-} from './statement-fingerprint';
+import { extractStatementFingerprintBag, extractStatementFingerprints } from './statement-fingerprint';
 
 // ─── 헬퍼 ─────────────────────────────────────────────────────────────────────
 
-const parse = (source: string) =>
-  parseSync('test.ts', source);
+const parse = (source: string) => parseSync('test.ts', source);
 
 const firstFunction = (source: string) => {
   const { program } = parse(source);
   const fns = collectFunctionNodes(program);
-  if (fns.length === 0) throw new Error('함수 노드 없음');
+
+  if (fns.length === 0) {throw new Error('함수 노드 없음');}
+
   return fns[0]!;
 };
 
 const allFunctions = (source: string) => {
   const { program } = parse(source);
+
   return collectFunctionNodes(program);
 };
 
@@ -29,6 +28,7 @@ const allFunctions = (source: string) => {
 describe('extractStatementFingerprints', () => {
   it('빈 함수 body → 빈 배열', () => {
     const node = firstFunction(`function empty() {}`);
+
     expect(extractStatementFingerprints(node)).toHaveLength(0);
   });
 
@@ -40,6 +40,7 @@ describe('extractStatementFingerprints', () => {
         return a;
       }
     `);
+
     expect(extractStatementFingerprints(node)).toHaveLength(3);
   });
 
@@ -63,11 +64,13 @@ describe('extractStatementFingerprints', () => {
     const fns = allFunctions(source);
     const fpFoo = extractStatementFingerprints(fns[0]!);
     const fpBar = extractStatementFingerprints(fns[1]!);
+
     expect(fpFoo).toEqual(fpBar);
   });
 
   it('ArrowFunction expression body → 1개 fingerprint', () => {
     const node = firstFunction(`const add = (a: number, b: number) => a + b;`);
+
     expect(extractStatementFingerprints(node)).toHaveLength(1);
   });
 
@@ -78,6 +81,7 @@ describe('extractStatementFingerprints', () => {
         return x;
       };
     `);
+
     expect(extractStatementFingerprints(node)).toHaveLength(2);
   });
 
@@ -89,6 +93,7 @@ describe('extractStatementFingerprints', () => {
       }
     `);
     const fps = extractStatementFingerprints(node);
+
     for (const fp of fps) {
       expect(typeof fp).toBe('string');
       expect(fp.length).toBeGreaterThan(0);
@@ -110,6 +115,7 @@ describe('extractStatementFingerprints', () => {
     const fns = allFunctions(source);
     const outerNode = fns[0]!; // outer
     const fps = extractStatementFingerprints(outerNode);
+
     // outer body: const x = 1; / function inner() {...}; / return inner();
     expect(fps).toHaveLength(3);
   });
@@ -125,9 +131,12 @@ describe('extractStatementFingerprints', () => {
     `;
     const { program } = parse(source);
     // MethodDefinition 노드 직접 수집
-    const methodNodes = collectOxcNodes(program, (n) => n.type === 'MethodDefinition');
+    const methodNodes = collectOxcNodes(program, n => n.type === 'MethodDefinition');
+
     expect(methodNodes.length).toBeGreaterThan(0);
+
     const fps = extractStatementFingerprints(methodNodes[0]!);
+
     expect(fps).toHaveLength(2);
   });
 
@@ -146,6 +155,7 @@ describe('extractStatementFingerprints', () => {
     const fns = allFunctions(source);
     const fpA = extractStatementFingerprints(fns[0]!);
     const fpB = extractStatementFingerprints(fns[1]!);
+
     expect(fpA).not.toEqual(fpB);
   });
 
@@ -161,6 +171,7 @@ describe('extractStatementFingerprints', () => {
     const fns = allFunctions(source);
     const fpFive = extractStatementFingerprints(fns[0]!);
     const fpTen = extractStatementFingerprints(fns[1]!);
+
     // shape fingerprint: literal 값 무시 → 동일해야 함
     expect(fpFive).toEqual(fpTen);
   });
@@ -172,12 +183,14 @@ describe('extractStatementFingerprints', () => {
       }
     `;
     const { program } = parse(source);
-    const methodNodes = collectOxcNodes(program, (n) => n.type === 'MethodDefinition');
+    const methodNodes = collectOxcNodes(program, n => n.type === 'MethodDefinition');
+
     // abstract 메서드는 value가 FunctionExpression이지만 body가 없을 수 있음
     // 또는 isOxcNode(value) === false인 경우를 커버
     // 어떤 경우든 에러 없이 빈 배열이어야 함
     if (methodNodes.length > 0) {
       const fps = extractStatementFingerprints(methodNodes[0]!);
+
       expect(Array.isArray(fps)).toBe(true);
     }
   });
@@ -191,18 +204,24 @@ describe('extractStatementFingerprints', () => {
       }
     `;
     const { program } = parse(source);
-    const classNodes = collectOxcNodes(program, (n) => n.type === 'ClassDeclaration');
+    const classNodes = collectOxcNodes(program, n => n.type === 'ClassDeclaration');
+
     expect(classNodes.length).toBeGreaterThan(0);
+
     const fps = extractStatementFingerprints(classNodes[0]!);
+
     expect(fps).toHaveLength(0);
   });
 
   it('TSTypeAliasDeclaration → 빈 배열', () => {
     const source = `type Foo = string | number;`;
     const { program } = parse(source);
-    const typeNodes = collectOxcNodes(program, (n) => n.type === 'TSTypeAliasDeclaration');
+    const typeNodes = collectOxcNodes(program, n => n.type === 'TSTypeAliasDeclaration');
+
     expect(typeNodes.length).toBeGreaterThan(0);
+
     const fps = extractStatementFingerprints(typeNodes[0]!);
+
     expect(fps).toHaveLength(0);
   });
 });
@@ -212,6 +231,7 @@ describe('extractStatementFingerprints', () => {
 describe('extractStatementFingerprintBag', () => {
   it('빈 함수 → 빈 bag', () => {
     const node = firstFunction(`function empty() {}`);
+
     expect(extractStatementFingerprintBag(node)).toHaveLength(0);
   });
 
@@ -225,6 +245,7 @@ describe('extractStatementFingerprintBag', () => {
     `);
     const seq = extractStatementFingerprints(node);
     const bag = extractStatementFingerprintBag(node);
+
     expect(bag).toHaveLength(seq.length);
   });
 
@@ -238,6 +259,7 @@ describe('extractStatementFingerprintBag', () => {
     `);
     const bag = extractStatementFingerprintBag(node);
     const unique = new Set(bag);
+
     expect(unique.size).toBe(bag.length);
   });
 });

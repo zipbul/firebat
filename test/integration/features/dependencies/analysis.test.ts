@@ -269,9 +269,7 @@ describe('integration/dependencies', () => {
 
     try {
       const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-      const triangleCycles = dependencies.cycles.filter(
-        cycle => toCycleKey(cycle) === ['a.ts', 'b.ts', 'c.ts'].sort().join('|'),
-      );
+      const triangleCycles = dependencies.cycles.filter(cycle => toCycleKey(cycle) === ['a.ts', 'b.ts', 'c.ts'].sort().join('|'));
 
       expect(triangleCycles.length).toBe(1);
     } finally {

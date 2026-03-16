@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  createMinHasher,
-  estimateJaccard,
-  findLshCandidates,
-} from './minhash';
+
+import { createMinHasher, estimateJaccard, findLshCandidates } from './minhash';
 
 // ─── computeSignature ─────────────────────────────────────────────────────────
 
@@ -11,13 +8,17 @@ describe('MinHasher.computeSignature', () => {
   it('빈 bag → 에러 없이 길이 k 시그니처 반환', () => {
     const hasher = createMinHasher(16);
     const sig = hasher.computeSignature([]);
+
     expect(sig).toHaveLength(16);
   });
 
   it('기본 k=128', () => {
     const hasher = createMinHasher();
+
     expect(hasher.k).toBe(128);
+
     const sig = hasher.computeSignature(['a']);
+
     expect(sig).toHaveLength(128);
   });
 
@@ -26,6 +27,7 @@ describe('MinHasher.computeSignature', () => {
     const bag = ['stmt-1', 'stmt-2', 'stmt-3', 'stmt-4', 'stmt-5'];
     const sigA = hasher.computeSignature(bag);
     const sigB = hasher.computeSignature([...bag]);
+
     expect(sigA).toEqual(sigB);
   });
 
@@ -37,6 +39,7 @@ describe('MinHasher.computeSignature', () => {
     const sigB = hasher.computeSignature(bagB);
     // 추정 Jaccard ≈ 0 (50개 중 겹치는 것 없음)
     const jaccard = estimateJaccard(sigA, sigB);
+
     expect(jaccard).toBeLessThan(0.05);
   });
 
@@ -51,6 +54,7 @@ describe('MinHasher.computeSignature', () => {
     const sigA = hasher.computeSignature(bagA);
     const sigB = hasher.computeSignature(bagB);
     const jaccard = estimateJaccard(sigA, sigB);
+
     // k=512이면 오차 < ±0.05 기대
     expect(jaccard).toBeGreaterThan(0.55);
     expect(jaccard).toBeLessThan(0.65);
@@ -60,6 +64,7 @@ describe('MinHasher.computeSignature', () => {
     const hasher = createMinHasher(32);
     const sig1 = hasher.computeSignature(['hello']);
     const sig2 = hasher.computeSignature(['hello']);
+
     expect(sig1).toEqual(sig2);
   });
 
@@ -69,6 +74,7 @@ describe('MinHasher.computeSignature', () => {
     const bagB = ['z', 'x', 'y'];
     const sigA = hasher.computeSignature(bagA);
     const sigB = hasher.computeSignature(bagB);
+
     // bag semantics: 순서 다르지만 동일 원소 → 동일 시그니처
     expect(sigA).toEqual(sigB);
   });
@@ -83,18 +89,21 @@ describe('estimateJaccard', () => {
 
   it('동일 시그니처 → 1.0', () => {
     const sig = [1n, 2n, 3n, 4n];
+
     expect(estimateJaccard(sig, sig)).toBe(1.0);
   });
 
   it('완전 불일치 시그니처 → 0.0', () => {
     const sigA = [1n, 2n, 3n, 4n];
     const sigB = [5n, 6n, 7n, 8n];
+
     expect(estimateJaccard(sigA, sigB)).toBe(0.0);
   });
 
   it('절반 일치 → 0.5', () => {
     const sigA = [1n, 2n, 3n, 4n];
     const sigB = [1n, 2n, 5n, 6n];
+
     expect(estimateJaccard(sigA, sigB)).toBe(0.5);
   });
 });
@@ -109,6 +118,7 @@ describe('findLshCandidates', () => {
   it('단일 시그니처 → 빈 결과 (쌍 불가)', () => {
     const hasher = createMinHasher();
     const sig = hasher.computeSignature(['a', 'b']);
+
     expect(findLshCandidates([sig])).toHaveLength(0);
   });
 
@@ -118,6 +128,7 @@ describe('findLshCandidates', () => {
     const sig = hasher.computeSignature(bag);
     // 완전히 동일한 시그니처 → 모든 band에서 같은 버킷
     const candidates = findLshCandidates([sig, sig]);
+
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toEqual({ i: 0, j: 1 });
   });
@@ -128,17 +139,17 @@ describe('findLshCandidates', () => {
     const sigA = hasher.computeSignature(bag);
     const sigB = hasher.computeSignature([...bag]); // 같은 내용 다른 배열
     const candidates = findLshCandidates([sigA, sigB]);
-    const hasPair = candidates.some((c) => c.i === 0 && c.j === 1);
+    const hasPair = candidates.some(c => c.i === 0 && c.j === 1);
+
     expect(hasPair).toBe(true);
   });
 
   it('후보 쌍은 i < j 보장', () => {
     const hasher = createMinHasher();
-    const bags = Array.from({ length: 5 }, (_, b) =>
-      Array.from({ length: 10 }, (_, i) => `bag${b}-${i}`),
-    );
-    const signatures = bags.map((bag) => hasher.computeSignature(bag));
+    const bags = Array.from({ length: 5 }, (_, b) => Array.from({ length: 10 }, (_, i) => `bag${b}-${i}`));
+    const signatures = bags.map(bag => hasher.computeSignature(bag));
     const candidates = findLshCandidates(signatures);
+
     for (const { i, j } of candidates) {
       expect(i).toBeLessThan(j);
     }
@@ -147,16 +158,12 @@ describe('findLshCandidates', () => {
   it('후보 쌍 중복 없음', () => {
     const hasher = createMinHasher();
     const common = Array.from({ length: 20 }, (_, i) => `common-${i}`);
-    const bags = [
-      common,
-      common,
-      common,
-      Array.from({ length: 20 }, (_, i) => `other-${i}`),
-    ];
-    const signatures = bags.map((bag) => hasher.computeSignature(bag));
+    const bags = [common, common, common, Array.from({ length: 20 }, (_, i) => `other-${i}`)];
+    const signatures = bags.map(bag => hasher.computeSignature(bag));
     const candidates = findLshCandidates(signatures);
     const keys = candidates.map(({ i, j }) => `${i}-${j}`);
     const uniqueKeys = new Set(keys);
+
     expect(keys.length).toBe(uniqueKeys.size);
   });
 
@@ -166,11 +173,13 @@ describe('findLshCandidates', () => {
     const itemsPerBag = 20;
     const signatures = Array.from({ length: bagCount }, (_, b) => {
       const bag = Array.from({ length: itemsPerBag }, (_, i) => `bag${b}-item${i}`);
+
       return hasher.computeSignature(bag);
     });
-
     const start = performance.now();
+
     findLshCandidates(signatures);
+
     const elapsed = performance.now() - start;
 
     expect(elapsed).toBeLessThan(500);
@@ -179,11 +188,15 @@ describe('findLshCandidates', () => {
   it('성능: 시그니처 계산 1000개 bag, k=128 → < 1000ms', () => {
     const hasher = createMinHasher(128);
     const start = performance.now();
+
     for (let b = 0; b < 1000; b++) {
       const bag = Array.from({ length: 15 }, (_, i) => `bag${b}-stmt${i}`);
+
       hasher.computeSignature(bag);
     }
+
     const elapsed = performance.now() - start;
+
     expect(elapsed).toBeLessThan(1000);
   });
 
@@ -194,7 +207,8 @@ describe('findLshCandidates', () => {
     const different = hasher.computeSignature(Array.from({ length: 50 }, (_, i) => `other-${i}`));
     // threshold=0.9에서 identical 쌍은 반드시 후보
     const candidates = findLshCandidates([identical1, identical2, different], 0.9);
-    const hasIdenticalPair = candidates.some((c) => c.i === 0 && c.j === 1);
+    const hasIdenticalPair = candidates.some(c => c.i === 0 && c.j === 1);
+
     expect(hasIdenticalPair).toBe(true);
   });
 
@@ -206,6 +220,7 @@ describe('findLshCandidates', () => {
     // threshold=0.3이면 ~50% 겹침도 후보가 될 수 있음
     const lowCandidates = findLshCandidates([sig1, sig2], 0.3);
     const highCandidates = findLshCandidates([sig1, sig2], 0.9);
+
     // 낮은 threshold에서 후보가 더 많거나 같아야 함
     expect(lowCandidates.length).toBeGreaterThanOrEqual(highCandidates.length);
   });

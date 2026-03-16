@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'bun:test';
-
 // We test the module via its side effects — the exported function is async and
 // relies on Bun.spawn. Instead, we test the internal logic indirectly by
 // calling logExternalToolVersionOnce with a non-existent command and verifying
@@ -11,6 +10,7 @@ import { logExternalToolVersionOnce } from './external-tool-version';
 describe('logExternalToolVersionOnce', () => {
   it('[HP] does not throw when cmdPath does not exist (catches internally)', async () => {
     const logger = createNoopLogger('debug');
+
     await expect(
       logExternalToolVersionOnce({
         tool: 'fake-tool',
@@ -32,6 +32,7 @@ describe('logExternalToolVersionOnce', () => {
       minVersion: '1.0.0',
       logger,
     };
+
     await logExternalToolVersionOnce(opts);
     // Second call — should not throw and returns quickly
     await expect(logExternalToolVersionOnce(opts)).resolves.toBeUndefined();

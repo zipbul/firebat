@@ -1,15 +1,13 @@
 import { describe } from 'bun:test';
 
+import type { FixtureSources } from '../../shared/golden-runner';
+
 import { analyzeCoupling } from '../../../../src/test-api';
 import { analyzeDependencies } from '../../../../src/test-api';
-import type { FixtureSources } from '../../shared/golden-runner';
-import { runGolden } from '../../shared/golden-runner';
 import { createTempGildash } from '../../shared/gildash-test-kit';
+import { runGolden } from '../../shared/golden-runner';
 
-const gildashAdapter = async (
-  _program: ReadonlyArray<unknown>,
-  sources: FixtureSources,
-): Promise<unknown> => {
+const gildashAdapter = async (_program: ReadonlyArray<unknown>, sources: FixtureSources): Promise<unknown> => {
   const { gildash, tmpDir, cleanup } = await createTempGildash(sources);
 
   try {

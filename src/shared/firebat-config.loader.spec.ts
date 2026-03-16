@@ -1,4 +1,5 @@
 import { describe, it, expect, spyOn, afterEach } from 'bun:test';
+
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath, DEFAULT_FIREBAT_RC_BASENAME } from './firebat-config.loader';
 
 let fileSpy: ReturnType<typeof spyOn>;
@@ -29,6 +30,7 @@ describe('loadFirebatConfigFile', () => {
   it('should return exists:true with parsed config for valid JSONC', async () => {
     // Empty config {} is valid (all fields optional)
     const validConfig = JSON.stringify({});
+
     fileSpy = spyOn(Bun, 'file').mockReturnValue({
       exists: async () => true,
       text: async () => validConfig,
@@ -42,8 +44,10 @@ describe('loadFirebatConfigFile', () => {
 
   it('should use configPath when provided', async () => {
     let capturedPath: string | undefined;
+
     fileSpy = spyOn(Bun, 'file').mockImplementation(((p: string | URL) => {
       capturedPath = p.toString();
+
       return { exists: async () => false, text: async () => '' } as never;
     }) as unknown as typeof Bun.file);
 

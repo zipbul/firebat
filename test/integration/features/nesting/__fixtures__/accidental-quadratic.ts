@@ -21,7 +21,7 @@ export function findDuplicates(items: string[]): string[] {
 }
 
 export function nestedFilterSameTarget(data: number[]): number[] {
-  return data.filter((x) => {
-    return data.some((y) => y > x);
+  return data.filter(x => {
+    return data.some(y => y > x);
   });
 }

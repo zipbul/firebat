@@ -20,7 +20,6 @@ export const analyzeUnknownProof = (
 ): ReadonlyArray<UnknownProofFinding> => {
   const candidatesByFile = collectBindingCandidates({ program });
   const exprCandidatesByFile = collectExpressionCandidates({ program });
-
   // expression candidates -> findings (hover not needed, AST-only)
   const exprFindings: UnknownProofFinding[] = [];
 

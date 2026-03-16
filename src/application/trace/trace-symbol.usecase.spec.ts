@@ -39,8 +39,8 @@ mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), (
   computeToolVersion: () => '1.0.0-test',
 }));
 
-import { traceSymbolUseCase } from './trace-symbol.usecase';
 import { createNoopLogger } from '../../shared/logger';
+import { traceSymbolUseCase } from './trace-symbol.usecase';
 
 const logger = createNoopLogger('error');
 

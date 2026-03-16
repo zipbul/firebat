@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'bun:test';
-
 import type { CodeRelation, ParsedFile as GildashParsedFile } from '@zipbul/gildash';
+
+import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer';
@@ -20,6 +20,7 @@ describe('temporal-coupling/analyzer', () => {
     const files: any[] = [];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result).toEqual(createEmptyTemporalCoupling());
   });
@@ -33,6 +34,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -43,6 +45,7 @@ describe('temporal-coupling/analyzer', () => {
     const files = [file('src/a.js', 'let db = null; export function init() { db = 1; } export function query() { return db; }')];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -62,6 +65,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.kind).toBe('temporal-coupling');
@@ -83,6 +87,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.state).toBe('total');
@@ -99,6 +104,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.state).toBe('count');
@@ -121,6 +127,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(3);
     expect(result[0]?.writers).toBe(1);
@@ -144,6 +151,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.state).toBe('initialized');
@@ -203,11 +211,10 @@ describe('temporal-coupling/analyzer', () => {
   // --- [NE] should not report const declarations ---
   it('should not report const declarations', () => {
     // Arrange
-    const files = [
-      file('src/a.ts', ['const data = [];', 'export function getData() { return data; }'].join('\n')),
-    ];
+    const files = [file('src/a.ts', ['const data = [];', 'export function getData() { return data; }'].join('\n'))];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -220,6 +227,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -227,11 +235,10 @@ describe('temporal-coupling/analyzer', () => {
   // --- [NE] should not report when file has no exported functions ---
   it('should not report when file has no exported functions', () => {
     // Arrange
-    const files = [
-      file('src/a.ts', ['let x = 0;', 'function set() { x = 1; }', 'function get() { return x; }'].join('\n')),
-    ];
+    const files = [file('src/a.ts', ['let x = 0;', 'function set() { x = 1; }', 'function get() { return x; }'].join('\n'))];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -242,6 +249,7 @@ describe('temporal-coupling/analyzer', () => {
     const files = [file('src/a.ts', 'let x = 0;')];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -249,14 +257,10 @@ describe('temporal-coupling/analyzer', () => {
   // --- [CO] should not self-detect when variable is named 'initialized' ---
   it('should not self-detect when source contains keywords like initialized without temporal coupling pattern', () => {
     // Arrange — a file that uses 'initialized' as a plain variable but has no writer/reader split
-    const files = [
-      file(
-        'src/a.ts',
-        ['const initialized = true;', 'export function check() { return initialized; }'].join('\n'),
-      ),
-    ];
+    const files = [file('src/a.ts', ['const initialized = true;', 'export function check() { return initialized; }'].join('\n'))];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — const is not let/var, no temporal coupling
     expect(result.length).toBe(0);
   });
@@ -302,6 +306,7 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result1 = analyzeTemporalCoupling(files as any);
     const result2 = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result1).toEqual(result2);
   });
@@ -331,13 +336,11 @@ describe('temporal-coupling/analyzer', () => {
   it('analyzeTemporalCoupling - arrow function export writer/reader - reports temporal coupling', () => {
     // Arrange
     const files = [
-      file(
-        'src/a.ts',
-        ['let x = 0;', 'export const init = () => { x = 1; };', 'export const query = () => x;'].join('\n'),
-      ),
+      file('src/a.ts', ['let x = 0;', 'export const init = () => { x = 1; };', 'export const query = () => x;'].join('\n')),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.state).toBe('x');
@@ -349,15 +352,12 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'let x = 0;',
-          'export const init = function() { x = 1; };',
-          'export const query = function() { return x; };',
-        ].join('\n'),
+        ['let x = 0;', 'export const init = function() { x = 1; };', 'export const query = function() { return x; };'].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.state).toBe('x');
@@ -369,16 +369,12 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'let x = 0;',
-          'const init = () => { x = 1; };',
-          'const query = () => x;',
-          'export { init, query };',
-        ].join('\n'),
+        ['let x = 0;', 'const init = () => { x = 1; };', 'const query = () => x;', 'export { init, query };'].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
     expect(result[0]?.state).toBe('x');
@@ -390,15 +386,12 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'let x = 0;',
-          'export default function init() { x = 1; }',
-          'export function query() { return x; }',
-        ].join('\n'),
+        ['let x = 0;', 'export default function init() { x = 1; }', 'export function query() { return x; }'].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -420,6 +413,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -442,6 +436,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -451,9 +446,11 @@ describe('temporal-coupling/analyzer', () => {
   const createMockGildash = (relations: CodeRelation[]) => ({
     searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
       return relations.filter(r => {
-        if (query.type !== undefined && r.type !== query.type) return false;
-        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) return false;
-        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) return false;
+        if (query.type !== undefined && r.type !== query.type) {return false;}
+
+        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) {return false;}
+
+        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) {return false;}
 
         return true;
       });
@@ -477,6 +474,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -494,6 +492,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -509,6 +508,7 @@ describe('temporal-coupling/analyzer', () => {
     const mockGildash = createMockGildash([]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -529,6 +529,7 @@ describe('temporal-coupling/analyzer', () => {
     };
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: throwingGildash as any });
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -538,13 +539,7 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'export class Service {',
-          '  x = 0;',
-          '  init() { this.x = 1; }',
-          '  query() { return this.x; }',
-          '}',
-        ].join('\n'),
+        ['export class Service {', '  x = 0;', '  init() { this.x = 1; }', '  query() { return this.x; }', '}'].join('\n'),
       ),
     ];
     const mockGildash = createMockGildash([
@@ -553,6 +548,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -572,6 +568,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -581,13 +578,9 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'export const svc = new (class {',
-          '  x = 0;',
-          '  init() { this.x = 1; }',
-          '  query() { return this.x; }',
-          '})();',
-        ].join('\n'),
+        ['export const svc = new (class {', '  x = 0;', '  init() { this.x = 1; }', '  query() { return this.x; }', '})();'].join(
+          '\n',
+        ),
       ),
     ];
     // Gildash claims all callers call both — but anonymous class cannot be matched → no suppression
@@ -597,6 +590,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — anonymous class cannot be suppressed, finding must remain
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -606,9 +600,11 @@ describe('temporal-coupling/analyzer', () => {
   const createMockGildashWithAst = (relations: CodeRelation[], astMap: Record<string, GildashParsedFile>) => ({
     searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
       return relations.filter(r => {
-        if (query.type !== undefined && r.type !== query.type) return false;
-        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) return false;
-        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) return false;
+        if (query.type !== undefined && r.type !== query.type) {return false;}
+
+        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) {return false;}
+
+        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) {return false;}
 
         return true;
       });
@@ -621,7 +617,9 @@ describe('temporal-coupling/analyzer', () => {
 
   it('analyzeTemporalCoupling - caller calls writer before reader (correct order) - suppresses finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = ["import { init, query } from './a';", 'export function main() { init(); query(); }'].join('\n');
     const callerParsed = parseSource('src/main.ts', callerSource);
     const files = [file('src/a.ts', targetSource)];
@@ -634,13 +632,16 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — writer before reader → suppression maintained
     expect(result.length).toBe(0);
   });
 
   it('analyzeTemporalCoupling - caller calls reader before writer (reverse order) - keeps finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = ["import { init, query } from './a';", 'export function main() { query(); init(); }'].join('\n');
     const callerParsed = parseSource('src/main.ts', callerSource);
     const files = [file('src/a.ts', targetSource)];
@@ -653,13 +654,16 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — reader before writer → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyzeTemporalCoupling - caller calls writer inside if branch - keeps finding conservatively', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'declare const needInit: boolean;',
@@ -676,6 +680,7 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — writer inside branch → conservative, finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -699,20 +704,35 @@ describe('temporal-coupling/analyzer', () => {
     const files = [file('src/a.ts', targetSource)];
     const mockGildash = createMockGildashWithAst(
       [
-        { type: 'calls', srcFilePath: 'src/app.ts', srcSymbolName: 'App.run', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.init' },
-        { type: 'calls', srcFilePath: 'src/app.ts', srcSymbolName: 'App.run', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.query' },
+        {
+          type: 'calls',
+          srcFilePath: 'src/app.ts',
+          srcSymbolName: 'App.run',
+          dstFilePath: 'src/a.ts',
+          dstSymbolName: 'Service.init',
+        },
+        {
+          type: 'calls',
+          srcFilePath: 'src/app.ts',
+          srcSymbolName: 'App.run',
+          dstFilePath: 'src/a.ts',
+          dstSymbolName: 'Service.query',
+        },
       ],
       { 'src/app.ts': callerParsed as unknown as GildashParsedFile },
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — writer before reader in App.run → suppression
     expect(result.length).toBe(0);
   });
 
   it('analyzeTemporalCoupling - getParsedAst returns undefined - keeps finding conservatively', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const files = [file('src/a.ts', targetSource)];
     const mockGildash = createMockGildashWithAst(
       [
@@ -723,6 +743,7 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — AST unavailable → conservative, finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -731,7 +752,9 @@ describe('temporal-coupling/analyzer', () => {
 
   it('analyzeTemporalCoupling - both if/else branches have writer via CFG - suppresses finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'declare const cond: boolean;',
@@ -748,13 +771,16 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — 양쪽 분기 모두 writer → CFG 집합 dominate → suppression
     expect(result.length).toBe(0);
   });
 
   it('analyzeTemporalCoupling - single if branch writer via CFG - keeps finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'declare const cond: boolean;',
@@ -771,13 +797,16 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — 단측 분기 → CFG dominate 안 함 → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyzeTemporalCoupling - try writer catch then reader via CFG - keeps finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'export function main() { try { init(); } catch {} query(); }',
@@ -793,13 +822,16 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — exception edge로 초기화 없이 query 실행 가능 → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyzeTemporalCoupling - try writer and reader same block via CFG - suppresses finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'export function main() { try { init(); query(); } catch {} }',
@@ -815,6 +847,7 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — init throw 시 query도 미실행 → suppression
     expect(result.length).toBe(0);
   });
@@ -826,11 +859,16 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { if (!db) throw new Error("not ready"); return db.exec(); }'].join('\n'),
+        [
+          'let db: any;',
+          'export function init() { db = createDb(); }',
+          'export function query() { if (!db) throw new Error("not ready"); return db.exec(); }',
+        ].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — guard dominates state access → self-protecting reader → no finding
     expect(result.length).toBe(0);
   });
@@ -840,11 +878,16 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { if (!db) return null; return db.exec(); }'].join('\n'),
+        [
+          'let db: any;',
+          'export function init() { db = createDb(); }',
+          'export function query() { if (!db) return null; return db.exec(); }',
+        ].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — return guard dominates state access → self-protecting reader → no finding
     expect(result.length).toBe(0);
   });
@@ -854,11 +897,14 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db.exec(); }'].join('\n'),
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db.exec(); }'].join(
+          '\n',
+        ),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — no guard → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -879,6 +925,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — this.x guard dominates this.x access → self-protecting reader → no finding
     expect(result.length).toBe(0);
   });
@@ -888,18 +935,25 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { db.exec(); if (!db) throw new Error(); }'].join('\n'),
+        [
+          'let db: any;',
+          'export function init() { db = createDb(); }',
+          'export function query() { db.exec(); if (!db) throw new Error(); }',
+        ].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — guard comes after state access → does not dominate → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyzeTemporalCoupling - loop writer via CFG - keeps finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'declare const xs: any[];',
@@ -916,6 +970,7 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — 루프 0회 가능 → CFG dominate 안 함 → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -927,11 +982,14 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function setup() { return; db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+        ['let db: any;', 'export function setup() { return; db = createDb(); }', 'export function query() { return db; }'].join(
+          '\n',
+        ),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — setup의 write는 return 이후 unreachable → writer가 아님 → writer 0개 → finding 없음
     expect(result.length).toBe(0);
   });
@@ -941,13 +999,16 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function setup() { throw new Error(); db = createDb(); }', 'export function query() { return db; }'].join(
-          '\n',
-        ),
+        [
+          'let db: any;',
+          'export function setup() { throw new Error(); db = createDb(); }',
+          'export function query() { return db; }',
+        ].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — throw 이후 unreachable write → writer가 아님 → finding 없음
     expect(result.length).toBe(0);
   });
@@ -957,13 +1018,16 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        ['let db: any;', 'export function setup() { if (cond) { db = createDb(); } }', 'export function query() { return db; }'].join(
-          '\n',
-        ),
+        [
+          'let db: any;',
+          'export function setup() { if (cond) { db = createDb(); } }',
+          'export function query() { return db; }',
+        ].join('\n'),
       ),
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — if 분기 내 write는 reachable → writer 유지 → finding 있음
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -978,6 +1042,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — 정상 write는 reachable → writer 유지 → finding 있음
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -998,6 +1063,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — block-wrapped throw guard dominates state access → suppressed
     expect(result.length).toBe(0);
   });
@@ -1018,6 +1084,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — init의 write는 return 이후 unreachable → writer 0개 → finding 없음
     expect(result.length).toBe(0);
   });
@@ -1032,6 +1099,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — var 선언도 mutable var로 감지 → finding 있음
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -1053,13 +1121,26 @@ describe('temporal-coupling/analyzer', () => {
     const files = [file('src/a.ts', targetSource)];
     const mockGildash = createMockGildashWithAst(
       [
-        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.init' },
-        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.query' },
+        {
+          type: 'calls',
+          srcFilePath: 'src/main.ts',
+          srcSymbolName: 'main',
+          dstFilePath: 'src/a.ts',
+          dstSymbolName: 'Service.init',
+        },
+        {
+          type: 'calls',
+          srcFilePath: 'src/main.ts',
+          srcSymbolName: 'main',
+          dstFilePath: 'src/a.ts',
+          dstSymbolName: 'Service.query',
+        },
       ],
       { 'src/main.ts': callerParsed as unknown as GildashParsedFile },
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — caller calls init before query with getParsedAst → suppressed
     expect(result.length).toBe(0);
   });
@@ -1069,13 +1150,7 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'export class Service {',
-          '  x = 0;',
-          '  init() { this.x = 1; }',
-          '  query() { return this.x; }',
-          '}',
-        ].join('\n'),
+        ['export class Service {', '  x = 0;', '  init() { this.x = 1; }', '  query() { return this.x; }', '}'].join('\n'),
       ),
     ];
     const throwingGildash = {
@@ -1086,6 +1161,7 @@ describe('temporal-coupling/analyzer', () => {
     };
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: throwingGildash as any });
+
     // Assert — searchRelations throws → AST-only fallback → finding 있음
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -1104,6 +1180,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — getAndReset은 writer이자 reader → pureReaders에서 제외 → reader 없음 → finding 없음
     expect(result.length).toBe(0);
   });
@@ -1151,6 +1228,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — queryB의 caller 없음 → 보수적으로 finding 유지
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -1170,16 +1248,19 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — writers=2, reader=1 → finding 있음
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyzeTemporalCoupling - writer inside switch case via CFG - keeps finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
-      "declare const mode: string;",
+      'declare const mode: string;',
       "export function main() { switch(mode) { case 'a': init(); break; } query(); }",
     ].join('\n');
     const callerParsed = parseSource('src/main.ts', callerSource);
@@ -1193,6 +1274,7 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — switch case 안 writer → CFG 분기 처리에 따라 finding이 억제됨 (현재 구현 동작 확인)
     // OxcCFGBuilder가 switch case를 dominating으로 처리하므로 finding이 없음
     expect(result.length).toBe(0);
@@ -1200,7 +1282,9 @@ describe('temporal-coupling/analyzer', () => {
 
   it('analyzeTemporalCoupling - writer inside nested if via CFG - keeps finding', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const callerSource = [
       "import { init, query } from './a';",
       'declare const a: boolean;',
@@ -1218,6 +1302,7 @@ describe('temporal-coupling/analyzer', () => {
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — 중첩 조건 → init이 dominate 안 함 → finding 유지
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -1236,6 +1321,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — intra-file caller가 init/query 모두 호출 → finding 억제
     expect(result.length).toBe(0);
   });
@@ -1254,6 +1340,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     // Act
     const result = analyzeTemporalCoupling(files as any);
+
     // Assert — if (db) { return db.exec(); } 패턴에서 consequent가 ReturnStatement → isEarlyExit가 true로 판단
     // 따라서 현재 구현은 이를 guard로 인식하여 finding을 억제함
     expect(result.length).toBe(0);
@@ -1261,18 +1348,27 @@ describe('temporal-coupling/analyzer', () => {
 
   it('analyzeTemporalCoupling - caller with null srcSymbolName via CFG - keeps finding conservatively', () => {
     // Arrange
-    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
+    const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
+      '\n',
+    );
     const files = [file('src/a.ts', targetSource)];
     // writer에는 caller 없음, reader에만 srcSymbolName: null인 caller 존재
     // → writerCallerSet이 비어있음 → null caller에 대해 !writerCallerSet.has → return false → finding 유지
     const mockGildash = createMockGildashWithAst(
       [
-        { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: null as unknown as string, dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+        {
+          type: 'calls',
+          srcFilePath: 'src/main.ts',
+          srcSymbolName: null as unknown as string,
+          dstFilePath: 'src/a.ts',
+          dstSymbolName: 'query',
+        },
       ],
       {},
     );
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
     // Assert — null srcSymbolName caller로는 writer 연결 불가 → finding 유지
     expect(result.length).toBeGreaterThanOrEqual(1);
   });

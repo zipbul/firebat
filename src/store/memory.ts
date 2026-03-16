@@ -38,7 +38,6 @@ CREATE TABLE IF NOT EXISTS memories (
   PRIMARY KEY (projectKey, memoryKey)
 );
 `;
-
 const ENSURE_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_memories_projectKey ON memories(projectKey);',
   'CREATE INDEX IF NOT EXISTS idx_memories_updatedAt ON memories(updatedAt);',
@@ -60,23 +59,19 @@ export const createMemoryStore = (db: Database): MemoryStore => {
   const listKeysStmt = db.prepare<{ memoryKey: string; updatedAt: number }, [string]>(
     'SELECT memoryKey, updatedAt FROM memories WHERE projectKey = ? ORDER BY updatedAt DESC',
   );
-
   const readStmt = db.prepare<
     { projectKey: string; memoryKey: string; createdAt: number; updatedAt: number; payloadJson: string },
     [string, string]
   >('SELECT projectKey, memoryKey, createdAt, updatedAt, payloadJson FROM memories WHERE projectKey = ? AND memoryKey = ?');
-
   const existsStmt = db.prepare<{ createdAt: number }, [string, string]>(
     'SELECT createdAt FROM memories WHERE projectKey = ? AND memoryKey = ?',
   );
-
   const upsertStmt = db.prepare<void, [string, string, number, number, string]>(
     `INSERT INTO memories (projectKey, memoryKey, createdAt, updatedAt, payloadJson)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (projectKey, memoryKey)
      DO UPDATE SET updatedAt = excluded.updatedAt, payloadJson = excluded.payloadJson`,
   );
-
   const deleteStmt = db.prepare<void, [string, string]>('DELETE FROM memories WHERE projectKey = ? AND memoryKey = ?');
 
   return {

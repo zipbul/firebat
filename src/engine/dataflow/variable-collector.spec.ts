@@ -120,7 +120,6 @@ describe('variable-collector', () => {
       ['function f() {', '  const { a, ...rest } = { a: 1, b: 2, c: 3 };', '}'].join('\n'),
       0,
     );
-
     // Act
     const usages = collectVariables(statement, { includeNestedFunctions: false });
     const restWrites = usages.filter(u => u.name === 'rest' && u.isWrite && u.writeKind === 'declaration');

@@ -18,6 +18,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import type { ParsedFile } from '../../../src/test-api';
+
 import { parseSource } from '../../../src/test-api';
 import { PartialResultError } from '../../../src/test-api';
 import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
@@ -31,10 +32,7 @@ export type FixtureSources = Record<string, string>;
  * Analyzer function signature accepted by runGolden.
  * May return a plain value or a Promise.
  */
-export type AnalyzerFn<T = unknown> = (
-  program: ReadonlyArray<ParsedFile>,
-  sources: FixtureSources,
-) => T | Promise<T>;
+export type AnalyzerFn<T = unknown> = (program: ReadonlyArray<ParsedFile>, sources: FixtureSources) => T | Promise<T>;
 
 // GoldenRunOptions removed — had a single `virtualRoot` field that was never
 // used (void-discarded). Kept the export type for binary-compat but callers
@@ -114,7 +112,6 @@ export const runGolden = <T = unknown>(
     // Load fixture
     const sources = readDirFixture(fixturesDir, name);
     const program = buildProgram(sources);
-
     // Run analyzer — use partial field when tool is unavailable (e.g. gildash semantic)
     let actual: unknown;
 
@@ -129,15 +126,14 @@ export const runGolden = <T = unknown>(
     }
 
     const actualJson = toGoldenJson(actual);
-
     const expectedJson = readExpected(expectedDir, name);
 
     if (expectedJson === null) {
       // First run: create the expected file and fail so the developer can review.
       writeExpected(expectedDir, name, actualJson);
+
       throw new Error(
-        `[golden] Created new expected file for "${name}". ` +
-          `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
+        `[golden] Created new expected file for "${name}". ` + `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
       );
     }
 
@@ -163,13 +159,17 @@ export const runGolden = <T = unknown>(
 
       // Compare as sorted JSON strings to be insensitive to finding order.
       const sortedExpected = JSON.stringify(
-        Array.isArray(expectedParsed) ? [...expectedParsed as unknown[]].sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : 1) : expectedParsed,
+        Array.isArray(expectedParsed)
+          ? [...(expectedParsed as unknown[])].sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1))
+          : expectedParsed,
         null,
         2,
       );
       const reversedNormalized = JSON.parse(toGoldenJson(reversedActual)) as unknown;
       const sortedReversed = JSON.stringify(
-        Array.isArray(reversedNormalized) ? [...reversedNormalized as unknown[]].sort((a, b) => JSON.stringify(a) < JSON.stringify(b) ? -1 : 1) : reversedNormalized,
+        Array.isArray(reversedNormalized)
+          ? [...(reversedNormalized as unknown[])].sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1))
+          : reversedNormalized,
         null,
         2,
       );
@@ -178,4 +178,3 @@ export const runGolden = <T = unknown>(
     }
   });
 };
-

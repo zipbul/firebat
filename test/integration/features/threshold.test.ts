@@ -72,7 +72,6 @@ describe('threshold/variable-lifetime', () => {
       '}',
     ].join('\n');
     const findings = analyzeVariableLifetime([parse(src)], { maxLifetimeLines: 3 });
-
     // x: def line2, use line6 → lifetime=4 > 3 → should fire
     const xFindings = findings.filter(f => f.variable === 'x');
 

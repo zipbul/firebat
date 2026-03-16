@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeCollapsibleIf } from './analyzer';
 import { parseSource } from '../../engine/ast/parse-source';
+import { analyzeCollapsibleIf } from './analyzer';
 
 describe('analyzeCollapsibleIf - false negative / false positive scenarios', () => {
   const parse = (source: string) => [parseSource('/virtual/test.ts', source)];

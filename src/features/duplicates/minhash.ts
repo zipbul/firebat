@@ -54,7 +54,7 @@ export const findLshCandidates = (
   threshold: number = DEFAULT_THRESHOLD,
   bands: number = DEFAULT_BANDS,
 ): ReadonlyArray<LshCandidate> => {
-  if (signatures.length < 2) return [];
+  if (signatures.length < 2) {return [];}
 
   const k = signatures[0]!.length;
   const config =
@@ -63,14 +63,12 @@ export const findLshCandidates = (
       : computeOptimalBandConfig(k, threshold);
   const rowsPerBand = config.rowsPerBand;
   const effectiveBands = config.bands;
-
   const candidateSet = new Set<number>();
   const candidates: LshCandidate[] = [];
 
   for (let b = 0; b < effectiveBands; b++) {
     const start = b * rowsPerBand;
     const end = start + rowsPerBand;
-
     // band b의 버킷: bandKey → 아이템 인덱스 목록
     const buckets = new Map<bigint, number[]>();
 
@@ -78,6 +76,7 @@ export const findLshCandidates = (
       const sig = signatures[idx]!;
       const bandKey = hashBand(sig, start, end);
       const bucket = buckets.get(bandKey);
+
       if (bucket === undefined) {
         buckets.set(bandKey, [idx]);
       } else {
@@ -87,7 +86,7 @@ export const findLshCandidates = (
 
     // 같은 버킷에 2개 이상 → 후보 쌍
     for (const bucket of buckets.values()) {
-      if (bucket.length < 2) continue;
+      if (bucket.length < 2) {continue;}
       for (let p = 0; p < bucket.length; p++) {
         for (let q = p + 1; q < bucket.length; q++) {
           const a = bucket[p]!;
@@ -95,6 +94,7 @@ export const findLshCandidates = (
           const lo = a < c ? a : c;
           const hi = a < c ? c : a;
           const key = lo * signatures.length + hi;
+
           if (!candidateSet.has(key)) {
             candidateSet.add(key);
             candidates.push({ i: lo, j: hi });
@@ -115,11 +115,14 @@ export const estimateJaccard = (
   sigA: ReadonlyArray<bigint>,
   sigB: ReadonlyArray<bigint>,
 ): number => {
-  if (sigA.length === 0) return 0;
+  if (sigA.length === 0) {return 0;}
+
   let matches = 0;
+
   for (let i = 0; i < sigA.length; i++) {
-    if (sigA[i] === sigB[i]) matches++;
+    if (sigA[i] === sigB[i]) {matches++;}
   }
+
   return matches / sigA.length;
 };
 
@@ -139,9 +142,12 @@ const computeOptimalBandConfig = (
 
   for (let r = 1; r <= k; r++) {
     const b = Math.floor(k / r);
-    if (b < 1) break;
+
+    if (b < 1) {break;}
+
     const pr = 1 - Math.pow(1 - Math.pow(threshold, r), b);
     const diff = Math.abs(pr - 0.5);
+
     if (diff < bestDiff) {
       bestDiff = diff;
       bestBands = b;
@@ -158,12 +164,13 @@ const computeSignatureImpl = (
 ): ReadonlyArray<bigint> => {
   const sig = new Array<bigint>(k).fill(MAX_U64);
 
-  if (items.length === 0) return sig;
+  if (items.length === 0) {return sig;}
 
   for (const item of items) {
     for (let i = 0; i < k; i++) {
       // seed는 i (0 ~ k-1). Bun.hash.xxHash64 seed는 number 타입.
       const h = BigInt.asUintN(64, Bun.hash.xxHash64(item, i));
+
       if (h < sig[i]!) {
         sig[i] = h;
       }
@@ -185,8 +192,10 @@ const hashBand = (
   // FNV-like 조합
   const FNV_PRIME = 1099511628211n;
   let h = 14695981039346656037n;
+
   for (let i = start; i < end; i++) {
     h = BigInt.asUintN(64, (h ^ sig[i]!) * FNV_PRIME);
   }
+
   return h;
 };

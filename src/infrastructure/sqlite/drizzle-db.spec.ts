@@ -7,6 +7,7 @@ describe('infrastructure/sqlite/drizzle-db', () => {
   it('createDrizzleDb returns a non-null ORM instance', () => {
     const db = new Database(':memory:');
     const orm = createDrizzleDb(db);
+
     expect(orm).toBeDefined();
     expect(orm).not.toBeNull();
     db.close();
@@ -15,6 +16,7 @@ describe('infrastructure/sqlite/drizzle-db', () => {
   it('FirebatDrizzleDb type is the return type of createDrizzleDb', () => {
     const db = new Database(':memory:');
     const orm: FirebatDrizzleDb = createDrizzleDb(db);
+
     expect(typeof orm).toBe('object');
     db.close();
   });
@@ -24,6 +26,7 @@ describe('infrastructure/sqlite/drizzle-db', () => {
     const db2 = new Database(':memory:');
     const orm1 = createDrizzleDb(db1);
     const orm2 = createDrizzleDb(db2);
+
     expect(orm1).not.toBe(orm2);
     db1.close();
     db2.close();

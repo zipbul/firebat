@@ -5,9 +5,13 @@ import { FIREBAT_CODE_CATALOG, aggregateDiagnostics } from './diagnostic-aggrega
 // ── Helpers ─────────────────────────────────────────────────────────
 
 const makeWaste = (file: string) => ({ kind: 'dead-store', file, filePath: undefined });
+
 const makeNestingHighCC = (file: string) => ({ kind: 'high-cognitive-complexity', file });
+
 const makeNestingDeep = (file: string) => ({ kind: 'deep-nesting', file });
+
 const makeCoupling = (kind: string) => ({ kind, module: 'src/a.ts', score: 10, signals: [] });
+
 const makeCycle = (path: string[]) => ({ path });
 
 const FILE_A = 'src/a.ts';

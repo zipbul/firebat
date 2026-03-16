@@ -1,6 +1,5 @@
 export function computeWithLongLifetime(): number {
   const base = 100;
-
   const a = base * 2;
   const b = a + 1;
   const c = b - 3;

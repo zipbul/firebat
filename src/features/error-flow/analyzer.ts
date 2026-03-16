@@ -2,10 +2,10 @@ import type { Gildash, HeritageNode } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import { PartialResultError } from '../../engine/partial-result-error';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { PartialResultError } from '../../engine/partial-result-error';
 import { getLineColumn } from '../../engine/source-position';
 
 interface AnalyzeErrorFlowInput {
@@ -171,11 +171,7 @@ const containsReturnStatement = (node: NodeValue): boolean => {
     }
 
     // Don't cross function boundaries
-    if (
-      inner.type === 'FunctionDeclaration' ||
-      inner.type === 'FunctionExpression' ||
-      inner.type === 'ArrowFunctionExpression'
-    ) {
+    if (inner.type === 'FunctionDeclaration' || inner.type === 'FunctionExpression' || inner.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -202,11 +198,7 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
     }
 
     // Don't cross function boundaries
-    if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression'
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -231,11 +223,7 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
     }
 
     // Don't cross function boundaries
-    if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression'
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return;
     }
 
@@ -332,11 +320,7 @@ const containsThrowInExecutor = (body: NodeValue): boolean => {
     }
 
     // Don't cross function boundaries
-    if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression'
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -362,11 +346,7 @@ const containsNonEmptyReturnInExecutor = (body: NodeValue): boolean => {
     }
 
     // Don't cross function boundaries
-    if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression'
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -436,11 +416,7 @@ const containsPromiseWrapReturn = (body: NodeValue): boolean => {
       }
     }
 
-    if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression'
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -489,11 +465,7 @@ const containsNodeStyleCallback = (body: NodeValue): boolean => {
       }
     }
 
-    if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression'
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -732,11 +704,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
 
       // Don't cross function boundaries for reassignment check
-      if (
-        node.type === 'FunctionExpression' ||
-        node.type === 'ArrowFunctionExpression' ||
-        node.type === 'FunctionDeclaration'
-      ) {
+      if (node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration') {
         return false;
       }
 
@@ -779,11 +747,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
 
       // Don't cross function boundaries
-      if (
-        node.type === 'FunctionDeclaration' ||
-        node.type === 'FunctionExpression' ||
-        node.type === 'ArrowFunctionExpression'
-      ) {
+      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
         return false;
       }
 
@@ -1104,11 +1068,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       if (inTryBlockWithCatchDepth > 0) {
         // Only flag non-awaited expressions that likely return a Promise
-        if (
-          isOxcNode(arg) &&
-          arg.type !== 'AwaitExpression' &&
-          (arg.type === 'CallExpression' || arg.type === 'NewExpression')
-        ) {
+        if (isOxcNode(arg) && arg.type !== 'AwaitExpression' && (arg.type === 'CallExpression' || arg.type === 'NewExpression')) {
           pushFinding(findings, {
             kind: 'return-await-in-try',
             node,
@@ -1272,8 +1232,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         const isAsyncExecutor = isInlineExecutor && executor.async === true;
 
         if (inAsyncFunction && !isAsyncExecutor) {
-          const hasCallbackWrapping =
-            isInlineExecutor && containsCallbackApiCall(executor.body as NodeValue);
+          const hasCallbackWrapping = isInlineExecutor && containsCallbackApiCall(executor.body as NodeValue);
 
           if (!hasCallbackWrapping) {
             pushFinding(findings, {

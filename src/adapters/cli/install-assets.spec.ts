@@ -1,11 +1,6 @@
 import { describe, it, expect, spyOn, afterEach } from 'bun:test';
 
-import {
-  OXLINT_RC_JSONC,
-  OXFMT_RC_JSONC,
-  loadFirstExistingText,
-  resolveAssetCandidates,
-} from './install-assets';
+import { OXLINT_RC_JSONC, OXFMT_RC_JSONC, loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
 describe('OXLINT_RC_JSONC', () => {
   it('should be a non-empty string', () => {
@@ -61,9 +56,7 @@ describe('loadFirstExistingText', () => {
   });
 
   it('should throw when candidates is empty', async () => {
-    await expect(loadFirstExistingText([])).rejects.toThrow(
-      'No asset candidates provided',
-    );
+    await expect(loadFirstExistingText([])).rejects.toThrow('No asset candidates provided');
   });
 
   it('should throw when no candidate file exists', async () => {
@@ -97,9 +90,12 @@ describe('loadFirstExistingText', () => {
 
     fileSpy = spyOn(Bun, 'file').mockImplementation(((_path: string) => {
       callCount++;
+
       if (callCount === 1) {
         return {
-          exists: async () => { throw new Error('disk error'); },
+          exists: async () => {
+            throw new Error('disk error');
+          },
         } as never;
       }
 

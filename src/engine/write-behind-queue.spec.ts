@@ -80,6 +80,7 @@ describe('WriteBehindQueue', () => {
     // Arrange
     const queue = new WriteBehindQueue();
     let done = false;
+
     queue.enqueue(() => {
       done = true;
     });
@@ -94,13 +95,16 @@ describe('WriteBehindQueue', () => {
   it('should return immediately when flush timeoutMs is 0', async () => {
     // Arrange
     const queue = new WriteBehindQueue();
+
     queue.enqueue(() => {
       // callback intentionally empty for timing test
     });
 
     // Act
     const start = Date.now();
+
     await queue.flush(0);
+
     const elapsed = Date.now() - start;
 
     // Assert — flush(0) returns immediately without waiting
@@ -120,6 +124,7 @@ describe('WriteBehindQueue', () => {
     // Arrange
     const queue = new WriteBehindQueue();
     const results: string[] = [];
+
     queue.enqueue(() => results.push('a'));
     queue.enqueue(() => results.push('b'));
 

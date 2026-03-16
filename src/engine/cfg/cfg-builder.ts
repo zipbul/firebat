@@ -428,7 +428,9 @@ export class OxcCFGBuilder {
 
         if (updateValue !== undefined && updateValue !== null) {
           updateNode = this.addNode(toPayload(updateValue));
+
           this.addExceptionEdgeIfInTry(updateNode);
+
           continueTarget = updateNode;
         }
 

@@ -52,14 +52,12 @@ describe('scan', () => {
   test('should return consistent analyses when scanning the same target twice', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act – scan twice to verify idempotency
     const { structured: first } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
       detectors: ['duplicates'],
       minSize: 'auto',
     });
-
     const { structured: second } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
       detectors: ['duplicates'],
@@ -295,7 +293,6 @@ describe('scan', () => {
   test('should return all findings when filePatterns is omitted', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: [fixture],
@@ -310,11 +307,7 @@ describe('scan', () => {
 
   test('should return only matched file findings when filePatterns matches a specific file', async () => {
     // Arrange
-    const fixtures = [
-      path.join(ctx.fixturesAbs, 'sample.ts'),
-      path.join(ctx.fixturesAbs, 'editable.ts'),
-    ];
-
+    const fixtures = [path.join(ctx.fixturesAbs, 'sample.ts'), path.join(ctx.fixturesAbs, 'editable.ts')];
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: fixtures,
@@ -324,7 +317,9 @@ describe('scan', () => {
 
     // Assert
     expect(isError).toBe(false);
+
     const wasteFindings = (structured as any)?.analyses?.waste ?? [];
+
     for (const f of wasteFindings as any[]) {
       const filePath: string = (f as any).filePath ?? (f as any).file ?? '';
 
@@ -336,7 +331,6 @@ describe('scan', () => {
   test('should return empty findings for detector when filePatterns matches no files', async () => {
     // Arrange
     const fixture = path.join(ctx.fixturesAbs, 'sample.ts');
-
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: [fixture],
@@ -346,6 +340,7 @@ describe('scan', () => {
 
     // Assert
     expect(isError).toBe(false);
+
     const wasteFindings = (structured as any)?.analyses?.waste ?? [];
 
     expect(wasteFindings).toHaveLength(0);
@@ -358,7 +353,6 @@ describe('scan', () => {
       targets: [fixture],
       detectors: ['waste'],
     });
-
     // Act
     const { structured, isError } = await callToolSafe(ctx.client, 'scan', {
       targets: [fixture],
@@ -368,6 +362,7 @@ describe('scan', () => {
 
     // Assert
     expect(isError).toBe(false);
+
     const allWaste: unknown[] = (withoutFilter as any)?.analyses?.waste ?? [];
     const emptyFilterWaste: unknown[] = (structured as any)?.analyses?.waste ?? [];
 

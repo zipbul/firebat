@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'bun:test';
 
-import { parseSource } from './parse-source';
 import { evalStaticLiteralValue, evalStaticNullish, evalStaticTruthiness, unwrapExpression } from './oxc-expression-utils';
+import { parseSource } from './parse-source';
 
 /** Parse `expr;` and return the expression node of the ExpressionStatement */
 const exprOf = (src: string) => {
   const program = parseSource('test.ts', `(${src});`).program;
-  const stmt = ((program as { body: unknown[] }).body)[0] as {
+  const stmt = (program as { body: unknown[] }).body[0] as {
     type: string;
     expression?: unknown;
   };
+
   return (stmt.expression ?? null) as Parameters<typeof unwrapExpression>[0];
 };
 
@@ -17,6 +18,7 @@ describe('unwrapExpression', () => {
   it('[HP] returns the node itself for a plain Identifier', () => {
     const node = exprOf('x');
     const result = unwrapExpression(node);
+
     expect(result).not.toBeNull();
     expect((result as { type: string }).type).toBe('Identifier');
   });
@@ -24,11 +26,12 @@ describe('unwrapExpression', () => {
   it('[HP] unwraps a single ParenthesizedExpression', () => {
     // (x) → Identifier
     const program = parseSource('test.ts', 'x;').program;
-    const stmt = ((program as { body: unknown[] }).body)[0] as {
+    const stmt = (program as { body: unknown[] }).body[0] as {
       expression: unknown;
     };
     const node = stmt.expression as Parameters<typeof unwrapExpression>[0];
     const result = unwrapExpression(node);
+
     expect((result as { type: string }).type).toBe('Identifier');
   });
 

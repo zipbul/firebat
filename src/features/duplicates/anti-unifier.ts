@@ -60,7 +60,6 @@ export const antiUnify = (
 ): AntiUnificationResult => {
   const leftSize = countOxcSize(left);
   const rightSize = countOxcSize(right);
-
   const ctx: TraversalContext = {
     variables: [],
     sharedSize: 0,
@@ -96,7 +95,7 @@ export const classifyDiff = (
 ): DiffClassification => {
   const { variables } = result;
 
-  if (variables.length === 0) return 'rename-only';
+  if (variables.length === 0) {return 'rename-only';}
 
   let hasIdentifier = false;
   let hasLiteral = false;
@@ -104,16 +103,19 @@ export const classifyDiff = (
   let hasType = false;
 
   for (const v of variables) {
-    if (v.kind === 'identifier') hasIdentifier = true;
-    else if (v.kind === 'literal') hasLiteral = true;
-    else if (v.kind === 'structural') hasStructural = true;
-    else if (v.kind === 'type') hasType = true;
+    if (v.kind === 'identifier') {hasIdentifier = true;}
+    else if (v.kind === 'literal') {hasLiteral = true;}
+    else if (v.kind === 'structural') {hasStructural = true;}
+    else if (v.kind === 'type') {hasType = true;}
   }
 
-  if (hasStructural) return 'structural-diff';
-  if (hasIdentifier && !hasLiteral && !hasType) return 'rename-only';
-  if (hasLiteral && !hasIdentifier && !hasType) return 'literal-variant';
-  if (hasType && !hasIdentifier && !hasLiteral && !hasStructural) return 'type-variant';
+  if (hasStructural) {return 'structural-diff';}
+
+  if (hasIdentifier && !hasLiteral && !hasType) {return 'rename-only';}
+
+  if (hasLiteral && !hasIdentifier && !hasType) {return 'literal-variant';}
+
+  if (hasType && !hasIdentifier && !hasLiteral && !hasStructural) {return 'type-variant';}
 
   return 'mixed';
 };
@@ -159,6 +161,7 @@ const traverse = (
     // type이 다르면 → structural variable
     if (leftNode.type !== rightNode.type) {
       pushVariable(ctx, path, leftNode.type, rightNode.type, 'structural');
+
       return;
     }
 
@@ -169,6 +172,7 @@ const traverse = (
     if (leftNode.type === 'Identifier') {
       const leftName = (leftNode as unknown as { name: string }).name;
       const rightName = (rightNode as unknown as { name: string }).name;
+
       if (leftName !== rightName) {
         pushVariable(ctx, path + '.name', leftName, rightName, 'identifier');
       }
@@ -179,6 +183,7 @@ const traverse = (
     if (leftNode.type === 'Literal') {
       const leftVal = (leftNode as unknown as { value: unknown }).value;
       const rightVal = (rightNode as unknown as { value: unknown }).value;
+
       if (leftVal !== rightVal) {
         pushVariable(
           ctx,
@@ -195,24 +200,24 @@ const traverse = (
     if (leftNode.type === 'TSTypeReference') {
       const leftFp = createOxcFingerprintShape(leftNode);
       const rightFp = createOxcFingerprintShape(rightNode);
+
       if (leftFp !== rightFp) {
         pushVariable(ctx, path, leftNode.type, rightNode.type, 'type');
       } else {
         ctx.sharedSize += countOxcSize(leftNode) - 1;
       }
+
       return;
     }
 
     // Record로 변환 가능해야 자식 순회
-    if (!isNodeRecord(leftNode) || !isNodeRecord(rightNode)) return;
+    if (!isNodeRecord(leftNode) || !isNodeRecord(rightNode)) {return;}
 
     const leftRec = leftNode as NodeRecord;
     const rightRec = rightNode as NodeRecord;
-
     // 정렬된 키로 자식 순회
     const leftKeys = Object.keys(leftRec).filter((k) => !SKIP_KEYS.has(k)).sort();
     const rightKeys = Object.keys(rightRec).filter((k) => !SKIP_KEYS.has(k)).sort();
-
     // 양쪽 모두에 있는 키들만 비교
     const allKeys = new Set([...leftKeys, ...rightKeys]);
 
@@ -224,30 +229,37 @@ const traverse = (
       // 한쪽에만 키가 있는 경우
       if (leftChild === undefined && rightChild !== undefined) {
         pushVariable(ctx, childPath, 'undefined', describeValue(rightChild), 'structural');
+
         continue;
       }
+
       if (leftChild !== undefined && rightChild === undefined) {
         pushVariable(ctx, childPath, describeValue(leftChild), 'undefined', 'structural');
+
         continue;
       }
-      if (leftChild === undefined && rightChild === undefined) continue;
+
+      if (leftChild === undefined && rightChild === undefined) {continue;}
 
       // 둘 다 Node 배열인 경우 → LCS 정렬
       if (isOxcNodeArray(leftChild) && isOxcNodeArray(rightChild)) {
         traverseArrayChildren(ctx, leftChild, rightChild, childPath);
+
         continue;
       }
 
       // 둘 다 Node인 경우 → 재귀
       if (isOxcNode(leftChild) && isOxcNode(rightChild)) {
         traverse(ctx, leftChild, rightChild, childPath);
+
         continue;
       }
 
       // 프리미티브 값 비교 (operator 등)
       // Identifier.name과 Literal.value/raw는 위에서 이미 처리됨 → skip
-      if (key === 'name' && leftNode.type === 'Identifier') continue;
-      if ((key === 'value' || key === 'raw') && leftNode.type === 'Literal') continue;
+      if (key === 'name' && leftNode.type === 'Identifier') {continue;}
+
+      if ((key === 'value' || key === 'raw') && leftNode.type === 'Literal') {continue;}
 
       if (leftChild !== rightChild) {
         if (key === 'name') {
@@ -267,6 +279,7 @@ const traverse = (
   // 둘 다 배열인 경우 (top-level에서는 드물지만 방어적)
   if (isOxcNodeArray(left) && isOxcNodeArray(right)) {
     traverseArrayChildren(ctx, left, right, path);
+
     return;
   }
 
@@ -288,19 +301,20 @@ const traverseArrayChildren = (
   // fingerprint로 LCS 정렬
   const leftFps = leftArr.map((n) => (isOxcNode(n) ? createOxcFingerprintShape(n) : String(n)));
   const rightFps = rightArr.map((n) => (isOxcNode(n) ? createOxcFingerprintShape(n) : String(n)));
-
   const alignment = computeLcsAlignment(leftFps, rightFps);
 
   // 매칭된 쌍 → 재귀
   for (const { aIndex, bIndex } of alignment.matched) {
     const leftChild = leftArr[aIndex]!;
     const rightChild = rightArr[bIndex]!;
+
     traverse(ctx, leftChild, rightChild, `${path}[${aIndex}]`);
   }
 
   // A에만 있는 노드 → structural variable
   for (const aIdx of alignment.aOnly) {
     const child = leftArr[aIdx];
+
     pushVariable(
       ctx,
       `${path}[${aIdx}]`,
@@ -313,6 +327,7 @@ const traverseArrayChildren = (
   // B에만 있는 노드 → structural variable
   for (const bIdx of alignment.bOnly) {
     const child = rightArr[bIdx];
+
     pushVariable(
       ctx,
       `${path}[+${bIdx}]`,
@@ -324,9 +339,13 @@ const traverseArrayChildren = (
 };
 
 const describeValue = (val: NodeValue): string => {
-  if (val === null) return 'null';
-  if (val === undefined) return 'undefined';
-  if (isOxcNode(val)) return (val as Node).type;
-  if (Array.isArray(val)) return `Array(${val.length})`;
+  if (val === null) {return 'null';}
+
+  if (val === undefined) {return 'undefined';}
+
+  if (isOxcNode(val)) {return (val as Node).type;}
+
+  if (Array.isArray(val)) {return `Array(${val.length})`;}
+
   return typeof val;
 };

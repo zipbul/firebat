@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { table as renderTable } from 'table';
 
 import type { FirebatReport, OutputFormat, DependencyFinding } from './types';
+
 import { toJsonReport, countBlockers } from './types';
 
 const toPos = (line: number, column: number): string => `${line}:${column}`;
@@ -181,9 +182,16 @@ const formatText = (report: FirebatReport): string => {
   const collapsibleIf = analyses['collapsible-if'] ?? [];
   const depsRaw = analyses.dependencies;
   const depsFindings: ReadonlyArray<DependencyFinding> = Array.isArray(depsRaw) ? depsRaw : [];
-  const depsDead = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'dead-export' | 'test-only-export' }> => f.kind === 'dead-export' || f.kind === 'test-only-export');
-  const depsLayerViolations = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'layer-violation' }> => f.kind === 'layer-violation');
-  const depsCycleFindings = depsFindings.filter((f): f is Extract<DependencyFinding, { kind: 'circular-dependency' }> => f.kind === 'circular-dependency');
+  const depsDead = depsFindings.filter(
+    (f): f is Extract<DependencyFinding, { kind: 'dead-export' | 'test-only-export' }> =>
+      f.kind === 'dead-export' || f.kind === 'test-only-export',
+  );
+  const depsLayerViolations = depsFindings.filter(
+    (f): f is Extract<DependencyFinding, { kind: 'layer-violation' }> => f.kind === 'layer-violation',
+  );
+  const depsCycleFindings = depsFindings.filter(
+    (f): f is Extract<DependencyFinding, { kind: 'circular-dependency' }> => f.kind === 'circular-dependency',
+  );
   const coupling = analyses.coupling ?? [];
   const nesting = analyses.nesting ?? [];
   const forwarding = analyses.forwarding ?? [];
@@ -203,6 +211,7 @@ const formatText = (report: FirebatReport): string => {
       .filter(Boolean)
       .map(part => {
         const lower = part.toLowerCase();
+
         if (acronyms.has(lower)) {
           return lower.toUpperCase();
         }
@@ -230,8 +239,7 @@ const formatText = (report: FirebatReport): string => {
 
     const items: ReadonlyArray<unknown> = v;
     const count = items.length;
-    const filesCount =
-      count === 0 ? 0 : new Set(items.map(item => getFile(item)).filter(Boolean) as ReadonlyArray<string>).size;
+    const filesCount = count === 0 ? 0 : new Set(items.map(item => getFile(item)).filter(Boolean) as ReadonlyArray<string>).size;
 
     return {
       emoji: '🔎',
@@ -341,11 +349,7 @@ const formatText = (report: FirebatReport): string => {
           filesCount:
             depsFindings.length === 0
               ? 0
-              : new Set(
-                  depsFindings.flatMap(f =>
-                    'items' in f ? f.items.map(i => i.file) : [f.file],
-                  ),
-                ).size,
+              : new Set(depsFindings.flatMap(f => ('items' in f ? f.items.map(i => i.file) : [f.file]))).size,
           timingKey,
         };
       case 'coupling':
@@ -361,7 +365,8 @@ const formatText = (report: FirebatReport): string => {
           emoji: '🔀',
           label: 'Duplicates (unified)',
           count: duplicatesUnified.length,
-          filesCount: duplicatesUnified.length === 0 ? 0 : new Set(duplicatesUnified.flatMap(g => g.items.map(i => getFile(i)))).size,
+          filesCount:
+            duplicatesUnified.length === 0 ? 0 : new Set(duplicatesUnified.flatMap(g => g.items.map(i => getFile(i)))).size,
           timingKey,
         };
       default:
@@ -578,7 +583,9 @@ const formatText = (report: FirebatReport): string => {
       const rel = path.relative(process.cwd(), getFile(f));
       const start = toPos(f.span.start.line, f.span.start.column);
 
-      lines.push(`    ${cc('·', A.dim)} ${f.state} ${cc(`writers=${f.writers} readers=${f.readers}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+      lines.push(
+        `    ${cc('·', A.dim)} ${f.state} ${cc(`writers=${f.writers} readers=${f.readers}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
+      );
     }
   }
 
@@ -589,7 +596,9 @@ const formatText = (report: FirebatReport): string => {
       const rel = path.relative(process.cwd(), getFile(f));
       const start = toPos(f.span.start.line, f.span.start.column);
 
-      lines.push(`    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`);
+      lines.push(
+        `    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
+      );
     }
   }
 
@@ -611,6 +620,7 @@ const formatText = (report: FirebatReport): string => {
     for (const group of duplicatesUnified) {
       const findingLabel = group.findingKind ?? group.cloneType;
       const simLabel = group.similarity !== undefined ? ` sim=${group.similarity.toFixed(2)}` : '';
+
       lines.push(`    ${cc(`${group.items.length} items`, A.yellow)} ${cc(`[${findingLabel}${simLabel}]`, A.dim)}`);
 
       for (const item of group.items) {
@@ -639,7 +649,9 @@ const formatText = (report: FirebatReport): string => {
     const blockers = countBlockers(report.analyses);
 
     lines.push('');
-    lines.push(`  ${cc('⛔', A.dim)}  ${cc('Blockers', `${A.bold}${A.white}`)}  ${blockers > 0 ? cc(formatNumber(blockers), A.red) : cc('0', A.dim)}`);
+    lines.push(
+      `  ${cc('⛔', A.dim)}  ${cc('Blockers', `${A.bold}${A.white}`)}  ${blockers > 0 ? cc(formatNumber(blockers), A.red) : cc('0', A.dim)}`,
+    );
   }
 
   lines.push('');

@@ -1,12 +1,11 @@
+import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeAll, afterAll, mock } from 'bun:test';
 
-import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
-
-import { createInMemoryMcpContext, type InMemoryMcpContext } from './helpers/inmemory-server';
-import { callToolSafe } from './helpers/mcp-client';
 import { createNoopLogger } from '../../../src/test-api';
 // __testing__ is exported after implementation; before it, accessing it causes RED.
 import { __testing__McpServer as __testing__ } from '../../../src/test-api';
+import { createInMemoryMcpContext, type InMemoryMcpContext } from './helpers/inmemory-server';
+import { callToolSafe } from './helpers/mcp-client';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

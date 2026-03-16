@@ -46,7 +46,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'const x = 1;';
     const reports: ReportDescriptor[] = [];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -59,7 +58,6 @@ describe('applyFixes', () => {
     const text = 'const foo = 1;';
     //                   [6, 9] = 'foo'
     const reports = [makeReport(6, 9, 'bar')];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -72,7 +70,6 @@ describe('applyFixes', () => {
     const text = 'abcde';
     // delete [1,3] → 'ade'
     const reports = [makeReport(1, 3, '')];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -85,7 +82,6 @@ describe('applyFixes', () => {
     const text = 'hello world';
     // fix1: [0,5] → 'HELLO', fix2: [6,11] → 'WORLD'
     const reports = [makeReport(0, 5, 'HELLO'), makeReport(6, 11, 'WORLD')];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -97,7 +93,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'abc';
     const reports: ReportDescriptor[] = [makeNotFnReport()];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -109,7 +104,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'def';
     const reports: ReportDescriptor[] = [makeNoFixReport(), makeNoFixReport()];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -121,7 +115,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'xyz';
     const reports: ReportDescriptor[] = [makeBadRangeReport()];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -144,7 +137,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'hello';
     const reports: ReportDescriptor[] = [makeUndefinedTextReport(1, 3)];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -156,12 +148,7 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'aabbcc';
     // reports in leftmost-first order → sort should handle right-to-left application
-    const reports = [
-      makeReport(0, 2, 'XX'),
-      makeReport(2, 4, 'YY'),
-      makeReport(4, 6, 'ZZ'),
-    ];
-
+    const reports = [makeReport(0, 2, 'XX'), makeReport(2, 4, 'YY'), makeReport(4, 6, 'ZZ')];
     // Act
     const result = applyFixes(text, reports);
 
@@ -183,11 +170,7 @@ describe('applyFixes', () => {
     // Arrange
     const text = '123456789';
     // non-overlap [0,2], then overlap [4,8] + [6,9]
-    const reports = [
-      makeReport(0, 2, 'A'),
-      makeReport(4, 8, 'B'),
-      makeReport(6, 9, 'C'),
-    ];
+    const reports = [makeReport(0, 2, 'A'), makeReport(4, 8, 'B'), makeReport(6, 9, 'C')];
 
     // Act & Assert
     expect(() => applyFixes(text, reports)).toThrow('Overlapping fixes are not supported');
@@ -197,7 +180,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = '';
     const reports: ReportDescriptor[] = [];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -209,7 +191,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'oldvalue';
     const reports = [makeReport(0, text.length, 'newvalue')];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -222,7 +203,6 @@ describe('applyFixes', () => {
     const text = 'ac';
     // Insert 'b' at position 1 → 'abc'
     const reports = [makeReport(1, 1, 'b')];
-
     // Act
     const result = applyFixes(text, reports);
 
@@ -234,7 +214,6 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'foo bar';
     const reports = [makeReport(0, 3, 'baz')];
-
     // Act
     const first = applyFixes(text, reports);
     const second = applyFixes(text, reports);
@@ -248,7 +227,6 @@ describe('applyFixes', () => {
     const text = 'hello world';
     const r1 = makeReport(0, 5, 'HELLO');
     const r2 = makeReport(6, 11, 'WORLD');
-
     // Act
     const forwardResult = applyFixes(text, [r1, r2]);
     const reverseResult = applyFixes(text, [r2, r1]);

@@ -8,12 +8,10 @@ import type { ParsedFile } from './types';
 const duplicateDetectorAbs = path.resolve(import.meta.dir, '../features/duplicates/analyzer.ts');
 const oxcAstUtilsAbs = path.resolve(import.meta.dir, './ast/oxc-ast-utils.ts');
 const oxcSizeCountAbs = path.resolve(import.meta.dir, './ast/oxc-size-count.ts');
-
 // Save original modules BEFORE any mock.module() calls (shallow snapshot to avoid live binding mutation)
 const __origDuplicateDetector = { ...require(duplicateDetectorAbs) };
 const __origOxcAstUtils = { ...require(oxcAstUtilsAbs) };
 const __origOxcSizeCount = { ...require(oxcSizeCountAbs) };
-
 const isCloneTargetMock = mock((_node: unknown) => true);
 const collectOxcNodesMock = mock((_program: unknown, _pred: unknown): unknown[] => []);
 const countOxcSizeMock = mock((_node: unknown): number => 50);
@@ -29,8 +27,7 @@ const makeFile = (errorCount = 0): ParsedFile =>
   }) as unknown as ParsedFile;
 
 /** Build N dummy file objects, all error-free. */
-const makeFiles = (count: number): ParsedFile[] =>
-  Array.from({ length: count }, () => makeFile(0));
+const makeFiles = (count: number): ParsedFile[] => Array.from({ length: count }, () => makeFile(0));
 
 // ── computeAutoMinSize ────────────────────────────────────────────────────────
 
@@ -51,7 +48,6 @@ describe('computeAutoMinSize', () => {
   it('should return 60 when files array is empty', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
-
     // Act
     const result = computeAutoMinSize([]);
 
@@ -62,6 +58,7 @@ describe('computeAutoMinSize', () => {
   it('should return 60 when all files have errors', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
+
     collectOxcNodesMock.mockImplementation(() => []);
 
     // Act
@@ -74,10 +71,11 @@ describe('computeAutoMinSize', () => {
   it('should only include sizes from files without errors when mixed', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
+
     countOxcSizeMock.mockReturnValue(100);
+
     // error file should be skipped, healthy file contributes size=100
     const files = [makeFile(1), makeFile(0)];
-
     // Act
     const result = computeAutoMinSize(files);
 
@@ -93,6 +91,7 @@ describe('computeAutoMinSize', () => {
     // counts=[10,20,30,40,50], median index=2 → value=30
     const calls = [10, 20, 30, 40, 50];
     let i = 0;
+
     collectOxcNodesMock.mockImplementation(() => [{}]);
     countOxcSizeMock.mockImplementation(() => calls[i++ % calls.length] ?? 50);
 
@@ -111,7 +110,8 @@ describe('computeAutoMinSize', () => {
     // p=0.6: index=floor(499*0.6)=299 → counts[299]=25
     // p=0.5 would give index=249 → counts[249]=15 (distinguishable)
     let callIdx = 0;
-    countOxcSizeMock.mockImplementation(() => ++callIdx <= 270 ? 15 : 25);
+
+    countOxcSizeMock.mockImplementation(() => (++callIdx <= 270 ? 15 : 25));
 
     // Act
     const result = computeAutoMinSize(makeFiles(500));
@@ -128,7 +128,8 @@ describe('computeAutoMinSize', () => {
     // p=0.75: index=floor(999*0.75)=749 → counts[749]=25
     // p=0.5 would give index=499 → counts[499]=15 (distinguishable)
     let callIdx = 0;
-    countOxcSizeMock.mockImplementation(() => ++callIdx <= 500 ? 15 : 25);
+
+    countOxcSizeMock.mockImplementation(() => (++callIdx <= 500 ? 15 : 25));
 
     // Act
     const result = computeAutoMinSize(makeFiles(1000));
@@ -140,6 +141,7 @@ describe('computeAutoMinSize', () => {
   it('should clamp result to minimum 10 when computed value is below 10', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
+
     countOxcSizeMock.mockReturnValue(1); // very small sizes
 
     // Act
@@ -152,6 +154,7 @@ describe('computeAutoMinSize', () => {
   it('should clamp result to maximum 200 when computed value is above 200', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
+
     countOxcSizeMock.mockReturnValue(9999); // very large size
 
     // Act
@@ -164,6 +167,7 @@ describe('computeAutoMinSize', () => {
   it('should return a value within [10, 200] for normal input', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
+
     countOxcSizeMock.mockReturnValue(80);
 
     // Act
@@ -177,9 +181,10 @@ describe('computeAutoMinSize', () => {
   it('should return the same result on two successive calls with the same input', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
-    countOxcSizeMock.mockReturnValue(50);
-    const files = makeFiles(2);
 
+    countOxcSizeMock.mockReturnValue(50);
+
+    const files = makeFiles(2);
     // Act
     const first = computeAutoMinSize(files);
     const second = computeAutoMinSize(files);
@@ -191,6 +196,7 @@ describe('computeAutoMinSize', () => {
   it('should return 60 when a file has no clone-target nodes', async () => {
     // Arrange
     const { computeAutoMinSize } = await import('./auto-min-size');
+
     collectOxcNodesMock.mockReturnValue([]); // no nodes → no sizes
 
     // Act

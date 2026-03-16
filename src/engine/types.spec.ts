@@ -34,6 +34,7 @@ describe('engine/types — interface shape assertions (compile-time)', () => {
       equals: (_other: unknown) => false,
       array: () => [] as number[],
     };
+
     // No runtime assertion needed — this verifies the object can be typed as BitSet
     expect(typeof mockSet.add).toBe('function');
     expect(typeof mockSet.array).toBe('function');
@@ -48,6 +49,7 @@ describe('engine/types — interface shape assertions (compile-time)', () => {
       comments: [],
       sourceText: 'const x = 1;',
     };
+
     expect(pf.filePath).toBe('/foo/bar.ts');
     expect(Array.isArray(pf.errors)).toBe(true);
     expect(typeof pf.sourceText).toBe('string');
@@ -55,6 +57,7 @@ describe('engine/types — interface shape assertions (compile-time)', () => {
 
   it('LoopTargets interface requires breakTarget, continueTarget, label', () => {
     const lt = { breakTarget: 1, continueTarget: 2, label: null };
+
     expect(lt.breakTarget).toBe(1);
     expect(lt.continueTarget).toBe(2);
     expect(lt.label).toBeNull();

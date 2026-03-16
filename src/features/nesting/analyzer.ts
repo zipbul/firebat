@@ -475,7 +475,6 @@ const analyzeFunctionNode = (
   let cognitiveComplexity = 0;
   const iterationStack: string[] = [];
   const accidentalQuadraticTargets = new Set<string>();
-
   // Halstead counters
   let totalOperators = 0;
   let totalOperands = 0;
@@ -639,6 +638,7 @@ const analyzeFunctionNode = (
       const op = nodeType;
 
       totalOperators++;
+
       uniqueOperators.add(op);
     }
 
@@ -654,6 +654,7 @@ const analyzeFunctionNode = (
 
       if (op.length > 0) {
         totalOperators++;
+
         uniqueOperators.add(op);
       }
     }
@@ -661,30 +662,35 @@ const analyzeFunctionNode = (
     // ConditionalExpression (ternary)
     if (nodeType === 'ConditionalExpression') {
       totalOperators++;
+
       uniqueOperators.add('?:');
     }
 
     // Function call operator
     if (nodeType === 'CallExpression') {
       totalOperators++;
+
       uniqueOperators.add('()');
     }
 
     // Object creation operator
     if (nodeType === 'NewExpression') {
       totalOperators++;
+
       uniqueOperators.add('new');
     }
 
     // Await operator
     if (nodeType === 'AwaitExpression') {
       totalOperators++;
+
       uniqueOperators.add('await');
     }
 
     // Yield operator
     if (nodeType === 'YieldExpression') {
       totalOperators++;
+
       uniqueOperators.add('yield');
     }
 
@@ -695,6 +701,7 @@ const analyzeFunctionNode = (
       const op = optional ? '?.' : computed ? '[]' : '.';
 
       totalOperators++;
+
       uniqueOperators.add(op);
     }
 
@@ -704,6 +711,7 @@ const analyzeFunctionNode = (
 
       if (name.length > 0) {
         totalOperands++;
+
         uniqueOperands.add(name);
       }
     }
@@ -720,17 +728,20 @@ const analyzeFunctionNode = (
       const raw = String(value.raw ?? value.value ?? nodeType);
 
       totalOperands++;
+
       uniqueOperands.add(raw);
     }
 
     // Operands: this, super
     if (nodeType === 'ThisExpression') {
       totalOperands++;
+
       uniqueOperands.add('this');
     }
 
     if (nodeType === 'Super') {
       totalOperands++;
+
       uniqueOperands.add('super');
     }
   };
@@ -855,7 +866,6 @@ const analyzeFunctionNode = (
   // Complexity density: CC / LOC
   const loc = span.end.line - span.start.line + 1;
   const density = loc > 0 ? cognitiveComplexity / loc : 0;
-
   // Halstead metrics
   const eta1 = uniqueOperators.size;
   const eta2 = uniqueOperands.size;
@@ -864,7 +874,6 @@ const analyzeFunctionNode = (
   const vocabulary = eta1 + eta2;
   const halsteadVolume = vocabulary > 0 ? (n1 + n2) * Math.log2(vocabulary) : 0;
   const halsteadDifficulty = eta2 > 0 ? (eta1 / 2) * (n2 / eta2) : 0;
-
   const PRIORITY: ReadonlyArray<NestingKind> = [
     'accidental-quadratic',
     'high-cognitive-complexity',
@@ -877,12 +886,17 @@ const analyzeFunctionNode = (
   const collectSignals = (): NestingKind[] => {
     const signals: NestingKind[] = [];
 
-    if (quadraticTargets.length > 0) signals.push('accidental-quadratic');
-    if (cognitiveComplexity >= opts.maxCognitiveComplexity) signals.push('high-cognitive-complexity');
-    if (callbackDepth >= opts.maxCallbackDepth) signals.push('callback-depth');
-    if (promiseChainDepth >= opts.maxPromiseChainDepth) signals.push('promise-chain-depth');
-    if (maxDepth >= opts.maxNestingDepth) signals.push('deep-nesting');
-    if (loc >= opts.minDensityLoc && density > opts.maxDensity) signals.push('complexity-density');
+    if (quadraticTargets.length > 0) {signals.push('accidental-quadratic');}
+
+    if (cognitiveComplexity >= opts.maxCognitiveComplexity) {signals.push('high-cognitive-complexity');}
+
+    if (callbackDepth >= opts.maxCallbackDepth) {signals.push('callback-depth');}
+
+    if (promiseChainDepth >= opts.maxPromiseChainDepth) {signals.push('promise-chain-depth');}
+
+    if (maxDepth >= opts.maxNestingDepth) {signals.push('deep-nesting');}
+
+    if (loc >= opts.minDensityLoc && density > opts.maxDensity) {signals.push('complexity-density');}
 
     return signals;
   };

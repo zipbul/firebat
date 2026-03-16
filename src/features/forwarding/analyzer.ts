@@ -491,7 +491,7 @@ const buildImportIndex = (
   try {
     importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
   } catch (e) {
-    if (e instanceof GildashError) return new Map();
+    if (e instanceof GildashError) {return new Map();}
     throw e;
   }
 
@@ -523,7 +523,7 @@ const buildExportIndex = (
   try {
     allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
   } catch (e) {
-    if (e instanceof GildashError) return new Map();
+    if (e instanceof GildashError) {return new Map();}
     throw e;
   }
 
@@ -589,7 +589,6 @@ const analyzeForwarding = async (
   }
 
   const findings: ForwardingFinding[] = [];
-
   // Build import/export indices from gildash for cross-file resolution
   const importIdx = buildImportIndex(gildash, rootAbs);
   const exportIdx = buildExportIndex(gildash, rootAbs);

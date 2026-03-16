@@ -2,10 +2,10 @@ import { describe, expect, it } from 'bun:test';
 
 import type { NodeRecord, NodeWithBody, OxcBuiltFunctionCfg } from '../types';
 
-import { OxcCFGBuilder } from './cfg-builder';
-import { EdgeType } from './cfg-types';
 import { isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
+import { OxcCFGBuilder } from './cfg-builder';
+import { EdgeType } from './cfg-types';
 
 const getFunctionBody = (fn: NodeWithBody): NodeRecord => {
   const body = fn.body;
@@ -194,7 +194,6 @@ describe('cfg-builder', () => {
     // Act
     const built = builder.buildFunctionBody(getFunctionBody(fn));
     const edges = built.cfg.getEdges();
-
     // Collect all (from, to) pairs connected by an Exception edge
     const exceptionEdges: Array<{ from: number; to: number }> = [];
 

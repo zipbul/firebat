@@ -18,22 +18,23 @@ export const computeLcsLength = (
   a: ReadonlyArray<string>,
   b: ReadonlyArray<string>,
 ): number => {
-  if (a.length === 0 || b.length === 0) return 0;
+  if (a.length === 0 || b.length === 0) {return 0;}
 
   // b의 각 값 → 출현 인덱스 목록 (오름차순)
   const matchIndex = buildMatchIndex(b);
-
   // tails[k] = LCS 길이 k+1의 subsequence가 끝나는 B 인덱스의 최솟값
   const tails: number[] = [];
 
   for (const val of a) {
     const positions = matchIndex.get(val);
-    if (positions === undefined) continue;
+
+    if (positions === undefined) {continue;}
 
     // 역순으로 처리해야 같은 row에서 중복 사용 방지
     for (let p = positions.length - 1; p >= 0; p--) {
       const j = positions[p]!;
       const pos = lowerBound(tails, j);
+
       if (pos === tails.length) {
         tails.push(j);
       } else {
@@ -54,7 +55,9 @@ export const computeSequenceSimilarity = (
   b: ReadonlyArray<string>,
 ): number => {
   const total = a.length + b.length;
-  if (total === 0) return 0;
+
+  if (total === 0) {return 0;}
+
   return (2 * computeLcsLength(a, b)) / total;
 };
 
@@ -79,7 +82,6 @@ export const computeLcsAlignment = (
 ): LcsAlignment => {
   const m = a.length;
   const n = b.length;
-
   // dp[i][j] = a[0..i-1], b[0..j-1]의 LCS 길이
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
 
@@ -98,16 +100,18 @@ export const computeLcsAlignment = (
   const aOnlySet = new Set<number>();
   const bOnlySet = new Set<number>();
 
-  for (let i = 0; i < m; i++) aOnlySet.add(i);
-  for (let j = 0; j < n; j++) bOnlySet.add(j);
+  for (let i = 0; i < m; i++) {aOnlySet.add(i);}
+  for (let j = 0; j < n; j++) {bOnlySet.add(j);}
 
   let i = m;
   let j = n;
+
   while (i > 0 && j > 0) {
     if (a[i - 1] === b[j - 1]) {
       matched.push({ aIndex: i - 1, bIndex: j - 1 });
       aOnlySet.delete(i - 1);
       bOnlySet.delete(j - 1);
+
       i--;
       j--;
     } else if (dp[i - 1]![j]! >= dp[i]![j - 1]!) {
@@ -130,15 +134,18 @@ export const computeLcsAlignment = (
 
 const buildMatchIndex = (b: ReadonlyArray<string>): Map<string, number[]> => {
   const map = new Map<string, number[]>();
+
   for (let j = 0; j < b.length; j++) {
     const key = b[j]!;
     const list = map.get(key);
+
     if (list === undefined) {
       map.set(key, [j]);
     } else {
       list.push(j);
     }
   }
+
   return map;
 };
 
@@ -149,13 +156,16 @@ const buildMatchIndex = (b: ReadonlyArray<string>): Map<string, number[]> => {
 const lowerBound = (arr: number[], target: number): number => {
   let lo = 0;
   let hi = arr.length;
+
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
+
     if (arr[mid]! < target) {
       lo = mid + 1;
     } else {
       hi = mid;
     }
   }
+
   return lo;
 };

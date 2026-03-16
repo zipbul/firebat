@@ -1,13 +1,9 @@
 import { mock, afterAll, describe, it, expect, spyOn, afterEach } from 'bun:test';
 
-import {
-  replaceRangeUseCase,
-  replaceRegexUseCase,
-} from './edit.usecases';
 import { createNoopLogger } from '../../shared/logger';
+import { replaceRangeUseCase, replaceRegexUseCase } from './edit.usecases';
 
 const logger = createNoopLogger('error');
-
 let fileSpy: ReturnType<typeof spyOn>;
 let writeSpy: ReturnType<typeof spyOn>;
 
@@ -26,8 +22,10 @@ describe('replaceRangeUseCase', () => {
     const result = await replaceRangeUseCase({
       root: '/project',
       relativePath: '  ',
-      startLine: 1, startColumn: 1,
-      endLine: 1, endColumn: 1,
+      startLine: 1,
+      startColumn: 1,
+      endLine: 1,
+      endColumn: 1,
       newText: '',
       logger,
     });
@@ -38,14 +36,17 @@ describe('replaceRangeUseCase', () => {
 
   it('should return ok:true and changed:false when content is unchanged', async () => {
     const original = 'const x = 1;\n';
+
     mockFile(original);
 
     // Replace "1" at line 1, col 11-12 (1-based: col 11=`1`, col 12=`;`) with same "1"
     const result = await replaceRangeUseCase({
       root: '/project',
       relativePath: 'src/a.ts',
-      startLine: 1, startColumn: 11,
-      endLine: 1, endColumn: 12,
+      startLine: 1,
+      startColumn: 11,
+      endLine: 1,
+      endColumn: 12,
       newText: '1',
       logger,
     });
@@ -56,13 +57,16 @@ describe('replaceRangeUseCase', () => {
 
   it('should return ok:true and changed:true when content changes', async () => {
     const original = 'const x = 1;\n';
+
     mockFile(original);
 
     const result = await replaceRangeUseCase({
       root: '/project',
       relativePath: 'src/a.ts',
-      startLine: 1, startColumn: 11,
-      endLine: 1, endColumn: 12,
+      startLine: 1,
+      startColumn: 11,
+      endLine: 1,
+      endColumn: 12,
       newText: '42',
       logger,
     });
@@ -72,13 +76,19 @@ describe('replaceRangeUseCase', () => {
   });
 
   it('should return ok:false when Bun.file throws', async () => {
-    fileSpy = spyOn(Bun, 'file').mockReturnValue({ text: async () => { throw new Error('ENOENT'); } } as never);
+    fileSpy = spyOn(Bun, 'file').mockReturnValue({
+      text: async () => {
+        throw new Error('ENOENT');
+      },
+    } as never);
 
     const result = await replaceRangeUseCase({
       root: '/project',
       relativePath: 'src/missing.ts',
-      startLine: 1, startColumn: 1,
-      endLine: 1, endColumn: 1,
+      startLine: 1,
+      startColumn: 1,
+      endLine: 1,
+      endColumn: 1,
       newText: '',
       logger,
     });
@@ -135,6 +145,7 @@ describe('replaceRegexUseCase', () => {
 
   it('should replace all occurrences when allowMultipleOccurrences is true', async () => {
     mockFile('foo foo foo\n');
+
     writeSpy = spyOn(Bun, 'write').mockResolvedValue(11);
 
     const result = await replaceRegexUseCase({
@@ -151,7 +162,11 @@ describe('replaceRegexUseCase', () => {
   });
 
   it('should return ok:false when Bun.file throws', async () => {
-    fileSpy = spyOn(Bun, 'file').mockReturnValue({ text: async () => { throw new Error('ENOENT'); } } as never);
+    fileSpy = spyOn(Bun, 'file').mockReturnValue({
+      text: async () => {
+        throw new Error('ENOENT');
+      },
+    } as never);
 
     const result = await replaceRegexUseCase({
       root: '/project',

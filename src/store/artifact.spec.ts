@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { type ArtifactStore, type GetArtifactInput, type SetArtifactInput, createArtifactStore } from './artifact';
 
 describe('createArtifactStore', () => {
@@ -37,6 +38,7 @@ describe('createArtifactStore', () => {
     const value = { code: 42, items: [1, 2, 3] };
 
     store.set(makeSet(value));
+
     const result = store.get(makeGet());
 
     expect(result).toEqual(value);
@@ -87,10 +89,13 @@ describe('createArtifactStore', () => {
     store.get(makeGet()); // L1 now has corrupt JSON from L2
 
     // Fix L2 to have valid JSON
-    db.run(
-      'UPDATE artifacts SET payloadJson = ? WHERE projectKey = ? AND kind = ? AND artifactKey = ? AND inputsDigest = ?',
-      ['{"fixed":true}', 'proj', 'ast', 'file.ts', 'abc123'],
-    );
+    db.run('UPDATE artifacts SET payloadJson = ? WHERE projectKey = ? AND kind = ? AND artifactKey = ? AND inputsDigest = ?', [
+      '{"fixed":true}',
+      'proj',
+      'ast',
+      'file.ts',
+      'abc123',
+    ]);
 
     // L1 corrupt → catch → delete → L2 (now valid) → returns value
     const result = store.get<{ fixed: boolean }>(makeGet());
@@ -129,6 +134,7 @@ describe('createArtifactStore', () => {
     const emptyKey = { projectKey: '', kind: '', artifactKey: '', inputsDigest: '' };
 
     store.set({ ...emptyKey, value: 'ok' });
+
     const result = store.get<string>(emptyKey);
 
     expect(result).toBe('ok');
@@ -202,6 +208,7 @@ describe('createArtifactStore', () => {
     const store2 = createArtifactStore(db);
 
     store.set(makeSet({ shared: true }));
+
     // store2 has empty L1 but shares L2
     const result = store2.get<{ shared: boolean }>(makeGet());
 
@@ -212,11 +219,14 @@ describe('createArtifactStore', () => {
     const malicious = "'; DROP TABLE artifacts; --";
 
     store.set(makeSet('safe', { projectKey: malicious }));
+
     const result = store.get<string>(makeGet({ projectKey: malicious }));
 
     expect(result).toBe('safe');
+
     // Table still exists
     const count = db.prepare('SELECT COUNT(*) as c FROM artifacts').get() as { c: number };
+
     expect(count.c).toBeGreaterThanOrEqual(1);
   });
 
@@ -227,6 +237,7 @@ describe('createArtifactStore', () => {
     const store2 = createArtifactStore(db);
 
     store.set(makeSet('first'));
+
     const result = store2.get<string>(makeGet());
 
     expect(result).toBe('first');

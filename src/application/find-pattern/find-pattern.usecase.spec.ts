@@ -1,42 +1,33 @@
-import { mock, describe, it, expect, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
-import * as nodePath from 'node:path';
-
 import type { Gildash } from '@zipbul/gildash';
 import type { PatternMatch } from '@zipbul/gildash';
+
 import { GildashError } from '@zipbul/gildash';
+import { mock, describe, it, expect, beforeEach, afterEach, afterAll, spyOn } from 'bun:test';
+import * as nodePath from 'node:path';
 
 // ── Save originals before mocking ────────────────────────────────────────────
 
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/gildash.ts')) };
 const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
-
 // ── Mocks ─────────────────────────────────────────────────────────────────────
-
 const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
-const mockFindPattern = mock(
-  async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => [],
-);
-
+const mockFindPattern = mock(async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => []);
 const mockGildash = {
   findPattern: mockFindPattern,
   close: mockClose,
 } as unknown as Gildash;
-
 const mockCreateGildash = mock(async (_opts: unknown) => mockGildash);
-const mockResolveTargets = mock(
-  async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => [],
-);
+const mockResolveTargets = mock(async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => []);
 
 mock.module('../../store/gildash', () => ({ createGildash: mockCreateGildash }));
 mock.module('../../shared/target-discovery', () => ({ resolveTargets: mockResolveTargets }));
 
 // ── Import after mock ─────────────────────────────────────────────────────────
 
-import { findPatternUseCase } from './find-pattern.usecase';
 import { createNoopLogger } from '../../shared/logger';
+import { findPatternUseCase } from './find-pattern.usecase';
 
 const logger = createNoopLogger('error');
-
 const MATCH_1: PatternMatch = {
   filePath: '/proj/src/a.ts',
   startLine: 3,
@@ -67,12 +58,8 @@ beforeEach(() => {
   // Restore default implementations
   mockCreateGildash.mockImplementation(async (_opts: unknown) => mockGildash);
   mockClose.mockImplementation(async (_opts?: { cleanup?: boolean }) => {});
-  mockFindPattern.mockImplementation(
-    async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => [],
-  );
-  mockResolveTargets.mockImplementation(
-    async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => [],
-  );
+  mockFindPattern.mockImplementation(async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => []);
+  mockResolveTargets.mockImplementation(async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => []);
 });
 
 afterEach(() => {
@@ -127,24 +114,21 @@ describe('findPatternUseCase', () => {
     await findPatternUseCase({ targets: ['/root/a.ts'], pattern: 'x', logger, rootAbs: '/root' });
 
     // Assert
-    expect(mockCreateGildash).toHaveBeenCalledWith(
-      expect.objectContaining({ projectRoot: '/root' }),
-    );
+    expect(mockCreateGildash).toHaveBeenCalledWith(expect.objectContaining({ projectRoot: '/root' }));
   });
 
   it('should use process.cwd() as projectRoot when rootAbs is not provided', async () => {
     // Arrange
     mockResolveTargets.mockImplementation(resolveToFiles(['/cwd/a.ts']));
     mockFindPattern.mockImplementation(findPatternReturnsOk([]));
+
     const cwdSpy = spyOn(process, 'cwd').mockReturnValue('/cwd');
 
     // Act
     await findPatternUseCase({ targets: ['/cwd/a.ts'], pattern: 'x', logger });
 
     // Assert
-    expect(mockCreateGildash).toHaveBeenCalledWith(
-      expect.objectContaining({ projectRoot: '/cwd' }),
-    );
+    expect(mockCreateGildash).toHaveBeenCalledWith(expect.objectContaining({ projectRoot: '/cwd' }));
 
     cwdSpy.mockRestore();
   });
@@ -152,6 +136,7 @@ describe('findPatternUseCase', () => {
   it('should pass pattern and filePaths to gildash.findPattern with watchMode false', async () => {
     // Arrange
     const filePaths = ['/proj/a.ts'];
+
     mockResolveTargets.mockImplementation(resolveToFiles(filePaths));
     mockFindPattern.mockImplementation(findPatternReturnsOk([]));
 
@@ -159,9 +144,7 @@ describe('findPatternUseCase', () => {
     await findPatternUseCase({ targets: filePaths, pattern: 'async $F()', logger });
 
     // Assert
-    expect(mockCreateGildash).toHaveBeenCalledWith(
-      expect.objectContaining({ watchMode: false }),
-    );
+    expect(mockCreateGildash).toHaveBeenCalledWith(expect.objectContaining({ watchMode: false }));
     expect(mockFindPattern).toHaveBeenCalledWith('async $F()', { filePaths });
   });
 
@@ -203,6 +186,7 @@ describe('findPatternUseCase', () => {
   it('should call resolveTargets with root and undefined when targets is not provided', async () => {
     // Arrange
     mockResolveTargets.mockImplementation(resolveToFiles([]));
+
     const cwdSpy = spyOn(process, 'cwd').mockReturnValue('/cwd');
 
     // Act
@@ -246,9 +230,7 @@ describe('findPatternUseCase', () => {
     });
 
     // Act & Assert
-    await expect(
-      findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger }),
-    ).rejects.toThrow('open failed');
+    await expect(findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger })).rejects.toThrow('open failed');
   });
 
   it('should propagate error when resolveTargets throws', async () => {
@@ -258,9 +240,7 @@ describe('findPatternUseCase', () => {
     });
 
     // Act & Assert
-    await expect(
-      findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger }),
-    ).rejects.toThrow('resolve failed');
+    await expect(findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger })).rejects.toThrow('resolve failed');
   });
 
   it('should return early with empty array and call nothing when targets=[] and rootAbs=undefined', async () => {
