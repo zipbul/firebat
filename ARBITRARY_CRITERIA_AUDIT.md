@@ -726,6 +726,29 @@
 - **질문**: 실제 호출 순서 분석(call graph 기반) 없이 "coupling"을 선언하는 것이 적절한가?
 - **결론**: ✅ **6단계 정밀도 개선 완료** — (1) 기존 버그 3건 수정 (export 패턴 확장, constructor 제외, O(n²)→O(n)), (2) gildash call graph로 caller 공존 검사 (의도적 설계 패턴 억제), (3→4) CFG dominator 분석으로 caller 내 writer→reader 실행 순서 정밀 검증 (OxcCFGBuilder + IntegerCFG 활용, exception edge 처리 포함), (5) guard 패턴 인식 (self-protecting reader 억제), (6) dead writer 제외 (unreachable write 필터링). 업계 도구(SonarQube, NDepend, Structure101) 중 temporal coupling을 정적으로 직접 탐지하는 도구 없음 — firebat 고유 기능.
 
+### E-06. variable-lifetime — regex + name-match 기반 수명 측정
+
+- **파일**: `src/features/variable-lifetime/analyzer.ts` L81-108
+- **방식**: sourceText 전체에 regex `/\b(const|let|var)\s+([a-zA-Z_$][\w$]*)\b/g`로 선언 탐지 → 동명 Identifier 중 최대 offset → `lastLine - defLine`으로 수명 계산
+- **부정확성**:
+  - **스코프 무시**: `collectOxcNodes(file.program, n => n.type === 'Identifier' && getNodeName(n) === name && n.start >= defOffset)` — 함수 A의 `const x`와 함수 B의 `x` 참조가 이름만 같으면 같은 변수로 취급. 서로 다른 스코프의 동명 변수가 "긴 수명"으로 잘못 보고됨
+  - **제어 흐름 무시**: `if (cond) return;` 이후 50줄 뒤 사용 → lifetime 50으로 계산. 실제로는 early return 경로에서 변수가 1줄만 살아있음. CFG reaching-definition으로 경로별 실제 수명 계산 가능
+  - **regex 오매칭**: sourceText 전체에 적용하므로 주석 내 `const x = ...`이나 문자열 내 `let y = ...`도 선언으로 탐지 가능
+- **질문**: waste 디텍터가 이미 CFG + reaching-definition(gen/kill BitSet, forward dataflow)을 완전 구현해두었고, `defMetaById`, `reachingInByNode`, `useVarIndexesByNode`가 모두 존재한다. 이 인프라를 재사용하면 스코프 정확한 true lifetime 계산이 가능하지 않은가?
+- **개선 방향**: regex 선언 탐지 → AST VariableDeclarator 수집으로 교체, name-match → CFG reaching-definition으로 "어떤 def가 어떤 use에 도달하는가" 추적, 경로별 실제 수명 계산
+
+---
+
+### E-07. error-flow — return-await-in-try의 AST 스택 기반 try depth 추적
+
+- **파일**: `src/features/error-flow/analyzer.ts` L1101-1122
+- **방식**: `inTryBlockWithCatchDepth > 0`이면 `return <CallExpression>`을 플래그. try/catch depth를 수동 스택(`functionTryCatchDepth`, `inTryBlockDepth`, `inTryBlockWithCatchDepth`)으로 추적
+- **부정확성**:
+  - **Promise 반환 여부 불명**: `return fetchData()`가 Promise를 반환하는지 AST만으로는 알 수 없음. 타입 정보가 필요하며 이는 CFG가 아닌 gildash semantic 영역
+  - **exception 경로 근사**: "이 return의 rejection이 catch에 도달하는가"를 try depth 카운터로 근사. CFG exception edge를 사용하면 실제 도달 가능성을 정확히 판단 가능
+- **질문**: CFG exception edge로 개선 가능하나, 핵심 불확실성이 "CallExpression이 Promise를 반환하는가"이므로 CFG보다 타입 정보(gildash `getResolvedType` 또는 `getSemanticReferences`)가 더 중요하지 않은가?
+- **개선 방향**: (1) gildash `getResolvedType`으로 반환 타입이 Promise/Thenable인지 확인 → 비-Promise return은 플래그 안 함 (FP 대폭 감소). (2) CFG exception edge로 rejection→catch 도달 가능성 정밀 판정 (부차적 개선)
+
 ---
 
 ## F. 임의 confidence 값 (Arbitrary Confidence)
@@ -798,9 +821,9 @@
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
-| E. 근사 측정 | **5건** | ✅ 4건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
+| E. 근사 측정 | **7건** (+2 신규) | ✅ 4건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **55건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| **합계** | **66건** (+2 신규) | ✅ **55건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
