@@ -56,14 +56,18 @@ describe('features/error-flow/types — structural shape', () => {
       'missing-error-cause',
       'useless-catch',
       'unsafe-finally',
-      'catch-or-return',
+      'return-await-in-try',
       'prefer-catch',
       'prefer-await-to-then',
+      'no-return-wrap',
       'floating-promises',
+      'catch-or-return',
       'misused-promises',
-      'return-await-in-try',
+      'unobserved-variable',
+      'always-return',
+      'no-callback-in-promise',
     ] satisfies import('./types').ErrorFlowFindingKind[];
-    expect(kinds.length).toBe(12);
+    expect(kinds.length).toBe(16);
     expect(kinds[0]).toBe('tool-unavailable');
   });
 });

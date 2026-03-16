@@ -875,12 +875,16 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       'missing-error-cause': 'EF_MISSING_ERROR_CAUSE',
       'useless-catch': 'EF_USELESS_CATCH',
       'unsafe-finally': 'EF_UNSAFE_FINALLY',
-      'catch-or-return': 'EF_CATCH_OR_RETURN',
-      'prefer-catch': 'EF_PREFER_CATCH',
-      'prefer-await-to-then': 'EF_PREFER_AWAIT_TO_THEN',
-      'floating-promises': 'EF_FLOATING_PROMISES',
-      'misused-promises': 'EF_MISUSED_PROMISES',
       'return-await-in-try': 'EF_RETURN_AWAIT_IN_TRY',
+      'prefer-catch': 'EF_PREFER_DOT_CATCH_CATCH',
+      'prefer-await-to-then': 'EF_PREFER_DOT_CATCH_AWAIT',
+      'no-return-wrap': 'EF_PREFER_DOT_CATCH_NO_WRAP',
+      'floating-promises': 'EF_UNOBSERVED_PROMISE_FLOATING',
+      'catch-or-return': 'EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN',
+      'misused-promises': 'EF_UNOBSERVED_PROMISE_MISUSED',
+      'unobserved-variable': 'EF_UNOBSERVED_PROMISE_VARIABLE',
+      'always-return': 'EF_UNOBSERVED_PROMISE_ALWAYS_RETURN',
+      'no-callback-in-promise': 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE',
     };
 
     return items

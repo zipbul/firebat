@@ -146,15 +146,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the finally block contains only cleanup logic (close connections, release resources) that cannot affect control flow.',
     ],
   },
-  EF_CATCH_OR_RETURN: {
-    cause: 'A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.',
-    think: [
-      'Determine whether the Promise rejection is intentionally ignored or accidentally unhandled.',
-      "Check whether the code is in an async function where 'await' would capture rejections naturally.",
-      'If using .then(), verify that adding .catch() or returning the chain for the caller to handle resolves the issue.',
-    ],
-  },
-  EF_PREFER_CATCH: {
+  EF_PREFER_DOT_CATCH_CATCH: {
     cause:
       'Error handling uses .then(onFulfilled, onRejected) instead of .catch(), which is less readable and can miss errors thrown in onFulfilled.',
     think: [
@@ -163,7 +155,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that replacing with .then().catch() provides more predictable error coverage.',
     ],
   },
-  EF_PREFER_AWAIT_TO_THEN: {
+  EF_PREFER_DOT_CATCH_AWAIT: {
     cause:
       'Promise chains use .then()/.catch() inside an async function instead of await, reducing readability and error flow clarity.',
     think: [
@@ -172,7 +164,14 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that converting to await does not change the concurrency semantics of the code.',
     ],
   },
-  EF_FLOATING_PROMISES: {
+  EF_PREFER_DOT_CATCH_NO_WRAP: {
+    cause: 'A .then() callback returns Promise.resolve() or Promise.reject() unnecessarily — the value can be returned directly.',
+    think: [
+      'Check whether the wrapping in Promise.resolve/reject is intentional.',
+      'Verify that returning the value directly achieves the same result.',
+    ],
+  },
+  EF_UNOBSERVED_PROMISE_FLOATING: {
     cause: 'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
     think: [
       'Determine whether the fire-and-forget is intentional or accidental.',
@@ -180,13 +179,42 @@ export const FIREBAT_CODE_CATALOG = {
       'If truly fire-and-forget, verify that errors are handled inside the called function and consider adding void prefix for clarity.',
     ],
   },
-  EF_MISUSED_PROMISES: {
+  EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN: {
+    cause: 'A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.',
+    think: [
+      'Determine whether the Promise rejection is intentionally ignored or accidentally unhandled.',
+      "Check whether the code is in an async function where 'await' would capture rejections naturally.",
+      'If using .then(), verify that adding .catch() or returning the chain for the caller to handle resolves the issue.',
+    ],
+  },
+  EF_UNOBSERVED_PROMISE_MISUSED: {
     cause:
       'A Promise is used in a context that expects a synchronous value (e.g., array.forEach callback, conditional expression), leading to always-truthy checks or ignored results.',
     think: [
       'Determine what the code expected to happen — forEach does not await returned Promises and boolean checks on Promises are always true.',
       'Identify whether replacing with for-of + await restructures the logic to properly handle asynchronous values.',
       'Verify that the fix preserves iteration order and error propagation semantics.',
+    ],
+  },
+  EF_UNOBSERVED_PROMISE_VARIABLE: {
+    cause: 'A Promise is assigned to a variable but never awaited, .then()ed, or .catch()ed in the same scope.',
+    think: [
+      'Check whether the variable is consumed elsewhere (passed to another function, returned, etc.).',
+      'Determine whether the Promise result matters or can be safely ignored.',
+    ],
+  },
+  EF_UNOBSERVED_PROMISE_ALWAYS_RETURN: {
+    cause: 'A .then() callback does not return a value, breaking the Promise chain and losing the resolved value.',
+    think: [
+      'Determine whether the callback is intended to transform the value or just perform a side effect.',
+      'If transforming, add an explicit return. If side-effecting, consider using await instead of .then().',
+    ],
+  },
+  EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE: {
+    cause: 'A callback-style API is used inside a Promise chain, mixing two async patterns and risking unhandled errors.',
+    think: [
+      'Determine whether the callback API has a Promise-based alternative (e.g., fs/promises).',
+      'If no Promise alternative exists, wrap the callback in a new Promise explicitly.',
     ],
   },
   EF_RETURN_AWAIT_IN_TRY: {

@@ -1133,4 +1133,170 @@ describe('error-flow/analyzer', () => {
     // Assert — callback wrapping is allowed, so no finding
     expect(hits.length).toBe(0);
   });
+
+  // --- no-return-wrap ---
+
+  it('should report no-return-wrap for Promise.resolve in then callback expression body', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-wrap-expr.ts';
+    const source = 'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should report no-return-wrap for Promise.resolve in then callback block body', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-wrap-block.ts';
+    const source = [
+      'export const p = Promise.resolve(1).then(x => {',
+      '  return Promise.resolve(x + 1);',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report no-return-wrap for direct value return in then callback', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/return-direct.ts';
+    const source = 'export const p = Promise.resolve(1).then(x => x + 1);';
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- always-return ---
+
+  it('should report always-return when then callback has block body without return', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/always-return.ts';
+    const source = [
+      'export const p = Promise.resolve(1).then(x => {',
+      '  console.log(x);',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'always-return');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report always-return when then callback returns a value', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/always-return-ok.ts';
+    const source = [
+      'export const p = Promise.resolve(1).then(x => {',
+      '  return x + 1;',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'always-return');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- no-callback-in-promise ---
+
+  it('should report no-callback-in-promise when callback API is used inside then', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/callback-in-promise.ts';
+    const source = [
+      'import * as fs from "fs";',
+      'export const p = fetch("/api").then(res => {',
+      '  fs.readFile("data.txt", (err, data) => {',
+      '    console.log(data);',
+      '  });',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report no-callback-in-promise when no callback API is used', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/no-callback-ok.ts';
+    const source = [
+      'export const p = fetch("/api").then(res => {',
+      '  return res.json();',
+      '});',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- unobserved-variable ---
+
+  it('should report unobserved-variable when call result is assigned but never awaited', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/unobserved-var.ts';
+    const source = [
+      'export function f() {',
+      '  const p = fetchData();',
+      '  console.log("done");',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report unobserved-variable when call result is awaited', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/observed-var.ts';
+    const source = [
+      'export async function f() {',
+      '  const p = fetchData();',
+      '  await p;',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unobserved-variable when call result is returned', () => {
+    // Arrange
+    const filePath = '/virtual/src/features/returned-var.ts';
+    const source = [
+      'export function f() {',
+      '  const p = fetchData();',
+      '  return p;',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
 });

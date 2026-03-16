@@ -312,6 +312,111 @@ const containsCallbackApiCall = (body: NodeValue): boolean => {
   return found;
 };
 
+const isPromiseWrapCall = (expr: NodeValue): boolean => {
+  if (!isOxcNode(expr) || expr.type !== 'CallExpression' || !isNodeRecord(expr)) {
+    return false;
+  }
+
+  const callee = expr.callee;
+
+  if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
+    return false;
+  }
+
+  const obj = callee.object;
+  const prop = callee.property;
+
+  return (
+    isOxcNode(obj) &&
+    obj.type === 'Identifier' &&
+    isNodeRecord(obj) &&
+    obj.name === 'Promise' &&
+    isOxcNode(prop) &&
+    prop.type === 'Identifier' &&
+    isNodeRecord(prop) &&
+    (prop.name === 'resolve' || prop.name === 'reject')
+  );
+};
+
+const containsPromiseWrapReturn = (body: NodeValue): boolean => {
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+      if (isPromiseWrapCall(node.argument)) {
+        found = true;
+
+        return false;
+      }
+    }
+
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
+const nodeStyleCallbackMethods = new Set([
+  'readFile',
+  'writeFile',
+  'readdir',
+  'stat',
+  'unlink',
+  'mkdir',
+  'rmdir',
+  'access',
+  'rename',
+  'copyFile',
+  'exec',
+  'execFile',
+  'spawn',
+]);
+
+const containsNodeStyleCallback = (body: NodeValue): boolean => {
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (node.type === 'CallExpression' && isNodeRecord(node)) {
+      const method = getMemberPropertyName(node.callee);
+
+      if (method !== null && nodeStyleCallbackMethods.has(method)) {
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+        const last = args[args.length - 1];
+        const isCallbackArg =
+          last !== undefined &&
+          isOxcNode(last) &&
+          (last.type === 'ArrowFunctionExpression' || last.type === 'FunctionExpression');
+
+        if (isCallbackArg) {
+          found = true;
+
+          return false;
+        }
+      }
+    }
+
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression'
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
 interface TryCatchEntry {
   readonly hasCatch: boolean;
 }
@@ -395,6 +500,145 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
   }
 
   return false;
+};
+
+interface UnobservedCandidate {
+  readonly name: string;
+  readonly node: Node;
+}
+
+const collectUnobservedVariables = (
+  program: NodeValue,
+  findings: ErrorFlowFinding[],
+  filePath: string,
+  sourceText: string,
+): void => {
+  // Collect variable declarations initialized with call expressions,
+  // then check if the variable is ever awaited, .then()ed, or .catch()ed in the same scope.
+  const processScope = (body: NodeValue): void => {
+    if (!Array.isArray(body)) {
+      return;
+    }
+
+    const candidates: UnobservedCandidate[] = [];
+
+    // Pass 1: collect candidates
+    for (const stmt of body) {
+      if (!isOxcNode(stmt) || stmt.type !== 'VariableDeclaration' || !isNodeRecord(stmt)) {
+        continue;
+      }
+
+      const decls = Array.isArray(stmt.declarations) ? (stmt.declarations as ReadonlyArray<NodeValue>) : [];
+
+      for (const decl of decls) {
+        if (!isOxcNode(decl) || decl.type !== 'VariableDeclarator' || !isNodeRecord(decl)) {
+          continue;
+        }
+
+        const id = decl.id;
+        const init = decl.init;
+
+        if (
+          isOxcNode(id) &&
+          id.type === 'Identifier' &&
+          isNodeRecord(id) &&
+          typeof id.name === 'string' &&
+          isOxcNode(init) &&
+          init.type === 'CallExpression'
+        ) {
+          candidates.push({ name: id.name, node: stmt as Node });
+        }
+      }
+    }
+
+    if (candidates.length === 0) {
+      return;
+    }
+
+    // Pass 2: check usage
+    const observed = new Set<string>();
+
+    walkOxcTree(body, node => {
+      // await x
+      if (node.type === 'AwaitExpression' && isNodeRecord(node)) {
+        const arg = node.argument;
+
+        if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+          observed.add(arg.name);
+        }
+      }
+
+      // x.then(...), x.catch(...)
+      if (node.type === 'CallExpression' && isNodeRecord(node)) {
+        const callee = node.callee;
+
+        if (isOxcNode(callee) && callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+          const obj = callee.object;
+          const method = getMemberPropertyName(callee);
+
+          if (
+            isOxcNode(obj) &&
+            obj.type === 'Identifier' &&
+            isNodeRecord(obj) &&
+            typeof obj.name === 'string' &&
+            (method === 'then' || method === 'catch' || method === 'finally')
+          ) {
+            observed.add(obj.name);
+          }
+        }
+      }
+
+      // return x
+      if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+        const arg = node.argument;
+
+        if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+          observed.add(arg.name);
+        }
+      }
+
+      return true;
+    });
+
+    for (const candidate of candidates) {
+      if (!observed.has(candidate.name)) {
+        pushFinding(findings, {
+          kind: 'unobserved-variable',
+          node: candidate.node,
+          filePath,
+          sourceText,
+          message: `variable '${candidate.name}' is assigned a call result but never awaited, .then()ed, or .catch()ed`,
+          evidence: getEvidenceLineAt(sourceText, candidate.node.start),
+          recipes: [],
+        });
+      }
+    }
+  };
+
+  // Walk top-level and function bodies
+  walkOxcTree(program, node => {
+    if (
+      (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
+      isNodeRecord(node)
+    ) {
+      const body = node.body;
+
+      if (isOxcNode(body) && body.type === 'BlockStatement' && isNodeRecord(body)) {
+        processScope(body.body as NodeValue);
+      }
+    }
+
+    return true;
+  });
+
+  // Also process top-level program body
+  if (isNodeRecord(program)) {
+    const body = program.body;
+
+    if (Array.isArray(body)) {
+      processScope(body);
+    }
+  }
 };
 
 const collectFindings = (program: NodeValue, sourceText: string, filePath: string): ErrorFlowFinding[] => {
@@ -1065,6 +1309,101 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           }
         }
       }
+
+      // no-return-wrap: .then(() => Promise.resolve(x)) — unnecessary wrapping
+      if (method === 'then') {
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+
+        for (const arg of args) {
+          if (!isOxcNode(arg) || !isNodeRecord(arg)) {
+            continue;
+          }
+
+          if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
+            const body = arg.body;
+
+            if (isOxcNode(body) && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
+              pushFinding(findings, {
+                kind: 'no-return-wrap',
+                node,
+                filePath,
+                sourceText,
+                message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
+                evidence: getEvidenceLineAt(sourceText, node.start),
+                recipes: [],
+              });
+            }
+
+            if (isOxcNode(body) && body.type === 'BlockStatement') {
+              if (containsPromiseWrapReturn(body)) {
+                pushFinding(findings, {
+                  kind: 'no-return-wrap',
+                  node,
+                  filePath,
+                  sourceText,
+                  message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
+                  evidence: getEvidenceLineAt(sourceText, node.start),
+                  recipes: [],
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // always-return: then callback with block body that has no return
+      if (method === 'then') {
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+        const first = args[0];
+
+        if (
+          first !== undefined &&
+          isOxcNode(first) &&
+          (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
+          isNodeRecord(first)
+        ) {
+          const body = first.body;
+
+          if (isOxcNode(body) && body.type === 'BlockStatement' && !containsReturnStatement(body)) {
+            pushFinding(findings, {
+              kind: 'always-return',
+              node,
+              filePath,
+              sourceText,
+              message: 'then callback does not return a value — breaks Promise chain',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
+          }
+        }
+      }
+
+      // no-callback-in-promise: callback-style API inside then/catch/finally callback
+      if (method === 'then' || method === 'catch') {
+        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+
+        for (const arg of args) {
+          if (
+            isOxcNode(arg) &&
+            (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') &&
+            isNodeRecord(arg)
+          ) {
+            const body = arg.body;
+
+            if (isOxcNode(body) && containsNodeStyleCallback(body)) {
+              pushFinding(findings, {
+                kind: 'no-callback-in-promise',
+                node,
+                filePath,
+                sourceText,
+                message: 'callback-style API inside Promise chain — use Promise-based alternative',
+                evidence: getEvidenceLineAt(sourceText, node.start),
+                recipes: [],
+              });
+            }
+          }
+        }
+      }
     }
 
     // Expression-statement based rules.
@@ -1155,6 +1494,9 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
   // Run enhanced traversal for EF-04 missing-error-cause, EF-05 promise-constructor, nested context.
   visit(program);
+
+  // unobserved-variable: const p = asyncFn(); without await/then/catch on p
+  collectUnobservedVariables(program, findings, filePath, sourceText);
 
   return findings;
 };
