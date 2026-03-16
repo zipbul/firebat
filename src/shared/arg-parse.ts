@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import type { FirebatLogLevel } from './firebat-config';
 import type { FirebatCliExplicitFlags, FirebatCliOptions } from '../interfaces';
+import { DETECTOR_ALIASES } from '../types';
 import type { FirebatDetector, MinSizeOption, OutputFormat } from '../types';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
@@ -73,7 +74,10 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
   const detectors: FirebatDetector[] = [];
   const seen = new Set<FirebatDetector>();
 
-  for (const selection of selections) {
+  for (const raw of selections) {
+    // Apply alias mapping for backward compatibility (e.g. 'exception-hygiene' → 'error-flow')
+    const selection = DETECTOR_ALIASES[raw] ?? raw;
+
     if (
       selection !== 'duplicates' &&
       selection !== 'waste' &&

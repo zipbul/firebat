@@ -19,16 +19,6 @@ type Findings = Awaited<ReturnType<typeof analyzeSingle>>;
 
 const kinds = (findings: Findings) => findings.map(f => f.kind);
 
-const assertFindingShape = (findings: Findings) => {
-  // Act / Assert
-  for (const finding of findings) {
-    expect(finding.evidence.length).toBeGreaterThan(0);
-    expect(finding.file.length).toBeGreaterThan(0);
-    expect(finding.span.start.line).toBeGreaterThanOrEqual(1);
-    expect(finding.span.end.line).toBeGreaterThanOrEqual(finding.span.start.line);
-  }
-};
-
 describe('error-flow/analyzer', () => {
   it('should return no findings when input is empty', async () => {
     // Arrange
@@ -54,7 +44,13 @@ describe('error-flow/analyzer', () => {
 
     // Assert
     expect(findings.length).toBeGreaterThanOrEqual(1);
-    assertFindingShape(findings);
+
+    const first = findings[0]!;
+
+    expect(first.evidence.length).toBeGreaterThan(0);
+    expect(first.file.length).toBeGreaterThan(0);
+    expect(first.span.start.line).toBeGreaterThanOrEqual(1);
+    expect(first.span.end.line).toBeGreaterThanOrEqual(first.span.start.line);
 
     const sample = findings[0] as unknown as Record<string, unknown>;
 
@@ -473,6 +469,56 @@ describe('error-flow/analyzer', () => {
     // Act
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- floating-promises ---
+
+  it('should report floating-promises for unobserved Promise.resolve', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/floating.ts';
+    const source = 'export function f() { Promise.resolve(1); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('floating-promises');
+  });
+
+  it('should not report floating-promises when promise is voided', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/floating-void.ts';
+    const source = 'export function f() { void Promise.resolve(1); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'floating-promises');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  // --- misused-promises ---
+
+  it('should report misused-promises for async callback in forEach', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/misused.ts';
+    const source = 'export function f() { [1,2].forEach(async x => { await fetch(String(x)); }); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('misused-promises');
+  });
+
+  it('should not report misused-promises for sync callback in forEach', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/misused-sync.ts';
+    const source = 'export function f() { [1,2].forEach(x => console.log(x)); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
     expect(hits.length).toBe(0);

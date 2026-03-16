@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 
+import { DETECTOR_ALIASES } from '../types';
 import { FirebatConfigSchema, type FirebatConfig } from './firebat-config';
 
 const DEFAULT_FIREBAT_RC_BASENAME = '.firebatrc.jsonc';
@@ -35,6 +36,19 @@ const loadFirebatConfigFile = async (params: LoadFirebatConfigParams): Promise<L
     const message = err instanceof Error ? err.message : String(err);
 
     throw new Error(`[firebat] Failed to parse config: ${resolvedPath}\n${message}`);
+  }
+
+  // Apply detector alias remapping for backward compatibility (e.g. 'exception-hygiene' → 'error-flow')
+  if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const obj = parsed as Record<string, unknown>;
+
+    for (const [alias, canonical] of Object.entries(DETECTOR_ALIASES)) {
+      if (alias in obj && !(canonical in obj)) {
+        obj[canonical] = obj[alias];
+
+        delete obj[alias];
+      }
+    }
   }
 
   const validated = FirebatConfigSchema.safeParse(parsed);
