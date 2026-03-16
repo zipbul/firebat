@@ -359,8 +359,8 @@
 | A-21 | `giantFileMaxLines` | `1000` | 1000줄이 "거대"의 기준인 근거? 생성된 파일은? |
 | A-22 | `decisionSurfaceMaxAxes` | `2` | if 조건에 고유 변수 2개 이상이면 경고? 거의 모든 함수가 해당될 수 있음. ✅ **기능 폐기로 무효** |
 | A-23 | `variableLifetimeMaxLifetimeLines` | `30` | 변수 선언~마지막 사용이 30줄이면 "수명이 긴" 변수? |
-| A-24 | `implementationOverheadMinRatio` | `1.0` | 구현 복잡도/인터페이스 복잡도 비율 1.0이면 보고? 거의 모든 함수가 해당 |
-| A-25 | `conceptScatterMaxScatterIndex` | `2` | scatterIndex(파일 수 + 레이어 수) > 2이면 경고? |
+| A-24 | `implementationOverheadMinRatio` | `1.0` | 구현 복잡도/인터페이스 복잡도 비율 1.0이면 보고? 거의 모든 함수가 해당. ✅ **기능 폐기로 무효** |
+| A-25 | `conceptScatterMaxScatterIndex` | `2` | scatterIndex(파일 수 + 레이어 수) > 2이면 경고? ✅ **기능 폐기로 무효** |
 | A-26 | `abstractionFitnessMinFitnessScore` | `0` | fitness score 0 미만이면 보고? 0이라는 기준의 의미는? ✅ **기능 폐기로 무효** |
 
 ---
@@ -793,13 +793,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 27건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste, ~~exception-hygiene~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 29건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste, ~~exception-hygiene~~, ~~implementation-overhead~~, ~~concept-scatter~~ |
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
 | E. 근사 측정 | **5건** | ✅ 3건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **52건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **54건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
