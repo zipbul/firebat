@@ -378,6 +378,18 @@ const analyzeClassTemporalCoupling = (
         }
       }
 
+      // Phase 6: dead writer 제외 — named class method 내 unreachable write는 writer가 아님
+      // anonymous class(className === null)는 findFunctionBody로 찾을 수 없으므로 건너뜀
+      if (className !== null) {
+        for (const methodName of [...writerMethods]) {
+          const qualifiedMethod = `${className}.${methodName}`;
+
+          if (!isWriterReachable(program, qualifiedMethod, prop.name, true)) {
+            writerMethods.delete(methodName);
+          }
+        }
+      }
+
       if (writerMethods.size > 0 && readerMethods.size > 0) {
         // gildash 억제 검사: named class만 대상 (anonymous class 제외)
         if (gildash !== undefined && className !== null) {
@@ -886,6 +898,124 @@ const verifyCallerOrderByCfg = (
 };
 
 /**
+ * Returns true if the write to stateName inside writerName is reachable from the function entry.
+ * Dead writes (after return/throw) are considered unreachable → not a real writer.
+ */
+const isWriterReachable = (program: Node, writerName: string, stateName: string, isClassProp: boolean): boolean => {
+  const funcNode = findFunctionBody(program, writerName);
+
+  if (funcNode === null || !isNodeRecord(funcNode)) return false;
+
+  const funcBodyRaw = funcNode.body;
+
+  if (!isOxcNode(funcBodyRaw)) return false;
+
+  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+  const { cfg, entryId, nodePayloads } = built;
+  const adj = cfg.buildAdjacency('forward');
+
+  // Find CFG node IDs that contain a write to stateName
+  const writeNodeIds: number[] = [];
+
+  for (let i = 0; i < nodePayloads.length; i++) {
+    const payload = nodePayloads[i];
+
+    if (payload === null || payload === undefined) continue;
+
+    // Check if payload contains an AssignmentExpression or UpdateExpression targeting stateName
+    let hasWrite = false;
+
+    const checkNode = (n: Node) => {
+      if (hasWrite) return false;
+
+      if (isClassProp) {
+        // this.stateName = ...
+        if (n.type === 'AssignmentExpression' && isNodeRecord(n)) {
+          const left = n.left;
+
+          if (isOxcNode(left) && left.type === 'MemberExpression' && isNodeRecord(left)) {
+            const obj = left.object;
+            const p = left.property;
+
+            if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === stateName) {
+              hasWrite = true;
+
+              return false;
+            }
+          }
+        }
+      } else {
+        // stateName = ...
+        if (n.type === 'AssignmentExpression' && isNodeRecord(n)) {
+          const left = n.left;
+
+          if (isOxcNode(left) && left.type === 'Identifier' && getNodeName(left) === stateName) {
+            hasWrite = true;
+
+            return false;
+          }
+        }
+
+        // stateName++ or ++stateName
+        if (n.type === 'UpdateExpression' && isNodeRecord(n)) {
+          const argument = n.argument;
+
+          if (isOxcNode(argument) && argument.type === 'Identifier' && getNodeName(argument) === stateName) {
+            hasWrite = true;
+
+            return false;
+          }
+        }
+      }
+
+      return true;
+    };
+
+    if (isOxcNode(payload as Node)) {
+      walkOxcTree(payload as Node, checkNode);
+    } else if (Array.isArray(payload)) {
+      for (const n of payload as ReadonlyArray<Node>) {
+        walkOxcTree(n, checkNode);
+
+        if (hasWrite) break;
+      }
+    }
+
+    if (hasWrite) {
+      writeNodeIds.push(i);
+    }
+  }
+
+  // If no write nodes found in CFG, treat as not a writer (no actual write)
+  if (writeNodeIds.length === 0) return false;
+
+  // BFS from entryId: check if any writeNodeId is reachable
+  const visited = new Set<number>();
+  const queue: number[] = [entryId];
+
+  visited.add(entryId);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+
+    if (writeNodeIds.includes(current)) return true;
+
+    const neighbors = adj[current];
+
+    if (neighbors === undefined) continue;
+
+    for (const neighbor of neighbors) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
  * Returns true if every caller of every reader also calls at least one writer,
  * meaning temporal coupling is handled correctly at the call site.
  *
@@ -962,13 +1092,16 @@ const analyzeTemporalCoupling = (
     const writeKeys = collectWritePositionKeys(file.program as Node);
 
     for (const { name, offset } of mutableVars) {
-      const { writers, readers } = classifyExportedFunctions(
+      const { writers: rawWriters, readers } = classifyExportedFunctions(
         file.program as Node,
         file.sourceText,
         name,
         exportedNames,
         writeKeys,
       );
+
+      // Phase 6: dead writer 제외 — unreachable write는 writer가 아님
+      const writers = rawWriters.filter(w => isWriterReachable(file.program as Node, w, name, false));
 
       if (writers.length > 0 && readers.length > 0) {
         // gildash 억제 검사

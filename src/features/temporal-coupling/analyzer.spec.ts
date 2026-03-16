@@ -919,4 +919,66 @@ describe('temporal-coupling/analyzer', () => {
     // Assert — 루프 0회 가능 → CFG dominate 안 함 → finding kept
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
+
+  // --- Phase 6: dead writer 제외 ---
+
+  it('analyzeTemporalCoupling - dead writer after return - excludes from writers', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function setup() { return; db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — setup의 write는 return 이후 unreachable → writer가 아님 → writer 0개 → finding 없음
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - dead writer after throw - excludes from writers', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function setup() { throw new Error(); db = createDb(); }', 'export function query() { return db; }'].join(
+          '\n',
+        ),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — throw 이후 unreachable write → writer가 아님 → finding 없음
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - reachable writer in conditional - keeps as writer', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function setup() { if (cond) { db = createDb(); } }', 'export function query() { return db; }'].join(
+          '\n',
+        ),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — if 분기 내 write는 reachable → writer 유지 → finding 있음
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - reachable writer - keeps as writer', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function setup() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — 정상 write는 reachable → writer 유지 → finding 있음
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
 });
