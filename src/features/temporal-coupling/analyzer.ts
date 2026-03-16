@@ -393,7 +393,14 @@ const analyzeClassTemporalCoupling = (
           }
         }
 
-        for (const _ of readerMethods) {
+        for (const readerMethodName of readerMethods) {
+          // Phase 5: guard 패턴 — class reader가 self-protecting이면 finding 억제
+          const qualifiedReader = className !== null ? `${className}.${readerMethodName}` : readerMethodName;
+
+          if (isReaderSelfProtecting(program, qualifiedReader, prop.name, true)) {
+            continue;
+          }
+
           findings.push({
             kind: 'temporal-coupling',
             file: rel,
@@ -647,6 +654,168 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
   return result;
 };
 
+/** Check whether a node (payload or AST subtree) references the given state name. */
+const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean): boolean => {
+  let found = false;
+
+  walkOxcTree(node, n => {
+    if (found) return false;
+
+    if (isClassProp) {
+      // this.stateName — MemberExpression(ThisExpression, Identifier === stateName)
+      if (n.type === 'MemberExpression' && isNodeRecord(n)) {
+        const object = n.object;
+        const property = n.property;
+
+        if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && getNodeName(property) === stateName) {
+          found = true;
+
+          return false;
+        }
+      }
+    } else {
+      // module-scope: plain Identifier === stateName
+      if (n.type === 'Identifier' && getNodeName(n) === stateName) {
+        found = true;
+
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
+/**
+ * Check if a guard IfStatement's consequent is an early-exit (ThrowStatement or ReturnStatement).
+ */
+const isEarlyExit = (node: Node): boolean => {
+  if (!isNodeRecord(node)) return false;
+
+  if (node.type === 'ThrowStatement' || node.type === 'ReturnStatement') return true;
+
+  // BlockStatement with single ThrowStatement/ReturnStatement
+  if (node.type === 'BlockStatement') {
+    const body = (node as any).body;
+
+    if (!Array.isArray(body)) return false;
+
+    if (body.length === 1 && isOxcNode(body[0]) && isNodeRecord(body[0])) {
+      const first = body[0];
+
+      return first.type === 'ThrowStatement' || first.type === 'ReturnStatement';
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Returns true if the reader function is self-protecting:
+ * all state accesses in the reader body are dominated by a guard condition
+ * that references stateName and has an early-exit consequent.
+ */
+const isReaderSelfProtecting = (program: Node, readerName: string, stateName: string, isClassProp: boolean): boolean => {
+  const funcNode = findFunctionBody(program, readerName);
+
+  if (funcNode === null || !isNodeRecord(funcNode)) return false;
+
+  const funcBodyRaw = funcNode.body;
+
+  if (!isOxcNode(funcBodyRaw)) return false;
+
+  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+  const { cfg, entryId, nodePayloads } = built;
+  const adj = cfg.buildAdjacency('forward');
+
+  // Find guard condition node IDs:
+  // nodePayloads[i] is the IfStatement test expression when an IfStatement is processed.
+  // We need to identify which CFG node IDs correspond to guard conditions.
+  // Strategy: walk the reader body AST to collect IfStatement test nodes (by start offset).
+  // Then match those offsets against nodePayloads.
+
+  const guardConditionOffsets = new Set<number>();
+
+  walkOxcTree(funcBodyRaw as Node, n => {
+    if (n.type === 'IfStatement' && isNodeRecord(n)) {
+      const testNode = n.test;
+      const consequentNode = n.consequent;
+
+      if (!isOxcNode(testNode) || !isOxcNode(consequentNode)) return true;
+
+      // Check: test references stateName
+      if (!nodeReferencesState(testNode as Node, stateName, isClassProp)) return true;
+
+      // Check: consequent is early exit
+      if (!isEarlyExit(consequentNode as Node)) return true;
+
+      // This is a guard — record test node offset
+      guardConditionOffsets.add(testNode.start);
+    }
+
+    return true;
+  });
+
+  if (guardConditionOffsets.size === 0) return false;
+
+  // Find CFG node IDs for guard conditions (match by payload start offset)
+  const guardNodeIds: number[] = [];
+
+  for (let i = 0; i < nodePayloads.length; i++) {
+    const payload = nodePayloads[i];
+
+    if (payload === null || payload === undefined) continue;
+
+    // payload for an IfStatement condition is the test expression node
+    if (isOxcNode(payload as Node) && guardConditionOffsets.has((payload as Node).start)) {
+      guardNodeIds.push(i);
+    }
+  }
+
+  if (guardNodeIds.length === 0) return false;
+
+  // Find state access node IDs (nodes that reference stateName, excluding guard condition nodes)
+  const guardNodeIdSet = new Set(guardNodeIds);
+  const stateAccessNodeIds: number[] = [];
+
+  for (let i = 0; i < nodePayloads.length; i++) {
+    if (guardNodeIdSet.has(i)) continue;
+
+    const payload = nodePayloads[i];
+
+    if (payload === null || payload === undefined) continue;
+
+    // Check if payload references stateName
+    const payloadNode = isOxcNode(payload as Node) ? (payload as Node) : null;
+    const payloadArr = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : null;
+
+    if (payloadNode !== null && nodeReferencesState(payloadNode, stateName, isClassProp)) {
+      stateAccessNodeIds.push(i);
+    } else if (payloadArr !== null) {
+      for (const n of payloadArr) {
+        if (nodeReferencesState(n, stateName, isClassProp)) {
+          stateAccessNodeIds.push(i);
+          break;
+        }
+      }
+    }
+  }
+
+  // If no state accesses found (shouldn't happen but be safe), not self-protecting
+  if (stateAccessNodeIds.length === 0) return false;
+
+  // Check: guard condition nodes (as a set) dominate all state access nodes
+  for (const stateNodeId of stateAccessNodeIds) {
+    if (!writerSetDominatesReader(adj, entryId, guardNodeIds, stateNodeId)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 /**
  * Verify caller order using CFG dominator analysis.
  *
@@ -813,7 +982,12 @@ const analyzeTemporalCoupling = (
           }
         }
 
-        for (const _ of readers) {
+        for (const readerName of readers) {
+          // Phase 5: guard 패턴 — reader가 self-protecting이면 finding 억제
+          if (isReaderSelfProtecting(file.program as Node, readerName, name, false)) {
+            continue;
+          }
+
           findings.push({
             kind: 'temporal-coupling',
             file: rel,

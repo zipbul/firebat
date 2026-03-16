@@ -127,8 +127,8 @@ describe('temporal-coupling/analyzer', () => {
     expect(result[0]?.readers).toBe(3);
   });
 
-  // --- [HP] should detect class state property with init writer and query reader ---
-  it('should report temporal coupling for class init/query guard patterns', () => {
+  // --- [HP] should detect class state property with init writer and unguarded query reader ---
+  it('should report temporal coupling for class init/query when reader has no guard', () => {
     // Arrange
     const files = [
       file(
@@ -137,7 +137,7 @@ describe('temporal-coupling/analyzer', () => {
           'export class Service {',
           '  private initialized = false;',
           '  init() { this.initialized = true; }',
-          '  query() { if (!this.initialized) throw new Error("not ready"); return 1; }',
+          '  query() { return this.initialized ? 1 : 0; }',
           '}',
         ].join('\n'),
       ),
@@ -817,6 +817,84 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
     // Assert — init throw 시 query도 미실행 → suppression
     expect(result.length).toBe(0);
+  });
+
+  // --- Phase 5: guard 패턴 인식 ---
+
+  it('analyzeTemporalCoupling - reader has throw guard for state - suppresses finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { if (!db) throw new Error("not ready"); return db.exec(); }'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — guard dominates state access → self-protecting reader → no finding
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - reader has return guard for state - suppresses finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { if (!db) return null; return db.exec(); }'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — return guard dominates state access → self-protecting reader → no finding
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - reader has no guard - keeps finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db.exec(); }'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — no guard → finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - class reader has this.x guard - suppresses finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export class Service {',
+          '  x: any = null;',
+          '  init() { this.x = createX(); }',
+          '  query() { if (!this.x) throw new Error(); return this.x.exec(); }',
+          '}',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — this.x guard dominates this.x access → self-protecting reader → no finding
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - guard after state access - keeps finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { db.exec(); if (!db) throw new Error(); }'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert — guard comes after state access → does not dominate → finding kept
+    expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
   it('analyzeTemporalCoupling - loop writer via CFG - keeps finding', () => {
