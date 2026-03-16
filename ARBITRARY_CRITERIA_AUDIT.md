@@ -251,10 +251,11 @@
 
 ### A-11. exception-hygiene — overscoped-try 기준
 
-- **파일**: `src/features/exception-hygiene/analyzer.ts` L314
+- **파일**: ~~`src/features/exception-hygiene/analyzer.ts` L314~~ (삭제됨)
 - **코드**: `if (stmts.length >= 10)`
 - **임의 기준**: try 블록 내 statement 10개 이상이면 "overscoped"
 - **질문**: 10이라는 수치의 근거는? 파일 IO처럼 statement가 많을 수밖에 없는 경우에는?
+- **결론**: ✅ **기능 폐기로 무효** — overscoped-try 삭제 완료 (error-flow 리팩토링). "몇 개가 과도한지" 결정적 기준 없음으로 폐기.
 
 ---
 
@@ -775,7 +776,7 @@
 | 기능 | 판단 근거 | 비고 |
 |---|---|---|
 | **waste** (dead-store/overwrite) | CFG 기반 reaching-definition 데이터흐름 분석 | memory-retention 폐기 완료 (A-20, F-04) |
-| **exception-hygiene** (useless-catch, unsafe-finally 등) | AST 구조 패턴 매칭 — syntax적으로 확정 | overscoped-try는 제외 (A-11) |
+| **error-flow** (useless-catch, unsafe-finally 등) | AST 구조 패턴 매칭 — syntax적으로 확정 | overscoped-try 폐기 완료 (A-11) |
 | **typecheck** | tsgo LSP 진단 결과 | 외부 도구 위임 |
 | **lint** | oxlint 규칙 적용 결과 | 외부 도구 위임 |
 | **format** | oxfmt check 결과 | 외부 도구 위임 |
@@ -792,13 +793,13 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 26건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 27건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste, ~~exception-hygiene~~ |
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
 | E. 근사 측정 | **5건** | ✅ 3건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **51건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **52건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
