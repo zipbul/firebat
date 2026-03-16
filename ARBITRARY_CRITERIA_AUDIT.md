@@ -724,6 +724,7 @@
 - **방식**: 모듈 레벨 mutable 변수에 대해 writer 1+ / reader 1+ → temporal coupling
 - **부정확성**: 의도적 설계(예: connection pool, config loader)도 동일 패턴. false positive가 매우 높음
 - **질문**: 실제 호출 순서 분석(call graph 기반) 없이 "coupling"을 선언하는 것이 적절한가?
+- **결론**: ✅ **6단계 정밀도 개선 완료** — (1) 기존 버그 3건 수정 (export 패턴 확장, constructor 제외, O(n²)→O(n)), (2) gildash call graph로 caller 공존 검사 (의도적 설계 패턴 억제), (3→4) CFG dominator 분석으로 caller 내 writer→reader 실행 순서 정밀 검증 (OxcCFGBuilder + IntegerCFG 활용, exception edge 처리 포함), (5) guard 패턴 인식 (self-protecting reader 억제), (6) dead writer 제외 (unreachable write 필터링). 업계 도구(SonarQube, NDepend, Structure101) 중 temporal coupling을 정적으로 직접 탐지하는 도구 없음 — firebat 고유 기능.
 
 ---
 
@@ -797,9 +798,9 @@
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
-| E. 근사 측정 | **5건** | ✅ 3건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
+| E. 근사 측정 | **5건** | ✅ 4건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
-| **합계** | **64건** | ✅ **54건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| **합계** | **64건** | ✅ **55건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
