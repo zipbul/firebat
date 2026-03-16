@@ -588,161 +588,87 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
   return false;
 };
 
-interface UnobservedCandidate {
-  readonly name: string;
-  readonly node: Node;
+interface CollectFindingsResult {
+  readonly findings: ErrorFlowFinding[];
+  readonly constructorNames: Map<ErrorFlowFinding, string>;
 }
 
-const collectUnobservedVariables = (
-  program: NodeValue,
-  findings: ErrorFlowFinding[],
-  filePath: string,
-  sourceText: string,
-): void => {
-  // Collect variable declarations initialized with call expressions,
-  // then check if the variable is ever awaited, .then()ed, or .catch()ed in the same scope.
-  const processScope = (body: NodeValue): void => {
-    if (!Array.isArray(body)) {
+const extractConstructorName = (callee: NodeValue): string | null => {
+  if (!isOxcNode(callee) || !isNodeRecord(callee)) {
+    return null;
+  }
+
+  if (callee.type === 'Identifier' && typeof callee.name === 'string') {
+    return callee.name;
+  }
+
+  // Namespaced: ns.ClassName
+  if (callee.type === 'MemberExpression') {
+    const prop = callee.property;
+
+    if (isOxcNode(prop) && prop.type === 'Identifier' && isNodeRecord(prop) && typeof prop.name === 'string') {
+      return prop.name;
+    }
+  }
+
+  return null;
+};
+
+const collectFindings = (program: NodeValue, sourceText: string, filePath: string): CollectFindingsResult => {
+  const findings: ErrorFlowFinding[] = [];
+  const constructorNames: Map<ErrorFlowFinding, string> = new Map();
+  const tryCatchStack: TryCatchEntry[] = [];
+  let functionTryCatchDepth = 0;
+  let inTryBlockDepth = 0;
+  let inAsyncFunction = false;
+  let inTryBlockWithCatchDepth = 0;
+  // Unobserved-variable tracking: stack of candidate/observed sets per function scope
+  const unobservedCandidates: Map<string, Node>[] = [];
+  const unobservedObserved: Set<string>[] = [];
+
+  const pushUnobservedScope = (): void => {
+    unobservedCandidates.push(new Map());
+    unobservedObserved.push(new Set());
+  };
+
+  const popUnobservedScope = (): void => {
+    const candidates = unobservedCandidates.pop();
+    const observed = unobservedObserved.pop();
+
+    if (candidates === undefined || observed === undefined) {
       return;
     }
 
-    const candidates: UnobservedCandidate[] = [];
-
-    // Pass 1: collect candidates
-    for (const stmt of body) {
-      if (!isOxcNode(stmt) || stmt.type !== 'VariableDeclaration' || !isNodeRecord(stmt)) {
-        continue;
-      }
-
-      const decls = Array.isArray(stmt.declarations) ? (stmt.declarations as ReadonlyArray<NodeValue>) : [];
-
-      for (const decl of decls) {
-        if (!isOxcNode(decl) || decl.type !== 'VariableDeclarator' || !isNodeRecord(decl)) {
-          continue;
-        }
-
-        const id = decl.id;
-        const init = decl.init;
-
-        if (
-          isOxcNode(id) &&
-          id.type === 'Identifier' &&
-          isNodeRecord(id) &&
-          typeof id.name === 'string' &&
-          isOxcNode(init) &&
-          init.type === 'CallExpression'
-        ) {
-          candidates.push({ name: id.name, node: stmt as Node });
-        }
-      }
-    }
-
-    if (candidates.length === 0) {
-      return;
-    }
-
-    // Pass 2: check usage
-    const observed = new Set<string>();
-
-    walkOxcTree(body, node => {
-      // await x
-      if (node.type === 'AwaitExpression' && isNodeRecord(node)) {
-        const arg = node.argument;
-
-        if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
-          observed.add(arg.name);
-        }
-      }
-
-      // x.then(...), x.catch(...), or x passed as function argument
-      if (node.type === 'CallExpression' && isNodeRecord(node)) {
-        const callee = node.callee;
-
-        if (isOxcNode(callee) && callee.type === 'MemberExpression' && isNodeRecord(callee)) {
-          const obj = callee.object;
-          const method = getMemberPropertyName(callee);
-
-          if (
-            isOxcNode(obj) &&
-            obj.type === 'Identifier' &&
-            isNodeRecord(obj) &&
-            typeof obj.name === 'string' &&
-            (method === 'then' || method === 'catch' || method === 'finally')
-          ) {
-            observed.add(obj.name);
-          }
-        }
-
-        // fn(p) — passed as function argument, considered observed
-        const callArgs = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-
-        for (const callArg of callArgs) {
-          if (isOxcNode(callArg) && callArg.type === 'Identifier' && isNodeRecord(callArg) && typeof callArg.name === 'string') {
-            observed.add(callArg.name);
-          }
-        }
-      }
-
-      // return x
-      if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
-        const arg = node.argument;
-
-        if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
-          observed.add(arg.name);
-        }
-      }
-
-      return true;
-    });
-
-    for (const candidate of candidates) {
-      if (!observed.has(candidate.name)) {
+    for (const [name, node] of candidates) {
+      if (!observed.has(name)) {
         pushFinding(findings, {
           kind: 'unobserved-variable',
-          node: candidate.node,
+          node,
           filePath,
           sourceText,
-          message: `variable '${candidate.name}' is assigned a call result but never awaited, .then()ed, or .catch()ed`,
-          evidence: getEvidenceLineAt(sourceText, candidate.node.start),
+          message: `variable '${name}' is assigned a call result but never awaited, .then()ed, or .catch()ed`,
+          evidence: getEvidenceLineAt(sourceText, node.start),
           recipes: [],
         });
       }
     }
   };
 
-  // Walk top-level and function bodies
-  walkOxcTree(program, node => {
-    if (
-      (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
-      isNodeRecord(node)
-    ) {
-      const body = node.body;
+  const markObserved = (name: string): void => {
+    const top = unobservedObserved[unobservedObserved.length - 1];
 
-      if (isOxcNode(body) && body.type === 'BlockStatement' && isNodeRecord(body)) {
-        processScope(body.body as NodeValue);
-      }
+    if (top !== undefined) {
+      top.add(name);
     }
+  };
 
-    return true;
-  });
+  const addCandidate = (name: string, node: Node): void => {
+    const top = unobservedCandidates[unobservedCandidates.length - 1];
 
-  // Also process top-level program body
-  if (isNodeRecord(program)) {
-    const body = program.body;
-
-    if (Array.isArray(body)) {
-      processScope(body);
+    if (top !== undefined) {
+      top.set(name, node);
     }
-  }
-};
-
-const collectFindings = (program: NodeValue, sourceText: string, filePath: string): ErrorFlowFinding[] => {
-  const findings: ErrorFlowFinding[] = [];
-  const tryCatchStack: TryCatchEntry[] = [];
-  let functionTryCatchDepth = 0;
-  let inTryBlockDepth = 0;
-  let inAsyncFunction = false;
-  let inTryBlockWithCatchDepth = 0;
+  };
 
   const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
     if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
@@ -831,13 +757,78 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       return;
     }
 
-    // Find throw new X(...)
+    // Map varName -> NewExpression for indirect throw detection: `const wrapped = new Error(...); throw wrapped;`
+    // Uses walkOxcTree to cover nested blocks (if/for/etc.) within catch body.
+    const localNewExpressions = new Map<string, NodeValue>();
+
+    walkOxcTree(body, node => {
+      if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+        const id = node.id;
+        const init = node.init;
+
+        if (
+          isOxcNode(id) &&
+          id.type === 'Identifier' &&
+          isNodeRecord(id) &&
+          typeof id.name === 'string' &&
+          isOxcNode(init) &&
+          init.type === 'NewExpression'
+        ) {
+          localNewExpressions.set(id.name, init);
+        }
+      }
+
+      // Don't cross function boundaries
+      if (
+        node.type === 'FunctionDeclaration' ||
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression'
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // Find throw new X(...) — direct inline throw, and throw <identifier> — indirect via variable.
+    // NOTE: This walkOxcTree is a LOCAL traversal of the catch body, not a full program traversal.
+    // It runs at CatchClause visit time to analyze throw patterns as a unit. The subsequent
+    // visit() generic fallthrough re-visits catch body children for OTHER rules (throw-non-error,
+    // unobserved-variable, etc.) — no duplicate findings because each path checks different kinds.
     walkOxcTree(body, node => {
       if (node.type !== 'ThrowStatement' || !isNodeRecord(node)) {
         return true;
       }
 
       const arg = node.argument;
+
+      // Indirect throw: throw <identifier> where identifier was assigned a new Error(...)
+      if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+        const varName = arg.name;
+        const newExpr = localNewExpressions.get(varName);
+
+        if (newExpr !== undefined && isNodeRecord(newExpr)) {
+          const newExprCallee = (newExpr as Record<string, NodeValue>).callee;
+
+          if (isErrorConstructor(newExprCallee)) {
+            const hasCause = hasCausePropertyWithIdentifier(newExpr, name);
+
+            if (!hasCause) {
+              pushFinding(findings, {
+                kind: 'missing-error-cause',
+                node,
+                filePath,
+                sourceText,
+                message: `variable '${varName}' holds new Error() without { cause: ${name} } — loses original error context`,
+                evidence: getEvidenceLineAt(sourceText, node.start),
+                recipes: [],
+              });
+            }
+          }
+        }
+
+        return true;
+      }
 
       if (!isOxcNode(arg) || arg.type !== 'NewExpression' || !isNodeRecord(arg)) {
         return true;
@@ -875,6 +866,8 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       // Custom error class: catch param is used but cause is not preserved.
       // Lower confidence since we cannot statically verify it extends Error.
       if (usesIdentifier && !hasCause) {
+        const constructorName = extractConstructorName(arg.callee);
+
         pushFinding(findings, {
           kind: 'missing-error-cause',
           node,
@@ -885,11 +878,19 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           recipes: [],
         });
 
+        const addedFinding = findings[findings.length - 1];
+
+        if (addedFinding !== undefined && constructorName !== null) {
+          constructorNames.set(addedFinding, constructorName);
+        }
+
         return true;
       }
 
       // If identifier only appears as catch parameter but not in thrown expression, it's information loss
       if (!usesIdentifier && !hasCause) {
+        const constructorName = extractConstructorName(arg.callee);
+
         pushFinding(findings, {
           kind: 'missing-error-cause',
           node: catchClause,
@@ -899,6 +900,12 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           evidence: getEvidenceLineAt(sourceText, node.start),
           recipes: ['RCP-02'],
         });
+
+        const addedFinding = findings[findings.length - 1];
+
+        if (addedFinding !== undefined && constructorName !== null) {
+          constructorNames.set(addedFinding, constructorName);
+        }
       }
 
       return true;
@@ -980,6 +987,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     const node = value;
 
     // Function scope boundary: isolate try-catch depth for EF-06 return-await-in-try
+    // Also push/pop scope for unobserved-variable tracking.
     if (
       (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
       isNodeRecord(node)
@@ -994,6 +1002,8 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       inAsyncFunction = node.async === true;
       inTryBlockWithCatchDepth = 0;
 
+      pushUnobservedScope();
+
       const entries = Object.entries(node);
 
       for (const [key, childValue] of entries) {
@@ -1003,6 +1013,8 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
         visit(childValue);
       }
+
+      popUnobservedScope();
 
       functionTryCatchDepth = savedDepth;
       inTryBlockDepth = savedTryBlockDepth;
@@ -1016,6 +1028,27 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     if (node.type === 'TryStatement' && isNodeRecord(node)) {
       const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
       const hasFinalizer = isOxcNode(node.finalizer);
+
+      // EF-03 unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
+      if (hasFinalizer) {
+        const finalizer = node.finalizer;
+
+        if (isOxcNode(finalizer) && finalizer.type === 'BlockStatement' && isNodeRecord(finalizer)) {
+          const unsafeKind = findUnsafeControlFlowInFinally(finalizer);
+
+          if (unsafeKind !== null) {
+            pushFinding(findings, {
+              kind: 'unsafe-finally',
+              node,
+              filePath,
+              sourceText,
+              message: `finally masks original control flow with ${unsafeKind}`,
+              evidence: `finally contains ${unsafeKind}`,
+              recipes: ['RCP-03'],
+            });
+          }
+        }
+      }
 
       // Nested try/catch: flag try/catch inside another try block that has catch (SonarQube S1141)
       // Allowed: inner try/catch inside outer try/finally (no catch) — cleanup pattern
@@ -1066,24 +1099,31 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     // EF-06 return-await-in-try: return without await in try block misses rejection
-    if (node.type === 'ReturnStatement' && isNodeRecord(node) && inTryBlockWithCatchDepth > 0) {
+    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
       const arg = node.argument;
 
-      // Only flag non-awaited expressions that likely return a Promise
-      if (
-        isOxcNode(arg) &&
-        arg.type !== 'AwaitExpression' &&
-        (arg.type === 'CallExpression' || arg.type === 'NewExpression')
-      ) {
-        pushFinding(findings, {
-          kind: 'return-await-in-try',
-          node,
-          filePath,
-          sourceText,
-          message: 'return without await in try block — catch cannot intercept rejections',
-          evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: [],
-        });
+      if (inTryBlockWithCatchDepth > 0) {
+        // Only flag non-awaited expressions that likely return a Promise
+        if (
+          isOxcNode(arg) &&
+          arg.type !== 'AwaitExpression' &&
+          (arg.type === 'CallExpression' || arg.type === 'NewExpression')
+        ) {
+          pushFinding(findings, {
+            kind: 'return-await-in-try',
+            node,
+            filePath,
+            sourceText,
+            message: 'return without await in try block — catch cannot intercept rejections',
+            evidence: getEvidenceLineAt(sourceText, node.start),
+            recipes: [],
+          });
+        }
+      }
+
+      // Mark returned identifier as observed for unobserved-variable
+      if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+        markObserved(arg.name);
       }
     }
 
@@ -1256,53 +1296,64 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       // Keep visiting for other rules
     }
 
-    // Fall back to generic traversal
-    if (!isNodeRecord(node)) {
-      return;
-    }
+    // VariableDeclarator: track candidates for unobserved-variable
+    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+      const id = node.id;
+      const init = node.init;
 
-    const entries = Object.entries(node);
-
-    for (const [key, childValue] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(childValue);
-    }
-  };
-
-  // Existing rule set (EF-01..08) still uses walkOxcTree.
-  walkOxcTree(program, node => {
-    // EF-03 unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
-    if (node.type === 'TryStatement' && isNodeRecord(node)) {
-      const finalizer = node.finalizer;
-
-      if (isOxcNode(finalizer) && finalizer.type === 'BlockStatement' && isNodeRecord(finalizer)) {
-        const unsafeKind = findUnsafeControlFlowInFinally(finalizer);
-
-        if (unsafeKind !== null) {
-          pushFinding(findings, {
-            kind: 'unsafe-finally',
-            node,
-            filePath,
-            sourceText,
-            message: `finally masks original control flow with ${unsafeKind}`,
-            evidence: `finally contains ${unsafeKind}`,
-            recipes: ['RCP-03'],
-          });
-        }
+      if (
+        isOxcNode(id) &&
+        id.type === 'Identifier' &&
+        isNodeRecord(id) &&
+        typeof id.name === 'string' &&
+        isOxcNode(init) &&
+        init.type === 'CallExpression'
+      ) {
+        // node.parent is VariableDeclaration; we need the declaration node.
+        // Walk up: use the statement node (VariableDeclaration) for position — use init.start as proxy.
+        // Actually we need the VariableDeclaration node. Since visit doesn't have parent tracking,
+        // we record the VariableDeclarator node's start position via the oxc Node cast.
+        addCandidate(id.name, node as unknown as Node);
       }
     }
 
-    // EF-01 useless-catch is now handled in visit() via reportUselessCatchIfNeeded
-    // to avoid double-reporting with the nested variant.
+    // AwaitExpression: mark awaited identifier as observed
+    if (node.type === 'AwaitExpression' && isNodeRecord(node)) {
+      const arg = node.argument;
 
-    // EF-03 return-in-finally: .finally(() => { return ... })
+      if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+        markObserved(arg.name);
+      }
+    }
+
+    // CallExpression: mark .then/.catch/.finally on identifier; mark args as observed
+    // Also handle walkOxcTree rules: prefer-catch, prefer-await-to-then, no-return-wrap,
+    // always-return, no-callback-in-promise, misused-promises, unsafe-finally(.finally())
     if (node.type === 'CallExpression' && isNodeRecord(node)) {
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
+      // Unobserved-variable: x.then/catch/finally(...) marks x as observed
+      if (method !== null && (method === 'then' || method === 'catch' || method === 'finally')) {
+        if (isOxcNode(callee) && callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+          const obj = callee.object;
+
+          if (isOxcNode(obj) && obj.type === 'Identifier' && isNodeRecord(obj) && typeof obj.name === 'string') {
+            markObserved(obj.name);
+          }
+        }
+      }
+
+      // Unobserved-variable: fn(p) — passed as function argument marks p as observed
+      const callArgs = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+
+      for (const callArg of callArgs) {
+        if (isOxcNode(callArg) && callArg.type === 'Identifier' && isNodeRecord(callArg) && typeof callArg.name === 'string') {
+          markObserved(callArg.name);
+        }
+      }
+
+      // EF-03 return-in-finally: .finally(() => { return ... })
       if (method === 'finally') {
         const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
         const first = args[0];
@@ -1466,58 +1517,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           }
         }
       }
-    }
 
-    // Expression-statement based rules.
-    if (node.type === 'ExpressionStatement' && isNodeRecord(node)) {
-      const expr = node.expression;
-
-      // ignore explicit void
-      if (isOxcNode(expr) && expr.type === 'UnaryExpression' && isNodeRecord(expr) && expr.operator === 'void') {
-        return true;
-      }
-
-      // EF-08 floating-promises: Promise.* / new Promise as expression statement
-      if (isPromiseFactoryCall(expr)) {
-        pushFinding(findings, {
-          kind: 'floating-promises',
-          node,
-          filePath,
-          sourceText,
-          message: 'promise is created but not observed',
-          evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: ['RCP-09', 'RCP-10', 'RCP-11'],
-        });
-
-        return true;
-      }
-
-      // EF-08 catch-or-return: top-level then call without catch anywhere in chain
-      if (isOxcNode(expr) && expr.type === 'CallExpression' && isNodeRecord(expr)) {
-        const callee = expr.callee;
-        const method = getMemberPropertyName(callee);
-
-        if (method === 'then' && !chainHasCatch(expr)) {
-          pushFinding(findings, {
-            kind: 'catch-or-return',
-            node,
-            filePath,
-            sourceText,
-            message: 'promise chain should have catch or be awaited/returned',
-            evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: ['RCP-05', 'RCP-06'],
-          });
-        }
-      }
-    }
-
-    // EF-08 misused-promises: async callback passed to forEach
-    if (node.type === 'CallExpression' && isNodeRecord(node)) {
-      const callee = node.callee;
-      const method = getMemberPropertyName(callee);
-
+      // EF-08 misused-promises: async callback passed to forEach/map/filter/etc.
       if (
-        method &&
+        method !== null &&
         (method === 'forEach' ||
           method === 'map' ||
           method === 'filter' ||
@@ -1551,16 +1554,66 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    return true;
-  });
+    // Expression-statement based rules.
+    if (node.type === 'ExpressionStatement' && isNodeRecord(node)) {
+      const expr = node.expression;
 
-  // Run enhanced traversal for EF-04 missing-error-cause, EF-05 promise-constructor, nested context.
+      // ignore explicit void
+      if (!(isOxcNode(expr) && expr.type === 'UnaryExpression' && isNodeRecord(expr) && expr.operator === 'void')) {
+        // EF-08 floating-promises: Promise.* / new Promise as expression statement
+        if (isPromiseFactoryCall(expr)) {
+          pushFinding(findings, {
+            kind: 'floating-promises',
+            node,
+            filePath,
+            sourceText,
+            message: 'promise is created but not observed',
+            evidence: getEvidenceLineAt(sourceText, node.start),
+            recipes: ['RCP-09', 'RCP-10', 'RCP-11'],
+          });
+        } else if (isOxcNode(expr) && expr.type === 'CallExpression' && isNodeRecord(expr)) {
+          // EF-08 catch-or-return: top-level then call without catch anywhere in chain
+          const exprCallee = expr.callee;
+          const exprMethod = getMemberPropertyName(exprCallee);
+
+          if (exprMethod === 'then' && !chainHasCatch(expr)) {
+            pushFinding(findings, {
+              kind: 'catch-or-return',
+              node,
+              filePath,
+              sourceText,
+              message: 'promise chain should have catch or be awaited/returned',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: ['RCP-05', 'RCP-06'],
+            });
+          }
+        }
+      }
+    }
+
+    // Fall back to generic traversal
+    if (!isNodeRecord(node)) {
+      return;
+    }
+
+    const entries = Object.entries(node);
+
+    for (const [key, childValue] of entries) {
+      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+        continue;
+      }
+
+      visit(childValue);
+    }
+  };
+
+  // Single-pass traversal: all rules handled in visit().
+  // Top-level program body gets an unobserved-variable scope.
+  pushUnobservedScope();
   visit(program);
+  popUnobservedScope();
 
-  // unobserved-variable: const p = asyncFn(); without await/then/catch on p
-  collectUnobservedVariables(program, findings, filePath, sourceText);
-
-  return findings;
+  return { findings, constructorNames };
 };
 
 const createEmptyErrorFlow = (): ReadonlyArray<ErrorFlowFinding> => [];
@@ -1580,36 +1633,24 @@ const heritageExtendsError = (node: HeritageNode): boolean => {
 
 const verifyCustomErrorClasses = async (
   findings: ErrorFlowFinding[],
+  constructorNames: Map<ErrorFlowFinding, string>,
   gildash: Gildash,
 ): Promise<ErrorFlowFinding[]> => {
   // Collect unique constructor names from missing-error-cause findings on custom error classes
-  const customErrorFindings = findings.filter(
-    f =>
-      f.kind === 'missing-error-cause' &&
-      f.evidence.includes('new ') &&
-      !f.evidence.includes('new Error(') &&
-      !f.evidence.includes('new TypeError(') &&
-      !f.evidence.includes('new RangeError(') &&
-      !f.evidence.includes('new ReferenceError(') &&
-      !f.evidence.includes('new SyntaxError(') &&
-      !f.evidence.includes('new URIError(') &&
-      !f.evidence.includes('new EvalError(') &&
-      !f.evidence.includes('new AggregateError('),
-  );
+  // Uses the tagged constructorNames map instead of parsing evidence strings.
+  const customErrorFindings = findings.filter(f => f.kind === 'missing-error-cause' && constructorNames.has(f));
 
   if (customErrorFindings.length === 0) {
     return findings;
   }
 
-  // Extract constructor names from evidence lines (supports namespaced: new ns.Err())
-  const constructorRegex = /new\s+([\w.]+)\s*\(/;
   const toVerify = new Map<string, ConstructorToVerify>();
 
   for (const finding of customErrorFindings) {
-    const match = constructorRegex.exec(finding.evidence);
+    const constructorName = constructorNames.get(finding);
 
-    if (match?.[1]) {
-      toVerify.set(`${finding.file}:${match[1]}`, { name: match[1], filePath: finding.file });
+    if (constructorName !== undefined) {
+      toVerify.set(`${finding.file}:${constructorName}`, { name: constructorName, filePath: finding.file });
     }
   }
 
@@ -1635,13 +1676,13 @@ const verifyCustomErrorClasses = async (
       return true;
     }
 
-    const match = constructorRegex.exec(f.evidence);
+    const constructorName = constructorNames.get(f);
 
-    if (!match?.[1]) {
+    if (constructorName === undefined) {
       return true;
     }
 
-    const key = `${f.file}:${match[1]}`;
+    const key = `${f.file}:${constructorName}`;
 
     // If we verified this constructor and it's NOT an error class, drop the finding
     if (toVerify.has(key) && !confirmedErrors.has(key)) {
@@ -1661,19 +1702,26 @@ const analyzeErrorFlow = async (
   }
 
   const findings: ErrorFlowFinding[] = [];
+  const allConstructorNames: Map<ErrorFlowFinding, string> = new Map();
 
   for (const file of files) {
     if (file.errors.length > 0) {
       continue;
     }
 
-    findings.push(...collectFindings(file.program, file.sourceText, file.filePath));
+    const result = collectFindings(file.program, file.sourceText, file.filePath);
+
+    findings.push(...result.findings);
+
+    for (const [finding, name] of result.constructorNames) {
+      allConstructorNames.set(finding, name);
+    }
   }
 
   // gildash heritage verification for custom error classes
   if (input?.gildash) {
     try {
-      return await verifyCustomErrorClasses(findings, input.gildash);
+      return await verifyCustomErrorClasses(findings, allConstructorNames, input.gildash);
     } catch (e) {
       if (e instanceof PartialResultError) {
         throw e;

@@ -1485,4 +1485,65 @@ describe('error-flow/analyzer', () => {
     // Assert
     expect(hits.length).toBe(0);
   });
+
+  // --- missing-error-cause: indirect throw via variable ---
+
+  it('should report missing-error-cause when error is assigned to variable then thrown without cause', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/indirect-throw.ts';
+    const source = [
+      'export function f() {',
+      '  try { doSomething(); } catch (e) {',
+      '    const wrapped = new Error("failed");',
+      '    throw wrapped;',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report missing-error-cause when error variable has cause and is thrown', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/indirect-throw-ok.ts';
+    const source = [
+      'export function f() {',
+      '  try { doSomething(); } catch (e) {',
+      '    const wrapped = new Error("failed", { cause: e });',
+      '    throw wrapped;',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should report missing-error-cause when error variable is declared inside nested block in catch', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/indirect-throw-nested.ts';
+    const source = [
+      'export function f() {',
+      '  try { doSomething(); } catch (e) {',
+      '    if (isRetryable(e)) {',
+      '      const wrapped = new Error("retry failed");',
+      '      throw wrapped;',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
 });

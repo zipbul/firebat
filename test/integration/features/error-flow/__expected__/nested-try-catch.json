@@ -1,20 +1,5 @@
 [
   {
-    "evidence": "return Promise.resolve('value').finally(() => {",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "unsafe-finally",
-    "span": {
-      "end": {
-        "column": 4,
-        "line": 58
-      },
-      "start": {
-        "column": 9,
-        "line": 56
-      }
-    }
-  },
-  {
     "evidence": "return String(a + b + c + d + e + f + g + h + i + j + k);",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "return-await-in-try",
@@ -101,6 +86,21 @@
       "start": {
         "column": 4,
         "line": 47
+      }
+    }
+  },
+  {
+    "evidence": "return Promise.resolve('value').finally(() => {",
+    "file": "/virtual/nested-try-catch.ts",
+    "kind": "unsafe-finally",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 58
+      },
+      "start": {
+        "column": 9,
+        "line": 56
       }
     }
   }
