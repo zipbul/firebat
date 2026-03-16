@@ -1173,9 +1173,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(
-      f => f.kind === 'promise-constructor-hygiene' && f.evidence.includes('new Promise'),
-    );
+    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert — throw is inside setTimeout callback, not executor itself
     expect(hits.length).toBe(0);
