@@ -1,7 +1,7 @@
 // MUST: MUST-1
 import * as path from 'node:path';
 
-import type { ExceptionHygieneFindingKind } from '../../features/exception-hygiene';
+import type { ErrorFlowFindingKind } from '../../features/error-flow';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../shared/logger';
 import type {
@@ -25,7 +25,7 @@ import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
-import { analyzeExceptionHygiene, createEmptyExceptionHygiene } from '../../features/exception-hygiene';
+import { analyzeErrorFlow, createEmptyErrorFlow } from '../../features/error-flow';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
@@ -636,23 +636,23 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     collapsibleIf = createEmptyCollapsibleIf();
   }
 
-  let exceptionHygiene: ReturnType<typeof analyzeExceptionHygiene>;
-  let exceptionHygieneStatus: 'ok' | 'failed' = 'ok';
+  let errorFlow: ReturnType<typeof analyzeErrorFlow>;
+  let errorFlowStatus: 'ok' | 'failed' = 'ok';
 
-  if (options.detectors.includes('exception-hygiene')) {
+  if (options.detectors.includes('error-flow')) {
     const t0 = nowMs();
-    const detectorKey = 'exception-hygiene';
+    const detectorKey = 'error-flow';
 
     logger.debug('detector: start', { detector: detectorKey });
 
     try {
-      exceptionHygiene = analyzeExceptionHygiene(program);
+      errorFlow = analyzeErrorFlow(program);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
       metaErrors[detectorKey] = message;
-      exceptionHygieneStatus = 'failed';
-      exceptionHygiene = createEmptyExceptionHygiene();
+      errorFlowStatus = 'failed';
+      errorFlow = createEmptyErrorFlow();
     }
 
     const durationMs = nowMs() - t0;
@@ -661,7 +661,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
   } else {
-    exceptionHygiene = createEmptyExceptionHygiene();
+    errorFlow = createEmptyErrorFlow();
   }
 
   let forwarding: Awaited<ReturnType<typeof analyzeForwarding>>;
@@ -868,22 +868,22 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
   };
 
-  const enrichExceptionHygiene = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<Exclude<ExceptionHygieneFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
-      'throw-non-error': 'EH_THROW_NON_ERROR',
-      'async-promise-executor': 'EH_ASYNC_PROMISE_EXECUTOR',
-      'missing-error-cause': 'EH_MISSING_ERROR_CAUSE',
-      'useless-catch': 'EH_USELESS_CATCH',
-      'unsafe-finally': 'EH_UNSAFE_FINALLY',
-      'return-in-finally': 'EH_RETURN_IN_FINALLY',
-      'catch-or-return': 'EH_CATCH_OR_RETURN',
-      'prefer-catch': 'EH_PREFER_CATCH',
-      'prefer-await-to-then': 'EH_PREFER_AWAIT_TO_THEN',
-      'floating-promises': 'EH_FLOATING_PROMISES',
-      'misused-promises': 'EH_MISUSED_PROMISES',
-      'return-await-policy': 'EH_RETURN_AWAIT_POLICY',
-      'catch-transform-hygiene': 'EH_CATCH_TRANSFORM',
-      'redundant-nested-catch': 'EH_REDUNDANT_NESTED_CATCH',
+  const enrichErrorFlow = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Record<Exclude<ErrorFlowFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
+      'throw-non-error': 'EF_THROW_NON_ERROR',
+      'async-promise-executor': 'EF_ASYNC_PROMISE_EXECUTOR',
+      'missing-error-cause': 'EF_MISSING_ERROR_CAUSE',
+      'useless-catch': 'EF_USELESS_CATCH',
+      'unsafe-finally': 'EF_UNSAFE_FINALLY',
+      'return-in-finally': 'EF_RETURN_IN_FINALLY',
+      'catch-or-return': 'EF_CATCH_OR_RETURN',
+      'prefer-catch': 'EF_PREFER_CATCH',
+      'prefer-await-to-then': 'EF_PREFER_AWAIT_TO_THEN',
+      'floating-promises': 'EF_FLOATING_PROMISES',
+      'misused-promises': 'EF_MISUSED_PROMISES',
+      'return-await-policy': 'EF_RETURN_AWAIT_POLICY',
+      'catch-transform-hygiene': 'EF_CATCH_TRANSFORM',
+      'redundant-nested-catch': 'EF_REDUNDANT_NESTED_CATCH',
     };
 
     return items
@@ -1179,9 +1179,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste) } : {}),
     ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': enrichBarrelPolicy(barrelPolicy as any) } : {}),
     ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof as any) } : {}),
-    ...(selectedDetectors.has('exception-hygiene')
-      ? { 'exception-hygiene': enrichExceptionHygiene(exceptionHygiene as any) }
-      : {}),
+    ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow as any) } : {}),
     ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format) } : {}),
     ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
     ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),

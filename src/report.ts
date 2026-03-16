@@ -173,7 +173,7 @@ const formatText = (report: FirebatReport): string => {
   const waste = analyses.waste ?? [];
   const barrelPolicy = analyses['barrel-policy'] ?? [];
   const unknownProof = analyses['unknown-proof'] ?? [];
-  const exceptionHygiene = analyses['exception-hygiene'] ?? [];
+  const errorFlow = analyses['error-flow'] ?? [];
   const lint = analyses.lint ?? [];
   const format = analyses.format ?? [];
   const typecheck = analyses.typecheck ?? [];
@@ -325,12 +325,12 @@ const formatText = (report: FirebatReport): string => {
           filesCount: collapsibleIf.length === 0 ? 0 : new Set(collapsibleIf.map(i => getFile(i))).size,
           timingKey,
         };
-      case 'exception-hygiene':
+      case 'error-flow':
         return {
-          emoji: '🧯',
-          label: 'Exception Hygiene',
-          count: exceptionHygiene.length,
-          filesCount: exceptionHygiene.length === 0 ? 0 : new Set(exceptionHygiene.map(f => getFile(f))).size,
+          emoji: '🌊',
+          label: 'Error Flow',
+          count: errorFlow.length,
+          filesCount: errorFlow.length === 0 ? 0 : new Set(errorFlow.map(f => getFile(f))).size,
           timingKey,
         };
       case 'dependencies':
@@ -503,10 +503,10 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('exception-hygiene') && exceptionHygiene.length > 0) {
-    lines.push(sectionHeader('🧯', 'Exception Hygiene', `${exceptionHygiene.length} findings`));
+  if (selectedDetectors.has('error-flow') && errorFlow.length > 0) {
+    lines.push(sectionHeader('🌊', 'Error Flow', `${errorFlow.length} findings`));
 
-    for (const finding of exceptionHygiene) {
+    for (const finding of errorFlow) {
       const rel = path.relative(process.cwd(), getFile(finding));
       const start = toPos(finding.span.start.line, finding.span.start.column);
       const evidence =

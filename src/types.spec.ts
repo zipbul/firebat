@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 
 import { toJsonReport, countBlockers } from './types';
 import type { FirebatReport, FirebatAnalyses, LintDiagnostic, TypecheckItem, FormatFinding, SourceSpan, WasteFinding, BarrelPolicyFinding, UnknownProofFinding, ForwardingFinding, DuplicateGroup, GiantFileFinding } from './types';
-import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
+import type { ErrorFlowFinding } from './features/error-flow/types';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ describe('countBlockers', () => {
       waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
       'barrel-policy': [{ kind: 'deep-import', file: 'a.ts', span: span() } as BarrelPolicyFinding],
       'unknown-proof': [{ kind: 'unknown-type', message: '', filePath: 'a.ts', span: span() } as UnknownProofFinding],
-      'exception-hygiene': [{ kind: 'throw-non-error', file: 'a.ts', span: span(), evidence: '' } as ExceptionHygieneFinding],
+      'error-flow': [{ kind: 'throw-non-error', file: 'a.ts', span: span(), evidence: '' } as ErrorFlowFinding],
       format: [{ code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: 'a.ts', span: span() } as FormatFinding],
       lint: [{ severity: 'error', code: 'no-unused-vars', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic],
       typecheck: [{ severity: 'error', code: 'TS2322', msg: 'err', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem],
@@ -185,7 +185,7 @@ describe('countBlockers', () => {
       waste: [],
       'barrel-policy': [],
       'unknown-proof': [],
-      'exception-hygiene': [],
+      'error-flow': [],
       format: [],
       lint: [],
       typecheck: [],

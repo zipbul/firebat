@@ -103,7 +103,7 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  EH_THROW_NON_ERROR: {
+  EF_THROW_NON_ERROR: {
     cause: 'A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.',
     think: [
       'Identify what type is being thrown and why an Error subclass was not used.',
@@ -111,7 +111,7 @@ export const FIREBAT_CODE_CATALOG = {
       'If the thrown value carries domain information, verify that wrapping it in a custom Error subclass preserves that information.',
     ],
   },
-  EH_ASYNC_PROMISE_EXECUTOR: {
+  EF_ASYNC_PROMISE_EXECUTOR: {
     cause:
       'A Promise constructor receives an async executor function, which can silently swallow rejections from awaited expressions.',
     think: [
@@ -120,7 +120,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify whether refactoring to a plain async function eliminates the Promise constructor entirely.',
     ],
   },
-  EH_MISSING_ERROR_CAUSE: {
+  EF_MISSING_ERROR_CAUSE: {
     cause:
       "A caught error is re-thrown or wrapped without preserving the original error via the 'cause' option, breaking the error chain.",
     think: [
@@ -129,7 +129,7 @@ export const FIREBAT_CODE_CATALOG = {
       'If re-throwing the original error directly, verify that wrapping is not needed and the error chain is intact.',
     ],
   },
-  EH_USELESS_CATCH: {
+  EF_USELESS_CATCH: {
     cause: 'A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.',
     think: [
       'Determine whether the catch was intended to add logging, transformation, or handling that was never implemented.',
@@ -137,7 +137,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that removing the try-catch does not affect finally blocks or control flow.',
     ],
   },
-  EH_UNSAFE_FINALLY: {
+  EF_UNSAFE_FINALLY: {
     cause:
       'A finally block contains a throw or return statement that can override the try/catch result, silently discarding errors.',
     think: [
@@ -146,7 +146,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the finally block contains only cleanup logic (close connections, release resources) that cannot affect control flow.',
     ],
   },
-  EH_RETURN_IN_FINALLY: {
+  EF_RETURN_IN_FINALLY: {
     cause: 'A finally block contains a return statement that will override any return or throw from the try/catch blocks.',
     think: [
       'Identify what value the finally return produces and whether it silently replaces try/catch results.',
@@ -154,7 +154,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the finally block performs only cleanup after moving the return.',
     ],
   },
-  EH_CATCH_OR_RETURN: {
+  EF_CATCH_OR_RETURN: {
     cause: 'A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.',
     think: [
       'Determine whether the Promise rejection is intentionally ignored or accidentally unhandled.',
@@ -162,7 +162,7 @@ export const FIREBAT_CODE_CATALOG = {
       'If using .then(), verify that adding .catch() or returning the chain for the caller to handle resolves the issue.',
     ],
   },
-  EH_PREFER_CATCH: {
+  EF_PREFER_CATCH: {
     cause:
       'Error handling uses .then(onFulfilled, onRejected) instead of .catch(), which is less readable and can miss errors thrown in onFulfilled.',
     think: [
@@ -171,7 +171,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that replacing with .then().catch() provides more predictable error coverage.',
     ],
   },
-  EH_PREFER_AWAIT_TO_THEN: {
+  EF_PREFER_AWAIT_TO_THEN: {
     cause:
       'Promise chains use .then()/.catch() inside an async function instead of await, reducing readability and error flow clarity.',
     think: [
@@ -180,7 +180,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that converting to await does not change the concurrency semantics of the code.',
     ],
   },
-  EH_FLOATING_PROMISES: {
+  EF_FLOATING_PROMISES: {
     cause: 'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
     think: [
       'Determine whether the fire-and-forget is intentional or accidental.',
@@ -188,7 +188,7 @@ export const FIREBAT_CODE_CATALOG = {
       'If truly fire-and-forget, verify that errors are handled inside the called function and consider adding void prefix for clarity.',
     ],
   },
-  EH_MISUSED_PROMISES: {
+  EF_MISUSED_PROMISES: {
     cause:
       'A Promise is used in a context that expects a synchronous value (e.g., array.forEach callback, conditional expression), leading to always-truthy checks or ignored results.',
     think: [
@@ -197,7 +197,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the fix preserves iteration order and error propagation semantics.',
     ],
   },
-  EH_RETURN_AWAIT_POLICY: {
+  EF_RETURN_AWAIT_POLICY: {
     cause:
       'An async function returns await expression unnecessarily (or vice versa: should use return-await inside try blocks to catch errors properly).',
     think: [
@@ -206,7 +206,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the fix matches the project policy for return-await consistency.',
     ],
   },
-  EH_CATCH_TRANSFORM: {
+  EF_CATCH_TRANSFORM: {
     cause:
       'A catch block modifies the error object or its message before rethrowing, potentially losing original error information.',
     think: [
@@ -215,7 +215,7 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that downstream handlers still recognize the transformed error type.',
     ],
   },
-  EH_REDUNDANT_NESTED_CATCH: {
+  EF_REDUNDANT_NESTED_CATCH: {
     cause:
       'A try-catch is nested inside another try-catch that already handles the same error types, creating redundant handling.',
     think: [

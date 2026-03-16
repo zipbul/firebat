@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { ExceptionHygieneFinding, ExceptionHygieneFindingKind, SourceSpan } from './types';
+import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
@@ -17,7 +17,7 @@ const getSpan = (node: Node, sourceText: string): SourceSpan => {
 };
 
 interface PushFindingInput {
-  readonly kind: ExceptionHygieneFindingKind;
+  readonly kind: ErrorFlowFindingKind;
   readonly filePath: string;
   readonly sourceText: string;
   readonly node: Node;
@@ -26,7 +26,7 @@ interface PushFindingInput {
   readonly recipes: ReadonlyArray<string>;
 }
 
-const pushFinding = (findings: ExceptionHygieneFinding[], input: PushFindingInput): void => {
+const pushFinding = (findings: ErrorFlowFinding[], input: PushFindingInput): void => {
   const evidence = input.evidence.length > 0 ? input.evidence : 'unknown';
 
   findings.push({
@@ -286,8 +286,8 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
   return false;
 };
 
-const collectFindings = (program: NodeValue, sourceText: string, filePath: string): ExceptionHygieneFinding[] => {
-  const findings: ExceptionHygieneFinding[] = [];
+const collectFindings = (program: NodeValue, sourceText: string, filePath: string): ErrorFlowFinding[] => {
+  const findings: ErrorFlowFinding[] = [];
   const tryCatchStack: TryCatchEntry[] = [];
   let functionTryCatchDepth = 0;
 
@@ -867,14 +867,14 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   return findings;
 };
 
-const createEmptyExceptionHygiene = (): ReadonlyArray<ExceptionHygieneFinding> => [];
+const createEmptyErrorFlow = (): ReadonlyArray<ErrorFlowFinding> => [];
 
-const analyzeExceptionHygiene = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<ExceptionHygieneFinding> => {
+const analyzeErrorFlow = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<ErrorFlowFinding> => {
   if (files.length === 0) {
-    return createEmptyExceptionHygiene();
+    return createEmptyErrorFlow();
   }
 
-  const findings: ExceptionHygieneFinding[] = [];
+  const findings: ErrorFlowFinding[] = [];
 
   for (const file of files) {
     if (file.errors.length > 0) {
@@ -887,4 +887,4 @@ const analyzeExceptionHygiene = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
   return findings;
 };
 
-export { analyzeExceptionHygiene, createEmptyExceptionHygiene };
+export { analyzeErrorFlow, createEmptyErrorFlow };

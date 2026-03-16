@@ -63,7 +63,7 @@ interface FirebatFeaturesConfig {
   readonly waste?: boolean | undefined;
   readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: boolean | undefined;
-  readonly 'exception-hygiene'?: boolean | undefined;
+  readonly 'error-flow'?: boolean | undefined;
   readonly format?: boolean | undefined;
   readonly lint?: boolean | undefined;
   readonly typecheck?: boolean | undefined;
@@ -85,7 +85,7 @@ interface FirebatMcpFeaturesConfig {
   readonly waste?: boolean | 'inherit' | undefined;
   readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
   readonly 'unknown-proof'?: boolean | 'inherit' | undefined;
-  readonly 'exception-hygiene'?: boolean | 'inherit' | undefined;
+  readonly 'error-flow'?: boolean | 'inherit' | undefined;
   readonly format?: boolean | 'inherit' | undefined;
   readonly lint?: boolean | 'inherit' | undefined;
   readonly typecheck?: boolean | 'inherit' | undefined;
@@ -143,7 +143,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           ])
           .optional(),
         'unknown-proof': z.boolean().optional(),
-        'exception-hygiene': z.boolean().optional(),
+        'error-flow': z.boolean().optional(),
         format: z.boolean().optional(),
         lint: z.boolean().optional(),
         typecheck: z.boolean().optional(),
@@ -275,7 +275,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   ])
                   .optional(),
                 'unknown-proof': z.union([z.boolean(), z.literal('inherit')]).optional(),
-                'exception-hygiene': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
+                'error-flow': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 format: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 lint: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 typecheck: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),

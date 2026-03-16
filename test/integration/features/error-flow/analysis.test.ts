@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeExceptionHygiene } from '../../../../src/test-api';
+import { analyzeErrorFlow } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
-describe('integration/exception-hygiene', () => {
+describe('integration/error-flow', () => {
   it('should return no findings when input is empty', () => {
     // Arrange
     let sources = new Map<string, string>();
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
 
     // Assert
     expect(analysis.length).toBe(0);
@@ -25,7 +25,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -42,7 +42,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -59,7 +59,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -76,7 +76,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -93,7 +93,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -110,7 +110,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -127,7 +127,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -144,7 +144,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -171,7 +171,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -198,7 +198,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -225,7 +225,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -252,7 +252,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -269,7 +269,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
@@ -286,7 +286,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
@@ -303,7 +303,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'async-promise-executor');
 
     // Assert
@@ -320,7 +320,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -339,7 +339,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert
@@ -358,7 +358,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert
@@ -377,7 +377,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert
@@ -396,7 +396,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert
@@ -425,7 +425,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert
@@ -454,7 +454,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert
@@ -486,7 +486,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-policy');
 
     // Assert — inner arrow's return await is NOT inside its own try/catch, should be flagged
@@ -512,7 +512,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
@@ -537,7 +537,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
@@ -562,7 +562,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'catch-transform-hygiene');
 
     // Assert
@@ -591,7 +591,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
 
     // Assert
@@ -620,7 +620,7 @@ describe('integration/exception-hygiene', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeExceptionHygiene(program);
+    let analysis = analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'redundant-nested-catch');
 
     // Assert

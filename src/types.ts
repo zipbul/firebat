@@ -1,4 +1,4 @@
-import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
+import type { ErrorFlowFinding } from './features/error-flow/types';
 
 export type OutputFormat = 'text' | 'json';
 
@@ -10,7 +10,7 @@ export type FirebatDetector =
   | 'waste'
   | 'barrel-policy'
   | 'unknown-proof'
-  | 'exception-hygiene'
+  | 'error-flow'
   | 'format'
   | 'lint'
   | 'typecheck'
@@ -32,6 +32,7 @@ export const DETECTOR_ALIASES: Readonly<Record<string, FirebatDetector>> = {
   'exact-duplicates': 'duplicates',
   'structural-duplicates': 'duplicates',
   'modification-trap': 'duplicates',
+  'exception-hygiene': 'error-flow',
 };
 
 export type FirebatCatalogCode =
@@ -60,21 +61,21 @@ export type FirebatCatalogCode =
   // collapsible-if (2)
   | 'COLLAPSIBLE_IF'
   | 'COLLAPSIBLE_ELSE_IF'
-  // exception-hygiene (17)
-  | 'EH_THROW_NON_ERROR'
-  | 'EH_ASYNC_PROMISE_EXECUTOR'
-  | 'EH_MISSING_ERROR_CAUSE'
-  | 'EH_USELESS_CATCH'
-  | 'EH_UNSAFE_FINALLY'
-  | 'EH_RETURN_IN_FINALLY'
-  | 'EH_CATCH_OR_RETURN'
-  | 'EH_PREFER_CATCH'
-  | 'EH_PREFER_AWAIT_TO_THEN'
-  | 'EH_FLOATING_PROMISES'
-  | 'EH_MISUSED_PROMISES'
-  | 'EH_RETURN_AWAIT_POLICY'
-  | 'EH_CATCH_TRANSFORM'
-  | 'EH_REDUNDANT_NESTED_CATCH'
+  // error-flow (14)
+  | 'EF_THROW_NON_ERROR'
+  | 'EF_ASYNC_PROMISE_EXECUTOR'
+  | 'EF_MISSING_ERROR_CAUSE'
+  | 'EF_USELESS_CATCH'
+  | 'EF_UNSAFE_FINALLY'
+  | 'EF_RETURN_IN_FINALLY'
+  | 'EF_CATCH_OR_RETURN'
+  | 'EF_PREFER_CATCH'
+  | 'EF_PREFER_AWAIT_TO_THEN'
+  | 'EF_FLOATING_PROMISES'
+  | 'EF_MISUSED_PROMISES'
+  | 'EF_RETURN_AWAIT_POLICY'
+  | 'EF_CATCH_TRANSFORM'
+  | 'EF_REDUNDANT_NESTED_CATCH'
   // unknown-proof (5)
   | 'UNKNOWN_UNNARROWED'
   | 'UNKNOWN_INFERRED'
@@ -573,7 +574,7 @@ export interface FirebatAnalyses {
   readonly waste: ReadonlyArray<WasteFinding>;
   readonly 'barrel-policy': ReadonlyArray<BarrelPolicyFinding>;
   readonly 'unknown-proof': ReadonlyArray<UnknownProofFinding>;
-  readonly 'exception-hygiene': ReadonlyArray<ExceptionHygieneFinding>;
+  readonly 'error-flow': ReadonlyArray<ErrorFlowFinding>;
   readonly format: ReadonlyArray<FormatFinding>;
   readonly lint: ReadonlyArray<LintDiagnostic>;
   readonly typecheck: ReadonlyArray<TypecheckItem>;

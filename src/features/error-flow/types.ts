@@ -1,6 +1,6 @@
 import type { FirebatCatalogCode } from '../../types';
 
-export type ExceptionHygieneFindingKind =
+export type ErrorFlowFindingKind =
   | 'tool-unavailable'
   | 'throw-non-error'
   | 'async-promise-executor'
@@ -27,8 +27,8 @@ export interface SourceSpan {
   readonly end: SourcePosition;
 }
 
-export interface ExceptionHygieneFinding {
-  readonly kind: ExceptionHygieneFindingKind;
+export interface ErrorFlowFinding {
+  readonly kind: ErrorFlowFindingKind;
   readonly file: string;
   readonly span: SourceSpan;
   readonly code?: FirebatCatalogCode;

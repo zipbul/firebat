@@ -564,10 +564,10 @@ exit 7
     }
   });
 
-  it('should expose exception-hygiene findings as a bare array with file+code and no wrapper fields', async () => {
+  it('should expose error-flow findings as a bare array with file+code and no wrapper fields', async () => {
     // Arrange
     const project = await createScanProjectFixture(
-      'firebat-report-contract-exception-hygiene-bare-array',
+      'firebat-report-contract-error-flow-bare-array',
       [
         'export function badThrow() {',
         "  throw 'nope';",
@@ -595,7 +595,7 @@ exit 7
             minSize: 0,
             maxForwardDepth: 0,
             exitOnFindings: false,
-            detectors: ['exception-hygiene'],
+            detectors: ['error-flow'],
             fix: false,
             help: false,
           },
@@ -603,7 +603,7 @@ exit 7
         ),
       );
       // Assert
-      const findings = report.analyses['exception-hygiene'] as any;
+      const findings = report.analyses['error-flow'] as any;
 
       expect(Array.isArray(findings)).toBe(true);
 
@@ -617,7 +617,7 @@ exit 7
       expect(throwNonError?.tool).toBeUndefined();
       expect(throwNonError?.message).toBeUndefined();
       expect(throwNonError?.recipes).toBeUndefined();
-      expect(throwNonError?.code).toBe('EH_THROW_NON_ERROR');
+      expect(throwNonError?.code).toBe('EF_THROW_NON_ERROR');
     } finally {
       await project.dispose();
     }
@@ -789,7 +789,7 @@ exit 7
             minSize: 0,
             maxForwardDepth: 0,
             exitOnFindings: false,
-            detectors: ['waste', 'barrel-policy', 'exception-hygiene', 'lint', 'format', 'typecheck'],
+            detectors: ['waste', 'barrel-policy', 'error-flow', 'lint', 'format', 'typecheck'],
             fix: false,
             help: false,
             barrelPolicyIgnoreGlobs: [],
@@ -801,7 +801,7 @@ exit 7
       // Assert
       expect(typeof report.catalog.WASTE_DEAD_STORE?.cause).toBe('string');
       expect(typeof report.catalog.BARREL_EXPORT_STAR?.think[0]).toBe('string');
-      expect(typeof report.catalog.EH_THROW_NON_ERROR?.cause).toBe('string');
+      expect(typeof report.catalog.EF_THROW_NON_ERROR?.cause).toBe('string');
 
     } finally {
       await project.dispose();

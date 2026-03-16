@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-// exception-hygiene/types.ts exports only TypeScript type aliases + interfaces.
+// error-flow/types.ts exports only TypeScript type aliases + interfaces.
 // There are no runtime values to import. We verify the module resolves without
 // errors and perform structural shape checks via plain JS objects.
 
-describe('features/exception-hygiene/types — structural shape', () => {
-  it('ExceptionHygieneFinding shape satisfies expected keys', () => {
+describe('features/error-flow/types — structural shape', () => {
+  it('ErrorFlowFinding shape satisfies expected keys', () => {
     const finding = {
       kind: 'useless-catch' as const,
       file: '/src/foo.ts',
@@ -48,7 +48,7 @@ describe('features/exception-hygiene/types — structural shape', () => {
     expect(span.end.column).toBe(6);
   });
 
-  it('ExceptionHygieneFindingKind union covers expected string literals', () => {
+  it('ErrorFlowFindingKind union covers expected string literals', () => {
     const kinds = [
       'tool-unavailable',
       'throw-non-error',
@@ -65,7 +65,7 @@ describe('features/exception-hygiene/types — structural shape', () => {
       'return-await-policy',
       'catch-transform-hygiene',
       'redundant-nested-catch',
-    ] satisfies import('./types').ExceptionHygieneFindingKind[];
+    ] satisfies import('./types').ErrorFlowFindingKind[];
     expect(kinds.length).toBe(15);
     expect(kinds[0]).toBe('tool-unavailable');
   });

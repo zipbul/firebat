@@ -25,7 +25,7 @@ const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'waste',
   'barrel-policy',
   'unknown-proof',
-  'exception-hygiene',
+  'error-flow',
   'format',
   'lint',
   'typecheck',
@@ -340,7 +340,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, exception-hygiene, coupling, dependencies, lint, format, typecheck, temporal-coupling, variable-lifetime, giant-file.',
+            'Available: duplicates, waste, nesting, early-return, collapsible-if, forwarding, barrel-policy, unknown-proof, error-flow, coupling, dependencies, lint, format, typecheck, temporal-coupling, variable-lifetime, giant-file.',
           ].join(' '),
         ),
       minSize: z

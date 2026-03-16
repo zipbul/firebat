@@ -10,7 +10,7 @@ import { describe, expect, it } from 'bun:test';
 import { parseSource } from '../../../src/test-api';
 import type { ParsedFile } from '../../../src/test-api';
 import { analyzeEarlyReturn } from '../../../src/test-api';
-import { analyzeExceptionHygiene } from '../../../src/test-api';
+import { analyzeErrorFlow } from '../../../src/test-api';
 import { analyzeDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 
@@ -76,13 +76,13 @@ describe('cross-feature integration', () => {
 
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
-    const exceptionHygiene = analyzeExceptionHygiene(program);
+    const errorFlow = analyzeErrorFlow(program);
     const duplicates = analyzeDuplicates([...program], { minSize: 5 });
     const nesting = analyzeNesting(program);
 
     // Assert — each returns a well-formed array
     expect(Array.isArray(earlyReturn)).toBe(true);
-    expect(Array.isArray(exceptionHygiene)).toBe(true);
+    expect(Array.isArray(errorFlow)).toBe(true);
     expect(Array.isArray(duplicates)).toBe(true);
     expect(Array.isArray(nesting)).toBe(true);
   });

@@ -22,7 +22,7 @@ import type {
   FormatFinding,
   FirebatCatalogCode,
 } from './types';
-import type { ExceptionHygieneFinding } from './features/exception-hygiene/types';
+import type { ErrorFlowFinding } from './features/error-flow/types';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ const testFile2 = `${cwd}/test-file2.ts`;
 const emptyDeps: ReadonlyArray<DependencyFinding> = [];
 
 const allDetectors: ReadonlyArray<FirebatDetector> = [
-  'waste', 'barrel-policy', 'unknown-proof', 'exception-hygiene',
+  'waste', 'barrel-policy', 'unknown-proof', 'error-flow',
   'format', 'lint', 'typecheck', 'dependencies', 'coupling',
   'nesting', 'early-return', 'forwarding',
   'temporal-coupling',
@@ -150,7 +150,7 @@ describe('formatReport', () => {
       expect(out).toContain('Waste');
       expect(out).toContain('Barrel Policy');
       expect(out).toContain('Unknown Proof');
-      expect(out).toContain('Exception Hygiene');
+      expect(out).toContain('Error Flow');
       expect(out).toContain('Format');
       expect(out).toContain('Lint');
       expect(out).toContain('Typecheck');
@@ -418,22 +418,22 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Exception Hygiene body ──────────────────────────────────────
+  // ── Error Flow body ─────────────────────────────────────────────
 
-  describe('exception-hygiene body', () => {
+  describe('error-flow body', () => {
     it('should render body with kind and evidence when findings exist', () => {
-      const finding: ExceptionHygieneFinding = { kind: 'throw-non-error', file: testFile, span: span(12, 4), evidence: 'string literal' };
-      const out = formatReport(makeReport(['exception-hygiene'], { 'exception-hygiene': [finding] }), 'text');
+      const finding: ErrorFlowFinding = { kind: 'throw-non-error', file: testFile, span: span(12, 4), evidence: 'string literal' };
+      const out = formatReport(makeReport(['error-flow'], { 'error-flow': [finding] }), 'text');
 
-      expect(out).toContain('Exception Hygiene');
+      expect(out).toContain('Error Flow');
       expect(out).toContain('1 findings');
       expect(out).toContain('throw-non-error');
       expect(out).toContain('string literal');
     });
 
-    it('should omit evidence when exception-hygiene evidence is empty', () => {
-      const finding: ExceptionHygieneFinding = { kind: 'empty-catch' as any, file: testFile, span: span(), evidence: '' };
-      const out = formatReport(makeReport(['exception-hygiene'], { 'exception-hygiene': [finding] }), 'text');
+    it('should omit evidence when error-flow evidence is empty', () => {
+      const finding: ErrorFlowFinding = { kind: 'empty-catch' as any, file: testFile, span: span(), evidence: '' };
+      const out = formatReport(makeReport(['error-flow'], { 'error-flow': [finding] }), 'text');
 
       expect(out).toContain('empty-catch');
     });

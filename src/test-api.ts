@@ -16,7 +16,7 @@ export { analyzeBarrelPolicy } from './features/barrel-policy';
 export { analyzeCoupling } from './features/coupling';
 export { analyzeDependencies } from './features/dependencies';
 export { analyzeEarlyReturn } from './features/early-return';
-export { analyzeExceptionHygiene } from './features/exception-hygiene';
+export { analyzeErrorFlow } from './features/error-flow';
 export { analyzeFormat } from './features/format';
 export { analyzeForwarding } from './features/forwarding';
 export { analyzeGiantFile } from './features/giant-file';

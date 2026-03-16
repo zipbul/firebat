@@ -30,7 +30,7 @@
         "coupling": { "$ref": "#/$defs/couplingToggle" },
         "nesting": { "$ref": "#/$defs/nestingToggle" },
         "early-return": { "$ref": "#/$defs/emptyToggle" },
-        "exception-hygiene": { "$ref": "#/$defs/emptyToggle" },
+        "error-flow": { "$ref": "#/$defs/emptyToggle" },
 
         "temporal-coupling": { "$ref": "#/$defs/emptyToggle" },
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
@@ -61,7 +61,7 @@
                 "coupling": { "$ref": "#/$defs/couplingInheritable" },
                 "nesting": { "$ref": "#/$defs/nestingInheritable" },
                 "early-return": { "$ref": "#/$defs/emptyInheritable" },
-                "exception-hygiene": { "$ref": "#/$defs/emptyInheritable" },
+                "error-flow": { "$ref": "#/$defs/emptyInheritable" },
 
                 "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
                 "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },

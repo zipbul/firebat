@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/ast/parse-source';
-import { analyzeExceptionHygiene } from './analyzer';
+import { analyzeErrorFlow } from './analyzer';
 
 const analyzeSingle = (filePath: string, sourceText: string) => {
   // Arrange
   const program = [parseSource(filePath, sourceText)];
   // Act
-  const findings = analyzeExceptionHygiene(program);
+  const findings = analyzeErrorFlow(program);
 
   // Assert (shape)
   expect(Array.isArray(findings)).toBe(true);
@@ -27,12 +27,12 @@ const assertFindingShape = (findings: ReturnType<typeof analyzeSingle>) => {
   }
 };
 
-describe('analyzer', () => {
+describe('error-flow/analyzer', () => {
   it('should return no findings when input is empty', () => {
     // Arrange
     const program: ReturnType<typeof parseSource>[] = [];
     // Act
-    const findings = analyzeExceptionHygiene(program);
+    const findings = analyzeErrorFlow(program);
 
     // Assert
     expect(findings.length).toBe(0);

@@ -8,7 +8,7 @@
     "giant-file": {
       "maxLines": 800
     },
-    "exception-hygiene": true,
+    "error-flow": true,
     "barrel-policy": true,
     "format": true,
     "unknown-proof": true,
