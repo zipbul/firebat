@@ -16,19 +16,114 @@ const spanForOffset = (sourceText: string, offset: number) => {
   return { start, end };
 };
 
-/** Get the enclosing exported function name, or null if not inside an exported function. */
-const getEnclosingExportedFunction = (program: Node, targetOffset: number): string | null => {
-  let result: string | null = null;
+/** Collect the set of exported function/variable names from the program. */
+const collectExportedFunctionNames = (program: Node): Set<string> => {
+  const names = new Set<string>();
 
   walkOxcTree(program, node => {
     if (node.type === 'ExportNamedDeclaration' && isNodeRecord(node)) {
       const decl = node.declaration;
 
+      if (isOxcNode(decl) && isNodeRecord(decl)) {
+        if (decl.type === 'FunctionDeclaration') {
+          const name = getNodeName(decl.id);
+
+          if (typeof name === 'string' && name.length > 0) {
+            names.add(name);
+          }
+        } else if (decl.type === 'VariableDeclaration') {
+          const declarations = (decl as any).declarations;
+
+          if (Array.isArray(declarations)) {
+            for (const declarator of declarations) {
+              if (isOxcNode(declarator) && isNodeRecord(declarator)) {
+                const init = declarator.init;
+
+                if (
+                  isOxcNode(init) &&
+                  (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+                ) {
+                  const name = getNodeName(declarator.id);
+
+                  if (typeof name === 'string' && name.length > 0) {
+                    names.add(name);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // re-export: export { init, query }
+      const specifiers = (node as any).specifiers;
+
+      if (Array.isArray(specifiers)) {
+        for (const specifier of specifiers) {
+          if (isOxcNode(specifier) && isNodeRecord(specifier)) {
+            const localName = getNodeName(specifier.local);
+
+            if (typeof localName === 'string' && localName.length > 0) {
+              names.add(localName);
+            }
+          }
+        }
+      }
+    }
+
+    if (node.type === 'ExportDefaultDeclaration' && isNodeRecord(node)) {
+      const decl = node.declaration;
+
       if (isOxcNode(decl) && decl.type === 'FunctionDeclaration' && isNodeRecord(decl)) {
-        if (targetOffset >= decl.start && targetOffset <= decl.end) {
-          result = getNodeName(decl.id) ?? null;
+        const name = getNodeName(decl.id);
+
+        if (typeof name === 'string' && name.length > 0) {
+          names.add(name);
+        }
+      }
+    }
+
+    return true;
+  });
+
+  return names;
+};
+
+/** Get the enclosing exported function name, or null if not inside an exported function. */
+const getEnclosingExportedFunction = (program: Node, targetOffset: number, exportedNames: Set<string>): string | null => {
+  let result: string | null = null;
+
+  walkOxcTree(program, node => {
+    // FunctionDeclaration: export function foo() { ... }
+    if (node.type === 'FunctionDeclaration' && isNodeRecord(node)) {
+      const name = getNodeName(node.id);
+
+      if (typeof name === 'string' && exportedNames.has(name)) {
+        if (targetOffset >= node.start && targetOffset <= node.end) {
+          result = name;
 
           return false;
+        }
+      }
+    }
+
+    // VariableDeclarator: export const foo = () => { ... } or const foo = () => { ... } with re-export
+    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+      const name = getNodeName(node.id);
+
+      if (typeof name === 'string' && exportedNames.has(name)) {
+        const init = node.init;
+
+        if (
+          isOxcNode(init) &&
+          isNodeRecord(init) &&
+          (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
+        ) {
+          if (targetOffset >= init.start && targetOffset <= init.end) {
+            result = name;
+
+            return false;
+          }
         }
       }
     }
@@ -91,8 +186,45 @@ interface WriterReaderResult {
   readonly readers: ReadonlyArray<string>;
 }
 
+/** Build a Set of "start:end" keys for all write-position identifiers in the program (O(n)). */
+const collectWritePositionKeys = (program: Node): Set<string> => {
+  const keys = new Set<string>();
+
+  walkOxcTree(program, node => {
+    if (!isNodeRecord(node)) {
+      return true;
+    }
+
+    if (node.type === 'AssignmentExpression') {
+      const left = node.left;
+
+      if (isOxcNode(left)) {
+        keys.add(`${left.start}:${left.end}`);
+      }
+    }
+
+    if (node.type === 'UpdateExpression') {
+      const argument = node.argument;
+
+      if (isOxcNode(argument)) {
+        keys.add(`${argument.start}:${argument.end}`);
+      }
+    }
+
+    return true;
+  });
+
+  return keys;
+};
+
 /** For a given variable name, find which exported functions write it and which only read it. */
-const classifyExportedFunctions = (program: Node, _sourceText: string, varName: string): WriterReaderResult => {
+const classifyExportedFunctions = (
+  program: Node,
+  _sourceText: string,
+  varName: string,
+  exportedNames: Set<string>,
+  writeKeys: Set<string>,
+): WriterReaderResult => {
   const writerFns = new Set<string>();
   const readerFns = new Set<string>();
 
@@ -100,47 +232,13 @@ const classifyExportedFunctions = (program: Node, _sourceText: string, varName: 
   const identifiers = collectOxcNodes(program, n => n.type === 'Identifier' && getNodeName(n) === varName);
 
   for (const idNode of identifiers) {
-    const fnName = getEnclosingExportedFunction(program, idNode.start);
+    const fnName = getEnclosingExportedFunction(program, idNode.start, exportedNames);
 
     if (fnName === null) {
       continue;
     }
 
-    // Determine parent to check write context
-    let isWrite = false;
-
-    walkOxcTree(program, node => {
-      if (!isNodeRecord(node)) {
-        return true;
-      }
-
-      if (node.type === 'AssignmentExpression') {
-        const left = node.left;
-
-        if (isOxcNode(left) && left.start === idNode.start && left.end === idNode.end && getNodeName(left) === varName) {
-          isWrite = true;
-
-          return false;
-        }
-      }
-
-      if (node.type === 'UpdateExpression') {
-        const argument = node.argument;
-
-        if (
-          isOxcNode(argument) &&
-          argument.start === idNode.start &&
-          argument.end === idNode.end &&
-          getNodeName(argument) === varName
-        ) {
-          isWrite = true;
-
-          return false;
-        }
-      }
-
-      return true;
-    });
+    const isWrite = writeKeys.has(`${idNode.start}:${idNode.end}`);
 
     if (isWrite) {
       writerFns.add(fnName);
@@ -211,6 +309,10 @@ const analyzeClassTemporalCoupling = (
         const methodName = getNodeName(item.key);
 
         if (typeof methodName !== 'string' || methodName.length === 0) {
+          continue;
+        }
+
+        if (methodName === 'constructor') {
           continue;
         }
 
@@ -302,9 +404,17 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
 
     // Pattern 1: module-scope let/var variables shared across exported functions
     const mutableVars = collectTopLevelMutableVars(file.program as Node);
+    const exportedNames = collectExportedFunctionNames(file.program as Node);
+    const writeKeys = collectWritePositionKeys(file.program as Node);
 
     for (const { name, offset } of mutableVars) {
-      const { writers, readers } = classifyExportedFunctions(file.program as Node, file.sourceText, name);
+      const { writers, readers } = classifyExportedFunctions(
+        file.program as Node,
+        file.sourceText,
+        name,
+        exportedNames,
+        writeKeys,
+      );
 
       if (writers.length > 0 && readers.length > 0) {
         for (const _ of readers) {

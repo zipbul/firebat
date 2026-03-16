@@ -324,4 +324,123 @@ describe('temporal-coupling/analyzer', () => {
 
     expect(sorted1).toEqual(sorted2);
   });
+
+  // B-1: arrow function export
+  it('analyzeTemporalCoupling - arrow function export writer/reader - reports temporal coupling', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let x = 0;', 'export const init = () => { x = 1; };', 'export const query = () => x;'].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result[0]?.state).toBe('x');
+  });
+
+  // B-1: function expression export
+  it('analyzeTemporalCoupling - function expression export writer/reader - reports temporal coupling', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let x = 0;',
+          'export const init = function() { x = 1; };',
+          'export const query = function() { return x; };',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result[0]?.state).toBe('x');
+  });
+
+  // B-1: re-export pattern
+  it('analyzeTemporalCoupling - re-export pattern writer/reader - reports temporal coupling', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let x = 0;',
+          'const init = () => { x = 1; };',
+          'const query = () => x;',
+          'export { init, query };',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result[0]?.state).toBe('x');
+  });
+
+  // B-1: default export writer with named reader
+  it('analyzeTemporalCoupling - default export writer with named reader - reports temporal coupling', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let x = 0;',
+          'export default function init() { x = 1; }',
+          'export function query() { return x; }',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // B-2: class constructor as only writer
+  it('analyzeTemporalCoupling - class constructor as only writer - does not report finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export class Counter {',
+          '  count = 0;',
+          '  constructor() { this.count = 0; }',
+          '  getCount() { return this.count; }',
+          '}',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert
+    expect(result.length).toBe(0);
+  });
+
+  // B-2: class constructor plus method writer
+  it('analyzeTemporalCoupling - class constructor plus method writer - reports finding for method writer', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export class Service {',
+          '  x = 0;',
+          '  constructor() { this.x = 0; }',
+          '  set() { this.x = 1; }',
+          '  get() { return this.x; }',
+          '}',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
 });
