@@ -425,6 +425,7 @@ const collectConditionalRanges = (funcBody: Node): Array<{ start: number; end: n
     'ForStatement',
     'ForInStatement',
     'ForOfStatement',
+    'TryStatement',
   ]);
 
   walkOxcTree(funcBody, node => {
@@ -541,11 +542,15 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 /**
  * Collect call expression offsets for names in the given set within a function body.
  * Returns null if any matching call is inside a conditional/loop (conservative).
+ *
+ * allowBareIdentifier: if false, bare `name()` calls (Identifier callee) are not matched.
+ * Use false for class method names to prevent `otherObj.init()` from matching a `Service.init` writer.
  */
 const collectCallOffsetsStrict = (
   funcBody: Node,
   names: ReadonlySet<string>,
   conditionalRanges: ReadonlyArray<{ start: number; end: number }>,
+  allowBareIdentifier: boolean,
 ): number[] | null => {
   const offsets: number[] = [];
 
@@ -561,6 +566,8 @@ const collectCallOffsetsStrict = (
     let callName: string | null = null;
 
     if (callee.type === 'Identifier') {
+      if (!allowBareIdentifier) return true;
+
       callName = getNodeName(callee);
     } else if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
       callName = getNodeName(callee.property);
@@ -597,6 +604,10 @@ const verifyCallerOrder = (
   readerNames: ReadonlyArray<string>,
   callerKeys: ReadonlyArray<CallerKey>,
 ): boolean => {
+  // Determine whether names are class methods (contain '.') or plain module-scope functions
+  const writersAreMethod = writerNames.some(n => n.includes('.'));
+  const readersAreMethod = readerNames.some(n => n.includes('.'));
+
   // Extract bare function names (strip ClassName. prefix) for call-site matching
   const writerBareNames = new Set(writerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
   const readerBareNames = new Set(readerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
@@ -621,11 +632,11 @@ const verifyCallerOrder = (
 
     const conditionalRanges = collectConditionalRanges(funcBody);
 
-    const writerOffsets = collectCallOffsetsStrict(funcBody, writerBareNames, conditionalRanges);
+    const writerOffsets = collectCallOffsetsStrict(funcBody, writerBareNames, conditionalRanges, !writersAreMethod);
 
     if (writerOffsets === null) return false; // writer inside branch → conservative
 
-    const readerOffsets = collectCallOffsetsStrict(funcBody, readerBareNames, conditionalRanges);
+    const readerOffsets = collectCallOffsetsStrict(funcBody, readerBareNames, conditionalRanges, !readersAreMethod);
 
     if (readerOffsets === null) return false;
 

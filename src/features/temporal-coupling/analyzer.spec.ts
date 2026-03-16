@@ -680,6 +680,36 @@ describe('temporal-coupling/analyzer', () => {
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('analyzeTemporalCoupling - class method caller correct order via getParsedAst - suppresses finding', () => {
+    // Arrange
+    const targetSource = [
+      'export class Service {',
+      '  x = 0;',
+      '  init() { this.x = 1; }',
+      '  query() { return this.x; }',
+      '}',
+    ].join('\n');
+    const callerSource = [
+      "import { Service } from './a';",
+      'export class App {',
+      '  run() { const s = new Service(); s.init(); s.query(); }',
+      '}',
+    ].join('\n');
+    const callerParsed = parseSource('src/app.ts', callerSource);
+    const files = [file('src/a.ts', targetSource)];
+    const mockGildash = createMockGildashWithAst(
+      [
+        { type: 'calls', srcFilePath: 'src/app.ts', srcSymbolName: 'App.run', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.init' },
+        { type: 'calls', srcFilePath: 'src/app.ts', srcSymbolName: 'App.run', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.query' },
+      ],
+      { 'src/app.ts': callerParsed as unknown as GildashParsedFile },
+    );
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — writer before reader in App.run → suppression
+    expect(result.length).toBe(0);
+  });
+
   it('analyzeTemporalCoupling - getParsedAst returns undefined - keeps finding conservatively', () => {
     // Arrange
     const targetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n');
