@@ -3,11 +3,11 @@ import { describe, expect, it } from 'bun:test';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
 
-const analyzeSingle = (filePath: string, sourceText: string) => {
+const analyzeSingle = async (filePath: string, sourceText: string) => {
   // Arrange
   const program = [parseSource(filePath, sourceText)];
   // Act
-  const findings = analyzeErrorFlow(program);
+  const findings = await analyzeErrorFlow(program);
 
   // Assert (shape)
   expect(Array.isArray(findings)).toBe(true);
@@ -15,9 +15,11 @@ const analyzeSingle = (filePath: string, sourceText: string) => {
   return findings;
 };
 
-const kinds = (findings: ReturnType<typeof analyzeSingle>) => findings.map(f => f.kind);
+type Findings = Awaited<ReturnType<typeof analyzeSingle>>;
 
-const assertFindingShape = (findings: ReturnType<typeof analyzeSingle>) => {
+const kinds = (findings: Findings) => findings.map(f => f.kind);
+
+const assertFindingShape = (findings: Findings) => {
   // Act / Assert
   for (const finding of findings) {
     expect(finding.evidence.length).toBeGreaterThan(0);
@@ -28,17 +30,17 @@ const assertFindingShape = (findings: ReturnType<typeof analyzeSingle>) => {
 };
 
 describe('error-flow/analyzer', () => {
-  it('should return no findings when input is empty', () => {
+  it('should return no findings when input is empty', async () => {
     // Arrange
     const program: ReturnType<typeof parseSource>[] = [];
     // Act
-    const findings = analyzeErrorFlow(program);
+    const findings = await analyzeErrorFlow(program);
 
     // Assert
     expect(findings.length).toBe(0);
   });
 
-  it('should not include natural-language fields in findings', () => {
+  it('should not include natural-language fields in findings', async () => {
     // Arrange
     const filePath = '/virtual/src/adapters/cli/entry.ts';
     const source = [
@@ -48,7 +50,7 @@ describe('error-flow/analyzer', () => {
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
-    const findings = analyzeSingle(filePath, source);
+    const findings = await analyzeSingle(filePath, source);
 
     // Assert
     expect(findings.length).toBeGreaterThanOrEqual(1);
@@ -61,35 +63,35 @@ describe('error-flow/analyzer', () => {
     expect(sample.recipes).toBeUndefined();
   });
 
-  it('should report useless-catch when catch rethrows the same error', () => {
+  it('should report useless-catch when catch rethrows the same error', async () => {
     // Arrange
     const filePath = '/virtual/src/features/useless.ts';
     const source = ['export function f() {', '  try {', '    return 1;', '  } catch (e) {', '    throw e;', '  }', '}'].join(
       '\n',
     );
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report useless-catch when catch rethrows the same error with a different name', () => {
+  it('should report useless-catch when catch rethrows the same error with a different name', async () => {
     // Arrange
     const filePath = '/virtual/src/features/useless-rename.ts';
     const source = ['export function f() {', '  try {', '    return 1;', '  } catch (err) {', '    throw err;', '  }', '}'].join(
       '\n',
     );
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report useless-catch when catch logs and rethrows', () => {
+  it('should not report useless-catch when catch logs and rethrows', async () => {
     // Arrange
     const filePath = '/virtual/src/features/useless-logged.ts';
     const source = [
@@ -103,14 +105,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report useless-catch when catch rethrows a new error with cause', () => {
+  it('should not report useless-catch when catch rethrows a new error with cause', async () => {
     // Arrange
     const filePath = '/virtual/src/features/useless-wrapped.ts';
     const source = [
@@ -123,14 +125,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report useless-catch when catch adds context', () => {
+  it('should not report useless-catch when catch adds context', async () => {
     // Arrange
     const filePath = '/virtual/src/features/context.ts';
     const source = [
@@ -143,14 +145,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report unsafe-finally when finally returns and masks a throw', () => {
+  it('should report unsafe-finally when finally returns and masks a throw', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-return.ts';
     const source = [
@@ -163,14 +165,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report unsafe-finally when finally throws and masks a return', () => {
+  it('should report unsafe-finally when finally throws and masks a return', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-throw.ts';
     const source = [
@@ -183,14 +185,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report unsafe-finally when nested return exists inside finally', () => {
+  it('should report unsafe-finally when nested return exists inside finally', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-nested-return.ts';
     const source = [
@@ -205,14 +207,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report unsafe-finally when finally only performs cleanup', () => {
+  it('should not report unsafe-finally when finally only performs cleanup', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-cleanup.ts';
     const source = [
@@ -227,40 +229,40 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report unsafe-finally when finally callback returns a value', () => {
+  it('should report unsafe-finally when finally callback returns a value', async () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join(
       '\n',
     );
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report unsafe-finally when finally callback has expression body', () => {
+  it('should report unsafe-finally when finally callback has expression body', async () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-expr.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report unsafe-finally when finally callback returns undefined explicitly', () => {
+  it('should report unsafe-finally when finally callback returns undefined explicitly', async () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-undefined.ts';
     const source = [
@@ -271,14 +273,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report unsafe-finally (.finally() variant) when finally callback has no return', () => {
+  it('should not report unsafe-finally (.finally() variant) when finally callback has no return', async () => {
     // Arrange
     const filePath = '/virtual/src/features/promise-finally-ok.ts';
     const source = [
@@ -289,14 +291,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report catch-or-return when a then-chain has no catch', () => {
+  it('should report catch-or-return when a then-chain has no catch', async () => {
     // Arrange
     const filePath = '/virtual/src/features/then-no-catch.ts';
     const source = [
@@ -306,14 +308,14 @@ describe('error-flow/analyzer', () => {
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report catch-or-return when then-chain is returned', () => {
+  it('should not report catch-or-return when then-chain is returned', async () => {
     // Arrange
     const filePath = '/virtual/src/features/then-returned.ts';
     const source = [
@@ -323,14 +325,14 @@ describe('error-flow/analyzer', () => {
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report catch-or-return when then-chain is awaited', () => {
+  it('should not report catch-or-return when then-chain is awaited', async () => {
     // Arrange
     const filePath = '/virtual/src/features/then-awaited.ts';
     const source = [
@@ -340,14 +342,14 @@ describe('error-flow/analyzer', () => {
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report catch-or-return when promise chain has catch', () => {
+  it('should not report catch-or-return when promise chain has catch', async () => {
     // Arrange
     const filePath = '/virtual/src/features/then-has-catch.ts';
     const source = [
@@ -357,26 +359,26 @@ describe('error-flow/analyzer', () => {
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report prefer-catch when then handles rejection with a second argument', () => {
+  it('should report prefer-catch when then handles rejection with a second argument', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-catch.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report prefer-catch even when a catch is also chained', () => {
+  it('should report prefer-catch even when a catch is also chained', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-catch-and-catch.ts';
     const source = [
@@ -387,26 +389,26 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report prefer-catch when catch is used', () => {
+  it('should not report prefer-catch when catch is used', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-catch-ok.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report prefer-await-to-then when then-chains are long and used for control flow', () => {
+  it('should report prefer-await-to-then when then-chains are long and used for control flow', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await.ts';
     const source = [
@@ -422,14 +424,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report prefer-await-to-then when then-chain contains side effects', () => {
+  it('should report prefer-await-to-then when then-chain contains side effects', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await-side-effect.ts';
     const source = [
@@ -443,45 +445,45 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report prefer-await-to-then when then is a short value mapping', () => {
+  it('should not report prefer-await-to-then when then is a short value mapping', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await-ok.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report prefer-await-to-then when chain is short even if callback uses block', () => {
+  it('should not report prefer-await-to-then when chain is short even if callback uses block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await-short-block.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).then(x => {', '    return x + 1;', '  });', '}'].join(
       '\n',
     );
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not over-report unrelated kinds when only one rule is violated', () => {
+  it('should not over-report unrelated kinds when only one rule is violated', async () => {
     // Arrange
     const filePath = '/virtual/src/features/single-violation.ts';
     const source = ['export function f() {', '  Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('prefer-catch');
@@ -489,7 +491,7 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).not.toContain('unsafe-finally');
   });
 
-  it('should report missing-error-cause when catch throws new Error without cause', () => {
+  it('should report missing-error-cause when catch throws new Error without cause', async () => {
     // Arrange
     const filePath = '/virtual/src/features/transform-bad.ts';
     const source = [
@@ -502,14 +504,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report missing-error-cause (catch-transform variant) when cause is preserved', () => {
+  it('should not report missing-error-cause (catch-transform variant) when cause is preserved', async () => {
     // Arrange
     const filePath = '/virtual/src/features/transform-ok.ts';
     const source = [
@@ -522,14 +524,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report useless-catch when an inner useless catch exists under an outer catch', () => {
+  it('should report useless-catch when an inner useless catch exists under an outer catch', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-redundant.ts';
     const source = [
@@ -546,14 +548,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report useless-catch (nested variant) when there is no outer catch', () => {
+  it('should not report useless-catch (nested variant) when there is no outer catch', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-no-outer.ts';
     const source = [
@@ -566,7 +568,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
@@ -575,7 +577,7 @@ describe('error-flow/analyzer', () => {
 
   // --- useless-catch: nested try/catch ---
 
-  it('should report useless-catch for nested try/catch inside try block', () => {
+  it('should report useless-catch for nested try/catch inside try block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-try.ts';
     const source = [
@@ -592,14 +594,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', () => {
+  it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-try-finally.ts';
     const source = [
@@ -616,14 +618,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report useless-catch (nested variant) for try/catch in catch block (cleanup pattern)', () => {
+  it('should not report useless-catch (nested variant) for try/catch in catch block (cleanup pattern)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-in-catch.ts';
     const source = [
@@ -641,14 +643,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report useless-catch (nested variant) for try/catch inside a function defined in try block', () => {
+  it('should not report useless-catch (nested variant) for try/catch inside a function defined in try block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-in-function.ts';
     const source = [
@@ -668,7 +670,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
@@ -677,7 +679,7 @@ describe('error-flow/analyzer', () => {
 
   // --- unsafe-finally: break/continue ---
 
-  it('should report unsafe-finally when finally contains break targeting outer loop', () => {
+  it('should report unsafe-finally when finally contains break targeting outer loop', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-break.ts';
     const source = [
@@ -692,14 +694,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report unsafe-finally when finally contains continue targeting outer loop', () => {
+  it('should report unsafe-finally when finally contains continue targeting outer loop', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-continue.ts';
     const source = [
@@ -714,14 +716,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report unsafe-finally when break is inside a loop within finally', () => {
+  it('should not report unsafe-finally when break is inside a loop within finally', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-break-in-loop.ts';
     const source = [
@@ -736,14 +738,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report unsafe-finally when return is inside a nested function in finally', () => {
+  it('should not report unsafe-finally when return is inside a nested function in finally', async () => {
     // Arrange
     const filePath = '/virtual/src/features/finally-fn-return.ts';
     const source = [
@@ -757,7 +759,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
@@ -766,7 +768,7 @@ describe('error-flow/analyzer', () => {
 
   // --- missing-error-cause: extensions ---
 
-  it('should report missing-error-cause for vibe pattern — catch param in Error message', () => {
+  it('should report missing-error-cause for vibe pattern — catch param in Error message', async () => {
     // Arrange
     const filePath = '/virtual/src/features/vibe-pattern.ts';
     const source = [
@@ -779,14 +781,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report missing-error-cause for optional catch binding', () => {
+  it('should report missing-error-cause for optional catch binding', async () => {
     // Arrange
     const filePath = '/virtual/src/features/optional-catch.ts';
     const source = [
@@ -799,14 +801,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report missing-error-cause for catch param reassignment', () => {
+  it('should report missing-error-cause for catch param reassignment', async () => {
     // Arrange
     const filePath = '/virtual/src/features/catch-reassign.ts';
     const source = [
@@ -820,14 +822,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report missing-error-cause for AggregateError without cause', () => {
+  it('should report missing-error-cause for AggregateError without cause', async () => {
     // Arrange
     const filePath = '/virtual/src/features/aggregate-error.ts';
     const source = [
@@ -840,14 +842,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report missing-error-cause for AggregateError with cause', () => {
+  it('should not report missing-error-cause for AggregateError with cause', async () => {
     // Arrange
     const filePath = '/virtual/src/features/aggregate-error-ok.ts';
     const source = [
@@ -860,7 +862,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
@@ -869,56 +871,56 @@ describe('error-flow/analyzer', () => {
 
   // --- P3-1 throw-non-error ---
 
-  it('should report throw-non-error for string literal throw', () => {
+  it('should report throw-non-error for string literal throw', async () => {
     // Arrange
     const filePath = '/virtual/src/features/throw-string.ts';
     const source = 'export function f() { throw "boom"; }';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('throw-non-error');
   });
 
-  it('should report throw-non-error for numeric literal throw', () => {
+  it('should report throw-non-error for numeric literal throw', async () => {
     // Arrange
     const filePath = '/virtual/src/features/throw-number.ts';
     const source = 'export function f() { throw 42; }';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('throw-non-error');
   });
 
-  it('should report throw-non-error for primitive wrapper call (String)', () => {
+  it('should report throw-non-error for primitive wrapper call (String)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/throw-wrapper.ts';
     const source = 'export function f() { throw String("hello"); }';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('throw-non-error');
   });
 
-  it('should not report throw-non-error for new Error()', () => {
+  it('should not report throw-non-error for new Error()', async () => {
     // Arrange
     const filePath = '/virtual/src/features/throw-error.ts';
     const source = 'export function f() { throw new Error("x"); }';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).not.toContain('throw-non-error');
   });
 
-  it('should not report throw-non-error for factory call', () => {
+  it('should not report throw-non-error for factory call', async () => {
     // Arrange
     const filePath = '/virtual/src/features/throw-factory.ts';
     const source = 'export function f() { throw createError(); }';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).not.toContain('throw-non-error');
@@ -926,7 +928,7 @@ describe('error-flow/analyzer', () => {
 
   // --- return-await-in-try ---
 
-  it('should report return-await-in-try when returning a call without await in try block with catch', () => {
+  it('should report return-await-in-try when returning a call without await in try block with catch', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-no-await.ts';
     const source = [
@@ -939,14 +941,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report return-await-in-try when return uses await', () => {
+  it('should not report return-await-in-try when return uses await', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-with-await.ts';
     const source = [
@@ -959,14 +961,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report return-await-in-try when return is outside try block', () => {
+  it('should not report return-await-in-try when return is outside try block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-outside-try.ts';
     const source = [
@@ -975,14 +977,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report return-await-in-try for literal return in try block', () => {
+  it('should not report return-await-in-try for literal return in try block', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-literal-in-try.ts';
     const source = [
@@ -995,14 +997,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report return-await-in-try when try has only finally (no catch)', () => {
+  it('should not report return-await-in-try when try has only finally (no catch)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-try-finally.ts';
     const source = [
@@ -1015,7 +1017,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1024,40 +1026,40 @@ describe('error-flow/analyzer', () => {
 
   // --- P3-2 promise-constructor-hygiene ---
 
-  it('should report promise-constructor-hygiene for async executor', () => {
+  it('should report promise-constructor-hygiene for async executor', async () => {
     // Arrange
     const filePath = '/virtual/src/features/async-executor.ts';
     const source = 'export const p = new Promise(async () => { await fetch("/"); });';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should report promise-constructor-hygiene for globalThis.Promise async executor', () => {
+  it('should report promise-constructor-hygiene for globalThis.Promise async executor', async () => {
     // Arrange
     const filePath = '/virtual/src/features/async-executor-global.ts';
     const source = 'export const p = new globalThis.Promise(async () => { await fetch("/"); });';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should not report promise-constructor-hygiene for sync executor with resolve', () => {
+  it('should not report promise-constructor-hygiene for sync executor with resolve', async () => {
     // Arrange
     const filePath = '/virtual/src/features/sync-executor.ts';
     const source = 'export const p = new Promise((resolve) => { resolve(42); });';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).not.toContain('promise-constructor-hygiene');
   });
 
-  it('should report promise-constructor-hygiene for throw in sync executor', () => {
+  it('should report promise-constructor-hygiene for throw in sync executor', async () => {
     // Arrange
     const filePath = '/virtual/src/features/executor-throw.ts';
     const source = [
@@ -1067,13 +1069,13 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should report promise-constructor-hygiene for return value in executor', () => {
+  it('should report promise-constructor-hygiene for return value in executor', async () => {
     // Arrange
     const filePath = '/virtual/src/features/executor-return.ts';
     const source = [
@@ -1082,24 +1084,24 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should report promise-constructor-hygiene for swapped params (reject, resolve)', () => {
+  it('should report promise-constructor-hygiene for swapped params (reject, resolve)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/swapped-params.ts';
     const source = 'export const p = new Promise((reject, resolve) => { resolve(42); });';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should report promise-constructor-hygiene for unnecessary new Promise in async function', () => {
+  it('should report promise-constructor-hygiene for unnecessary new Promise in async function', async () => {
     // Arrange
     const filePath = '/virtual/src/features/unnecessary-promise.ts';
     const source = [
@@ -1110,13 +1112,13 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should not report unnecessary new Promise when wrapping callback API', () => {
+  it('should not report unnecessary new Promise when wrapping callback API', async () => {
     // Arrange
     const filePath = '/virtual/src/features/callback-wrap.ts';
     const source = [
@@ -1127,7 +1129,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert — callback wrapping is allowed, so no finding
@@ -1136,19 +1138,19 @@ describe('error-flow/analyzer', () => {
 
   // --- no-return-wrap ---
 
-  it('should report no-return-wrap for Promise.resolve in then callback expression body', () => {
+  it('should report no-return-wrap for Promise.resolve in then callback expression body', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-wrap-expr.ts';
     const source = 'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report no-return-wrap for Promise.resolve in then callback block body', () => {
+  it('should report no-return-wrap for Promise.resolve in then callback block body', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-wrap-block.ts';
     const source = [
@@ -1157,19 +1159,19 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report no-return-wrap for direct value return in then callback', () => {
+  it('should not report no-return-wrap for direct value return in then callback', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-direct.ts';
     const source = 'export const p = Promise.resolve(1).then(x => x + 1);';
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
@@ -1178,7 +1180,7 @@ describe('error-flow/analyzer', () => {
 
   // --- always-return ---
 
-  it('should report always-return when then callback has block body without return', () => {
+  it('should report always-return when then callback has block body without return', async () => {
     // Arrange
     const filePath = '/virtual/src/features/always-return.ts';
     const source = [
@@ -1187,14 +1189,14 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'always-return');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report always-return when then callback returns a value', () => {
+  it('should not report always-return when then callback returns a value', async () => {
     // Arrange
     const filePath = '/virtual/src/features/always-return-ok.ts';
     const source = [
@@ -1203,7 +1205,7 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'always-return');
 
     // Assert
@@ -1212,7 +1214,7 @@ describe('error-flow/analyzer', () => {
 
   // --- no-callback-in-promise ---
 
-  it('should report no-callback-in-promise when callback API is used inside then', () => {
+  it('should report no-callback-in-promise when callback API is used inside then', async () => {
     // Arrange
     const filePath = '/virtual/src/features/callback-in-promise.ts';
     const source = [
@@ -1224,14 +1226,14 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report no-callback-in-promise when no callback API is used', () => {
+  it('should not report no-callback-in-promise when no callback API is used', async () => {
     // Arrange
     const filePath = '/virtual/src/features/no-callback-ok.ts';
     const source = [
@@ -1240,7 +1242,7 @@ describe('error-flow/analyzer', () => {
       '});',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
 
     // Assert
@@ -1249,7 +1251,7 @@ describe('error-flow/analyzer', () => {
 
   // --- unobserved-variable ---
 
-  it('should report unobserved-variable when call result is assigned but never awaited', () => {
+  it('should report unobserved-variable when call result is assigned but never awaited', async () => {
     // Arrange
     const filePath = '/virtual/src/features/unobserved-var.ts';
     const source = [
@@ -1259,14 +1261,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report unobserved-variable when call result is awaited', () => {
+  it('should not report unobserved-variable when call result is awaited', async () => {
     // Arrange
     const filePath = '/virtual/src/features/observed-var.ts';
     const source = [
@@ -1276,14 +1278,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report unobserved-variable when call result is returned', () => {
+  it('should not report unobserved-variable when call result is returned', async () => {
     // Arrange
     const filePath = '/virtual/src/features/returned-var.ts';
     const source = [
@@ -1293,7 +1295,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert

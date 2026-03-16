@@ -1,10 +1,16 @@
+import type { Gildash, HeritageNode } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
+import { PartialResultError } from '../../engine/partial-result-error';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
+
+interface AnalyzeErrorFlowInput {
+  readonly gildash?: Gildash;
+}
 
 const getSpan = (node: Node, sourceText: string): SourceSpan => {
   const start = getLineColumn(sourceText, node.start);
@@ -1479,7 +1485,97 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
 const createEmptyErrorFlow = (): ReadonlyArray<ErrorFlowFinding> => [];
 
-const analyzeErrorFlow = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<ErrorFlowFinding> => {
+interface ConstructorToVerify {
+  readonly name: string;
+  readonly filePath: string;
+}
+
+const heritageExtendsError = (node: HeritageNode): boolean => {
+  if (node.symbolName === 'Error') {
+    return true;
+  }
+
+  return node.children.some(child => child.kind === 'extends' && heritageExtendsError(child));
+};
+
+const verifyCustomErrorClasses = async (
+  findings: ErrorFlowFinding[],
+  gildash: Gildash,
+): Promise<ErrorFlowFinding[]> => {
+  // Collect unique constructor names from missing-error-cause findings on custom error classes
+  const customErrorFindings = findings.filter(
+    f =>
+      f.kind === 'missing-error-cause' &&
+      f.evidence.includes('new ') &&
+      !f.evidence.includes('new Error(') &&
+      !f.evidence.includes('new TypeError(') &&
+      !f.evidence.includes('new RangeError(') &&
+      !f.evidence.includes('new ReferenceError(') &&
+      !f.evidence.includes('new SyntaxError(') &&
+      !f.evidence.includes('new URIError(') &&
+      !f.evidence.includes('new EvalError(') &&
+      !f.evidence.includes('new AggregateError('),
+  );
+
+  if (customErrorFindings.length === 0) {
+    return findings;
+  }
+
+  // Extract constructor names from evidence lines
+  const constructorRegex = /new\s+(\w+)\s*\(/;
+  const toVerify = new Map<string, ConstructorToVerify>();
+
+  for (const finding of customErrorFindings) {
+    const match = constructorRegex.exec(finding.evidence);
+
+    if (match?.[1]) {
+      toVerify.set(`${finding.file}:${match[1]}`, { name: match[1], filePath: finding.file });
+    }
+  }
+
+  // Check heritage chains
+  const confirmedErrors = new Set<string>();
+
+  for (const [key, { name, filePath }] of toVerify) {
+    try {
+      const heritage = await gildash.getHeritageChain(name, filePath);
+
+      if (heritageExtendsError(heritage)) {
+        confirmedErrors.add(key);
+      }
+    } catch {
+      // Heritage check failed — keep the finding (lower confidence)
+      confirmedErrors.add(key);
+    }
+  }
+
+  // Filter out findings where constructor is confirmed NOT to extend Error
+  return findings.filter(f => {
+    if (f.kind !== 'missing-error-cause') {
+      return true;
+    }
+
+    const match = constructorRegex.exec(f.evidence);
+
+    if (!match?.[1]) {
+      return true;
+    }
+
+    const key = `${f.file}:${match[1]}`;
+
+    // If we verified this constructor and it's NOT an error class, drop the finding
+    if (toVerify.has(key) && !confirmedErrors.has(key)) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
+const analyzeErrorFlow = async (
+  files: ReadonlyArray<ParsedFile>,
+  input?: AnalyzeErrorFlowInput,
+): Promise<ReadonlyArray<ErrorFlowFinding>> => {
   if (files.length === 0) {
     return createEmptyErrorFlow();
   }
@@ -1492,6 +1588,19 @@ const analyzeErrorFlow = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<Error
     }
 
     findings.push(...collectFindings(file.program, file.sourceText, file.filePath));
+  }
+
+  // gildash heritage verification for custom error classes
+  if (input?.gildash) {
+    try {
+      return await verifyCustomErrorClasses(findings, input.gildash);
+    } catch (e) {
+      if (e instanceof PartialResultError) {
+        throw e;
+      }
+
+      throw new PartialResultError('gildash heritage check failed', findings);
+    }
   }
 
   return findings;

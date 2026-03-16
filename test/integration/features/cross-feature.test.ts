@@ -70,13 +70,13 @@ const buildProgram = (source: string): ParsedFile[] => {
 };
 
 describe('cross-feature integration', () => {
-  it('should run all analyzers on the same source without crashes', () => {
+  it('should run all analyzers on the same source without crashes', async () => {
     // Arrange
     const program = buildProgram(SOURCE);
 
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
-    const errorFlow = analyzeErrorFlow(program);
+    const errorFlow = await analyzeErrorFlow(program);
     const duplicates = analyzeDuplicates([...program], { minSize: 5 });
     const nesting = analyzeNesting(program);
 
@@ -87,7 +87,7 @@ describe('cross-feature integration', () => {
     expect(Array.isArray(nesting)).toBe(true);
   });
 
-  it('should produce findings from multiple analyzers on the same file', () => {
+  it('should produce findings from multiple analyzers on the same file', async () => {
     // Arrange
     const program = buildProgram(SOURCE);
 
@@ -101,7 +101,7 @@ describe('cross-feature integration', () => {
     expect(totalFindings).toBeGreaterThanOrEqual(1);
   });
 
-  it('should produce consistent results on repeated runs', () => {
+  it('should produce consistent results on repeated runs', async () => {
     // Arrange
     const program = buildProgram(SOURCE);
 

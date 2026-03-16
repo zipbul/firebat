@@ -168,7 +168,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Repositories created');
 
-  const needsSemantic = options.detectors.includes('unknown-proof');
+  const needsSemantic = options.detectors.includes('unknown-proof') || options.detectors.includes('error-flow');
   const tIndex0 = nowMs();
   let gildash: Awaited<ReturnType<typeof createGildash>>;
   let semanticAvailable = false;
@@ -636,7 +636,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     collapsibleIf = createEmptyCollapsibleIf();
   }
 
-  let errorFlow: ReturnType<typeof analyzeErrorFlow>;
+  let errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>>;
   let errorFlowStatus: 'ok' | 'failed' = 'ok';
 
   if (options.detectors.includes('error-flow')) {
@@ -646,13 +646,22 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     try {
-      errorFlow = analyzeErrorFlow(program);
+      errorFlow = await analyzeErrorFlow(program, {
+        ...(semanticAvailable ? { gildash } : {}),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
       metaErrors[detectorKey] = message;
       errorFlowStatus = 'failed';
-      errorFlow = createEmptyErrorFlow();
+
+      const partial = (err as any)?.partial;
+
+      if (Array.isArray(partial)) {
+        errorFlow = partial as ReadonlyArray<import('../../features/error-flow').ErrorFlowFinding>;
+      } else {
+        errorFlow = createEmptyErrorFlow();
+      }
     }
 
     const durationMs = nowMs() - t0;

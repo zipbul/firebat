@@ -4,18 +4,18 @@ import { analyzeErrorFlow } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 describe('integration/error-flow', () => {
-  it('should return no findings when input is empty', () => {
+  it('should return no findings when input is empty', async () => {
     // Arrange
     let sources = new Map<string, string>();
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
 
     // Assert
     expect(analysis.length).toBe(0);
   });
 
-  it('should report floating-promises when a promise-like expression statement is unobserved', () => {
+  it('should report floating-promises when a promise-like expression statement is unobserved', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating.ts';
@@ -25,14 +25,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report floating-promises when Promise.reject is unobserved', () => {
+  it('should report floating-promises when Promise.reject is unobserved', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-reject.ts';
@@ -42,14 +42,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report floating-promises when Promise.all is unobserved', () => {
+  it('should report floating-promises when Promise.all is unobserved', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-all.ts';
@@ -59,14 +59,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report floating-promises when new Promise is unobserved', () => {
+  it('should report floating-promises when new Promise is unobserved', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-new-promise.ts';
@@ -76,14 +76,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report floating-promises when promise is explicitly ignored with void', () => {
+  it('should not report floating-promises when promise is explicitly ignored with void', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-ok.ts';
@@ -93,14 +93,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report floating-promises when promise is returned', () => {
+  it('should not report floating-promises when promise is returned', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-returned.ts';
@@ -110,14 +110,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report floating-promises when promise is awaited', () => {
+  it('should not report floating-promises when promise is awaited', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-awaited.ts';
@@ -127,14 +127,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report floating-promises when promise has catch handler', () => {
+  it('should not report floating-promises when promise has catch handler', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/floating-caught.ts';
@@ -144,14 +144,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report misused-promises when an async callback is passed to forEach', () => {
+  it('should report misused-promises when an async callback is passed to forEach', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused.ts';
@@ -171,14 +171,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report misused-promises when an async callback is passed to map', () => {
+  it('should report misused-promises when an async callback is passed to map', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused-map.ts';
@@ -198,14 +198,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report misused-promises when an async callback is passed to filter', () => {
+  it('should report misused-promises when an async callback is passed to filter', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused-filter.ts';
@@ -225,14 +225,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report misused-promises when a sync wrapper is used', () => {
+  it('should not report misused-promises when a sync wrapper is used', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused-ok.ts';
@@ -252,14 +252,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report throw-non-error when throwing a non-Error value', () => {
+  it('should report throw-non-error when throwing a non-Error value', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/throw-non-error.ts';
@@ -269,14 +269,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report throw-non-error when throwing an identifier', () => {
+  it('should not report throw-non-error when throwing an identifier', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/throw-non-error-ok.ts';
@@ -286,14 +286,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report promise-constructor-hygiene when Promise executor is async', () => {
+  it('should report promise-constructor-hygiene when Promise executor is async', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/async-promise-executor.ts';
@@ -303,14 +303,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report misused-promises when callback is sync', () => {
+  it('should not report misused-promises when callback is sync', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused-sync.ts';
@@ -320,14 +320,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-await-in-try when call is returned without await in try with catch', () => {
+  it('should report return-await-in-try when call is returned without await in try with catch', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-no-await.ts';
@@ -345,14 +345,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report return-await-in-try when return uses await in try with catch', () => {
+  it('should not report return-await-in-try when return uses await in try with catch', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-with-await.ts';
@@ -370,14 +370,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report return-await-in-try when return is outside try block', () => {
+  it('should not report return-await-in-try when return is outside try block', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-outside-try.ts';
@@ -391,14 +391,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report return-await-in-try for literal return in try block', () => {
+  it('should not report return-await-in-try for literal return in try block', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-literal-try.ts';
@@ -416,14 +416,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should not report return-await-in-try in nested function even if outer has try/catch', () => {
+  it('should not report return-await-in-try in nested function even if outer has try/catch', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-nested-fn.ts';
@@ -444,14 +444,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert — inner arrow's return is NOT inside its own try/catch, so should not be flagged
     expect(hits.length).toBe(0);
   });
 
-  it('should report missing-error-cause when catch throws a new Error without { cause }', () => {
+  it('should report missing-error-cause when catch throws a new Error without { cause }', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/transform-bad.ts';
@@ -469,14 +469,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report missing-error-cause when cause is preserved', () => {
+  it('should not report missing-error-cause when cause is preserved', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/transform-ok-cause.ts';
@@ -494,14 +494,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('should report missing-error-cause when cause/context is lost for non-Error constructors', () => {
+  it('should report missing-error-cause when cause/context is lost for non-Error constructors', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/transform-custom.ts';
@@ -519,14 +519,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report useless-catch when inner useless catch exists under an outer catch', () => {
+  it('should report useless-catch when inner useless catch exists under an outer catch', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/nested-redundant.ts';
@@ -548,14 +548,14 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should not report useless-catch (nested variant) when there is no outer catch', () => {
+  it('should not report useless-catch (nested variant) when there is no outer catch', async () => {
     // Arrange
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/nested-ok-no-outer.ts';
@@ -577,7 +577,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program);
     let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
