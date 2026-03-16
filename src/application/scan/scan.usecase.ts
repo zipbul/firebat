@@ -743,7 +743,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    temporalCoupling = analyzeTemporalCoupling(program);
+    temporalCoupling = analyzeTemporalCoupling(program, { gildash });
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { CodeRelation } from '@zipbul/gildash';
+
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer';
 
@@ -441,6 +443,161 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result = analyzeTemporalCoupling(files as any);
     // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // --- gildash caller 공존 검사 ---
+
+  const createMockGildash = (relations: CodeRelation[]) => ({
+    searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
+      return relations.filter(r => {
+        if (query.type !== undefined && r.type !== query.type) return false;
+        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) return false;
+        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) return false;
+
+        return true;
+      });
+    },
+    getInternalRelations: (filePath: string) => {
+      return relations.filter(r => r.srcFilePath === filePath && r.dstFilePath === filePath);
+    },
+  });
+
+  it('analyzeTemporalCoupling - all callers of reader also call writer via gildash - suppresses finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    const mockGildash = createMockGildash([
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+    ]);
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - some callers of reader do not call writer - keeps finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    const mockGildash = createMockGildash([
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+    ]);
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - reader has no callers via gildash - keeps finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    const mockGildash = createMockGildash([]);
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - gildash searchRelations throws - falls back to AST-only', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    const throwingGildash = {
+      searchRelations: (_query: unknown) => {
+        throw new Error('gildash error');
+      },
+      getInternalRelations: (_filePath: string) => [],
+    };
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: throwingGildash as any });
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - class method all callers call writer - suppresses finding', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export class Service {',
+          '  x = 0;',
+          '  init() { this.x = 1; }',
+          '  query() { return this.x; }',
+          '}',
+        ].join('\n'),
+      ),
+    ];
+    const mockGildash = createMockGildash([
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.init' },
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'Service.query' },
+    ]);
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert
+    expect(result.length).toBe(0);
+  });
+
+  it('analyzeTemporalCoupling - different file same function name - dstFilePath prevents collision', () => {
+    // Arrange
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    // 'init' caller is pointing to 'src/other.ts', not 'src/a.ts'
+    const mockGildash = createMockGildash([
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/other.ts', dstSymbolName: 'init' },
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+    ]);
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - anonymous class method - skips gildash suppression', () => {
+    // Arrange — anonymous class expression (no name), gildash suppression is not applicable
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export const svc = new (class {',
+          '  x = 0;',
+          '  init() { this.x = 1; }',
+          '  query() { return this.x; }',
+          '})();',
+        ].join('\n'),
+      ),
+    ];
+    // Gildash claims all callers call both — but anonymous class cannot be matched → no suppression
+    const mockGildash = createMockGildash([
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
+      { type: 'calls', srcFilePath: 'main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
+    ]);
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+    // Assert — anonymous class cannot be suppressed, finding must remain
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 });

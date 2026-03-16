@@ -1,11 +1,17 @@
 import type { Node } from 'oxc-parser';
 
+import type { Gildash } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
 import type { TemporalCouplingFinding } from '../../types';
 
 import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { getLineColumn } from '../../engine/source-position';
+
+interface AnalyzeTemporalCouplingInput {
+  readonly gildash?: Gildash;
+}
 
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];
 
@@ -258,6 +264,7 @@ const analyzeClassTemporalCoupling = (
   program: Node,
   sourceText: string,
   rel: string,
+  gildash?: Gildash,
 ): TemporalCouplingFinding[] => {
   const findings: TemporalCouplingFinding[] = [];
   const classes = collectOxcNodes(program, n => n.type === 'ClassDeclaration' || n.type === 'ClassExpression');
@@ -266,6 +273,9 @@ const analyzeClassTemporalCoupling = (
     if (!isNodeRecord(classNode)) {
       continue;
     }
+
+    // Extract class name — anonymous classes cannot be matched via gildash
+    const className = typeof getNodeName(classNode.id) === 'string' ? (getNodeName(classNode.id) as string) : null;
 
     const classBody = classNode.body;
 
@@ -367,6 +377,20 @@ const analyzeClassTemporalCoupling = (
       }
 
       if (writerMethods.size > 0 && readerMethods.size > 0) {
+        // gildash 억제 검사: named class만 대상 (anonymous class 제외)
+        if (gildash !== undefined && className !== null) {
+          const qualifiedWriters = [...writerMethods].map(m => `${className}.${m}`);
+          const qualifiedReaders = [...readerMethods].map(m => `${className}.${m}`);
+
+          try {
+            if (shouldSuppressByCallGraph(gildash, rel, qualifiedWriters, qualifiedReaders)) {
+              continue;
+            }
+          } catch {
+            // gildash 에러 → AST-only fallback
+          }
+        }
+
         for (const _ of readerMethods) {
           findings.push({
             kind: 'temporal-coupling',
@@ -384,7 +408,56 @@ const analyzeClassTemporalCoupling = (
   return findings;
 };
 
-const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<TemporalCouplingFinding> => {
+/**
+ * Returns true if every caller of every reader also calls at least one writer,
+ * meaning temporal coupling is handled correctly at the call site.
+ *
+ * relPath: normalizeFile result (relative path, e.g. "src/a.ts")
+ * writerNames: function/method names that write the shared state
+ * readerNames: function/method names that only read the shared state
+ */
+const shouldSuppressByCallGraph = (
+  gildash: Gildash,
+  relPath: string,
+  writerNames: ReadonlyArray<string>,
+  readerNames: ReadonlyArray<string>,
+): boolean => {
+  // Pre-fetch callers of all writers (dstFilePath+dstSymbolName keyed lookup)
+  // key: `${srcFilePath}:${srcSymbolName}`
+  const writerCallerSet = new Set<string>();
+
+  for (const writer of writerNames) {
+    const writerCallers = gildash.searchRelations({ type: 'calls', dstFilePath: relPath, dstSymbolName: writer });
+
+    for (const wc of writerCallers) {
+      writerCallerSet.add(`${wc.srcFilePath}:${wc.srcSymbolName ?? ''}`);
+    }
+  }
+
+  for (const reader of readerNames) {
+    const readerCallers = gildash.searchRelations({ type: 'calls', dstFilePath: relPath, dstSymbolName: reader });
+
+    // If reader has no callers at all, cannot suppress
+    if (readerCallers.length === 0) {
+      return false;
+    }
+
+    for (const rc of readerCallers) {
+      const callerKey = `${rc.srcFilePath}:${rc.srcSymbolName ?? ''}`;
+
+      if (!writerCallerSet.has(callerKey)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+};
+
+const analyzeTemporalCoupling = (
+  files: ReadonlyArray<ParsedFile>,
+  input?: AnalyzeTemporalCouplingInput,
+): ReadonlyArray<TemporalCouplingFinding> => {
   if (files.length === 0) {
     return createEmptyTemporalCoupling();
   }
@@ -417,6 +490,17 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
       );
 
       if (writers.length > 0 && readers.length > 0) {
+        // gildash 억제 검사
+        if (input?.gildash !== undefined) {
+          try {
+            if (shouldSuppressByCallGraph(input.gildash, rel, writers, readers)) {
+              continue;
+            }
+          } catch {
+            // gildash 에러 → AST-only fallback
+          }
+        }
+
         for (const _ of readers) {
           findings.push({
             kind: 'temporal-coupling',
@@ -431,10 +515,11 @@ const analyzeTemporalCoupling = (files: ReadonlyArray<ParsedFile>): ReadonlyArra
     }
 
     // Pattern 2: class state properties with writer/reader method split
-    findings.push(...analyzeClassTemporalCoupling(file.program as Node, file.sourceText, rel));
+    findings.push(...analyzeClassTemporalCoupling(file.program as Node, file.sourceText, rel, input?.gildash));
   }
 
   return findings;
 };
 
 export { analyzeTemporalCoupling, createEmptyTemporalCoupling };
+export type { AnalyzeTemporalCouplingInput };
