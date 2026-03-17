@@ -741,9 +741,9 @@
   - ✅ 파라미터 수명 추적 (parameter bindings → entry 노드 def 등록)
   - ✅ 구조분해 바인딩 독립 수명 (`const { a, b } = obj` → a, b 각각)
   - ✅ contextBurden 함수 단위 정밀화
-- **잔여 설계 제약** (reaching-defs 인프라 공유 한계, waste-detector-oxc와 동일):
-  - **E-06a. payloadOffset 근사**: `span.end`가 CFG 노드 payload의 `.start`를 사용하므로 실제 식별자 위치가 아닌 statement/expression 시작 위치. line 계산은 단일 라인 문장에서 정확, multi-line 문장에서 ±1-2줄 과소 평가 가능. 수정 시 per-variable use offset 추적 필요 → `FunctionBodyAnalysis` 타입 변경 수반
-  - **E-06b. name-based 변수 추적**: `collectLocalVarIndexes`가 변수 이름으로 인덱싱하므로, 같은 함수 내 서로 다른 블록 스코프의 동명 변수(`{ const x = 1; } { const x = 2; }`)가 동일 varIndex 공유. 블록 스코프 섀도잉 시 수명 과대 평가 가능. 수정 시 scope-aware variable tracking 필요
+- **잔여 설계 제약** (variable-lifetime 디텍터의 문제가 아니라 `reaching-defs` 공유 인프라의 아키텍처 특성. waste-detector-oxc도 동일한 제약을 가지며, 개선하려면 `reaching-defs` 인프라 자체를 변경해야 함):
+  - **E-06a. payloadOffset 근사**: `span.end`가 CFG 노드 payload의 `.start`를 사용하므로 실제 식별자 위치가 아닌 statement/expression 시작 위치. line 계산은 단일 라인 문장에서 정확, multi-line 문장에서 ±1-2줄 과소 평가 가능. 수정 시 per-variable use offset 추적을 `FunctionBodyAnalysis`에 추가해야 하며, 이는 reaching-defs 인프라 + 모든 소비자(waste-detector-oxc, variable-lifetime) 동시 변경 수반
+  - **E-06b. name-based 변수 추적**: `collectLocalVarIndexes`가 변수 이름으로 인덱싱하므로, 같은 함수 내 서로 다른 블록 스코프의 동명 변수(`{ const x = 1; } { const x = 2; }`)가 동일 varIndex 공유. 블록 스코프 섀도잉 시 수명 과대 평가 가능. 수정 시 reaching-defs 인프라에 scope-aware variable tracking 도입 필요 — waste-detector-oxc에도 동일하게 적용됨
 - **미착수 후속 확장** (이번 범위 밖):
   - `declarationKind` 필드 — const/let/var/parameter 구분을 finding에 추가
   - 지연 초기화 감지 — 선언~첫 할당 gap 측정 (`let x; ... x = compute();`)
