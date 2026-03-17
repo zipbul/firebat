@@ -49,6 +49,7 @@ export interface FunctionBodyAnalysis {
   readonly exitId: NodeId;
   readonly useVarIndexesByNode: ReadonlyArray<ReadonlyArray<number>>;
   readonly writeVarIndexesByNode: ReadonlyArray<ReadonlyArray<number>>;
+  readonly defsOfVar: ReadonlyArray<BitSet>;
 }
 
 export type NodeValue = Node | ReadonlyArray<NodeValue> | string | number | boolean | null | undefined;

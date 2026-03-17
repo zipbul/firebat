@@ -3,14 +3,14 @@
     "contextBurden": 1,
     "file": "long-lifetime.ts",
     "kind": "variable-lifetime",
-    "lifetimeLines": 8,
+    "lifetimeLines": 7,
     "span": {
       "end": {
-        "column": 0,
-        "line": 12
+        "column": 9,
+        "line": 9
       },
       "start": {
-        "column": 2,
+        "column": 8,
         "line": 2
       }
     },

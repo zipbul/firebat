@@ -1,58 +1,32 @@
-import type { ParsedFile } from '../../engine/types';
+import type { Node } from 'oxc-parser';
+
+import type { BitSet, ParsedFile } from '../../engine/types';
 import type { VariableLifetimeFinding } from '../../types';
 
+import { collectFunctionNodes, isNodeRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { collectOxcNodes, getNodeName } from '../../engine/ast/oxc-ast-utils';
+import { intersectBitSet } from '../../engine/dataflow/dataflow';
+import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyVariableLifetime = (): ReadonlyArray<VariableLifetimeFinding> => [];
-
-const spanForOffsets = (sourceText: string, startOffset: number, endOffset: number) => {
-  const start = getLineColumn(sourceText, Math.max(0, startOffset));
-  const end = getLineColumn(sourceText, Math.max(0, endOffset));
-
-  return { start, end };
-};
 
 interface AnalyzeVariableLifetimeOptions {
   readonly maxLifetimeLines: number;
 }
 
-const lineStarts = (sourceText: string): ReadonlyArray<number> => {
-  const starts: number[] = [0];
-
-  for (let i = 0; i < sourceText.length; i++) {
-    const ch = sourceText.charCodeAt(i);
-
-    if (ch === 10) {
-      starts.push(i + 1);
-    }
+const payloadOffset = (payload: Node | ReadonlyArray<Node> | null): number => {
+  if (payload === null) {
+    return -1;
   }
 
-  return starts;
-};
+  if (Array.isArray(payload)) {
+    const first = (payload as ReadonlyArray<Node>)[0];
 
-const offsetToLineIndex = (starts: ReadonlyArray<number>, offset: number): number => {
-  let lo = 0;
-  let hi = starts.length - 1;
-
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const start = starts[mid] ?? 0;
-    const next = starts[mid + 1] ?? Number.POSITIVE_INFINITY;
-
-    if (offset >= start && offset < next) {
-      return mid;
-    }
-
-    if (offset < start) {
-      hi = mid - 1;
-    } else {
-      lo = mid + 1;
-    }
+    return first !== undefined ? first.start : -1;
   }
 
-  return 0;
+  return (payload as Node).start;
 };
 
 const analyzeVariableLifetime = (
@@ -77,53 +51,113 @@ const analyzeVariableLifetime = (
       continue;
     }
 
-    const starts = lineStarts(file.sourceText);
-    const declRe = /\b(const|let|var)\s+([a-zA-Z_$][\w$]*)\b/g;
-    const longLived: Array<{ readonly name: string; readonly defOffset: number; readonly lifeLines: number }> = [];
+    const functionNodes = collectFunctionNodes(file.program);
 
-    for (;;) {
-      const m = declRe.exec(file.sourceText);
+    for (const functionNode of functionNodes) {
+      const localIndexByName = collectLocalVarIndexes(functionNode);
 
-      if (m === null) {
-        break;
+      if (localIndexByName.size === 0) {
+        continue;
       }
 
-      const name = String(m[2] ?? '');
-      const defOffset = m.index;
-      // Find last AST identifier node with matching name at or after the declaration.
-      let lastOffset = defOffset;
+      const paramBindings = collectParameterBindings(functionNode);
+      const bodyValue = isNodeRecord(functionNode) ? functionNode.body : undefined;
+      const bodyNode = isOxcNode(bodyValue) || Array.isArray(bodyValue) ? bodyValue : undefined;
 
-      for (const idNode of collectOxcNodes(
-        file.program,
-        n => n.type === 'Identifier' && getNodeName(n) === name && n.start >= defOffset,
-      )) {
-        if (idNode.start > lastOffset) {
-          lastOffset = idNode.start;
+      if (bodyNode === undefined) {
+        continue;
+      }
+
+      const analysis = analyzeFunctionBody(bodyNode, localIndexByName, paramBindings);
+      const { defs, reachingInByNode, useVarIndexesByNode, nodePayloads, defsOfVar } = analysis;
+
+      // Compute last use offset for each defId via reaching definitions.
+      const lastUseOffsetByDefId = new Map<number, number>();
+
+      for (let cfgNodeId = 0; cfgNodeId < nodePayloads.length; cfgNodeId += 1) {
+        const reachingIn = reachingInByNode[cfgNodeId];
+        const useVarIndexes = useVarIndexesByNode[cfgNodeId];
+
+        if (!reachingIn || !useVarIndexes || useVarIndexes.length === 0) {
+          continue;
+        }
+
+        const payload = nodePayloads[cfgNodeId];
+
+        if (payload === null || payload === undefined) {
+          continue;
+        }
+
+        const useOffset = payloadOffset(payload);
+
+        if (useOffset < 0) {
+          continue;
+        }
+
+        for (const varIndex of useVarIndexes) {
+          const varDefs = defsOfVar[varIndex] as BitSet | undefined;
+
+          if (!varDefs) {
+            continue;
+          }
+
+          const reachingDefs = intersectBitSet(reachingIn, varDefs);
+          const defIds = reachingDefs.array();
+
+          for (const defId of defIds) {
+            const existing = lastUseOffsetByDefId.get(defId);
+
+            if (existing === undefined || useOffset > existing) {
+              lastUseOffsetByDefId.set(defId, useOffset);
+            }
+          }
         }
       }
 
-      const defLine = offsetToLineIndex(starts, defOffset);
-      const lastLine = offsetToLineIndex(starts, lastOffset);
-      const lifeLines = Math.max(0, lastLine - defLine);
+      // Generate findings for long-lived definitions.
+      const longLived: Array<{
+        readonly variable: string;
+        readonly defOffset: number;
+        readonly lastUseOffset: number;
+        readonly lifetimeLines: number;
+      }> = [];
 
-      if (lifeLines > maxLifetimeLines) {
-        longLived.push({ name, defOffset, lifeLines });
+      for (const [defId, lastUseOffset] of lastUseOffsetByDefId) {
+        const defMeta = defs[defId];
+
+        if (!defMeta) {
+          continue;
+        }
+
+        const defLoc = getLineColumn(file.sourceText, defMeta.location);
+        const useLoc = getLineColumn(file.sourceText, lastUseOffset);
+        const lifetime = useLoc.line - defLoc.line;
+
+        if (lifetime > maxLifetimeLines) {
+          longLived.push({
+            variable: defMeta.name,
+            defOffset: defMeta.location,
+            lastUseOffset,
+            lifetimeLines: lifetime,
+          });
+        }
       }
-    }
 
-    const contextBurden = longLived.length;
+      const contextBurden = longLived.length;
 
-    for (const item of longLived) {
-      const evidenceEnd = Math.min(file.sourceText.length, item.defOffset + 200);
+      for (const item of longLived) {
+        const start = getLineColumn(file.sourceText, item.defOffset);
+        const end = getLineColumn(file.sourceText, item.lastUseOffset);
 
-      findings.push({
-        kind: 'variable-lifetime',
-        file: rel,
-        span: spanForOffsets(file.sourceText, item.defOffset, evidenceEnd),
-        variable: item.name,
-        lifetimeLines: item.lifeLines,
-        contextBurden,
-      });
+        findings.push({
+          kind: 'variable-lifetime',
+          file: rel,
+          span: { start, end },
+          variable: item.variable,
+          lifetimeLines: item.lifetimeLines,
+          contextBurden,
+        });
+      }
     }
   }
 
