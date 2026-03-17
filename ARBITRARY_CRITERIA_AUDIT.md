@@ -727,17 +727,28 @@
 - **질문**: 실제 호출 순서 분석(call graph 기반) 없이 "coupling"을 선언하는 것이 적절한가?
 - **결론**: ✅ **6단계 정밀도 개선 완료** — (1) 기존 버그 3건 수정 (export 패턴 확장, constructor 제외, O(n²)→O(n)), (2) gildash call graph로 caller 공존 검사 (의도적 설계 패턴 억제), (3→4) CFG dominator 분석으로 caller 내 writer→reader 실행 순서 정밀 검증 (OxcCFGBuilder + IntegerCFG 활용, exception edge 처리 포함), (5) guard 패턴 인식 (self-protecting reader 억제), (6) dead writer 제외 (unreachable write 필터링). 업계 도구(SonarQube, NDepend, Structure101) 중 temporal coupling을 정적으로 직접 탐지하는 도구 없음 — firebat 고유 기능.
 
-### E-06. variable-lifetime — regex + name-match 기반 수명 측정
+### E-06. variable-lifetime — ~~regex + name-match 기반 수명 측정~~ CFG + reaching-definition 전면 교체 완료
 
-- **파일**: `src/features/variable-lifetime/analyzer.ts` L81-108
-- **방식**: sourceText 전체에 regex `/\b(const|let|var)\s+([a-zA-Z_$][\w$]*)\b/g`로 선언 탐지 → 동명 Identifier 중 최대 offset → `lastLine - defLine`으로 수명 계산
-- **부정확성**:
-  - **스코프 무시**: `collectOxcNodes(file.program, n => n.type === 'Identifier' && getNodeName(n) === name && n.start >= defOffset)` — 함수 A의 `const x`와 함수 B의 `x` 참조가 이름만 같으면 같은 변수로 취급. 서로 다른 스코프의 동명 변수가 "긴 수명"으로 잘못 보고됨
-  - **제어 흐름 무시**: `if (cond) return;` 이후 50줄 뒤 사용 → lifetime 50으로 계산. 실제로는 early return 경로에서 변수가 1줄만 살아있음. CFG reaching-definition으로 경로별 실제 수명 계산 가능
-  - **regex 오매칭**: sourceText 전체에 적용하므로 주석 내 `const x = ...`이나 문자열 내 `let y = ...`도 선언으로 탐지 가능
-- **질문**: waste 디텍터가 이미 CFG + reaching-definition(gen/kill BitSet, forward dataflow)을 완전 구현해두었고, `defMetaById`, `reachingInByNode`, `useVarIndexesByNode`가 모두 존재한다. 이 인프라를 재사용하면 스코프 정확한 true lifetime 계산이 가능하지 않은가?
-- **개선 방향**: regex 선언 탐지 → AST VariableDeclarator 수집으로 교체, name-match → CFG reaching-definition으로 "어떤 def가 어떤 use에 도달하는가" 추적, 경로별 실제 수명 계산
-- **결론**: ✅ **CFG + reaching-definition 도입으로 전면 교체 필요** — 알고리즘 교체(정확도 수정) + 기능 확장 6건 식별: (1) 재할당 수명 분리 (def별 독립 수명), (2) const vs let 부담 차이 (가중치), (3) 파라미터 수명 (추적 범위 확장), (4) 지연 초기화 (선언~첫 할당 gap), (5) 패턴 인식 (accumulator 등 의도적 장수 변수 FP 감소). 별도 논의 대상 5건은 G 섹션 참조.
+- **파일**: `src/features/variable-lifetime/analyzer.ts`, `src/engine/dataflow/reaching-defs.ts`
+- **이전 방식**: sourceText 전체에 regex로 선언 탐지 → 동명 Identifier 중 최대 offset → `lastLine - defLine`으로 수명 계산. 스코프 무시, 제어 흐름 무시, regex 오매칭 3가지 부정확성 존재
+- **현재 방식**: `collectFunctionNodes`로 함수별 독립 분석. `analyzeFunctionBody`(reaching-defs.ts에서 추출)로 CFG + reaching-definition 기반 per-def 수명 계산. `defsOfVar` 필드 추가로 변수별 def 집합 추적
+- **해결된 부정확성**:
+  - ✅ **스코프 무시** → 함수별 독립 `collectLocalVarIndexes` + `analyzeFunctionBody`로 완전 격리
+  - ✅ **제어 흐름 무시** → reaching-definition으로 도달 가능한 use만 수명에 포함. dead code 후 use 제외
+  - ✅ **regex 오매칭** → regex 완전 제거. AST 기반 선언/사용 탐지
+- **달성된 기능 확장**:
+  - ✅ 재할당 수명 분리 (각 defId 독립 수명 — 조건부 재할당 시 동일 변수에 복수 finding)
+  - ✅ 파라미터 수명 추적 (parameter bindings → entry 노드 def 등록)
+  - ✅ 구조분해 바인딩 독립 수명 (`const { a, b } = obj` → a, b 각각)
+  - ✅ contextBurden 함수 단위 정밀화
+- **잔여 설계 제약** (reaching-defs 인프라 공유 한계, waste-detector-oxc와 동일):
+  - **E-06a. payloadOffset 근사**: `span.end`가 CFG 노드 payload의 `.start`를 사용하므로 실제 식별자 위치가 아닌 statement/expression 시작 위치. line 계산은 단일 라인 문장에서 정확, multi-line 문장에서 ±1-2줄 과소 평가 가능. 수정 시 per-variable use offset 추적 필요 → `FunctionBodyAnalysis` 타입 변경 수반
+  - **E-06b. name-based 변수 추적**: `collectLocalVarIndexes`가 변수 이름으로 인덱싱하므로, 같은 함수 내 서로 다른 블록 스코프의 동명 변수(`{ const x = 1; } { const x = 2; }`)가 동일 varIndex 공유. 블록 스코프 섀도잉 시 수명 과대 평가 가능. 수정 시 scope-aware variable tracking 필요
+- **미착수 후속 확장** (이번 범위 밖):
+  - `declarationKind` 필드 — const/let/var/parameter 구분을 finding에 추가
+  - 지연 초기화 감지 — 선언~첫 할당 gap 측정 (`let x; ... x = compute();`)
+  - 패턴 인식 — accumulator, loop counter 등 의도적 장수 변수 FP 감소
+- **결론**: ✅ **완료** — 3대 부정확성 해소, 4건 기능 확장 달성. 잔여 설계 제약 2건(E-06a, E-06b)은 reaching-defs 인프라 수준 변경 필요. 미착수 후속 확장 3건은 정확도가 아닌 기능 추가.
 
 ---
 
@@ -823,10 +834,10 @@
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
-| E. 근사 측정 | **7건** (+2 신규) | ✅ 4건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
+| E. 근사 측정 | **7건** (+2 신규) | ✅ 5건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
 | G. 신규 디텍터/메트릭 후보 | **4건** | 미착수 | liveness pressure, usage gap, 조건부 사용/스코프 축소, 변이 밀도 |
-| **합계** | **70건** (+6 신규) | ✅ **56건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| **합계** | **70건** (+6 신규) | ✅ **57건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
@@ -839,7 +850,7 @@ CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데
 ### G-01. 동시 활성 변수 압력 (liveness pressure)
 
 - **관심사**: 함수 내 특정 지점에서 동시에 살아있는 변수 수
-- **현재 상태**: variable-lifetime의 `contextBurden`이 파일 내 장수 변수 개수로 근사
+- **현재 상태**: variable-lifetime의 `contextBurden`이 함수 내 장수 변수 개수로 근사 (E-06 완료 후 함수 단위로 정밀화됨)
 - **정확한 측정**: CFG 노드별 `reachingInByNode` BitSet 크기 = 해당 지점의 활성 변수 수
 - **귀속**: 함수 복잡도 메트릭 — nesting 디텍터 또는 별도 디텍터
 
