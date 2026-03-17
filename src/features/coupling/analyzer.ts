@@ -1,7 +1,15 @@
 import type { FirebatCouplingConfig } from '../../shared/firebat-config';
 import type { CouplingHotspot, DependencyAnalysis } from '../../types';
 
-import { sortCouplingHotspots } from '../../engine/sort-utils';
+const sortCouplingHotspots = (items: ReadonlyArray<CouplingHotspot>): ReadonlyArray<CouplingHotspot> => {
+  return [...items].sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+
+    return left.module.localeCompare(right.module);
+  });
+};
 
 const createEmptyCoupling = (): ReadonlyArray<CouplingHotspot> => [];
 

@@ -12,7 +12,15 @@ import type {
   DependencyLayerViolation,
 } from '../../types';
 
-import { sortDependencyFanStats } from '../../engine/sort-utils';
+const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
+  return [...items].sort((left, right) => {
+    if (right.count !== left.count) {
+      return right.count - left.count;
+    }
+
+    return left.module.localeCompare(right.module);
+  });
+};
 
 /* ------------------------------------------------------------------ */
 /*  Utilities                                                          */
