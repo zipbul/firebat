@@ -64,18 +64,16 @@ const safeRemoveFile = async (filePath: string): Promise<'removed' | 'missing' |
     return result;
   }
 
-  if (hasPath) {
-    try {
-      const file = Bun.file(filePath);
+  try {
+    const file = Bun.file(filePath);
 
-      if (await file.exists()) {
-        await rm(filePath);
+    if (await file.exists()) {
+      await rm(filePath);
 
-        result = 'removed';
-      }
-    } catch (err) {
-      result = 'failed';
+      result = 'removed';
     }
+  } catch (err) {
+    result = 'failed';
   }
 
   return result;
