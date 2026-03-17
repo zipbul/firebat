@@ -54,6 +54,7 @@
 - [D. 아키텍처 가정 (Architecture Assumption)](#d-아키텍처-가정-architecture-assumption)
 - [E. 근사 측정 (Approximate Measurement)](#e-근사-측정-approximate-measurement)
 - [F. 임의 confidence 값 (Arbitrary Confidence)](#f-임의-confidence-값-arbitrary-confidence)
+- [G. 신규 디텍터/메트릭 후보 (Detector Candidates)](#g-신규-디텍터메트릭-후보-detector-candidates)
 - [참고: 객관적 사실 기반 기능 목록](#참고-객관적-사실-기반-기능-목록)
 - [요약 통계](#요약-통계)
 
@@ -736,6 +737,7 @@
   - **regex 오매칭**: sourceText 전체에 적용하므로 주석 내 `const x = ...`이나 문자열 내 `let y = ...`도 선언으로 탐지 가능
 - **질문**: waste 디텍터가 이미 CFG + reaching-definition(gen/kill BitSet, forward dataflow)을 완전 구현해두었고, `defMetaById`, `reachingInByNode`, `useVarIndexesByNode`가 모두 존재한다. 이 인프라를 재사용하면 스코프 정확한 true lifetime 계산이 가능하지 않은가?
 - **개선 방향**: regex 선언 탐지 → AST VariableDeclarator 수집으로 교체, name-match → CFG reaching-definition으로 "어떤 def가 어떤 use에 도달하는가" 추적, 경로별 실제 수명 계산
+- **결론**: ✅ **CFG + reaching-definition 도입으로 전면 교체 필요** — 알고리즘 교체(정확도 수정) + 기능 확장 6건 식별: (1) 재할당 수명 분리 (def별 독립 수명), (2) const vs let 부담 차이 (가중치), (3) 파라미터 수명 (추적 범위 확장), (4) 지연 초기화 (선언~첫 할당 gap), (5) 패턴 인식 (accumulator 등 의도적 장수 변수 FP 감소). 별도 논의 대상 5건은 G 섹션 참조.
 
 ---
 
@@ -823,7 +825,50 @@
 | D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
 | E. 근사 측정 | **7건** (+2 신규) | ✅ 4건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
-| **합계** | **66건** (+2 신규) | ✅ **55건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| G. 신규 디텍터/메트릭 후보 | **4건** | 미착수 | liveness pressure, usage gap, 조건부 사용/스코프 축소, 변이 밀도 |
+| **합계** | **70건** (+6 신규) | ✅ **56건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+
+---
+
+## G. 신규 디텍터/메트릭 후보 (Detector Candidates)
+
+CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데이터를 활용하지만 variable-lifetime 디텍터의 관심사가 아닌 것들.
+
+---
+
+### G-01. 동시 활성 변수 압력 (liveness pressure)
+
+- **관심사**: 함수 내 특정 지점에서 동시에 살아있는 변수 수
+- **현재 상태**: variable-lifetime의 `contextBurden`이 파일 내 장수 변수 개수로 근사
+- **정확한 측정**: CFG 노드별 `reachingInByNode` BitSet 크기 = 해당 지점의 활성 변수 수
+- **귀속**: 함수 복잡도 메트릭 — nesting 디텍터 또는 별도 디텍터
+
+---
+
+### G-02. 사용 간격 (usage gap)
+
+- **관심사**: 변수가 사용되는 구간들 사이에 긴 미사용 구간이 존재하면 함수 분해 시그널
+- **예시**: 변수 10~15줄 사용, 중간 65줄 비어있음, 80줄에서 재사용 → "함수를 쪼개라"
+- **필요 인프라**: def-use 체인으로 사용 클러스터 식별
+- **귀속**: 함수 분해 시그널 — 별도 디텍터 후보
+
+---
+
+### G-03. 조건부 전용 사용 / 스코프 축소 기회
+
+- **관심사**: 함수 상단에서 선언했지만 한쪽 분기 또는 특정 블록(루프/if/try) 안에서만 사용 → 선언을 좁은 스코프로 이동 가능
+- **예시**: `const x = compute(); if (cond) { use(x); } else { /* x 안 씀 */ }` → 분기 안으로 이동
+- **필요 인프라**: CFG 경로별 liveness 분석
+- **귀속**: 스코프 배치 최적화 — waste 디텍터 또는 별도 디텍터
+
+---
+
+### G-04. 변이 밀도 (mutation density)
+
+- **관심사**: 수명 구간 내 재할당 횟수. 같은 수명이라도 변이가 잦으면 인지 부담 증가
+- **예시**: 50줄 수명의 `let` — 재할당 1회 vs 5회는 추적 난이도가 다름
+- **필요 인프라**: def-use 체인에서 write 횟수 집계
+- **귀속**: 변이 복잡도 메트릭 — 별도 메트릭 후보
 
 ---
 
