@@ -1,8 +1,3 @@
-const initHasher = async (): Promise<void> => {
-  // No-op: Bun.hash is always available at runtime.
-  void 0;
-};
-
 const toU64Hex = (value: bigint): string => {
   const unsigned = BigInt.asUintN(64, value);
 
@@ -14,4 +9,4 @@ const hashString = (input: string): string => {
   return toU64Hex(Bun.hash.xxHash64(input));
 };
 
-export { initHasher, hashString };
+export { hashString };

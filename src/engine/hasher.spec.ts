@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { hashString, initHasher } from './hasher';
-
-describe('initHasher', () => {
-  it('should resolve without error', async () => {
-    // Arrange & Act & Assert
-    await expect(initHasher()).resolves.toBeUndefined();
-  });
-});
+import { hashString } from './hasher';
 
 describe('hashString', () => {
   it('should return a 16-character lowercase hex string', () => {

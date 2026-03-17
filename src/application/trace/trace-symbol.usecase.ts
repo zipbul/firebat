@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan } from '../../types';
 
-import { initHasher } from '../../engine/hasher';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { computeToolVersion } from '../../shared/tool-version';
@@ -109,8 +108,6 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const { logger } = input;
 
   logger.debug('trace-symbol: start', { entryFile: input.entryFile, symbol: input.symbol, maxDepth: input.maxDepth });
-
-  await initHasher();
 
   const ctx = await resolveRuntimeContextFromCwd();
   const toolVersion = computeToolVersion();

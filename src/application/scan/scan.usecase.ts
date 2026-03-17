@@ -18,7 +18,6 @@ import type {
 } from '../../types';
 
 import { computeAutoMinSize } from '../../engine/auto-min-size';
-import { initHasher } from '../../engine/hasher';
 import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
@@ -119,12 +118,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     fixMode: options.fix,
   });
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
-
-  const tHasher0 = nowMs();
-
-  await initHasher();
-
-  logger.trace('Hasher initialized', { durationMs: Math.round(nowMs() - tHasher0) });
 
   const tCtx0 = nowMs();
   const ctx = await resolveRuntimeContextFromCwd();
