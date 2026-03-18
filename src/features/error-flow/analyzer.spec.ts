@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { Gildash } from '@zipbul/gildash';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
@@ -13,6 +14,27 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
   expect(Array.isArray(findings)).toBe(true);
 
   return findings;
+};
+
+interface ResolvedType {
+  text: string;
+  flags: number;
+  isUnion: boolean;
+  isIntersection: boolean;
+  isGeneric: boolean;
+  members?: ResolvedType[];
+  typeArguments?: ResolvedType[];
+}
+
+const analyzeWithSemantic = async (
+  filePath: string,
+  sourceText: string,
+  mockCollectTypeAt: (filePath: string, position: number) => ResolvedType | null,
+) => {
+  const program = [parseSource(filePath, sourceText)];
+  const gildash = { _ctx: { semanticLayer: { collectTypeAt: mockCollectTypeAt } } } as unknown as Gildash;
+
+  return analyzeErrorFlow(program, { gildash });
 };
 
 type Findings = Awaited<ReturnType<typeof analyzeSingle>>;
@@ -1167,6 +1189,174 @@ describe('error-flow/analyzer', () => {
 
     // Assert
     expect(hits.length).toBe(0);
+  });
+
+  it('return-await-in-try - non-async function with return call in try - no finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/non-async-try.ts';
+    const source = [
+      'export function f() {',
+      '  try {',
+      '    return fetch("url");',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('return-await-in-try - semantic Promise CallExpression - flags finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-promise.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'Promise<Response>',
+      flags: 0,
+      isUnion: false,
+      isIntersection: false,
+      isGeneric: false,
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - semantic sync CallExpression - no finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-sync.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return parseInt(s);',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'number',
+      flags: 0,
+      isUnion: false,
+      isIntersection: false,
+      isGeneric: false,
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('return-await-in-try - semantic Promise Identifier - flags finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-ident-promise.ts';
+    const source = [
+      'export async function f() {',
+      '  const p = fetchData();',
+      '  try {',
+      '    return p;',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'Promise<void>',
+      flags: 0,
+      isUnion: false,
+      isIntersection: false,
+      isGeneric: false,
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - semantic sync Identifier - no finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-ident-sync.ts';
+    const source = [
+      'export async function f() {',
+      '  const val = "hello";',
+      '  try {',
+      '    return val;',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'string',
+      flags: 0,
+      isUnion: false,
+      isIntersection: false,
+      isGeneric: false,
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('return-await-in-try - gildash without semanticLayer - falls back to AST heuristic', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/no-semantic.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const program = [parseSource(filePath, source)];
+    const gildash = { _ctx: { semanticLayer: null } } as unknown as Gildash;
+    const analysis = await analyzeErrorFlow(program, { gildash });
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - collectTypeAt returns null - falls back to AST heuristic', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-null.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => null);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert — CallExpression이므로 AST 휴리스틱으로 플래그
+    expect(hits.length).toBe(1);
   });
 
   // --- P3-2 promise-constructor-hygiene ---

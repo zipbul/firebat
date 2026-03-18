@@ -1,46 +1,16 @@
 [
   {
-    "evidence": "return String(a + b + c + d + e + f + g + h + i + j + k);",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "return-await-in-try",
-    "span": {
-      "end": {
-        "column": 61,
-        "line": 17
-      },
-      "start": {
-        "column": 4,
-        "line": 17
-      }
-    }
-  },
-  {
-    "evidence": "return JSON.parse('{}');",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "return-await-in-try",
-    "span": {
-      "end": {
-        "column": 28,
-        "line": 25
-      },
-      "start": {
-        "column": 4,
-        "line": 25
-      }
-    }
-  },
-  {
     "evidence": "} catch (e) {",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "useless-catch",
     "span": {
       "end": {
         "column": 3,
-        "line": 28
+        "line": 29
       },
       "start": {
         "column": 4,
-        "line": 26
+        "line": 27
       }
     }
   },
@@ -51,25 +21,10 @@
     "span": {
       "end": {
         "column": 5,
-        "line": 37
+        "line": 38
       },
       "start": {
         "column": 4,
-        "line": 33
-      }
-    }
-  },
-  {
-    "evidence": "return JSON.parse('{}');",
-    "file": "/virtual/nested-try-catch.ts",
-    "kind": "return-await-in-try",
-    "span": {
-      "end": {
-        "column": 30,
-        "line": 34
-      },
-      "start": {
-        "column": 6,
         "line": 34
       }
     }
@@ -81,11 +36,11 @@
     "span": {
       "end": {
         "column": 31,
-        "line": 47
+        "line": 48
       },
       "start": {
         "column": 4,
-        "line": 47
+        "line": 48
       }
     }
   },
@@ -96,11 +51,11 @@
     "span": {
       "end": {
         "column": 4,
-        "line": 58
+        "line": 59
       },
       "start": {
         "column": 9,
-        "line": 56
+        "line": 57
       }
     }
   }

@@ -12,6 +12,41 @@ interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
 }
 
+// ResolvedType — gildash 0.8.1+ 배포 전까지 로컬 정의 (unknown-proof 동일 패턴)
+interface ResolvedType {
+  text: string;
+  flags: number;
+  isUnion: boolean;
+  isIntersection: boolean;
+  isGeneric: boolean;
+  members?: ResolvedType[];
+  typeArguments?: ResolvedType[];
+}
+
+interface SemanticLayerAccess {
+  readonly collectTypeAt: (filePath: string, position: number) => ResolvedType | null;
+}
+
+const getSemanticLayer = (gildash: Gildash): SemanticLayerAccess | null => {
+  const ctx = gildash._ctx;
+
+  if (!ctx.semanticLayer) {
+    return null;
+  }
+
+  return {
+    collectTypeAt: ctx.semanticLayer.collectTypeAt.bind(ctx.semanticLayer),
+  };
+};
+
+const isPromiseLike = (rt: ResolvedType): boolean => {
+  if ((rt.isUnion || rt.isIntersection) && rt.members) {
+    return rt.members.some(m => isPromiseLike(m));
+  }
+
+  return /^(Promise|PromiseLike)\b/.test(rt.text);
+};
+
 const getSpan = (node: Node, sourceText: string): SourceSpan => {
   const start = getLineColumn(sourceText, node.start);
   const end = getLineColumn(sourceText, node.end);
@@ -586,7 +621,7 @@ const extractConstructorName = (callee: NodeValue): string | null => {
   return null;
 };
 
-const collectFindings = (program: NodeValue, sourceText: string, filePath: string): CollectFindingsResult => {
+const collectFindings = (program: NodeValue, sourceText: string, filePath: string, semantic: SemanticLayerAccess | null): CollectFindingsResult => {
   const findings: ErrorFlowFinding[] = [];
   const constructorNames: Map<ErrorFlowFinding, string> = new Map();
   const tryCatchStack: TryCatchEntry[] = [];
@@ -1066,18 +1101,34 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
       const arg = node.argument;
 
-      if (inTryBlockWithCatchDepth > 0) {
-        // Only flag non-awaited expressions that likely return a Promise
-        if (isOxcNode(arg) && arg.type !== 'AwaitExpression' && (arg.type === 'CallExpression' || arg.type === 'NewExpression')) {
-          pushFinding(findings, {
-            kind: 'return-await-in-try',
-            node,
-            filePath,
-            sourceText,
-            message: 'return without await in try block — catch cannot intercept rejections',
-            evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: [],
-          });
+      if (inTryBlockWithCatchDepth > 0 && inAsyncFunction) {
+        if (isOxcNode(arg) && arg.type !== 'AwaitExpression') {
+          let shouldFlag = false;
+
+          if (semantic) {
+            const resolvedType = semantic.collectTypeAt(filePath, arg.start);
+
+            if (resolvedType) {
+              shouldFlag = isPromiseLike(resolvedType);
+            } else {
+              // 타입 조회 실패 → AST 휴리스틱 fallback
+              shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+            }
+          } else {
+            shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+          }
+
+          if (shouldFlag) {
+            pushFinding(findings, {
+              kind: 'return-await-in-try',
+              node,
+              filePath,
+              sourceText,
+              message: 'return without await in try block — catch cannot intercept rejections',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
+          }
         }
       }
 
@@ -1662,13 +1713,14 @@ const analyzeErrorFlow = async (
 
   const findings: ErrorFlowFinding[] = [];
   const allConstructorNames: Map<ErrorFlowFinding, string> = new Map();
+  const semantic = input?.gildash ? getSemanticLayer(input.gildash) : null;
 
   for (const file of files) {
     if (file.errors.length > 0) {
       continue;
     }
 
-    const result = collectFindings(file.program, file.sourceText, file.filePath);
+    const result = collectFindings(file.program, file.sourceText, file.filePath, semantic);
 
     findings.push(...result.findings);
 
