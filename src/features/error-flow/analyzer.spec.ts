@@ -1350,6 +1350,169 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(1);
   });
 
+  it('return-await-in-try - semantic union with Promise member - flags finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-union-promise.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'Promise<Response> | null',
+      flags: 0,
+      isUnion: true,
+      isIntersection: false,
+      isGeneric: false,
+      members: [
+        { text: 'Promise<Response>', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
+        { text: 'null', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
+      ],
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - semantic union all sync members - no finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-union-sync.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return getValue();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'string | number',
+      flags: 0,
+      isUnion: true,
+      isIntersection: false,
+      isGeneric: false,
+      members: [
+        { text: 'string', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
+        { text: 'number', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
+      ],
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('return-await-in-try - semantic intersection with Promise member - flags finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-intersection-promise.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'Promise<Response> & Loggable',
+      flags: 0,
+      isUnion: false,
+      isIntersection: true,
+      isGeneric: false,
+      members: [
+        { text: 'Promise<Response>', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
+        { text: 'Loggable', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
+      ],
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - semantic union without members - falls back to text regex', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-union-no-members.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'Promise<Response> | null',
+      flags: 0,
+      isUnion: true,
+      isIntersection: false,
+      isGeneric: false,
+      members: undefined,
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert — members 없으므로 text regex로 판별, "Promise<..."로 시작하므로 플래그
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - semantic PromiseLike type - flags finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-promiselike.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return getThenable();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => ({
+      text: 'PromiseLike<string>',
+      flags: 0,
+      isUnion: false,
+      isIntersection: false,
+      isGeneric: false,
+    }));
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - fallback NewExpression in async function - flags finding', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/fallback-new-expr.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return new MyPromise(resolve => resolve(1));',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
   // --- P3-2 promise-constructor-hygiene ---
 
   it('should report promise-constructor-hygiene for async executor', async () => {
