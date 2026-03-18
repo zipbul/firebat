@@ -752,15 +752,20 @@
 
 ---
 
-### E-07. error-flow — return-await-in-try의 AST 스택 기반 try depth 추적
+### E-07. error-flow — ~~return-await-in-try의 AST 스택 기반 try depth 추적~~ gildash semantic 타입 기반 개선 완료
 
-- **파일**: `src/features/error-flow/analyzer.ts` L1101-1122
-- **방식**: `inTryBlockWithCatchDepth > 0`이면 `return <CallExpression>`을 플래그. try/catch depth를 수동 스택(`functionTryCatchDepth`, `inTryBlockDepth`, `inTryBlockWithCatchDepth`)으로 추적
-- **부정확성**:
-  - **Promise 반환 여부 불명**: `return fetchData()`가 Promise를 반환하는지 AST만으로는 알 수 없음. 타입 정보가 필요하며 이는 CFG가 아닌 gildash semantic 영역
-  - **exception 경로 근사**: "이 return의 rejection이 catch에 도달하는가"를 try depth 카운터로 근사. CFG exception edge를 사용하면 실제 도달 가능성을 정확히 판단 가능
-- **질문**: CFG exception edge로 개선 가능하나, 핵심 불확실성이 "CallExpression이 Promise를 반환하는가"이므로 CFG보다 타입 정보(gildash `getResolvedType` 또는 `getSemanticReferences`)가 더 중요하지 않은가?
-- **개선 방향**: (1) gildash `getResolvedType`으로 반환 타입이 Promise/Thenable인지 확인 → 비-Promise return은 플래그 안 함 (FP 대폭 감소). (2) CFG exception edge로 rejection→catch 도달 가능성 정밀 판정 (부차적 개선)
+- **파일**: `src/features/error-flow/analyzer.ts` L1101-1134
+- **이전 방식**: `inTryBlockWithCatchDepth > 0`이면 `return <CallExpression|NewExpression>`을 플래그. async 여부 미확인, 타입 정보 미사용
+- **현재 방식**: `inAsyncFunction` 가드 추가 + gildash `collectTypeAt`으로 반환 표현식의 타입 조회 → `isPromiseLike` 판별. semantic 없으면 기존 AST 휴리스틱 fallback
+- **해결된 부정확성**:
+  - ✅ **FP — 비-async 함수 오탐**: `inAsyncFunction` 가드 추가. non-async 함수에서 `return fetch()`를 더 이상 플래그하지 않음
+  - ✅ **FP — 동기 함수 호출 오탐**: semantic 경로에서 `collectTypeAt` → `isPromiseLike`로 `return parseInt(s)` 같은 동기 반환 제외
+  - ✅ **FN — 변수 Promise 미탐지**: semantic 경로에서 `return p` (Identifier)도 타입 조회로 Promise 판별. CallExpression/NewExpression 이외 모든 arg 타입 커버
+- **잔여 설계 제약**:
+  - **`_ctx.semanticLayer` private API 사용**: `collectTypeAt(filePath, position)`은 gildash private API. public API `getResolvedType(symbolName, filePath)`은 symbol name 기반이라 AST position 기반 조회에 부적합. `GILDASH_PLAN.md` P2-1 참조
+  - **exception 경로 근사**: try depth 카운터 방식 유지. CFG exception edge 교체는 별도 이슈
+- **테스트**: 102 pass / 0 fail. 14개 코드 경로 전수 커버 (union/intersection 재귀, PromiseLike 매칭, collectTypeAt null fallback, NewExpression fallback 포함)
+- **결론**: ✅ **완료** — FP/FN 핵심 원인(타입 정보 부재) 해결. 잔여 제약 2건은 gildash API 개선(GILDASH_PLAN.md) 및 CFG exception edge(별도 이슈)로 분리
 
 ---
 
