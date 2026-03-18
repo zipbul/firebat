@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Gildash } from '@zipbul/gildash';
 
+import type { ResolvedType } from '../../engine/semantic-types';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
 
@@ -15,16 +16,6 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
 
   return findings;
 };
-
-interface ResolvedType {
-  text: string;
-  flags: number;
-  isUnion: boolean;
-  isIntersection: boolean;
-  isGeneric: boolean;
-  members?: ResolvedType[];
-  typeArguments?: ResolvedType[];
-}
 
 const analyzeWithSemantic = async (
   filePath: string,

@@ -2,32 +2,11 @@ import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import type { ResolvedType, SemanticReference } from '../../engine/semantic-types';
 import type { ParsedFile } from '../../engine/types';
 import type { UnknownProofFinding } from '../../types';
 
 import type { BindingCandidate } from './candidates';
-
-// TODO: gildash 0.8.1+ 배포 후 `import type { ResolvedType, SemanticReference } from '@zipbul/gildash'`로 전환
-// 현재 0.8.0 dist에 미반영 — 로컬 정의로 임시 대체
-
-interface ResolvedType {
-  text: string;
-  flags: number;
-  isUnion: boolean;
-  isIntersection: boolean;
-  isGeneric: boolean;
-  members?: ResolvedType[];
-  typeArguments?: ResolvedType[];
-}
-
-interface SemanticReference {
-  filePath: string;
-  position: number;
-  line: number;
-  column: number;
-  isDefinition: boolean;
-  isWrite: boolean;
-}
 
 // TypeScript TypeFlags bit values
 const TYPE_FLAG_ANY = 1;

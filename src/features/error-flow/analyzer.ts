@@ -2,6 +2,7 @@ import type { Gildash, HeritageNode } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { ResolvedType } from '../../engine/semantic-types';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
@@ -10,17 +11,6 @@ import { getLineColumn } from '../../engine/source-position';
 
 interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
-}
-
-// ResolvedType — gildash 0.8.1+ 배포 전까지 로컬 정의 (unknown-proof 동일 패턴)
-interface ResolvedType {
-  text: string;
-  flags: number;
-  isUnion: boolean;
-  isIntersection: boolean;
-  isGeneric: boolean;
-  members?: ResolvedType[];
-  typeArguments?: ResolvedType[];
 }
 
 interface SemanticLayerAccess {
