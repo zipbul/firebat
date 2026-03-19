@@ -739,14 +739,19 @@ const analyzeIndirection = async (
     });
 
     // interface-rewrap: empty interface with at least one extends (not declare, not module augmentation, not declaration merging)
-    const interfaceNameCount = new Map<string, number>();
+    // Count same-name declarations for merging detection: interface+interface AND class+interface merging
+    const declarationNameCount = new Map<string, number>();
 
     walkOxcTree(file.program, node => {
-      if (isNodeRecord(node) && node.type === 'TSInterfaceDeclaration') {
+      if (!isNodeRecord(node)) {
+        return true;
+      }
+
+      if (node.type === 'TSInterfaceDeclaration' || node.type === 'ClassDeclaration') {
         const id = node.id;
 
         if (isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string') {
-          interfaceNameCount.set(id.name as string, (interfaceNameCount.get(id.name as string) ?? 0) + 1);
+          declarationNameCount.set(id.name as string, (declarationNameCount.get(id.name as string) ?? 0) + 1);
         }
       }
 
@@ -790,8 +795,8 @@ const analyzeIndirection = async (
 
         const name = id.name as string;
 
-        // Skip same-file declaration merging
-        if ((interfaceNameCount.get(name) ?? 0) >= 2) {
+        // Skip same-file declaration merging (interface+interface or class+interface)
+        if ((declarationNameCount.get(name) ?? 0) >= 2) {
           return true;
         }
 

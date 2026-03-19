@@ -461,9 +461,25 @@ describe('analyzer', () => {
       expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
     });
 
-    it('analyzeIndirection - same-file declaration merging - skips', async () => {
+    it('analyzeIndirection - same-file interface declaration merging - skips', async () => {
       // Arrange
       const source = 'interface Foo extends Bar {}\ninterface Foo { x: number }';
+      const program = createProgram('/virtual/rewrap.ts', source);
+      // Act
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
+
+      // Assert
+      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
+    });
+
+    it('analyzeIndirection - class-interface declaration merging - skips', async () => {
+      // Arrange
+      const source = 'interface Table extends SQLWrapper {}\nclass Table implements SQLWrapper { static kind = "Table"; }';
       const program = createProgram('/virtual/rewrap.ts', source);
       // Act
       const analysis = await analyzeIndirection(
