@@ -1,0 +1,590 @@
+# forwarding + barrel-policy 확장 계획
+
+> **작성일**: 2026-03-19
+>
+> **상태**:
+> - **Part 1 (forwarding)**: 설계 확정, 구현 대기
+> - **Part 2 (barrel-policy)**: 방향 결정됨, 별도 심층 논의 필요
+>
+> **구현 후 검증 필요 (Part 2)**:
+> - scope-aware 로컬 사용 판별: 알고리즘 sound, oxc-parser AST scope 경계 엣지케이스 구현 시 확인
+> - "부모→자식" 기준 precision: 실제 프로젝트 실증 필요 (firebat 자체 + 오픈소스 3개 + 바이브코딩 샘플, FP < 5% 목표)
+>
+> **Part 2 미논의 사항**:
+> - barrel-policy 기존 코드(`analyzer.ts`, `resolver.ts`)와의 통합 방식
+> - `ImportResolver` 재활용 구체 방안
+> - `collectImportLikes()`에 cross-module 체크를 추가하는 방식 vs 별도 pass
+>
+> **관련**: `ARBITRARY_CRITERIA_AUDIT.md` A-17, `src/features/forwarding/analyzer.ts`, `src/features/barrel-policy/analyzer.ts`
+
+---
+
+## 배경
+
+바이브코딩(AI 코드 생성)에서 불필요한 중간 계층이 빈번하게 발생한다:
+- 함수 thin-wrapper (기존 forwarding이 탐지)
+- type/interface remap (미탐지)
+- 모듈 밖 re-export (미탐지)
+
+업계 도구(SonarQube, ESLint, Biome, Knip, oxlint)는 "불필요한 re-export 중간 계층"을 직접 탐지하지 않는다:
+- **Knip**: 소비 여부만 봄 — 소비되면 통과
+- **Biome/oxlint**: `export *` 금지 또는 barrel 파일 자체 금지
+- **eslint-plugin-import**: unused export만 탐지
+- **barrel-begone**: 모듈 로딩 비용 정량화
+- **@typescript-eslint**: `no-type-alias` deprecated, 순수 remap만 잡는 규칙 없음
+- **@typescript-eslint/oxlint**: `no-empty-interface` 존재하지만 forwarding 맥락과 다름
+
+firebat의 차별점: 기존 도구가 안 잡는, AI가 만드는 불필요한 indirection을 탐지.
+
+---
+
+## 기능 경계 설계
+
+두 가지 레벨의 indirection을 **별도 디텍터**에서 탐지한다.
+
+| 레벨 | 디텍터 | 관심사 |
+|------|--------|--------|
+| **코드 레벨** | forwarding | 함수/타입/인터페이스의 무가치 래핑 |
+| **모듈 레벨** | barrel-policy | 모듈 경계를 넘는 re-export 구조 위반 |
+
+근거: cross-module-reexport는 barrel-policy와 AST 파싱, 경로 resolve, ignore globs, 모듈 경계 판단이 전부 겹친다. barrel-policy에 합치면 기존 tsconfig resolver를 재활용하여 alias(`@/models/user`) 문제도 즉시 해결된다.
+
+---
+
+## Part 1: forwarding 확장
+
+### 1-1. type-remap (추가)
+
+**탐지 조건** (모두 만족):
+
+```
+node.type === 'TSTypeAliasDeclaration'
+AND node.declare === false
+AND node.typeAnnotation.type === 'TSTypeReference'
+AND node.typeAnnotation.typeArguments === null
+AND node.typeParameters === null
+```
+
+oxc-parser 실제 파싱으로 검증 완료 (2026-03-19). `declare type A = B`는 `declare: true`로 파싱됨.
+
+**분류**: Fact
+
+**탐지/제외 검증표**:
+
+| 패턴 | typeAnnotation | typeArgs | typeParams | 판정 |
+|------|---------------|----------|------------|------|
+| `type A = B` | TSTypeReference | null | null | ✅ 탐지 (remap) |
+| `type Node = ts.Node` | TSTypeReference (TSQualifiedName) | null | null | ✅ 탐지 (namespace 단축 remap) |
+| `type UserId = string` | TSStringKeyword | — | — | ❌ 자동 제외 (TSTypeReference 아님) |
+| `type StringArray = Array<string>` | TSTypeReference | `<string>` | null | ❌ 제외 (generic 고정 = 가치) |
+| `type ReadonlyUser = Readonly<User>` | TSTypeReference | `<User>` | null | ❌ 제외 (utility type 적용) |
+| `type MyArray<T> = Array<T>` | TSTypeReference | `<T>` | `<T>` | ❌ 제외 (generic 전달) |
+| `type A = B \| null` | TSUnionType | — | — | ❌ 자동 제외 |
+| `type A = B & { x: 1 }` | TSIntersectionType | — | — | ❌ 자동 제외 |
+| `type Config = typeof x` | TSTypeQuery | — | — | ❌ 자동 제외 |
+| `type Keys = keyof User` | TSTypeOperator | — | — | ❌ 자동 제외 |
+| `type Name = User['name']` | TSIndexedAccessType | — | — | ❌ 자동 제외 |
+| `` type E = `on${string}` `` | TSTemplateLiteralType | — | — | ❌ 자동 제외 |
+| `type T = { x: number }` | TSTypeLiteral | — | — | ❌ 자동 제외 |
+
+**primitive 제외 로직 불필요**: oxc-parser에서 `string`, `number`, `boolean` 등은 `TSStringKeyword`, `TSNumberKeyword` 등 별도 노드. `TSTypeReference` 체크만으로 자동 필터링.
+
+**카탈로그 코드**: `FWD_TYPE_REMAP`
+
+---
+
+### 1-2. interface-rewrap (추가)
+
+**탐지 조건** (모두 만족):
+
+```
+node.type === 'TSInterfaceDeclaration'
+AND node.extends.length >= 1
+AND node.body.body.length === 0
+AND node.declare === false
+AND parent가 TSModuleDeclaration이 아님 (module augmentation 제외)
+AND 동명 interface가 다른 파일에 없음 (declaration merging 제외)
+```
+
+oxc-parser 실제 파싱으로 검증 완료 (2026-03-19):
+- `declare module 'express' { interface Request extends Base {} }` → 내부 interface의 `declare`가 **`false`**로 파싱됨
+- `declare === false` 체크만으로는 module augmentation 제외 불가 → parent `TSModuleDeclaration` 체크 필수
+
+**분류**: Fact
+
+**탐지/제외 검증표**:
+
+| 패턴 | extends 수 | body | declare | 판정 |
+|------|-----------|------|---------|------|
+| `interface A extends B {}` | 1 | 비어있음 | false | ✅ 탐지 |
+| `interface A extends B, C {}` | 2 | 비어있음 | false | ✅ 탐지 (빈 껍데기) |
+| `interface A extends BaseRepo<User> {}` | 1 | 비어있음 | false | ✅ 탐지 |
+| `interface A extends B { x: number }` | 1 | 멤버 있음 | false | ❌ 제외 |
+| `interface A {}` (marker) | 0 | 비어있음 | false | ❌ 제외 (extends 없음) |
+| `declare interface A extends B {}` | 1 | 비어있음 | true | ❌ 제외 (ambient) |
+| `interface Express extends Base {}` (다른 파일에 동명 존재) | 1 | 비어있음 | false | ❌ 제외 (merge 대상) |
+
+**declaration merging 판별**: gildash `searchSymbols({ kind: 'interface', text: name, exact: true })` 조회. 현재 파일 외 다른 파일에서 동명 interface가 발견되면 skip. 파일당 1회 batch 조회 후 Set 구축하여 비용 최소화.
+
+**다중 extends 포함 근거**: `interface A extends B, C {}`의 body가 비면 `type A = B & C`와 동일. extends가 1개든 5개든 body가 비면 새로운 가치를 추가하지 않는 빈 껍데기.
+
+**잔여 FP**: 미래 확장 의도로 빈 interface를 미리 만들어두는 경우. 정적 분석으로 판별 불가. 업계 도구(@typescript-eslint, oxlint)도 동일 한계.
+
+**카탈로그 코드**: `FWD_INTERFACE_REWRAP`
+
+---
+
+### 1-3. A-17 해결: depth < 2 configurable 전환
+
+현재 `analyzer.ts` L761의 `if (entry.depth < 2) { continue; }` 하드코딩을
+`.firebatrc.jsonc`의 `forwarding.crossFileMinDepth`로 설정 가능하게 전환.
+
+기본값 2 유지. `FirebatForwardingConfig` 인터페이스 + Zod schema 추가.
+
+**카탈로그 코드**: 기존 `FWD_CROSS_FILE_CHAIN` 유지.
+
+---
+
+### 1-4. forwarding 전체 finding kind 목록
+
+| kind | 분류 | 상태 |
+|------|------|------|
+| `thin-wrapper` | code smell | 기존 유지 |
+| `forward-chain` | code smell | 기존 유지 |
+| `cross-file-forwarding-chain` | code smell | 기존 유지 + configurable |
+| `type-remap` | Fact | **추가** |
+| `interface-rewrap` | Fact | **추가** |
+
+---
+
+## Part 2: barrel-policy 확장
+
+### 2-1. cross-module-reexport (추가)
+
+**탐지 기준**: re-export의 source 경로가 모듈 밖(`../`)을 가리키면 탐지.
+
+> **부모가 자식을 re-export → 허용. 동일 depth 또는 상위를 re-export → Fact.**
+
+**구현 방법**: barrel-policy의 기존 `collectImportLikes()` + `ImportResolver`를 활용.
+
+**두 가지 구문을 모두 탐지한다:**
+
+#### 구문 A: `export from` (직접 re-export)
+
+```ts
+export { User } from '../models/user';
+export type { OrderId } from '../order/types';
+```
+
+1. `ExportNamedDeclaration`에 `source`가 있으면 re-export
+2. `ImportResolver.resolve(source)`로 절대경로 획득
+3. resolved 경로가 현재 파일의 디렉토리 하위(`./`)가 아니면 cross-module
+
+#### 구문 B: `import + export` (간접 re-export)
+
+```ts
+import type { User } from '../models/user';
+export type { User };  // source 없음 — export from 으로 안 잡힘
+```
+
+바이브코딩에서 가장 흔한 패턴. AI가 import 먼저 쓰고 나중에 export를 붙인다.
+
+1. `ExportNamedDeclaration`에 `source`가 **없으면** 로컬 export
+2. export된 이름이 import된 심볼인지 확인 (import 목록과 매칭)
+3. 해당 import가 모듈 밖(`../`)인지 확인 (구문 A와 동일 기준)
+4. **X가 파일 내에서 export 외에 로컬 사용이 없는지 확인** — 로컬 사용이 있으면 정당한 import+export
+
+4번이 핵심. 로컬에서도 쓰고 export도 하면 정당:
+
+```ts
+import type { User } from '../models/user';
+const defaultUser: User = { name: 'test' };  // 로컬 사용 있음
+export type { User };  // → 허용 (로컬 사용 + export)
+```
+
+로컬 사용 없이 export만 하면 `export from`과 동일한 무가치 indirection:
+
+```ts
+import type { User } from '../models/user';
+export type { User };  // → 탐지 (로컬 사용 없음, 순수 pass-through)
+```
+
+**로컬 사용 판별 알고리즘 — scope-aware** (oxc-parser 실제 파싱으로 검증 완료):
+
+full type checker가 아닌 **name binding만 추적하는 간소화된 scope resolver**.
+
+```
+1. 파일의 모든 import 바인딩을 수집 → importedNames: Map<name, source>
+
+2. scope-aware AST walk:
+   - scopeStack: Array<Set<name>> 관리
+   - module level → scopeStack = [∅]
+   - function/block 진입 → push(해당 scope의 local declarations)
+     · VariableDeclarator.id, FunctionDeclaration.id, ClassDeclaration.id,
+       TSTypeAliasDeclaration.id, TSInterfaceDeclaration.id, Parameter 등
+   - function/block 퇴장 → pop
+   - ExportNamedDeclaration.specifiers → SKIP (export specifier 자체가 Identifier)
+   - ExportDefaultDeclaration.declaration이 Identifier → SKIP
+   - 그 외 Identifier('X') 만났을 때:
+     · scopeStack을 top→bottom으로 탐색
+     · 현재~최근접 scope에 X 선언이 있으면 → shadow, skip (import X와 무관)
+     · scope stack에 X 선언이 없으면 → module-level import X 사용으로 카운트
+   → importUsedLocally: Set<name>
+
+3. 각 export specifier name에 대해:
+   - importedNames에 있고 (import된 심볼)
+   - importedNames.get(name)의 source가 모듈 밖이고 (../ 또는 resolver로 판별)
+   - importUsedLocally에 없으면 (export 외 로컬 사용 없음)
+   → 탐지
+```
+
+**scope analysis가 필요한 근거**:
+
+```ts
+import { X } from '../other';
+function foo() { const X = 1; use(X); }  // shadow — import X와 무관
+export { X };
+```
+
+- scope-aware 없이: `use(X)`가 import X 사용으로 오판 → FN (탐지 누락)
+- scope-aware 있으면: `const X = 1`이 function scope에서 shadow → `use(X)`는 로컬 X → import X는 미사용 → 정확히 탐지
+
+**검증된 엣지케이스**:
+
+| 케이스 | 처리 | 근거 |
+|--------|------|------|
+| `export { X }` specifier의 Identifier | **SKIP** | oxc-parser가 specifier.local에 Identifier를 넣음. 수집하면 모든 export가 "사용됨"으로 오판 |
+| `function foo() { const X = 1; use(X); }` (shadow) | **scope로 정확 판별** | function scope에 X 선언 → `use(X)`는 로컬 X, import X 미사용 |
+| `const x: User = ...` (타입 annotation) | 로컬 사용으로 카운트 | Identifier가 AST에 존재. 타입으로든 값으로든 사용하면 정당한 import |
+| `{ const X = 1; } use(X);` (블록 밖 사용) | import X 사용으로 카운트 | 블록 scope pop 후 X 선언 없음 → module import |
+
+#### 구문 C: `import + export default` (default 간접 re-export)
+
+```ts
+import Foo from '../other';
+export default Foo;  // ExportDefaultDeclaration — ExportNamedDeclaration과 다른 노드 타입
+```
+
+`export default X`는 `ExportDefaultDeclaration`이므로 구문 A, B와 별도 처리 필요.
+
+1. `ExportDefaultDeclaration`의 `declaration`이 `Identifier`인지 확인
+2. 해당 Identifier가 import된 심볼인지 확인 (import 목록과 매칭)
+3. 해당 import가 모듈 밖(`../`)인지 확인 (동일 기준)
+4. **파일 내에서 export 외 로컬 사용이 없는지 확인** (구문 B와 동일)
+
+`export default <expression>`이 Identifier가 아니면 변환이 있으므로 탐지 대상 아님:
+
+```ts
+import Foo from '../other';
+export default new Foo();      // → 허용 (생성자 호출 = 변환)
+export default Foo.create();   // → 허용 (메서드 호출 = 변환)
+export default { ...Foo };     // → 허용 (spread = 변환)
+```
+
+**barrel-policy resolver 재활용의 이점**:
+- tsconfig paths alias (`@/models/user`) → resolver가 절대경로로 변환 → 정확 판별
+- bare specifier (`'express'`) → resolver가 null 반환 → 자동 제외 (npm 패키지 facade 정당)
+- workspace 패키지 → resolver가 workspace 경로로 변환 → 정확 판별
+
+**분류**: Fact
+
+**적용 대상**:
+
+| 구문 | 적용 | 근거 |
+|------|------|------|
+| `export { X } from '../...'` | ✅ | 구문 A: 값 re-export |
+| `export type { X } from '../...'` | ✅ | 구문 A: 타입 re-export |
+| `export * from '../...'` | ✅ | 구문 A: 기존 `export-star` 규칙과 별개 (경로 기준) |
+| `export * as Ns from '../...'` | ✅ | 구문 A: 동일 |
+| `export { X as Y } from '../...'` | ✅ | 구문 A: rename이어도 밖에서 끌어오는 것 자체가 문제 |
+| `import { X } from '../...'; export { X }` | ✅ | 구문 B: X 로컬 미사용 시 탐지 |
+| `import type { X } from '../...'; export type { X }` | ✅ | 구문 B: 동일 |
+| `export { X } from './child'` | ❌ 허용 | 부모→자식 = barrel |
+| `import { X } from './child'; export { X }` | ❌ 허용 | 부모→자식 (구문 B도 동일 기준) |
+| `export { X } from 'lodash'` | ❌ 허용 | npm 패키지 facade |
+| `import { X } from 'lodash'; export { X }` | ❌ 허용 | npm 패키지 facade |
+| `export { X } from '@/models/user'` | resolver로 판별 | alias가 `../`이면 탐지, `./`이면 허용 |
+| `import { X } from '../...'; export { X }` (X 로컬 사용 있음) | ❌ 허용 | 로컬에서도 쓰는 정당한 import+export |
+| `import X from '../...'; export default X` | ✅ | 구문 C: X 로컬 미사용 시 탐지 |
+| `import X from '../...'; export default X` (X 로컬 사용 있음) | ❌ 허용 | 로컬에서도 쓰는 정당한 import+export default |
+| `import X from '../...'; export default new X()` | ❌ 허용 | 변환 있음 (Identifier가 아님) |
+| `import X from './child'; export default X` | ❌ 허용 | 부모→자식 |
+
+**13개 시나리오 검증** (resolver 적용 후):
+
+| # | 시나리오 | resolved 경로 방향 | 판정 | noise |
+|---|---------|-------------------|------|-------|
+| 1 | 단순 barrel (`./service`) | 자식 | 허용 | 없음 |
+| 2 | AI 타입 허브 (`../models/user`) | 상위 | 탐지 | 없음 |
+| 3 | rename (`../../internal/...`) | 상위 | 탐지 | 없음 |
+| 4 | 다중 소비자 통합 (`./connection`) | 자식 | 허용 | 없음 |
+| 5 | cross-module (`../order/types`) | 상위 | 탐지 | 없음 |
+| 6 | package entry (`./scanner`) | 자식 | 허용 | 없음 |
+| 7 | 자체 선언 + re-export (`./local`) | 자식 | 허용 | 없음 |
+| 8 | 깊은 chain | 방향에 따라 | 혼합 | — |
+| 9 | 자체 코드 + re-export (`./service`) | 자식 | 허용 | 없음 |
+| 10 | monorepo (`@app/core`) | resolver로 판별 | 탐지 | 없음 |
+| 11 | test barrel (`../fixtures/user`) | 상위 | glob 제외 | 없음 |
+| 12 | default→named (`./Button`) | 자식 | 허용 | 없음 |
+| 13 | namespace (`./user`) | 자식 | 허용 | 없음 |
+
+**영구 noise: 0개.**
+
+**기존 barrel-policy 규칙과의 관계**:
+
+| 기존 규칙 | 관심사 | 겹침 |
+|-----------|--------|------|
+| `export-star` | `export *` 구문 자체 금지 | 별개 — 구문 vs 경로 |
+| `deep-import` | barrel 우회 import | 별개 — import vs export |
+| `missing-index` | barrel 파일 부재 | 없음 |
+| `invalid-index-statement` | barrel에 비-re-export 코드 | 없음 |
+| `barrel-side-effect-import` | barrel 내 side-effect | 없음 |
+
+**카탈로그 코드**: `BARREL_CROSS_MODULE_REEXPORT`
+
+---
+
+### 2-2. barrel-policy 전체 finding kind 목록
+
+| kind | 상태 |
+|------|------|
+| `export-star` | 기존 유지 |
+| `deep-import` | 기존 유지 |
+| `index-deep-import` | 기존 유지 |
+| `missing-index` | 기존 유지 |
+| `invalid-index-statement` | 기존 유지 |
+| `barrel-side-effect-import` | 기존 유지 |
+| `cross-module-reexport` | **추가** |
+
+---
+
+## 설계 결정 사항
+
+### 의도적 제외
+
+| 항목 | 제외 사유 |
+|------|-----------|
+| **class empty extends** (`class A extends B {}`) | 런타임 의미 있음 (instanceof, DI 등록, 데코레이터 타겟). interface와 달리 빈 body에도 가치 존재 |
+| **`.d.ts` 파일 전체** | declaration 파일은 API surface 정의 목적, 자동 생성 가능. remap이 아닌 타입 선언 계약 |
+| **`declare type` / `declare interface`** | ambient declaration은 외부 타입 보강 목적. AST에서 `declare === true` 체크로 제외 |
+| **`./sibling` re-export (비-index 파일)** | `./` 경로는 허용. 비-index 파일의 `./` re-export는 빈도 낮고 FN 허용 가능. index 제한을 추가하면 barrel-policy `invalid-index-statement`과 역할 겹침 |
+| **순환 remap** (`type A = B` + `type B = A`) | 각각 type-remap으로 잡히면 충분. 순환 자체는 TypeScript 컴파일러가 에러로 잡음 |
+
+### 두 디텍터 동시 hit 정책
+
+`import type { B } from '../other'; export type A = B;` — forwarding이 type-remap으로 탐지.
+`export type { B } from '../other';` — barrel-policy가 cross-module-reexport로 탐지.
+
+같은 심볼이 양쪽에 잡히면 **둘 다 보고**. 관심사가 다르다 (코드 레벨 remap vs 모듈 레벨 구조 위반). 에이전트가 둘 중 하나로 해결하면 나머지도 자연 소멸.
+
+### path comparison 알고리즘
+
+```
+currentDir = path.dirname(currentFilePath)  // 정규화된 절대경로
+isChild = resolvedPath.startsWith(currentDir + '/')
+
+isChild → 허용 (부모→자식)
+!isChild → 탐지 (cross-module)
+resolver 반환 null → 제외 (bare specifier, npm 패키지)
+```
+
+Windows path: `normalizePath()` (backslash → forward slash)로 정규화 후 비교. barrel-policy resolver에 동일 처리가 되는지 확인 필요, 누락 시 추가.
+
+### gildash batch 쿼리 전략 (interface declaration merging 체크)
+
+1. 파일 진입 시 파일 내 모든 빈 interface 이름 수집
+2. 이름별 `searchSymbols({ kind: 'interface', text: name, exact: true })` 1회 호출
+3. 결과를 `Set<string>` (merging 대상 이름)에 캐싱
+4. 개별 interface 검사 시 Set lookup — O(1)
+
+### diagnostic-aggregator 메시지
+
+```ts
+FWD_TYPE_REMAP: {
+  cause: "A type alias is a direct synonym for another named type, adding no type-level transformation.",
+  think: [
+    "Check whether the alias was introduced for a future extension that never happened.",
+    "Replace all usages of the alias with the original type and remove the alias.",
+  ],
+},
+
+FWD_INTERFACE_REWRAP: {
+  cause: "An interface extends another type but declares no additional members, making it a pure synonym.",
+  think: [
+    "Check whether declaration merging is intended — another file may add members to this interface.",
+    "If no merging exists, replace all usages with the base type and remove the interface.",
+  ],
+},
+
+BARREL_CROSS_MODULE_REEXPORT: {
+  cause: "A file re-exports a symbol from outside its own module boundary, creating an unnecessary indirection layer.",
+  think: [
+    "Identify all consumers of this re-export and redirect them to import from the original source.",
+    "Verify that removing the re-export does not break the module public API contract.",
+  ],
+},
+```
+
+---
+
+## 테스트 전략
+
+### Unit (`*.spec.ts`, 소스와 같은 디렉토리)
+
+**type-remap** (`forwarding/analyzer.spec.ts`):
+- 15개 패턴 검증표 전수 (탐지 2, 제외 11, 자동 제외 2)
+- `.d.ts` 파일 제외
+- `declare type` 제외
+
+**interface-rewrap** (`forwarding/analyzer.spec.ts`):
+- 12개 패턴 검증표 전수 (탐지 3, 제외 4, 자동 제외 5)
+- declaration merging 제외 (gildash mock)
+- `declare interface` 제외
+- 다중 extends + 빈 body 탐지
+
+**cross-module-reexport** (`barrel-policy/analyzer.spec.ts`):
+
+구문 A (`export from`):
+- 13개 시나리오 (허용 7, 탐지 4, glob 제외 1, 혼합 1)
+- tsconfig alias resolve (`@/models/user` → 절대경로 → 판별)
+- bare specifier 제외 (`'express'` → null → 제외)
+- `export type { X } from '../...'` 탐지
+- `export * from '../...'` 탐지
+- `export { X as Y } from '../...'` rename 탐지
+
+구문 B (`import + export`):
+- `import { X } from '../...'; export { X }` — X 로컬 미사용 → 탐지
+- `import { X } from '../...'; export { X }` — X 로컬 사용 있음 → 허용
+- `import type { X } from '../...'; export type { X }` — 로컬 미사용 → 탐지
+- `import { X } from './child'; export { X }` — 자식 경로 → 허용
+- `import { X } from 'lodash'; export { X }` — bare specifier → 허용
+- `import { X, Y } from '../...'; export { X }` — X 미사용 + Y 사용 → X만 탐지
+
+scope-aware 엣지케이스:
+- `import { X } from '../...'; function foo() { const X = 1; use(X); } export { X }` — shadow → import X 미사용 → 탐지
+- `import { X } from '../...'; { const X = 1; } use(X); export { X }` — 블록 밖 use → import X 사용 → 허용
+
+구문 C (`import + export default`):
+- `import X from '../...'; export default X` — X 로컬 미사용 → 탐지
+- `import X from '../...'; export default X` — X 로컬 사용 있음 → 허용
+- `import X from '../...'; export default new X()` — 변환 있음 → 허용
+- `import X from './child'; export default X` — 자식 경로 → 허용
+
+**A-17 configurable** (`forwarding/analyzer.spec.ts`):
+- depth 1, 2, 3 각각 config 변경 후 검증
+
+### Integration (`test/`)
+
+- 실제 프로젝트 구조에서 두 디텍터 동시 scan → 중복 보고 없음 검증
+- type-remap + cross-module-reexport 동일 심볼 → 각각 별도 finding 검증
+- `.firebatrc.jsonc` config 적용 → `crossFileMinDepth` 변경 반영 검증
+
+### 실증 검증 (구현 후)
+
+"부모→자식" 기준은 firebat 고유 기준이며 학술적으로 정립된 기준이 아니다. 구현 후 실제 프로젝트에서 precision/recall을 측정해야 한다.
+
+| 대상 | 목적 |
+|------|------|
+| firebat 자체 코드베이스 | self-hosting 검증 — 자기 자신에 대해 FP/FN 확인 |
+| 오픈소스 TypeScript 프로젝트 3개 이상 | 다양한 아키텍처에서 precision 측정 |
+| 바이브코딩 생성 코드 샘플 | 핵심 타겟에서 recall 측정 |
+
+precision 목표: FP < 5%. 미달 시 기준 재조정 또는 configurable 전환.
+
+---
+
+## 폐기 확정 항목
+
+| 항목 | 폐기 사유 |
+|------|-----------|
+| `const x = y` remap 탐지 | temp var 구분 불가. waste/variable-lifetime이 이미 커버 |
+| `enum` remap 탐지 | 실질적으로 미발생, 패턴 복잡 |
+| re-export 전체 Signal | 85% 영구 noise. 3원칙 #2 위반 |
+| re-export를 forwarding에 구현 | barrel-policy와 인프라 중복 (resolver, globs). barrel-policy 확장이 적절 |
+
+---
+
+## 논의 과정에서 확인된 사항
+
+### re-export Signal 폐기 → Fact 승격 과정
+
+1. re-export를 Signal로 보고하면 에이전트가 "정당하다"고 판단한 항목이 매 scan마다 재등장
+2. 13개 시나리오 중 11개(85%)가 영구 noise → 3원칙 #2 위반
+3. "부모→자식" 기준 도입으로 정당한 barrel이 자동 허용됨 → noise 0%
+4. Fact로 승격 가능
+
+### 업계 도구 조사 결과
+
+| 도구 | re-export 접근 | "불필요한 re-export" 판별 |
+|------|---------------|------------------------|
+| SonarQube | 없음 | 없음 |
+| ESLint (import plugin) | unused export만 | 소비 여부만 |
+| eslint-plugin-barrel-files | barrel 자체 금지 | 구분 없이 전면 금지 |
+| Knip | 프로젝트 그래프 | 소비 여부만 |
+| oxlint | `export *` 모듈 수 threshold | 양적 기준만 |
+| Biome | barrel 파일 금지 / `export *` 금지 | 구분 없음 |
+| barrel-begone | 로딩 비용 정량화 | 구분 없음 |
+
+"부모→자식" 경로 방향으로 불필요한 re-export를 판별하는 접근은 **firebat 고유**.
+
+### type remap 업계 비교
+
+| 도구 | 규칙 | 순수 remap 탐지 |
+|------|------|-----------------|
+| @typescript-eslint | `no-type-alias` (deprecated) | 전면 금지 방식, 실용적이지 않음 |
+| SonarQube | 없음 | 없음 |
+| Biome | 없음 | 없음 |
+| oxlint | 없음 | 없음 |
+
+`typeArguments === null` 조건으로 generic 고정/적용을 제외하는 정밀 탐지는 **firebat 고유**.
+
+### interface rewrap 업계 비교
+
+| 도구 | 규칙 | 동작 |
+|------|------|------|
+| @typescript-eslint | `no-empty-interface` → `no-empty-object-type` | 단일 extends 탐지, `allowSingleExtends` 옵션 |
+| oxlint | `typescript/no-empty-interface` | 동일 |
+| Biome | `noEmptyInterface` | extends 있으면 제외 |
+
+firebat는 단일/다중 extends 모두 탐지 + declaration merging 제외 (gildash 활용)로 차별화.
+
+### `type A = B`와 `const x = y`의 차이
+
+- `type A = B` — 런타임 효과 없음, 100% 구조적 판단 가능
+- `const x = y` — temp var일 수 있음, waste/variable-lifetime이 이미 커버
+- 따라서 type remap만 forwarding에서 탐지, 변수는 기존 디텍터에 위임
+
+---
+
+## 학술적 근거 수준
+
+각 탐지 항목의 근거를 정확히 명시한다. 학술 논문이 없는 것을 있다고 주장하지 않는다.
+
+### type-remap
+
+- **직접 논문**: 없음
+- **이론적 근거**: 타입 이론에서 structural identity — `type A = B`는 A와 B가 수학적으로 동일한 타입. GHC Core에서 type synonym은 변환 시 완전 제거(expansion)됨
+- **업계 도구**: `@typescript-eslint/no-type-alias` (deprecated, 전면 금지 방식)
+- **firebat 차별점**: `typeArguments === null` 조건으로 generic 적용을 제외하는 정밀 탐지. 업계에 동등한 규칙 없음
+
+### interface-rewrap
+
+- **직접 논문**: 없음
+- **간접 논문**: "Unnecessary Hierarchy" 설계 냄새 (Suryanarayana et al., 2014 — 교재), "Refused Bequest" 코드 냄새 (Fowler)
+- **업계 도구**: Microsoft CA1040 "Avoid empty interfaces", `@typescript-eslint/no-empty-interface` → `no-empty-object-type`
+- **firebat 차별점**: 다중 extends 포함 + declaration merging 제외 (gildash 활용). 업계 도구에 없는 안전장치
+
+### cross-module-reexport
+
+- **직접 논문**: 없음
+- **간접 논문**:
+  - Paltoglou et al. (2021) "Automated Refactoring of Legacy JavaScript Code to ES6 Modules" — named import로 전환 시 모듈 결합도 감소 실증 (arXiv:2107.10164)
+  - Liu et al. (2024) "Detecting and removing bloated dependencies in CommonJS packages" — 50.6% 의존성이 불필요함을 실증 (arXiv:2405.17939)
+  - Malavolta et al. (2023) "JavaScript Dead Code Identification, Elimination, and Empirical Assessment" — 정적+동적 분석 결합 F-score 87.9% (IEEE TSE)
+- **"부모→자식" 기준**: 학술적으로 정립된 기준이 아닌 firebat 고유 기준. layered architecture 원칙에서 유도. 13개 시나리오 시뮬레이션으로 noise 0% 검증
+
+### 로컬 사용 판별 알고리즘
+
+- **직접 이론**: Live Variable Analysis (Dragon Book, Aho et al.), Scope Graph (Konat et al. 2012 Springer, Zwaan & van Antwerpen 2023 OASIcs)
+- **알고리즘 soundness**: conservative approximation — shadow 변수를 "사용됨"으로 간주하여 FN 방향 보수적. FP 없음
+- **export specifier SKIP**: oxc-parser 실제 파싱으로 필요성 검증 완료 (2026-03-19)
