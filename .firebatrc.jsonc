@@ -9,7 +9,7 @@
       "maxLines": 800
     },
     "error-flow": true,
-    "barrel-policy": true,
+    "barrel": true,
     "format": true,
     "unknown-proof": true,
     "duplicates": { "minSize": "auto" },

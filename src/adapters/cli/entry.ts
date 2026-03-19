@@ -18,7 +18,7 @@ interface CliLoggerInput {
   readonly logStack: FirebatCliOptions['logStack'];
 }
 
-interface BarrelPolicyFeatureValue {
+interface BarrelFeatureValue {
   readonly ignoreGlobs?: unknown;
 }
 
@@ -94,7 +94,7 @@ const printHelp = (): void => {
     `  ${hc('DETECTORS', `${H.bold}${H.yellow}`, c)}`,
     '',
     `    waste, nesting, early-return,`,
-    `    indirection, barrel-policy, unknown-proof,`,
+    `    indirection, barrel, unknown-proof,`,
     `    error-flow, lint, format, typecheck, dependencies, coupling,`,
     `    temporal-coupling,`,
     `    variable-lifetime,`,
@@ -103,7 +103,7 @@ const printHelp = (): void => {
     '',
     `  ${hc('CONFIG-ONLY OPTIONS', `${H.bold}${H.yellow}`, c)}  ${hc('(set in .firebatrc.jsonc)', H.dim, c)}`,
     '',
-    `    ${hc('features["barrel-policy"].ignoreGlobs', H.gray, c)}    Ignore glob patterns`,
+    `    ${hc('features["barrel"].ignoreGlobs', H.gray, c)}    Ignore glob patterns`,
     '',
     `  ${hc('EXAMPLES', `${H.bold}${H.yellow}`, c)}`,
     '',
@@ -121,7 +121,7 @@ const printHelp = (): void => {
 const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
   const all: ReadonlyArray<FirebatDetector> = [
     'waste',
-    'barrel-policy',
+    'barrel',
     'unknown-proof',
     'error-flow',
     'format',
@@ -173,16 +173,16 @@ const appendCliErrorLog = async (err: unknown): Promise<void> => {
   }
 };
 
-const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
+const resolveBarrelIgnoreGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const { 'barrel-policy': value } = features ?? {};
+  const { barrel: value } = features ?? {};
 
   if (!value || value === true || typeof value !== 'object') {
     return undefined;
   }
 
-  const ignoreGlobs = (value as BarrelPolicyFeatureValue).ignoreGlobs;
+  const ignoreGlobs = (value as BarrelFeatureValue).ignoreGlobs;
 
   return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
     ? ignoreGlobs
@@ -310,7 +310,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
   const cfgCrossFileMinDepth = resolveCrossFileMinDepthFromFeatures(featuresCfg);
-  const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
+  const cfgBarrelIgnoreGlobs = resolveBarrelIgnoreGlobsFromFeatures(featuresCfg);
   const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(featuresCfg);
   const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(featuresCfg);
   const cfgCouplingConfig = resolveCouplingConfigFromFeatures(featuresCfg);
@@ -328,7 +328,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
     ...(options.explicit?.crossFileMinDepth ? {} : cfgCrossFileMinDepth !== undefined ? { crossFileMinDepth: cfgCrossFileMinDepth } : {}),
     ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
-    ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
+    ...(cfgBarrelIgnoreGlobs !== undefined ? { barrelIgnoreGlobs: cfgBarrelIgnoreGlobs } : {}),
     ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
     ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
     ...(cfgCouplingConfig !== undefined ? { couplingConfig: cfgCouplingConfig } : {}),
@@ -424,7 +424,7 @@ export { runCli };
 
 export const __testing__ = {
   resolveEnabledDetectorsFromFeatures,
-  resolveBarrelPolicyIgnoreGlobsFromFeatures,
+  resolveBarrelIgnoreGlobsFromFeatures,
   resolveDependenciesLayersFromFeatures,
   resolveDependenciesAllowedDependenciesFromFeatures,
   resolveMinSizeFromFeatures,

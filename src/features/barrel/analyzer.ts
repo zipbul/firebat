@@ -1,13 +1,16 @@
+import type { Node } from 'oxc-parser';
+
 import * as path from 'node:path';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { BarrelPolicyFinding, SourceSpan } from '../../types';
+import type { BarrelFinding, SourceSpan } from '../../types';
 
+import { collectLocallyUsedImportNames } from '../../engine/ast/collect-locally-used-import-names';
 import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
 
-interface BarrelPolicyOptions {
+interface BarrelOptions {
   readonly rootAbs: string;
   readonly ignoreGlobs?: ReadonlyArray<string>;
 }
@@ -193,9 +196,9 @@ const isExplicitIndexSpecifier = (specifier: string): boolean => {
   return normalized.endsWith('/index') || normalized.endsWith('/index.ts') || normalized === 'index' || normalized === 'index.ts';
 };
 
-const createEmptyBarrelPolicy = (): ReadonlyArray<BarrelPolicyFinding> => [];
+const createEmptyBarrel = (): ReadonlyArray<BarrelFinding> => [];
 
-const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): void => {
+const checkExportStar = (file: ParsedFile, findings: BarrelFinding[]): void => {
   walkOxcTree(file.program, node => {
     if (!isOxcNode(node)) {
       return false;
@@ -217,7 +220,7 @@ const checkExportStar = (file: ParsedFile, findings: BarrelPolicyFinding[]): voi
   });
 };
 
-const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[]): void => {
+const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void => {
   if (!isIndexFile(file.filePath)) {
     return;
   }
@@ -295,7 +298,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelPolicyFinding[])
 const checkMissingIndex = (
   activeFiles: ReadonlyArray<ParsedFile>,
   fileSet: ReadonlySet<string>,
-  findings: BarrelPolicyFinding[],
+  findings: BarrelFinding[],
 ): void => {
   const dirs = new Set<string>();
 
@@ -353,12 +356,277 @@ const toAllowedBarrelSpecifier = (
   return rel;
 };
 
+// ─── cross-module-reexport detection ─────────────────────────────────────────
+
+interface ImportedBinding {
+  readonly source: string; // specifier string (e.g. '../other')
+  readonly localName: string;
+}
+
+const collectImportBindings = (file: ParsedFile): Map<string, ImportedBinding> => {
+  // Map: local name → { source, localName }
+  const result = new Map<string, ImportedBinding>();
+  const body = asNodeLike(file.program)?.body;
+
+  if (!Array.isArray(body)) {
+    return result;
+  }
+
+  for (const stmt of body) {
+    if (!isNodeRecord(stmt as Node)) {
+      continue;
+    }
+
+    const stmtNode = stmt as Node & Record<string, unknown>;
+
+    if (stmtNode.type !== 'ImportDeclaration') {
+      continue;
+    }
+
+    const source = getLiteralString(stmtNode.source as NodeValue);
+
+    if (typeof source !== 'string') {
+      continue;
+    }
+
+    const specifiers = stmtNode.specifiers;
+
+    if (!Array.isArray(specifiers)) {
+      continue;
+    }
+
+    for (const spec of specifiers) {
+      if (!isNodeRecord(spec as Node)) {
+        continue;
+      }
+
+      const specNode = spec as Node & Record<string, unknown>;
+      // ImportSpecifier: { local: Identifier }
+      // ImportDefaultSpecifier: { local: Identifier }
+      // ImportNamespaceSpecifier: { local: Identifier }
+      const localNode = specNode.local;
+
+      if (!isNodeRecord(localNode as Node) || (localNode as Node & Record<string, unknown>).type !== 'Identifier') {
+        continue;
+      }
+
+      const localName = (localNode as Node & Record<string, unknown>).name;
+
+      if (typeof localName === 'string') {
+        result.set(localName, { source, localName });
+      }
+    }
+  }
+
+  return result;
+};
+
+const isChildPath = (currentFileAbs: string, resolvedTargetAbs: string): boolean => {
+  const currentDir = normalizePath(path.dirname(currentFileAbs));
+  const target = normalizePath(resolvedTargetAbs);
+
+  return target.startsWith(currentDir + '/');
+};
+
+const checkCrossModuleReexport = async (
+  activeFiles: ReadonlyArray<ParsedFile>,
+  resolver: ImportResolver,
+  fileSet: ReadonlySet<string>,
+  findings: BarrelFinding[],
+): Promise<void> => {
+  for (const file of activeFiles) {
+    const fileAbs = normalizePath(file.filePath);
+
+    // .d.ts 파일 방어
+    if (fileAbs.endsWith('.d.ts')) {
+      continue;
+    }
+
+    const body = asNodeLike(file.program)?.body;
+
+    if (!Array.isArray(body)) {
+      continue;
+    }
+
+    // 구문 A: ExportNamedDeclaration with source, ExportAllDeclaration
+    for (const stmt of body) {
+      if (!isNodeRecord(stmt as Node)) {
+        continue;
+      }
+
+      const stmtNode = stmt as Node & Record<string, unknown>;
+
+      if (stmtNode.type === 'ExportNamedDeclaration' || stmtNode.type === 'ExportAllDeclaration') {
+        const source = getLiteralString(stmtNode.source as NodeValue);
+
+        if (typeof source !== 'string') {
+          continue;
+        }
+
+        // resolver null → bare specifier → 허용
+        const resolved = await resolver.resolve(fileAbs, source);
+
+        if (!resolved) {
+          continue;
+        }
+
+        // fileSet에 없으면 외부 → 허용
+        if (!fileSet.has(normalizePath(resolved))) {
+          continue;
+        }
+
+        // child path → 허용
+        if (isChildPath(fileAbs, resolved)) {
+          continue;
+        }
+
+        // cross-module → 탐지
+        findings.push({
+          kind: 'cross-module-reexport',
+          file: file.filePath,
+          span: toNodeSpan(file, stmt),
+          evidence: source,
+        });
+      }
+    }
+
+    // 구문 B, C: import 바인딩 수집 후 export 분석
+    const importBindings = collectImportBindings(file);
+
+    if (importBindings.size === 0) {
+      continue;
+    }
+
+    // scope-aware 로컬 사용 판별
+    const importedNames = new Set(importBindings.keys());
+    const locallyUsed = collectLocallyUsedImportNames(file.program, importedNames);
+
+    for (const stmt of body) {
+      if (!isNodeRecord(stmt as Node)) {
+        continue;
+      }
+
+      const stmtNode = stmt as Node & Record<string, unknown>;
+
+      // 구문 B: ExportNamedDeclaration without source
+      if (stmtNode.type === 'ExportNamedDeclaration' && (stmtNode.source === null || stmtNode.source === undefined)) {
+        const specifiers = stmtNode.specifiers;
+
+        if (!Array.isArray(specifiers)) {
+          continue;
+        }
+
+        for (const spec of specifiers) {
+          if (!isNodeRecord(spec as Node)) {
+            continue;
+          }
+
+          const specNode = spec as Node & Record<string, unknown>;
+          const localNode = specNode.local;
+
+          if (!isNodeRecord(localNode as Node) || (localNode as Node & Record<string, unknown>).type !== 'Identifier') {
+            continue;
+          }
+
+          const localName = (localNode as Node & Record<string, unknown>).name;
+
+          if (typeof localName !== 'string') {
+            continue;
+          }
+
+          const binding = importBindings.get(localName);
+
+          if (!binding) {
+            continue;
+          }
+
+          // 이 import가 모듈 밖인지 확인
+          const resolved = await resolver.resolve(fileAbs, binding.source);
+
+          if (!resolved) {
+            continue;
+          }
+
+          if (!fileSet.has(normalizePath(resolved))) {
+            continue;
+          }
+
+          if (isChildPath(fileAbs, resolved)) {
+            continue;
+          }
+
+          // 로컬 사용 있으면 허용
+          if (locallyUsed.has(localName)) {
+            continue;
+          }
+
+          // cross-module reexport → 탐지
+          findings.push({
+            kind: 'cross-module-reexport',
+            file: file.filePath,
+            span: toNodeSpan(file, stmt),
+            evidence: binding.source,
+          });
+        }
+
+        continue;
+      }
+
+      // 구문 C: ExportDefaultDeclaration — declaration이 Identifier
+      if (stmtNode.type === 'ExportDefaultDeclaration') {
+        const declaration = stmtNode.declaration;
+
+        if (!isNodeRecord(declaration as Node) || (declaration as Node & Record<string, unknown>).type !== 'Identifier') {
+          continue;
+        }
+
+        const identName = (declaration as Node & Record<string, unknown>).name;
+
+        if (typeof identName !== 'string') {
+          continue;
+        }
+
+        const binding = importBindings.get(identName);
+
+        if (!binding) {
+          continue;
+        }
+
+        const resolved = await resolver.resolve(fileAbs, binding.source);
+
+        if (!resolved) {
+          continue;
+        }
+
+        if (!fileSet.has(normalizePath(resolved))) {
+          continue;
+        }
+
+        if (isChildPath(fileAbs, resolved)) {
+          continue;
+        }
+
+        if (locallyUsed.has(identName)) {
+          continue;
+        }
+
+        findings.push({
+          kind: 'cross-module-reexport',
+          file: file.filePath,
+          span: toNodeSpan(file, stmt),
+          evidence: binding.source,
+        });
+      }
+    }
+  }
+};
+
 const checkDeepImports = async (
   activeFiles: ReadonlyArray<ParsedFile>,
   resolver: ImportResolver,
   workspacePackages: ReadonlyMap<string, string>,
   fileSet: ReadonlySet<string>,
-  findings: BarrelPolicyFinding[],
+  findings: BarrelFinding[],
 ): Promise<void> => {
   for (const file of activeFiles) {
     const importerAbs = normalizePath(file.filePath);
@@ -414,12 +682,12 @@ const checkDeepImports = async (
   }
 };
 
-const analyzeBarrelPolicy = async (
+const analyzeBarrel = async (
   program: ReadonlyArray<ParsedFile>,
-  options: BarrelPolicyOptions,
-): Promise<ReadonlyArray<BarrelPolicyFinding>> => {
+  options: BarrelOptions,
+): Promise<ReadonlyArray<BarrelFinding>> => {
   if (!Array.isArray(program) || program.length === 0) {
-    return createEmptyBarrelPolicy();
+    return createEmptyBarrel();
   }
 
   const ignoreMatchers = compileIgnoreMatchers([...DEFAULT_IGNORE_GLOBS, ...(options.ignoreGlobs ?? [])]);
@@ -436,7 +704,7 @@ const analyzeBarrelPolicy = async (
     fileSet,
     workspacePackages,
   });
-  const findings: BarrelPolicyFinding[] = [];
+  const findings: BarrelFinding[] = [];
 
   for (const file of activeFiles) {
     checkExportStar(file, findings);
@@ -446,9 +714,10 @@ const analyzeBarrelPolicy = async (
   checkMissingIndex(activeFiles, fileSet, findings);
 
   await checkDeepImports(activeFiles, resolver, workspacePackages, fileSet, findings);
+  await checkCrossModuleReexport(activeFiles, resolver, fileSet, findings);
 
   return findings;
 };
 
-export { analyzeBarrelPolicy, createEmptyBarrelPolicy };
-export type { BarrelPolicyOptions };
+export { analyzeBarrel, createEmptyBarrel };
+export type { BarrelOptions };

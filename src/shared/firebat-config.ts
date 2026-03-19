@@ -45,7 +45,7 @@ interface FirebatCouplingConfig {
   readonly rigidInstability?: number | undefined;
 }
 
-interface FirebatBarrelPolicyConfig {
+interface FirebatBarrelConfig {
   readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
 }
 
@@ -62,7 +62,7 @@ interface FirebatDependenciesConfig {
 interface FirebatFeaturesConfig {
   readonly duplicates?: FeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: boolean | undefined;
-  readonly 'barrel-policy'?: FeatureToggle<FirebatBarrelPolicyConfig> | undefined;
+  readonly barrel?: FeatureToggle<FirebatBarrelConfig> | undefined;
   readonly 'unknown-proof'?: boolean | undefined;
   readonly 'error-flow'?: boolean | undefined;
   readonly format?: boolean | undefined;
@@ -84,7 +84,7 @@ interface FirebatFeaturesConfig {
 interface FirebatMcpFeaturesConfig {
   readonly duplicates?: InheritableFeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: boolean | 'inherit' | undefined;
-  readonly 'barrel-policy'?: InheritableFeatureToggle<FirebatBarrelPolicyConfig> | undefined;
+  readonly barrel?: InheritableFeatureToggle<FirebatBarrelConfig> | undefined;
   readonly 'unknown-proof'?: boolean | 'inherit' | undefined;
   readonly 'error-flow'?: boolean | 'inherit' | undefined;
   readonly format?: boolean | 'inherit' | undefined;
@@ -132,7 +132,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           ])
           .optional(),
         waste: z.boolean().optional(),
-        'barrel-policy': z
+        barrel: z
           .union([
             z.literal(false),
             z.literal(true),
@@ -264,7 +264,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   ])
                   .optional(),
                 waste: z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
-                'barrel-policy': z
+                barrel: z
                   .union([
                     z.literal(false),
                     z.literal('inherit'),
@@ -392,7 +392,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
   .strict();
 
 export type {
-  FirebatBarrelPolicyConfig,
+  FirebatBarrelConfig,
   FirebatConfig,
   FirebatCouplingConfig,
   FirebatDuplicatesConfig,

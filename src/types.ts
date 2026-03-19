@@ -8,7 +8,7 @@ export type MinSizeOption = number | 'auto';
 
 export type FirebatDetector =
   | 'waste'
-  | 'barrel-policy'
+  | 'barrel'
   | 'unknown-proof'
   | 'error-flow'
   | 'format'
@@ -33,19 +33,21 @@ export const DETECTOR_ALIASES: Readonly<Record<string, FirebatDetector>> = {
   'structural-duplicates': 'duplicates',
   'modification-trap': 'duplicates',
   'exception-hygiene': 'error-flow',
+  'barrel-policy': 'barrel',
 };
 
 export type FirebatCatalogCode =
   // waste (2)
   | 'WASTE_DEAD_STORE'
   | 'WASTE_DEAD_STORE_OVERWRITE'
-  // barrel-policy (6)
+  // barrel (7)
   | 'BARREL_EXPORT_STAR'
   | 'BARREL_DEEP_IMPORT'
   | 'BARREL_INDEX_DEEP_IMPORT'
   | 'BARREL_MISSING_INDEX'
   | 'BARREL_INVALID_INDEX_STMT'
   | 'BARREL_SIDE_EFFECT_IMPORT'
+  | 'BARREL_CROSS_MODULE_REEXPORT'
   // nesting (6)
   | 'NESTING_DEEP'
   | 'NESTING_HIGH_CC'
@@ -400,16 +402,17 @@ export interface CollapsibleIfItem {
   readonly score: number;
 }
 
-export type BarrelPolicyFindingKind =
+export type BarrelFindingKind =
   | 'export-star'
   | 'deep-import'
   | 'index-deep-import'
   | 'missing-index'
   | 'invalid-index-statement'
-  | 'barrel-side-effect-import';
+  | 'barrel-side-effect-import'
+  | 'cross-module-reexport';
 
-export interface BarrelPolicyFinding {
-  readonly kind: BarrelPolicyFindingKind;
+export interface BarrelFinding {
+  readonly kind: BarrelFindingKind;
   readonly file: string;
   readonly span: SourceSpan;
   readonly code?: FirebatCatalogCode;
@@ -575,7 +578,7 @@ export interface GiantFileFinding {
 
 export interface FirebatAnalyses {
   readonly waste: ReadonlyArray<WasteFinding>;
-  readonly 'barrel-policy': ReadonlyArray<BarrelPolicyFinding>;
+  readonly barrel: ReadonlyArray<BarrelFinding>;
   readonly 'unknown-proof': ReadonlyArray<UnknownProofFinding>;
   readonly 'error-flow': ReadonlyArray<ErrorFlowFinding>;
   readonly format: ReadonlyArray<FormatFinding>;

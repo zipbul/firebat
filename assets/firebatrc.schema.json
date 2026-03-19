@@ -13,8 +13,8 @@
         "duplicates": {
           "$ref": "#/$defs/duplicatesToggle"
         },
-        "barrel-policy": {
-          "$ref": "#/$defs/barrelPolicyToggle"
+        "barrel": {
+          "$ref": "#/$defs/barrelToggle"
         },
         "unknown-proof": {
           "$ref": "#/$defs/unknownProofToggle"
@@ -50,7 +50,7 @@
               "additionalProperties": false,
               "properties": {
                 "duplicates": { "$ref": "#/$defs/duplicatesInheritable" },
-                "barrel-policy": { "$ref": "#/$defs/barrelPolicyInheritable" },
+                "barrel": { "$ref": "#/$defs/barrelInheritable" },
                 "unknown-proof": { "$ref": "#/$defs/unknownProofInheritable" },
                 "format": { "$ref": "#/$defs/emptyInheritable" },
                 "indirection": { "$ref": "#/$defs/indirectionInheritable" },
@@ -158,7 +158,7 @@
       "description": "false disables; true enables.",
       "type": "boolean"
     },
-    "barrelPolicyToggle": {
+    "barrelToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
         { "type": "boolean", "const": true },
@@ -170,7 +170,7 @@
               "type": "array",
               "items": { "type": "string" },
               "minItems": 1,
-              "description": "Additional ignore globs for barrel-policy. Default ignores are minimal: node_modules/** and dist/**."
+              "description": "Additional ignore globs for barrel. Default ignores are minimal: node_modules/** and dist/**."
             }
           }
         }
@@ -207,7 +207,7 @@
       "description": "false disables; true enables; 'inherit' uses root.",
       "oneOf": [{ "type": "boolean" }, { "type": "string", "const": "inherit" }]
     },
-    "barrelPolicyInheritable": {
+    "barrelInheritable": {
       "oneOf": [
         { "type": "boolean", "const": false },
         { "type": "string", "const": "inherit" },
@@ -220,7 +220,7 @@
               "type": "array",
               "items": { "type": "string" },
               "minItems": 1,
-              "description": "Additional ignore globs for barrel-policy. Default ignores are minimal: node_modules/** and dist/**."
+              "description": "Additional ignore globs for barrel. Default ignores are minimal: node_modules/** and dist/**."
             }
           }
         }

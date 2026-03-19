@@ -12,7 +12,7 @@ const DEFAULT_CROSS_FILE_MIN_DEPTH = 2;
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
   'waste',
-  'barrel-policy',
+  'barrel',
   'unknown-proof',
   'error-flow',
   'format',
@@ -83,7 +83,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
     if (
       selection !== 'duplicates' &&
       selection !== 'waste' &&
-      selection !== 'barrel-policy' &&
+      selection !== 'barrel' &&
       selection !== 'unknown-proof' &&
       selection !== 'error-flow' &&
       selection !== 'format' &&
@@ -100,7 +100,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|error-flow|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|indirection|temporal-coupling|variable-lifetime|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel|unknown-proof|error-flow|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|indirection|temporal-coupling|variable-lifetime|giant-file`,
       );
     }
 

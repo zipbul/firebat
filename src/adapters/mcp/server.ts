@@ -23,7 +23,7 @@ import { GildashError } from '@zipbul/gildash';
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
   'waste',
-  'barrel-policy',
+  'barrel',
   'unknown-proof',
   'error-flow',
   'format',
@@ -80,10 +80,10 @@ const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] 
   return indirection.maxForwardDepth;
 };
 
-const resolveBarrelPolicyIgnoreGlobsFromFeatures = (
+const resolveBarrelIgnoreGlobsFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): ReadonlyArray<string> | undefined => {
-  const { 'barrel-policy': value } = features ?? {};
+  const { barrel: value } = features ?? {};
 
   if (!value || value === true || typeof value !== 'object') {
     return undefined;
@@ -342,7 +342,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
             'Subset of detectors to run.',
             'If omitted, uses enabled detectors from config (including config.mcp.features overrides); otherwise uses all detectors.',
             'Unknown detector names are ignored.',
-            'Available: duplicates, waste, nesting, early-return, collapsible-if, indirection, barrel-policy, unknown-proof, error-flow, coupling, dependencies, lint, format, typecheck, temporal-coupling, variable-lifetime, giant-file.',
+            'Available: duplicates, waste, nesting, early-return, collapsible-if, indirection, barrel, unknown-proof, error-flow, coupling, dependencies, lint, format, typecheck, temporal-coupling, variable-lifetime, giant-file.',
           ].join(' '),
         ),
       minSize: z
@@ -458,7 +458,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const cfgDetectors = resolveEnabledDetectorsFromFeatures(effectiveFeatures);
       const cfgMinSize = resolveMinSizeFromFeatures(effectiveFeatures);
       const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(effectiveFeatures);
-      const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(effectiveFeatures);
+      const cfgBarrelIgnoreGlobs = resolveBarrelIgnoreGlobsFromFeatures(effectiveFeatures);
       const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(effectiveFeatures);
       const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(effectiveFeatures);
       const cliOptions: FirebatCliOptions = {
@@ -469,7 +469,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         exitOnFindings: false,
         detectors: args.detectors !== undefined ? asDetectors(args.detectors) : cfgDetectors,
         fix: false,
-        ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
+        ...(cfgBarrelIgnoreGlobs !== undefined ? { barrelIgnoreGlobs: cfgBarrelIgnoreGlobs } : {}),
         ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
         ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
         help: false,

@@ -80,7 +80,7 @@ describe('scan', () => {
     'nesting',
     'early-return',
     'indirection',
-    'barrel-policy',
+    'barrel',
     'unknown-proof',
     'coupling',
     'dependencies',

@@ -5,7 +5,7 @@ import type { ErrorFlowFindingKind } from '../../features/error-flow';
 import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../shared/logger';
 import type {
-  BarrelPolicyFindingKind,
+  BarrelFindingKind,
   CouplingKind,
   DuplicateCloneType,
   EarlyReturnKind,
@@ -18,7 +18,7 @@ import type {
 } from '../../types';
 
 import { computeAutoMinSize } from '../../engine/auto-min-size';
-import { analyzeBarrelPolicy, createEmptyBarrelPolicy } from '../../features/barrel-policy';
+import { analyzeBarrel, createEmptyBarrel } from '../../features/barrel';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
@@ -211,7 +211,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     detectors: options.detectors,
     minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
     maxForwardDepth: options.maxForwardDepth,
-    ...(options.detectors.includes('barrel-policy') ? { barrelPolicyIgnoreGlobs: options.barrelPolicyIgnoreGlobs ?? [] } : {}),
+    ...(options.detectors.includes('barrel') ? { barrelIgnoreGlobs: options.barrelIgnoreGlobs ?? [] } : {}),
     ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
       ? {
           dependenciesLayers: options.dependenciesLayers,
@@ -253,7 +253,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   type LintResult = ReturnType<typeof createEmptyLint>;
 
-  type BarrelPolicyResult = ReturnType<typeof createEmptyBarrelPolicy>;
+  type BarrelResult = ReturnType<typeof createEmptyBarrel>;
 
   type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
 
@@ -429,16 +429,16 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.waste) });
   }
 
-  const barrelPolicyPromise = options.detectors.includes('barrel-policy')
-    ? ((): Promise<BarrelPolicyResult> => {
+  const barrelPromise = options.detectors.includes('barrel')
+    ? ((): Promise<BarrelResult> => {
         const t0 = nowMs();
-        const detectorKey = 'barrel-policy';
+        const detectorKey = 'barrel';
 
         logger.debug('detector: start', { detector: detectorKey });
 
-        return analyzeBarrelPolicy(program, {
+        return analyzeBarrel(program, {
           rootAbs: ctx.rootAbs,
-          ...(options.barrelPolicyIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelPolicyIgnoreGlobs } : {}),
+          ...(options.barrelIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelIgnoreGlobs } : {}),
         }).then(r => {
           const durationMs = nowMs() - t0;
 
@@ -449,7 +449,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           return r;
         });
       })()
-    : Promise.resolve(createEmptyBarrelPolicy());
+    : Promise.resolve(createEmptyBarrel());
   let unknownProofResult: UnknownProofResult = createEmptyUnknownProof();
 
   if (options.detectors.includes('unknown-proof')) {
@@ -686,8 +686,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     indirection = createEmptyIndirection();
   }
 
-  const [barrelPolicy, lint, typecheck, format] = await Promise.all([
-    barrelPolicyPromise,
+  const [barrel, lint, typecheck, format] = await Promise.all([
+    barrelPromise,
     lintPromise ?? Promise.resolve(createEmptyLint()),
     typecheckPromise,
     formatPromise ?? Promise.resolve(createEmptyFormat()),
@@ -789,14 +789,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
   };
 
-  const enrichBarrelPolicy = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<BarrelPolicyFindingKind, FirebatCatalogCode>> = {
+  const enrichBarrel = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Readonly<Record<BarrelFindingKind, FirebatCatalogCode>> = {
       'export-star': 'BARREL_EXPORT_STAR',
       'deep-import': 'BARREL_DEEP_IMPORT',
       'index-deep-import': 'BARREL_INDEX_DEEP_IMPORT',
       'missing-index': 'BARREL_MISSING_INDEX',
       'invalid-index-statement': 'BARREL_INVALID_INDEX_STMT',
       'barrel-side-effect-import': 'BARREL_SIDE_EFFECT_IMPORT',
+      'cross-module-reexport': 'BARREL_CROSS_MODULE_REEXPORT',
     } as const;
 
     return items.map(item => {
@@ -1184,7 +1185,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const analyses: FirebatReport['analyses'] = {
     ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste) } : {}),
-    ...(selectedDetectors.has('barrel-policy') ? { 'barrel-policy': enrichBarrelPolicy(barrelPolicy as any) } : {}),
+    ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel as any) } : {}),
     ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof as any) } : {}),
     ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow as any) } : {}),
     ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format) } : {}),

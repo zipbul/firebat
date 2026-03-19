@@ -49,7 +49,7 @@ import { __testing__, runCli } from './entry';
 
 const {
   resolveEnabledDetectorsFromFeatures,
-  resolveBarrelPolicyIgnoreGlobsFromFeatures,
+  resolveBarrelIgnoreGlobsFromFeatures,
   resolveDependenciesLayersFromFeatures,
   resolveDependenciesAllowedDependenciesFromFeatures,
   resolveMinSizeFromFeatures,
@@ -84,21 +84,21 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
   });
 });
 
-describe('resolveBarrelPolicyIgnoreGlobsFromFeatures', () => {
+describe('resolveBarrelIgnoreGlobsFromFeatures', () => {
   it('should return undefined when features is undefined', () => {
-    expect(resolveBarrelPolicyIgnoreGlobsFromFeatures(undefined)).toBeUndefined();
+    expect(resolveBarrelIgnoreGlobsFromFeatures(undefined)).toBeUndefined();
   });
 
   it('should return ignoreGlobs array when configured', () => {
-    const result = resolveBarrelPolicyIgnoreGlobsFromFeatures({
-      'barrel-policy': { ignoreGlobs: ['**/node_modules/**'] },
+    const result = resolveBarrelIgnoreGlobsFromFeatures({
+      barrel: { ignoreGlobs: ['**/node_modules/**'] },
     } as never);
 
     expect(result).toEqual(['**/node_modules/**']);
   });
 
-  it('should return undefined when barrel-policy is false', () => {
-    expect(resolveBarrelPolicyIgnoreGlobsFromFeatures({ 'barrel-policy': false } as never)).toBeUndefined();
+  it('should return undefined when barrel is false', () => {
+    expect(resolveBarrelIgnoreGlobsFromFeatures({ barrel: false } as never)).toBeUndefined();
   });
 });
 

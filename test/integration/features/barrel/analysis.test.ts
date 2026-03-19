@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeBarrelPolicy } from '../../../../src/test-api';
+import { analyzeBarrel } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
-describe('integration/barrel-policy', () => {
+describe('integration/barrel', () => {
   it('should report missing index when a directory contains source files', async () => {
     // Arrange
     let sources = new Map<string, string>();
@@ -12,7 +12,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.some(f => f.kind === 'missing-index')).toBe(true);
@@ -28,7 +28,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.some(f => f.kind === 'export-star')).toBe(true);
@@ -48,7 +48,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.some(f => f.kind === 'deep-import')).toBe(true);
@@ -68,7 +68,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.some(f => f.kind === 'index-deep-import')).toBe(true);
@@ -83,7 +83,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.some(f => f.kind === 'invalid-index-statement')).toBe(true);
@@ -99,7 +99,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.some(f => f.kind === 'barrel-side-effect-import')).toBe(true);
@@ -114,7 +114,7 @@ describe('integration/barrel-policy', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeBarrelPolicy(program, { rootAbs: '/virtual' });
+    let analysis = await analyzeBarrel(program, { rootAbs: '/virtual' });
 
     // Assert
     expect(analysis.length).toBe(0);

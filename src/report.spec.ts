@@ -6,7 +6,7 @@ import type {
   SourceSpan,
   DuplicateGroup,
   WasteFinding,
-  BarrelPolicyFinding,
+  BarrelFinding,
   UnknownProofFinding,
   LintDiagnostic,
   TypecheckItem,
@@ -45,7 +45,7 @@ const testFile2 = `${cwd}/test-file2.ts`;
 const emptyDeps: ReadonlyArray<DependencyFinding> = [];
 const allDetectors: ReadonlyArray<FirebatDetector> = [
   'waste',
-  'barrel-policy',
+  'barrel',
   'unknown-proof',
   'error-flow',
   'format',
@@ -393,15 +393,15 @@ describe('formatReport', () => {
 
   // ── Barrel Policy body ──────────────────────────────────────────
 
-  describe('barrel-policy body', () => {
+  describe('barrel body', () => {
     it('should render body with kind and evidence when findings exist', () => {
-      const finding: BarrelPolicyFinding = {
+      const finding: BarrelFinding = {
         kind: 'deep-import',
         file: testFile,
         span: span(3, 0),
         evidence: 'suggest: ./utils',
       };
-      const out = formatReport(makeReport(['barrel-policy'], { 'barrel-policy': [finding] }), 'text');
+      const out = formatReport(makeReport(['barrel'], { barrel: [finding] }), 'text');
 
       expect(out).toContain('Barrel Policy');
       expect(out).toContain('1 findings');
@@ -410,16 +410,16 @@ describe('formatReport', () => {
       expect(out).toContain('3:0');
     });
 
-    it('should omit evidence when barrel-policy evidence is undefined', () => {
-      const finding: BarrelPolicyFinding = { kind: 'export-star', file: testFile, span: span() };
-      const out = formatReport(makeReport(['barrel-policy'], { 'barrel-policy': [finding] }), 'text');
+    it('should omit evidence when barrel evidence is undefined', () => {
+      const finding: BarrelFinding = { kind: 'export-star', file: testFile, span: span() };
+      const out = formatReport(makeReport(['barrel'], { barrel: [finding] }), 'text');
 
       expect(out).toContain('export-star');
     });
 
-    it('should omit evidence when barrel-policy evidence is empty string', () => {
-      const finding: BarrelPolicyFinding = { kind: 'export-star', file: testFile, span: span(), evidence: '' };
-      const out = formatReport(makeReport(['barrel-policy'], { 'barrel-policy': [finding] }), 'text');
+    it('should omit evidence when barrel evidence is empty string', () => {
+      const finding: BarrelFinding = { kind: 'export-star', file: testFile, span: span(), evidence: '' };
+      const out = formatReport(makeReport(['barrel'], { barrel: [finding] }), 'text');
 
       expect(out).toContain('export-star');
     });

@@ -469,7 +469,7 @@ exit 1
     }
   });
 
-  it('should expose barrel-policy findings as a bare array with file+code and no message field', async () => {
+  it('should expose barrel findings as a bare array with file+code and no message field', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-barrel-bare-array', {
       'src/a.ts': 'export const a = 1;\n',
@@ -487,16 +487,16 @@ exit 1
             minSize: 0,
             maxForwardDepth: 0,
             exitOnFindings: false,
-            detectors: ['barrel-policy'],
+            detectors: ['barrel'],
             fix: false,
             help: false,
-            barrelPolicyIgnoreGlobs: [],
+            barrelIgnoreGlobs: [],
           },
           { logger },
         ),
       );
       // Assert
-      const barrel = report.analyses['barrel-policy'] as any;
+      const barrel = report.analyses['barrel'] as any;
 
       expect(Array.isArray(barrel)).toBe(true);
 
@@ -789,10 +789,10 @@ exit 7
             minSize: 0,
             maxForwardDepth: 0,
             exitOnFindings: false,
-            detectors: ['waste', 'barrel-policy', 'error-flow', 'lint', 'format', 'typecheck'],
+            detectors: ['waste', 'barrel', 'error-flow', 'lint', 'format', 'typecheck'],
             fix: false,
             help: false,
-            barrelPolicyIgnoreGlobs: [],
+            barrelIgnoreGlobs: [],
           },
           { logger },
         ),

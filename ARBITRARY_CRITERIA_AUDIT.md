@@ -650,18 +650,18 @@
 
 ---
 
-### D-05. barrel-policy — DEFAULT_IGNORE_GLOBS
+### D-05. barrel — DEFAULT_IGNORE_GLOBS
 
-- **파일**: `src/features/barrel-policy/analyzer.ts` L16-23
+- **파일**: `src/features/barrel/analyzer.ts` L16-23
 - **코드**: `node_modules/**`, `dist/**`, `test/**` 등 7개 glob
 - **임의 가정**: 이 경로들이 항상 분석에서 제외되어야 함
 - **질문**: monorepo에서 `test/`가 integration test이고 barrel 규칙을 적용해야 할 수 있음
 
 ---
 
-### D-06. barrel-policy — index.ts strictness
+### D-06. barrel — index.ts strictness
 
-- **파일**: `src/features/barrel-policy/analyzer.ts` L220-280
+- **파일**: `src/features/barrel/analyzer.ts` L220-280
 - **임의 가정**: index.ts 파일은 re-export만 허용
 - **질문**: 일부 프로젝트에서는 index.ts에 factory 함수나 DI 설정을 넣는 것이 정석. 이것이 "violation"인 것이 맞는가?
 
@@ -825,7 +825,7 @@
 | **format** | oxfmt check 결과 | 외부 도구 위임 |
 | **exact-duplicates** | 해시 기반 AST 동일성 | minSize threshold는 임의 (A-18) |
 | **structural-duplicates** | fingerprint 기반 유사성 | minSize threshold는 임의 (A-18) |
-| **barrel-policy** (export-star 감지) | AST 구조적 사실 | strictness 규칙은 D-06 |
+| **barrel** (export-star, cross-module-reexport 감지) | AST 구조적 사실 | strictness 규칙은 D-06 |
 | **indirection** (thin-wrapper 감지) | 함수 body 단일 호출 + 인자 1:1 전달 검증 | chain depth 기준은 A-17 |
 | ~~**noop**~~ | ~~AST 구문 특성~~ | **기능 삭제됨** — lint 규칙으로 완전 대체 (C-02, F-01~F-03) |
 | **dependencies** (cycles, layer-violations) | import graph 구조적 분석 | layer 설정은 사용자 정의 |
@@ -839,7 +839,7 @@
 | A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 29건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste, ~~exception-hygiene~~, ~~implementation-overhead~~, ~~concept-scatter~~ |
 | B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel-policy |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel |
 | E. 근사 측정 | **7건** (+2 신규) | ✅ 5건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
 | G. 신규 디텍터/메트릭 후보 | **4건** | 미착수 | liveness pressure, usage gap, 조건부 사용/스코프 축소, 변이 밀도 |

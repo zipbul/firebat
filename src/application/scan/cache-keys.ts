@@ -18,7 +18,7 @@ interface ComputeScanArtifactKeyInput {
   readonly detectors: ReadonlyArray<string>;
   readonly minSize: string;
   readonly maxForwardDepth: number;
-  readonly barrelPolicyIgnoreGlobs?: ReadonlyArray<string>;
+  readonly barrelIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly couplingConfig?: Record<string, unknown>;
@@ -26,7 +26,7 @@ interface ComputeScanArtifactKeyInput {
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedDetectors = [...input.detectors].sort();
-  const normalizedBarrelPolicyIgnoreGlobs = input.barrelPolicyIgnoreGlobs ? [...input.barrelPolicyIgnoreGlobs].sort() : [];
+  const normalizedBarrelIgnoreGlobs = input.barrelIgnoreGlobs ? [...input.barrelIgnoreGlobs].sort() : [];
   const normalizedDependenciesLayers = input.dependenciesLayers
     ? [...input.dependenciesLayers]
         .map(layer => ({ name: layer.name, glob: layer.glob }))
@@ -44,7 +44,7 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `detectors=${normalizedDetectors.join(',')}`,
       `minSize=${input.minSize}`,
       `maxForwardDepth=${String(input.maxForwardDepth)}`,
-      `barrelPolicyIgnoreGlobs=${normalizedBarrelPolicyIgnoreGlobs.join(',')}`,
+      `barrelIgnoreGlobs=${normalizedBarrelIgnoreGlobs.join(',')}`,
       `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
       `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,
       `couplingConfig=${input.couplingConfig ? JSON.stringify(Object.entries(input.couplingConfig).sort((a, b) => a[0].localeCompare(b[0]))) : ''}`,

@@ -172,7 +172,7 @@ const formatText = (report: FirebatReport): string => {
   };
 
   const waste = analyses.waste ?? [];
-  const barrelPolicy = analyses['barrel-policy'] ?? [];
+  const barrel = analyses['barrel'] ?? [];
   const unknownProof = analyses['unknown-proof'] ?? [];
   const errorFlow = analyses['error-flow'] ?? [];
   const lint = analyses.lint ?? [];
@@ -260,12 +260,12 @@ const formatText = (report: FirebatReport): string => {
           filesCount: waste.length === 0 ? 0 : new Set(waste.map(f => getFile(f))).size,
           timingKey,
         };
-      case 'barrel-policy':
+      case 'barrel':
         return {
           emoji: '📦',
           label: 'Barrel Policy',
-          count: barrelPolicy.length,
-          filesCount: barrelPolicy.length === 0 ? 0 : new Set(barrelPolicy.map(f => getFile(f))).size,
+          count: barrel.length,
+          filesCount: barrel.length === 0 ? 0 : new Set(barrel.map(f => getFile(f))).size,
           timingKey,
         };
       case 'unknown-proof':
@@ -391,10 +391,10 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('barrel-policy') && barrelPolicy.length > 0) {
-    lines.push(sectionHeader('📦', 'Barrel Policy', `${barrelPolicy.length} findings`));
+  if (selectedDetectors.has('barrel') && barrel.length > 0) {
+    lines.push(sectionHeader('📦', 'Barrel Policy', `${barrel.length} findings`));
 
-    for (const finding of barrelPolicy) {
+    for (const finding of barrel) {
       const rel = path.relative(process.cwd(), getFile(finding));
       const start = toPos(finding.span.start.line, finding.span.start.column);
       const evidence =

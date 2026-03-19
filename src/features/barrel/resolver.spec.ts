@@ -17,7 +17,7 @@ afterEach(async () => {
 
 const normPath = (p: string): string => p.replaceAll('\\', '/');
 
-describe('features/barrel-policy/resolver — createWorkspacePackageMap', () => {
+describe('features/barrel/resolver — createWorkspacePackageMap', () => {
   it('returns empty Map when no package.json exists', async () => {
     const map = await createWorkspacePackageMap(tmpDir);
 
@@ -46,7 +46,7 @@ describe('features/barrel-policy/resolver — createWorkspacePackageMap', () => 
   });
 });
 
-describe('features/barrel-policy/resolver — createImportResolver', () => {
+describe('features/barrel/resolver — createImportResolver', () => {
   it('resolve returns null for external packages not in workspace', async () => {
     const fileSet = new Set<string>([normPath(path.join(tmpDir, 'src/a.ts'))]);
     const resolver = createImportResolver({ rootAbs: tmpDir, fileSet, workspacePackages: new Map() });

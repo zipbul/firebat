@@ -119,6 +119,13 @@ export const FIREBAT_CODE_CATALOG = {
       'If intentional, verify whether it should be isolated into an explicit setup module rather than hiding in a barrel.',
     ],
   },
+  BARREL_CROSS_MODULE_REEXPORT: {
+    cause: 'A file re-exports a symbol from outside its own module boundary, creating an unnecessary indirection layer.',
+    think: [
+      'Identify all consumers of this re-export and redirect them to import from the original source.',
+      'Verify that removing the re-export does not break the module public API contract.',
+    ],
+  },
 
   EF_THROW_NON_ERROR: {
     cause: 'A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.',

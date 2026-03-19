@@ -31,19 +31,19 @@ describe('FirebatConfigSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('[HP] parses barrel-policy feature with ignoreGlobs', () => {
+  it('[HP] parses barrel feature with ignoreGlobs', () => {
     const result = FirebatConfigSchema.safeParse({
       features: {
-        'barrel-policy': { ignoreGlobs: ['src/generated/**'] },
+        barrel: { ignoreGlobs: ['src/generated/**'] },
       },
     });
 
     expect(result.success).toBe(true);
   });
 
-  it('[NE] rejects barrel-policy ignoreGlobs with empty array', () => {
+  it('[NE] rejects barrel ignoreGlobs with empty array', () => {
     const result = FirebatConfigSchema.safeParse({
-      features: { 'barrel-policy': { ignoreGlobs: [] } },
+      features: { barrel: { ignoreGlobs: [] } },
     });
 
     expect(result.success).toBe(false);
