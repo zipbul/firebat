@@ -262,6 +262,81 @@ describe('analyzer', () => {
       expect(findKinds(analysis, 'type-remap').length).toBe(0);
     });
 
+    it('analyzeIndirection - utility type alias with generic args - skips', async () => {
+      // Arrange
+      const program = createProgram('/virtual/remap.ts', 'type ReadonlyUser = Readonly<User>;');
+      // Act
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
+
+      // Assert
+      expect(findKinds(analysis, 'type-remap').length).toBe(0);
+    });
+
+    it('analyzeIndirection - keyof type alias - skips', async () => {
+      // Arrange
+      const program = createProgram('/virtual/remap.ts', 'type Keys = keyof User;');
+      // Act
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
+
+      // Assert
+      expect(findKinds(analysis, 'type-remap').length).toBe(0);
+    });
+
+    it('analyzeIndirection - indexed access type alias - skips', async () => {
+      // Arrange
+      const program = createProgram('/virtual/remap.ts', "type Name = User['name'];");
+      // Act
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
+
+      // Assert
+      expect(findKinds(analysis, 'type-remap').length).toBe(0);
+    });
+
+    it('analyzeIndirection - template literal type alias - skips', async () => {
+      // Arrange
+      const program = createProgram('/virtual/remap.ts', 'type E = `on${string}`;');
+      // Act
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
+
+      // Assert
+      expect(findKinds(analysis, 'type-remap').length).toBe(0);
+    });
+
+    it('analyzeIndirection - object literal type alias - skips', async () => {
+      // Arrange
+      const program = createProgram('/virtual/remap.ts', 'type T = { x: number };');
+      // Act
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
+
+      // Assert
+      expect(findKinds(analysis, 'type-remap').length).toBe(0);
+    });
+
     it('analyzeIndirection - declare type alias - skips', async () => {
       // Arrange
       const program = createProgram('/virtual/remap.ts', 'declare type A = B;');
