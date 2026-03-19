@@ -3,14 +3,26 @@
 > **작성일**: 2026-03-19
 >
 > **상태**:
-> - **Part 1 (indirection)**: 설계 확정, 심층 리뷰 완료 (2026-03-19), 구현 대기
+> - **Part 1 (indirection)**: ✅ **구현 완료** (2026-03-19). 실증 검증 통과.
 > - **Part 2 (barrel-policy)**: 방향 결정됨, 별도 심층 논의 필요
 >
-> **Part 1 구현 전제조건** (심층 리뷰에서 도출):
-> - `walkOxcTree`에 parent 추적 기능 추가 또는 `walkWithParent()` 유틸 신규 구현 (interface-rewrap의 module augmentation 제외에 필수)
-> - analyzer 레벨에서 `.d.ts` 파일 방어 체크 추가 (`file.filePath.endsWith('.d.ts')` → skip)
-> - `crossFileMinDepth` 필드를 Zod 스키마 및 `FirebatIndirectionConfig`에 추가
-> - gildash `searchSymbols` API의 `kind` 필터 지원 여부 확인, 미지원 시 클라이언트 측 `.filter()` 폴백 구현
+> **Part 1 구현 완료 사항**:
+> - `walkOxcTreeWithParent()` 유틸 구현 (`src/engine/ast/oxc-ast-utils.ts`)
+> - analyzer 레벨 `.d.ts` 파일 방어 체크 추가
+> - `crossFileMinDepth` 필드 Zod 스키마 및 `FirebatIndirectionConfig`에 추가, CLI `--cross-file-min-depth` 플래그 추가
+> - gildash `searchSymbols` — `kind` 필터 미사용, 클라이언트 측 name 매칭으로 처리
+> - class-interface declaration merging 감지 추가 (오픈소스 실증에서 FP 발견 → 수정)
+>
+> **Part 1 실증 검증 결과** (2026-03-19):
+>
+> | 프로젝트 | 파일 수 | type-remap | interface-rewrap | FP |
+> |---|---|---|---|---|
+> | firebat 자체 | 239 | 2 TP | 0 | 0 |
+> | zod v4 | 277 | 8 TP | ~100 TP (nominal type 패턴) | 0 |
+> | trpc | 683 | 3 TP | 27 TP | 0 |
+> | drizzle-orm | ~400 | 8 TP | 6 TP | 0 |
+>
+> **FP 0%. precision 목표(< 5%) 달성.**
 >
 > **구현 후 검증 필요 (Part 2)**:
 > - scope-aware 로컬 사용 판별: 알고리즘 sound, oxc-parser AST scope 경계 엣지케이스 구현 시 확인

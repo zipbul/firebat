@@ -316,10 +316,11 @@
 
 ### A-17. indirection — cross-file chain 최소 depth
 
-- **파일**: `src/features/indirection/analyzer.ts` L737
-- **코드**: `if (entry.depth < 2) { continue; }`
+- **파일**: `src/features/indirection/analyzer.ts`
+- **코드**: `if (entry.depth < options.crossFileMinDepth) { continue; }`
 - **임의 기준**: cross-file indirection chain depth가 2 이상이면 보고
 - **질문**: depth 1(단일 파일 간 indirection)은 왜 무시하는가?
+- **결론**: ✅ **configurable 전환 완료** — `.firebatrc.jsonc`의 `indirection.crossFileMinDepth`로 설정 가능. CLI `--cross-file-min-depth`. 기본값 2 유지, 최소값 1. Zod 스키마 `z.number().int().min(1).optional()`. 경계값 테스트 3개(minDepth 0, 1, 2) 작성 완료.
 
 ---
 
