@@ -94,7 +94,7 @@ const printHelp = (): void => {
     `  ${hc('DETECTORS', `${H.bold}${H.yellow}`, c)}`,
     '',
     `    waste, nesting, early-return,`,
-    `    forwarding, barrel-policy, unknown-proof,`,
+    `    indirection, barrel-policy, unknown-proof,`,
     `    error-flow, lint, format, typecheck, dependencies, coupling,`,
     `    temporal-coupling,`,
     `    variable-lifetime,`,
@@ -132,7 +132,7 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'nesting',
     'early-return',
     'collapsible-if',
-    'forwarding',
+    'indirection',
     'temporal-coupling',
     'variable-lifetime',
     'giant-file',
@@ -253,13 +253,23 @@ const resolveMinSizeFromFeatures = (
 };
 
 const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
-  const forwarding = features?.forwarding;
+  const indirection = features?.indirection;
 
-  if (forwarding === undefined || forwarding === false || forwarding === true) {
+  if (indirection === undefined || indirection === false || indirection === true) {
     return undefined;
   }
 
-  return forwarding.maxForwardDepth;
+  return indirection.maxForwardDepth;
+};
+
+const resolveCrossFileMinDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {
+  const indirection = features?.indirection;
+
+  if (indirection === undefined || indirection === false || indirection === true) {
+    return undefined;
+  }
+
+  return indirection.crossFileMinDepth;
 };
 
 const resolveCouplingConfigFromFeatures = (
@@ -299,6 +309,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgDetectors = resolveEnabledDetectorsFromFeatures(featuresCfg);
   const cfgMinSize = resolveMinSizeFromFeatures(featuresCfg);
   const cfgMaxForwardDepth = resolveMaxForwardDepthFromFeatures(featuresCfg);
+  const cfgCrossFileMinDepth = resolveCrossFileMinDepthFromFeatures(featuresCfg);
   const cfgBarrelPolicyIgnoreGlobs = resolveBarrelPolicyIgnoreGlobsFromFeatures(featuresCfg);
   const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(featuresCfg);
   const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(featuresCfg);
@@ -308,12 +319,14 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     detectors: cfgDetectors.length,
     minSize: cfgMinSize,
     maxForwardDepth: cfgMaxForwardDepth,
+    crossFileMinDepth: cfgCrossFileMinDepth,
   });
 
   const merged: FirebatCliOptions = {
     ...options,
     ...(options.explicit?.minSize ? {} : cfgMinSize !== undefined ? { minSize: cfgMinSize } : {}),
     ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
+    ...(options.explicit?.crossFileMinDepth ? {} : cfgCrossFileMinDepth !== undefined ? { crossFileMinDepth: cfgCrossFileMinDepth } : {}),
     ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
     ...(cfgBarrelPolicyIgnoreGlobs !== undefined ? { barrelPolicyIgnoreGlobs: cfgBarrelPolicyIgnoreGlobs } : {}),
     ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
@@ -416,4 +429,5 @@ export const __testing__ = {
   resolveDependenciesAllowedDependenciesFromFeatures,
   resolveMinSizeFromFeatures,
   resolveMaxForwardDepthFromFeatures,
+  resolveCrossFileMinDepthFromFeatures,
 };

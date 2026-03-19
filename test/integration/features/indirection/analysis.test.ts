@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeForwarding } from '../../../../src/test-api';
+import { analyzeIndirection } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 import { buildMockGildashFromSources } from './mock-gildash-helper';
 
-const createForwardingSource = (): string => {
+const createIndirectionSource = (): string => {
   return [
     'function target(value) {',
     '  return value + 1;',
@@ -15,7 +15,7 @@ const createForwardingSource = (): string => {
   ].join('\n');
 };
 
-const createForwardingChainSource = (): string => {
+const createIndirectionChainSource = (): string => {
   return [
     'function c(value) {',
     '  return value;',
@@ -29,17 +29,17 @@ const createForwardingChainSource = (): string => {
   ].join('\n');
 };
 
-describe('integration/forwarding', () => {
+describe('integration/indirection', () => {
   it('should report thin wrappers when they only forward arguments', async () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set('/virtual/forwarding/forward.ts', createForwardingSource());
+    sources.set('/virtual/indirection/forward.ts', createIndirectionSource());
 
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
+    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
@@ -59,12 +59,12 @@ describe('integration/forwarding', () => {
       '}',
     ].join('\n');
 
-    sources.set('/virtual/forwarding/object-pattern.ts', source);
+    sources.set('/virtual/indirection/object-pattern.ts', source);
 
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
+    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
@@ -83,12 +83,12 @@ describe('integration/forwarding', () => {
       '}',
     ].join('\n');
 
-    sources.set('/virtual/forwarding/object-pattern-rest.ts', source);
+    sources.set('/virtual/indirection/object-pattern-rest.ts', source);
 
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeForwarding(gildash, program, 0, '/virtual');
+    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
@@ -99,12 +99,12 @@ describe('integration/forwarding', () => {
     // Arrange
     const sources = new Map<string, string>();
 
-    sources.set('/virtual/forwarding/chain.ts', createForwardingChainSource());
+    sources.set('/virtual/indirection/chain.ts', createIndirectionChainSource());
 
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeForwarding(gildash, program, 1, '/virtual');
+    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
     const chainFindings = findings.filter(finding => finding.kind === 'forward-chain');
 
     // Assert

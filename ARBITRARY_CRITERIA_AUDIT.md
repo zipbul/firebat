@@ -314,12 +314,12 @@
 
 ---
 
-### A-17. forwarding — cross-file chain 최소 depth
+### A-17. indirection — cross-file chain 최소 depth
 
-- **파일**: `src/features/forwarding/analyzer.ts` L737
+- **파일**: `src/features/indirection/analyzer.ts` L737
 - **코드**: `if (entry.depth < 2) { continue; }`
-- **임의 기준**: cross-file forwarding chain depth가 2 이상이면 보고
-- **질문**: depth 1(단일 파일 간 forwarding)은 왜 무시하는가?
+- **임의 기준**: cross-file indirection chain depth가 2 이상이면 보고
+- **질문**: depth 1(단일 파일 간 indirection)은 왜 무시하는가?
 
 ---
 
@@ -825,7 +825,7 @@
 | **exact-duplicates** | 해시 기반 AST 동일성 | minSize threshold는 임의 (A-18) |
 | **structural-duplicates** | fingerprint 기반 유사성 | minSize threshold는 임의 (A-18) |
 | **barrel-policy** (export-star 감지) | AST 구조적 사실 | strictness 규칙은 D-06 |
-| **forwarding** (thin-wrapper 감지) | 함수 body 단일 호출 + 인자 1:1 전달 검증 | chain depth 기준은 A-17 |
+| **indirection** (thin-wrapper 감지) | 함수 body 단일 호출 + 인자 1:1 전달 검증 | chain depth 기준은 A-17 |
 | ~~**noop**~~ | ~~AST 구문 특성~~ | **기능 삭제됨** — lint 규칙으로 완전 대체 (C-02, F-01~F-03) |
 | **dependencies** (cycles, layer-violations) | import graph 구조적 분석 | layer 설정은 사용자 정의 |
 

@@ -194,7 +194,7 @@ const formatText = (report: FirebatReport): string => {
   );
   const coupling = analyses.coupling ?? [];
   const nesting = analyses.nesting ?? [];
-  const forwarding = analyses.forwarding ?? [];
+  const indirection = analyses.indirection ?? [];
   const temporalCoupling = analyses['temporal-coupling'] ?? [];
   const variableLifetime = analyses['variable-lifetime'] ?? [];
   const giantFile = analyses['giant-file'] ?? [];
@@ -301,12 +301,12 @@ const formatText = (report: FirebatReport): string => {
           filesCount: typecheckErrors === 0 ? 0 : new Set(typecheck.map(i => i.file)).size,
           timingKey,
         };
-      case 'forwarding':
+      case 'indirection':
         return {
           emoji: '↗️',
-          label: 'Forwarding',
-          count: forwarding.length,
-          filesCount: forwarding.length === 0 ? 0 : new Set(forwarding.map(f => getFile(f))).size,
+          label: 'Indirection',
+          count: indirection.length,
+          filesCount: indirection.length === 0 ? 0 : new Set(indirection.map(f => getFile(f))).size,
           timingKey,
         };
       case 'nesting':
@@ -457,10 +457,10 @@ const formatText = (report: FirebatReport): string => {
     }
   }
 
-  if (selectedDetectors.has('forwarding') && forwarding.length > 0) {
-    lines.push(sectionHeader('↗️', 'Forwarding', `${forwarding.length} findings`));
+  if (selectedDetectors.has('indirection') && indirection.length > 0) {
+    lines.push(sectionHeader('↗️', 'Indirection', `${indirection.length} findings`));
 
-    for (const finding of forwarding) {
+    for (const finding of indirection) {
       const rel = path.relative(process.cwd(), getFile(finding));
       const start = toPos(finding.span.start.line, finding.span.start.column);
       const name = finding.header !== 'anonymous' ? `${finding.header} ` : '';

@@ -33,7 +33,7 @@
     "coupling": true,
     "nesting": true,
     "early-return": true,
-    "forwarding": { "maxForwardDepth": 0 }
+    "indirection": { "maxForwardDepth": 0 }
   },
   "mcp": "inherit"
 }

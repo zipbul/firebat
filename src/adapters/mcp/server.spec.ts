@@ -183,8 +183,8 @@ describe('resolveMaxForwardDepthFromFeatures', () => {
     expect(resolveMaxForwardDepthFromFeatures(undefined)).toBeUndefined();
   });
 
-  it('should return maxForwardDepth from forwarding config', () => {
-    const result = resolveMaxForwardDepthFromFeatures({ forwarding: { maxForwardDepth: 3 } } as never);
+  it('should return maxForwardDepth from indirection config', () => {
+    const result = resolveMaxForwardDepthFromFeatures({ indirection: { maxForwardDepth: 3 } } as never);
 
     expect(result).toBe(3);
   });

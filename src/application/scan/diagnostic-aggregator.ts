@@ -26,7 +26,7 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  FWD_THIN_WRAPPER: {
+  IND_THIN_WRAPPER: {
     cause:
       "A function's entire body delegates to another function with identical or trivially transformed arguments, adding no logic.",
     think: [
@@ -35,7 +35,7 @@ export const FIREBAT_CODE_CATALOG = {
       'If no purpose is found, verify that callers can reference the target function directly without breaking contracts.',
     ],
   },
-  FWD_FORWARD_CHAIN: {
+  IND_FORWARD_CHAIN: {
     cause: 'Multiple functions form a chain where each forwards to the next with no added logic, creating unnecessary depth.',
     think: [
       'Trace the chain to find where real logic begins — the intermediate links may be remnants of refactoring.',
@@ -43,12 +43,29 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that collapsing intermediate hops does not break consumers that import from the middle of the chain.',
     ],
   },
-  FWD_CROSS_FILE_CHAIN: {
+  IND_CROSS_FILE_CHAIN: {
     cause: 'A forwarding chain spans multiple files, creating cross-file indirection without logic at each hop.',
     think: [
       'Identify each file boundary in the chain and determine whether it represents a genuine architectural layer.',
       'Check whether the chain follows a re-export pattern that can be consolidated at the public surface.',
       'Verify that eliminating intermediate files does not break other consumers that import from those files.',
+    ],
+  },
+  IND_TYPE_REMAP: {
+    cause: 'A type alias is a direct synonym for another named type, adding no type-level transformation.',
+    think: [
+      'Check whether the alias was introduced for a future extension that never happened.',
+      'If the alias is exported, verify that removing it does not break downstream consumers who import this type.',
+      'Check whether the alias provides a shorter name for a deeply qualified namespace path (e.g., `type Node = ts.Node`) — if so, consider whether the project convention favors named imports over namespace access.',
+      'Replace all usages of the alias with the original type and remove the alias.',
+    ],
+  },
+  IND_INTERFACE_REWRAP: {
+    cause: 'An interface extends another type but declares no additional members, making it a pure synonym.',
+    think: [
+      'Check whether declaration merging is intended — another file may add members to this interface.',
+      'If this interface is part of a plugin or extension API where consumers are expected to augment it via declaration merging, keep it.',
+      'If no merging exists, replace all usages with the base type and remove the interface.',
     ],
   },
 

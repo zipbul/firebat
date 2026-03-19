@@ -51,8 +51,8 @@ gildash API 사용 파일 42개에 대한 영향도 분석. 주요 확인 대상
 
 | API | 사용처 | 확인 사항 |
 |-----|--------|-----------|
-| `searchRelations()` | dependencies, forwarding, temporal-coupling | 시그니처/반환 타입 변경 여부 |
-| `searchSymbols()` | dependencies, forwarding | 시그니처/반환 타입 변경 여부 |
+| `searchRelations()` | dependencies, indirection, temporal-coupling | 시그니처/반환 타입 변경 여부 |
+| `searchSymbols()` | dependencies, indirection | 시그니처/반환 타입 변경 여부 |
 | `getImportGraph()` | dependencies | 시그니처 변경 여부 |
 | `getCyclePaths()` | dependencies | 시그니처 변경 여부 |
 | `getHeritageChain()` | error-flow, trace-symbol | 시그니처 변경 여부 |
@@ -101,8 +101,8 @@ firebat 측 후속:
 | API | 패턴 | 반환값 | 비동기 | 사용처 |
 |-----|------|--------|--------|--------|
 | `Gildash.open()` | 팩토리 | `Gildash` | O | `store/gildash.ts` |
-| `searchRelations()` | 검색 | `CodeRelation[]` | X | dependencies, forwarding, temporal-coupling |
-| `searchSymbols()` | 검색 | `SymbolSearchResult[]` | X | dependencies, forwarding |
+| `searchRelations()` | 검색 | `CodeRelation[]` | X | dependencies, indirection, temporal-coupling |
+| `searchSymbols()` | 검색 | `SymbolSearchResult[]` | X | dependencies, indirection |
 | `getImportGraph()` | 그래프 | `Map<string, string[]>` | O | dependencies |
 | `getCyclePaths()` | 그래프 | `string[][]` | O | dependencies |
 | `getFileInfo()` | 메타 | `{ contentHash }` | X | inputs-digest |

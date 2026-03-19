@@ -13,8 +13,8 @@ import { parseSource } from '../../../src/test-api';
 import { analyzeGiantFile } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
-import { analyzeForwarding } from '../../../src/test-api';
-import { buildMockGildashFromSources } from './forwarding/mock-gildash-helper';
+import { analyzeIndirection } from '../../../src/test-api';
+import { buildMockGildashFromSources } from './indirection/mock-gildash-helper';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -124,13 +124,13 @@ describe('threshold/nesting', () => {
   });
 });
 
-// ── forwarding ───────────────────────────────────────────────────────────────
+// ── indirection ──────────────────────────────────────────────────────────────
 
-describe('threshold/forwarding', () => {
-  it('direct call without forwarding → no finding', async () => {
+describe('threshold/indirection', () => {
+  it('direct call without indirection → no finding', async () => {
     const src = ['export const add = (a: number, b: number) => a + b;'].join('\n');
     const emptyGildash = buildMockGildashFromSources({});
-    const findings = await analyzeForwarding(emptyGildash, [parse(src)], 1, '/virtual');
+    const findings = await analyzeIndirection(emptyGildash, [parse(src)], { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
 
     expect(findings).toHaveLength(0);
   });
@@ -138,7 +138,7 @@ describe('threshold/forwarding', () => {
   it('two independent functions → no finding', async () => {
     const src = ['export const double = (x: number) => x * 2;', 'export const triple = (x: number) => x * 3;'].join('\n');
     const emptyGildash = buildMockGildashFromSources({});
-    const findings = await analyzeForwarding(emptyGildash, [parse(src)], 1, '/virtual');
+    const findings = await analyzeIndirection(emptyGildash, [parse(src)], { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
 
     expect(findings).toHaveLength(0);
   });

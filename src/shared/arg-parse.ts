@@ -8,6 +8,7 @@ import { DETECTOR_ALIASES } from '../types';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
 const DEFAULT_MAX_FORWARD_DEPTH = 0;
+const DEFAULT_CROSS_FILE_MIN_DEPTH = 2;
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
   'waste',
@@ -22,7 +23,7 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'nesting',
   'early-return',
   'collapsible-if',
-  'forwarding',
+  'indirection',
   'temporal-coupling',
   'variable-lifetime',
   'giant-file',
@@ -93,13 +94,13 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'nesting' &&
       selection !== 'early-return' &&
       selection !== 'collapsible-if' &&
-      selection !== 'forwarding' &&
+      selection !== 'indirection' &&
       selection !== 'temporal-coupling' &&
       selection !== 'variable-lifetime' &&
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|error-flow|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|forwarding|temporal-coupling|variable-lifetime|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel-policy|unknown-proof|error-flow|format|lint|typecheck|dependencies|coupling|nesting|early-return|collapsible-if|indirection|temporal-coupling|variable-lifetime|giant-file`,
       );
     }
 
@@ -132,6 +133,7 @@ interface ExplicitMutable {
   format: boolean;
   minSize: boolean;
   maxForwardDepth: boolean;
+  crossFileMinDepth: boolean;
   exitOnFindings: boolean;
   detectors: boolean;
   fix: boolean;
@@ -145,6 +147,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let format: OutputFormat = 'text';
   let minSize: MinSizeOption = DEFAULT_MIN_SIZE;
   let maxForwardDepth = DEFAULT_MAX_FORWARD_DEPTH;
+  let crossFileMinDepth = DEFAULT_CROSS_FILE_MIN_DEPTH;
   let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
   let fix = false;
@@ -157,6 +160,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       format: input.format,
       minSize: input.minSize,
       maxForwardDepth: input.maxForwardDepth,
+      crossFileMinDepth: input.crossFileMinDepth,
       exitOnFindings: input.exitOnFindings,
       detectors: input.detectors,
       fix: input.fix,
@@ -170,6 +174,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     format: false,
     minSize: false,
     maxForwardDepth: false,
+    crossFileMinDepth: false,
     exitOnFindings: false,
     detectors: false,
     fix: false,
@@ -191,6 +196,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
         format,
         minSize,
         maxForwardDepth,
+        crossFileMinDepth,
         exitOnFindings,
         detectors,
         fix,
@@ -240,6 +246,21 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
 
       maxForwardDepth = Math.max(0, Math.round(parseNumber(value, '--max-forward-depth')));
       explicit.maxForwardDepth = true;
+
+      i += 1;
+
+      continue;
+    }
+
+    if (arg === '--cross-file-min-depth') {
+      const value = argv[i + 1];
+
+      if (typeof value !== 'string') {
+        throw new Error('[firebat] Missing value for --cross-file-min-depth');
+      }
+
+      crossFileMinDepth = Math.max(1, Math.round(parseNumber(value, '--cross-file-min-depth')));
+      explicit.crossFileMinDepth = true;
 
       i += 1;
 
@@ -324,6 +345,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     format,
     minSize,
     maxForwardDepth,
+    crossFileMinDepth,
     exitOnFindings,
     detectors,
     fix,

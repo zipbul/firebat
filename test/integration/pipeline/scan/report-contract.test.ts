@@ -668,9 +668,9 @@ exit 7
     }
   });
 
-  it('should expose forwarding findings as a bare array with file+code and no wrapper fields', async () => {
+  it('should expose indirection findings as a bare array with file+code and no wrapper fields', async () => {
     // Arrange
-    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-forwarding-bare-array', {
+    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-indirection-bare-array', {
       'src/c.ts': ['export const real = (value: number) => value + 1;'].join('\n'),
       'src/b.ts': ["import { real } from './c';", 'export const mid = (value: number) => real(value);'].join('\n'),
       'src/a.ts': ["import { mid } from './b';", 'export const top = (value: number) => mid(value);'].join('\n'),
@@ -687,7 +687,7 @@ exit 7
             minSize: 0,
             maxForwardDepth: 5,
             exitOnFindings: false,
-            detectors: ['forwarding'],
+            detectors: ['indirection'],
             fix: false,
             help: false,
           },
@@ -695,7 +695,7 @@ exit 7
         ),
       );
       // Assert
-      const findings = report.analyses.forwarding as any;
+      const findings = report.analyses.indirection as any;
 
       expect(Array.isArray(findings)).toBe(true);
       expect((findings as any[]).length).toBeGreaterThan(0);
@@ -708,7 +708,7 @@ exit 7
       expect(first?.status).toBeUndefined();
       expect(first?.tool).toBeUndefined();
       expect(typeof first?.code).toBe('string');
-      expect(String(first?.code)).toContain('FWD_');
+      expect(String(first?.code)).toContain('IND_');
     } finally {
       await project.dispose();
     }

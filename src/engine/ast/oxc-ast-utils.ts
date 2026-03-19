@@ -89,6 +89,46 @@ export const walkOxcTree = (program: NodeValue, walker: OxcNodeWalker): void => 
   visit(program);
 };
 
+type OxcNodeWalkerWithParent = (node: Node, parent: Node | null) => boolean;
+
+export const walkOxcTreeWithParent = (root: NodeValue, walker: OxcNodeWalkerWithParent): void => {
+  const visit = (value: NodeValue, parent: Node | null): void => {
+    if (isOxcNodeArray(value)) {
+      for (const entry of value) {
+        visit(entry, parent);
+      }
+
+      return;
+    }
+
+    if (!isOxcNode(value)) {
+      return;
+    }
+
+    const shouldVisitChildren = walker(value, parent);
+
+    if (!shouldVisitChildren) {
+      return;
+    }
+
+    if (!isNodeRecord(value)) {
+      return;
+    }
+
+    const entries = Object.entries(value);
+
+    for (const [key, childValue] of entries) {
+      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+        continue;
+      }
+
+      visit(childValue, value);
+    }
+  };
+
+  visit(root, null);
+};
+
 export const collectOxcNodes = (program: NodeValue, predicate: OxcNodePredicate): Node[] => {
   const nodes: Node[] = [];
 

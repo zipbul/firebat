@@ -12,8 +12,9 @@ interface FirebatDuplicatesConfig {
   readonly minSize?: number | 'auto' | undefined;
 }
 
-interface FirebatForwardingConfig {
+interface FirebatIndirectionConfig {
   readonly maxForwardDepth?: number | undefined;
+  readonly crossFileMinDepth?: number | undefined;
 }
 
 interface FirebatVariableLifetimeConfig {
@@ -72,7 +73,7 @@ interface FirebatFeaturesConfig {
   readonly nesting?: FeatureToggle<FirebatNestingConfig> | undefined;
   readonly 'early-return'?: boolean | undefined;
   readonly 'collapsible-if'?: boolean | undefined;
-  readonly forwarding?: FeatureToggle<FirebatForwardingConfig> | undefined;
+  readonly indirection?: FeatureToggle<FirebatIndirectionConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
   readonly 'temporal-coupling'?: boolean | undefined;
@@ -94,7 +95,7 @@ interface FirebatMcpFeaturesConfig {
   readonly nesting?: InheritableFeatureToggle<FirebatNestingConfig> | undefined;
   readonly 'early-return'?: boolean | 'inherit' | undefined;
   readonly 'collapsible-if'?: boolean | 'inherit' | undefined;
-  readonly forwarding?: InheritableFeatureToggle<FirebatForwardingConfig> | undefined;
+  readonly indirection?: InheritableFeatureToggle<FirebatIndirectionConfig> | undefined;
 
   // Phase 1 detectors (IMPROVE.md)
   readonly 'temporal-coupling'?: boolean | 'inherit' | undefined;
@@ -204,13 +205,14 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           .optional(),
         'early-return': z.boolean().optional(),
         'collapsible-if': z.boolean().optional(),
-        forwarding: z
+        indirection: z
           .union([
             z.literal(false),
             z.literal(true),
             z
               .object({
-                maxForwardDepth: z.number().int().nonnegative(),
+                maxForwardDepth: z.number().int().nonnegative().optional(),
+                crossFileMinDepth: z.number().int().min(1).optional(),
               })
               .strict(),
           ])
@@ -366,14 +368,15 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   .optional(),
                 'early-return': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
                 'collapsible-if': z.union([z.literal(false), z.literal(true), z.literal('inherit')]).optional(),
-                forwarding: z
+                indirection: z
                   .union([
                     z.literal(false),
                     z.literal('inherit'),
                     z.literal(true),
                     z
                       .object({
-                        maxForwardDepth: z.number().int().nonnegative(),
+                        maxForwardDepth: z.number().int().nonnegative().optional(),
+                        crossFileMinDepth: z.number().int().min(1).optional(),
                       })
                       .strict(),
                   ])
@@ -394,7 +397,7 @@ export type {
   FirebatCouplingConfig,
   FirebatDuplicatesConfig,
   FirebatFeaturesConfig,
-  FirebatForwardingConfig,
+  FirebatIndirectionConfig,
   FirebatLogLevel,
   FirebatMcpConfig,
   FirebatMcpConfigObject,

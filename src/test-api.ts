@@ -18,7 +18,7 @@ export { analyzeDependencies } from './features/dependencies';
 export { analyzeEarlyReturn } from './features/early-return';
 export { analyzeErrorFlow } from './features/error-flow';
 export { analyzeFormat } from './features/format';
-export { analyzeForwarding } from './features/forwarding';
+export { analyzeIndirection } from './features/indirection';
 export { analyzeGiantFile } from './features/giant-file';
 export { analyzeLint } from './features/lint';
 export { analyzeNesting } from './features/nesting';

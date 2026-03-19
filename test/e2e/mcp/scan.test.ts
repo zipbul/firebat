@@ -79,7 +79,7 @@ describe('scan', () => {
     'waste',
     'nesting',
     'early-return',
-    'forwarding',
+    'indirection',
     'barrel-policy',
     'unknown-proof',
     'coupling',
@@ -164,7 +164,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['forwarding'],
+      detectors: ['indirection'],
       maxForwardDepth: 0,
     });
 
@@ -179,7 +179,7 @@ describe('scan', () => {
     // Act
     const { structured } = await callTool(ctx.client, 'scan', {
       targets: [fixture],
-      detectors: ['forwarding'],
+      detectors: ['indirection'],
       maxForwardDepth: 10,
     });
 

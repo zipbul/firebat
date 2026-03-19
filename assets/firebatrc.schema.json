@@ -20,8 +20,8 @@
           "$ref": "#/$defs/unknownProofToggle"
         },
         "format": { "$ref": "#/$defs/emptyToggle" },
-        "forwarding": {
-          "$ref": "#/$defs/forwardingToggle"
+        "indirection": {
+          "$ref": "#/$defs/indirectionToggle"
         },
         "waste": { "$ref": "#/$defs/wasteToggle" },
         "lint": { "$ref": "#/$defs/emptyToggle" },
@@ -53,7 +53,7 @@
                 "barrel-policy": { "$ref": "#/$defs/barrelPolicyInheritable" },
                 "unknown-proof": { "$ref": "#/$defs/unknownProofInheritable" },
                 "format": { "$ref": "#/$defs/emptyInheritable" },
-                "forwarding": { "$ref": "#/$defs/forwardingInheritable" },
+                "indirection": { "$ref": "#/$defs/indirectionInheritable" },
                 "waste": { "$ref": "#/$defs/wasteInheritable" },
                 "lint": { "$ref": "#/$defs/emptyInheritable" },
                 "typecheck": { "$ref": "#/$defs/emptyInheritable" },
@@ -176,7 +176,7 @@
         }
       ]
     },
-    "forwardingToggle": {
+    "indirectionToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
         { "type": "boolean", "const": true },
@@ -226,7 +226,7 @@
         }
       ]
     },
-    "forwardingInheritable": {
+    "indirectionInheritable": {
       "oneOf": [
         { "type": "boolean", "const": false },
         { "type": "string", "const": "inherit" },

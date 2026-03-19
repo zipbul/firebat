@@ -10,7 +10,7 @@ import type {
   UnknownProofFinding,
   LintDiagnostic,
   TypecheckItem,
-  ForwardingFinding,
+  IndirectionFinding,
   NestingItem,
   EarlyReturnItem,
   DependencyFinding,
@@ -55,7 +55,7 @@ const allDetectors: ReadonlyArray<FirebatDetector> = [
   'coupling',
   'nesting',
   'early-return',
-  'forwarding',
+  'indirection',
   'temporal-coupling',
   'variable-lifetime',
   'giant-file',
@@ -166,7 +166,7 @@ describe('formatReport', () => {
       expect(out).toContain('Coupling Hotspots');
       expect(out).toContain('Nesting');
       expect(out).toContain('Early Return');
-      expect(out).toContain('Forwarding');
+      expect(out).toContain('Indirection');
       expect(out).toContain('Temporal Coupling');
       expect(out).toContain('Variable Lifetime');
       expect(out).toContain('Giant File');
@@ -642,11 +642,11 @@ describe('formatReport', () => {
     });
   });
 
-  // ── Forwarding body ─────────────────────────────────────────────
+  // ── Indirection body ─────────────────────────────────────────────
 
-  describe('forwarding body', () => {
+  describe('indirection body', () => {
     it('should render body with kind and header when findings exist', () => {
-      const finding: ForwardingFinding = {
+      const finding: IndirectionFinding = {
         kind: 'thin-wrapper',
         filePath: testFile,
         span: span(30, 0),
@@ -654,17 +654,17 @@ describe('formatReport', () => {
         depth: 2,
         evidence: 'direct forward',
       };
-      const out = formatReport(makeReport(['forwarding'], { forwarding: [finding] }), 'text');
+      const out = formatReport(makeReport(['indirection'], { indirection: [finding] }), 'text');
 
-      expect(out).toContain('Forwarding');
+      expect(out).toContain('Indirection');
       expect(out).toContain('1 findings');
       expect(out).toContain('thin-wrapper');
       expect(out).toContain('wrapFn');
       expect(out).toContain('30:0');
     });
 
-    it('should omit name when forwarding header is anonymous', () => {
-      const finding: ForwardingFinding = {
+    it('should omit name when indirection header is anonymous', () => {
+      const finding: IndirectionFinding = {
         kind: 'thin-wrapper',
         filePath: testFile,
         span: span(),
@@ -672,7 +672,7 @@ describe('formatReport', () => {
         depth: 1,
         evidence: '',
       };
-      const out = formatReport(makeReport(['forwarding'], { forwarding: [finding] }), 'text');
+      const out = formatReport(makeReport(['indirection'], { indirection: [finding] }), 'text');
 
       expect(out).not.toContain('anonymous');
     });

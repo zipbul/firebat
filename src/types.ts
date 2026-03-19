@@ -19,7 +19,7 @@ export type FirebatDetector =
   | 'nesting'
   | 'early-return'
   | 'collapsible-if'
-  | 'forwarding'
+  | 'indirection'
   // Phase 1 detectors (IMPROVE.md)
   | 'temporal-coupling'
   | 'variable-lifetime'
@@ -83,10 +83,12 @@ export type FirebatCatalogCode =
   | 'UNKNOWN_ANY_INFERRED'
   | 'UNKNOWN_ANY_CAST'
   | 'UNKNOWN_DOUBLE_CAST'
-  // forwarding (3)
-  | 'FWD_THIN_WRAPPER'
-  | 'FWD_FORWARD_CHAIN'
-  | 'FWD_CROSS_FILE_CHAIN'
+  // indirection (5)
+  | 'IND_THIN_WRAPPER'
+  | 'IND_FORWARD_CHAIN'
+  | 'IND_CROSS_FILE_CHAIN'
+  | 'IND_TYPE_REMAP'
+  | 'IND_INTERFACE_REWRAP'
   // coupling (5)
   | 'COUPLING_GOD_MODULE'
   | 'COUPLING_BIDIRECTIONAL'
@@ -414,10 +416,10 @@ export interface BarrelPolicyFinding {
   readonly evidence?: string;
 }
 
-export type ForwardingFindingKind = 'thin-wrapper' | 'forward-chain' | 'cross-file-forwarding-chain';
+export type IndirectionFindingKind = 'thin-wrapper' | 'forward-chain' | 'cross-file-forwarding-chain' | 'type-remap' | 'interface-rewrap';
 
-export interface ForwardingFinding {
-  readonly kind: ForwardingFindingKind;
+export interface IndirectionFinding {
+  readonly kind: IndirectionFindingKind;
   readonly filePath: string;
   readonly span: SourceSpan;
   readonly code?: FirebatCatalogCode;
@@ -426,13 +428,13 @@ export interface ForwardingFinding {
   readonly evidence: string;
 }
 
-export interface ForwardingParamsInfo {
+export interface IndirectionParamsInfo {
   readonly params: ReadonlyArray<string>;
   readonly restParam: string | null;
 }
 
-export interface ForwardingAnalysis {
-  readonly findings: ReadonlyArray<ForwardingFinding>;
+export interface IndirectionAnalysis {
+  readonly findings: ReadonlyArray<IndirectionFinding>;
 }
 
 export interface WasteFinding {
@@ -584,7 +586,7 @@ export interface FirebatAnalyses {
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
   readonly 'collapsible-if': ReadonlyArray<CollapsibleIfItem>;
-  readonly forwarding: ReadonlyArray<ForwardingFinding>;
+  readonly indirection: ReadonlyArray<IndirectionFinding>;
 
   // Phase 1 detectors (IMPROVE.md)
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;

@@ -51,8 +51,8 @@
     // Error flow rules (try/catch and promise safety).
     "error-flow": true,
 
-    // Thin-wrapper forwarding chain detection.
-    "forwarding": { "maxForwardDepth": 0 },
+    // Thin-wrapper indirection chain detection.
+    "indirection": { "maxForwardDepth": 0 },
 
     // Unknown-proof checks (propagation-only). Optional boundaryGlobs can restrict boundary matching.
     "unknown-proof": true,

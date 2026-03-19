@@ -1,14 +1,21 @@
+import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
+import { GildashError } from '@zipbul/gildash';
 import * as path from 'node:path';
 
-import type { Gildash } from '@zipbul/gildash';
-import { GildashError } from '@zipbul/gildash';
+import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
-import type { NodeRecord, NodeValue, ParsedFile } from '../../engine/types';
-import type { ForwardingFinding, ForwardingFindingKind, ForwardingParamsInfo } from '../../types';
-
-import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import {
+  getNodeHeader,
+  isFunctionNode,
+  isNodeRecord,
+  isOxcNode,
+  isOxcNodeArray,
+  walkOxcTree,
+  walkOxcTreeWithParent,
+} from '../../engine/ast/oxc-ast-utils';
 import { getLineColumn } from '../../engine/source-position';
 
 /* ------------------------------------------------------------------ */
@@ -18,14 +25,13 @@ import { getLineColumn } from '../../engine/source-position';
 const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 /** Ensure a path from gildash (may be project-relative) is absolute. */
-const resolveAbs = (rootAbs: string, p: string): string =>
-  normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
+const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
 
 /* ------------------------------------------------------------------ */
 /*  AST utilities — thin-wrapper detection                             */
 /* ------------------------------------------------------------------ */
 
-const createEmptyForwarding = (): ReadonlyArray<ForwardingFinding> => [];
+const createEmptyIndirection = (): ReadonlyArray<IndirectionFinding> => [];
 
 const getSpan = (node: Node, sourceText: string) => {
   const start = getLineColumn(sourceText, node.start);
@@ -103,7 +109,7 @@ const getCallFromStatement = (statement: Node): Node | null => {
   return null;
 };
 
-const getParams = (node: Node): ForwardingParamsInfo | null => {
+const getParams = (node: Node): IndirectionParamsInfo | null => {
   if (!isNodeRecord(node)) {
     return null;
   }
@@ -193,7 +199,7 @@ const getParams = (node: Node): ForwardingParamsInfo | null => {
   };
 };
 
-const isForwardingArgs = (callExpression: Node, params: readonly string[], restParam: string | null): boolean => {
+const isPassthroughArgs = (callExpression: Node, params: readonly string[], restParam: string | null): boolean => {
   if (!isNodeRecord(callExpression)) {
     return false;
   }
@@ -287,7 +293,7 @@ const getWrapperCall = (node: Node): Node | null => {
     return null;
   }
 
-  if (!isForwardingArgs(maybeCall, paramsInfo.params, paramsInfo.restParam)) {
+  if (!isPassthroughArgs(maybeCall, paramsInfo.params, paramsInfo.restParam)) {
     return null;
   }
 
@@ -322,9 +328,18 @@ const resolveCalleeName = (callExpression: Node): string | null => {
 };
 
 /** Structured callee reference for cross-file import resolution via gildash. */
-type SimpleCalleeRef =
-  | { readonly kind: 'local'; readonly name: string }
-  | { readonly kind: 'namespace'; readonly ns: string; readonly name: string };
+interface LocalCalleeRef {
+  readonly kind: 'local';
+  readonly name: string;
+}
+
+interface NamespaceCalleeRef {
+  readonly kind: 'namespace';
+  readonly ns: string;
+  readonly name: string;
+}
+
+type SimpleCalleeRef = LocalCalleeRef | NamespaceCalleeRef;
 
 const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
   if (!isNodeRecord(callExpression)) {
@@ -430,8 +445,8 @@ const collectFunctionNames = (program: NodeValue): Map<Node, string> => {
 };
 
 const addFinding = (
-  findings: ForwardingFinding[],
-  kind: ForwardingFindingKind,
+  findings: IndirectionFinding[],
+  kind: IndirectionFindingKind,
   node: Node,
   filePath: string,
   sourceText: string,
@@ -482,16 +497,15 @@ interface ImportTarget {
   readonly exportedName: string | null;
 }
 
-const buildImportIndex = (
-  gildash: Gildash,
-  rootAbs: string,
-): Map<string, Map<string, ImportTarget>> => {
+const buildImportIndex = (gildash: Gildash, rootAbs: string): Map<string, Map<string, ImportTarget>> => {
   let importRels: ReturnType<Gildash['searchRelations']>;
 
   try {
     importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
   } catch (e) {
-    if (e instanceof GildashError) {return new Map();}
+    if (e instanceof GildashError) {
+      return new Map();
+    }
     throw e;
   }
 
@@ -514,16 +528,15 @@ const buildImportIndex = (
   return index;
 };
 
-const buildExportIndex = (
-  gildash: Gildash,
-  rootAbs: string,
-): Map<string, Set<string>> => {
+const buildExportIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<string>> => {
   let allExported: ReturnType<Gildash['searchSymbols']>;
 
   try {
     allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
   } catch (e) {
-    if (e instanceof GildashError) {return new Map();}
+    if (e instanceof GildashError) {
+      return new Map();
+    }
     throw e;
   }
 
@@ -540,11 +553,16 @@ const buildExportIndex = (
   return index;
 };
 
+interface CrossFileTarget {
+  readonly targetFilePath: string;
+  readonly exportedName: string;
+}
+
 const resolveCrossFileTarget = (
   ref: SimpleCalleeRef,
   srcFilePath: string,
   importIdx: Map<string, Map<string, ImportTarget>>,
-): { readonly targetFilePath: string; readonly exportedName: string } | null => {
+): CrossFileTarget | null => {
   const fileImports = importIdx.get(srcFilePath);
 
   if (!fileImports) {
@@ -578,28 +596,33 @@ const resolveCrossFileTarget = (
 /*  Main analysis                                                      */
 /* ------------------------------------------------------------------ */
 
-const analyzeForwarding = async (
+interface AnalyzeIndirectionOptions {
+  readonly maxForwardDepth: number;
+  readonly crossFileMinDepth: number;
+}
+
+interface CrossFileWrapper {
+  node: Node;
+  file: ParsedFile;
+  header: string;
+  depth: number;
+  targetKey: string | null;
+}
+
+const analyzeIndirection = async (
   gildash: Gildash,
   files: ReadonlyArray<ParsedFile>,
-  maxForwardDepth: number,
+  options: AnalyzeIndirectionOptions,
   rootAbs: string,
-): Promise<ReadonlyArray<ForwardingFinding>> => {
+): Promise<ReadonlyArray<IndirectionFinding>> => {
   if (files.length === 0) {
-    return createEmptyForwarding();
+    return createEmptyIndirection();
   }
 
-  const findings: ForwardingFinding[] = [];
+  const findings: IndirectionFinding[] = [];
   // Build import/export indices from gildash for cross-file resolution
   const importIdx = buildImportIndex(gildash, rootAbs);
   const exportIdx = buildExportIndex(gildash, rootAbs);
-
-  type CrossFileWrapper = {
-    node: Node;
-    file: ParsedFile;
-    header: string;
-    depth: number;
-    targetKey: string | null;
-  };
 
   const crossFileWrappers = new Map<string, CrossFileWrapper>();
 
@@ -638,12 +661,8 @@ const analyzeForwarding = async (
         // Cross-file: only track exported functions
         if (fileExports.has(header)) {
           const calleeRef = getSimpleCalleeRef(wrapperCall);
-          const crossTarget = calleeRef
-            ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx)
-            : null;
-          const targetKey = crossTarget
-            ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}`
-            : null;
+          const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx) : null;
+          const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
           const key = `${normalizedFilePath}:${header}`;
 
           crossFileWrappers.set(key, {
@@ -659,18 +678,146 @@ const analyzeForwarding = async (
       return true;
     });
 
-    if (maxForwardDepth >= 1) {
+    if (options.maxForwardDepth >= 1) {
       for (const [name, node] of wrapperNodeByName.entries()) {
         const depth = computeChainDepth(name, calleeByName, new Set<string>());
 
-        if (depth > maxForwardDepth) {
-          const evidence = `forwarding chain depth ${depth} exceeds max ${maxForwardDepth}`;
+        if (depth > options.maxForwardDepth) {
+          const evidence = `forwarding chain depth ${depth} exceeds max ${options.maxForwardDepth}`;
           const header = namesByNode.get(node) ?? getNodeHeader(node);
 
           addFinding(findings, 'forward-chain', node, file.filePath, file.sourceText, header, depth, evidence);
         }
       }
     }
+
+    // Skip .d.ts files for type-level indirection checks
+    if (normalizedFilePath.endsWith('.d.ts')) {
+      continue;
+    }
+
+    // type-remap: type A = B (pure synonym, no type args, no type params)
+    walkOxcTree(file.program, node => {
+      if (!isNodeRecord(node)) {
+        return true;
+      }
+
+      if (node.type === 'TSTypeAliasDeclaration' && node.declare !== true) {
+        const typeAnnotation = node.typeAnnotation;
+
+        if (isOxcNode(typeAnnotation) && isNodeRecord(typeAnnotation) && typeAnnotation.type === 'TSTypeReference') {
+          const typeArgs = typeAnnotation.typeArguments;
+          const typeParams = node.typeParameters;
+          const hasTypeArgs = isOxcNode(typeArgs) && typeArgs !== null && typeArgs !== undefined;
+          const hasTypeParams = isOxcNode(typeParams) && typeParams !== null && typeParams !== undefined;
+
+          if (!hasTypeArgs && !hasTypeParams) {
+            const id = node.id;
+            const header =
+              isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string'
+                ? id.name
+                : 'anonymous';
+            const typeName = typeAnnotation.typeName;
+            let targetName = 'unknown';
+
+            if (isOxcNode(typeName) && isNodeRecord(typeName)) {
+              if (typeName.type === 'Identifier' && typeof typeName.name === 'string') {
+                targetName = typeName.name as string;
+              } else if (typeName.type === 'TSQualifiedName') {
+                targetName = getNodeHeader(typeName as Node);
+              }
+            }
+
+            const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
+
+            addFinding(findings, 'type-remap', node as Node, file.filePath, file.sourceText, header, 1, evidence);
+          }
+        }
+      }
+
+      return true;
+    });
+
+    // interface-rewrap: empty interface with at least one extends (not declare, not module augmentation, not declaration merging)
+    const interfaceNameCount = new Map<string, number>();
+
+    walkOxcTree(file.program, node => {
+      if (isNodeRecord(node) && node.type === 'TSInterfaceDeclaration') {
+        const id = node.id;
+
+        if (isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string') {
+          interfaceNameCount.set(id.name as string, (interfaceNameCount.get(id.name as string) ?? 0) + 1);
+        }
+      }
+
+      return true;
+    });
+
+    walkOxcTreeWithParent(file.program, (node, parent) => {
+      if (!isNodeRecord(node)) {
+        return true;
+      }
+
+      if (node.type === 'TSInterfaceDeclaration' && node.declare !== true) {
+        const extendsArr = node.extends;
+
+        if (!Array.isArray(extendsArr) || extendsArr.length === 0) {
+          return true;
+        }
+
+        const body = node.body;
+
+        if (!isNodeRecord(body)) {
+          return true;
+        }
+
+        const bodyBody = body.body;
+
+        if (!Array.isArray(bodyBody) || bodyBody.length > 0) {
+          return true;
+        }
+
+        // Skip module augmentation (parent is TSModuleBlock)
+        if (parent !== null && isNodeRecord(parent) && parent.type === 'TSModuleBlock') {
+          return true;
+        }
+
+        const id = node.id;
+
+        if (!isOxcNode(id) || !isNodeRecord(id) || id.type !== 'Identifier' || typeof id.name !== 'string') {
+          return true;
+        }
+
+        const name = id.name as string;
+
+        // Skip same-file declaration merging
+        if ((interfaceNameCount.get(name) ?? 0) >= 2) {
+          return true;
+        }
+
+        // Skip cross-file declaration merging
+        try {
+          const symbols = gildash.searchSymbols({ text: name, isExported: undefined, limit: 100 });
+          const otherFileHasSameName = symbols.some(
+            s => s.name === name && resolveAbs(rootAbs, s.filePath) !== normalizedFilePath,
+          );
+
+          if (otherFileHasSameName) {
+            return true;
+          }
+        } catch {
+          // gildash failure: conservative — do not skip
+        }
+
+        const firstExtends = extendsArr[0] as Node;
+        const baseName = getNodeHeader(firstExtends);
+        const evidence = `interface ${name} extends ${baseName} with empty body`;
+
+        addFinding(findings, 'interface-rewrap', node as Node, file.filePath, file.sourceText, name, 1, evidence);
+      }
+
+      return true;
+    });
   }
 
   // Pass 2: Resolve cross-file forwarding chains (fixpoint)
@@ -758,7 +905,7 @@ const analyzeForwarding = async (
         continue;
       }
 
-      if (entry.depth < 2) {
+      if (entry.depth < options.crossFileMinDepth) {
         continue;
       }
 
@@ -780,4 +927,4 @@ const analyzeForwarding = async (
   return findings;
 };
 
-export { analyzeForwarding, createEmptyForwarding };
+export { analyzeIndirection, createEmptyIndirection };

@@ -181,13 +181,13 @@ describe('resolveMaxForwardDepthFromFeatures', () => {
     expect(resolveMaxForwardDepthFromFeatures(undefined)).toBeUndefined();
   });
 
-  it('should return undefined when forwarding is boolean', () => {
-    expect(resolveMaxForwardDepthFromFeatures({ forwarding: true } as never)).toBeUndefined();
-    expect(resolveMaxForwardDepthFromFeatures({ forwarding: false } as never)).toBeUndefined();
+  it('should return undefined when indirection is boolean', () => {
+    expect(resolveMaxForwardDepthFromFeatures({ indirection: true } as never)).toBeUndefined();
+    expect(resolveMaxForwardDepthFromFeatures({ indirection: false } as never)).toBeUndefined();
   });
 
-  it('should return maxForwardDepth from forwarding config', () => {
-    const result = resolveMaxForwardDepthFromFeatures({ forwarding: { maxForwardDepth: 5 } } as never);
+  it('should return maxForwardDepth from indirection config', () => {
+    const result = resolveMaxForwardDepthFromFeatures({ indirection: { maxForwardDepth: 5 } } as never);
 
     expect(result).toBe(5);
   });

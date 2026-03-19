@@ -5,6 +5,7 @@ export interface FirebatCliExplicitFlags {
   readonly format: boolean;
   readonly minSize: boolean;
   readonly maxForwardDepth: boolean;
+  readonly crossFileMinDepth: boolean;
   readonly exitOnFindings: boolean;
   readonly detectors: boolean;
   readonly fix: boolean;
@@ -18,6 +19,7 @@ export interface FirebatCliOptions {
   readonly format: OutputFormat;
   readonly minSize: MinSizeOption;
   readonly maxForwardDepth: number;
+  readonly crossFileMinDepth?: number;
   readonly exitOnFindings: boolean;
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly fix: boolean;

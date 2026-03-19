@@ -11,7 +11,7 @@ import type {
   EarlyReturnKind,
   FirebatCatalogCode,
   FirebatReport,
-  ForwardingFindingKind,
+  IndirectionFindingKind,
   NestingKind,
   UnknownProofFindingKind,
   WasteKind,
@@ -26,7 +26,7 @@ import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplica
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { analyzeErrorFlow, createEmptyErrorFlow } from '../../features/error-flow';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
-import { analyzeForwarding, createEmptyForwarding } from '../../features/forwarding';
+import { analyzeIndirection, createEmptyIndirection } from '../../features/indirection';
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
@@ -665,20 +665,25 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     errorFlow = createEmptyErrorFlow();
   }
 
-  let forwarding: Awaited<ReturnType<typeof analyzeForwarding>>;
+  let indirection: Awaited<ReturnType<typeof analyzeIndirection>>;
 
-  if (options.detectors.includes('forwarding')) {
+  if (options.detectors.includes('indirection')) {
     const t0 = nowMs();
-    const detectorKey = 'forwarding';
+    const detectorKey = 'indirection';
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    forwarding = await analyzeForwarding(gildash, program, options.maxForwardDepth, ctx.rootAbs);
-    detectorTimings.forwarding = nowMs() - t0;
+    indirection = await analyzeIndirection(
+      gildash,
+      program,
+      { maxForwardDepth: options.maxForwardDepth, crossFileMinDepth: options.crossFileMinDepth ?? 2 },
+      ctx.rootAbs,
+    );
+    detectorTimings.indirection = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.forwarding) });
+    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.indirection) });
   } else {
-    forwarding = createEmptyForwarding();
+    indirection = createEmptyIndirection();
   }
 
   const [barrelPolicy, lint, typecheck, format] = await Promise.all([
@@ -931,11 +936,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       });
   };
 
-  const enrichForwarding = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<ForwardingFindingKind, FirebatCatalogCode>> = {
-      'thin-wrapper': 'FWD_THIN_WRAPPER',
-      'forward-chain': 'FWD_FORWARD_CHAIN',
-      'cross-file-forwarding-chain': 'FWD_CROSS_FILE_CHAIN',
+  const enrichIndirection = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
+    const kindToCode: Readonly<Record<IndirectionFindingKind, FirebatCatalogCode>> = {
+      'thin-wrapper': 'IND_THIN_WRAPPER',
+      'forward-chain': 'IND_FORWARD_CHAIN',
+      'cross-file-forwarding-chain': 'IND_CROSS_FILE_CHAIN',
+      'type-remap': 'IND_TYPE_REMAP',
+      'interface-rewrap': 'IND_INTERFACE_REWRAP',
     } as const;
 
     return items.map(item => {
@@ -1188,7 +1195,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
     ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
     ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf as any) } : {}),
-    ...(selectedDetectors.has('forwarding') ? { forwarding: enrichForwarding(forwarding as any) } : {}),
+    ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('variable-lifetime')
       ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') }
