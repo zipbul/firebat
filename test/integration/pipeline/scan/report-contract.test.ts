@@ -848,4 +848,84 @@ exit 7
       await project.dispose();
     }
   });
+
+  it('indirection - type alias synonym - reports IND_TYPE_REMAP with correct code', async () => {
+    // Arrange
+    const project = await createScanProjectFixture(
+      'firebat-report-contract-ind-type-remap',
+      'type A = B;\n',
+    );
+
+    try {
+      const logger = createLogger();
+      // Act
+      const report = await withCwd(project.rootAbs, () =>
+        scanUseCase(
+          {
+            targets: [project.srcFileAbs],
+            format: 'json',
+            minSize: 0,
+            maxForwardDepth: 0,
+            exitOnFindings: false,
+            detectors: ['indirection'],
+            fix: false,
+            help: false,
+          },
+          { logger },
+        ),
+      );
+      // Assert
+      const findings = report.analyses.indirection as any[];
+
+      expect(Array.isArray(findings)).toBe(true);
+      expect(findings.length).toBe(1);
+      expect(findings[0]?.kind).toBe('type-remap');
+      expect(findings[0]?.code).toBe('IND_TYPE_REMAP');
+      expect(typeof findings[0]?.file).toBe('string');
+      expect(findings[0]?.filePath).toBeUndefined();
+      expect(findings[0]?.header).toBe('A');
+    } finally {
+      await project.dispose();
+    }
+  });
+
+  it('indirection - empty interface with extends - reports IND_INTERFACE_REWRAP with correct code', async () => {
+    // Arrange
+    const project = await createScanProjectFixture(
+      'firebat-report-contract-ind-interface-rewrap',
+      'interface C extends D {}\n',
+    );
+
+    try {
+      const logger = createLogger();
+      // Act
+      const report = await withCwd(project.rootAbs, () =>
+        scanUseCase(
+          {
+            targets: [project.srcFileAbs],
+            format: 'json',
+            minSize: 0,
+            maxForwardDepth: 0,
+            exitOnFindings: false,
+            detectors: ['indirection'],
+            fix: false,
+            help: false,
+          },
+          { logger },
+        ),
+      );
+      // Assert
+      const findings = report.analyses.indirection as any[];
+
+      expect(Array.isArray(findings)).toBe(true);
+      expect(findings.length).toBe(1);
+      expect(findings[0]?.kind).toBe('interface-rewrap');
+      expect(findings[0]?.code).toBe('IND_INTERFACE_REWRAP');
+      expect(typeof findings[0]?.file).toBe('string');
+      expect(findings[0]?.filePath).toBeUndefined();
+      expect(findings[0]?.header).toBe('C');
+    } finally {
+      await project.dispose();
+    }
+  });
 });

@@ -32,4 +32,16 @@ describe('golden/indirection', () => {
   runGolden(import.meta.dir, 'param-patterns', async (program, sources) =>
     analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
   );
+
+  runGolden(import.meta.dir, 'type-remap', async (program, sources) =>
+    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual'),
+  );
+
+  runGolden(import.meta.dir, 'interface-rewrap', async (program, sources) =>
+    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual'),
+  );
+
+  runGolden(import.meta.dir, 'mixed-indirection', async (program, sources) =>
+    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
+  );
 });

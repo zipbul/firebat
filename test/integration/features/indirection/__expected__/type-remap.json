@@ -1,0 +1,53 @@
+[
+  {
+    "depth": 1,
+    "evidence": "type alias A is a direct synonym for B",
+    "filePath": "/virtual/type-remap.ts",
+    "header": "A",
+    "kind": "type-remap",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 2
+      },
+      "start": {
+        "column": 0,
+        "line": 2
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "type alias Alias is a direct synonym for Original",
+    "filePath": "/virtual/type-remap.ts",
+    "header": "Alias",
+    "kind": "type-remap",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 3
+      },
+      "start": {
+        "column": 7,
+        "line": 3
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "type alias Node is a direct synonym for anonymous",
+    "filePath": "/virtual/type-remap.ts",
+    "header": "Node",
+    "kind": "type-remap",
+    "span": {
+      "end": {
+        "column": 20,
+        "line": 4
+      },
+      "start": {
+        "column": 0,
+        "line": 4
+      }
+    }
+  }
+]

@@ -1,0 +1,53 @@
+[
+  {
+    "depth": 1,
+    "evidence": "thin wrapper forwards to target",
+    "filePath": "/virtual/mixed-indirection.ts",
+    "header": "wrapper",
+    "kind": "thin-wrapper",
+    "span": {
+      "end": {
+        "column": 46,
+        "line": 2
+      },
+      "start": {
+        "column": 0,
+        "line": 2
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "type alias Alias is a direct synonym for Original",
+    "filePath": "/virtual/mixed-indirection.ts",
+    "header": "Alias",
+    "kind": "type-remap",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 5
+      },
+      "start": {
+        "column": 0,
+        "line": 5
+      }
+    }
+  },
+  {
+    "depth": 1,
+    "evidence": "interface Empty extends anonymous with empty body",
+    "filePath": "/virtual/mixed-indirection.ts",
+    "header": "Empty",
+    "kind": "interface-rewrap",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 6
+      },
+      "start": {
+        "column": 0,
+        "line": 6
+      }
+    }
+  }
+]
