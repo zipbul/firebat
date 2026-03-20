@@ -330,6 +330,7 @@
 - **코드**: `return 60; // 기본값` / `return clamp(Math.round(selected), 10, 200);`
 - **임의 기준**: 기본 60, 최소 10, 최대 200
 - **질문**: AST 노드 수로 60이 "중복 판단에 적절한 최소 크기"라는 근거는?
+- **결론**: ✅ **유지** — PMD CPD 기본 100 tokens, SourcererCC 50 tokens (Sajnani et al. 2016, arXiv:1512.06448), Roy & Cordy (2007) 실용적 최솟값 30 tokens. AST 노드 ↔ 토큰 변환 비율이 학술적으로 확립되지 않아 직접 비교 불가하나 60 노드는 업계 범위 내. `--min-size` CLI로 override 가능. clamp 하한 10은 보수적이나 auto 경로 내부 로직이므로 configurable 대상 아님.
 
 ---
 
@@ -339,6 +340,7 @@
 - **코드**: `const percentile = fileCount >= 1000 ? 0.75 : fileCount >= 500 ? 0.6 : 0.5;`
 - **임의 기준**: 1000파일→75th percentile, 500파일→60th, 기본→50th
 - **질문**: 이 3단계 매핑은 어떤 실험 데이터에서 도출되었는가? 선형 보간이 더 적절하지 않은가?
+- **결론**: ✅ **유지** — 다중 임계값 필요성은 학술적으로 지지됨 (Multi-threshold token-based code clone detection, arXiv:2002.05204: 단일 임계값 대비 탐지율 40.5~56.6% 향상). 업계 도구(SonarQube, PMD CPD)는 단일 고정값만 제공, firebat의 percentile-adaptive 접근은 보다 진보적. 구체적 500/1000 경계와 50/60/75th 수치는 실증 미검증 휴리스틱이나, `--min-size`로 결과를 override 가능하므로 내부 알고리즘의 configurable화 불필요.
 
 ---
 
@@ -358,9 +360,9 @@
 
 | # | 옵션 | 기본값 | 질문 |
 |---|---|---|---|
-| A-21 | `giantFileMaxLines` | `1000` | 1000줄이 "거대"의 기준인 근거? 생성된 파일은? |
+| A-21 | `giantFileMaxLines` | `1000` | 1000줄이 "거대"의 기준인 근거? 생성된 파일은? ✅ **SonarQube S104 기본값 1000 일치**. ESLint max-lines 300, Checkstyle FileLength 2000. 업계 범위 300~2000 내. configurable (`giant-file.maxLines`). |
 | A-22 | `decisionSurfaceMaxAxes` | `2` | if 조건에 고유 변수 2개 이상이면 경고? 거의 모든 함수가 해당될 수 있음. ✅ **기능 폐기로 무효** |
-| A-23 | `variableLifetimeMaxLifetimeLines` | `30` | 변수 선언~마지막 사용이 30줄이면 "수명이 긴" 변수? |
+| A-23 | `variableLifetimeMaxLifetimeLines` | `30` | 변수 선언~마지막 사용이 30줄이면 "수명이 긴" 변수? ✅ **McConnell Code Complete: "minimize live time" 원칙, 구체 수치 없음**. 업계 도구에 해당 규칙 없음. 30줄 ≈ 화면 1페이지 ≈ 함수 1개 분량. 학술 근거 부재하나 configurable (`variable-lifetime.maxLifetimeLines`). |
 | A-24 | `implementationOverheadMinRatio` | `1.0` | 구현 복잡도/인터페이스 복잡도 비율 1.0이면 보고? 거의 모든 함수가 해당. ✅ **기능 폐기로 무효** |
 | A-25 | `conceptScatterMaxScatterIndex` | `2` | scatterIndex(파일 수 + 레이어 수) > 2이면 경고? ✅ **기능 폐기로 무효** |
 | A-26 | `abstractionFitnessMinFitnessScore` | `0` | fitness score 0 미만이면 보고? 0이라는 기준의 의미는? ✅ **기능 폐기로 무효** |
@@ -652,10 +654,11 @@
 
 ### D-05. barrel — DEFAULT_IGNORE_GLOBS
 
-- **파일**: `src/features/barrel/analyzer.ts` L16-23
+- **파일**: `src/features/barrel/analyzer.ts` L18-25
 - **코드**: `node_modules/**`, `dist/**`, `test/**` 등 7개 glob
 - **임의 가정**: 이 경로들이 항상 분석에서 제외되어야 함
 - **질문**: monorepo에서 `test/`가 integration test이고 barrel 규칙을 적용해야 할 수 있음
+- **결론**: ✅ **configurable로 해결됨** — `BarrelOptions.ignoreGlobs`로 사용자가 override 가능. `.firebatrc.jsonc`의 `barrel.ignoreGlobs`로 설정. 기본값은 업계 관행(node_modules, dist, test 제외)에 부합. SonarQube/ESLint도 동일 경로를 기본 제외. monorepo에서 test/ 포함이 필요하면 `ignoreGlobs`를 빈 배열로 설정 가능.
 
 ---
 
@@ -664,6 +667,7 @@
 - **파일**: `src/features/barrel/analyzer.ts` L220-280
 - **임의 가정**: index.ts 파일은 re-export만 허용
 - **질문**: 일부 프로젝트에서는 index.ts에 factory 함수나 DI 설정을 넣는 것이 정석. 이것이 "violation"인 것이 맞는가?
+- **결론**: ✅ **Fact (유지)** — barrel file = re-export only는 업계 표준. eslint-plugin-barrel-files는 barrel에 비-export 코드를 금지. Biome `noBarrelFile`도 동일 전제. Angular 스타일 가이드, Nx 공식 문서 모두 index.ts는 public API surface로서 re-export만 권장. factory/DI를 index.ts에 넣는 패턴은 barrel 규칙 자체를 비활성화하는 것이 적절 (`barrel: false`). finding kind `invalid-index-statement`는 barrel 규칙을 활성화한 프로젝트에서만 적용되므로 오탐이 아님.
 
 ---
 
@@ -836,14 +840,14 @@
 
 | 카테고리 | 건수 | 해결 | 주요 영향 feature |
 |---|---|---|---|
-| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 29건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste, ~~exception-hygiene~~, ~~implementation-overhead~~, ~~concept-scatter~~ |
-| B. 임의 공식/가중치 | **7건** | ✅ 5건 | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
+| A. 임의 수치 임계값 | **34건** (+8 신규) | ✅ 33건 | coupling, nesting, early-return, collapsible-if, 기본값 6개, ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, ~~implicit-state~~, ~~decision-surface~~, waste, ~~exception-hygiene~~, ~~implementation-overhead~~, ~~concept-scatter~~, auto-min-size, giant-file, variable-lifetime |
+| B. 임의 공식/가중치 | **7건** | ✅ **7건 전체 해결** | coupling, ~~abstraction-fitness~~, ~~concept-scatter~~, implementation-overhead, ~~decision-surface~~ |
 | C. 이름/패턴 휴리스틱 | **7건** | ✅ 7건 | ~~api-drift~~, ~~noop~~, ~~symmetry-breaking~~, ~~implicit-state~~, ~~invariant-blindspot~~, waste |
-| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ 6건 | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel |
-| E. 근사 측정 | **7건** (+2 신규) | ✅ 5건 | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
+| D. 아키텍처 가정 | **7건** (+1건 중복) | ✅ **7건 전체 해결** | ~~abstraction-fitness~~, ~~symmetry-breaking~~, ~~concept-scatter~~, ~~modification-impact~~, barrel |
+| E. 근사 측정 | **7건** (+2 신규) | ✅ **7건 전체 해결** | ~~decision-surface~~, implementation-overhead, ~~modification-trap~~, ~~symmetry-breaking~~, temporal-coupling, variable-lifetime, error-flow |
 | F. 임의 confidence | **4건** | ✅ 4건 | ~~noop~~, waste |
-| G. 신규 디텍터/메트릭 후보 | **4건** | 미착수 | liveness pressure, usage gap, 조건부 사용/스코프 축소, 변이 밀도 |
-| **합계** | **70건** (+6 신규) | ✅ **57건 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
+| G. 신규 디텍터/메트릭 후보 | **4건** | ✅ **4건 전체 채택** | liveness pressure, usage gap, 스코프 축소, 변이 밀도 |
+| **합계** | **70건** (+6 신규) | ✅ **70건 전체 해결** | 17개 feature 중 14개에서 최소 1건 이상 |
 
 ---
 
@@ -859,6 +863,7 @@ CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데
 - **현재 상태**: variable-lifetime의 `contextBurden`이 함수 내 장수 변수 개수로 근사 (E-06 완료 후 함수 단위로 정밀화됨)
 - **정확한 측정**: CFG 노드별 `reachingInByNode` BitSet 크기 = 해당 지점의 활성 변수 수
 - **귀속**: 함수 복잡도 메트릭 — nesting 디텍터 또는 별도 디텍터
+- **결론**: ✅ **채택** — 에이전트가 피크 압력 지점 기준으로 함수 분리 가능. dead store 발견, 불필요 연산 제거 등 버그 수정 유도. 단독 발화 시 노이즈 위험(순수 데이터 변환 함수 오탐) → **함수 길이 + lifetime 복합 조건으로만 발화**. CC/nesting이 낮은 평탄한 긴 함수를 유일하게 잡을 수 있는 메트릭.
 
 ---
 
@@ -868,6 +873,7 @@ CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데
 - **예시**: 변수 10~15줄 사용, 중간 65줄 비어있음, 80줄에서 재사용 → "함수를 쪼개라"
 - **필요 인프라**: def-use 체인으로 사용 클러스터 식별
 - **귀속**: 함수 분해 시그널 — 별도 디텍터 후보
+- **결론**: ✅ **채택** — gap이 "잘못된 위치 선언" 시그널로 작동, 핸들러 분리 및 검증 누락 버그 노출 효과. 반례(의도적 리소스 early acquire)는 finding 메시지에 "리소스 관리 패턴 확인" 안내로 방어. **finding 메시지에 "gap 사이 구간에서 변수 불필요 여부" 명시 필수**.
 
 ---
 
@@ -877,6 +883,7 @@ CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데
 - **예시**: `const x = compute(); if (cond) { use(x); } else { /* x 안 씀 */ }` → 분기 안으로 이동
 - **필요 인프라**: CFG 경로별 liveness 분석
 - **귀속**: 스코프 배치 최적화 — waste 디텍터 또는 별도 디텍터
+- **결론**: ✅ **채택** — 가장 명확한 행동 지시("변수 X를 if 블록으로 이동"). JS/TS 린트 생태계 공백 (ESLint 두 차례 제안 거부, oxlint/Biome/SonarJS 해당 없음. ReSharper/IntelliJ는 C#/Java 전용). firebat의 CFG 인프라로 ESLint가 거부한 이유(성능, 사이드이펙트)를 극복 가능. **finally/catch 블록 사용 변수 필터링 구현 필수**.
 
 ---
 
@@ -886,6 +893,7 @@ CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데
 - **예시**: 50줄 수명의 `let` — 재할당 1회 vs 5회는 추적 난이도가 다름
 - **필요 인프라**: def-use 체인에서 write 횟수 집계
 - **귀속**: 변이 복잡도 메트릭 — 별도 메트릭 후보
+- **결론**: ✅ **채택** — 재할당 8회 `let`을 `const` 중간값 체인으로 변환 유도. 불변 보장 + 단계별 명명으로 가독성 실질 향상. `prefer-const`는 0회 vs 1회+만 구분하나, gradient(1회 vs 8회)가 리팩토링 방향("파이프라인/중간값 추출")을 구체적으로 결정. 반례(loop accumulator)는 **accumulator 패턴 감지 후 억제 필수**.
 
 ---
 
