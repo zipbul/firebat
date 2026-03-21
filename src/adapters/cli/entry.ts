@@ -335,8 +335,10 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     configPath: loaded.resolvedPath,
   };
 
+  const cfgExclude = config?.exclude;
+
   if (merged.targets.length > 0) {
-    const targets = await resolveTargets(rootAbs, merged.targets);
+    const targets = await resolveTargets(rootAbs, merged.targets, cfgExclude);
 
     logger.debug('Targets expanded', { inputTargetCount: merged.targets.length, expandedTargetCount: targets.length });
 
@@ -346,7 +348,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     };
   }
 
-  const targets = await resolveTargets(rootAbs);
+  const targets = await resolveTargets(rootAbs, undefined, cfgExclude);
 
   logger.debug('Targets auto-discovered', { discoveredTargetCount: targets.length, rootAbs });
 

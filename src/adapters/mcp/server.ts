@@ -434,7 +434,8 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
     },
     safeTool(async (args: z.infer<typeof ScanInputSchema>) => {
       const mcpLogger = createMcpLogger(server, logger);
-      let targets = await resolveTargets(rootAbs, args.targets);
+      const cfgExclude = config?.exclude;
+      let targets = await resolveTargets(rootAbs, args.targets, cfgExclude);
 
       if (args.expandAffected === true && args.targets !== undefined && args.targets.length > 0) {
         try {

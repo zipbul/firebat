@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/firebat/assets/firebatrc.schema.json",
+  "exclude": ["**/__fixtures__/**", "**/__expected__/**"],
   "features": {
     "temporal-coupling": true,
     "variable-lifetime": {

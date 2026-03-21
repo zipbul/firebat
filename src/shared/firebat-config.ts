@@ -113,11 +113,13 @@ interface FirebatConfig {
   readonly $schema?: string | undefined;
   readonly features?: FirebatFeaturesConfig | undefined;
   readonly mcp?: FirebatMcpConfig | undefined;
+  readonly exclude?: ReadonlyArray<string> | undefined;
 }
 
 const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
   .object({
     $schema: z.string().optional(),
+    exclude: z.array(z.string()).optional(),
     features: z
       .object({
         duplicates: z

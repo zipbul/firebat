@@ -70,4 +70,20 @@ describe('FirebatConfigSchema', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('[HP] parses exclude with glob patterns', () => {
+    const result = FirebatConfigSchema.safeParse({
+      exclude: ['**/__fixtures__/**'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('[NE] rejects exclude with non-string elements', () => {
+    const result = FirebatConfigSchema.safeParse({
+      exclude: [123],
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
