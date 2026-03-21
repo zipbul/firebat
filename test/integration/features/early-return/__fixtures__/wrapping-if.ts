@@ -12,13 +12,8 @@ export function process(data: unknown) {
 function isValid(_data: unknown): boolean {
   return true;
 }
-
 function doA() {}
-
 function doB() {}
-
 function doC() {}
-
 function doD() {}
-
 function doE() {}

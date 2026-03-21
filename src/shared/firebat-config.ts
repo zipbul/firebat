@@ -138,7 +138,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
             z.literal(true),
             z
               .object({
-                ignoreGlobs: z.array(z.string()).nonempty().optional(),
+                ignoreGlobs: z.array(z.string()).optional(),
               })
               .strict(),
           ])
@@ -271,7 +271,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                     z.literal(true),
                     z
                       .object({
-                        ignoreGlobs: z.array(z.string()).nonempty().optional(),
+                        ignoreGlobs: z.array(z.string()).optional(),
                       })
                       .strict(),
                   ])

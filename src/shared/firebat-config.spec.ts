@@ -41,12 +41,12 @@ describe('FirebatConfigSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('[NE] rejects barrel ignoreGlobs with empty array', () => {
+  it('[HP] accepts barrel ignoreGlobs with empty array (replace semantics)', () => {
     const result = FirebatConfigSchema.safeParse({
       features: { barrel: { ignoreGlobs: [] } },
     });
 
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('[NE] rejects minSize with negative number', () => {
@@ -60,9 +60,7 @@ describe('FirebatConfigSchema', () => {
   it('[NE] rejects unknown top-level keys (strict mode)', () => {
     const result = FirebatConfigSchema.safeParse({ unknownField: true });
 
-    // May or may not fail depending on strict mode
-    // At minimum, should not throw
-    expect(typeof result.success).toBe('boolean');
+    expect(result.success).toBe(false);
   });
 
   it('[HP] parses $schema field', () => {

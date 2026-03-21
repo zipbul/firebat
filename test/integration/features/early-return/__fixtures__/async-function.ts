@@ -5,6 +5,5 @@ export async function fetchData(url: string | null): Promise<string> {
   }
 
   const response = await fetch(url);
-
   return response.text();
 }

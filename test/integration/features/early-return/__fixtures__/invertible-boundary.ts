@@ -4,7 +4,6 @@ export function exactBoundary(x: boolean): string {
   if (x) {
     const a = 'short1';
     const b = 'short2';
-
     return a + b;
   } else {
     const c = 'long1';
@@ -12,7 +11,6 @@ export function exactBoundary(x: boolean): string {
     const e = 'long3';
     const f = 'long4';
     const g = 'long5';
-
     return c + d + e + f + g;
   }
 }
@@ -23,7 +21,6 @@ export function overLimit(x: boolean): string {
     const a = 'a';
     const b = 'b';
     const c = 'c';
-
     return a + b + c;
   } else {
     const d = 'd';
@@ -33,7 +30,6 @@ export function overLimit(x: boolean): string {
     const h = 'h';
     const i = 'i';
     const j = 'j';
-
     return d + e + f + g + h + i + j;
   }
 }
@@ -43,14 +39,12 @@ export function belowRatio(x: boolean): string {
   if (x) {
     const a = 'short1';
     const b = 'short2';
-
     return a + b;
   } else {
     const c = 'long1';
     const d = 'long2';
     const e = 'long3';
     const f = 'long4';
-
     return c + d + e + f;
   }
 }

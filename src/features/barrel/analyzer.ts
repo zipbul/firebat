@@ -690,7 +690,7 @@ const analyzeBarrel = async (
     return createEmptyBarrel();
   }
 
-  const ignoreMatchers = compileIgnoreMatchers([...DEFAULT_IGNORE_GLOBS, ...(options.ignoreGlobs ?? [])]);
+  const ignoreMatchers = compileIgnoreMatchers(options.ignoreGlobs ?? [...DEFAULT_IGNORE_GLOBS]);
   const activeFiles = program.filter(file => !isIgnored(options.rootAbs, file.filePath, ignoreMatchers));
   const fileSet = new Set<string>();
 

@@ -4,7 +4,6 @@ export function outer(x: boolean): string {
     if (!y) {
       return 'inner-false';
     }
-
     return 'inner-true';
   };
 

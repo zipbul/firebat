@@ -14,7 +14,6 @@ export function overscopedTry(): string {
     const i = 9;
     const j = 10;
     const k = 11;
-
     return String(a + b + c + d + e + f + g + h + i + j + k);
   } catch (err) {
     return 'error';

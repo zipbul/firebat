@@ -16,11 +16,7 @@ export function processItems(items: Array<{ type: string; value: string }>) {
 }
 
 function doA(_item: unknown) {}
-
 function doB(_item: unknown) {}
-
 function doC(_item: unknown) {}
-
 function doD(_item: unknown) {}
-
 function doE(_item: unknown) {}

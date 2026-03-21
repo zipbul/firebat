@@ -16,7 +16,7 @@
   "embeddedLanguageFormatting": "auto",
   "endOfLine": "lf",
   "insertFinalNewline": true,
-  "ignorePatterns": [],
+  "ignorePatterns": ["**/__fixtures__/**"],
   "experimentalSortPackageJson": {
     "sortScripts": true,
   },

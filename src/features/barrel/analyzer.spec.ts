@@ -132,6 +132,20 @@ describe('analyzer', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('custom ignoreGlobs replaces defaults — dist files are detected', async () => {
+      const distDir = path.join(tmpDir, 'dist');
+
+      await fs.mkdir(distDir, { recursive: true });
+
+      const f = toFile(path.join(distDir, 'index.ts'), `export * from './other';`);
+
+      const result = await analyzeBarrel([f], { rootAbs: tmpDir, ignoreGlobs: ['generated/**'] });
+
+      const starFindings = result.filter(r => r.kind === 'export-star');
+
+      expect(starFindings.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   // ─── cross-module-reexport: 구문 A (export from) ───────────────────────────

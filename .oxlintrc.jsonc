@@ -250,6 +250,7 @@
     "**/*.d.ts",
     "dist",
     "**/dist/**",
+    "**/__fixtures__/**",
     ".dependency-cruiser.cjs",
     "commitlint.config.cjs",
   ],

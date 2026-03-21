@@ -6,7 +6,6 @@ export class Processor {
     }
 
     const trimmed = input.trim();
-
     return trimmed.toUpperCase();
   }
 }

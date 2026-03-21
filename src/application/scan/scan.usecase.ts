@@ -432,24 +432,23 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 
   const barrelPromise = options.detectors.includes('barrel')
-    ? ((): Promise<BarrelResult> => {
+    ? (async (): Promise<BarrelResult> => {
         const t0 = nowMs();
         const detectorKey = 'barrel';
 
         logger.debug('detector: start', { detector: detectorKey });
 
-        return analyzeBarrel(program, {
+        const r = await analyzeBarrel(program, {
           rootAbs: ctx.rootAbs,
           ...(options.barrelIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelIgnoreGlobs } : {}),
-        }).then(r => {
-          const durationMs = nowMs() - t0;
-
-          detectorTimings[detectorKey] = durationMs;
-
-          logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-
-          return r;
         });
+        const durationMs = nowMs() - t0;
+
+        detectorTimings[detectorKey] = durationMs;
+
+        logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
+
+        return r;
       })()
     : Promise.resolve(createEmptyBarrel());
   let unknownProofResult: UnknownProofResult = createEmptyUnknownProof();
@@ -484,38 +483,38 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 
   const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
-    ? ((): Promise<TypecheckResult | null> => {
+    ? (async (): Promise<TypecheckResult | null> => {
         const t0 = nowMs();
         const detectorKey = 'typecheck';
 
         logger.info('detector: start', { detector: detectorKey });
 
-        return analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger })
-          .then(r => {
-            detectorTimings.typecheck = nowMs() - t0;
+        try {
+          const r = await analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger });
 
-            logger.debug('detector: complete', {
-              detector: detectorKey,
-              durationMs: Math.round(detectorTimings.typecheck),
-            });
+          detectorTimings.typecheck = nowMs() - t0;
 
-            return r;
-          })
-          .catch(err => {
-            detectorTimings.typecheck = nowMs() - t0;
-
-            const message = err instanceof Error ? err.message : String(err);
-
-            metaErrors.typecheck = message;
-
-            logger.debug('detector: failed', {
-              detector: detectorKey,
-              durationMs: Math.round(detectorTimings.typecheck),
-              message: metaErrors.typecheck,
-            });
-
-            return null;
+          logger.debug('detector: complete', {
+            detector: detectorKey,
+            durationMs: Math.round(detectorTimings.typecheck),
           });
+
+          return r;
+        } catch (err) {
+          detectorTimings.typecheck = nowMs() - t0;
+
+          const message = err instanceof Error ? err.message : String(err);
+
+          metaErrors.typecheck = message;
+
+          logger.debug('detector: failed', {
+            detector: detectorKey,
+            durationMs: Math.round(detectorTimings.typecheck),
+            message: metaErrors.typecheck,
+          });
+
+          return null;
+        }
       })()
     : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
@@ -557,7 +556,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     coupling = createEmptyCoupling();
   }
 
-  const nestingCfg = (config as any)?.features?.nesting;
+  const nestingCfg = config?.features?.nesting;
   const resolvedNestingOptions = {
     maxCognitiveComplexity:
       (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCognitiveComplexity : undefined) ??
@@ -633,7 +632,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 
   let errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>>;
-  let errorFlowStatus: 'ok' | 'failed' = 'ok';
 
   if (options.detectors.includes('error-flow')) {
     const t0 = nowMs();
@@ -647,7 +645,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       const message = err instanceof Error ? err.message : String(err);
 
       metaErrors[detectorKey] = message;
-      errorFlowStatus = 'failed';
 
       const partial = (err as any)?.partial;
 
@@ -702,10 +699,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     giantFileMaxLines: 1000,
     variableLifetimeMaxLifetimeLines: 30,
   };
+  const { 'giant-file': giantFileCfg, 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
   const resolvedGiantFileMaxLines =
-    (config as any)?.features?.['giant-file']?.maxLines ?? defaultFeatureOptions.giantFileMaxLines;
+    (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? defaultFeatureOptions.giantFileMaxLines;
   const resolvedVariableLifetimeMaxLifetimeLines =
-    (config as any)?.features?.['variable-lifetime']?.maxLifetimeLines ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
+    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg.maxLifetimeLines : undefined) ??
+    defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
 
   if (options.detectors.includes('giant-file')) {
