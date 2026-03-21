@@ -83,10 +83,20 @@ If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be
 
 | Detector | What it finds |
 |----------|---------------|
-| **barrel** | Barrel file violations: `export *`, deep imports, missing/invalid index files |
+| **barrel** | Barrel file violations: `export *`, deep imports, missing/invalid index files, cross-module re-exports |
 | **unknown-proof** | Unsafe `unknown`/`any` usage: type assertions, unvalidated unknown, inferred any |
 | **dependencies** | Import dependency cycles and edge-cut hints |
 | **coupling** | High-coupling hotspot modules |
+| **nesting** | Cognitive complexity, deep nesting, callback depth, complexity density |
+| **early-return** | Invertible if-else, collapsible conditions, guard clause opportunities |
+| **collapsible-if** | Nested if statements that can be collapsed into a single condition |
+| **indirection** | Thin wrappers, forwarding chains, type remaps, interface rewraps |
+| **variable-lifetime** | Long-lived variables, scope-narrowing opportunities |
+| **waste** | Dead stores, unused variables |
+| **duplicates** | Exact and structural code duplicates |
+| **temporal-coupling** | Order-dependent operations |
+| **giant-file** | Files exceeding configurable line count threshold |
+| **error-flow** | Unsafe error handling patterns |
 
 ### External Tools
 
