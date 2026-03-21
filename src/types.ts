@@ -114,10 +114,11 @@ export type FirebatCatalogCode =
   | 'DIAG_SHOTGUN_SURGERY'
   | 'DIAG_OVER_INDIRECTION'
   | 'DIAG_MIXED_ABSTRACTION'
-  // Phase 1 detectors (11)
+  // Phase 1 detectors (12)
   | 'TEMPORAL_COUPLING'
   | 'SYMMETRY_BREAK'
   | 'VAR_LIFETIME'
+  | 'LIFETIME_SCOPE_NARROWING'
   | 'GIANT_FILE'
   // external tools (3)
   | 'LINT'
@@ -553,6 +554,8 @@ export interface TemporalCouplingFinding {
   readonly readers: number;
 }
 
+export type VariableLifetimeFindingKind = 'variable-lifetime' | 'scope-narrowing';
+
 export interface VariableLifetimeFinding {
   readonly kind: 'variable-lifetime';
   readonly file: string;
@@ -561,6 +564,18 @@ export interface VariableLifetimeFinding {
   readonly variable: string;
   readonly lifetimeLines: number;
   readonly contextBurden: number;
+}
+
+export interface ScopeNarrowingFinding {
+  readonly kind: 'scope-narrowing';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly code?: FirebatCatalogCode;
+  readonly variable: string;
+  readonly targetBlock: {
+    readonly type: 'if-consequent' | 'if-alternate' | 'switch-case' | 'try-block' | 'catch-block';
+    readonly span: SourceSpan;
+  };
 }
 
 export interface GiantFileMetrics {
@@ -593,7 +608,7 @@ export interface FirebatAnalyses {
 
   // Phase 1 detectors (IMPROVE.md)
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
-  readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding>;
+  readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector
   readonly duplicates: ReadonlyArray<DuplicateGroup>;

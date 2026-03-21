@@ -596,9 +596,15 @@ const formatText = (report: FirebatReport): string => {
       const rel = path.relative(process.cwd(), getFile(f));
       const start = toPos(f.span.start.line, f.span.start.column);
 
-      lines.push(
-        `    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
-      );
+      if (f.kind === 'scope-narrowing') {
+        lines.push(
+          `    ${cc('·', A.dim)} ${f.variable} ${cc(`scope-narrowing → ${f.targetBlock.type}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
+        );
+      } else {
+        lines.push(
+          `    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
+        );
+      }
     }
   }
 

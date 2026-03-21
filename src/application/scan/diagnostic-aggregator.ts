@@ -596,6 +596,15 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that reducing the lifetime does not break readability by scattering related declarations.',
     ],
   },
+  LIFETIME_SCOPE_NARROWING: {
+    cause:
+      'A variable is declared in a wider scope than necessary — all its uses are inside a single narrower block.',
+    think: [
+      'Move the declaration inside the target block to reduce the variable\'s visibility.',
+      'Verify that the initializer has no side effects that depend on execution order.',
+      'If the variable is a `let` with reassignments, ensure all assignments are also inside the target block.',
+    ],
+  },
   GIANT_FILE: {
     cause: 'A source file exceeds the line threshold, concentrating too many responsibilities in a single file.',
     think: [

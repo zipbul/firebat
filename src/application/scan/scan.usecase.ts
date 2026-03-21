@@ -13,7 +13,9 @@ import type {
   FirebatReport,
   IndirectionFindingKind,
   NestingKind,
+  ScopeNarrowingFinding,
   UnknownProofFindingKind,
+  VariableLifetimeFinding,
   WasteKind,
 } from '../../types';
 
@@ -1120,6 +1122,16 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       };
     });
 
+  const enrichVariableLifetime = (
+    findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding>,
+  ): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding> =>
+    findings.map(f => ({
+      ...f,
+      code: (f.kind === 'scope-narrowing' ? 'LIFETIME_SCOPE_NARROWING' : 'VAR_LIFETIME') as FirebatCatalogCode,
+      file: f.file.length > 0 ? toProjectRelative(f.file) : f.file,
+      span: f.span,
+    }));
+
   const enrichFormat = (files: ReadonlyArray<string>): ReadonlyArray<any> =>
     files.map(filePath => ({
       kind: 'needs-formatting' as const,
@@ -1199,7 +1211,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection as any) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('variable-lifetime')
-      ? { 'variable-lifetime': enrichPhase1(variableLifetime as any, 'VAR_LIFETIME') }
+      ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime as any) }
       : {}),
     ...(selectedDetectors.has('temporal-coupling')
       ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') }
