@@ -1,0 +1,19 @@
+[
+  {
+    "file": "liveness-pressure.ts",
+    "functionLineCount": 54,
+    "hotSpotLine": 53,
+    "kind": "liveness-pressure",
+    "maxLiveVariables": 44,
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 60
+      },
+      "start": {
+        "column": 7,
+        "line": 6
+      }
+    }
+  }
+]

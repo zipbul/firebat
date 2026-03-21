@@ -17,6 +17,7 @@ import type {
   CouplingHotspot,
   TemporalCouplingFinding,
   VariableLifetimeFinding,
+  LivenessPressureFinding,
   GiantFileFinding,
   FirebatDetector,
   FormatFinding,
@@ -960,6 +961,29 @@ describe('formatReport', () => {
       expect(out).toContain('config');
       expect(out).toContain('lifetime=80L');
       expect(out).toContain('burden=5');
+    });
+  });
+
+  // ── Liveness Pressure body ──────────────────────────────────────
+
+  describe('liveness-pressure body', () => {
+    it('formatReport - liveness-pressure finding - renders maxLive, lines, and hotspot in output', () => {
+      // Arrange
+      const finding: LivenessPressureFinding = {
+        kind: 'liveness-pressure',
+        file: testFile,
+        span: span(5, 0),
+        maxLiveVariables: 9,
+        functionLineCount: 60,
+        hotSpotLine: 12,
+      };
+      // Act
+      const out = formatReport(makeReport(['variable-lifetime'], { 'variable-lifetime': [finding] }), 'text');
+      // Assert
+      expect(out).toContain('liveness-pressure');
+      expect(out).toContain('maxLive=9');
+      expect(out).toContain('lines=60');
+      expect(out).toContain('hotspot=L12');
     });
   });
 

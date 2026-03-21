@@ -17,6 +17,7 @@ export interface BitSet {
   clone(): BitSet;
   equals(other: BitSet): boolean;
   array(): number[];
+  size(): number;
 }
 
 export interface VariableUsage {

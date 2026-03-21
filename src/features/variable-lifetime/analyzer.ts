@@ -1,19 +1,25 @@
 import type { Node } from 'oxc-parser';
 
 import type { BitSet, CfgNodePayload, FunctionBodyAnalysis, NodeRecord, ParsedFile } from '../../engine/types';
-import type { ScopeNarrowingFinding, VariableLifetimeFinding } from '../../types';
+import type { LivenessPressureFinding, ScopeNarrowingFinding, VariableLifetimeFinding } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { collectFunctionNodes, isNodeRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
+import { computeLiveness } from '../../engine/dataflow/liveness';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
 import { collectVariables } from '../../engine/dataflow/variable-collector';
+import { getFunctionSpan } from '../../engine/function-span';
 import { getLineColumn } from '../../engine/source-position';
 
-const createEmptyVariableLifetime = (): ReadonlyArray<VariableLifetimeFinding> => [];
+const createEmptyVariableLifetime = (): ReadonlyArray<
+  VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding
+> => [];
 
 interface AnalyzeVariableLifetimeOptions {
   readonly maxLifetimeLines: number;
+  readonly maxLiveVariables?: number | undefined;
+  readonly minFunctionLines?: number | undefined;
 }
 
 const payloadOffset = (payload: Node | ReadonlyArray<Node> | null): number => {
@@ -767,13 +773,13 @@ const checkScopeNarrowing = (
 const analyzeVariableLifetime = (
   files: ReadonlyArray<ParsedFile>,
   options: AnalyzeVariableLifetimeOptions,
-): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding> => {
+): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding> => {
   if (files.length === 0) {
     return createEmptyVariableLifetime();
   }
 
   const maxLifetimeLines = Math.max(0, Math.floor(options.maxLifetimeLines));
-  const findings: Array<VariableLifetimeFinding | ScopeNarrowingFinding> = [];
+  const findings: Array<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding> = [];
 
   for (const file of files) {
     if (file.errors.length > 0) {
@@ -906,6 +912,36 @@ const analyzeVariableLifetime = (
       );
 
       findings.push(...narrowingFindings);
+
+      // Liveness pressure check
+      const maxLiveVarsThreshold = options.maxLiveVariables ?? Infinity;
+      const minFuncLines = options.minFunctionLines ?? Infinity;
+      const functionSpan = getFunctionSpan(functionNode, file.sourceText);
+      const functionLineCount = functionSpan.end.line - functionSpan.start.line;
+
+      if (functionLineCount >= minFuncLines) {
+        const livenessResult = computeLiveness(
+          analysis.cfg,
+          analysis.useVarIndexesByNode,
+          analysis.writeVarIndexesByNode,
+          localIndexByName.size,
+        );
+
+        if (livenessResult.maxLiveCount >= maxLiveVarsThreshold) {
+          const hotSpotPayload = analysis.nodePayloads[livenessResult.maxLiveNodeId];
+          const hotSpotOffset = hotSpotPayload ? payloadOffset(hotSpotPayload as Node | ReadonlyArray<Node>) : functionNode.start;
+          const hotSpotLine = getLineColumn(file.sourceText, hotSpotOffset >= 0 ? hotSpotOffset : functionNode.start).line;
+
+          findings.push({
+            kind: 'liveness-pressure',
+            file: rel,
+            span: functionSpan,
+            maxLiveVariables: livenessResult.maxLiveCount,
+            functionLineCount,
+            hotSpotLine,
+          });
+        }
+      }
     }
   }
 

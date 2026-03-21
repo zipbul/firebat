@@ -12,6 +12,7 @@ import type {
   FirebatCatalogCode,
   FirebatReport,
   IndirectionFindingKind,
+  LivenessPressureFinding,
   NestingKind,
   ScopeNarrowingFinding,
   UnknownProofFindingKind,
@@ -28,8 +29,8 @@ import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplica
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { analyzeErrorFlow, createEmptyErrorFlow } from '../../features/error-flow';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
-import { analyzeIndirection, createEmptyIndirection } from '../../features/indirection';
 import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
+import { analyzeIndirection, createEmptyIndirection } from '../../features/indirection';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
@@ -640,7 +641,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     try {
-      errorFlow = await analyzeErrorFlow(program, (semanticAvailable ? { gildash } : {}));
+      errorFlow = await analyzeErrorFlow(program, semanticAvailable ? { gildash } : {});
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
@@ -698,13 +699,25 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   const defaultFeatureOptions = {
     giantFileMaxLines: 1000,
     variableLifetimeMaxLifetimeLines: 30,
+    variableLifetimeMaxLiveVariables: 7,
+    variableLifetimeMinFunctionLines: 40,
   };
   const { 'giant-file': giantFileCfg, 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
   const resolvedGiantFileMaxLines =
-    (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? defaultFeatureOptions.giantFileMaxLines;
+    (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ??
+    defaultFeatureOptions.giantFileMaxLines;
   const resolvedVariableLifetimeMaxLifetimeLines =
-    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg.maxLifetimeLines : undefined) ??
-    defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
+    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+      ? variableLifetimeCfg.maxLifetimeLines
+      : undefined) ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
+  const resolvedMaxLiveVariables =
+    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+      ? variableLifetimeCfg.maxLiveVariables
+      : undefined) ?? defaultFeatureOptions.variableLifetimeMaxLiveVariables;
+  const resolvedMinFunctionLines =
+    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+      ? variableLifetimeCfg.minFunctionLines
+      : undefined) ?? defaultFeatureOptions.variableLifetimeMinFunctionLines;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
 
   if (options.detectors.includes('giant-file')) {
@@ -727,7 +740,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     logger.debug('detector: start', { detector: detectorKey });
 
-    variableLifetime = analyzeVariableLifetime(program, { maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines) });
+    variableLifetime = analyzeVariableLifetime(program, {
+      maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines),
+      maxLiveVariables: Number(resolvedMaxLiveVariables),
+      minFunctionLines: Number(resolvedMinFunctionLines),
+    });
     detectorTimings[detectorKey] = nowMs() - t0;
 
     logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
@@ -1122,11 +1139,15 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
 
   const enrichVariableLifetime = (
-    findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding>,
-  ): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding> =>
+    findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
+  ): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding> =>
     findings.map(f => ({
       ...f,
-      code: (f.kind === 'scope-narrowing' ? 'LIFETIME_SCOPE_NARROWING' : 'VAR_LIFETIME') as FirebatCatalogCode,
+      code: (f.kind === 'scope-narrowing'
+        ? 'LIFETIME_SCOPE_NARROWING'
+        : f.kind === 'liveness-pressure'
+          ? 'LIFETIME_LIVENESS_PRESSURE'
+          : 'VAR_LIFETIME') as FirebatCatalogCode,
       file: f.file.length > 0 ? toProjectRelative(f.file) : f.file,
       span: f.span,
     }));

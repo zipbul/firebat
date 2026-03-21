@@ -339,7 +339,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "maxLifetimeLines": { "type": "integer", "minimum": 0 } }
+          "properties": {
+            "maxLifetimeLines": { "type": "integer", "minimum": 0 },
+            "maxLiveVariables": { "type": "integer", "minimum": 0 },
+            "minFunctionLines": { "type": "integer", "minimum": 0 }
+          }
         }
       ]
     },
@@ -351,7 +355,11 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "maxLifetimeLines": { "type": "integer", "minimum": 0 } }
+          "properties": {
+            "maxLifetimeLines": { "type": "integer", "minimum": 0 },
+            "maxLiveVariables": { "type": "integer", "minimum": 0 },
+            "minFunctionLines": { "type": "integer", "minimum": 0 }
+          }
         }
       ]
     },

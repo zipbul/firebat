@@ -119,6 +119,7 @@ export type FirebatCatalogCode =
   | 'SYMMETRY_BREAK'
   | 'VAR_LIFETIME'
   | 'LIFETIME_SCOPE_NARROWING'
+  | 'LIFETIME_LIVENESS_PRESSURE'
   | 'GIANT_FILE'
   // external tools (3)
   | 'LINT'
@@ -420,7 +421,12 @@ export interface BarrelFinding {
   readonly evidence?: string;
 }
 
-export type IndirectionFindingKind = 'thin-wrapper' | 'forward-chain' | 'cross-file-forwarding-chain' | 'type-remap' | 'interface-rewrap';
+export type IndirectionFindingKind =
+  | 'thin-wrapper'
+  | 'forward-chain'
+  | 'cross-file-forwarding-chain'
+  | 'type-remap'
+  | 'interface-rewrap';
 
 export interface IndirectionFinding {
   readonly kind: IndirectionFindingKind;
@@ -554,7 +560,7 @@ export interface TemporalCouplingFinding {
   readonly readers: number;
 }
 
-export type VariableLifetimeFindingKind = 'variable-lifetime' | 'scope-narrowing';
+export type VariableLifetimeFindingKind = 'variable-lifetime' | 'scope-narrowing' | 'liveness-pressure';
 
 export interface VariableLifetimeFinding {
   readonly kind: 'variable-lifetime';
@@ -576,6 +582,16 @@ export interface ScopeNarrowingFinding {
     readonly type: 'if-consequent' | 'if-alternate' | 'switch-case' | 'try-block' | 'catch-block';
     readonly span: SourceSpan;
   };
+}
+
+export interface LivenessPressureFinding {
+  readonly kind: 'liveness-pressure';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly code?: FirebatCatalogCode;
+  readonly maxLiveVariables: number;
+  readonly functionLineCount: number;
+  readonly hotSpotLine: number;
 }
 
 export interface GiantFileMetrics {
@@ -608,7 +624,7 @@ export interface FirebatAnalyses {
 
   // Phase 1 detectors (IMPROVE.md)
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
-  readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding>;
+  readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector
   readonly duplicates: ReadonlyArray<DuplicateGroup>;

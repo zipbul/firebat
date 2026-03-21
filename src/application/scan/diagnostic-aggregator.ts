@@ -597,12 +597,20 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   LIFETIME_SCOPE_NARROWING: {
-    cause:
-      'A variable is declared in a wider scope than necessary — all its uses are inside a single narrower block.',
+    cause: 'A variable is declared in a wider scope than necessary — all its uses are inside a single narrower block.',
     think: [
-      'Move the declaration inside the target block to reduce the variable\'s visibility.',
+      "Move the declaration inside the target block to reduce the variable's visibility.",
       'Verify that the initializer has no side effects that depend on execution order.',
       'If the variable is a `let` with reassignments, ensure all assignments are also inside the target block.',
+    ],
+  },
+  LIFETIME_LIVENESS_PRESSURE: {
+    cause:
+      'A function has too many simultaneously live variables at a single point, indicating excessive state to track mentally.',
+    think: [
+      'Identify clusters of variables that are alive together and determine whether they represent independent concerns that can be separated into sub-functions.',
+      'Check whether the function is flat and long — if so, grouping related operations into named helper functions reduces the maximum live variable count.',
+      'Verify that the high liveness is not caused by premature variable declarations that can be moved closer to their use.',
     ],
   },
   GIANT_FILE: {
@@ -669,7 +677,9 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   if (godFunctionResolves > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_FUNCTION;
 
-    if (entry !== undefined) {catalog.DIAG_GOD_FUNCTION = entry;}
+    if (entry !== undefined) {
+      catalog.DIAG_GOD_FUNCTION = entry;
+    }
   }
 
   // DIAG_CIRCULAR_DEPENDENCY
@@ -678,7 +688,9 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   if (cycles.length > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_CIRCULAR_DEPENDENCY;
 
-    if (entry !== undefined) {catalog.DIAG_CIRCULAR_DEPENDENCY = entry;}
+    if (entry !== undefined) {
+      catalog.DIAG_CIRCULAR_DEPENDENCY = entry;
+    }
   }
 
   // DIAG_GOD_MODULE
@@ -687,7 +699,9 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   if (godModules.length > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_MODULE;
 
-    if (entry !== undefined) {catalog.DIAG_GOD_MODULE = entry;}
+    if (entry !== undefined) {
+      catalog.DIAG_GOD_MODULE = entry;
+    }
   }
 
   return { catalog };

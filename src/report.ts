@@ -600,6 +600,10 @@ const formatText = (report: FirebatReport): string => {
         lines.push(
           `    ${cc('·', A.dim)} ${f.variable} ${cc(`scope-narrowing → ${f.targetBlock.type}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
         );
+      } else if (f.kind === 'liveness-pressure') {
+        lines.push(
+          `    ${cc('·', A.dim)} ${cc(`liveness-pressure maxLive=${f.maxLiveVariables} lines=${f.functionLineCount} hotspot=L${f.hotSpotLine}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,
+        );
       } else {
         lines.push(
           `    ${cc('·', A.dim)} ${f.variable} ${cc(`lifetime=${f.lifetimeLines}L burden=${f.contextBurden}`, A.yellow)} ${cc(`@ ${rel}:${start}`, A.dim)}`,

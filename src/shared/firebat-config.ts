@@ -19,6 +19,8 @@ interface FirebatIndirectionConfig {
 
 interface FirebatVariableLifetimeConfig {
   readonly maxLifetimeLines?: number | undefined;
+  readonly maxLiveVariables?: number | undefined;
+  readonly minFunctionLines?: number | undefined;
 }
 
 interface FirebatGiantFileConfig {
@@ -228,6 +230,8 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
             z
               .object({
                 maxLifetimeLines: z.number().int().nonnegative().optional(),
+                maxLiveVariables: z.number().int().nonnegative().optional(),
+                minFunctionLines: z.number().int().nonnegative().optional(),
               })
               .strict(),
           ])
@@ -316,6 +320,8 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                     z
                       .object({
                         maxLifetimeLines: z.number().int().nonnegative().optional(),
+                        maxLiveVariables: z.number().int().nonnegative().optional(),
+                        minFunctionLines: z.number().int().nonnegative().optional(),
                       })
                       .strict(),
                   ])

@@ -33,6 +33,7 @@ describe('engine/types — interface shape assertions (compile-time)', () => {
       clone: () => mockSet,
       equals: (_other: unknown) => false,
       array: () => [] as number[],
+      size: () => 0,
     };
 
     // No runtime assertion needed — this verifies the object can be typed as BitSet

@@ -11,22 +11,6 @@
 >
 > 이 문서의 모든 항목은 위 관점에서 논의한다: **"이 기준이 에이전트에게 정확한 판단 근거를 제공하는가?"**
 
-> [!NOTE]
-> ## 3원칙 (논의 확정)
->
-> ### 1. Fact / Signal 이분법
-> - **Fact**: 100% 확인된 구조적 결함. 에이전트가 반드시 수정해야 함. (예: bidirectional-coupling)
-> - **Signal**: 객관적 metric + threshold 알림. 에이전트가 판단. (예: off-main-sequence, god-module)
-> - 중간 단계 없음 — 모든 finding은 Fact 아니면 Signal.
->
-> ### 2. severity 미도입
-> - Fact에도 Signal에도 severity level을 부여하지 않는다.
-> - Fact는 모두 동등한 "에러". Signal은 raw metric만 제공, 에이전트가 판단.
-> - 근거: warn → 에이전트가 무시 → 매 scan마다 반복 → 노이즈.
->
-> ### 3. Signal threshold = configurable
-> - 하드코딩된 임의 수치가 아닌, 사용자/프로젝트가 설정하는 threshold.
-> - 기본값은 있을 수 있으나, 변경 가능해야 한다.
 
 > **목적**: 26개 feature + engine 핵심 모듈 전체를 코드 레벨로 읽고, "분석 데이터로부터 도출된 논리적/객관적 사실"이 **아닌** 개발자가 근거 없이 설정한 기준들을 식별한다.
 > *(원래 28개 모듈에서 api-drift, noop feature 제외)*

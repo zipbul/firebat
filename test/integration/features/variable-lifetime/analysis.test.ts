@@ -233,4 +233,112 @@ describe('integration/variable-lifetime', () => {
       await project.dispose();
     }
   });
+
+  it('should emit liveness-pressure finding when maxLiveVariables and minFunctionLines are configured', async () => {
+    // Arrange: 8 vars all live at return, 50-line function; config sets maxLiveVariables:7, minFunctionLines:10
+    const filler = Array.from({ length: 45 }, (_, i) => `  const pad${i} = ${i};`).join('\n');
+    const project = await createScanProjectFixtureWithFiles('p1-var-life-liveness-1', {
+      '.firebatrc.jsonc':
+        '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 999, "maxLiveVariables": 7, "minFunctionLines": 10 } }\n}',
+      'src/a.ts': [
+        'export function bigFn() {',
+        '  const a = 1;',
+        '  const b = 2;',
+        '  const c = 3;',
+        '  const d = 4;',
+        '  const e = 5;',
+        '  const f = 6;',
+        '  const g = 7;',
+        '  const h = 8;',
+        filler,
+        '  return a + b + c + d + e + f + g + h;',
+        '}',
+      ].join('\n'),
+    });
+
+    try {
+      // Act
+      const report = await withCwd(project.rootAbs, () =>
+        scanUseCase(
+          {
+            targets: [...project.targetsAbs],
+            format: 'json',
+            minSize: 0,
+            maxForwardDepth: 0,
+            exitOnFindings: false,
+            detectors: ['variable-lifetime' as any],
+            fix: false,
+            help: false,
+          },
+          { logger: createScanLogger() },
+        ),
+      );
+      // Assert
+      const list = (report as any)?.analyses?.['variable-lifetime'];
+
+      expect(Array.isArray(list)).toBe(true);
+
+      const pressureFindings = (list ?? []).filter((item: any) => item.kind === 'liveness-pressure');
+
+      expect(pressureFindings.length).toBeGreaterThanOrEqual(1);
+      expect(pressureFindings[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+      expect(typeof pressureFindings[0]?.functionLineCount).toBe('number');
+      expect(pressureFindings[0]?.functionLineCount).toBeGreaterThanOrEqual(10);
+      expect(typeof pressureFindings[0]?.hotSpotLine).toBe('number');
+    } finally {
+      await project.dispose();
+    }
+  });
+
+  it('should not emit liveness-pressure finding when maxLiveVariables is set very high in config', async () => {
+    // Arrange: 8 vars all live at return, 50-line function; config sets maxLiveVariables to 999 → no fire
+    const filler = Array.from({ length: 45 }, (_, i) => `  const pad${i} = ${i};`).join('\n');
+    const project = await createScanProjectFixtureWithFiles('p1-var-life-liveness-2', {
+      '.firebatrc.jsonc':
+        '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 999, "maxLiveVariables": 999, "minFunctionLines": 10 } }\n}',
+      'src/a.ts': [
+        'export function bigFnHighThreshold() {',
+        '  const a = 1;',
+        '  const b = 2;',
+        '  const c = 3;',
+        '  const d = 4;',
+        '  const e = 5;',
+        '  const f = 6;',
+        '  const g = 7;',
+        '  const h = 8;',
+        filler,
+        '  return a + b + c + d + e + f + g + h;',
+        '}',
+      ].join('\n'),
+    });
+
+    try {
+      // Act
+      const report = await withCwd(project.rootAbs, () =>
+        scanUseCase(
+          {
+            targets: [...project.targetsAbs],
+            format: 'json',
+            minSize: 0,
+            maxForwardDepth: 0,
+            exitOnFindings: false,
+            detectors: ['variable-lifetime' as any],
+            fix: false,
+            help: false,
+          },
+          { logger: createScanLogger() },
+        ),
+      );
+      // Assert — no liveness-pressure because maxLiveVariables threshold (999) is above actual live count
+      const list = (report as any)?.analyses?.['variable-lifetime'];
+
+      expect(Array.isArray(list)).toBe(true);
+
+      const pressureFindings = (list ?? []).filter((item: any) => item.kind === 'liveness-pressure');
+
+      expect(pressureFindings.length).toBe(0);
+    } finally {
+      await project.dispose();
+    }
+  });
 });

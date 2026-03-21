@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { ScopeNarrowingFinding, VariableLifetimeFinding } from '../../types';
+import type { LivenessPressureFinding, ScopeNarrowingFinding, VariableLifetimeFinding } from '../../types';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } from './analyzer';
@@ -8,12 +8,16 @@ import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } fro
 const { isPureInitializer } = __testing__;
 
 const lifetimeOnly = (
-  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding>,
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
 ): ReadonlyArray<VariableLifetimeFinding> => findings.filter((f): f is VariableLifetimeFinding => f.kind === 'variable-lifetime');
 
 const scopeOnly = (
-  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding>,
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
 ): ReadonlyArray<ScopeNarrowingFinding> => findings.filter((f): f is ScopeNarrowingFinding => f.kind === 'scope-narrowing');
+
+const livenessOnly = (
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
+): ReadonlyArray<LivenessPressureFinding> => findings.filter((f): f is LivenessPressureFinding => f.kind === 'liveness-pressure');
 
 const file = (relPath: string, sourceText: string) => parseSource(`/p/${relPath}`, sourceText);
 
@@ -127,7 +131,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
     // Assert — lifetime 3 === threshold 3, strictly greater required, so not reported
-    expect(result.filter(f => f.variable === 'x').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
 
   it('analyzeVariableLifetime - lifetime one above threshold - reported', () => {
@@ -145,7 +149,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
     // Assert — lifetime 4 > threshold 3
-    expect(result.filter(f => f.variable === 'x').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
 
   it('analyzeVariableLifetime - maxLifetimeLines 0 - single line gap reports', () => {
@@ -168,7 +172,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
     // Assert — lifetime 0 is NOT > 0, so not reported
-    expect(result.filter(f => f.variable === 'x').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
 
   // ── 기존 regex 버그 수정 확인 ──
@@ -210,7 +214,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert — lifetime = 2 (line 2 to line 4), within threshold
-    expect(result.filter(f => f.variable === 'x').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
 
   it('analyzeVariableLifetime - module-level variable - not analyzed', () => {
@@ -250,7 +254,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert — neither x exceeds threshold (both have lifetime 1)
-    expect(result.filter(f => f.variable === 'x').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
 
   it('analyzeVariableLifetime - nested function use - does not extend outer variable lifetime', () => {
@@ -269,7 +273,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert — x has no direct use in outer scope (only nested), so no finding
-    expect(result.filter(f => f.variable === 'x').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
 
   // ── 제어 흐름 ──
@@ -287,7 +291,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert
-    expect(result.filter(f => f.variable === 'x').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
 
   it('analyzeVariableLifetime - if/else both branches use variable - uses farther branch for lifetime', () => {
@@ -307,7 +311,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert — x used in both branches, the farther one determines lifetime
-    expect(result.filter(f => f.variable === 'x').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
 
   it('analyzeVariableLifetime - loop body use - variable lifetime spans to loop', () => {
@@ -325,7 +329,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert
-    expect(result.filter(f => f.variable === 'multiplier').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'multiplier').length).toBe(1);
   });
 
   it('analyzeVariableLifetime - try/catch - variable used in catch block', () => {
@@ -345,7 +349,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert
-    expect(result.filter(f => f.variable === 'resource').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'resource').length).toBe(1);
   });
 
   // ── 재할당 / let ──
@@ -364,7 +368,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert — only def2's lifetime counted, def1 is killed
-    const xFindings = result.filter(f => f.variable === 'x');
+    const xFindings = lifetimeOnly(result).filter(f => f.variable === 'x');
 
     expect(xFindings.length).toBe(1);
   });
@@ -428,8 +432,8 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert — both a and b reported
-    expect(result.filter(f => f.variable === 'a').length).toBe(1);
-    expect(result.filter(f => f.variable === 'b').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'a').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'b').length).toBe(1);
   });
 
   // ── 함수 종류 ──
@@ -447,7 +451,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert
-    expect(result.filter(f => f.variable === 'x').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
 
   it('analyzeVariableLifetime - function expression - analyzed', () => {
@@ -463,7 +467,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
     // Assert
-    expect(result.filter(f => f.variable === 'x').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
 
   // ── 사용 없는 변수 ──
@@ -475,7 +479,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
     // Assert — unused has no use, so no lastUseOffset → no finding
-    expect(result.filter(f => f.variable === 'unused').length).toBe(0);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'unused').length).toBe(0);
   });
 
   // ── Finding 형태 검증 ──
@@ -526,7 +530,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
-    const finding = result.find(f => f.variable === 'x');
+    const finding = lifetimeOnly(result).find(f => f.variable === 'x');
     // Assert
     expect(finding).toBeDefined();
     expect(finding!.span.start.line).toBe(2);
@@ -575,10 +579,10 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
     // Assert
-    expect(result.filter(f => f.variable === 'a').length).toBe(1);
-    expect(result.filter(f => f.variable === 'b').length).toBe(1);
-    expect(result.filter(f => f.variable === 'a')[0]?.file).toBe('src/a.ts');
-    expect(result.filter(f => f.variable === 'b')[0]?.file).toBe('src/b.ts');
+    expect(lifetimeOnly(result).filter(f => f.variable === 'a').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'b').length).toBe(1);
+    expect(lifetimeOnly(result).filter(f => f.variable === 'a')[0]?.file).toBe('src/a.ts');
+    expect(lifetimeOnly(result).filter(f => f.variable === 'b')[0]?.file).toBe('src/b.ts');
   });
 
   // ── scope-narrowing ───────────────────────────────────────────────────────────
@@ -1060,8 +1064,7 @@ describe('variable-lifetime/analyzer', () => {
     // 시나리오 6: switch default case — default도 case로 처리하는가?
     it('analyzeVariableLifetime - switch with default case terminating - detects scope-narrowing', () => {
       // Arrange — switch has case "a" + default, both with break
-      const sourceText =
-        'function f(y: string) { const x = 1; switch (y) { case "a": break; default: use(x); break; } }';
+      const sourceText = 'function f(y: string) { const x = 1; switch (y) { case "a": break; default: use(x); break; } }';
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
@@ -1135,8 +1138,7 @@ describe('variable-lifetime/analyzer', () => {
 
     it('analyzeVariableLifetime - object with computed key initializer - no scope-narrowing finding', () => {
       // Arrange
-      const sourceText =
-        'function f(cond: boolean) { const x = { [compute()]: 1 }; if (cond) { use(x); } }';
+      const sourceText = 'function f(cond: boolean) { const x = { [compute()]: 1 }; if (cond) { use(x); } }';
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
@@ -1204,5 +1206,480 @@ describe('variable-lifetime/analyzer', () => {
       // Assert — arrow function initializer is impure → no scope-narrowing
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
+  });
+
+  // ── Liveness pressure ──
+
+  it('analyzeVariableLifetime - long flat function with many live vars - emits liveness-pressure', () => {
+    // Arrange: 50+ line function with 8 variables simultaneously alive
+    const sourceText = [
+      'function bigFn() {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - short function with many live vars - no liveness-pressure (below minFunctionLines)', () => {
+    // Arrange: only 5 lines long — below minFunctionLines threshold
+    const sourceText = [
+      'function smallFn() {',
+      '  const a = 1; const b = 2; const c = 3; const d = 4; const e = 5; const f = 6; const g = 7; const h = 8;',
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
+    // Assert — function is too short, no liveness-pressure finding
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - long function with few live vars - no liveness-pressure (below maxLiveVariables)', () => {
+    // Arrange: 50+ line function but only 2 variables alive at once
+    const sourceText = [
+      'function sparseFn() {',
+      '  const a = 1;',
+      '  const b = 2;',
+      filler(50, 'pad'),
+      '  return a + b;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act — threshold is 8 live vars, function only has 2
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 8, minFunctionLines: 40 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - maxLiveCount equals threshold - emits liveness-pressure (>= semantics)', () => {
+    // Arrange: 50+ line function with exactly 3 live vars, threshold set to 3
+    const sourceText = [
+      'function exactFn() {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      filler(45, 'pad'),
+      '  return a + b + c;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act — threshold exactly matches live count
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 10 });
+    // Assert — >= means it should fire when equal
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - liveness-pressure finding has correct maxLiveVariables and functionLineCount', () => {
+    // Arrange: 50+ line function with exactly 8 simultaneously live variables
+    const sourceText = [
+      'function metaFn() {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+    expect(lp[0]?.functionLineCount).toBeGreaterThanOrEqual(40);
+    expect(typeof lp[0]?.hotSpotLine).toBe('number');
+  });
+
+  it('analyzeVariableLifetime - function parameters count as live variables - includes params in maxLiveVariables', () => {
+    // Arrange: 50+ line function, 5 params + 3 local vars all alive at return, threshold 7
+    const sourceText = [
+      'function heavyFn(p1: number, p2: number, p3: number, p4: number, p5: number) {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      filler(48, 'pad'),
+      '  return a + b + c + p1 + p2 + p3 + p4 + p5;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - maxLiveVariables zero - fires for any function with variables', () => {
+    // Arrange: 50+ line function with only 1 variable; threshold 0 should fire
+    const sourceText = [
+      'function singleVarFn() {',
+      '  const x = 1;',
+      filler(50, 'pad'),
+      '  return x;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 0, minFunctionLines: 10 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - minFunctionLines zero - fires even for short functions', () => {
+    // Arrange: 5-line function with 8 simultaneously live vars, minFunctionLines 0
+    const sourceText = [
+      'function shortFn() {',
+      '  const a = 1; const b = 2; const c = 3; const d = 4;',
+      '  const e = 5; const f = 6; const g = 7; const h = 8;',
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 0 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - arrow function with many live vars - emits liveness-pressure', () => {
+    // Arrange: 50+ line arrow function with 8 simultaneously live vars, threshold 7
+    const sourceText = [
+      'const arrowFn = () => {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '};',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - nested function variables - inner vars do not inflate outer liveness', () => {
+    // Arrange: outer has 2 vars (below threshold 7), inner has 8 vars (above threshold 7)
+    const sourceText = [
+      'function outerFn() {',
+      '  const x = 1;',
+      '  const y = 2;',
+      '  function innerFn() {',
+      '    const a = 1;',
+      '    const b = 2;',
+      '    const c = 3;',
+      '    const d = 4;',
+      '    const e = 5;',
+      '    const f = 6;',
+      '    const g = 7;',
+      '    const h = 8;',
+      filler(45, 'pad'),
+      '    return a + b + c + d + e + f + g + h;',
+      '  }',
+      filler(40, 'outerPad'),
+      '  return x + y + innerFn();',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    // Assert: outer function must NOT have liveness-pressure (only 2 live vars)
+    const lp = livenessOnly(result);
+    const outerPressure = lp.filter(f => f.maxLiveVariables <= 2);
+
+    expect(outerPressure.length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - destructuring bindings all live simultaneously - emits liveness-pressure', () => {
+    // Arrange: 8-binding destructuring + 50-line body; all bindings used at end → all simultaneously live
+    const sourceText = [
+      'function destructFn(obj: any) {',
+      '  const { a, b, c, d, e, f, g, h } = obj;',
+      filler(50, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+  });
+
+  it('analyzeVariableLifetime - for-loop inner vars combined with outer vars - emits liveness-pressure', () => {
+    // Arrange: 5 outer vars declared before loop; inside loop, 3 more + use outer vars → 8 simultaneous
+    const sourceText = [
+      'function loopFn(items: number[]) {',
+      '  const v1 = 1;',
+      '  const v2 = 2;',
+      '  const v3 = 3;',
+      '  const v4 = 4;',
+      '  const v5 = 5;',
+      filler(45, 'pad'),
+      '  for (let i = 0; i < items.length; i++) {',
+      '    const inner1 = items[i]!;',
+      '    const inner2 = inner1 * 2;',
+      '    const inner3 = inner2 + 1;',
+      '    console.log(inner3 + v1 + v2 + v3 + v4 + v5);',
+      '  }',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - try-catch inner vars above threshold - emits liveness-pressure', () => {
+    // Arrange: 5 vars outside + error + 2 vars inside catch → 8 live in catch block; threshold 7
+    const sourceText = [
+      'function tryCatchFn() {',
+      '  const v1 = 1;',
+      '  const v2 = 2;',
+      '  const v3 = 3;',
+      '  const v4 = 4;',
+      '  const v5 = 5;',
+      filler(45, 'pad'),
+      '  try {',
+      '    doWork(v1 + v2 + v3 + v4 + v5);',
+      '  } catch (err: any) {',
+      '    const msg = String(err);',
+      '    const code = err.code ?? 0;',
+      '    console.error(msg, code, v1, v2, v3, v4, v5);',
+      '  }',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeVariableLifetime - if-branch declares all vars at top - all 8 live at entry block', () => {
+    // Arrange: 8 vars declared at top, half used in if-branch, half in else-branch
+    // At declaration point all 8 are simultaneously live → above threshold 7
+    const sourceText = [
+      'function branchFn(cond: boolean) {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  if (cond) {',
+      '    return a + b + c + d;',
+      '  } else {',
+      '    return e + f + g + h;',
+      '  }',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
+    // Assert
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+  });
+
+  it('analyzeVariableLifetime - two functions independently measured - only high-pressure one fires', () => {
+    // Arrange: functionA has 8 live vars (fires), functionB has 2 live vars (no fire)
+    const sourceText = [
+      'function highPressure() {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+      'function lowPressure() {',
+      '  const x = 1;',
+      '  const y = 2;',
+      filler(50, 'lp'),
+      '  return x + y;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
+    // Assert: exactly one liveness-pressure finding (highPressure only)
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBe(1);
+    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+  });
+
+  it('analyzeVariableLifetime - no maxLiveVariables option - liveness-pressure never fires', () => {
+    // Arrange: 50-line function with 8 simultaneously live vars; options omit maxLiveVariables/minFunctionLines
+    const sourceText = [
+      'function bigFnNoOpt() {',
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act — only maxLifetimeLines provided; maxLiveVariables/minFunctionLines absent → Infinity defaults
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+    // Assert — no liveness-pressure finding because Infinity threshold is never reached
+    const lp = livenessOnly(result);
+
+    expect(lp.length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - liveness-pressure hotSpotLine - points to correct line in source', () => {
+    // Arrange: 50+ line function with 8 vars declared at top, all used in return
+    // hotSpotLine must be > 0 and <= last line of function
+    const varDecls = ['  const a = 1;', '  const b = 2;', '  const c = 3;', '  const d = 4;', '  const e = 5;', '  const f = 6;', '  const g = 7;', '  const h = 8;'];
+    const lines = ['function hotSpotFn() {', ...varDecls, filler(45, 'pad'), '  return a + b + c + d + e + f + g + h;', '}'];
+    const sourceText = lines.join('\n');
+    const functionLastLine = lines.length;
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    const lp = livenessOnly(result);
+    // Assert
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp[0]!.hotSpotLine).toBeGreaterThan(0);
+    expect(lp[0]!.hotSpotLine).toBeLessThanOrEqual(functionLastLine);
+  });
+
+  it('analyzeVariableLifetime - let reassignment kills previous def - does not inflate live count beyond actual simultaneous uses', () => {
+    // Arrange: x reassigned unconditionally; at most x+a alive simultaneously (count=2), threshold 3 → no fire
+    const sourceText = [
+      'function f() {',
+      '  let x = 1;',
+      '  const a = 2;',
+      '  console.log(x + a);',
+      '  x = 99;',
+      filler(50, 'pad'),
+      '  return x;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
+    const lp = livenessOnly(result);
+    // Assert: maxLiveCount is 2 (x + a), which is below threshold 3 → no liveness-pressure
+    expect(lp.length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - class method with many live vars - emits liveness-pressure', () => {
+    // Arrange: 50+ line class method with 8 vars all used in return
+    const sourceText = [
+      'class Service {',
+      '  process() {',
+      '    const a = 1;',
+      '    const b = 2;',
+      '    const c = 3;',
+      '    const d = 4;',
+      '    const e = 5;',
+      '    const f = 6;',
+      '    const g = 7;',
+      '    const h = 8;',
+      filler(45, 'pad').split('\n').map(l => '  ' + l).join('\n'),
+      '    return a + b + c + d + e + f + g + h;',
+      '  }',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    const lp = livenessOnly(result);
+    // Assert
+    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp[0]!.maxLiveVariables).toBeGreaterThanOrEqual(7);
+  });
+
+  it('analyzeVariableLifetime - two functions both exceeding threshold - emits two liveness-pressure findings', () => {
+    // Arrange: functionA and functionB each have 8 vars all alive simultaneously, threshold 7
+    const makeHeavyFn = (name: string) => [
+      `function ${name}() {`,
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+      filler(45, 'pad'),
+      '  return a + b + c + d + e + f + g + h;',
+      '}',
+    ].join('\n');
+    const sourceText = [makeHeavyFn('functionA'), makeHeavyFn('functionB')].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    const lp = livenessOnly(result);
+    // Assert: both functions emit liveness-pressure
+    expect(lp.length).toBe(2);
   });
 });
