@@ -613,6 +613,15 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the high liveness is not caused by premature variable declarations that can be moved closer to their use.',
     ],
   },
+  LIFETIME_MUTATION_DENSITY: {
+    cause:
+      'A variable is reassigned too many times outside of loop accumulation, suggesting the variable serves multiple unrelated purposes.',
+    think: [
+      'Check whether the variable can be split into separate variables, each with a single purpose.',
+      'Consider whether a pipeline or intermediate variables would make the data flow clearer.',
+      'Verify that the reassignments are not caused by incremental string/object building that could be refactored into a builder pattern or template.',
+    ],
+  },
   GIANT_FILE: {
     cause: 'A source file exceeds the line threshold, concentrating too many responsibilities in a single file.',
     think: [

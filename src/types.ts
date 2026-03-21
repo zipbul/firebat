@@ -120,6 +120,7 @@ export type FirebatCatalogCode =
   | 'VAR_LIFETIME'
   | 'LIFETIME_SCOPE_NARROWING'
   | 'LIFETIME_LIVENESS_PRESSURE'
+  | 'LIFETIME_MUTATION_DENSITY'
   | 'GIANT_FILE'
   // external tools (3)
   | 'LINT'
@@ -560,7 +561,7 @@ export interface TemporalCouplingFinding {
   readonly readers: number;
 }
 
-export type VariableLifetimeFindingKind = 'variable-lifetime' | 'scope-narrowing' | 'liveness-pressure';
+export type VariableLifetimeFindingKind = 'variable-lifetime' | 'scope-narrowing' | 'liveness-pressure' | 'mutation-density';
 
 export interface VariableLifetimeFinding {
   readonly kind: 'variable-lifetime';
@@ -594,6 +595,15 @@ export interface LivenessPressureFinding {
   readonly hotSpotLine: number;
 }
 
+export interface MutationDensityFinding {
+  readonly kind: 'mutation-density';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly code?: FirebatCatalogCode;
+  readonly variable: string;
+  readonly mutationCount: number;
+}
+
 export interface GiantFileMetrics {
   readonly lineCount: number;
   readonly maxLines: number;
@@ -624,7 +634,9 @@ export interface FirebatAnalyses {
 
   // Phase 1 detectors (IMPROVE.md)
   readonly 'temporal-coupling': ReadonlyArray<TemporalCouplingFinding>;
-  readonly 'variable-lifetime': ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>;
+  readonly 'variable-lifetime': ReadonlyArray<
+    VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding
+  >;
   readonly 'giant-file': ReadonlyArray<GiantFileFinding>;
   // Unified duplicates detector
   readonly duplicates: ReadonlyArray<DuplicateGroup>;

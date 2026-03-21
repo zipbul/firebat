@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { LivenessPressureFinding, ScopeNarrowingFinding, VariableLifetimeFinding } from '../../types';
+import type {
+  LivenessPressureFinding,
+  MutationDensityFinding,
+  ScopeNarrowingFinding,
+  VariableLifetimeFinding,
+} from '../../types';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } from './analyzer';
@@ -8,16 +13,20 @@ import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } fro
 const { isPureInitializer } = __testing__;
 
 const lifetimeOnly = (
-  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
 ): ReadonlyArray<VariableLifetimeFinding> => findings.filter((f): f is VariableLifetimeFinding => f.kind === 'variable-lifetime');
 
 const scopeOnly = (
-  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
 ): ReadonlyArray<ScopeNarrowingFinding> => findings.filter((f): f is ScopeNarrowingFinding => f.kind === 'scope-narrowing');
 
 const livenessOnly = (
-  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
 ): ReadonlyArray<LivenessPressureFinding> => findings.filter((f): f is LivenessPressureFinding => f.kind === 'liveness-pressure');
+
+const mutationOnly = (
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
+): ReadonlyArray<MutationDensityFinding> => findings.filter((f): f is MutationDensityFinding => f.kind === 'mutation-density');
 
 const file = (relPath: string, sourceText: string) => parseSource(`/p/${relPath}`, sourceText);
 
@@ -1341,13 +1350,7 @@ describe('variable-lifetime/analyzer', () => {
 
   it('analyzeVariableLifetime - maxLiveVariables zero - fires for any function with variables', () => {
     // Arrange: 50+ line function with only 1 variable; threshold 0 should fire
-    const sourceText = [
-      'function singleVarFn() {',
-      '  const x = 1;',
-      filler(50, 'pad'),
-      '  return x;',
-      '}',
-    ].join('\n');
+    const sourceText = ['function singleVarFn() {', '  const x = 1;', filler(50, 'pad'), '  return x;', '}'].join('\n');
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 0, minFunctionLines: 10 });
@@ -1597,7 +1600,16 @@ describe('variable-lifetime/analyzer', () => {
   it('analyzeVariableLifetime - liveness-pressure hotSpotLine - points to correct line in source', () => {
     // Arrange: 50+ line function with 8 vars declared at top, all used in return
     // hotSpotLine must be > 0 and <= last line of function
-    const varDecls = ['  const a = 1;', '  const b = 2;', '  const c = 3;', '  const d = 4;', '  const e = 5;', '  const f = 6;', '  const g = 7;', '  const h = 8;'];
+    const varDecls = [
+      '  const a = 1;',
+      '  const b = 2;',
+      '  const c = 3;',
+      '  const d = 4;',
+      '  const e = 5;',
+      '  const f = 6;',
+      '  const g = 7;',
+      '  const h = 8;',
+    ];
     const lines = ['function hotSpotFn() {', ...varDecls, filler(45, 'pad'), '  return a + b + c + d + e + f + g + h;', '}'];
     const sourceText = lines.join('\n');
     const functionLastLine = lines.length;
@@ -1644,7 +1656,10 @@ describe('variable-lifetime/analyzer', () => {
       '    const f = 6;',
       '    const g = 7;',
       '    const h = 8;',
-      filler(45, 'pad').split('\n').map(l => '  ' + l).join('\n'),
+      filler(45, 'pad')
+        .split('\n')
+        .map(l => '  ' + l)
+        .join('\n'),
       '    return a + b + c + d + e + f + g + h;',
       '  }',
       '}',
@@ -1660,20 +1675,21 @@ describe('variable-lifetime/analyzer', () => {
 
   it('analyzeVariableLifetime - two functions both exceeding threshold - emits two liveness-pressure findings', () => {
     // Arrange: functionA and functionB each have 8 vars all alive simultaneously, threshold 7
-    const makeHeavyFn = (name: string) => [
-      `function ${name}() {`,
-      '  const a = 1;',
-      '  const b = 2;',
-      '  const c = 3;',
-      '  const d = 4;',
-      '  const e = 5;',
-      '  const f = 6;',
-      '  const g = 7;',
-      '  const h = 8;',
-      filler(45, 'pad'),
-      '  return a + b + c + d + e + f + g + h;',
-      '}',
-    ].join('\n');
+    const makeHeavyFn = (name: string) =>
+      [
+        `function ${name}() {`,
+        '  const a = 1;',
+        '  const b = 2;',
+        '  const c = 3;',
+        '  const d = 4;',
+        '  const e = 5;',
+        '  const f = 6;',
+        '  const g = 7;',
+        '  const h = 8;',
+        filler(45, 'pad'),
+        '  return a + b + c + d + e + f + g + h;',
+        '}',
+      ].join('\n');
     const sourceText = [makeHeavyFn('functionA'), makeHeavyFn('functionB')].join('\n');
     const files = [file('src/a.ts', sourceText)];
     // Act
@@ -1681,5 +1697,113 @@ describe('variable-lifetime/analyzer', () => {
     const lp = livenessOnly(result);
     // Assert: both functions emit liveness-pressure
     expect(lp.length).toBe(2);
+  });
+
+  // ── mutation-density ──
+
+  it('analyzeVariableLifetime - maxMutationCount not set - no mutation-density findings', () => {
+    // Arrange
+    const sourceText = [
+      'function f() {',
+      '  let x = 0;',
+      '  x = 1;',
+      '  x = 2;',
+      '  x = 3;',
+      '  x = 4;',
+      '  return x;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+    // Assert
+    expect(mutationOnly(result).length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - mutations exceed maxMutationCount - emits finding', () => {
+    // Arrange
+    const sourceText = [
+      'function f() {',
+      '  let x = 0;',
+      '  x = 1;',
+      '  x = 2;',
+      '  x = 3;',
+      '  x = 4;',
+      '  return x;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 3 });
+    const mutations = mutationOnly(result);
+    // Assert
+    expect(mutations.length).toBe(1);
+    expect(mutations[0]!.variable).toBe('x');
+    expect(mutations[0]!.mutationCount).toBe(4);
+  });
+
+  it('analyzeVariableLifetime - mutations equal maxMutationCount - no finding (strict greater-than)', () => {
+    // Arrange
+    const sourceText = ['function f() {', '  let x = 0;', '  x = 1;', '  x = 2;', '  x = 3;', '  return x;', '}'].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 3 });
+    // Assert
+    expect(mutationOnly(result).length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - loop accumulator compound-assignment - suppressed', () => {
+    // Arrange
+    const sourceText = [
+      'function f(items: number[]) {',
+      '  let sum = 0;',
+      '  for (const item of items) {',
+      '    sum += item;',
+      '  }',
+      '  return sum;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 0 });
+    // Assert — sum += item inside loop is suppressed
+    expect(mutationOnly(result).length).toBe(0);
+  });
+
+  it('analyzeVariableLifetime - multiple variables only exceeding ones reported', () => {
+    // Arrange
+    const sourceText = [
+      'function f() {',
+      '  let a = 0;',
+      '  a = 1;',
+      '  a = 2;',
+      '  let b = 0;',
+      '  b = 1;',
+      '  return a + b;',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act — threshold 1: a has 2 writes (exceeds), b has 1 write (equal, no finding)
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 1 });
+    const mutations = mutationOnly(result);
+    // Assert
+    expect(mutations.length).toBe(1);
+    expect(mutations[0]!.variable).toBe('a');
+  });
+
+  it('analyzeVariableLifetime - for-statement update clause i++ - suppressed as loop write', () => {
+    // Arrange — i++ in update clause should be treated as loop write
+    const sourceText = [
+      'function f(n: number) {',
+      '  for (let i = 0; i < n; i++) {',
+      '    console.log(i);',
+      '  }',
+      '}',
+    ].join('\n');
+    const files = [file('src/a.ts', sourceText)];
+    // Act — threshold 0 means any non-loop write triggers finding
+    const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 0 });
+    // Assert — i++ is inside ForStatement range, suppressed
+    expect(mutationOnly(result).length).toBe(0);
   });
 });

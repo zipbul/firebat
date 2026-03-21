@@ -13,6 +13,7 @@ import type {
   FirebatReport,
   IndirectionFindingKind,
   LivenessPressureFinding,
+  MutationDensityFinding,
   NestingKind,
   ScopeNarrowingFinding,
   UnknownProofFindingKind,
@@ -701,6 +702,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     variableLifetimeMaxLifetimeLines: 30,
     variableLifetimeMaxLiveVariables: 7,
     variableLifetimeMinFunctionLines: 40,
+    variableLifetimeMaxMutationCount: Infinity,
   };
   const { 'giant-file': giantFileCfg, 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
   const resolvedGiantFileMaxLines =
@@ -718,6 +720,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
       ? variableLifetimeCfg.minFunctionLines
       : undefined) ?? defaultFeatureOptions.variableLifetimeMinFunctionLines;
+  const resolvedMaxMutationCount =
+    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+      ? variableLifetimeCfg.maxMutationCount
+      : undefined) ?? defaultFeatureOptions.variableLifetimeMaxMutationCount;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
 
   if (options.detectors.includes('giant-file')) {
@@ -744,6 +750,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines),
       maxLiveVariables: Number(resolvedMaxLiveVariables),
       minFunctionLines: Number(resolvedMinFunctionLines),
+      maxMutationCount: resolvedMaxMutationCount,
     });
     detectorTimings[detectorKey] = nowMs() - t0;
 
@@ -1139,15 +1146,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     });
 
   const enrichVariableLifetime = (
-    findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding>,
-  ): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding> =>
+    findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
+  ): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding> =>
     findings.map(f => ({
       ...f,
       code: (f.kind === 'scope-narrowing'
         ? 'LIFETIME_SCOPE_NARROWING'
         : f.kind === 'liveness-pressure'
           ? 'LIFETIME_LIVENESS_PRESSURE'
-          : 'VAR_LIFETIME') as FirebatCatalogCode,
+          : f.kind === 'mutation-density'
+            ? 'LIFETIME_MUTATION_DENSITY'
+            : 'VAR_LIFETIME') as FirebatCatalogCode,
       file: f.file.length > 0 ? toProjectRelative(f.file) : f.file,
       span: f.span,
     }));

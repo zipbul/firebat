@@ -1,7 +1,12 @@
 import type { Node } from 'oxc-parser';
 
 import type { BitSet, CfgNodePayload, FunctionBodyAnalysis, NodeRecord, ParsedFile } from '../../engine/types';
-import type { LivenessPressureFinding, ScopeNarrowingFinding, VariableLifetimeFinding } from '../../types';
+import type {
+  LivenessPressureFinding,
+  MutationDensityFinding,
+  ScopeNarrowingFinding,
+  VariableLifetimeFinding,
+} from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { collectFunctionNodes, isNodeRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
@@ -13,13 +18,14 @@ import { getFunctionSpan } from '../../engine/function-span';
 import { getLineColumn } from '../../engine/source-position';
 
 const createEmptyVariableLifetime = (): ReadonlyArray<
-  VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding
+  VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding
 > => [];
 
 interface AnalyzeVariableLifetimeOptions {
   readonly maxLifetimeLines: number;
   readonly maxLiveVariables?: number | undefined;
   readonly minFunctionLines?: number | undefined;
+  readonly maxMutationCount?: number | undefined;
 }
 
 const payloadOffset = (payload: Node | ReadonlyArray<Node> | null): number => {
@@ -768,18 +774,81 @@ const checkScopeNarrowing = (
   return findings;
 };
 
+// ── collectLoopBodyRanges ─────────────────────────────────────────────────────
+
+interface LoopBodyRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+const LOOP_STATEMENT_TYPES = new Set(['ForStatement', 'WhileStatement', 'DoWhileStatement', 'ForInStatement', 'ForOfStatement']);
+
+/**
+ * Recursively collects ranges of all loop statements anywhere in the given
+ * AST node list (any depth).  For ForStatement the **entire** statement range
+ * is used so that init/test/update clause writes (e.g. `i++`) are also
+ * suppressed.  For other loop types the body range is sufficient.
+ */
+const collectLoopBodyRanges = (stmts: ReadonlyArray<Node>): ReadonlyArray<LoopBodyRange> => {
+  const ranges: LoopBodyRange[] = [];
+
+  const visit = (node: Node): void => {
+    if (!isNodeRecord(node)) {
+      return;
+    }
+
+    if (LOOP_STATEMENT_TYPES.has(node.type)) {
+      // ForStatement: use full statement range to cover init/test/update clauses
+      if (node.type === 'ForStatement') {
+        ranges.push({ start: node.start, end: node.end });
+      } else {
+        const body = isOxcNode(node.body) ? (node.body as Node) : null;
+
+        if (body !== null) {
+          ranges.push({ start: body.start, end: body.end });
+        }
+      }
+    }
+
+    // Recurse into all child Node values
+    for (const key of Object.keys(node)) {
+      if (key === 'type' || key === 'start' || key === 'end') {
+        continue;
+      }
+
+      const value = (node as NodeRecord)[key];
+
+      if (isOxcNode(value as Node)) {
+        visit(value as Node);
+      } else if (Array.isArray(value)) {
+        for (const child of value as unknown[]) {
+          if (isOxcNode(child as Node)) {
+            visit(child as Node);
+          }
+        }
+      }
+    }
+  };
+
+  for (const stmt of stmts) {
+    visit(stmt);
+  }
+
+  return ranges;
+};
+
 // ── analyzeVariableLifetime ───────────────────────────────────────────────────
 
 const analyzeVariableLifetime = (
   files: ReadonlyArray<ParsedFile>,
   options: AnalyzeVariableLifetimeOptions,
-): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding> => {
+): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding> => {
   if (files.length === 0) {
     return createEmptyVariableLifetime();
   }
 
   const maxLifetimeLines = Math.max(0, Math.floor(options.maxLifetimeLines));
-  const findings: Array<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding> = [];
+  const findings: Array<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding> = [];
 
   for (const file of files) {
     if (file.errors.length > 0) {
@@ -940,6 +1009,67 @@ const analyzeVariableLifetime = (
             functionLineCount,
             hotSpotLine,
           });
+        }
+      }
+
+      // Mutation density check
+      const maxMutationCount = options.maxMutationCount ?? Infinity;
+
+      if (maxMutationCount < Infinity) {
+        const loopBodyRanges = collectLoopBodyRanges(bodyStatements);
+
+        const isInLoopBody = (offset: number): boolean => loopBodyRanges.some(r => offset >= r.start && offset < r.end);
+
+        // Group non-declaration defs by variable name, excluding loop-body writes
+        const nonDeclWriteCountByVar = new Map<string, { count: number; firstWriteOffset: number }>();
+
+        for (const [defId, defMeta] of analysis.defs.entries()) {
+          if (!defMeta) {
+            continue;
+          }
+
+          if (defMeta.writeKind === 'declaration' || defMeta.writeKind === undefined) {
+            continue;
+          }
+
+          const nodeId = analysis.defNodeIdByDefId[defId];
+
+          if (nodeId === undefined) {
+            continue;
+          }
+
+          const payload = analysis.nodePayloads[nodeId];
+          const offset = payload !== null && payload !== undefined ? payloadOffset(payload as Node | ReadonlyArray<Node>) : -1;
+
+          // Skip writes whose location cannot be determined or that are inside loop bodies
+          if (offset < 0 || isInLoopBody(offset)) {
+            continue;
+          }
+
+          const existing = nonDeclWriteCountByVar.get(defMeta.name);
+
+          if (existing === undefined) {
+            nonDeclWriteCountByVar.set(defMeta.name, { count: 1, firstWriteOffset: defMeta.location });
+          } else {
+            nonDeclWriteCountByVar.set(defMeta.name, {
+              count: existing.count + 1,
+              firstWriteOffset: Math.min(existing.firstWriteOffset, defMeta.location),
+            });
+          }
+        }
+
+        for (const [varName, info] of nonDeclWriteCountByVar) {
+          if (info.count > maxMutationCount) {
+            const defLoc = getLineColumn(file.sourceText, info.firstWriteOffset);
+
+            findings.push({
+              kind: 'mutation-density',
+              file: rel,
+              span: { start: defLoc, end: defLoc },
+              variable: varName,
+              mutationCount: info.count,
+            });
+          }
         }
       }
     }

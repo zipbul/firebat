@@ -21,4 +21,8 @@ describe('golden/variable-lifetime', () => {
   runGolden(import.meta.dir, 'liveness-pressure', program =>
     analyzeVariableLifetime(program, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 }),
   );
+
+  runGolden(import.meta.dir, 'mutation-density', program =>
+    analyzeVariableLifetime(program, { maxLifetimeLines: 999, maxMutationCount: 3 }),
+  );
 });
