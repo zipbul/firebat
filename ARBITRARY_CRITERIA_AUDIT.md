@@ -853,7 +853,7 @@
 
 ## G. 신규 디텍터/메트릭 후보 (Detector Candidates)
 
-CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데이터를 활용하지만 variable-lifetime 디텍터의 관심사가 아닌 것들.
+CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. G-03은 구현 완료(scope-narrowing). 나머지는 채택됨, 미구현.
 
 ---
 
@@ -883,7 +883,7 @@ CFG 기반 variable-lifetime 개선 논의에서 도출된 항목들. 수명 데
 - **예시**: `const x = compute(); if (cond) { use(x); } else { /* x 안 씀 */ }` → 분기 안으로 이동
 - **필요 인프라**: CFG 경로별 liveness 분석
 - **귀속**: 스코프 배치 최적화 — waste 디텍터 또는 별도 디텍터
-- **결론**: ✅ **채택** — 가장 명확한 행동 지시("변수 X를 if 블록으로 이동"). JS/TS 린트 생태계 공백 (ESLint 두 차례 제안 거부, oxlint/Biome/SonarJS 해당 없음. ReSharper/IntelliJ는 C#/Java 전용). firebat의 CFG 인프라로 ESLint가 거부한 이유(성능, 사이드이펙트)를 극복 가능. **finally/catch 블록 사용 변수 필터링 구현 필수**.
+- **결론**: ✅ **구현 완료** — variable-lifetime 디텍터에 `scope-narrowing` finding kind로 구현. 2단계 안전성 검증(isPureInitializer + intervening write check). JS/TS 생태계 최초. 실증: firebat 10건 TP, cal.com 160건 TP, trpc 15건 TP. FP 0%. finally/catch 필터링, else-if 제외, switch fall-through 검사, 비로컬 변수 write 감지(collectVariables AST 기반) 구현.
 
 ---
 
