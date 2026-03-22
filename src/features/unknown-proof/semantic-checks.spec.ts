@@ -1,4 +1,5 @@
 import type { Node } from 'oxc-parser';
+import type { Gildash } from '@zipbul/gildash';
 
 import { describe, expect, it } from 'bun:test';
 
@@ -516,15 +517,16 @@ describe('isSafelyUsed', () => {
   const isResolvedType = (entry: TypeMapEntry): entry is ResolvedType => 'text' in entry;
 
   const makeSemantic = (typeMap: Record<number, TypeMapEntry> = {}) => ({
-    collectTypeAt: (_filePath: string, position: number) => {
+    _ctx: { semanticLayer: {} },
+    getResolvedTypeAtPosition: (_filePath: string, position: number) => {
       const entry = typeMap[position];
 
       if (!entry) {return null;}
 
       return isResolvedType(entry) ? entry : makeType({ flags: entry.flags });
     },
-    findReferences: () => [],
-  });
+    getSemanticReferencesAtPosition: () => [],
+  } as unknown as Gildash);
 
   const makeRef = (
     position: number,

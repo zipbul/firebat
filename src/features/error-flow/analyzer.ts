@@ -13,21 +13,6 @@ interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
 }
 
-interface SemanticLayerAccess {
-  readonly collectTypeAt: (filePath: string, position: number) => ResolvedType | null;
-}
-
-const getSemanticLayer = (gildash: Gildash): SemanticLayerAccess | null => {
-  const ctx = gildash._ctx;
-
-  if (!ctx.semanticLayer) {
-    return null;
-  }
-
-  return {
-    collectTypeAt: ctx.semanticLayer.collectTypeAt.bind(ctx.semanticLayer),
-  };
-};
 
 const isPromiseLike = (rt: ResolvedType): boolean => {
   if ((rt.isUnion || rt.isIntersection) && rt.members) {
@@ -611,7 +596,7 @@ const extractConstructorName = (callee: NodeValue): string | null => {
   return null;
 };
 
-const collectFindings = (program: NodeValue, sourceText: string, filePath: string, semantic: SemanticLayerAccess | null): CollectFindingsResult => {
+const collectFindings = (program: NodeValue, sourceText: string, filePath: string, gildash: Gildash | null): CollectFindingsResult => {
   const findings: ErrorFlowFinding[] = [];
   const constructorNames: Map<ErrorFlowFinding, string> = new Map();
   const tryCatchStack: TryCatchEntry[] = [];
@@ -1095,8 +1080,8 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         if (isOxcNode(arg) && arg.type !== 'AwaitExpression') {
           let shouldFlag = false;
 
-          if (semantic) {
-            const resolvedType = semantic.collectTypeAt(filePath, arg.start);
+          if (gildash) {
+            const resolvedType = gildash.getResolvedTypeAtPosition(filePath, arg.start);
 
             if (resolvedType) {
               shouldFlag = isPromiseLike(resolvedType);
@@ -1703,14 +1688,14 @@ const analyzeErrorFlow = async (
 
   const findings: ErrorFlowFinding[] = [];
   const allConstructorNames: Map<ErrorFlowFinding, string> = new Map();
-  const semantic = input?.gildash ? getSemanticLayer(input.gildash) : null;
+  const gildash = input?.gildash && input.gildash._ctx.semanticLayer ? input.gildash : null;
 
   for (const file of files) {
     if (file.errors.length > 0) {
       continue;
     }
 
-    const result = collectFindings(file.program, file.sourceText, file.filePath, semantic);
+    const result = collectFindings(file.program, file.sourceText, file.filePath, gildash);
 
     findings.push(...result.findings);
 

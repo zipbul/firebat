@@ -20,10 +20,13 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
 const analyzeWithSemantic = async (
   filePath: string,
   sourceText: string,
-  mockCollectTypeAt: (filePath: string, position: number) => ResolvedType | null,
+  mockGetResolvedTypeAtPosition: (filePath: string, position: number) => ResolvedType | null,
 ) => {
   const program = [parseSource(filePath, sourceText)];
-  const gildash = { _ctx: { semanticLayer: { collectTypeAt: mockCollectTypeAt } } } as unknown as Gildash;
+  const gildash = {
+    _ctx: { semanticLayer: {} },
+    getResolvedTypeAtPosition: mockGetResolvedTypeAtPosition,
+  } as unknown as Gildash;
 
   return analyzeErrorFlow(program, { gildash });
 };

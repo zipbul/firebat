@@ -245,7 +245,7 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
  * No regex — relies on TypeScript's control flow analysis + AST structure.
  */
 const isSafelyUsed = (
-  semantic: SemanticLayerAccess,
+  gildash: Gildash,
   filePath: string,
   refs: ReadonlyArray<SemanticReference>,
   varName: string,
@@ -264,7 +264,7 @@ const isSafelyUsed = (
   // ALL semantics: every usage must be safe (narrowed or in safe context)
   return usages.every(u => {
     // Strategy 1: Semantic narrowing — type changed at usage → developer handles the type
-    const usageType = fileTypes.get(u.position) ?? semantic.collectTypeAt(filePath, u.position);
+    const usageType = fileTypes.get(u.position) ?? gildash.getResolvedTypeAtPosition(filePath, u.position);
 
     if (usageType) {
       const usageFlag = containsUnknownOrAny(usageType);
@@ -283,7 +283,7 @@ const isSafelyUsed = (
     const callArg = safeCtx.callArgRanges.find(r => r.start <= u.position && u.position < r.end);
 
     if (callArg && callArg.calleeEnd > 0) {
-      const calleeType = semantic.collectTypeAt(filePath, callArg.calleeEnd - 1);
+      const calleeType = gildash.getResolvedTypeAtPosition(filePath, callArg.calleeEnd - 1);
 
       if (calleeType) {
         const calleeFlag = containsUnknownOrAny(calleeType);
@@ -299,11 +299,6 @@ const isSafelyUsed = (
     return false;
   });
 };
-
-interface SemanticLayerAccess {
-  readonly collectTypeAt: (filePath: string, position: number) => ResolvedType | null;
-  readonly findReferences: (filePath: string, position: number) => SemanticReference[];
-}
 
 interface RunSemanticChecksInput {
   readonly program: ReadonlyArray<ParsedFile>;
@@ -324,21 +319,8 @@ interface RunSemanticChecksFail {
 
 type RunSemanticChecksResult = RunSemanticChecksOk | RunSemanticChecksFail;
 
-const getSemanticLayer = (gildash: Gildash): SemanticLayerAccess | null => {
-  const ctx = gildash._ctx;
-
-  if (!ctx.semanticLayer) {return null;}
-
-  return {
-    collectTypeAt: ctx.semanticLayer.collectTypeAt.bind(ctx.semanticLayer),
-    findReferences: ctx.semanticLayer.findReferences.bind(ctx.semanticLayer),
-  };
-};
-
 export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): RunSemanticChecksResult => {
-  const semantic = getSemanticLayer(input.gildash);
-
-  if (!semantic) {
+  if (!input.gildash._ctx.semanticLayer) {
     return { ok: false, error: 'Semantic layer not available (gildash opened without semantic: true)', findings: [] };
   }
 
@@ -363,7 +345,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
     for (const candidate of candidates) {
       // fileTypes covers VariableDeclaration, ClassDeclaration, etc.
       // Function parameters are not in fileTypes (gildash collectFile limitation) → fallback to single lookup
-      const resolvedType = fileTypes.get(candidate.offset) ?? semantic.collectTypeAt(filePath, candidate.offset);
+      const resolvedType = fileTypes.get(candidate.offset) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.offset);
 
       if (!resolvedType) {continue;}
 
@@ -373,8 +355,8 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // catch param → finding only if not safely used
       if (candidate.isCatchParam) {
-        const refs = semantic.findReferences(filePath, candidate.offset);
-        const isSafe = isSafelyUsed(semantic, filePath, refs, candidate.name, flag, safeCtx, fileTypes);
+        const refs = input.gildash.getSemanticReferencesAtPosition(filePath, candidate.offset);
+        const isSafe = isSafelyUsed(input.gildash, filePath, refs, candidate.name, flag, safeCtx, fileTypes);
 
         if (!isSafe) {
           if (flag.unknown) {
@@ -409,7 +391,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // CallExpression init → check callee's declared return type for boundary detection
       if (candidate.initCalleeEndOffset !== undefined) {
-        const calleeType = semantic.collectTypeAt(filePath, candidate.initCalleeEndOffset - 1);
+        const calleeType = input.gildash.getResolvedTypeAtPosition(filePath, candidate.initCalleeEndOffset - 1);
 
         if (calleeType) {
           const calleeFlag = containsUnknownOrAny(calleeType);
@@ -426,7 +408,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // MemberExpression on any/unknown parent → derived type, not binding's fault
       if (candidate.initObjectEndOffset !== undefined) {
-        const objectType = semantic.collectTypeAt(filePath, candidate.initObjectEndOffset - 1);
+        const objectType = input.gildash.getResolvedTypeAtPosition(filePath, candidate.initObjectEndOffset - 1);
 
         if (objectType) {
           const objectFlag = containsUnknownOrAny(objectType);
@@ -440,7 +422,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // ForOf/ForIn loop variable → check iterable's element type
       if (candidate.iterableEndOffset !== undefined) {
-        const iterableType = semantic.collectTypeAt(filePath, candidate.iterableEndOffset - 1);
+        const iterableType = input.gildash.getResolvedTypeAtPosition(filePath, candidate.iterableEndOffset - 1);
 
         if (iterableType) {
           const iterableFlag = containsUnknownOrAny(iterableType);
@@ -456,8 +438,8 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
       if (candidate.hasExplicitAnnotation) {continue;}
 
       // Check safe usage via semantic narrowing + AST context
-      const refs = semantic.findReferences(filePath, candidate.offset);
-      const isSafe = isSafelyUsed(semantic, filePath, refs, candidate.name, flag, safeCtx, fileTypes);
+      const refs = input.gildash.getSemanticReferencesAtPosition(filePath, candidate.offset);
+      const isSafe = isSafelyUsed(input.gildash, filePath, refs, candidate.name, flag, safeCtx, fileTypes);
 
       if (isSafe) {continue;}
 
