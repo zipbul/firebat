@@ -50,9 +50,8 @@ describe('InMemory MCP strict (scan-only)', () => {
       const tools = asArrayOrEmpty(result.tools);
 
       // Assert
-      expect(tools.length).toBe(4);
+      expect(tools.length).toBe(3);
       expect(tools.map((t: any) => t.name).sort()).toEqual([
-        'index-external-packages',
         'query-dependencies',
         'scan',
         'symbols-by-file',

@@ -493,52 +493,6 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
   // ── Gildash-backed query tools ──────────────────────────────────────────────
 
-  const IndexExternalPackagesInputSchema = z
-    .object({
-      packages: z
-        .array(z.string())
-        .describe('Package names as they appear in node_modules/ (e.g. ["react", "typescript"]).'),
-    })
-    .strict();
-
-  server.registerTool(
-    'index-external-packages',
-    {
-      title: 'Index external packages',
-      description: [
-        'Index the TypeScript type declarations (.d.ts) of one or more node_modules packages.',
-        'Each package is indexed under a dedicated @external/<packageName> project.',
-        'After indexing, symbols from these packages become searchable.',
-      ].join('\n'),
-      inputSchema: IndexExternalPackagesInputSchema,
-    },
-    safeTool(async (args: z.infer<typeof IndexExternalPackagesInputSchema>) => {
-      const gildash = await ensureGildash();
-
-      try {
-        const result = await gildash.indexExternalPackages(args.packages);
-        const summary = result.map(r => ({
-          project: r.project,
-          filesIndexed: r.filesIndexed,
-          symbolsExtracted: r.symbolsExtracted,
-          relationsExtracted: r.relationsExtracted,
-        }));
-
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ packages: args.packages, results: summary }) }],
-        };
-      } catch (e) {
-        if (e instanceof GildashError) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: `indexExternalPackages failed: ${e.message}` }],
-          };
-        }
-        throw e;
-      }
-    }),
-  );
-
   const DependencyQueryInputSchema = z
     .object({
       filePath: z

@@ -20,19 +20,13 @@ interface ContainsResult {
 
 const EMPTY_RESULT: ContainsResult = { unknown: false, any: false, isDirect: false };
 
-const containsUnknownOrAny = (rt: ResolvedType, visited?: Set<ResolvedType>): ContainsResult => {
+// NOTE: No visited Set — gildash 0.9.4+ guarantees ResolvedType is an acyclic tree (bounded, finite, no cycles).
+const containsUnknownOrAny = (rt: ResolvedType): ContainsResult => {
   // Handle direct flags — both bits can coexist (e.g. flags = ANY | UNKNOWN = 3)
   const hasDirectUnknown = (rt.flags & TYPE_FLAG_UNKNOWN) !== 0;
   const hasDirectAny = (rt.flags & TYPE_FLAG_ANY) !== 0;
 
   if (hasDirectUnknown || hasDirectAny) {return { unknown: hasDirectUnknown, any: hasDirectAny, isDirect: true };}
-
-  // Circular reference protection
-  const seen = visited ?? new Set<ResolvedType>();
-
-  if (seen.has(rt)) {return EMPTY_RESULT;}
-
-  seen.add(rt);
 
   // Accumulate flags across members and type arguments — both any and unknown can coexist
   let hasUnknown = false;
@@ -43,7 +37,7 @@ const containsUnknownOrAny = (rt: ResolvedType, visited?: Set<ResolvedType>): Co
   // e.g. `string | unknown` → member `unknown` has isDirect=true → parent keeps isDirect=true
   if (rt.members) {
     for (const m of rt.members) {
-      const r = containsUnknownOrAny(m, seen);
+      const r = containsUnknownOrAny(m);
 
       if (r.unknown) { hasUnknown = true; isDirect = isDirect || r.isDirect; }
 
@@ -55,7 +49,7 @@ const containsUnknownOrAny = (rt: ResolvedType, visited?: Set<ResolvedType>): Co
   // e.g. `Array<unknown>` → unknown is structural, not a direct inference issue
   if (rt.typeArguments) {
     for (const ta of rt.typeArguments) {
-      const r = containsUnknownOrAny(ta, seen);
+      const r = containsUnknownOrAny(ta);
 
       if (r.unknown) {hasUnknown = true;}
 
@@ -308,7 +302,6 @@ const isSafelyUsed = (
 
 interface SemanticLayerAccess {
   readonly collectTypeAt: (filePath: string, position: number) => ResolvedType | null;
-  readonly collectFileTypes: (filePath: string) => Map<number, ResolvedType>;
   readonly findReferences: (filePath: string, position: number) => SemanticReference[];
 }
 
@@ -338,7 +331,6 @@ const getSemanticLayer = (gildash: Gildash): SemanticLayerAccess | null => {
 
   return {
     collectTypeAt: ctx.semanticLayer.collectTypeAt.bind(ctx.semanticLayer),
-    collectFileTypes: ctx.semanticLayer.collectFileTypes.bind(ctx.semanticLayer),
     findReferences: ctx.semanticLayer.findReferences.bind(ctx.semanticLayer),
   };
 };
@@ -364,7 +356,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
     if (!file) {continue;}
 
     // Batch: collect all declaration types for this file at once
-    const fileTypes = semantic.collectFileTypes(filePath);
+    const fileTypes = input.gildash.getFileTypes(filePath);
     // Pre-compute safe AST context ranges for this file (once per file)
     const safeCtx = collectSafeContextRanges(file.program);
 

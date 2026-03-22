@@ -2,6 +2,7 @@ import type { Node } from 'oxc-parser';
 
 import { describe, expect, it } from 'bun:test';
 
+import type { ResolvedType } from '../../engine/semantic-types';
 import { parseSource } from '../../engine/ast/parse-source';
 import { __testing__ } from './semantic-checks';
 
@@ -16,16 +17,16 @@ const makeType = (overrides: {
   isUnion?: boolean;
   isIntersection?: boolean;
   isGeneric?: boolean;
-  members?: ReturnType<typeof makeType>[];
-  typeArguments?: ReturnType<typeof makeType>[];
-}) => ({
+  members?: ResolvedType[];
+  typeArguments?: ResolvedType[];
+}): ResolvedType => ({
   text: overrides.text ?? '',
   flags: overrides.flags ?? 0,
   isUnion: overrides.isUnion ?? false,
   isIntersection: overrides.isIntersection ?? false,
   isGeneric: overrides.isGeneric ?? false,
-  members: overrides.members,
-  typeArguments: overrides.typeArguments,
+  ...(overrides.members !== undefined ? { members: overrides.members } : {}),
+  ...(overrides.typeArguments !== undefined ? { typeArguments: overrides.typeArguments } : {}),
 });
 
 describe('containsUnknownOrAny', () => {
@@ -149,17 +150,8 @@ describe('containsUnknownOrAny', () => {
     expect(result).toEqual({ unknown: false, any: false, isDirect: false });
   });
 
-  it('circular reference - no stack overflow', () => {
-    const a = makeType({ flags: 0 });
-    const b = makeType({ flags: 0, members: [a] });
-
-    // Create circular reference: a → b → a
-    a.members = [b];
-
-    const result = containsUnknownOrAny(a);
-
-    expect(result).toEqual({ unknown: false, any: false, isDirect: false });
-  });
+  // NOTE: circular reference test removed — gildash 0.9.4+ guarantees ResolvedType is an acyclic tree
+  // (bounded finite tree, no cycles), so visited Set protection is no longer needed.
 });
 
 describe('collectSafeContextRanges', () => {
@@ -531,7 +523,6 @@ describe('isSafelyUsed', () => {
 
       return isResolvedType(entry) ? entry : makeType({ flags: entry.flags });
     },
-    collectFileTypes: () => new Map(),
     findReferences: () => [],
   });
 
