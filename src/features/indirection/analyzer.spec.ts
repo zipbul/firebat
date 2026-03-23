@@ -61,6 +61,64 @@ describe('analyzer', () => {
     expect(thinWrappers[0]?.header).toBe('wrapper');
   });
 
+  it('analyzeIndirection - overloaded and non-overloaded coexist - only non-overloaded flagged', async () => {
+    // Arrange — file has both overloaded greet and non-overloaded wrapper
+    const source = [
+      'function greet(name: string): string;',
+      'function greet(name: string, age: number): string;',
+      'function greet(name: string, age?: number): string {',
+      '  return formatGreeting(name, age);',
+      '}',
+      'function wrapper(value) {',
+      '  return target(value);',
+      '}',
+    ].join('\n');
+    const program = createProgram('/virtual/mixed.ts', source);
+    const gildash = createMockGildash({
+      searchSymbols: () =>
+        [
+          { name: 'greet', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
+          { name: 'greet', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 2, column: 0 }, end: { line: 2, column: 0 } }, id: 2, signature: 'params:2|async:0', fingerprint: null },
+          { name: 'greet', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } }, id: 3, signature: 'params:2|async:0', fingerprint: null },
+          { name: 'wrapper', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 6, column: 0 }, end: { line: 8, column: 0 } }, id: 4, signature: 'params:1|async:0', fingerprint: null },
+        ] as unknown as SymbolSearchResult[],
+    });
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — greet (overloaded) skipped, wrapper (non-overloaded) flagged
+    expect(thinWrappers.length).toBe(1);
+    expect(thinWrappers[0]?.header).toBe('wrapper');
+  });
+
+  it('analyzeIndirection - overloaded function with pass-through - skips wrapper', async () => {
+    // Arrange — overloaded functions provide type narrowing, not simple indirection
+    const source = [
+      'function greet(name: string): string;',
+      'function greet(name: string, age: number): string;',
+      'function greet(name: string, age?: number): string {',
+      '  return formatGreeting(name, age);',
+      '}',
+    ].join('\n');
+    const program = createProgram('/virtual/overloaded.ts', source);
+    // Mock: searchSymbols returns 3 rows for 'greet' (2 overloads + 1 impl)
+    const gildash = createMockGildash({
+      searchSymbols: () =>
+        [
+          { name: 'greet', kind: 'function', filePath: 'overloaded.ts', isExported: false, span: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
+          { name: 'greet', kind: 'function', filePath: 'overloaded.ts', isExported: false, span: { start: { line: 2, column: 0 }, end: { line: 2, column: 0 } }, id: 2, signature: 'params:2|async:0', fingerprint: null },
+          { name: 'greet', kind: 'function', filePath: 'overloaded.ts', isExported: false, span: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } }, id: 3, signature: 'params:2|async:0', fingerprint: null },
+        ] as unknown as SymbolSearchResult[],
+    });
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — overloaded function should NOT be flagged as thin-wrapper
+    expect(thinWrappers.length).toBe(0);
+  });
+
   it('analyzeIndirection - arguments are transformed - skips wrapper', async () => {
     // Arrange
     const source = [

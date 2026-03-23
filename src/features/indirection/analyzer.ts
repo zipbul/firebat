@@ -611,6 +611,59 @@ const resolveCrossFileTarget = (
   }
 };
 
+/**
+ * Build a set of overloaded function/method names per file.
+ * A name is overloaded if gildash indexes 2+ symbols with the same name in the same file.
+ */
+const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<string>> => {
+  let allSymbols: ReturnType<Gildash['searchSymbols']>;
+
+  try {
+    allSymbols = gildash.searchSymbols({ limit: 100_000 });
+  } catch (e) {
+    if (e instanceof GildashError) {
+      return new Map();
+    }
+    throw e;
+  }
+
+  // Count occurrences of each name per file
+  // Functions: gildash name = "greet", matches AST header directly
+  // Methods: gildash name = "MyClass.method", AST header = "method" → exact match 불가, 향후 개선
+  const counts = new Map<string, Map<string, number>>();
+
+  for (const sym of allSymbols) {
+    if (sym.kind !== 'function' && sym.kind !== 'method') {
+      continue;
+    }
+
+    const absFile = resolveAbs(rootAbs, sym.filePath);
+    const fileCounts = counts.get(absFile) ?? new Map<string, number>();
+
+    fileCounts.set(sym.name, (fileCounts.get(sym.name) ?? 0) + 1);
+    counts.set(absFile, fileCounts);
+  }
+
+  // Convert to set of names with count > 1
+  const index = new Map<string, Set<string>>();
+
+  for (const [file, fileCounts] of counts) {
+    const overloaded = new Set<string>();
+
+    for (const [name, count] of fileCounts) {
+      if (count > 1) {
+        overloaded.add(name);
+      }
+    }
+
+    if (overloaded.size > 0) {
+      index.set(file, overloaded);
+    }
+  }
+
+  return index;
+};
+
 /* ------------------------------------------------------------------ */
 /*  Main analysis                                                      */
 /* ------------------------------------------------------------------ */
@@ -639,9 +692,10 @@ const analyzeIndirection = async (
   }
 
   const findings: IndirectionFinding[] = [];
-  // Build import/export indices from gildash for cross-file resolution
+  // Build import/export/overload indices from gildash
   const importIdx = buildImportIndex(gildash, rootAbs);
   const exportIdx = buildExportIndex(gildash, rootAbs);
+  const overloadIdx = buildOverloadIndex(gildash, rootAbs);
 
   const crossFileWrappers = new Map<string, CrossFileWrapper>();
 
@@ -655,6 +709,7 @@ const analyzeIndirection = async (
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
     const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
+    const fileOverloads = overloadIdx.get(normalizedFilePath) ?? new Set<string>();
 
     walkOxcTree(file.program, node => {
       if (!isFunctionNode(node)) {
@@ -668,6 +723,12 @@ const analyzeIndirection = async (
       }
 
       const header = namesByNode.get(node) ?? getNodeHeader(node);
+
+      // Overloaded functions provide type narrowing — not simple indirection
+      if (fileOverloads.has(header)) {
+        return true;
+      }
+
       const calleeName = resolveCalleeName(wrapperCall);
       const evidence = `thin wrapper forwards to ${calleeName ?? 'call'}`;
 
