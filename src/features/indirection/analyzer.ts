@@ -562,12 +562,17 @@ const resolveCrossFileTarget = (
   ref: SimpleCalleeRef,
   srcFilePath: string,
   importIdx: Map<string, Map<string, ImportTarget>>,
+  gildash: Gildash,
+  rootAbs: string,
 ): CrossFileTarget | null => {
   const fileImports = importIdx.get(srcFilePath);
 
   if (!fileImports) {
     return null;
   }
+
+  let targetFilePath: string;
+  let exportedName: string;
 
   if (ref.kind === 'local') {
     const imp = fileImports.get(ref.name);
@@ -576,20 +581,34 @@ const resolveCrossFileTarget = (
       return null;
     }
 
-    return { targetFilePath: imp.targetFilePath, exportedName: imp.exportedName };
-  }
-
-  if (ref.kind === 'namespace') {
+    targetFilePath = imp.targetFilePath;
+    exportedName = imp.exportedName;
+  } else if (ref.kind === 'namespace') {
     const imp = fileImports.get(ref.ns);
 
     if (!imp) {
       return null;
     }
 
-    return { targetFilePath: imp.targetFilePath, exportedName: ref.name };
+    targetFilePath = imp.targetFilePath;
+    exportedName = ref.name;
+  } else {
+    return null;
   }
 
-  return null;
+  // Follow re-export chain to find the original definition
+  try {
+    const relTargetPath = path.relative(rootAbs, targetFilePath);
+    const resolved = gildash.resolveSymbol(exportedName, relTargetPath);
+
+    return {
+      targetFilePath: resolveAbs(rootAbs, resolved.originalFilePath),
+      exportedName: resolved.originalName,
+    };
+  } catch {
+    // resolveSymbol 실패 시 single-hop 결과 반환
+    return { targetFilePath, exportedName };
+  }
 };
 
 /* ------------------------------------------------------------------ */
@@ -661,7 +680,9 @@ const analyzeIndirection = async (
         // Cross-file: only track exported functions
         if (fileExports.has(header)) {
           const calleeRef = getSimpleCalleeRef(wrapperCall);
-          const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx) : null;
+          const crossTarget = calleeRef
+            ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs)
+            : null;
           const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
           const key = `${normalizedFilePath}:${header}`;
 
