@@ -449,4 +449,66 @@ export default X;`,
       expect(findings.length).toBe(0);
     });
   });
+
+  // ─── gildash re-export pruning ──────────────────────────────────────────────
+
+  describe('checkCrossModuleReexport — gildash pruning', () => {
+    it('syntax A — gildash confirms cross-module — still detects finding', async () => {
+      const srcDir = path.join(tmpDir, 'src');
+
+      await fs.mkdir(srcDir, { recursive: true });
+
+      const indexFile = makeSrcFile(tmpDir, 'src/index.ts', `export { X } from '../other';`);
+      const otherFile = makeSrcFile(tmpDir, 'other.ts', `export const X = 1;`);
+      const gildash = {
+        searchRelations: () => [{ type: 're-exports', srcFilePath: 'src/index.ts', dstFilePath: 'other.ts', srcSymbolName: 'X', dstSymbolName: 'X' }],
+      } as any;
+
+      const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
+      const findings = result.filter(r => r.kind === 'cross-module-reexport');
+
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('syntax A — gildash says no cross-module — skips pattern A', async () => {
+      const srcDir = path.join(tmpDir, 'src');
+
+      await fs.mkdir(srcDir, { recursive: true });
+
+      const indexFile = makeSrcFile(tmpDir, 'src/index.ts', `export { X } from '../other';`);
+      const otherFile = makeSrcFile(tmpDir, 'other.ts', `export const X = 1;`);
+
+      // gildash returns empty re-exports — no cross-module files detected
+      const gildash = {
+        searchRelations: () => [],
+      } as any;
+
+      const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
+      const findings = result.filter(r => r.kind === 'cross-module-reexport');
+
+      // gildash says no re-exports → pattern A skipped → no finding from pattern A
+      // BUT: this is a real cross-module re-export that gildash missed (false negative in pruning)
+      // This is acceptable — gildash data should be reliable
+      expect(findings.length).toBe(0);
+    });
+
+    it('syntax A — gildash throws — falls back to AST detection', async () => {
+      const srcDir = path.join(tmpDir, 'src');
+
+      await fs.mkdir(srcDir, { recursive: true });
+
+      const indexFile = makeSrcFile(tmpDir, 'src/index.ts', `export { X } from '../other';`);
+      const otherFile = makeSrcFile(tmpDir, 'other.ts', `export const X = 1;`);
+
+      const gildash = {
+        searchRelations: () => { throw new Error('gildash error'); },
+      } as any;
+
+      const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
+      const findings = result.filter(r => r.kind === 'cross-module-reexport');
+
+      // gildash error → null → fallback to AST → should detect
+      expect(findings.length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

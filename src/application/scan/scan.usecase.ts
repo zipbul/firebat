@@ -442,6 +442,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
         const r = await analyzeBarrel(program, {
           rootAbs: ctx.rootAbs,
+          gildash,
           ...(options.barrelIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelIgnoreGlobs } : {}),
         });
         const durationMs = nowMs() - t0;

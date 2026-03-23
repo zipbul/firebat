@@ -870,8 +870,8 @@ gildash semantic API가 lib.d.ts 타입(PromiseLike, Error 등)을 활용할 수
 
 ### Phase 4: 디텍터 gildash 활용 강화
 
-1. P6-1: barrel 디텍터 — `searchRelations({ type: 're-exports' })` + `resolveSymbol()` 활용
-2. P6-3: temporal-coupling — `getParsedAst` `as any` 캐스팅 제거 (0.11.0 기준 공식 API)
+1. ~~P6-1: barrel 디텍터 — `searchRelations({ type: 're-exports' })` 활용~~ → ✅ **완료** (gildash re-export relation으로 cross-module 파일 사전 필터링, pattern A 최적화)
+2. ~~P6-3: temporal-coupling — `getParsedAst` `as any` 캐스팅 제거~~ → ✅ **완료** (직접 `gildash.getParsedAst()` 호출, `as Node` 캐스트도 제거)
 3. ~~P4-1: `isTypeAssignableToType`로 `isPromiseLike` 교체~~ → ✅ **완료** (gildash 0.12.0 `isTypeAssignableToType` 사용)
 4. ~~P4-2: `getImplementations`로 Error 서브클래스 자동 탐색~~ → 검토 완료, **불필요** (getHeritageChain이 symbol-name 기반으로 충분, isTypeAssignableToType은 position 확보 비용 추가)
 5. ~~P6-4: indirection — semantic wrapper detection 강화~~ → ✅ **완료** (gildash 0.12.2 함수 overload 인덱싱 + overload 감지 시 thin-wrapper 제외)

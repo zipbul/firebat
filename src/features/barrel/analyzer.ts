@@ -1,3 +1,4 @@
+import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import * as path from 'node:path';
@@ -13,6 +14,7 @@ import { createImportResolver, createWorkspacePackageMap, type ImportResolver } 
 interface BarrelOptions {
   readonly rootAbs: string;
   readonly ignoreGlobs?: ReadonlyArray<string>;
+  readonly gildash?: Gildash;
 }
 
 const DEFAULT_IGNORE_GLOBS: ReadonlyArray<string> = [
@@ -428,11 +430,49 @@ const isChildPath = (currentFileAbs: string, resolvedTargetAbs: string): boolean
   return target.startsWith(currentDir + '/');
 };
 
+/**
+ * Build a set of files that have cross-module re-exports from gildash relations.
+ * Files NOT in this set can skip AST-based cross-module-reexport detection entirely.
+ */
+const buildCrossModuleReexportFiles = (
+  gildash: Gildash,
+  rootAbs: string,
+  fileSet: ReadonlySet<string>,
+): Set<string> | null => {
+  let rels: ReturnType<Gildash['searchRelations']>;
+
+  try {
+    rels = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
+  } catch {
+    return null;
+  }
+
+  const result = new Set<string>();
+
+  for (const rel of rels) {
+    const srcAbs = normalizePath(path.resolve(rootAbs, rel.srcFilePath));
+    const dstAbs = normalizePath(path.resolve(rootAbs, rel.dstFilePath));
+
+    if (!fileSet.has(dstAbs)) {
+      continue;
+    }
+
+    if (isChildPath(srcAbs, dstAbs)) {
+      continue;
+    }
+
+    result.add(srcAbs);
+  }
+
+  return result;
+};
+
 const checkCrossModuleReexport = async (
   activeFiles: ReadonlyArray<ParsedFile>,
   resolver: ImportResolver,
   fileSet: ReadonlySet<string>,
   findings: BarrelFinding[],
+  crossModuleFiles: Set<string> | null,
 ): Promise<void> => {
   for (const file of activeFiles) {
     const fileAbs = normalizePath(file.filePath);
@@ -442,6 +482,10 @@ const checkCrossModuleReexport = async (
       continue;
     }
 
+    // gildash가 이 파일에 cross-module re-export 없다고 판단하면 구문 A 건너뛰기
+    // (구문 B/C는 import+export 패턴이라 gildash re-export relation에 안 잡힐 수 있으므로 유지)
+    const skipPatternA = crossModuleFiles !== null && !crossModuleFiles.has(fileAbs);
+
     const body = asNodeLike(file.program)?.body;
 
     if (!Array.isArray(body)) {
@@ -449,44 +493,42 @@ const checkCrossModuleReexport = async (
     }
 
     // 구문 A: ExportNamedDeclaration with source, ExportAllDeclaration
-    for (const stmt of body) {
-      if (!isNodeRecord(stmt as Node)) {
-        continue;
-      }
-
-      const stmtNode = stmt as Node & Record<string, unknown>;
-
-      if (stmtNode.type === 'ExportNamedDeclaration' || stmtNode.type === 'ExportAllDeclaration') {
-        const source = getLiteralString(stmtNode.source as NodeValue);
-
-        if (typeof source !== 'string') {
+    if (!skipPatternA) {
+      for (const stmt of body) {
+        if (!isNodeRecord(stmt as Node)) {
           continue;
         }
 
-        // resolver null → bare specifier → 허용
-        const resolved = await resolver.resolve(fileAbs, source);
+        const stmtNode = stmt as Node & Record<string, unknown>;
 
-        if (!resolved) {
-          continue;
+        if (stmtNode.type === 'ExportNamedDeclaration' || stmtNode.type === 'ExportAllDeclaration') {
+          const source = getLiteralString(stmtNode.source as NodeValue);
+
+          if (typeof source !== 'string') {
+            continue;
+          }
+
+          const resolved = await resolver.resolve(fileAbs, source);
+
+          if (!resolved) {
+            continue;
+          }
+
+          if (!fileSet.has(normalizePath(resolved))) {
+            continue;
+          }
+
+          if (isChildPath(fileAbs, resolved)) {
+            continue;
+          }
+
+          findings.push({
+            kind: 'cross-module-reexport',
+            file: file.filePath,
+            span: toNodeSpan(file, stmt),
+            evidence: source,
+          });
         }
-
-        // fileSet에 없으면 외부 → 허용
-        if (!fileSet.has(normalizePath(resolved))) {
-          continue;
-        }
-
-        // child path → 허용
-        if (isChildPath(fileAbs, resolved)) {
-          continue;
-        }
-
-        // cross-module → 탐지
-        findings.push({
-          kind: 'cross-module-reexport',
-          file: file.filePath,
-          span: toNodeSpan(file, stmt),
-          evidence: source,
-        });
       }
     }
 
@@ -704,6 +746,9 @@ const analyzeBarrel = async (
     fileSet,
     workspacePackages,
   });
+  const crossModuleFiles = options.gildash
+    ? buildCrossModuleReexportFiles(options.gildash, options.rootAbs, fileSet)
+    : null;
   const findings: BarrelFinding[] = [];
 
   for (const file of activeFiles) {
@@ -714,7 +759,7 @@ const analyzeBarrel = async (
   checkMissingIndex(activeFiles, fileSet, findings);
 
   await checkDeepImports(activeFiles, resolver, workspacePackages, fileSet, findings);
-  await checkCrossModuleReexport(activeFiles, resolver, fileSet, findings);
+  await checkCrossModuleReexport(activeFiles, resolver, fileSet, findings, crossModuleFiles);
 
   return findings;
 };
