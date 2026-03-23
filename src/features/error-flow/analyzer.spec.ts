@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Gildash } from '@zipbul/gildash';
 
-import type { ResolvedType } from '../../engine/semantic-types';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
 
@@ -20,12 +19,16 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
 const analyzeWithSemantic = async (
   filePath: string,
   sourceText: string,
-  mockGetResolvedTypeAtPosition: (filePath: string, position: number) => ResolvedType | null,
+  mockIsTypeAssignableToType: (
+    filePath: string,
+    position: number,
+    targetTypeExpression: string,
+    options?: { anyConstituent?: boolean },
+  ) => boolean | null,
 ) => {
   const program = [parseSource(filePath, sourceText)];
   const gildash = {
-    _ctx: { semanticLayer: {} },
-    getResolvedTypeAtPosition: mockGetResolvedTypeAtPosition,
+    isTypeAssignableToType: mockIsTypeAssignableToType,
   } as unknown as Gildash;
 
   return analyzeErrorFlow(program, { gildash });
@@ -1217,14 +1220,8 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'Promise<Response>',
-      flags: 0,
-      isUnion: false,
-      isIntersection: false,
-      isGeneric: false,
-    }));
+    // Act — CallExpression: target is '(...args: any[]) => PromiseLike<any>'
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1244,13 +1241,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'number',
-      flags: 0,
-      isUnion: false,
-      isIntersection: false,
-      isGeneric: false,
-    }));
+    const analysis = await analyzeWithSemantic(filePath, source, () => false);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1270,14 +1261,8 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'Promise<void>',
-      flags: 0,
-      isUnion: false,
-      isIntersection: false,
-      isGeneric: false,
-    }));
+    // Act — Identifier: target is 'PromiseLike<any>'
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1298,42 +1283,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'string',
-      flags: 0,
-      isUnion: false,
-      isIntersection: false,
-      isGeneric: false,
-    }));
+    const analysis = await analyzeWithSemantic(filePath, source, () => false);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(0);
   });
 
-  it('return-await-in-try - gildash without semanticLayer - falls back to AST heuristic', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/no-semantic.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const program = [parseSource(filePath, source)];
-    const gildash = { _ctx: { semanticLayer: null } } as unknown as Gildash;
-    const analysis = await analyzeErrorFlow(program, { gildash });
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - collectTypeAt returns null - falls back to AST heuristic', async () => {
+  it('return-await-in-try - isTypeAssignableToType returns null - falls back to AST heuristic', async () => {
     // Arrange
     const filePath = '/virtual/src/features/semantic-null.ts';
     const source = [
@@ -1353,7 +1310,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(1);
   });
 
-  it('return-await-in-try - semantic union with Promise member - flags finding', async () => {
+  it('return-await-in-try - semantic union with Promise member (CallExpression) - flags finding', async () => {
     // Arrange
     const filePath = '/virtual/src/features/semantic-union-promise.ts';
     const source = [
@@ -1365,18 +1322,8 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'Promise<Response> | null',
-      flags: 0,
-      isUnion: true,
-      isIntersection: false,
-      isGeneric: false,
-      members: [
-        { text: 'Promise<Response>', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
-        { text: 'null', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
-      ],
-    }));
+    // Act — () => Promise<Response> | null is assignable to (...args: any[]) => PromiseLike<any>
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1396,17 +1343,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'string | number',
-      flags: 0,
-      isUnion: true,
-      isIntersection: false,
-      isGeneric: false,
-      members: [
-        { text: 'string', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
-        { text: 'number', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
-      ],
-    }));
+    const analysis = await analyzeWithSemantic(filePath, source, () => false);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1425,48 +1362,11 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'Promise<Response> & Loggable',
-      flags: 0,
-      isUnion: false,
-      isIntersection: true,
-      isGeneric: false,
-      members: [
-        { text: 'Promise<Response>', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
-        { text: 'Loggable', flags: 0, isUnion: false, isIntersection: false, isGeneric: false },
-      ],
-    }));
+    // Act — () => Promise<Response> & Loggable is assignable to (...args: any[]) => PromiseLike<any>
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - semantic union without members - falls back to text regex', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-union-no-members.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'Promise<Response> | null',
-      flags: 0,
-      isUnion: true,
-      isIntersection: false,
-      isGeneric: false,
-      members: undefined,
-    }));
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert — members 없으므로 text regex로 판별, "Promise<..."로 시작하므로 플래그
     expect(hits.length).toBe(1);
   });
 
@@ -1483,16 +1383,83 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => ({
-      text: 'PromiseLike<string>',
-      flags: 0,
-      isUnion: false,
-      isIntersection: false,
-      isGeneric: false,
-    }));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - CallExpression passes function target type', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-call-target.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act — mock inspects targetTypeExpression
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target, options) => {
+      expect(target).toBe('(...args: any[]) => PromiseLike<any>');
+      expect(options).toBeUndefined();
+
+      return true;
+    });
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - Identifier passes anyConstituent option', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-id-target.ts';
+    const source = [
+      'export async function f() {',
+      '  const p = fetchData();',
+      '  try {',
+      '    return p;',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act — mock inspects targetTypeExpression and options
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target, options) => {
+      expect(target).toBe('PromiseLike<any>');
+      expect(options).toEqual({ anyConstituent: true });
+
+      return true;
+    });
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('return-await-in-try - semantic layer throws - falls back to AST heuristic', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/semantic-throw.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return fetchData();',
+      '  } catch (e) {',
+      '    console.error(e);',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act — mock throws (semantic layer not enabled)
+    const analysis = await analyzeWithSemantic(filePath, source, () => {
+      throw new Error('semantic layer is not enabled');
+    });
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert — CallExpression이므로 AST 휴리스틱으로 플래그
     expect(hits.length).toBe(1);
   });
 

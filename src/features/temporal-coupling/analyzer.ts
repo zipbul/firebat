@@ -842,9 +842,7 @@ const verifyCallerOrderByCfg = (
   readerNames: ReadonlyArray<string>,
   callerKeys: ReadonlyArray<CallerKey>,
 ): boolean => {
-  const getParsedAst = (gildash as any).getParsedAst as ((filePath: string) => unknown) | undefined;
-
-  if (typeof getParsedAst !== 'function') {
+  if (typeof gildash.getParsedAst !== 'function') {
     // gildash does not support AST retrieval → skip Phase 4, trust Phase 2 result
     return true;
   }
@@ -856,11 +854,11 @@ const verifyCallerOrderByCfg = (
   for (const caller of callerKeys) {
     if (caller.srcSymbolName === null) {continue;}
 
-    const parsed = getParsedAst.call(gildash, caller.srcFilePath) as { program: Node } | undefined;
+    const parsed = gildash.getParsedAst(caller.srcFilePath);
 
     if (parsed === undefined || parsed === null) {return false;}
 
-    const funcNode = findFunctionBody(parsed.program as Node, caller.srcSymbolName);
+    const funcNode = findFunctionBody(parsed.program, caller.srcSymbolName);
 
     if (funcNode === null || !isNodeRecord(funcNode)) {return false;}
 

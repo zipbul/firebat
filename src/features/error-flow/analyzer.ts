@@ -2,7 +2,6 @@ import type { Gildash, HeritageNode } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
-import type { ResolvedType } from '../../engine/semantic-types';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
@@ -12,15 +11,6 @@ import { getLineColumn } from '../../engine/source-position';
 interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
 }
-
-
-const isPromiseLike = (rt: ResolvedType): boolean => {
-  if ((rt.isUnion || rt.isIntersection) && rt.members) {
-    return rt.members.some(m => isPromiseLike(m));
-  }
-
-  return /^(Promise|PromiseLike)\b/.test(rt.text);
-};
 
 const getSpan = (node: Node, sourceText: string): SourceSpan => {
   const start = getLineColumn(sourceText, node.start);
@@ -1081,12 +1071,21 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           let shouldFlag = false;
 
           if (gildash) {
-            const resolvedType = gildash.getResolvedTypeAtPosition(filePath, arg.start);
+            // CallExpression/NewExpression: callee position → function type → match function returning PromiseLike
+            // Other expressions: direct type → match PromiseLike, anyConstituent for union (e.g. Promise<T> | null)
+            try {
+              const isCall = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+              const assignable = isCall
+                ? gildash.isTypeAssignableToType(filePath, arg.start, '(...args: any[]) => PromiseLike<any>')
+                : gildash.isTypeAssignableToType(filePath, arg.start, 'PromiseLike<any>', { anyConstituent: true });
 
-            if (resolvedType) {
-              shouldFlag = isPromiseLike(resolvedType);
-            } else {
-              // 타입 조회 실패 → AST 휴리스틱 fallback
+              if (assignable !== null) {
+                shouldFlag = assignable;
+              } else {
+                shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+              }
+            } catch {
+              // semantic layer 미활성 등 → AST 휴리스틱 fallback
               shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
             }
           } else {
@@ -1688,7 +1687,7 @@ const analyzeErrorFlow = async (
 
   const findings: ErrorFlowFinding[] = [];
   const allConstructorNames: Map<ErrorFlowFinding, string> = new Map();
-  const gildash = input?.gildash && input.gildash._ctx.semanticLayer ? input.gildash : null;
+  const gildash = input?.gildash ?? null;
 
   for (const file of files) {
     if (file.errors.length > 0) {
