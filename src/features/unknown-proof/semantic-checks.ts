@@ -311,19 +311,7 @@ interface RunSemanticChecksOk {
   readonly findings: ReadonlyArray<UnknownProofFinding>;
 }
 
-interface RunSemanticChecksFail {
-  readonly ok: false;
-  readonly error: string;
-  readonly findings: ReadonlyArray<UnknownProofFinding>;
-}
-
-type RunSemanticChecksResult = RunSemanticChecksOk | RunSemanticChecksFail;
-
-export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): RunSemanticChecksResult => {
-  if (!input.gildash._ctx.semanticLayer) {
-    return { ok: false, error: 'Semantic layer not available (gildash opened without semantic: true)', findings: [] };
-  }
-
+export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): RunSemanticChecksOk => {
   const fileByPath = new Map<string, ParsedFile>();
 
   for (const file of input.program) {

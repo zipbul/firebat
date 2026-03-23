@@ -517,7 +517,6 @@ describe('isSafelyUsed', () => {
   const isResolvedType = (entry: TypeMapEntry): entry is ResolvedType => 'text' in entry;
 
   const makeSemantic = (typeMap: Record<number, TypeMapEntry> = {}) => ({
-    _ctx: { semanticLayer: {} },
     getResolvedTypeAtPosition: (_filePath: string, position: number) => {
       const entry = typeMap[position];
 

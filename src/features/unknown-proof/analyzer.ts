@@ -52,16 +52,8 @@ export const analyzeUnknownProof = (
       gildash: input.gildash,
     });
 
-    if (result.ok) {
-      return [...result.findings, ...exprFindings];
-    }
-
-    throw new PartialResultError(result.error, [...result.findings, ...exprFindings]);
+    return [...result.findings, ...exprFindings];
   } catch (e) {
-    if (e instanceof PartialResultError) {
-      throw e;
-    }
-
     const message = e instanceof Error ? e.message : String(e);
 
     throw new PartialResultError(message, exprFindings);
