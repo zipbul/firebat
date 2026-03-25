@@ -1,4 +1,4 @@
-import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
+import type { Gildash, CodeRelation, FullSymbol, SymbolSearchResult } from '@zipbul/gildash';
 
 import { describe, expect, it } from 'bun:test';
 
@@ -14,12 +14,16 @@ import { analyzeIndirection } from './analyzer';
 interface MockGildashOverrides {
   searchRelations?: (q: unknown) => CodeRelation[];
   searchSymbols?: (q: unknown) => SymbolSearchResult[];
+  isTypeAssignableTo?: (src: string, srcFile: string, dst: string, dstFile: string) => boolean | null;
+  getFullSymbol?: (name: string, filePath: string) => FullSymbol | null;
 }
 
 const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
   return {
     searchRelations: overrides.searchRelations ?? (() => []),
     searchSymbols: overrides.searchSymbols ?? (() => []),
+    isTypeAssignableTo: overrides.isTypeAssignableTo ?? (() => null),
+    getFullSymbol: overrides.getFullSymbol ?? (() => null),
   } as unknown as Gildash;
 };
 
@@ -117,6 +121,59 @@ describe('analyzer', () => {
 
     // Assert — overloaded function should NOT be flagged as thin-wrapper
     expect(thinWrappers.length).toBe(0);
+  });
+
+  it('analyzeIndirection - overloaded method with memberName - skips wrapper', async () => {
+    // Arrange — method overload: sym.name = "MyClass.greet", sym.memberName = "greet"
+    const source = [
+      'class MyClass {',
+      '  greet(name: string): string;',
+      '  greet(name: string, age: number): string;',
+      '  greet(name: string, age?: number): string {',
+      '    return formatGreeting(name, age);',
+      '  }',
+      '}',
+    ].join('\n');
+    const program = createProgram('/virtual/method-overload.ts', source);
+    const gildash = createMockGildash({
+      searchSymbols: () =>
+        [
+          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'method-overload.ts', isExported: false, span: { start: { line: 2, column: 2 }, end: { line: 2, column: 30 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
+          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'method-overload.ts', isExported: false, span: { start: { line: 3, column: 2 }, end: { line: 3, column: 38 } }, id: 2, signature: 'params:2|async:0', fingerprint: null },
+          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'method-overload.ts', isExported: false, span: { start: { line: 4, column: 2 }, end: { line: 6, column: 3 } }, id: 3, signature: 'params:2|async:0', fingerprint: null },
+        ] as unknown as SymbolSearchResult[],
+    });
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — overloaded method should NOT be flagged as thin-wrapper
+    expect(thinWrappers.length).toBe(0);
+  });
+
+  it('analyzeIndirection - function and method with same unqualified name - no false overload collision', async () => {
+    // Arrange — top-level function "greet" and method "MyClass.greet" coexist
+    // They should NOT be counted together as overloads
+    const source = [
+      'function greet(name) { return format(name); }',
+      'class MyClass {',
+      '  greet(name) { return format(name); }',
+      '}',
+    ].join('\n');
+    const program = createProgram('/virtual/collision.ts', source);
+    const gildash = createMockGildash({
+      searchSymbols: () =>
+        [
+          { name: 'greet', memberName: null, kind: 'function', filePath: 'collision.ts', isExported: false, span: { start: { line: 1, column: 0 }, end: { line: 1, column: 40 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
+          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'collision.ts', isExported: false, span: { start: { line: 3, column: 2 }, end: { line: 3, column: 40 } }, id: 2, signature: 'params:1|async:0', fingerprint: null },
+        ] as unknown as SymbolSearchResult[],
+    });
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — neither is overloaded, both should be flagged as thin-wrapper
+    expect(thinWrappers.length).toBe(2);
   });
 
   it('analyzeIndirection - arguments are transformed - skips wrapper', async () => {
@@ -676,6 +733,169 @@ describe('analyzer', () => {
 
       // Assert
       expect(crossFindings.some(f => f.header === 'bar')).toBe(true);
+    });
+  });
+
+  describe('type-remap semantic verification', () => {
+    it('analyzeIndirection - complex alias with bidirectional assignability - reports type-remap', async () => {
+      // Arrange: type AlreadyReadonly = Readonly<User> where User is already readonly (bidirectionally assignable)
+      const source = 'type AlreadyReadonly = Readonly<User>;';
+      const program = createProgram('/virtual/remap.ts', source);
+      const gildash = createMockGildash({
+        isTypeAssignableTo: (src, _srcFile, dst, _dstFile) => {
+          // Both directions return true — structurally equivalent
+          if (src === 'AlreadyReadonly' && dst === 'Readonly') return true;
+          if (src === 'Readonly' && dst === 'AlreadyReadonly') return true;
+          return null;
+        },
+      });
+      // Act
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const remaps = findKinds(analysis, 'type-remap');
+
+      // Assert
+      expect(remaps.length).toBe(1);
+      expect(remaps[0]?.header).toBe('AlreadyReadonly');
+      expect(remaps[0]?.evidence).toContain('structurally equivalent');
+    });
+
+    it('analyzeIndirection - complex alias where only forward assignable - skips type-remap', async () => {
+      // Arrange: type Narrowed = Readonly<User> where Narrowed is NOT assignable back to Readonly<User>
+      const source = 'type Narrowed = Readonly<User>;';
+      const program = createProgram('/virtual/remap.ts', source);
+      const gildash = createMockGildash({
+        isTypeAssignableTo: (src, _srcFile, dst, _dstFile) => {
+          if (src === 'Narrowed' && dst === 'Readonly') return true;
+          if (src === 'Readonly' && dst === 'Narrowed') return false; // not bidirectional
+          return null;
+        },
+      });
+      // Act
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const remaps = findKinds(analysis, 'type-remap');
+
+      // Assert
+      expect(remaps.length).toBe(0);
+    });
+
+    it('analyzeIndirection - complex alias where semantic check throws - skips gracefully', async () => {
+      // Arrange: isTypeAssignableTo throws — should not propagate error
+      const source = 'type Safe = Readonly<User>;';
+      const program = createProgram('/virtual/remap.ts', source);
+      const gildash = createMockGildash({
+        isTypeAssignableTo: () => {
+          throw new Error('semantic layer unavailable');
+        },
+      });
+      // Act
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const remaps = findKinds(analysis, 'type-remap');
+
+      // Assert: error is swallowed, no finding added for this complex case
+      expect(remaps.length).toBe(0);
+    });
+
+    it('analyzeIndirection - declare complex alias - skips semantic check', async () => {
+      // Arrange: declare type aliases are ambient declarations, must be skipped
+      const source = 'declare type A = Readonly<User>;';
+      const program = createProgram('/virtual/remap.ts', source);
+      let called = false;
+      const gildash = createMockGildash({
+        isTypeAssignableTo: () => {
+          called = true;
+          return true;
+        },
+      });
+      // Act
+      await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
+      // Assert: semantic check must not be called for declare aliases
+      expect(called).toBe(false);
+    });
+  });
+
+  describe('thin-wrapper decorator filter', () => {
+    it('analyzeIndirection - decorated wrapper function - skips thin-wrapper', async () => {
+      // Arrange: wrapper has decorators (e.g. @Injectable) — intentional wrapping
+      const source = ['function target(value) {', '  return value;', '}', 'function wrapper(value) {', '  return target(value);', '}'].join(
+        '\n',
+      );
+      const program = createProgram('/virtual/decorated.ts', source);
+      const gildash = createMockGildash({
+        getFullSymbol: (name, _filePath) => {
+          if (name === 'wrapper') {
+            return {
+              name: 'wrapper',
+              kind: 'function',
+              filePath: '/virtual/decorated.ts',
+              isExported: false,
+              span: { start: { line: 4, column: 0 }, end: { line: 6, column: 1 } },
+              id: 1,
+              signature: 'params:1|async:0',
+              fingerprint: null,
+              decorators: [{ name: 'Injectable' }],
+            } as unknown as FullSymbol;
+          }
+          return null;
+        },
+      });
+      // Act
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+      // Assert: decorated wrapper should be skipped
+      expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(false);
+    });
+
+    it('analyzeIndirection - undecorated wrapper function - reports thin-wrapper', async () => {
+      // Arrange: wrapper has no decorators → still flagged
+      const source = ['function target(value) {', '  return value;', '}', 'function wrapper(value) {', '  return target(value);', '}'].join(
+        '\n',
+      );
+      const program = createProgram('/virtual/nodecorators.ts', source);
+      const gildash = createMockGildash({
+        getFullSymbol: (name, _filePath) => {
+          if (name === 'wrapper') {
+            return {
+              name: 'wrapper',
+              kind: 'function',
+              filePath: '/virtual/nodecorators.ts',
+              isExported: false,
+              span: { start: { line: 4, column: 0 }, end: { line: 6, column: 1 } },
+              id: 1,
+              signature: 'params:1|async:0',
+              fingerprint: null,
+              decorators: [],
+            } as unknown as FullSymbol;
+          }
+          return null;
+        },
+      });
+      // Act
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+      // Assert: no decorators → still flagged as thin-wrapper
+      expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
+    });
+
+    it('analyzeIndirection - getFullSymbol throws - keeps existing thin-wrapper behavior', async () => {
+      // Arrange: getFullSymbol throws — fallback to original behavior
+      const source = ['function target(value) {', '  return value;', '}', 'function wrapper(value) {', '  return target(value);', '}'].join(
+        '\n',
+      );
+      const program = createProgram('/virtual/fallback.ts', source);
+      const gildash = createMockGildash({
+        getFullSymbol: () => {
+          throw new Error('gildash unavailable');
+        },
+      });
+      // Act
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+      // Assert: error swallowed, original thin-wrapper finding preserved
+      expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
     });
   });
 });

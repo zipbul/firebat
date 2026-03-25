@@ -165,7 +165,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Repositories created');
 
-  const needsSemantic = options.detectors.includes('unknown-proof') || options.detectors.includes('error-flow');
+  const needsSemantic = options.detectors.includes('unknown-proof') || options.detectors.includes('error-flow') || options.detectors.includes('typecheck');
   const tIndex0 = nowMs();
   let gildash: Awaited<ReturnType<typeof createGildash>>;
   let semanticAvailable = false;
@@ -493,7 +493,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         logger.info('detector: start', { detector: detectorKey });
 
         try {
-          const r = await analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger });
+          const r = await analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger, ...(semanticAvailable ? { gildash } : {}) });
 
           detectorTimings.typecheck = nowMs() - t0;
 

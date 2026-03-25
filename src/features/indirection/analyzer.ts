@@ -379,8 +379,14 @@ const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
 /*  Function name collection                                           */
 /* ------------------------------------------------------------------ */
 
-const collectFunctionNames = (program: NodeValue): Map<Node, string> => {
+interface CollectedFunctionNames {
+  readonly namesByNode: Map<Node, string>;
+  readonly methodNodes: Set<Node>;
+}
+
+const collectFunctionNames = (program: NodeValue): CollectedFunctionNames => {
   const namesByNode = new Map<Node, string>();
+  const methodNodes = new Set<Node>();
 
   walkOxcTree(program, node => {
     if (!isNodeRecord(node)) {
@@ -432,6 +438,7 @@ const collectFunctionNames = (program: NodeValue): Map<Node, string> => {
 
         if (header.length > 0 && header !== 'anonymous') {
           namesByNode.set(valueNode, header);
+          methodNodes.add(valueNode);
         }
       }
 
@@ -441,7 +448,7 @@ const collectFunctionNames = (program: NodeValue): Map<Node, string> => {
     return true;
   });
 
-  return namesByNode;
+  return { namesByNode, methodNodes };
 };
 
 const addFinding = (
@@ -611,11 +618,19 @@ const resolveCrossFileTarget = (
   }
 };
 
+interface FileOverloads {
+  readonly functions: Set<string>;
+  readonly methods: Set<string>;
+}
+
+const emptyOverloads: FileOverloads = { functions: new Set(), methods: new Set() };
+
 /**
  * Build a set of overloaded function/method names per file.
  * A name is overloaded if gildash indexes 2+ symbols with the same name in the same file.
+ * Functions and methods are tracked separately to avoid false collisions.
  */
-const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<string>> => {
+const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, FileOverloads> => {
   let allSymbols: ReturnType<Gildash['searchSymbols']>;
 
   try {
@@ -627,10 +642,9 @@ const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<
     throw e;
   }
 
-  // Count occurrences of each name per file
-  // Functions: gildash name = "greet", matches AST header directly
-  // Methods: gildash name = "MyClass.method", AST header = "method" → exact match 불가, 향후 개선
-  const counts = new Map<string, Map<string, number>>();
+  // Count by qualified name (sym.name) to correctly group overloads.
+  // Store kind and AST-matching key (memberName ?? name) for the final sets.
+  const counts = new Map<string, Map<string, { count: number; astKey: string; kind: 'function' | 'method' }>>();
 
   for (const sym of allSymbols) {
     if (sym.kind !== 'function' && sym.kind !== 'method') {
@@ -638,26 +652,33 @@ const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<
     }
 
     const absFile = resolveAbs(rootAbs, sym.filePath);
-    const fileCounts = counts.get(absFile) ?? new Map<string, number>();
+    const fileCounts = counts.get(absFile) ?? new Map<string, { count: number; astKey: string; kind: 'function' | 'method' }>();
+    const existing = fileCounts.get(sym.name);
+    const astKey = sym.memberName ?? sym.name;
 
-    fileCounts.set(sym.name, (fileCounts.get(sym.name) ?? 0) + 1);
+    fileCounts.set(sym.name, { count: (existing?.count ?? 0) + 1, astKey, kind: sym.kind });
     counts.set(absFile, fileCounts);
   }
 
-  // Convert to set of names with count > 1
-  const index = new Map<string, Set<string>>();
+  // Convert to separate sets for functions and methods
+  const index = new Map<string, FileOverloads>();
 
   for (const [file, fileCounts] of counts) {
-    const overloaded = new Set<string>();
+    const functions = new Set<string>();
+    const methods = new Set<string>();
 
-    for (const [name, count] of fileCounts) {
+    for (const [, { count, astKey, kind }] of fileCounts) {
       if (count > 1) {
-        overloaded.add(name);
+        if (kind === 'function') {
+          functions.add(astKey);
+        } else {
+          methods.add(astKey);
+        }
       }
     }
 
-    if (overloaded.size > 0) {
-      index.set(file, overloaded);
+    if (functions.size > 0 || methods.size > 0) {
+      index.set(file, { functions, methods });
     }
   }
 
@@ -705,11 +726,11 @@ const analyzeIndirection = async (
     }
 
     const normalizedFilePath = normalizePath(file.filePath);
-    const namesByNode = collectFunctionNames(file.program);
+    const { namesByNode, methodNodes } = collectFunctionNames(file.program);
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
     const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
-    const fileOverloads = overloadIdx.get(normalizedFilePath) ?? new Set<string>();
+    const fileOverloads = overloadIdx.get(normalizedFilePath) ?? emptyOverloads;
 
     walkOxcTree(file.program, node => {
       if (!isFunctionNode(node)) {
@@ -725,8 +746,21 @@ const analyzeIndirection = async (
       const header = namesByNode.get(node) ?? getNodeHeader(node);
 
       // Overloaded functions provide type narrowing — not simple indirection
-      if (fileOverloads.has(header)) {
+      const overloadSet = methodNodes.has(node) ? fileOverloads.methods : fileOverloads.functions;
+
+      if (overloadSet.has(header)) {
         return true;
+      }
+
+      // Decorator check: functions with decorators indicate intentional wrapping — skip
+      try {
+        const detail = gildash.getFullSymbol(header, file.filePath);
+
+        if (detail !== null && Array.isArray(detail.decorators) && detail.decorators.length > 0) {
+          return true;
+        }
+      } catch {
+        // Semantic layer unavailable — keep existing thin-wrapper behavior
       }
 
       const calleeName = resolveCalleeName(wrapperCall);
@@ -813,6 +847,40 @@ const analyzeIndirection = async (
             const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
 
             addFinding(findings, 'type-remap', node as Node, file.filePath, file.sourceText, header, 1, evidence);
+          } else {
+            // Semantic verification: complex aliases (with type args/params) may still be structurally equivalent
+            // e.g. type A = Readonly<B> where B is already fully readonly — bidirectional assignability confirms equivalence
+            const id = node.id;
+            const aliasHeader =
+              isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string' ? (id.name as string) : null;
+
+            if (aliasHeader !== null) {
+              const typeName = typeAnnotation.typeName;
+              let targetTypeName: string | null = null;
+
+              if (isOxcNode(typeName) && isNodeRecord(typeName)) {
+                if (typeName.type === 'Identifier' && typeof typeName.name === 'string') {
+                  targetTypeName = typeName.name as string;
+                } else if (typeName.type === 'TSQualifiedName') {
+                  targetTypeName = getNodeHeader(typeName as Node);
+                }
+              }
+
+              if (targetTypeName !== null) {
+                try {
+                  const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
+                  const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
+
+                  if (fwd === true && bwd === true) {
+                    const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+
+                    addFinding(findings, 'type-remap', node as Node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
+                  }
+                } catch {
+                  // Semantic layer unavailable — skip this check
+                }
+              }
+            }
           }
         }
       }
@@ -884,7 +952,7 @@ const analyzeIndirection = async (
 
         // Skip cross-file declaration merging
         try {
-          const symbols = gildash.searchSymbols({ text: name, isExported: undefined, limit: 100 });
+          const symbols = gildash.searchSymbols({ text: name, limit: 100 });
           const otherFileHasSameName = symbols.some(
             s => s.name === name && resolveAbs(rootAbs, s.filePath) !== normalizedFilePath,
           );

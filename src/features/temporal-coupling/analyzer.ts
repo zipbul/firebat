@@ -5,6 +5,8 @@ import type { Gildash } from '@zipbul/gildash';
 import type { CfgNodePayload, ParsedFile } from '../../engine/types';
 import type { TemporalCouplingFinding } from '../../types';
 
+import { GildashError } from '@zipbul/gildash';
+
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
 import { EdgeType } from '../../engine/cfg/cfg-types';
 import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
@@ -95,6 +97,43 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
   });
 
   return names;
+};
+
+/**
+ * Try to get exported function/variable names from gildash.
+ * Returns null on failure so the caller can fall back to AST walk.
+ */
+const collectExportedFunctionNamesFromGildash = (gildash: Gildash | undefined, relPath: string): Set<string> | null => {
+  if (gildash === undefined || typeof gildash.getSymbolsByFile !== 'function') {
+    return null;
+  }
+
+  try {
+    const symbols = gildash.getSymbolsByFile(relPath);
+
+    if (symbols.length === 0) {
+      return null;
+    }
+
+    const names = new Set<string>();
+
+    for (const sym of symbols) {
+      if (!sym.isExported) {
+        continue;
+      }
+
+      if (sym.kind === 'function' || sym.kind === 'variable') {
+        names.add(sym.name);
+      }
+    }
+
+    return names.size > 0 ? names : null;
+  } catch (e) {
+    if (e instanceof GildashError) {
+      return null;
+    }
+    throw e;
+  }
 };
 
 /** Get the enclosing exported function name, or null if not inside an exported function. */
@@ -1083,7 +1122,8 @@ const analyzeTemporalCoupling = (
 
     // Pattern 1: module-scope let/var variables shared across exported functions
     const mutableVars = collectTopLevelMutableVars(file.program as Node);
-    const exportedNames = collectExportedFunctionNames(file.program as Node);
+    const exportedNames = collectExportedFunctionNamesFromGildash(input?.gildash, rel) ?? collectExportedFunctionNames(file.program as Node);
+
     const writeKeys = collectWritePositionKeys(file.program as Node);
 
     for (const { name, offset } of mutableVars) {

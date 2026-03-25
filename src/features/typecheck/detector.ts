@@ -2,6 +2,8 @@ import * as path from 'node:path';
 
 import ts from 'typescript';
 
+import type { Gildash } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan, TypecheckItem } from '../../types';
@@ -35,6 +37,7 @@ const buildCodeFrame = (lines: ReadonlyArray<string>, line: number, column: numb
 interface AnalyzeTypecheckInput {
   readonly rootAbs?: string;
   readonly logger?: FirebatLogger;
+  readonly gildash?: Gildash;
 }
 
 const shouldIncludeDiagnostic = (category: ts.DiagnosticCategory): boolean => {
@@ -95,71 +98,117 @@ const attachCodeFrames = (
   });
 };
 
+const shouldIncludeGildashDiagnostic = (category: 'error' | 'warning' | 'suggestion'): boolean => {
+  return category === 'error' || category === 'warning';
+};
+
+const analyzeTypecheckViaGildash = (
+  program: ReadonlyArray<ParsedFile>,
+  root: string,
+  gildash: Gildash,
+): ReadonlyArray<Omit<TypecheckItem, 'codeFrame'>> => {
+  const items: Array<Omit<TypecheckItem, 'codeFrame'>> = [];
+
+  for (const file of program) {
+    const diagnostics = gildash.getSemanticDiagnostics(file.filePath, { preEmit: true });
+
+    for (const diag of diagnostics) {
+      if (!shouldIncludeGildashDiagnostic(diag.category)) {continue;}
+
+      const column1Based = diag.column + 1;
+      const span: SourceSpan = {
+        start: { line: diag.line, column: column1Based },
+        end: { line: diag.line, column: column1Based },
+      };
+
+      items.push({
+        severity: 'error',
+        code: `TS${diag.code}`,
+        msg: diag.message,
+        file: toProjectRelative(root, diag.filePath),
+        span,
+      });
+    }
+  }
+
+  return items;
+};
+
 const analyzeTypecheck = async (
   program: ReadonlyArray<ParsedFile>,
   input?: AnalyzeTypecheckInput,
 ): Promise<ReadonlyArray<TypecheckItem>> => {
   const root = input?.rootAbs ?? process.cwd();
   const logger = input?.logger ?? createNoopLogger();
-  const tsconfigPath = findTsconfigPath(root);
 
-  if (!tsconfigPath) {
-    throw new Error('typecheck: tsconfig.json not found');
-  }
+  let itemsWithoutFrames: ReadonlyArray<Omit<TypecheckItem, 'codeFrame'>>;
 
-  logger.debug('typecheck: creating ts.Program', { tsconfigPath });
+  if (input?.gildash) {
+    logger.debug('typecheck: using gildash getSemanticDiagnostics');
+    itemsWithoutFrames = analyzeTypecheckViaGildash(program, root, input.gildash);
+  } else {
+    const tsconfigPath = findTsconfigPath(root);
 
-  const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
-
-  if (configFile.error) {
-    const msg = ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n');
-
-    throw new Error(`typecheck: failed to read tsconfig — ${msg}`);
-  }
-
-  const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, path.dirname(tsconfigPath));
-  const fileNames = program.map(f => f.filePath);
-  const tsProgram = ts.createProgram(fileNames, parsedConfig.options);
-  const itemsWithoutFrames: Array<Omit<TypecheckItem, 'codeFrame'>> = [];
-
-  for (const file of program) {
-    const sourceFile = tsProgram.getSourceFile(file.filePath);
-
-    if (!sourceFile) {continue;}
-
-    const diagnostics = ts.getPreEmitDiagnostics(tsProgram, sourceFile);
-
-    for (const diag of diagnostics) {
-      if (!shouldIncludeDiagnostic(diag.category)) {continue;}
-
-      const filePath = diag.file?.fileName ?? file.filePath;
-      let span: SourceSpan;
-
-      if (diag.file && diag.start !== undefined) {
-        const startLc = diag.file.getLineAndCharacterOfPosition(diag.start);
-        const endLc = diag.file.getLineAndCharacterOfPosition(diag.start + (diag.length ?? 0));
-
-        span = {
-          start: { line: startLc.line + 1, column: startLc.character + 1 },
-          end: { line: endLc.line + 1, column: endLc.character + 1 },
-        };
-      } else {
-        span = createEmptySpan();
-      }
-
-      itemsWithoutFrames.push({
-        severity: toSeverity(diag.category),
-        code: `TS${diag.code}`,
-        msg: ts.flattenDiagnosticMessageText(diag.messageText, '\n').trim(),
-        file: toProjectRelative(root, filePath),
-        span,
-      });
+    if (!tsconfigPath) {
+      throw new Error('typecheck: tsconfig.json not found');
     }
+
+    logger.debug('typecheck: creating ts.Program', { tsconfigPath });
+
+    const configFile = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+
+    if (configFile.error) {
+      const msg = ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n');
+
+      throw new Error(`typecheck: failed to read tsconfig — ${msg}`);
+    }
+
+    const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, path.dirname(tsconfigPath));
+    const fileNames = program.map(f => f.filePath);
+    const tsProgram = ts.createProgram(fileNames, parsedConfig.options);
+    const mutableItems: Array<Omit<TypecheckItem, 'codeFrame'>> = [];
+
+    for (const file of program) {
+      const sourceFile = tsProgram.getSourceFile(file.filePath);
+
+      if (!sourceFile) {continue;}
+
+      const diagnostics = ts.getPreEmitDiagnostics(tsProgram, sourceFile);
+
+      for (const diag of diagnostics) {
+        if (!shouldIncludeDiagnostic(diag.category)) {continue;}
+
+        const filePath = diag.file?.fileName ?? file.filePath;
+        let span: SourceSpan;
+
+        if (diag.file && diag.start !== undefined) {
+          const startLc = diag.file.getLineAndCharacterOfPosition(diag.start);
+          const endLc = diag.file.getLineAndCharacterOfPosition(diag.start + (diag.length ?? 0));
+
+          span = {
+            start: { line: startLc.line + 1, column: startLc.character + 1 },
+            end: { line: endLc.line + 1, column: endLc.character + 1 },
+          };
+        } else {
+          span = createEmptySpan();
+        }
+
+        mutableItems.push({
+          severity: toSeverity(diag.category),
+          code: `TS${diag.code}`,
+          msg: ts.flattenDiagnosticMessageText(diag.messageText, '\n').trim(),
+          file: toProjectRelative(root, filePath),
+          span,
+        });
+      }
+    }
+
+    itemsWithoutFrames = mutableItems;
   }
 
   const itemsWithFrames = attachCodeFrames(program, itemsWithoutFrames);
 
-  return itemsWithFrames.sort((left, right) => {
+  return [...itemsWithFrames].sort((left, right) => {
     if (left.file !== right.file) {return left.file.localeCompare(right.file);}
 
     if (left.span.start.line !== right.span.start.line) {return left.span.start.line - right.span.start.line;}

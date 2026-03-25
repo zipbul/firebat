@@ -460,6 +460,86 @@ describe('temporal-coupling/analyzer', () => {
     },
   });
 
+  // --- gildash getSymbolsByFile 기반 exported name 수집 ---
+
+  it('analyzeTemporalCoupling - gildash getSymbolsByFile provides exported names - detects temporal coupling', () => {
+    // Arrange — getSymbolsByFile returns exported function symbols
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    const mockGildash = {
+      ...createMockGildash([]),
+      getSymbolsByFile: (filePath: string) => {
+        if (filePath === 'src/a.ts') {
+          return [
+            { name: 'init', kind: 'function', isExported: true, filePath: 'src/a.ts' },
+            { name: 'query', kind: 'function', isExported: true, filePath: 'src/a.ts' },
+          ];
+        }
+        return [];
+      },
+    };
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
+    // Assert — gildash provides exported names, temporal coupling detected
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - gildash getSymbolsByFile empty result - falls back to AST walk', () => {
+    // Arrange — getSymbolsByFile returns empty → fallback to collectExportedFunctionNames
+    const files = [
+      file(
+        'src/a.ts',
+        ['let db: any;', 'export function init() { db = createDb(); }', 'export function query() { return db; }'].join('\n'),
+      ),
+    ];
+    const mockGildash = {
+      ...createMockGildash([]),
+      getSymbolsByFile: () => [],
+    };
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
+    // Assert — AST fallback still detects temporal coupling
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - gildash getSymbolsByFile with export { } specifiers - detects coupling', () => {
+    // Arrange — export { init, query } pattern: gildash 0.14.0 returns isExported: true
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let db: any;',
+          'function init() { db = createDb(); }',
+          'function query() { return db; }',
+          'export { init, query };',
+        ].join('\n'),
+      ),
+    ];
+    const mockGildash = {
+      ...createMockGildash([]),
+      getSymbolsByFile: (filePath: string) => {
+        if (filePath === 'src/a.ts') {
+          return [
+            { name: 'init', kind: 'function', isExported: true, filePath: 'src/a.ts' },
+            { name: 'query', kind: 'function', isExported: true, filePath: 'src/a.ts' },
+          ];
+        }
+        return [];
+      },
+    };
+    // Act
+    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
+
+    // Assert — gildash correctly marks specifiers as exported
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('analyzeTemporalCoupling - all callers of reader also call writer via gildash - suppresses finding', () => {
     // Arrange
     const files = [
