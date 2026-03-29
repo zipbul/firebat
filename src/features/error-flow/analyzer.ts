@@ -56,7 +56,7 @@ const isIdentifierName = (node: NodeValue, name: string): boolean => {
     return false;
   }
 
-  if (node.type !== 'Identifier' || !isNodeRecord(node)) {
+  if (node.type !== 'Identifier') {
     return false;
   }
 
@@ -64,13 +64,13 @@ const isIdentifierName = (node: NodeValue, name: string): boolean => {
 };
 
 const getMemberPropertyName = (callee: NodeValue): string | null => {
-  if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
+  if (!isOxcNode(callee) || callee.type !== 'MemberExpression') {
     return null;
   }
 
   const prop = callee.property;
 
-  if (isOxcNode(prop) && prop.type === 'Identifier' && isNodeRecord(prop) && typeof prop.name === 'string') {
+  if (prop.type === 'Identifier' && typeof prop.name === 'string') {
     return prop.name;
   }
 
@@ -82,7 +82,7 @@ const knownPrimitiveWrappers = new Set(['String', 'Number', 'Boolean', 'Symbol',
 const isPrimitiveWrapperName = (name: string): boolean => knownPrimitiveWrappers.has(name);
 
 const isErrorConstructor = (callee: NodeValue): boolean => {
-  if (!isOxcNode(callee) || !isNodeRecord(callee) || callee.type !== 'Identifier') {
+  if (!isOxcNode(callee) || callee.type !== 'Identifier') {
     return false;
   }
 
@@ -101,12 +101,12 @@ const isErrorConstructor = (callee: NodeValue): boolean => {
 };
 
 const isPromiseFactoryCall = (expr: NodeValue): boolean => {
-  if (!isOxcNode(expr) || expr.type !== 'CallExpression' || !isNodeRecord(expr)) {
+  if (!isOxcNode(expr) || expr.type !== 'CallExpression') {
     // `new Promise(...)`
-    if (isOxcNode(expr) && expr.type === 'NewExpression' && isNodeRecord(expr)) {
+    if (isOxcNode(expr) && expr.type === 'NewExpression') {
       const callee = expr.callee;
 
-      return isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && callee.name === 'Promise';
+      return callee.type === 'Identifier' && callee.name === 'Promise';
     }
 
     return false;
@@ -114,22 +114,18 @@ const isPromiseFactoryCall = (expr: NodeValue): boolean => {
 
   const callee = expr.callee;
 
-  if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
+  if (callee.type !== 'MemberExpression') {
     return false;
   }
 
   const obj = callee.object;
   const prop = callee.property;
 
-  if (!isOxcNode(obj) || !isOxcNode(prop)) {
+  if (obj.type !== 'Identifier' || obj.name !== 'Promise') {
     return false;
   }
 
-  if (obj.type !== 'Identifier' || !isNodeRecord(obj) || obj.name !== 'Promise') {
-    return false;
-  }
-
-  if (prop.type !== 'Identifier' || !isNodeRecord(prop)) {
+  if (prop.type !== 'Identifier') {
     return false;
   }
 
@@ -141,7 +137,7 @@ const isPromiseFactoryCall = (expr: NodeValue): boolean => {
 const chainHasCatch = (expr: NodeValue): boolean => {
   let current = expr;
 
-  while (isOxcNode(current) && current.type === 'CallExpression' && isNodeRecord(current)) {
+  while (isOxcNode(current) && current.type === 'CallExpression') {
     const callee = current.callee;
     const method = getMemberPropertyName(callee);
 
@@ -150,7 +146,7 @@ const chainHasCatch = (expr: NodeValue): boolean => {
     }
 
     // Walk down the chain: expr.callee.object is the previous call
-    if (isOxcNode(callee) && callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+    if (callee.type === 'MemberExpression') {
       current = callee.object;
     } else {
       break;
@@ -189,10 +185,10 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
 
   // Pre-collect all labels defined inside the finalizer
   walkOxcTree(finalizer, node => {
-    if (node.type === 'LabeledStatement' && isNodeRecord(node)) {
+    if (node.type === 'LabeledStatement') {
       const label = node.label;
 
-      if (isOxcNode(label) && label.type === 'Identifier' && isNodeRecord(label) && typeof label.name === 'string') {
+      if (typeof label.name === 'string') {
         localLabels.add(label.name);
       }
     }
@@ -239,12 +235,9 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
       return;
     }
 
-    if (node.type === 'BreakStatement' && isNodeRecord(node)) {
+    if (node.type === 'BreakStatement') {
       const label = node.label;
-      const labelName =
-        isOxcNode(label) && label.type === 'Identifier' && isNodeRecord(label) && typeof label.name === 'string'
-          ? label.name
-          : null;
+      const labelName = label !== null ? label.name : null;
 
       if (labelName !== null) {
         // labeled break: unsafe only if label is defined outside finally
@@ -261,12 +254,9 @@ const findUnsafeControlFlowInFinally = (finalizer: NodeValue): UnsafeControlFlow
       }
     }
 
-    if (node.type === 'ContinueStatement' && isNodeRecord(node)) {
+    if (node.type === 'ContinueStatement') {
       const label = node.label;
-      const labelName =
-        isOxcNode(label) && label.type === 'Identifier' && isNodeRecord(label) && typeof label.name === 'string'
-          ? label.name
-          : null;
+      const labelName = label !== null ? label.name : null;
 
       if (labelName !== null) {
         if (!localLabels.has(labelName)) {
@@ -334,11 +324,11 @@ const containsNonEmptyReturnInExecutor = (body: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+    if (node.type === 'ReturnStatement') {
       const arg = node.argument;
 
       // return; (no argument) is fine
-      if (isOxcNode(arg)) {
+      if (arg !== null) {
         found = true;
 
         return false;
@@ -362,7 +352,7 @@ const containsCallbackApiCall = (body: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (node.type === 'CallExpression' && isNodeRecord(node)) {
+    if (node.type === 'CallExpression') {
       const method = getMemberPropertyName(node.callee);
 
       if (method !== null && callbackApiMethods.has(method)) {
@@ -379,13 +369,13 @@ const containsCallbackApiCall = (body: NodeValue): boolean => {
 };
 
 const isPromiseWrapCall = (expr: NodeValue): boolean => {
-  if (!isOxcNode(expr) || expr.type !== 'CallExpression' || !isNodeRecord(expr)) {
+  if (!isOxcNode(expr) || expr.type !== 'CallExpression') {
     return false;
   }
 
   const callee = expr.callee;
 
-  if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
+  if (callee.type !== 'MemberExpression') {
     return false;
   }
 
@@ -393,13 +383,9 @@ const isPromiseWrapCall = (expr: NodeValue): boolean => {
   const prop = callee.property;
 
   return (
-    isOxcNode(obj) &&
     obj.type === 'Identifier' &&
-    isNodeRecord(obj) &&
     obj.name === 'Promise' &&
-    isOxcNode(prop) &&
     prop.type === 'Identifier' &&
-    isNodeRecord(prop) &&
     (prop.name === 'resolve' || prop.name === 'reject')
   );
 };
@@ -408,7 +394,7 @@ const containsPromiseWrapReturn = (body: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+    if (node.type === 'ReturnStatement') {
       if (isPromiseWrapCall(node.argument)) {
         found = true;
 
@@ -446,16 +432,14 @@ const containsNodeStyleCallback = (body: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (node.type === 'CallExpression' && isNodeRecord(node)) {
+    if (node.type === 'CallExpression') {
       const method = getMemberPropertyName(node.callee);
 
       if (method !== null && nodeStyleCallbackMethods.has(method)) {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+        const args = node.arguments;
         const last = args[args.length - 1];
         const isCallbackArg =
-          last !== undefined &&
-          isOxcNode(last) &&
-          (last.type === 'ArrowFunctionExpression' || last.type === 'FunctionExpression');
+          last !== undefined && (last.type === 'ArrowFunctionExpression' || last.type === 'FunctionExpression');
 
         if (isCallbackArg) {
           found = true;
@@ -483,7 +467,7 @@ const containsIdentifierUse = (node: NodeValue, name: string): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (inner.type === 'Identifier' && isNodeRecord(inner) && inner.name === name) {
+    if (inner.type === 'Identifier' && inner.name === name) {
       found = true;
 
       return false;
@@ -499,22 +483,20 @@ const hasCausePropertyWithIdentifier = (node: NodeValue, name: string): boolean 
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (inner.type !== 'ObjectExpression' || !isNodeRecord(inner)) {
+    if (inner.type !== 'ObjectExpression') {
       return true;
     }
 
-    const props = Array.isArray(inner.properties) ? (inner.properties as ReadonlyArray<NodeValue>) : [];
-
-    for (const prop of props) {
-      if (!isOxcNode(prop) || !isNodeRecord(prop) || prop.type !== 'Property') {
+    for (const prop of inner.properties) {
+      if (prop.type !== 'Property') {
         continue;
       }
 
-      const key = prop.key as NodeValue;
-      const value = prop.value as NodeValue;
+      const key = prop.key;
+      const value = prop.value;
       const isCauseKey =
-        (isOxcNode(key) && key.type === 'Identifier' && isNodeRecord(key) && key.name === 'cause') ||
-        (isOxcNode(key) && key.type === 'Literal' && isNodeRecord(key) && key.value === 'cause');
+        (key.type === 'Identifier' && key.name === 'cause') ||
+        (key.type === 'Literal' && key.value === 'cause');
 
       if (!isCauseKey) {
         continue;
@@ -538,10 +520,10 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
     return false;
   }
 
-  if (arg.type === 'ArrowFunctionExpression' && isNodeRecord(arg)) {
+  if (arg.type === 'ArrowFunctionExpression') {
     const body = arg.body;
 
-    if (isOxcNode(body) && body.type === 'BlockStatement') {
+    if (body.type === 'BlockStatement') {
       return containsReturnStatement(body);
     }
 
@@ -549,10 +531,10 @@ const hasNonEmptyReturnInFinallyCallback = (arg: NodeValue): boolean => {
     return true;
   }
 
-  if ((arg.type === 'FunctionExpression' || arg.type === 'FunctionDeclaration') && isNodeRecord(arg)) {
+  if (arg.type === 'FunctionExpression' || arg.type === 'FunctionDeclaration') {
     const body = arg.body;
 
-    if (isOxcNode(body) && body.type === 'BlockStatement') {
+    if (body !== null && body.type === 'BlockStatement') {
       return containsReturnStatement(body);
     }
   }
@@ -566,7 +548,7 @@ interface CollectFindingsResult {
 }
 
 const extractConstructorName = (callee: NodeValue): string | null => {
-  if (!isOxcNode(callee) || !isNodeRecord(callee)) {
+  if (!isOxcNode(callee)) {
     return null;
   }
 
@@ -578,7 +560,7 @@ const extractConstructorName = (callee: NodeValue): string | null => {
   if (callee.type === 'MemberExpression') {
     const prop = callee.property;
 
-    if (isOxcNode(prop) && prop.type === 'Identifier' && isNodeRecord(prop) && typeof prop.name === 'string') {
+    if (prop.type === 'Identifier' && typeof prop.name === 'string') {
       return prop.name;
     }
   }
@@ -643,27 +625,23 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   };
 
   const reportCatchTransformHygieneIfNeeded = (catchClause: NodeValue): void => {
-    if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
+    if (!isOxcNode(catchClause) || catchClause.type !== 'CatchClause') {
       return;
     }
 
     const param = catchClause.param;
     const body = catchClause.body;
 
-    if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
-      return;
-    }
-
     // Optional catch binding: catch { throw new Error('fail'); }
-    if (!isOxcNode(param)) {
+    if (param === null) {
       walkOxcTree(body, node => {
-        if (node.type !== 'ThrowStatement' || !isNodeRecord(node)) {
+        if (node.type !== 'ThrowStatement') {
           return true;
         }
 
         const arg = node.argument;
 
-        if (!isOxcNode(arg) || arg.type !== 'NewExpression' || !isNodeRecord(arg)) {
+        if (arg.type !== 'NewExpression') {
           return true;
         }
 
@@ -686,7 +664,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     // Non-identifier param (e.g., destructured): skip
-    if (param.type !== 'Identifier' || !isNodeRecord(param)) {
+    if (param.type !== 'Identifier') {
       return;
     }
 
@@ -695,7 +673,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     let hasReassignment = false;
 
     walkOxcTree(body, node => {
-      if (node.type === 'AssignmentExpression' && isNodeRecord(node)) {
+      if (node.type === 'AssignmentExpression') {
         if (isIdentifierName(node.left, name)) {
           hasReassignment = true;
 
@@ -730,18 +708,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     const localNewExpressions = new Map<string, NodeValue>();
 
     walkOxcTree(body, node => {
-      if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+      if (node.type === 'VariableDeclarator') {
         const id = node.id;
         const init = node.init;
 
-        if (
-          isOxcNode(id) &&
-          id.type === 'Identifier' &&
-          isNodeRecord(id) &&
-          typeof id.name === 'string' &&
-          isOxcNode(init) &&
-          init.type === 'NewExpression'
-        ) {
+        if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && init.type === 'NewExpression') {
           localNewExpressions.set(id.name, init);
         }
       }
@@ -760,21 +731,19 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     // visit() generic fallthrough re-visits catch body children for OTHER rules (throw-non-error,
     // unobserved-variable, etc.) — no duplicate findings because each path checks different kinds.
     walkOxcTree(body, node => {
-      if (node.type !== 'ThrowStatement' || !isNodeRecord(node)) {
+      if (node.type !== 'ThrowStatement') {
         return true;
       }
 
       const arg = node.argument;
 
       // Indirect throw: throw <identifier> where identifier was assigned a new Error(...)
-      if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+      if (arg.type === 'Identifier' && typeof arg.name === 'string') {
         const varName = arg.name;
         const newExpr = localNewExpressions.get(varName);
 
-        if (newExpr !== undefined && isNodeRecord(newExpr)) {
-          const newExprCallee = (newExpr as Record<string, NodeValue>).callee;
-
-          if (isErrorConstructor(newExprCallee)) {
+        if (newExpr !== undefined && isOxcNode(newExpr) && newExpr.type === 'NewExpression') {
+          if (isErrorConstructor(newExpr.callee)) {
             const hasCause = hasCausePropertyWithIdentifier(newExpr, name);
 
             if (!hasCause) {
@@ -794,7 +763,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         return true;
       }
 
-      if (!isOxcNode(arg) || arg.type !== 'NewExpression' || !isNodeRecord(arg)) {
+      if (arg.type !== 'NewExpression') {
         return true;
       }
 
@@ -804,8 +773,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
         if (!hasCause) {
           // Check for vibe pattern: catch param used in Error message position
-          const constructorArgs = Array.isArray(arg.arguments) ? (arg.arguments as ReadonlyArray<NodeValue>) : [];
-          const firstArg = constructorArgs[0];
+          const firstArg = arg.arguments[0];
           const isVibePattern = firstArg !== undefined && containsIdentifierUse(firstArg, name);
 
           pushFinding(findings, {
@@ -886,23 +854,19 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
   };
 
   const isUselessRethrow = (catchClause: NodeValue): boolean => {
-    if (!isOxcNode(catchClause) || !isNodeRecord(catchClause)) {
+    if (!isOxcNode(catchClause) || catchClause.type !== 'CatchClause') {
       return false;
     }
 
     const param = catchClause.param;
     const body = catchClause.body;
 
-    if (!isOxcNode(param) || param.type !== 'Identifier' || !isNodeRecord(param)) {
-      return false;
-    }
-
-    if (!isOxcNode(body) || body.type !== 'BlockStatement' || !isNodeRecord(body)) {
+    if (param === null || param.type !== 'Identifier') {
       return false;
     }
 
     const name = param.name;
-    const stmts = Array.isArray(body.body) ? (body.body as ReadonlyArray<NodeValue>) : [];
+    const stmts = body.body;
 
     if (stmts.length !== 1) {
       return false;
@@ -910,7 +874,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     const only = stmts[0];
 
-    if (!isOxcNode(only) || only.type !== 'ThrowStatement' || !isNodeRecord(only)) {
+    if (only === undefined || only.type !== 'ThrowStatement') {
       return false;
     }
 
@@ -952,10 +916,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
     // Function scope boundary: isolate try-catch depth for EF-06 return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
-    if (
-      (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') &&
-      isNodeRecord(node)
-    ) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       const savedDepth = functionTryCatchDepth;
       const savedTryBlockDepth = inTryBlockDepth;
       const savedAsync = inAsyncFunction;
@@ -968,14 +929,16 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       pushUnobservedScope();
 
-      const entries = Object.entries(node);
+      if (isNodeRecord(node)) {
+        const entries = Object.entries(node);
 
-      for (const [key, childValue] of entries) {
-        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-          continue;
+        for (const [key, childValue] of entries) {
+          if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
+            continue;
+          }
+
+          visit(childValue);
         }
-
-        visit(childValue);
       }
 
       popUnobservedScope();
@@ -989,15 +952,15 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     // Pre-order hooks
-    if (node.type === 'TryStatement' && isNodeRecord(node)) {
-      const hasCatch = isOxcNode(node.handler) && node.handler.type === 'CatchClause';
-      const hasFinalizer = isOxcNode(node.finalizer);
+    if (node.type === 'TryStatement') {
+      const hasCatch = node.handler !== null;
+      const hasFinalizer = node.finalizer !== null;
 
       // EF-03 unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
       if (hasFinalizer) {
         const finalizer = node.finalizer;
 
-        if (isOxcNode(finalizer) && finalizer.type === 'BlockStatement' && isNodeRecord(finalizer)) {
+        if (finalizer !== null) {
           const unsafeKind = findUnsafeControlFlowInFinally(finalizer);
 
           if (unsafeKind !== null) {
@@ -1063,11 +1026,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     // EF-06 return-await-in-try: return without await in try block misses rejection
-    if (node.type === 'ReturnStatement' && isNodeRecord(node)) {
+    if (node.type === 'ReturnStatement') {
       const arg = node.argument;
 
       if (inTryBlockWithCatchDepth > 0 && inAsyncFunction) {
-        if (isOxcNode(arg) && arg.type !== 'AwaitExpression') {
+        if (arg !== null && arg.type !== 'AwaitExpression') {
           let shouldFlag = false;
 
           if (gildash) {
@@ -1107,73 +1070,57 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
 
       // Mark returned identifier as observed for unobserved-variable
-      if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+      if (arg !== null && arg.type === 'Identifier') {
         markObserved(arg.name);
       }
     }
 
     // P3-1 throw-non-error
-    if (node.type === 'ThrowStatement' && isNodeRecord(node)) {
+    if (node.type === 'ThrowStatement') {
       const arg = node.argument;
+      const isLikelyError =
+        arg.type === 'NewExpression' ||
+        arg.type === 'Identifier' ||
+        arg.type === 'AwaitExpression' ||
+        arg.type === 'ChainExpression';
+      // CallExpression is allowed in general (e.g. createError()),
+      // but reject known primitive wrappers that never produce Error instances.
+      const isCallButPrimitiveWrapper =
+        arg.type === 'CallExpression' &&
+        arg.callee.type === 'Identifier' &&
+        isPrimitiveWrapperName(arg.callee.name);
+      const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
 
-      if (isOxcNode(arg)) {
-        const isLikelyError =
-          arg.type === 'NewExpression' ||
-          arg.type === 'Identifier' ||
-          arg.type === 'AwaitExpression' ||
-          arg.type === 'ChainExpression';
-        // CallExpression is allowed in general (e.g. createError()),
-        // but reject known primitive wrappers that never produce Error instances.
-        const isCallButPrimitiveWrapper =
-          arg.type === 'CallExpression' &&
-          isNodeRecord(arg) &&
-          isOxcNode(arg.callee) &&
-          arg.callee.type === 'Identifier' &&
-          isNodeRecord(arg.callee) &&
-          isPrimitiveWrapperName(arg.callee.name as string);
-        const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
-
-        if (!isLikelyError && !isAllowedCall) {
-          pushFinding(findings, {
-            kind: 'throw-non-error',
-            node,
-            filePath,
-            sourceText,
-            message: 'throw argument is not an Error instance (loses stack trace)',
-            evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: [],
-          });
-        }
+      if (!isLikelyError && !isAllowedCall) {
+        pushFinding(findings, {
+          kind: 'throw-non-error',
+          node,
+          filePath,
+          sourceText,
+          message: 'throw argument is not an Error instance (loses stack trace)',
+          evidence: getEvidenceLineAt(sourceText, node.start),
+          recipes: [],
+        });
       }
     }
 
     // P3-2 promise-constructor-hygiene
-    if (node.type === 'NewExpression' && isNodeRecord(node)) {
+    if (node.type === 'NewExpression') {
       const callee = node.callee;
-      const isPromiseIdent =
-        isOxcNode(callee) && callee.type === 'Identifier' && isNodeRecord(callee) && callee.name === 'Promise';
+      const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise';
       const isPromiseMember =
         !isPromiseIdent &&
-        isOxcNode(callee) &&
         callee.type === 'MemberExpression' &&
-        isNodeRecord(callee) &&
-        isOxcNode(callee.object) &&
         callee.object.type === 'Identifier' &&
-        isNodeRecord(callee.object) &&
         (callee.object.name === 'globalThis' || callee.object.name === 'window' || callee.object.name === 'self') &&
-        isOxcNode(callee.property) &&
         callee.property.type === 'Identifier' &&
-        isNodeRecord(callee.property) &&
         callee.property.name === 'Promise';
 
       if (isPromiseIdent || isPromiseMember) {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-        const executor = args[0];
+        const executor = node.arguments[0];
         const isInlineExecutor =
           executor !== undefined &&
-          isOxcNode(executor) &&
-          (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression') &&
-          isNodeRecord(executor);
+          (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression');
 
         if (isInlineExecutor) {
           const isAsync = executor.async === true;
@@ -1195,7 +1142,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           if (!isAsync) {
             const executorBody = executor.body;
 
-            if (isOxcNode(executorBody) && executorBody.type === 'BlockStatement') {
+            if (executorBody !== null && executorBody.type === 'BlockStatement') {
               if (containsThrowInExecutor(executorBody)) {
                 pushFinding(findings, {
                   kind: 'promise-constructor-hygiene',
@@ -1214,7 +1161,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           if (!isAsync) {
             const executorBody = executor.body;
 
-            if (isOxcNode(executorBody) && executorBody.type === 'BlockStatement') {
+            if (executorBody !== null && executorBody.type === 'BlockStatement') {
               if (containsNonEmptyReturnInExecutor(executorBody)) {
                 pushFinding(findings, {
                   kind: 'promise-constructor-hygiene',
@@ -1230,16 +1177,9 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           }
 
           // param order: first param should be resolve, not reject
-          const executorParams = Array.isArray(executor.params) ? (executor.params as ReadonlyArray<NodeValue>) : [];
-          const firstParam = executorParams[0];
+          const firstParam = executor.params[0];
 
-          if (
-            firstParam !== undefined &&
-            isOxcNode(firstParam) &&
-            firstParam.type === 'Identifier' &&
-            isNodeRecord(firstParam) &&
-            firstParam.name === 'reject'
-          ) {
+          if (firstParam !== undefined && firstParam.type === 'Identifier' && firstParam.name === 'reject') {
             pushFinding(findings, {
               kind: 'promise-constructor-hygiene',
               node,
@@ -1257,7 +1197,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         const isAsyncExecutor = isInlineExecutor && executor.async === true;
 
         if (inAsyncFunction && !isAsyncExecutor) {
-          const hasCallbackWrapping = isInlineExecutor && containsCallbackApiCall(executor.body as NodeValue);
+          const hasCallbackWrapping = isInlineExecutor && containsCallbackApiCall(executor.body);
 
           if (!hasCallbackWrapping) {
             pushFinding(findings, {
@@ -1274,25 +1214,18 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
       }
     }
 
-    if (node.type === 'CatchClause' && isNodeRecord(node)) {
+    if (node.type === 'CatchClause') {
       reportUselessCatchIfNeeded(node);
       reportCatchTransformHygieneIfNeeded(node);
       // Keep visiting for other rules
     }
 
     // VariableDeclarator: track candidates for unobserved-variable
-    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+    if (node.type === 'VariableDeclarator') {
       const id = node.id;
       const init = node.init;
 
-      if (
-        isOxcNode(id) &&
-        id.type === 'Identifier' &&
-        isNodeRecord(id) &&
-        typeof id.name === 'string' &&
-        isOxcNode(init) &&
-        init.type === 'CallExpression'
-      ) {
+      if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && init.type === 'CallExpression') {
         // node.parent is VariableDeclaration; we need the declaration node.
         // Walk up: use the statement node (VariableDeclaration) for position — use init.start as proxy.
         // Actually we need the VariableDeclaration node. Since visit doesn't have parent tracking,
@@ -1302,10 +1235,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     // AwaitExpression: mark awaited identifier as observed
-    if (node.type === 'AwaitExpression' && isNodeRecord(node)) {
+    if (node.type === 'AwaitExpression') {
       const arg = node.argument;
 
-      if (isOxcNode(arg) && arg.type === 'Identifier' && isNodeRecord(arg) && typeof arg.name === 'string') {
+      if (arg.type === 'Identifier') {
         markObserved(arg.name);
       }
     }
@@ -1313,34 +1246,31 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     // CallExpression: mark .then/.catch/.finally on identifier; mark args as observed
     // Also handle walkOxcTree rules: prefer-catch, prefer-await-to-then, no-return-wrap,
     // always-return, no-callback-in-promise, misused-promises, unsafe-finally(.finally())
-    if (node.type === 'CallExpression' && isNodeRecord(node)) {
+    if (node.type === 'CallExpression') {
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
       // Unobserved-variable: x.then/catch/finally(...) marks x as observed
       if (method !== null && (method === 'then' || method === 'catch' || method === 'finally')) {
-        if (isOxcNode(callee) && callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+        if (callee.type === 'MemberExpression') {
           const obj = callee.object;
 
-          if (isOxcNode(obj) && obj.type === 'Identifier' && isNodeRecord(obj) && typeof obj.name === 'string') {
+          if (obj.type === 'Identifier') {
             markObserved(obj.name);
           }
         }
       }
 
       // Unobserved-variable: fn(p) — passed as function argument marks p as observed
-      const callArgs = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-
-      for (const callArg of callArgs) {
-        if (isOxcNode(callArg) && callArg.type === 'Identifier' && isNodeRecord(callArg) && typeof callArg.name === 'string') {
+      for (const callArg of node.arguments) {
+        if (callArg.type === 'Identifier') {
           markObserved(callArg.name);
         }
       }
 
       // EF-03 return-in-finally: .finally(() => { return ... })
       if (method === 'finally') {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-        const first = args[0];
+        const first = node.arguments[0];
 
         if (hasNonEmptyReturnInFinallyCallback(first)) {
           pushFinding(findings, {
@@ -1357,8 +1287,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // EF-07 prefer-catch: .then(success, failure)
       if (method === 'then') {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-        const second = args[1];
+        const second = node.arguments[1];
 
         if (second !== undefined) {
           pushFinding(findings, {
@@ -1375,22 +1304,13 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // EF-07 prefer-await-to-then: long then chains with block callbacks
       if (method === 'then') {
-        const inner = isOxcNode(callee) && isNodeRecord(callee) ? callee.object : null;
+        const inner = callee.type === 'MemberExpression' ? callee.object : null;
         const hasNestedThen =
-          isOxcNode(inner) &&
-          inner.type === 'CallExpression' &&
-          isNodeRecord(inner) &&
-          getMemberPropertyName(inner.callee) === 'then';
+          inner !== null && inner.type === 'CallExpression' && getMemberPropertyName(inner.callee) === 'then';
 
         if (hasNestedThen) {
-          const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-          const anyBlockCb = args.some(
-            arg =>
-              isOxcNode(arg) &&
-              arg.type === 'ArrowFunctionExpression' &&
-              isNodeRecord(arg) &&
-              isOxcNode(arg.body) &&
-              arg.body.type === 'BlockStatement',
+          const anyBlockCb = node.arguments.some(
+            arg => arg.type === 'ArrowFunctionExpression' && arg.body.type === 'BlockStatement',
           );
 
           if (anyBlockCb) {
@@ -1409,17 +1329,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // no-return-wrap: .then(() => Promise.resolve(x)) — unnecessary wrapping
       if (method === 'then') {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-
-        for (const arg of args) {
-          if (!isOxcNode(arg) || !isNodeRecord(arg)) {
-            continue;
-          }
-
+        for (const arg of node.arguments) {
           if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
             const body = arg.body;
 
-            if (isOxcNode(body) && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
+            if (body !== null && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
               pushFinding(findings, {
                 kind: 'no-return-wrap',
                 node,
@@ -1431,7 +1345,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
               });
             }
 
-            if (isOxcNode(body) && body.type === 'BlockStatement') {
+            if (body !== null && body.type === 'BlockStatement') {
               if (containsPromiseWrapReturn(body)) {
                 pushFinding(findings, {
                   kind: 'no-return-wrap',
@@ -1450,18 +1364,12 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // always-return: then callback with block body that has no return
       if (method === 'then') {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-        const first = args[0];
+        const first = node.arguments[0];
 
-        if (
-          first !== undefined &&
-          isOxcNode(first) &&
-          (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
-          isNodeRecord(first)
-        ) {
+        if (first !== undefined && (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression')) {
           const body = first.body;
 
-          if (isOxcNode(body) && body.type === 'BlockStatement' && !containsReturnStatement(body)) {
+          if (body !== null && body.type === 'BlockStatement' && !containsReturnStatement(body)) {
             pushFinding(findings, {
               kind: 'always-return',
               node,
@@ -1477,17 +1385,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
 
       // no-callback-in-promise: callback-style API inside then/catch/finally callback
       if (method === 'then' || method === 'catch') {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-
-        for (const arg of args) {
-          if (
-            isOxcNode(arg) &&
-            (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') &&
-            isNodeRecord(arg)
-          ) {
+        for (const arg of node.arguments) {
+          if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
             const body = arg.body;
 
-            if (isOxcNode(body) && containsNodeStyleCallback(body)) {
+            if (body !== null && containsNodeStyleCallback(body)) {
               pushFinding(findings, {
                 kind: 'no-callback-in-promise',
                 node,
@@ -1516,12 +1418,10 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
           method === 'reduceRight' ||
           method === 'sort')
       ) {
-        const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
-        const first = args[0];
+        const first = node.arguments[0];
         const isAsyncFn =
-          isOxcNode(first) &&
+          first !== undefined &&
           (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
-          isNodeRecord(first) &&
           first.async === true;
 
         if (isAsyncFn) {
@@ -1539,11 +1439,11 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
     }
 
     // Expression-statement based rules.
-    if (node.type === 'ExpressionStatement' && isNodeRecord(node)) {
+    if (node.type === 'ExpressionStatement') {
       const expr = node.expression;
 
       // ignore explicit void
-      if (!(isOxcNode(expr) && expr.type === 'UnaryExpression' && isNodeRecord(expr) && expr.operator === 'void')) {
+      if (!(expr.type === 'UnaryExpression' && expr.operator === 'void')) {
         // EF-08 floating-promises: Promise.* / new Promise as expression statement
         if (isPromiseFactoryCall(expr)) {
           pushFinding(findings, {
@@ -1555,7 +1455,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
             evidence: getEvidenceLineAt(sourceText, node.start),
             recipes: ['RCP-09', 'RCP-10', 'RCP-11'],
           });
-        } else if (isOxcNode(expr) && expr.type === 'CallExpression' && isNodeRecord(expr)) {
+        } else if (expr.type === 'CallExpression') {
           // EF-08 catch-or-return: top-level then call without catch anywhere in chain
           const exprCallee = expr.callee;
           const exprMethod = getMemberPropertyName(exprCallee);

@@ -14,7 +14,6 @@ import {
   isFunctionNode,
   isNodeRecord,
   isOxcNode,
-  isOxcNodeArray,
   walkOxcTree,
   walkOxcTreeWithParent,
 } from '../../engine/ast/oxc-ast-utils';
@@ -46,15 +45,7 @@ const getAwaitedCallExpression = (node: Node): Node | null => {
     return null;
   }
 
-  if (!isNodeRecord(node)) {
-    return null;
-  }
-
   const argument = node.argument;
-
-  if (!isOxcNode(argument)) {
-    return null;
-  }
 
   if (argument.type !== 'CallExpression') {
     return null;
@@ -80,14 +71,10 @@ const getCallFromExpression = (expression: Node | null): Node | null => {
 };
 
 const getCallFromStatement = (statement: Node): Node | null => {
-  if (!isNodeRecord(statement)) {
-    return null;
-  }
-
   if (statement.type === 'ReturnStatement') {
     const argument = statement.argument;
 
-    if (!isOxcNode(argument)) {
+    if (!argument) {
       return null;
     }
 
@@ -95,13 +82,7 @@ const getCallFromStatement = (statement: Node): Node | null => {
   }
 
   if (statement.type === 'ExpressionStatement') {
-    const expression = statement.expression;
-
-    if (!isOxcNode(expression)) {
-      return null;
-    }
-
-    return getCallFromExpression(expression);
+    return getCallFromExpression(statement.expression);
   }
 
   return null;
@@ -132,22 +113,14 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
       continue;
     }
 
-    if (paramNode.type === 'ObjectPattern' && isNodeRecord(paramNode)) {
+    if (paramNode.type === 'ObjectPattern') {
       const properties = paramNode.properties;
 
-      if (!Array.isArray(properties)) {
-        return null;
-      }
-
       for (const prop of properties) {
-        if (!isOxcNode(prop)) {
-          return null;
-        }
-
         if (prop.type === 'Property' && isNodeRecord(prop)) {
           const value = prop.value ?? prop.key;
 
-          if (!isOxcNode(value) || value.type !== 'Identifier' || typeof value.name !== 'string') {
+          if (!isOxcNode(value) || value.type !== 'Identifier') {
             return null;
           }
 
@@ -159,7 +132,7 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
         if (prop.type === 'RestElement' && isNodeRecord(prop)) {
           const argument = prop.argument;
 
-          if (!isOxcNode(argument) || argument.type !== 'Identifier' || typeof argument.name !== 'string') {
+          if (argument.type !== 'Identifier') {
             return null;
           }
 
@@ -176,10 +149,10 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
       continue;
     }
 
-    if (paramNode.type === 'RestElement' && isNodeRecord(paramNode)) {
+    if (paramNode.type === 'RestElement') {
       const argument = paramNode.argument;
 
-      if (isOxcNode(argument) && argument.type === 'Identifier' && typeof argument.name === 'string') {
+      if (argument.type === 'Identifier') {
         restParam = argument.name;
 
         params.push(argument.name);
@@ -226,13 +199,13 @@ const isPassthroughArgs = (callExpression: Node, params: readonly string[], rest
     }
 
     if (isRest) {
-      if (arg.type !== 'SpreadElement' || !isNodeRecord(arg)) {
+      if (arg.type !== 'SpreadElement') {
         return false;
       }
 
       const spreadArg = arg.argument;
 
-      if (!isOxcNode(spreadArg) || spreadArg.type !== 'Identifier' || spreadArg.name !== restParam) {
+      if (spreadArg.type !== 'Identifier' || spreadArg.name !== restParam) {
         return false;
       }
 
@@ -267,19 +240,15 @@ const getWrapperCall = (node: Node): Node | null => {
   const maybeCall =
     body.type === 'BlockStatement'
       ? (() => {
-          if (!isNodeRecord(body)) {
-            return null;
-          }
-
           const statements = body.body;
 
-          if (!isOxcNodeArray(statements) || statements.length !== 1) {
+          if (statements.length !== 1) {
             return null;
           }
 
           const statement = statements[0];
 
-          if (!isOxcNode(statement)) {
+          if (!statement) {
             return null;
           }
 
@@ -309,15 +278,15 @@ const resolveCalleeName = (callExpression: Node): string | null => {
     return null;
   }
 
-  if (callee.type === 'Identifier' && 'name' in callee && typeof callee.name === 'string') {
+  if (callee.type === 'Identifier') {
     return callee.name;
   }
 
-  if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+  if (callee.type === 'MemberExpression') {
     const object = callee.object;
     const property = callee.property;
 
-    if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && property.type === 'Identifier') {
+    if (object.type === 'ThisExpression' && property.type === 'Identifier') {
       return property.name;
     }
   }
@@ -350,22 +319,15 @@ const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
     return null;
   }
 
-  if (callee.type === 'Identifier' && typeof callee.name === 'string') {
+  if (callee.type === 'Identifier') {
     return { kind: 'local', name: callee.name };
   }
 
-  if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+  if (callee.type === 'MemberExpression') {
     const object = callee.object;
     const property = callee.property;
 
-    if (
-      isOxcNode(object) &&
-      object.type === 'Identifier' &&
-      typeof object.name === 'string' &&
-      isOxcNode(property) &&
-      property.type === 'Identifier' &&
-      typeof property.name === 'string'
-    ) {
+    if (object.type === 'Identifier' && property.type === 'Identifier') {
       return { kind: 'namespace', ns: object.name, name: property.name };
     }
   }
@@ -387,14 +349,10 @@ const collectFunctionNames = (program: NodeValue): CollectedFunctionNames => {
   const methodNodes = new Set<Node>();
 
   walkOxcTree(program, node => {
-    if (!isNodeRecord(node)) {
-      return true;
-    }
-
     if (node.type === 'FunctionDeclaration') {
       const idNode = node.id;
 
-      if (isOxcNode(idNode) && idNode.type === 'Identifier' && typeof idNode.name === 'string') {
+      if (idNode !== null) {
         namesByNode.set(node, idNode.name);
       }
 
@@ -405,10 +363,8 @@ const collectFunctionNames = (program: NodeValue): CollectedFunctionNames => {
       const idNode = node.id;
       const initNode = node.init;
 
-      if (isOxcNode(idNode) && idNode.type === 'Identifier' && typeof idNode.name === 'string' && isOxcNode(initNode)) {
-        if (isFunctionNode(initNode)) {
-          namesByNode.set(initNode, idNode.name);
-        }
+      if (idNode.type === 'Identifier' && initNode !== null && isFunctionNode(initNode)) {
+        namesByNode.set(initNode, idNode.name);
       }
 
       return true;
@@ -812,71 +768,54 @@ const analyzeIndirection = async (
 
     // type-remap: type A = B (pure synonym, no type args, no type params)
     walkOxcTree(file.program, node => {
-      if (!isNodeRecord(node)) {
-        return true;
-      }
-
       if (node.type === 'TSTypeAliasDeclaration' && node.declare !== true) {
         const typeAnnotation = node.typeAnnotation;
 
-        if (isOxcNode(typeAnnotation) && isNodeRecord(typeAnnotation) && typeAnnotation.type === 'TSTypeReference') {
+        if (typeAnnotation.type === 'TSTypeReference') {
           const typeArgs = typeAnnotation.typeArguments;
           const typeParams = node.typeParameters;
-          const hasTypeArgs = isOxcNode(typeArgs) && typeArgs !== null && typeArgs !== undefined;
-          const hasTypeParams = isOxcNode(typeParams) && typeParams !== null && typeParams !== undefined;
+          const hasTypeArgs = typeArgs !== null;
+          const hasTypeParams = typeParams !== null;
 
           if (!hasTypeArgs && !hasTypeParams) {
-            const id = node.id;
-            const header =
-              isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string'
-                ? id.name
-                : 'anonymous';
+            const header = node.id.name;
             const typeName = typeAnnotation.typeName;
             let targetName = 'unknown';
 
-            if (isOxcNode(typeName) && isNodeRecord(typeName)) {
-              if (typeName.type === 'Identifier' && typeof typeName.name === 'string') {
-                targetName = typeName.name as string;
-              } else if (typeName.type === 'TSQualifiedName') {
-                targetName = getNodeHeader(typeName as Node);
-              }
+            if (typeName.type === 'Identifier') {
+              targetName = typeName.name;
+            } else if (typeName.type === 'TSQualifiedName') {
+              targetName = getNodeHeader(typeName);
             }
 
             const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
 
-            addFinding(findings, 'type-remap', node as Node, file.filePath, file.sourceText, header, 1, evidence);
+            addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, header, 1, evidence);
           } else {
             // Semantic verification: complex aliases (with type args/params) may still be structurally equivalent
             // e.g. type A = Readonly<B> where B is already fully readonly — bidirectional assignability confirms equivalence
-            const id = node.id;
-            const aliasHeader =
-              isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string' ? (id.name as string) : null;
+            const aliasHeader = node.id.name;
+            const typeName = typeAnnotation.typeName;
+            let targetTypeName: string | null = null;
 
-            if (aliasHeader !== null) {
-              const typeName = typeAnnotation.typeName;
-              let targetTypeName: string | null = null;
+            if (typeName.type === 'Identifier') {
+              targetTypeName = typeName.name;
+            } else if (typeName.type === 'TSQualifiedName') {
+              targetTypeName = getNodeHeader(typeName);
+            }
 
-              if (isOxcNode(typeName) && isNodeRecord(typeName)) {
-                if (typeName.type === 'Identifier' && typeof typeName.name === 'string') {
-                  targetTypeName = typeName.name as string;
-                } else if (typeName.type === 'TSQualifiedName') {
-                  targetTypeName = getNodeHeader(typeName as Node);
+            if (targetTypeName !== null) {
+              try {
+                const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
+                const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
+
+                if (fwd === true && bwd === true) {
+                  const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+
+                  addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
                 }
-              }
-
-              if (targetTypeName !== null) {
-                try {
-                  const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
-                  const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
-
-                  if (fwd === true && bwd === true) {
-                    const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
-
-                    addFinding(findings, 'type-remap', node as Node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
-                  }
-                } catch {
-                  // Semantic layer unavailable — skip this check
-                }
+              } catch {
+                // Semantic layer unavailable — skip this check
               }
             }
           }
@@ -891,15 +830,15 @@ const analyzeIndirection = async (
     const declarationNameCount = new Map<string, number>();
 
     walkOxcTree(file.program, node => {
-      if (!isNodeRecord(node)) {
-        return true;
-      }
+      if (node.type === 'TSInterfaceDeclaration') {
+        const name = node.id.name;
 
-      if (node.type === 'TSInterfaceDeclaration' || node.type === 'ClassDeclaration') {
+        declarationNameCount.set(name, (declarationNameCount.get(name) ?? 0) + 1);
+      } else if (node.type === 'ClassDeclaration') {
         const id = node.id;
 
-        if (isOxcNode(id) && isNodeRecord(id) && id.type === 'Identifier' && typeof id.name === 'string') {
-          declarationNameCount.set(id.name as string, (declarationNameCount.get(id.name as string) ?? 0) + 1);
+        if (id !== null) {
+          declarationNameCount.set(id.name, (declarationNameCount.get(id.name) ?? 0) + 1);
         }
       }
 
@@ -907,41 +846,25 @@ const analyzeIndirection = async (
     });
 
     walkOxcTreeWithParent(file.program, (node, parent) => {
-      if (!isNodeRecord(node)) {
-        return true;
-      }
-
       if (node.type === 'TSInterfaceDeclaration' && node.declare !== true) {
         const extendsArr = node.extends;
 
-        if (!Array.isArray(extendsArr) || extendsArr.length === 0) {
+        if (extendsArr.length === 0) {
           return true;
         }
 
-        const body = node.body;
+        const bodyBody = node.body.body;
 
-        if (!isNodeRecord(body)) {
-          return true;
-        }
-
-        const bodyBody = body.body;
-
-        if (!Array.isArray(bodyBody) || bodyBody.length > 0) {
+        if (bodyBody.length > 0) {
           return true;
         }
 
         // Skip module augmentation (parent is TSModuleBlock)
-        if (parent !== null && isNodeRecord(parent) && parent.type === 'TSModuleBlock') {
+        if (parent !== null && parent.type === 'TSModuleBlock') {
           return true;
         }
 
-        const id = node.id;
-
-        if (!isOxcNode(id) || !isNodeRecord(id) || id.type !== 'Identifier' || typeof id.name !== 'string') {
-          return true;
-        }
-
-        const name = id.name as string;
+        const name = node.id.name;
 
         // Skip same-file declaration merging (interface+interface or class+interface)
         if ((declarationNameCount.get(name) ?? 0) >= 2) {
@@ -962,11 +885,16 @@ const analyzeIndirection = async (
           // gildash failure: conservative — do not skip
         }
 
-        const firstExtends = extendsArr[0] as Node;
+        const firstExtends = extendsArr[0];
+
+        if (!firstExtends) {
+          return true;
+        }
+
         const baseName = getNodeHeader(firstExtends);
         const evidence = `interface ${name} extends ${baseName} with empty body`;
 
-        addFinding(findings, 'interface-rewrap', node as Node, file.filePath, file.sourceText, name, 1, evidence);
+        addFinding(findings, 'interface-rewrap', node, file.filePath, file.sourceText, name, 1, evidence);
       }
 
       return true;

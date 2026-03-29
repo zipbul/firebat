@@ -34,10 +34,10 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
   const names = new Set<string>();
 
   walkOxcTree(program, node => {
-    if (node.type === 'ExportNamedDeclaration' && isNodeRecord(node)) {
+    if (node.type === 'ExportNamedDeclaration') {
       const decl = node.declaration;
 
-      if (isOxcNode(decl) && isNodeRecord(decl)) {
+      if (isOxcNode(decl)) {
         if (decl.type === 'FunctionDeclaration') {
           const name = getNodeName(decl.id);
 
@@ -49,7 +49,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
 
           if (Array.isArray(declarations)) {
             for (const declarator of declarations) {
-              if (isOxcNode(declarator) && isNodeRecord(declarator)) {
+              if (isOxcNode(declarator)) {
                 const init = declarator.init;
 
                 if (
@@ -73,7 +73,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
 
       if (Array.isArray(specifiers)) {
         for (const specifier of specifiers) {
-          if (isOxcNode(specifier) && isNodeRecord(specifier)) {
+          if (isOxcNode(specifier)) {
             const localName = getNodeName(specifier.local);
 
             if (typeof localName === 'string' && localName.length > 0) {
@@ -84,10 +84,10 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
       }
     }
 
-    if (node.type === 'ExportDefaultDeclaration' && isNodeRecord(node)) {
+    if (node.type === 'ExportDefaultDeclaration') {
       const decl = node.declaration;
 
-      if (isOxcNode(decl) && decl.type === 'FunctionDeclaration' && isNodeRecord(decl)) {
+      if (isOxcNode(decl) && decl.type === 'FunctionDeclaration') {
         const name = getNodeName(decl.id);
 
         if (typeof name === 'string' && name.length > 0) {
@@ -145,7 +145,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
 
   walkOxcTree(program, node => {
     // FunctionDeclaration: export function foo() { ... }
-    if (node.type === 'FunctionDeclaration' && isNodeRecord(node)) {
+    if (node.type === 'FunctionDeclaration') {
       const name = getNodeName(node.id);
 
       if (typeof name === 'string' && exportedNames.has(name)) {
@@ -158,7 +158,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
     }
 
     // VariableDeclarator: export const foo = () => { ... } or const foo = () => { ... } with re-export
-    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+    if (node.type === 'VariableDeclarator') {
       const name = getNodeName(node.id);
 
       if (typeof name === 'string' && exportedNames.has(name)) {
@@ -166,7 +166,6 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
 
         if (
           isOxcNode(init) &&
-          isNodeRecord(init) &&
           (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
         ) {
           if (targetOffset >= init.start && targetOffset <= init.end) {
@@ -188,7 +187,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
 const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset: number }> => {
   const vars: Array<{ name: string; offset: number }> = [];
 
-  if (!isNodeRecord(program) || program.type !== 'Program') {
+  if (program.type !== 'Program') {
     return vars;
   }
 
@@ -203,7 +202,7 @@ const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset
       continue;
     }
 
-    if (stmt.type === 'VariableDeclaration' && isNodeRecord(stmt)) {
+    if (stmt.type === 'VariableDeclaration') {
       const kind = stmt.kind;
 
       if (kind !== 'let' && kind !== 'var') {
@@ -217,12 +216,10 @@ const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset
       }
 
       for (const declarator of declarations) {
-        if (isOxcNode(declarator) && isNodeRecord(declarator)) {
-          const name = getNodeName(declarator.id);
+        const name = getNodeName(declarator.id);
 
-          if (typeof name === 'string' && name.length > 0) {
-            vars.push({ name, offset: stmt.start });
-          }
+        if (typeof name === 'string' && name.length > 0) {
+          vars.push({ name, offset: stmt.start });
         }
       }
     }
@@ -241,10 +238,6 @@ const collectWritePositionKeys = (program: Node): Set<string> => {
   const keys = new Set<string>();
 
   walkOxcTree(program, node => {
-    if (!isNodeRecord(node)) {
-      return true;
-    }
-
     if (node.type === 'AssignmentExpression') {
       const left = node.left;
 
@@ -313,15 +306,12 @@ const analyzeClassTemporalCoupling = (
   const classes = collectOxcNodes(program, n => n.type === 'ClassDeclaration' || n.type === 'ClassExpression');
 
   for (const classNode of classes) {
-    if (!isNodeRecord(classNode)) {
-      continue;
-    }
-
+    if (classNode.type !== 'ClassDeclaration' && classNode.type !== 'ClassExpression') continue;
     // Extract class name — anonymous classes cannot be matched via gildash
     const className = typeof getNodeName(classNode.id) === 'string' ? (getNodeName(classNode.id) as string) : null;
     const classBody = classNode.body;
 
-    if (!isOxcNode(classBody) || classBody.type !== 'ClassBody' || !isNodeRecord(classBody)) {
+    if (!isOxcNode(classBody) || classBody.type !== 'ClassBody') {
       continue;
     }
 
@@ -335,7 +325,7 @@ const analyzeClassTemporalCoupling = (
     const stateProps: Array<{ name: string; offset: number }> = [];
 
     for (const item of bodyItems) {
-      if (!isOxcNode(item) || item.type !== 'PropertyDefinition' || !isNodeRecord(item)) {
+      if (!isOxcNode(item) || item.type !== 'PropertyDefinition') {
         continue;
       }
 
@@ -354,7 +344,7 @@ const analyzeClassTemporalCoupling = (
       const readerMethods = new Set<string>();
 
       for (const item of bodyItems) {
-        if (!isOxcNode(item) || item.type !== 'MethodDefinition' || !isNodeRecord(item)) {
+        if (!isOxcNode(item) || item.type !== 'MethodDefinition') {
           continue;
         }
 
@@ -368,7 +358,7 @@ const analyzeClassTemporalCoupling = (
           continue;
         }
 
-        const methodBody = isOxcNode(item.value) && isNodeRecord(item.value) ? item.value : null;
+        const methodBody = isOxcNode(item.value) ? item.value : null;
 
         if (methodBody === null) {
           continue;
@@ -379,7 +369,7 @@ const analyzeClassTemporalCoupling = (
         let hasRead = false;
 
         walkOxcTree(methodBody, node => {
-          if (node.type === 'MemberExpression' && isNodeRecord(node)) {
+          if (node.type === 'MemberExpression') {
             const object = node.object;
             const property = node.property;
 
@@ -393,10 +383,10 @@ const analyzeClassTemporalCoupling = (
             }
           }
 
-          if (node.type === 'AssignmentExpression' && isNodeRecord(node)) {
+          if (node.type === 'AssignmentExpression') {
             const left = node.left;
 
-            if (isOxcNode(left) && left.type === 'MemberExpression' && isNodeRecord(left)) {
+            if (isOxcNode(left) && left.type === 'MemberExpression') {
               const obj = left.object;
               const p = left.property;
 
@@ -491,8 +481,7 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
     const callNodes = collectOxcNodes(payload as Node, n => n.type === 'CallExpression');
 
     for (const callNode of callNodes) {
-      if (!isNodeRecord(callNode)) {continue;}
-
+      if (callNode.type !== 'CallExpression') continue;
       const callee = callNode.callee;
 
       if (!isOxcNode(callee)) {continue;}
@@ -501,7 +490,7 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
 
       if (callee.type === 'Identifier') {
         callName = getNodeName(callee);
-      } else if (callee.type === 'MemberExpression' && isNodeRecord(callee)) {
+      } else if (callee.type === 'MemberExpression') {
         callName = getNodeName(callee.property);
       }
 
@@ -634,21 +623,21 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
     walkOxcTree(program, node => {
       if (result !== null) {return false;}
 
-      if ((node.type === 'ClassDeclaration' || node.type === 'ClassExpression') && isNodeRecord(node)) {
+      if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
         const name = getNodeName(node.id);
 
         if (name !== className) {return true;}
 
         const classBody = node.body;
 
-        if (!isOxcNode(classBody) || classBody.type !== 'ClassBody' || !isNodeRecord(classBody)) {return false;}
+        if (!isOxcNode(classBody) || classBody.type !== 'ClassBody') {return false;}
 
         const bodyItems = classBody.body;
 
         if (!Array.isArray(bodyItems)) {return false;}
 
         for (const item of bodyItems) {
-          if (!isOxcNode(item) || item.type !== 'MethodDefinition' || !isNodeRecord(item)) {continue;}
+          if (!isOxcNode(item) || item.type !== 'MethodDefinition') {continue;}
 
           const mName = getNodeName(item.key);
 
@@ -656,7 +645,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 
           const methodValue = item.value;
 
-          if (isOxcNode(methodValue) && isNodeRecord(methodValue)) {
+          if (isOxcNode(methodValue)) {
             result = methodValue as Node;
           }
 
@@ -677,7 +666,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
     if (result !== null) {return false;}
 
     // FunctionDeclaration: function foo() {}
-    if (node.type === 'FunctionDeclaration' && isNodeRecord(node)) {
+    if (node.type === 'FunctionDeclaration') {
       if (getNodeName(node.id) === symbolName) {
         result = node as Node;
 
@@ -686,13 +675,12 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
     }
 
     // VariableDeclarator: const foo = () => {} or function() {}
-    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
+    if (node.type === 'VariableDeclarator') {
       if (getNodeName(node.id) === symbolName) {
         const init = node.init;
 
         if (
           isOxcNode(init) &&
-          isNodeRecord(init) &&
           (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
         ) {
           result = init as Node;
@@ -717,7 +705,7 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
 
     if (isClassProp) {
       // this.stateName — MemberExpression(ThisExpression, Identifier === stateName)
-      if (n.type === 'MemberExpression' && isNodeRecord(n)) {
+      if (n.type === 'MemberExpression') {
         const object = n.object;
         const property = n.property;
 
@@ -746,8 +734,6 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
  * Check if a guard IfStatement's consequent is an early-exit (ThrowStatement or ReturnStatement).
  */
 const isEarlyExit = (node: Node): boolean => {
-  if (!isNodeRecord(node)) {return false;}
-
   if (node.type === 'ThrowStatement' || node.type === 'ReturnStatement') {return true;}
 
   // BlockStatement with single ThrowStatement/ReturnStatement
@@ -756,10 +742,10 @@ const isEarlyExit = (node: Node): boolean => {
 
     if (!Array.isArray(body)) {return false;}
 
-    if (body.length === 1 && isOxcNode(body[0]) && isNodeRecord(body[0])) {
+    if (body.length === 1) {
       const first = body[0];
 
-      return first.type === 'ThrowStatement' || first.type === 'ReturnStatement';
+      return first !== undefined && (first.type === 'ThrowStatement' || first.type === 'ReturnStatement');
     }
   }
 
@@ -791,7 +777,7 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
   const guardConditionOffsets = new Set<number>();
 
   walkOxcTree(funcBodyRaw as Node, n => {
-    if (n.type === 'IfStatement' && isNodeRecord(n)) {
+    if (n.type === 'IfStatement') {
       const testNode = n.test;
       const consequentNode = n.consequent;
 
@@ -967,10 +953,10 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
 
       if (isClassProp) {
         // this.stateName = ...
-        if (n.type === 'AssignmentExpression' && isNodeRecord(n)) {
+        if (n.type === 'AssignmentExpression') {
           const left = n.left;
 
-          if (isOxcNode(left) && left.type === 'MemberExpression' && isNodeRecord(left)) {
+          if (isOxcNode(left) && left.type === 'MemberExpression') {
             const obj = left.object;
             const p = left.property;
 
@@ -983,7 +969,7 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
         }
       } else {
         // stateName = ...
-        if (n.type === 'AssignmentExpression' && isNodeRecord(n)) {
+        if (n.type === 'AssignmentExpression') {
           const left = n.left;
 
           if (isOxcNode(left) && left.type === 'Identifier' && getNodeName(left) === stateName) {
@@ -994,7 +980,7 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
         }
 
         // stateName++ or ++stateName
-        if (n.type === 'UpdateExpression' && isNodeRecord(n)) {
+        if (n.type === 'UpdateExpression') {
           const argument = n.argument;
 
           if (isOxcNode(argument) && argument.type === 'Identifier' && getNodeName(argument) === stateName) {
