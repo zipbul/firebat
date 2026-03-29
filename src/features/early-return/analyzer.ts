@@ -52,10 +52,6 @@ export const isExitBlock = (value: NodeValue): boolean => {
     return false;
   }
 
-  if (!isNodeRecord(value)) {
-    return false;
-  }
-
   const body = value.body;
 
   if (!Array.isArray(body) || body.length === 0) {
@@ -83,10 +79,6 @@ export const isLoopGuardBlock = (value: NodeValue): boolean => {
   }
 
   if (value.type !== 'BlockStatement') {
-    return false;
-  }
-
-  if (!isNodeRecord(value)) {
     return false;
   }
 
@@ -118,7 +110,7 @@ export const countStatements = (node: NodeValue): number => {
   if (node.type !== 'BlockStatement') {
     // For else-if chains: when alternate is an IfStatement, recursively
     // count all statements across the entire chain to get a true total.
-    if (node.type === 'IfStatement' && isNodeRecord(node)) {
+    if (node.type === 'IfStatement') {
       const consequentCount = countStatements(node.consequent as NodeValue);
       const alternateCount = node.alternate != null ? countStatements(node.alternate as NodeValue) : 0;
 
@@ -126,10 +118,6 @@ export const countStatements = (node: NodeValue): number => {
     }
 
     return 1;
-  }
-
-  if (!isNodeRecord(node)) {
-    return 0;
   }
 
   const body = node.body;
@@ -147,10 +135,6 @@ export const endsWithReturnOrThrow = (node: NodeValue): boolean => {
   }
 
   if (node.type !== 'BlockStatement') {
-    return false;
-  }
-
-  if (!isNodeRecord(node)) {
     return false;
   }
 
@@ -176,10 +160,6 @@ const endsWithLoopExit = (value: NodeValue): boolean => {
   }
 
   if (value.type !== 'BlockStatement') {
-    return false;
-  }
-
-  if (!isNodeRecord(value)) {
     return false;
   }
 
@@ -233,7 +213,7 @@ export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<NodeValue>): nu
   for (let i = startIdx; i >= 0; i--) {
     const stmt = stmts[i]!;
 
-    if (isOxcNode(stmt) && stmt.type === 'IfStatement' && isNodeRecord(stmt) && stmt.alternate == null) {
+    if (isOxcNode(stmt) && stmt.type === 'IfStatement' && stmt.alternate == null) {
       count += 1;
     } else {
       break;
@@ -269,10 +249,6 @@ const detectWrappingIf = (
   const last = bodyStatements[bodyStatements.length - 1];
 
   if (!isOxcNode(last) || last.type !== 'IfStatement') {
-    return null;
-  }
-
-  if (!isNodeRecord(last)) {
     return null;
   }
 
@@ -325,10 +301,6 @@ const detectImplicitElse = (
     const stmt = bodyStatements[i]!;
 
     if (!isOxcNode(stmt) || stmt.type !== 'IfStatement') {
-      continue;
-    }
-
-    if (!isNodeRecord(stmt)) {
       continue;
     }
 
@@ -399,10 +371,6 @@ const detectCascadeGuard = (
     return null;
   }
 
-  if (!isNodeRecord(ifNode)) {
-    return null;
-  }
-
   // Must have an alternate to be a chain
   if (ifNode.alternate === null || ifNode.alternate === undefined) {
     return null;
@@ -413,7 +381,7 @@ const detectCascadeGuard = (
   let current: NodeValue = ifNode;
 
   // Walk the chain: each link must have consequent ending in exit
-  while (isOxcNode(current) && current.type === 'IfStatement' && isNodeRecord(current)) {
+  while (isOxcNode(current) && current.type === 'IfStatement') {
     const consequent = current.consequent as NodeValue;
     const alternate = current.alternate;
     // Check if consequent ends with exit (for loop context: also allow continue/break)
@@ -456,7 +424,7 @@ const detectCascadeGuard = (
     let totalConsequentCount = 0;
     let recount: NodeValue = ifNode;
 
-    while (isOxcNode(recount) && recount.type === 'IfStatement' && isNodeRecord(recount)) {
+    while (isOxcNode(recount) && recount.type === 'IfStatement') {
       totalConsequentCount += countStatements(recount.consequent as NodeValue);
 
       const alt = recount.alternate;
@@ -547,7 +515,7 @@ const analyzeFunctionNode = (
       maxDepth = nextDepth;
     }
 
-    if (nodeType === 'IfStatement' && isNodeRecord(value)) {
+    if (nodeType === 'IfStatement') {
       const alternateValue = value.alternate;
 
       if (alternateValue !== null && alternateValue !== undefined) {
@@ -560,7 +528,7 @@ const analyzeFunctionNode = (
           // Mark all sub-IfStatements in the chain to skip re-analysis
           let chainNode: NodeValue = value;
 
-          while (isOxcNode(chainNode) && chainNode.type === 'IfStatement' && isNodeRecord(chainNode)) {
+          while (isOxcNode(chainNode) && chainNode.type === 'IfStatement') {
             const alt = chainNode.alternate;
 
             if (isOxcNode(alt) && (alt as Node).type === 'IfStatement') {
@@ -605,10 +573,10 @@ const analyzeFunctionNode = (
     }
 
     // Check for wrapping-if and implicit-else in block statements
-    if (nodeType === 'BlockStatement' && isNodeRecord(value)) {
+    if (nodeType === 'BlockStatement') {
       const bodyArr = value.body;
 
-      if (Array.isArray(bodyArr) && bodyArr.length > 0) {
+      if (bodyArr.length > 0) {
         const bodyStmts = bodyArr as ReadonlyArray<NodeValue>;
 
         // Only detect wrapping-if/implicit-else when early exit is safe:
@@ -638,10 +606,6 @@ const analyzeFunctionNode = (
         }
       }
 
-      return;
-    }
-
-    if (!isNodeRecord(value)) {
       return;
     }
 

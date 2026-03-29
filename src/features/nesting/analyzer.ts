@@ -770,10 +770,6 @@ const analyzeFunctionNode = (
       // Halstead: count IfStatement operator (else-if handled in visitIfStatement)
       collectHalstead(value, nodeType);
 
-      if (!isNodeRecord(value)) {
-        return;
-      }
-
       visitIfStatement(value, depth);
 
       return;
@@ -794,7 +790,7 @@ const analyzeFunctionNode = (
 
     // labeled break/continue: +1
     if (nodeType === 'BreakStatement' || nodeType === 'ContinueStatement') {
-      if (isNodeRecord(value) && value.label !== null && value.label !== undefined) {
+      if (value.label !== null && value.label !== undefined) {
         cognitiveComplexity += 1;
       }
     }
@@ -833,10 +829,6 @@ const analyzeFunctionNode = (
 
       iterationStack.pop();
     };
-
-    if (!isNodeRecord(value)) {
-      return;
-    }
 
     if (isIteration) {
       pushIteration();
