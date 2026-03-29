@@ -270,10 +270,6 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
   const blocks: ScopeBlock[] = [];
 
   for (const stmt of bodyStatements) {
-    if (!isOxcNode(stmt)) {
-      continue;
-    }
-
     if (stmt.type === 'IfStatement' && isNodeRecord(stmt)) {
       const consequent = isOxcNode(stmt.consequent) ? stmt.consequent : null;
       const alternate = isOxcNode(stmt.alternate) ? stmt.alternate : null;
@@ -377,7 +373,7 @@ const collectVarDeclInfo = (bodyStatements: ReadonlyArray<Node>): Map<number, Va
   const result = new Map<number, VarDeclInfo>();
 
   for (const stmt of bodyStatements) {
-    if (!isOxcNode(stmt) || stmt.type !== 'VariableDeclaration' || !isNodeRecord(stmt)) {
+    if (stmt.type !== 'VariableDeclaration' || !isNodeRecord(stmt)) {
       continue;
     }
 
@@ -535,7 +531,7 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
   const tryHandlerRanges: TryCatchRange[] = [];
 
   for (const stmt of bodyStatements) {
-    if (!isOxcNode(stmt) || stmt.type !== 'TryStatement' || !isNodeRecord(stmt)) {
+    if (stmt.type !== 'TryStatement' || !isNodeRecord(stmt)) {
       continue;
     }
 
@@ -611,7 +607,7 @@ const collectAllSiteOffsets = (analysis: FunctionBodyAnalysis, localIndexByName:
 
 const findInitNode = (bodyStatements: ReadonlyArray<Node>, defLocation: number): Node | null => {
   for (const stmt of bodyStatements) {
-    if (!isOxcNode(stmt) || stmt.type !== 'VariableDeclaration' || !isNodeRecord(stmt)) {
+    if (stmt.type !== 'VariableDeclaration' || !isNodeRecord(stmt)) {
       continue;
     }
 

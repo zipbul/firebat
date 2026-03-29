@@ -69,10 +69,6 @@ const hasReturnStatement = (node: NodeValue): boolean => {
   let found = false;
 
   walkOxcTree(node, value => {
-    if (!isOxcNode(value)) {
-      return true;
-    }
-
     if (found) {
       return false;
     }
