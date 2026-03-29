@@ -1,14 +1,16 @@
 import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
+import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { BarrelFinding, SourceSpan } from '../../types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { collectLocallyUsedImportNames } from '../../engine/ast/collect-locally-used-import-names';
 import { getLiteralString, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
-import { getLineColumn } from '../../engine/source-position';
 import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
 
 interface BarrelOptions {
@@ -27,8 +29,6 @@ const DEFAULT_IGNORE_GLOBS: ReadonlyArray<string> = [
   '**/*.test.*',
 ];
 
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
-
 const isIndexFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
 
@@ -36,10 +36,12 @@ const isIndexFile = (filePath: string): boolean => {
 };
 
 const toSpan = (sourceText: string, startOffset: number, endOffset: number): SourceSpan => {
-  const start = getLineColumn(sourceText, Math.max(0, startOffset));
-  const end = getLineColumn(sourceText, Math.max(0, endOffset));
+  const offsets = buildLineOffsets(sourceText);
 
-  return { start, end };
+  return {
+    start: getLineColumn(offsets, Math.max(0, startOffset)),
+    end: getLineColumn(offsets, Math.max(0, endOffset)),
+  };
 };
 
 type NodeLike = Record<string, unknown>;
@@ -442,7 +444,7 @@ const buildCrossModuleReexportFiles = (
   let rels: ReturnType<Gildash['searchRelations']>;
 
   try {
-    rels = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
+    rels = gildash.searchRelations({ type: 're-exports' });
   } catch {
     return null;
   }
@@ -450,6 +452,7 @@ const buildCrossModuleReexportFiles = (
   const result = new Set<string>();
 
   for (const rel of rels) {
+    if (rel.dstFilePath === null) continue;
     const srcAbs = normalizePath(path.resolve(rootAbs, rel.srcFilePath));
     const dstAbs = normalizePath(path.resolve(rootAbs, rel.dstFilePath));
 

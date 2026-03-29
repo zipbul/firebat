@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { WasteFinding } from '../types';
-import type { NodeValue, ParsedFile } from './types';
+import type { ParsedFile } from './types';
 
 import {
   collectOxcNodes,
@@ -11,7 +11,7 @@ import {
   isNodeRecord,
   isOxcNode,
 } from './ast/oxc-ast-utils';
-import { getLineColumn } from './source-position';
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import { collectVariables } from './dataflow/variable-collector';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from './dataflow/reaching-defs';
 
@@ -26,6 +26,8 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
     if (file.errors.length > 0) {
       continue;
     }
+
+    const lineOffsets = buildLineOffsets(file.sourceText);
 
     const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
       if (Array.isArray(node)) {
@@ -72,7 +74,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               continue;
             }
 
-            const nested = collectOxcNodes(payload as unknown as NodeValue, n => isFunctionNode(n));
+            const nested = collectOxcNodes(payload, n => isFunctionNode(n));
 
             if (nested.length === 0) {
               continue;
@@ -97,7 +99,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               hasRelevantNested = true;
 
               // Collect read names specific to this nested function for per-entry precision.
-              const nestedReads = collectVariables(nestedFunction as unknown as NodeValue, { includeNestedFunctions: true }).filter(
+              const nestedReads = collectVariables(nestedFunction, { includeNestedFunctions: true }).filter(
                 u => u.isRead,
               );
 
@@ -171,7 +173,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               continue;
             }
 
-            const loc = getLineColumn(file.sourceText, meta.location);
+            const loc = getLineColumn(lineOffsets, meta.location);
             const isOverwritten = overwrittenDefIds[defId] === true;
             const kind = isOverwritten && meta.writeKind !== 'declaration' ? 'dead-store-overwrite' : 'dead-store';
             const message =

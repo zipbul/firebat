@@ -1,11 +1,13 @@
 import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
-import { GildashError } from '@zipbul/gildash';
+import { GildashError, normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
+
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import {
   getNodeHeader,
@@ -16,13 +18,10 @@ import {
   walkOxcTree,
   walkOxcTreeWithParent,
 } from '../../engine/ast/oxc-ast-utils';
-import { getLineColumn } from '../../engine/source-position';
 
 /* ------------------------------------------------------------------ */
 /*  Path utilities                                                     */
 /* ------------------------------------------------------------------ */
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 /** Ensure a path from gildash (may be project-relative) is absolute. */
 const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
@@ -34,12 +33,11 @@ const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.is
 const createEmptyIndirection = (): ReadonlyArray<IndirectionFinding> => [];
 
 const getSpan = (node: Node, sourceText: string) => {
-  const start = getLineColumn(sourceText, node.start);
-  const end = getLineColumn(sourceText, node.end);
+  const offsets = buildLineOffsets(sourceText);
 
   return {
-    start,
-    end,
+    start: getLineColumn(offsets, node.start),
+    end: getLineColumn(offsets, node.end),
   };
 };
 
@@ -508,7 +506,7 @@ const buildImportIndex = (gildash: Gildash, rootAbs: string): Map<string, Map<st
   let importRels: ReturnType<Gildash['searchRelations']>;
 
   try {
-    importRels = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+    importRels = gildash.searchRelations({ type: 'imports' });
   } catch (e) {
     if (e instanceof GildashError) {
       return new Map();
@@ -522,7 +520,7 @@ const buildImportIndex = (gildash: Gildash, rootAbs: string): Map<string, Map<st
     const srcFile = resolveAbs(rootAbs, rel.srcFilePath);
     const fileImports = index.get(srcFile) ?? new Map<string, ImportTarget>();
 
-    if (rel.srcSymbolName) {
+    if (rel.srcSymbolName && rel.dstFilePath !== null) {
       fileImports.set(rel.srcSymbolName, {
         targetFilePath: resolveAbs(rootAbs, rel.dstFilePath),
         exportedName: rel.dstSymbolName ?? null,
@@ -539,7 +537,7 @@ const buildExportIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<st
   let allExported: ReturnType<Gildash['searchSymbols']>;
 
   try {
-    allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+    allExported = gildash.searchSymbols({ isExported: true });
   } catch (e) {
     if (e instanceof GildashError) {
       return new Map();
@@ -634,7 +632,7 @@ const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, File
   let allSymbols: ReturnType<Gildash['searchSymbols']>;
 
   try {
-    allSymbols = gildash.searchSymbols({ limit: 100_000 });
+    allSymbols = gildash.searchSymbols({});
   } catch (e) {
     if (e instanceof GildashError) {
       return new Map();

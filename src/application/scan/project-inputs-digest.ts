@@ -3,10 +3,10 @@ import * as path from 'node:path';
 
 import type { Gildash } from '@zipbul/gildash';
 
+import { normalizePath } from '@zipbul/gildash';
+
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
-
-const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 const listRootTsconfigs = async (rootAbs: string): Promise<string[]> => {
   if (rootAbs.trim().length === 0) {

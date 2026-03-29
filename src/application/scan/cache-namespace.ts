@@ -1,10 +1,9 @@
+import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 import { hashString } from '../../engine/hasher';
 
 const CACHE_SCHEMA_VERSION = 2;
-
-const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 const computeBuildId = async (): Promise<string> => {
   const scriptArg = Bun.argv[1];

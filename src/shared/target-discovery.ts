@@ -1,3 +1,4 @@
+import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 const uniqueSorted = (values: ReadonlyArray<string>): string[] => Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
@@ -42,8 +43,6 @@ const scanWithGlob = async (cwd: string, patterns: ReadonlyArray<string>): Promi
 
   return uniqueSorted(matches);
 };
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const shouldIncludeSourceFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);

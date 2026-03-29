@@ -1,4 +1,4 @@
-import type { Comment, Node, OxcError, Program } from 'oxc-parser';
+import type { Node } from 'oxc-parser';
 
 import type { FirebatItemKind } from '../types';
 import type { IntegerCFG } from './cfg';
@@ -75,13 +75,7 @@ export type NodeWithValue = Node & Record<'value', string | number | boolean | b
 
 export type CfgNodePayload = Node | ReadonlyArray<Node>;
 
-export interface ParsedFile {
-  filePath: string;
-  program: Program;
-  errors: ReadonlyArray<OxcError>;
-  comments: ReadonlyArray<Comment>;
-  sourceText: string;
-}
+export type { ParsedFile } from '@zipbul/gildash';
 
 export interface OxcBuiltFunctionCfg {
   readonly cfg: IntegerCFG;

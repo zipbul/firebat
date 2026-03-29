@@ -312,7 +312,7 @@ const measureMaxCallbackDepth = (value: NodeValue, depth: number = 0): number =>
       if (isOxcNode(arg) && isFunctionNode(arg)) {
         // Test runner callbacks (describe/it/test/beforeEach etc.) are structural,
         // not complexity-bearing — do not increase depth.
-        const callbackBody = resolveFunctionBody(arg as unknown as Node);
+        const callbackBody = resolveFunctionBody(arg);
 
         if (callbackBody !== null && callbackBody !== undefined) {
           const nextDepth = isTestRunner ? depth : depth + 1;
@@ -418,7 +418,7 @@ const measurePromiseChainDepth = (value: NodeValue, depth: number = 0): number =
 
     for (const arg of args) {
       if (isOxcNode(arg) && isFunctionNode(arg)) {
-        const callbackBody = resolveFunctionBody(arg as unknown as Node);
+        const callbackBody = resolveFunctionBody(arg);
 
         if (callbackBody !== null && callbackBody !== undefined) {
           // Nested chains inside callbacks count from the current chain depth
@@ -540,7 +540,7 @@ const analyzeFunctionNode = (
       return;
     }
 
-    const callbackBody = resolveFunctionBody(callback as unknown as Node);
+    const callbackBody = resolveFunctionBody(callback);
 
     if (callbackBody === null || callbackBody === undefined) {
       return;

@@ -1,9 +1,9 @@
 import type { Gildash } from '@zipbul/gildash';
 
+import { normalizePath } from '@zipbul/gildash';
+
 import { hashString } from '../../engine/hasher';
 import { runWithConcurrency } from '../../engine/promise-pool';
-
-const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 interface ComputeInputsDigestInput {
   readonly targets: ReadonlyArray<string>;

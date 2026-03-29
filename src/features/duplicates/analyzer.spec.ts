@@ -143,6 +143,7 @@ const makeErrorFile = (fileName: string): ParsedFile => ({
   errors: [{ message: 'Syntax error' } as unknown as ParsedFile['errors'][0]],
   comments: [],
   sourceText: 'invalid {{{ code',
+  module: {} as never,
 });
 
 // ─── Teardown ─────────────────────────────────────────────────────────────────

@@ -7,11 +7,12 @@ import type { TemporalCouplingFinding } from '../../types';
 
 import { GildashError } from '@zipbul/gildash';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
 import { EdgeType } from '../../engine/cfg/cfg-types';
 import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { getLineColumn } from '../../engine/source-position';
 
 interface AnalyzeTemporalCouplingInput {
   readonly gildash?: Gildash;
@@ -20,10 +21,12 @@ interface AnalyzeTemporalCouplingInput {
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];
 
 const spanForOffset = (sourceText: string, offset: number) => {
-  const start = getLineColumn(sourceText, Math.max(0, offset));
-  const end = getLineColumn(sourceText, Math.min(sourceText.length, Math.max(0, offset + 1)));
+  const offsets = buildLineOffsets(sourceText);
 
-  return { start, end };
+  return {
+    start: getLineColumn(offsets, Math.max(0, offset)),
+    end: getLineColumn(offsets, Math.min(sourceText.length, Math.max(0, offset + 1))),
+  };
 };
 
 /** Collect the set of exported function/variable names from the program. */
@@ -42,7 +45,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
             names.add(name);
           }
         } else if (decl.type === 'VariableDeclaration') {
-          const declarations = (decl as any).declarations;
+          const declarations = decl.declarations;
 
           if (Array.isArray(declarations)) {
             for (const declarator of declarations) {
@@ -66,7 +69,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
       }
 
       // re-export: export { init, query }
-      const specifiers = (node as any).specifiers;
+      const specifiers = node.specifiers;
 
       if (Array.isArray(specifiers)) {
         for (const specifier of specifiers) {
@@ -201,13 +204,13 @@ const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset
     }
 
     if (stmt.type === 'VariableDeclaration' && isNodeRecord(stmt)) {
-      const kind = (stmt as any).kind;
+      const kind = stmt.kind;
 
       if (kind !== 'let' && kind !== 'var') {
         continue;
       }
 
-      const declarations = (stmt as any).declarations;
+      const declarations = stmt.declarations;
 
       if (!Array.isArray(declarations)) {
         continue;
@@ -322,7 +325,7 @@ const analyzeClassTemporalCoupling = (
       continue;
     }
 
-    const bodyItems = (classBody as any).body;
+    const bodyItems = classBody.body;
 
     if (!Array.isArray(bodyItems)) {
       continue;
@@ -640,7 +643,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 
         if (!isOxcNode(classBody) || classBody.type !== 'ClassBody' || !isNodeRecord(classBody)) {return false;}
 
-        const bodyItems = (classBody as any).body;
+        const bodyItems = classBody.body;
 
         if (!Array.isArray(bodyItems)) {return false;}
 
@@ -749,7 +752,7 @@ const isEarlyExit = (node: Node): boolean => {
 
   // BlockStatement with single ThrowStatement/ReturnStatement
   if (node.type === 'BlockStatement') {
-    const body = (node as any).body;
+    const body = node.body;
 
     if (!Array.isArray(body)) {return false;}
 

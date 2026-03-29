@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
-import type { Gildash } from '@zipbul/gildash';
-import { GildashError } from '@zipbul/gildash';
+import type { Gildash, SymbolDetail } from '@zipbul/gildash';
+import { GildashError, normalizePath } from '@zipbul/gildash';
 
 import type {
   DependencyAnalysis,
@@ -36,8 +36,6 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
   layerViolations: [],
   deadExports: [],
 });
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
 
@@ -378,10 +376,10 @@ const analyzeDependencies = async (
   // 5. Export stats via searchSymbols
   const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
   let allExported: ReturnType<Gildash['searchSymbols']> | null = null;
-  const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: Record<string, unknown> }>>();
+  const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: SymbolDetail }>>();
 
   try {
-    allExported = gildash.searchSymbols({ isExported: true, limit: 100_000 });
+    allExported = gildash.searchSymbols({ isExported: true });
 
     for (const sym of allExported) {
       const absFilePath = resolveAbs(rootAbs, sym.filePath);
@@ -397,9 +395,7 @@ const analyzeDependencies = async (
         s =>
           s.kind === 'interface' ||
           s.kind === 'type' ||
-          (s.kind === 'class' &&
-            Array.isArray((s.detail as Record<string, unknown>)?.modifiers) &&
-            ((s.detail as Record<string, unknown>).modifiers as string[]).includes('abstract')),
+          (s.kind === 'class' && s.detail.modifiers?.includes('abstract') === true),
       ).length;
 
       exportStats[toRelativePath(rootAbs, filePath)] = { total, abstract };
@@ -417,14 +413,14 @@ const analyzeDependencies = async (
     let hasRelationData = false;
 
     try {
-      imports = gildash.searchRelations({ type: 'imports', limit: 100_000 });
+      imports = gildash.searchRelations({ type: 'imports' });
       hasRelationData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {throw e;}
     }
 
     try {
-      reExports = gildash.searchRelations({ type: 're-exports', limit: 100_000 });
+      reExports = gildash.searchRelations({ type: 're-exports' });
       hasRelationData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {throw e;}
@@ -443,6 +439,7 @@ const analyzeDependencies = async (
       >();
 
       for (const rel of [...imports, ...reExports]) {
+        if (rel.dstFilePath === null) continue;
         const target = resolveAbs(rootAbs, rel.dstFilePath);
         const consumer = resolveAbs(rootAbs, rel.srcFilePath);
         const isTestConsumer = isTestLikePath(consumer);

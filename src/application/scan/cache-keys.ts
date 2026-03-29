@@ -1,7 +1,7 @@
+import { normalizePath } from '@zipbul/gildash';
+
 import { hashString } from '../../engine/hasher';
 import { CACHE_SCHEMA_VERSION } from './cache-namespace';
-
-const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 interface ComputeProjectKeyInput {
   readonly toolVersion: string;

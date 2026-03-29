@@ -477,7 +477,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       metaErrors[detectorKey] = message;
 
-      const partial = (err as any)?.partial;
+      const partial = (err as { partial?: unknown })?.partial;
 
       if (Array.isArray(partial)) {
         unknownProofResult = partial as UnknownProofResult;
@@ -649,7 +649,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       metaErrors[detectorKey] = message;
 
-      const partial = (err as any)?.partial;
+      const partial = (err as { partial?: unknown })?.partial;
 
       if (Array.isArray(partial)) {
         errorFlow = partial as ReadonlyArray<import('../../features/error-flow').ErrorFlowFinding>;
@@ -1136,13 +1136,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     code: FirebatCatalogCode,
   ): ReadonlyArray<T & { readonly code: FirebatCatalogCode; readonly file: string; readonly span: unknown }> =>
     items.map(item => {
-      const filePath = String((item as any)?.file ?? (item as any)?.filePath ?? '');
+      const filePath = String(item.file ?? item.filePath ?? '');
 
       return {
         ...item,
         code,
         file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: (item as any)?.span ?? zeroSpan,
+        span: item.span ?? zeroSpan,
       };
     });
 
@@ -1204,7 +1204,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
         if (Array.isArray(nested)) {
           for (const sub of nested) {
-            const subCode = (sub as any)?.code ?? (sub as any)?.catalogCode;
+            const subCode = (sub as Record<string, unknown>)?.code ?? (sub as Record<string, unknown>)?.catalogCode;
 
             if (typeof subCode === 'string' && subCode in FIREBAT_CODE_CATALOG) {
               seenCodes.add(subCode as FirebatCatalogCode);
@@ -1227,28 +1227,28 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   const analyses: FirebatReport['analyses'] = {
     ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste) } : {}),
-    ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel as any) } : {}),
-    ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof as any) } : {}),
-    ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow as any) } : {}),
+    ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel) } : {}),
+    ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof) } : {}),
+    ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow) } : {}),
     ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format) } : {}),
     ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
     ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
-    ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies as any) } : {}),
-    ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling as any) } : {}),
-    ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting as any) } : {}),
-    ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn as any) } : {}),
-    ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf as any) } : {}),
-    ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection as any) } : {}),
-    ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile as any, 'GIANT_FILE') } : {}),
+    ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies) } : {}),
+    ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling) } : {}),
+    ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting) } : {}),
+    ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn) } : {}),
+    ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf) } : {}),
+    ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection) } : {}),
+    ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile, 'GIANT_FILE') } : {}),
     ...(selectedDetectors.has('variable-lifetime')
-      ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime as any) }
+      ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime) }
       : {}),
     ...(selectedDetectors.has('temporal-coupling')
-      ? { 'temporal-coupling': enrichPhase1(temporalCoupling as any, 'TEMPORAL_COUPLING') }
+      ? { 'temporal-coupling': enrichPhase1(temporalCoupling, 'TEMPORAL_COUPLING') }
       : {}),
-    ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified as any) } : {}),
+    ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified) } : {}),
   };
-  const diagnostics = aggregateDiagnostics({ analyses: analyses as any });
+  const diagnostics = aggregateDiagnostics({ analyses: analyses as Readonly<Record<string, unknown>> });
   const catalog = buildCatalog({ analyses, diagnostics });
   const report: FirebatReport = {
     meta: {

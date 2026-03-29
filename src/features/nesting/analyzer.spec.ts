@@ -25,6 +25,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       errors: [{ message: 'err' }] as never as [],
       comments: [],
       sourceText: '',
+      module: {} as never,
     };
 
     expect(analyzeNesting([bad])).toEqual([]);

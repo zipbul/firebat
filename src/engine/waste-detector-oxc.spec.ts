@@ -25,6 +25,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       errors: [{ message: 'err' }] as never as [],
       comments: [],
       sourceText: 'const x = ;',
+      module: {} as never,
     };
     const result = detectWasteOxc([badFile]);
 

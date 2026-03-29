@@ -4,21 +4,21 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { PartialResultError } from '../../engine/partial-result-error';
-import { getLineColumn } from '../../engine/source-position';
 
 interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
 }
 
 const getSpan = (node: Node, sourceText: string): SourceSpan => {
-  const start = getLineColumn(sourceText, node.start);
-  const end = getLineColumn(sourceText, node.end);
+  const offsets = buildLineOffsets(sourceText);
 
   return {
-    start,
-    end,
+    start: getLineColumn(offsets, node.start),
+    end: getLineColumn(offsets, node.end),
   };
 };
 
@@ -1297,7 +1297,7 @@ const collectFindings = (program: NodeValue, sourceText: string, filePath: strin
         // Walk up: use the statement node (VariableDeclaration) for position — use init.start as proxy.
         // Actually we need the VariableDeclaration node. Since visit doesn't have parent tracking,
         // we record the VariableDeclarator node's start position via the oxc Node cast.
-        addCandidate(id.name, node as unknown as Node);
+        addCandidate(id.name, node);
       }
     }
 

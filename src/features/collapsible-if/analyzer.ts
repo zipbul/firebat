@@ -3,10 +3,11 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { CollapsibleIfItem, SourceSpan } from '../../types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
-import { getLineColumn } from '../../engine/source-position';
 import {
   getNodeHeader,
   isFunctionNode,
@@ -15,6 +16,15 @@ import {
   isOxcNodeArray,
   visitOxcChildren,
 } from '../../engine/ast/oxc-ast-utils';
+
+const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
+  const offsets = buildLineOffsets(sourceText);
+
+  return {
+    start: getLineColumn(offsets, node.start),
+    end: getLineColumn(offsets, node.end),
+  };
+};
 
 const createEmptyCollapsibleIf = (): ReadonlyArray<CollapsibleIfItem> => [];
 
@@ -110,12 +120,10 @@ const detectCollapsibleIf = (ifNode: NodeValue, sourceText: string): Opportunity
   }
 
   const node = ifNode as Node;
-  const spanStart = getLineColumn(sourceText, node.start);
-  const spanEnd = getLineColumn(sourceText, node.end);
 
   return {
     kind: 'collapsible-if',
-    span: { start: spanStart, end: spanEnd },
+    span: nodeSpan(node, sourceText),
     depthReduction: 1,
     statementsAffected: innerCount,
   };
@@ -179,12 +187,10 @@ const detectCollapsibleElseIf = (ifNode: NodeValue, sourceText: string): Opportu
 
   const statementsAffected = Math.max(innerTotal, MIN_INNER_STMTS);
   const node = ifNode as Node;
-  const spanStart = getLineColumn(sourceText, node.start);
-  const spanEnd = getLineColumn(sourceText, node.end);
 
   return {
     kind: 'collapsible-else-if',
-    span: { start: spanStart, end: spanEnd },
+    span: nodeSpan(node, sourceText),
     depthReduction: 1,
     statementsAffected,
   };

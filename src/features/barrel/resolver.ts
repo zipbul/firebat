@@ -1,3 +1,4 @@
+import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 type TsconfigPaths = Record<string, ReadonlyArray<string>>;
@@ -32,8 +33,6 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
 
   return value as Record<string, unknown>;
 };
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const isWithinRoot = (rootAbs: string, fileAbs: string): boolean => {
   const rel = path.relative(rootAbs, fileAbs);

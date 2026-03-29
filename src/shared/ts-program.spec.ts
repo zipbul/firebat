@@ -38,6 +38,7 @@ const makeParsedFile = (filePath: string): ParsedFile => ({
   errors: [],
   comments: [],
   sourceText: `// ${filePath}`,
+  module: {} as never,
 });
 
 const batchParseReturnsOk =

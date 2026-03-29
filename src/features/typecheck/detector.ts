@@ -4,13 +4,13 @@ import ts from 'typescript';
 
 import type { Gildash } from '@zipbul/gildash';
 
+import { normalizePath } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan, TypecheckItem } from '../../types';
 
 import { createNoopLogger } from '../../shared/logger';
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const createEmptySpan = (): SourceSpan => ({
   start: { line: 1, column: 1 },

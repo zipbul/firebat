@@ -3,10 +3,11 @@ import type { Node } from 'oxc-parser';
 import type { NodeValue, ParsedFile } from '../../engine/types';
 import type { EarlyReturnItem, EarlyReturnKind, SourceSpan } from '../../types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
-import { getLineColumn } from '../../engine/source-position';
 import {
   getNodeHeader,
   isFunctionNode,
@@ -15,6 +16,15 @@ import {
   isOxcNodeArray,
   visitOxcChildren,
 } from '../../engine/ast/oxc-ast-utils';
+
+const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
+  const offsets = buildLineOffsets(sourceText);
+
+  return {
+    start: getLineColumn(offsets, node.start),
+    end: getLineColumn(offsets, node.end),
+  };
+};
 
 const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 
@@ -280,8 +290,6 @@ const detectWrappingIf = (
   }
 
   const ifNode = last as Node;
-  const spanStart = getLineColumn(sourceText, ifNode.start);
-  const spanEnd = getLineColumn(sourceText, ifNode.end);
 
   // Verify that an exit is possible: for loop body → continue, for function body → return/throw
   // We don't check the exit type here — the pattern is valid as long as the block scope allows an exit
@@ -289,7 +297,7 @@ const detectWrappingIf = (
 
   return {
     kind: 'wrapping-if',
-    span: { start: spanStart, end: spanEnd },
+    span: nodeSpan(ifNode, sourceText),
     depthReduction: 1,
     statementsAffected: stmtCount,
   };
@@ -364,12 +372,10 @@ const detectImplicitElse = (
     }
 
     const ifNode = stmt as Node;
-    const spanStart = getLineColumn(sourceText, ifNode.start);
-    const spanEnd = getLineColumn(sourceText, ifNode.end);
 
     results.push({
       kind: 'implicit-else',
-      span: { start: spanStart, end: spanEnd },
+      span: nodeSpan(ifNode, sourceText),
       depthReduction: 1,
       statementsAffected: consequentCount,
     });
@@ -463,12 +469,10 @@ const detectCascadeGuard = (
     }
 
     const taillessNode = ifNode as Node;
-    const taillessStart = getLineColumn(sourceText, taillessNode.start);
-    const taillessEnd = getLineColumn(sourceText, taillessNode.end);
 
     return {
       kind: 'cascade-guard',
-      span: { start: taillessStart, end: taillessEnd },
+      span: nodeSpan(taillessNode, sourceText),
       depthReduction: 1,
       statementsAffected: totalConsequentCount,
     };
@@ -486,12 +490,10 @@ const detectCascadeGuard = (
   }
 
   const node = ifNode as Node;
-  const spanStart = getLineColumn(sourceText, node.start);
-  const spanEnd = getLineColumn(sourceText, node.end);
 
   return {
     kind: 'cascade-guard',
-    span: { start: spanStart, end: spanEnd },
+    span: nodeSpan(node, sourceText),
     depthReduction: chainLength,
     statementsAffected: finalCount,
   };
@@ -588,12 +590,10 @@ const analyzeFunctionNode = (
 
             if (shortCount <= 3 && shortExits && longCount >= shortCount * 2) {
               const ifNode = value as Node;
-              const spanStart = getLineColumn(sourceText, ifNode.start);
-              const spanEnd = getLineColumn(sourceText, ifNode.end);
 
               opportunities.push({
                 kind: 'invertible-if-else',
-                span: { start: spanStart, end: spanEnd },
+                span: nodeSpan(ifNode, sourceText),
                 depthReduction: 1,
                 statementsAffected: longCount,
               });

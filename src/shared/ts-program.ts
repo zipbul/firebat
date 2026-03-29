@@ -1,5 +1,7 @@
 import type { Gildash } from '@zipbul/gildash';
 
+import { normalizePath } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../engine/types';
 import type { FirebatProgramConfig } from '../interfaces';
 
@@ -7,8 +9,6 @@ import { createGildash } from '../store/gildash';
 
 // Re-export ParsedFile so external callers (specs) can import it from this module
 export type { ParsedFile };
-
-const normalizePath = (filePath: string): string => filePath.replaceAll('\\', '/');
 
 const shouldIncludeFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
@@ -47,7 +47,7 @@ export const createFirebatProgram = async (
   try {
     const { parsed } = await gildash.batchParse(eligible);
 
-    return Array.from(parsed.values()) as unknown as ParsedFile[];
+    return Array.from(parsed.values());
   } finally {
     if (ownsGildash) {
       await gildash.close({ cleanup: false });

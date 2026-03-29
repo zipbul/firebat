@@ -3,8 +3,8 @@ import type { Node } from 'oxc-parser';
 import type { SourceSpan } from '../types';
 import type { NodeValue, ParsedFile } from './types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode } from './ast/oxc-ast-utils';
-import { getLineColumn } from './source-position';
 
 type ExtractedSymbolKind = 'function' | 'method' | 'class' | 'type' | 'interface' | 'enum';
 
@@ -19,10 +19,14 @@ interface NodeWithInit {
   readonly init?: NodeValue;
 }
 
-const getNodeSpan = (node: Node, sourceText: string): SourceSpan => ({
-  start: getLineColumn(sourceText, node.start),
-  end: getLineColumn(sourceText, node.end),
-});
+const getNodeSpan = (node: Node, sourceText: string): SourceSpan => {
+  const offsets = buildLineOffsets(sourceText);
+
+  return {
+    start: getLineColumn(offsets, node.start),
+    end: getLineColumn(offsets, node.end),
+  };
+};
 
 const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => {
   const out: ExtractedSymbol[] = [];
@@ -110,7 +114,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       return;
     }
 
-    const entries = Object.entries(node) as Array<[string, NodeValue]>;
+    const entries = Object.entries(node);
 
     for (const [key, childValue] of entries) {
       if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {

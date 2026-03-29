@@ -8,8 +8,9 @@ import type { Node } from 'oxc-parser';
 
 import type { FirebatItemKind, SourceSpan } from '../../types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { getNodeType } from '../../engine/ast/oxc-ast-utils';
-import { getLineColumn } from '../../engine/source-position';
 
 export const CLONE_TARGET_TYPES = new Set([
   'FunctionDeclaration',
@@ -38,7 +39,11 @@ export const getItemKind = (node: Node): FirebatItemKind => {
   return 'node';
 };
 
-export const resolveSpan = (sourceText: string, node: Node): SourceSpan => ({
-  start: getLineColumn(sourceText, node.start),
-  end: getLineColumn(sourceText, node.end),
-});
+export const resolveSpan = (sourceText: string, node: Node): SourceSpan => {
+  const offsets = buildLineOffsets(sourceText);
+
+  return {
+    start: getLineColumn(offsets, node.start),
+    end: getLineColumn(offsets, node.end),
+  };
+};

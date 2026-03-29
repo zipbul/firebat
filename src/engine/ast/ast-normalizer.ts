@@ -1,4 +1,25 @@
-import type { Node } from 'oxc-parser';
+import type {
+  ArrowFunctionExpression,
+  AssignmentExpression,
+  BlockStatement,
+  CallExpression,
+  ChainExpression,
+  ConditionalExpression,
+  ExpressionStatement,
+  ForOfStatement,
+  IdentifierReference,
+  IfStatement,
+  LogicalExpression,
+  Node,
+  ParenthesizedExpression,
+  ReturnStatement,
+  StaticMemberExpression,
+  TemplateElement,
+  TemplateLiteral,
+  UnaryExpression,
+  VariableDeclaration,
+  VariableDeclarator,
+} from 'oxc-parser';
 
 import type { NodeValue } from '../types';
 
@@ -69,37 +90,31 @@ const hasReturnStatement = (node: NodeValue): boolean => {
 };
 
 const isIdentifierNamed = (node: NodeValue, name: string): boolean => {
-  return (
-    isOxcNode(node) &&
-    node.type === 'Identifier' &&
-    typeof (node as unknown as { name?: unknown }).name === 'string' &&
-    (node as unknown as { name: string }).name === name
-  );
+  if (!isOxcNode(node) || node.type !== 'Identifier') {
+    return false;
+  }
+
+  const id = node as IdentifierReference;
+
+  return id.name === name;
 };
 
 const isMemberNamed = (callee: NodeValue, name: string): { object: Node; computed: boolean } | null => {
-  if (!isOxcNode(callee) || callee.type !== 'MemberExpression' || !isNodeRecord(callee)) {
+  if (!isOxcNode(callee) || callee.type !== 'MemberExpression') {
     return null;
   }
 
-  const computed = Boolean((callee as unknown as { computed?: unknown }).computed);
-  const property = (callee as unknown as { property?: unknown }).property;
+  const member = callee as StaticMemberExpression;
 
-  if (computed) {
+  if (member.computed) {
     return null;
   }
 
-  if (!isIdentifierNamed(property as NodeValue, name)) {
+  if (!isIdentifierNamed(member.property as NodeValue, name)) {
     return null;
   }
 
-  const object = (callee as unknown as { object?: unknown }).object;
-
-  if (!isOxcNode(object as NodeValue)) {
-    return null;
-  }
-
-  return { object: object as Node, computed };
+  return { object: member.object as Node, computed: false };
 };
 
 const toBlock = (value: NodeValue): Node | null => {
@@ -119,21 +134,21 @@ const appendToBlockBody = (bodyNode: Node, statement: Node): Node => {
     return block([bodyNode, statement]);
   }
 
-  const body = Array.isArray((bodyNode as unknown as { body?: unknown }).body)
-    ? ((bodyNode as unknown as { body: Node[] }).body as Node[])
-    : [];
+  const bs = bodyNode as BlockStatement;
+  const body = Array.isArray(bs.body) ? (bs.body as Node[]) : [];
 
   return block([...body, statement]);
 };
 
 const normalizeTemplateLiteralToConcat = (node: AnyNode): NodeValue => {
-  const quasis = Array.isArray(node.quasis) ? (node.quasis as unknown as AnyNode[]) : [];
-  const expressions = Array.isArray(node.expressions) ? (node.expressions as unknown as Node[]) : [];
+  const tl = node as TemplateLiteral;
+  const quasis = Array.isArray(tl.quasis) ? (tl.quasis as TemplateElement[]) : [];
+  const expressions = Array.isArray(tl.expressions) ? (tl.expressions as Node[]) : [];
   const parts: Node[] = [];
 
   for (let index = 0; index < quasis.length; index += 1) {
     const quasi = quasis[index];
-    const value = quasi?.value as unknown as { raw?: unknown; cooked?: unknown } | undefined;
+    const value = quasi?.value;
     const cooked = typeof value?.cooked === 'string' ? value.cooked : typeof value?.raw === 'string' ? value.raw : '';
 
     if (cooked.length > 0) {
@@ -165,7 +180,8 @@ const normalizeOptionalChain = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const expression = node.expression as unknown;
+  const chain = node as ChainExpression;
+  const expression = chain.expression;
 
   if (!isOxcNode(expression as NodeValue) || !isNodeRecord(expression as Node)) {
     return null;
@@ -175,22 +191,23 @@ const normalizeOptionalChain = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const optional = Boolean((expression as unknown as { optional?: unknown }).optional);
+  const me = expression as StaticMemberExpression;
+  const optional = Boolean(me.optional);
 
   if (!optional) {
     return null;
   }
 
-  const object = (expression as unknown as { object?: unknown }).object;
-  const property = (expression as unknown as { property?: unknown }).property;
-  const computed = Boolean((expression as unknown as { computed?: unknown }).computed);
+  const object = me.object as Node;
+  const property = me.property as Node;
+  const computed = me.computed;
 
   if (!isOxcNode(object as NodeValue) || !isOxcNode(property as NodeValue)) {
     return null;
   }
 
-  const test = binary('!=', object as Node, literal(null));
-  const consequent = memberExpression(object as Node, property as Node, computed);
+  const test = binary('!=', object, literal(null));
+  const consequent = memberExpression(object, property, computed);
   const alternate = identifier('undefined');
 
   return conditional(test, consequent, alternate);
@@ -201,43 +218,43 @@ const normalizeDeMorgan = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const operator = typeof node.operator === 'string' ? node.operator : '';
+  const ue = node as UnaryExpression;
+  const operator = ue.operator;
 
   if (operator !== '!') {
     return null;
   }
 
-  let argument = node.argument as unknown;
+  let argument: NodeValue = ue.argument as NodeValue;
 
-  if (!isOxcNode(argument as NodeValue) || !isNodeRecord(argument as Node)) {
+  if (!isOxcNode(argument) || !isNodeRecord(argument as Node)) {
     return null;
   }
 
   if ((argument as Node).type === 'ParenthesizedExpression') {
-    const expression = (argument as unknown as { expression?: unknown }).expression;
+    const pe = argument as ParenthesizedExpression;
+    const expression = pe.expression;
 
     if (!isOxcNode(expression as NodeValue) || !isNodeRecord(expression as Node)) {
       return null;
     }
 
-    argument = expression;
+    argument = expression as NodeValue;
   }
 
   if ((argument as Node).type !== 'LogicalExpression') {
     return null;
   }
 
-  const innerOperator =
-    typeof (argument as unknown as { operator?: unknown }).operator === 'string'
-      ? (argument as unknown as { operator: string }).operator
-      : '';
+  const le = argument as LogicalExpression;
+  const innerOperator = le.operator;
 
   if (innerOperator !== '&&' && innerOperator !== '||') {
     return null;
   }
 
-  const left = (argument as unknown as { left?: unknown }).left;
-  const right = (argument as unknown as { right?: unknown }).right;
+  const left = le.left as Node;
+  const right = le.right as Node;
 
   if (!isOxcNode(left as NodeValue) || !isOxcNode(right as NodeValue)) {
     return null;
@@ -245,7 +262,7 @@ const normalizeDeMorgan = (node: AnyNode): NodeValue | null => {
 
   const newOp = innerOperator === '&&' ? '||' : '&&';
 
-  return logical(newOp, unary('!', left as Node), unary('!', right as Node));
+  return logical(newOp, unary('!', left), unary('!', right));
 };
 
 const normalizeTernaryInversion = (node: AnyNode): NodeValue | null => {
@@ -253,7 +270,8 @@ const normalizeTernaryInversion = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const test = node.test as unknown;
+  const ce = node as ConditionalExpression;
+  const test = ce.test;
 
   if (!isOxcNode(test as NodeValue) || !isNodeRecord(test as Node)) {
     return null;
@@ -263,23 +281,21 @@ const normalizeTernaryInversion = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const operator =
-    typeof (test as unknown as { operator?: unknown }).operator === 'string'
-      ? (test as unknown as { operator: string }).operator
-      : '';
+  const ue = test as UnaryExpression;
+  const operator = ue.operator;
 
   if (operator !== '!') {
     return null;
   }
 
-  const argument = (test as unknown as { argument?: unknown }).argument;
+  const argument = ue.argument as NodeValue;
 
-  if (!isOxcNode(argument as NodeValue)) {
+  if (!isOxcNode(argument)) {
     return null;
   }
 
-  const consequent = node.consequent as unknown;
-  const alternate = node.alternate as unknown;
+  const consequent = ce.consequent;
+  const alternate = ce.alternate;
 
   if (!isOxcNode(consequent as NodeValue) || !isOxcNode(alternate as NodeValue)) {
     return null;
@@ -293,9 +309,10 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const test = node.test as unknown;
-  const consequent = node.consequent as unknown;
-  const alternate = node.alternate as unknown;
+  const is = node as IfStatement;
+  const test = is.test;
+  const consequent = is.consequent;
+  const alternate = is.alternate;
 
   if (!isOxcNode(test as NodeValue) || !isOxcNode(consequent as NodeValue) || !isOxcNode(alternate as NodeValue)) {
     return null;
@@ -310,9 +327,8 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
     }
 
     if (stmt.type === 'BlockStatement') {
-      const body = Array.isArray((stmt as unknown as { body?: unknown }).body)
-        ? ((stmt as unknown as { body: Node[] }).body as Node[])
-        : [];
+      const bs = stmt as BlockStatement;
+      const body = Array.isArray(bs.body) ? (bs.body as Node[]) : [];
 
       if (body.length !== 1 || !isOxcNode(body[0])) {
         return null;
@@ -333,8 +349,8 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
 
   // Only normalize `return A` / `return B`.
   if (c.type === 'ReturnStatement' && a.type === 'ReturnStatement' && isNodeRecord(c) && isNodeRecord(a)) {
-    const cArg = (c as unknown as { argument?: unknown }).argument;
-    const aArg = (a as unknown as { argument?: unknown }).argument;
+    const cArg = (c as ReturnStatement).argument;
+    const aArg = (a as ReturnStatement).argument;
 
     if (!isOxcNode(cArg as NodeValue) || !isOxcNode(aArg as NodeValue)) {
       return null;
@@ -345,8 +361,8 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
 
   // Only normalize `x = A` / `x = B`.
   if (c.type === 'ExpressionStatement' && a.type === 'ExpressionStatement' && isNodeRecord(c) && isNodeRecord(a)) {
-    const cExpr = (c as unknown as { expression?: unknown }).expression;
-    const aExpr = (a as unknown as { expression?: unknown }).expression;
+    const cExpr = (c as ExpressionStatement).expression;
+    const aExpr = (a as ExpressionStatement).expression;
 
     if (!isOxcNode(cExpr as NodeValue) || !isOxcNode(aExpr as NodeValue)) {
       return null;
@@ -359,20 +375,16 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
       (cExpr as Node).type === 'AssignmentExpression' &&
       (aExpr as Node).type === 'AssignmentExpression'
     ) {
-      const opC =
-        typeof (cExpr as unknown as { operator?: unknown }).operator === 'string'
-          ? (cExpr as unknown as { operator: string }).operator
-          : '';
-      const opA =
-        typeof (aExpr as unknown as { operator?: unknown }).operator === 'string'
-          ? (aExpr as unknown as { operator: string }).operator
-          : '';
+      const aeC = cExpr as AssignmentExpression;
+      const aeA = aExpr as AssignmentExpression;
+      const opC = aeC.operator;
+      const opA = aeA.operator;
 
       if (opC === '=' && opA === '=') {
-        const leftC = (cExpr as unknown as { left?: unknown }).left;
-        const leftA = (aExpr as unknown as { left?: unknown }).left;
-        const rightC = (cExpr as unknown as { right?: unknown }).right;
-        const rightA = (aExpr as unknown as { right?: unknown }).right;
+        const leftC = aeC.left as Node;
+        const leftA = aeA.left as Node;
+        const rightC = aeC.right as Node;
+        const rightA = aeA.right as Node;
 
         if (
           isOxcNode(leftC as NodeValue) &&
@@ -381,14 +393,14 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
           isOxcNode(rightA as NodeValue)
         ) {
           if ((leftC as Node).type === 'Identifier' && (leftA as Node).type === 'Identifier') {
-            const nameC = (leftC as unknown as { name?: unknown }).name;
-            const nameA = (leftA as unknown as { name?: unknown }).name;
+            const nameC = (leftC as IdentifierReference).name;
+            const nameA = (leftA as IdentifierReference).name;
 
             if (typeof nameC === 'string' && typeof nameA === 'string' && nameC === nameA) {
               const assignment = withType('AssignmentExpression', {
                 operator: '=',
-                left: leftC as Node,
-                right: conditional(test as Node, rightC as Node, rightA as Node),
+                left: leftC,
+                right: conditional(test as Node, rightC, rightA),
               }) as unknown as Node;
 
               return expressionStatement(assignment);
@@ -448,7 +460,8 @@ const normalizeForEach = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const expression = (node as unknown as { expression?: unknown }).expression;
+  const es = node as ExpressionStatement;
+  const expression = es.expression;
 
   if (
     !isOxcNode(expression as NodeValue) ||
@@ -458,12 +471,10 @@ const normalizeForEach = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const call = expression as AnyNode;
-  const callee = (call as unknown as { callee?: unknown }).callee;
-  const args = Array.isArray((call as unknown as { arguments?: unknown }).arguments)
-    ? ((call as unknown as { arguments: Node[] }).arguments as Node[])
-    : [];
-  const member = isMemberNamed(callee as NodeValue, 'forEach');
+  const call = expression as CallExpression;
+  const callee = call.callee as NodeValue;
+  const args = Array.isArray(call.arguments) ? (call.arguments as Node[]) : [];
+  const member = isMemberNamed(callee, 'forEach');
 
   if (member === null || args.length !== 1) {
     return null;
@@ -479,33 +490,32 @@ const normalizeForEach = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const asyncFlag = Boolean((callback as unknown as { async?: unknown }).async);
+  const afe = callback as ArrowFunctionExpression;
+  const asyncFlag = Boolean(afe.async);
 
   if (asyncFlag) {
     return null;
   }
 
-  const params = Array.isArray((callback as unknown as { params?: unknown }).params)
-    ? ((callback as unknown as { params: Node[] }).params as Node[])
-    : [];
+  const params = Array.isArray(afe.params) ? (afe.params as Node[]) : [];
 
   if (params.length !== 1 || params[0]?.type !== 'Identifier') {
     return null;
   }
 
-  const bodyNode = (callback as unknown as { body?: unknown }).body;
+  const bodyNode = afe.body as NodeValue;
 
-  if (!isOxcNode(bodyNode as NodeValue)) {
+  if (!isOxcNode(bodyNode)) {
     return null;
   }
 
-  if (hasReturnStatement(bodyNode as NodeValue)) {
+  if (hasReturnStatement(bodyNode)) {
     return null;
   }
 
   const loopVar = params[0] as Node;
   const left = variableDeclaration('const', [variableDeclarator(loopVar)]);
-  const bodyBlock = toBlock(bodyNode as NodeValue) ?? block([expressionStatement(bodyNode as Node)]);
+  const bodyBlock = toBlock(bodyNode) ?? block([expressionStatement(bodyNode as Node)]);
 
   return forOfStatement(left, member.object, bodyBlock);
 };
@@ -515,11 +525,10 @@ const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const callee = (node as unknown as { callee?: unknown }).callee;
-  const args = Array.isArray((node as unknown as { arguments?: unknown }).arguments)
-    ? ((node as unknown as { arguments: Node[] }).arguments as Node[])
-    : [];
-  const filterMember = isMemberNamed(callee as NodeValue, 'filter');
+  const outerCall = node as CallExpression;
+  const callee = outerCall.callee as NodeValue;
+  const args = Array.isArray(outerCall.arguments) ? (outerCall.arguments as Node[]) : [];
+  const filterMember = isMemberNamed(callee, 'filter');
 
   if (filterMember === null || args.length !== 1) {
     return null;
@@ -535,11 +544,10 @@ const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const mapCallee = (mapCall as unknown as { callee?: unknown }).callee;
-  const mapArgs = Array.isArray((mapCall as unknown as { arguments?: unknown }).arguments)
-    ? ((mapCall as unknown as { arguments: Node[] }).arguments as Node[])
-    : [];
-  const mapMember = isMemberNamed(mapCallee as NodeValue, 'map');
+  const innerCall = mapCall as CallExpression;
+  const mapCallee = innerCall.callee as NodeValue;
+  const mapArgs = Array.isArray(innerCall.arguments) ? (innerCall.arguments as Node[]) : [];
+  const mapMember = isMemberNamed(mapCallee, 'map');
 
   if (mapMember === null || mapArgs.length !== 1) {
     return null;
@@ -555,17 +563,16 @@ const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const params = Array.isArray((callback as unknown as { params?: unknown }).params)
-    ? ((callback as unknown as { params: Node[] }).params as Node[])
-    : [];
+  const afe = callback as ArrowFunctionExpression;
+  const params = Array.isArray(afe.params) ? (afe.params as Node[]) : [];
 
   if (params.length !== 1 || params[0]?.type !== 'Identifier') {
     return null;
   }
 
-  const bodyNode = (callback as unknown as { body?: unknown }).body;
+  const bodyNode = afe.body as NodeValue;
 
-  if (!isOxcNode(bodyNode as NodeValue)) {
+  if (!isOxcNode(bodyNode)) {
     return null;
   }
 
@@ -582,8 +589,9 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const right = (node as unknown as { right?: unknown }).right;
-  const bodyValue = (node as unknown as { body?: unknown }).body;
+  const fos = node as ForOfStatement;
+  const right = fos.right as Node;
+  const bodyValue = fos.body as Node;
 
   if (!isOxcNode(right as NodeValue) || !isOxcNode(bodyValue as NodeValue) || !isNodeRecord(bodyValue as Node)) {
     return null;
@@ -593,9 +601,8 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const body = Array.isArray((bodyValue as unknown as { body?: unknown }).body)
-    ? ((bodyValue as unknown as { body: Node[] }).body as Node[])
-    : [];
+  const bs = bodyValue as BlockStatement;
+  const body = Array.isArray(bs.body) ? (bs.body as Node[]) : [];
 
   if (body.length !== 2) {
     return null;
@@ -608,22 +615,21 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const declarations = Array.isArray((decl as unknown as { declarations?: unknown }).declarations)
-    ? ((decl as unknown as { declarations: Node[] }).declarations as Node[])
-    : [];
+  const vd = decl as VariableDeclaration;
+  const declarations = Array.isArray(vd.declarations) ? (vd.declarations as Node[]) : [];
 
   if (declarations.length !== 1 || !isOxcNode(declarations[0] as NodeValue) || !isNodeRecord(declarations[0] as Node)) {
     return null;
   }
 
-  const declarator = declarations[0] as AnyNode;
+  const declarator = declarations[0] as VariableDeclarator;
 
   if (declarator.type !== 'VariableDeclarator') {
     return null;
   }
 
-  const id = declarator.id as unknown;
-  const init = declarator.init as unknown;
+  const id = declarator.id as Node;
+  const init = declarator.init as Node | null;
 
   if (!isOxcNode(id as NodeValue) || (id as Node).type !== 'Identifier' || !isOxcNode(init as NodeValue)) {
     return null;
@@ -633,9 +639,10 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const test = (guard as unknown as { test?: unknown }).test;
-  const consequent = (guard as unknown as { consequent?: unknown }).consequent;
-  const alternate = (guard as unknown as { alternate?: unknown }).alternate;
+  const guardIf = guard as IfStatement;
+  const test = guardIf.test as Node;
+  const consequent = guardIf.consequent as Node;
+  const alternate = guardIf.alternate;
 
   if (!isOxcNode(test as NodeValue) || alternate != null) {
     return null;
@@ -651,29 +658,28 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const consequentBody = Array.isArray((only as unknown as { body?: unknown }).body)
-    ? ((only as unknown as { body: Node[] }).body as Node[])
-    : [];
+  const onlyBs = only as BlockStatement;
+  const consequentBody = Array.isArray(onlyBs.body) ? (onlyBs.body as Node[]) : [];
 
   if (consequentBody.length !== 1 || !isOxcNode(consequentBody[0] as NodeValue) || !isNodeRecord(consequentBody[0] as Node)) {
     return null;
   }
 
-  const stmt = consequentBody[0] as AnyNode;
+  const stmt = consequentBody[0] as Node;
 
   if (stmt.type !== 'ExpressionStatement') {
     return null;
   }
 
-  const expr = stmt.expression as unknown;
+  const stmtEs = stmt as ExpressionStatement;
+  const expr = stmtEs.expression as Node;
 
   if (!isOxcNode(expr as NodeValue) || !isNodeRecord(expr as Node) || (expr as Node).type !== 'CallExpression') {
     return null;
   }
 
-  const callArgs = Array.isArray((expr as unknown as { arguments?: unknown }).arguments)
-    ? ((expr as unknown as { arguments: Node[] }).arguments as Node[])
-    : [];
+  const callExpr = expr as CallExpression;
+  const callArgs = Array.isArray(callExpr.arguments) ? (callExpr.arguments as Node[]) : [];
 
   if (callArgs.length !== 1 || callArgs[0]?.type !== 'Identifier') {
     return null;
@@ -684,8 +690,8 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const testName = (test as unknown as { name?: unknown }).name;
-  const argName = (callArgs[0] as unknown as { name?: unknown }).name;
+  const testName = (test as IdentifierReference).name;
+  const argName = (callArgs[0] as IdentifierReference).name;
 
   if (typeof testName !== 'string' || typeof argName !== 'string' || testName !== argName) {
     return null;

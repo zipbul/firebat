@@ -8,6 +8,8 @@ import type {
   VariableLifetimeFinding,
 } from '../../types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { collectFunctionNodes, isNodeRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
@@ -15,7 +17,8 @@ import { computeLiveness } from '../../engine/dataflow/liveness';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
 import { collectVariables } from '../../engine/dataflow/variable-collector';
 import { getFunctionSpan } from '../../engine/function-span';
-import { getLineColumn } from '../../engine/source-position';
+
+const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
 
 const createEmptyVariableLifetime = (): ReadonlyArray<
   VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding
@@ -755,9 +758,9 @@ const checkScopeNarrowing = (
     }
 
     // All checks passed — generate finding
-    const declLoc = getLineColumn(sourceText, defMeta.location);
-    const blockStartLoc = getLineColumn(sourceText, matchingBlock.start);
-    const blockEndLoc = getLineColumn(sourceText, matchingBlock.end);
+    const declLoc = lineColumnAt(sourceText, defMeta.location);
+    const blockStartLoc = lineColumnAt(sourceText, matchingBlock.start);
+    const blockEndLoc = lineColumnAt(sourceText, matchingBlock.end);
 
     findings.push({
       kind: 'scope-narrowing',
@@ -933,8 +936,8 @@ const analyzeVariableLifetime = (
           continue;
         }
 
-        const defLoc = getLineColumn(file.sourceText, defMeta.location);
-        const useLoc = getLineColumn(file.sourceText, lastUseOffset);
+        const defLoc = lineColumnAt(file.sourceText, defMeta.location);
+        const useLoc = lineColumnAt(file.sourceText, lastUseOffset);
         const lifetime = useLoc.line - defLoc.line;
 
         if (lifetime > maxLifetimeLines) {
@@ -950,8 +953,8 @@ const analyzeVariableLifetime = (
       const contextBurden = longLived.length;
 
       for (const item of longLived) {
-        const start = getLineColumn(file.sourceText, item.defOffset);
-        const end = getLineColumn(file.sourceText, item.lastUseOffset);
+        const start = lineColumnAt(file.sourceText, item.defOffset);
+        const end = lineColumnAt(file.sourceText, item.lastUseOffset);
 
         findings.push({
           kind: 'variable-lifetime',
@@ -999,7 +1002,7 @@ const analyzeVariableLifetime = (
         if (livenessResult.maxLiveCount >= maxLiveVarsThreshold) {
           const hotSpotPayload = analysis.nodePayloads[livenessResult.maxLiveNodeId];
           const hotSpotOffset = hotSpotPayload ? payloadOffset(hotSpotPayload as Node | ReadonlyArray<Node>) : functionNode.start;
-          const hotSpotLine = getLineColumn(file.sourceText, hotSpotOffset >= 0 ? hotSpotOffset : functionNode.start).line;
+          const hotSpotLine = lineColumnAt(file.sourceText, hotSpotOffset >= 0 ? hotSpotOffset : functionNode.start).line;
 
           findings.push({
             kind: 'liveness-pressure',
@@ -1060,7 +1063,7 @@ const analyzeVariableLifetime = (
 
         for (const [varName, info] of nonDeclWriteCountByVar) {
           if (info.count > maxMutationCount) {
-            const defLoc = getLineColumn(file.sourceText, info.firstWriteOffset);
+            const defLoc = lineColumnAt(file.sourceText, info.firstWriteOffset);
 
             findings.push({
               kind: 'mutation-density',

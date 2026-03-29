@@ -1,3 +1,4 @@
+import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 import * as z from 'zod';
 
@@ -68,8 +69,6 @@ const resolveParent = (dirAbs: string): string | null => {
 
   return parent === dirAbs ? null : parent;
 };
-
-const normalizePath = (value: string): string => value.replaceAll('\\', '/');
 
 const isWithinNodeModules = (dirAbs: string): boolean => {
   const normalized = normalizePath(dirAbs);

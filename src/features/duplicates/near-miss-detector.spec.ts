@@ -229,6 +229,7 @@ describe('detectNearMissClones', () => {
       errors: [{ message: 'parse error' } as never],
       comments: [],
       sourceText: '',
+      module: {} as never,
     };
     // 에러 없이 실행됨
     const result = detectNearMissClones([goodFile, badFile], defaultOptions);

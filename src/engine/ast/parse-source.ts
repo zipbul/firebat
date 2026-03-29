@@ -11,5 +11,6 @@ export const parseSource = (filePath: string, sourceText: string): ParsedFile =>
     errors: parsed.errors,
     comments: parsed.comments,
     sourceText,
+    module: parsed.module,
   };
 };

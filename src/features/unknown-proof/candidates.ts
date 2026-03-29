@@ -3,8 +3,9 @@ import type { Node } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan } from '../../types';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import { isNodeRecord, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
-import { getLineColumn } from '../../engine/source-position';
 
 type NodeLike = Record<string, unknown>;
 
@@ -33,10 +34,12 @@ interface CollectBindingCandidatesInput {
 }
 
 const toSpanFromOffsets = (sourceText: string, startOffset: number, endOffset: number): SourceSpan => {
-  const start = getLineColumn(sourceText, Math.max(0, startOffset));
-  const end = getLineColumn(sourceText, Math.max(0, endOffset));
+  const offsets = buildLineOffsets(sourceText);
 
-  return { start, end };
+  return {
+    start: getLineColumn(offsets, Math.max(0, startOffset)),
+    end: getLineColumn(offsets, Math.max(0, endOffset)),
+  };
 };
 
 const asNodeLike = (value: unknown): NodeLike | null => {
@@ -501,8 +504,8 @@ const collectExpressionCandidates = (input: CollectBindingCandidatesInput): Read
         const innerType = asNodeLike(innerExpr.typeAnnotation);
 
         if (innerType?.type === 'TSUnknownKeyword' || innerType?.type === 'TSAnyKeyword') {
-          const startOffset = typeof (node as any).start === 'number' ? (node as any).start as number : 0;
-          const endOffset = typeof (node as any).end === 'number' ? (node as any).end as number : startOffset;
+          const startOffset = node.start;
+          const endOffset = node.end;
 
           candidates.push({
             kind: 'double-cast',
@@ -516,8 +519,8 @@ const collectExpressionCandidates = (input: CollectBindingCandidatesInput): Read
 
       // any-cast: as any
       if (typeAnnotation?.type === 'TSAnyKeyword') {
-        const startOffset = typeof (node as any).start === 'number' ? (node as any).start as number : 0;
-        const endOffset = typeof (node as any).end === 'number' ? (node as any).end as number : startOffset;
+        const startOffset = node.start;
+        const endOffset = node.end;
 
         candidates.push({
           kind: 'any-cast',

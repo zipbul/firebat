@@ -1,13 +1,15 @@
 import type { Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { SourceSpan } from '../types';
 
-import { getLineColumn } from './source-position';
-
 const getFunctionSpan = (functionNode: Node, sourceText: string): SourceSpan => {
+  const offsets = buildLineOffsets(sourceText);
+
   return {
-    start: getLineColumn(sourceText, functionNode.start),
-    end: getLineColumn(sourceText, functionNode.end),
+    start: getLineColumn(offsets, functionNode.start),
+    end: getLineColumn(offsets, functionNode.end),
   };
 };
 
