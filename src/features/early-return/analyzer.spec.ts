@@ -15,16 +15,6 @@ const node = (type: string, extra: Record<string, unknown> = {}) => ({ type, ...
 
 describe('early-return/analyzer helpers', () => {
   describe('isExitStatement', () => {
-    it('should return false when value is not an oxc node', () => {
-      // Arrange
-      const values = [null, undefined, 1, 'x', true, [node('ReturnStatement')]] as const;
-      // Act
-      const results = values.map(value => isExitStatement(value as any));
-
-      // Assert
-      expect(results).toEqual([false, false, false, false, false, false]);
-    });
-
     it('should return false when node is not return-or-throw', () => {
       // Arrange
       const value = node('ExpressionStatement');
@@ -57,16 +47,6 @@ describe('early-return/analyzer helpers', () => {
   });
 
   describe('isExitBlock', () => {
-    it('should return false when value is not an oxc node', () => {
-      // Arrange
-      const value = null;
-      // Act
-      const result = isExitBlock(value as any);
-
-      // Assert
-      expect(result).toBe(false);
-    });
-
     it('should return true when value is ReturnStatement', () => {
       // Arrange
       const value = node('ReturnStatement');
@@ -149,16 +129,6 @@ describe('early-return/analyzer helpers', () => {
   });
 
   describe('isLoopGuardBlock', () => {
-    it('should return false when value is not an oxc node', () => {
-      // Arrange
-      const value = undefined;
-      // Act
-      const result = isLoopGuardBlock(value as any);
-
-      // Assert
-      expect(result).toBe(false);
-    });
-
     it('should return true when value is ContinueStatement', () => {
       // Arrange
       const value = node('ContinueStatement');
@@ -333,16 +303,6 @@ describe('early-return/analyzer helpers', () => {
   });
 
   describe('countStatements', () => {
-    it('should return 0 when node is not an oxc node', () => {
-      // Arrange
-      const value = 'not-a-node';
-      // Act
-      const result = countStatements(value as any);
-
-      // Assert
-      expect(result).toBe(0);
-    });
-
     it('should return 1 when node is not a block statement', () => {
       // Arrange
       const value = node('ReturnStatement');

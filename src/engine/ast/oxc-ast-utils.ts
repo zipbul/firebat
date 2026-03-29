@@ -1,24 +1,19 @@
 import type { Node } from 'oxc-parser';
+import { visitorKeys } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue, NodeValueVisitor, OxcNodePredicate, OxcNodeWalker } from '../types';
+import type { NodeRecord, NodeValue } from '../types';
 
 export const isOxcNode = (value: unknown): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => {
-  if (!Array.isArray(value)) {
-    return false;
-  }
-
-  return true;
-};
+export const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
 
 export const isNodeRecord = (node: unknown): node is NodeRecord =>
   typeof node === 'object' && node !== null && !Array.isArray(node);
 
 export const getNodeType = (node: Node): string => node.type;
 
-export const getNodeName = (node: NodeValue): string | null => {
-  if (!isOxcNode(node)) {
+export const getNodeName = (node: Node | null | undefined): string | null => {
+  if (node === null || node === undefined) {
     return null;
   }
 
@@ -29,8 +24,8 @@ export const getNodeName = (node: NodeValue): string | null => {
   return null;
 };
 
-export const getLiteralString = (node: NodeValue): string | null => {
-  if (!isOxcNode(node)) {
+export const getLiteralString = (node: Node | null | undefined): string | null => {
+  if (node === null || node === undefined) {
     return null;
   }
 
@@ -51,39 +46,40 @@ export const isFunctionNode = (node: Node): boolean => {
   return nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression' || nodeType === 'ArrowFunctionExpression';
 };
 
-export const walkOxcTree = (program: NodeValue, walker: OxcNodeWalker): void => {
-  const visit = (value: NodeValue): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry);
+/** Node의 자식 중 Node 타입인 것만 콜백에 전달. visitorKeys 기반. */
+export const forEachChildNode = (node: Node, cb: (child: Node) => void): void => {
+  const keys = visitorKeys[node.type];
+
+  if (keys === undefined) {
+    return;
+  }
+
+  for (const key of keys) {
+    const value = (node as unknown as Record<string, unknown>)[key];
+
+    if (isOxcNode(value)) {
+      cb(value);
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (isOxcNode(item)) {
+          cb(item);
+        }
       }
-
-      return;
     }
+  }
+};
 
-    if (!isOxcNode(value)) {
-      return;
-    }
+type OxcNodeWalker = (node: Node) => boolean;
 
-    const shouldVisitChildren = walker(value);
+export const walkOxcTree = (program: Node, walker: OxcNodeWalker): void => {
+  const visit = (node: Node): void => {
+    const shouldVisitChildren = walker(node);
 
     if (!shouldVisitChildren) {
       return;
     }
 
-    if (!isNodeRecord(value)) {
-      return;
-    }
-
-    const entries = Object.entries(value);
-
-    for (const [key, childValue] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(childValue);
-    }
+    forEachChildNode(node, visit);
   };
 
   visit(program);
@@ -91,45 +87,23 @@ export const walkOxcTree = (program: NodeValue, walker: OxcNodeWalker): void => 
 
 type OxcNodeWalkerWithParent = (node: Node, parent: Node | null) => boolean;
 
-export const walkOxcTreeWithParent = (root: NodeValue, walker: OxcNodeWalkerWithParent): void => {
-  const visit = (value: NodeValue, parent: Node | null): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry, parent);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(value)) {
-      return;
-    }
-
-    const shouldVisitChildren = walker(value, parent);
+export const walkOxcTreeWithParent = (root: Node, walker: OxcNodeWalkerWithParent): void => {
+  const visit = (node: Node, parent: Node | null): void => {
+    const shouldVisitChildren = walker(node, parent);
 
     if (!shouldVisitChildren) {
       return;
     }
 
-    if (!isNodeRecord(value)) {
-      return;
-    }
-
-    const entries = Object.entries(value);
-
-    for (const [key, childValue] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(childValue, value);
-    }
+    forEachChildNode(node, child => visit(child, node));
   };
 
   visit(root, null);
 };
 
-export const collectOxcNodes = (program: NodeValue, predicate: OxcNodePredicate): Node[] => {
+type OxcNodePredicate = (node: Node) => boolean;
+
+export const collectOxcNodes = (program: Node, predicate: OxcNodePredicate): Node[] => {
   const nodes: Node[] = [];
 
   walkOxcTree(program, node => {
@@ -143,80 +117,42 @@ export const collectOxcNodes = (program: NodeValue, predicate: OxcNodePredicate)
   return nodes;
 };
 
-export const collectFunctionNodes = (program: NodeValue): Node[] => collectOxcNodes(program, isFunctionNode);
+export const collectFunctionNodes = (program: Node): Node[] => collectOxcNodes(program, isFunctionNode);
 
 export interface FunctionNodeWithParent {
   readonly node: Node;
   readonly parent: Node | null;
 }
 
-export const collectFunctionNodesWithParent = (program: NodeValue): FunctionNodeWithParent[] => {
+export const collectFunctionNodesWithParent = (program: Node): FunctionNodeWithParent[] => {
   const results: FunctionNodeWithParent[] = [];
 
-  const visit = (value: NodeValue, parent: Node | null): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry, parent);
-      }
-
-      return;
+  walkOxcTreeWithParent(program, (node, parent) => {
+    if (isFunctionNode(node)) {
+      results.push({ node, parent });
     }
 
-    if (!isOxcNode(value)) {
-      return;
-    }
-
-    if (isFunctionNode(value)) {
-      results.push({ node: value, parent });
-    }
-
-    if (!isNodeRecord(value)) {
-      return;
-    }
-
-    const entries = Object.entries(value);
-
-    for (const [key, childValue] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(childValue, value);
-    }
-  };
-
-  visit(program, null);
+    return true;
+  });
 
   return results;
 };
 
-export const visitOxcChildren = (node: Node, visit: NodeValueVisitor): void => {
-  if (!isNodeRecord(node)) {
-    return;
-  }
-
-  const entries = Object.entries(node);
-
-  for (const [key, value] of entries) {
-    if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-      continue;
-    }
-
-    visit(value);
-  }
-};
-
 export const getNodeHeader = (node: Node, parent?: Node | null): string => {
-  const idNode = isNodeRecord(node) ? node.id : undefined;
-  const idName = getNodeName(idNode);
+  const rec = node as unknown as Record<string, unknown>;
+  const idNode = rec.id;
 
-  if (typeof idName === 'string' && idName.length > 0) {
-    return idName;
+  if (isOxcNode(idNode)) {
+    const idName = getNodeName(idNode);
+
+    if (typeof idName === 'string' && idName.length > 0) {
+      return idName;
+    }
   }
 
-  const key = isNodeRecord(node) ? node.key : undefined;
+  const key = rec.key;
 
-  if (key !== undefined && key !== null) {
+  if (key !== undefined && key !== null && isOxcNode(key)) {
     const keyName = getNodeName(key);
 
     if (typeof keyName === 'string' && keyName.length > 0) {
@@ -230,28 +166,37 @@ export const getNodeHeader = (node: Node, parent?: Node | null): string => {
     }
   }
 
-  if (parent !== undefined && parent !== null && isNodeRecord(parent)) {
-    const parentType = (parent as Node).type;
+  if (parent !== undefined && parent !== null) {
+    const parentRec = parent as unknown as Record<string, unknown>;
+    const parentType = parent.type;
 
     if (parentType === 'VariableDeclarator') {
-      const parentIdName = getNodeName(parent.id);
+      const parentId = parentRec.id;
 
-      if (typeof parentIdName === 'string' && parentIdName.length > 0) {
-        return parentIdName;
+      if (isOxcNode(parentId)) {
+        const parentIdName = getNodeName(parentId);
+
+        if (typeof parentIdName === 'string' && parentIdName.length > 0) {
+          return parentIdName;
+        }
       }
     }
 
     if (parentType === 'MethodDefinition' || parentType === 'PropertyDefinition' || parentType === 'Property') {
-      const parentKeyName = getNodeName(parent.key);
+      const parentKey = parentRec.key;
 
-      if (typeof parentKeyName === 'string' && parentKeyName.length > 0) {
-        return parentKeyName;
-      }
+      if (isOxcNode(parentKey)) {
+        const parentKeyName = getNodeName(parentKey);
 
-      const parentKeyValue = getLiteralString(parent.key);
+        if (typeof parentKeyName === 'string' && parentKeyName.length > 0) {
+          return parentKeyName;
+        }
 
-      if (typeof parentKeyValue === 'string' && parentKeyValue.length > 0) {
-        return parentKeyValue;
+        const parentKeyValue = getLiteralString(parentKey);
+
+        if (typeof parentKeyValue === 'string' && parentKeyValue.length > 0) {
+          return parentKeyValue;
+        }
       }
     }
   }

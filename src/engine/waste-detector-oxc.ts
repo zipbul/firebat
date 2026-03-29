@@ -6,9 +6,7 @@ import type { ParsedFile } from './types';
 import {
   collectOxcNodes,
   getNodeName,
-  getNodeType,
   isFunctionNode,
-  isNodeRecord,
   isOxcNode,
 } from './ast/oxc-ast-utils';
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -44,7 +42,8 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
         return;
       }
 
-      const functionBody = isNodeRecord(node) ? node.body : undefined;
+      const nodeRec = node as unknown as Record<string, unknown>;
+      const functionBody = nodeRec.body;
       const functionBodyNode = isOxcNode(functionBody) || Array.isArray(functionBody) ? functionBody : undefined;
 
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
@@ -59,8 +58,9 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
           const reachingInByNode = analysis.reachingInByNode;
           const nodePayloads = analysis.nodePayloads;
           const varHasAnyUsedDef: boolean[] = Array.from({ length: localIndexByName.size }, () => false);
-          const allReads = collectVariables(functionBodyNode, { includeNestedFunctions: true }).filter(u => u.isRead);
-          const outerReads = collectVariables(functionBodyNode, { includeNestedFunctions: false }).filter(u => u.isRead);
+          const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode) ? (functionBodyNode as ReadonlyArray<Node>) : [functionBodyNode as Node];
+          const allReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: true })).filter(u => u.isRead);
+          const outerReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: false })).filter(u => u.isRead);
           const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
           const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
           const outerReadNames = new Set(outerReads.map(u => u.name));
@@ -74,7 +74,8 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               continue;
             }
 
-            const nested = collectOxcNodes(payload, n => isFunctionNode(n));
+            const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+            const nested = payloadNodes.flatMap(pn => collectOxcNodes(pn, n => isFunctionNode(n)));
 
             if (nested.length === 0) {
               continue;
@@ -84,12 +85,13 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
             const entryReadNames = new Set<string>();
 
             for (const nestedFunction of nested) {
-              const nestedType = getNodeType(nestedFunction);
+              const nestedType = nestedFunction.type;
 
               // If a nested FunctionDeclaration is never referenced in the outer body,
               // treat its closure reads as non-executed to enable dead-store detection.
-              if (nestedType === 'FunctionDeclaration' && isNodeRecord(nestedFunction)) {
-                const declName = getNodeName(nestedFunction.id);
+              if (nestedType === 'FunctionDeclaration') {
+                const nestedFunctionRec = nestedFunction as unknown as Record<string, unknown>;
+                const declName = getNodeName(isOxcNode(nestedFunctionRec.id) ? nestedFunctionRec.id : null);
 
                 if (declName !== null && !outerReadNames.has(declName)) {
                   continue;
@@ -198,18 +200,15 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
         } // end if (localIndexByName.size > 0)
       }
 
-      if (!isNodeRecord(node)) {
-        return;
-      }
-
-      const keys = Object.keys(node);
+      const nodeRec2 = node as unknown as Record<string, unknown>;
+      const keys = Object.keys(nodeRec2);
 
       for (const key of keys) {
         if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
           continue;
         }
 
-        const value = node[key];
+        const value = nodeRec2[key];
         const visitValue = isOxcNode(value) || Array.isArray(value) ? value : undefined;
 
         visit(visitValue);

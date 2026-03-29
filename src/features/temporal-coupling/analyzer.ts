@@ -11,7 +11,7 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
 import { EdgeType } from '../../engine/cfg/cfg-types';
-import { collectOxcNodes, getNodeName, isNodeRecord, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { collectOxcNodes, getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { normalizeFile } from '../../engine/ast/normalize-file';
 
 interface AnalyzeTemporalCouplingInput {
@@ -760,13 +760,13 @@ const isEarlyExit = (node: Node): boolean => {
 const isReaderSelfProtecting = (program: Node, readerName: string, stateName: string, isClassProp: boolean): boolean => {
   const funcNode = findFunctionBody(program, readerName);
 
-  if (funcNode === null || !isNodeRecord(funcNode)) {return false;}
+  if (funcNode === null) {return false;}
 
-  const funcBodyRaw = funcNode.body;
+  const funcBodyRaw = (funcNode as unknown as Record<string, unknown>).body;
 
   if (!isOxcNode(funcBodyRaw)) {return false;}
 
-  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find guard condition node IDs:
@@ -888,13 +888,13 @@ const verifyCallerOrderByCfg = (
 
     const funcNode = findFunctionBody(parsed.program, caller.srcSymbolName);
 
-    if (funcNode === null || !isNodeRecord(funcNode)) {return false;}
+    if (funcNode === null) {return false;}
 
-    const funcBodyRaw = funcNode.body;
+    const funcBodyRaw = (funcNode as unknown as Record<string, unknown>).body;
 
     if (!isOxcNode(funcBodyRaw)) {return false;}
 
-    const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+    const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw);
     const { cfg, entryId, nodePayloads } = built;
     const writerNodeIds = findCallNodeIds(nodePayloads, writerBareNames);
     const readerNodeIds = findCallNodeIds(nodePayloads, readerBareNames);
@@ -928,13 +928,13 @@ const verifyCallerOrderByCfg = (
 const isWriterReachable = (program: Node, writerName: string, stateName: string, isClassProp: boolean): boolean => {
   const funcNode = findFunctionBody(program, writerName);
 
-  if (funcNode === null || !isNodeRecord(funcNode)) {return false;}
+  if (funcNode === null) {return false;}
 
-  const funcBodyRaw = funcNode.body;
+  const funcBodyRaw = (funcNode as unknown as Record<string, unknown>).body;
 
   if (!isOxcNode(funcBodyRaw)) {return false;}
 
-  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find CFG node IDs that contain a write to stateName

@@ -12,14 +12,8 @@
 
 import type { Node } from 'oxc-parser';
 
-import type { NodeRecord } from '../../engine/types';
-
 import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
-import {
-  isNodeRecord,
-  isOxcNode,
-  isOxcNodeArray,
-} from '../../engine/ast/oxc-ast-utils';
+import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -65,14 +59,12 @@ export const extractStatementFingerprintBag = (
  * 중첩 함수는 하나의 statement(FunctionDeclaration 등)로 취급 — 내부 재귀 없음.
  */
 const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
-  if (!isNodeRecord(node)) {return [];}
-
-  const record = node as NodeRecord;
-  const type = record.type as string;
+  const rec = node as unknown as Record<string, unknown>;
+  const type = node.type;
 
   // MethodDefinition → value는 FunctionExpression
   if (type === 'MethodDefinition') {
-    const value = record.value;
+    const value = rec.value;
 
     if (isOxcNode(value)) {return getBodyStatements(value);}
 
@@ -85,17 +77,17 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
     type === 'FunctionExpression' ||
     type === 'ArrowFunctionExpression'
   ) {
-    const body = record.body;
+    const body = rec.body;
 
     if (!isOxcNode(body)) {return [];}
 
-    const bodyRecord = body as NodeRecord;
+    const bodyRec = body as unknown as Record<string, unknown>;
 
     // BlockStatement → .body 배열
-    if ((bodyRecord.type as string) === 'BlockStatement') {
-      const stmts = bodyRecord.body;
+    if (body.type === 'BlockStatement') {
+      const stmts = bodyRec.body;
 
-      if (isOxcNodeArray(stmts)) {return stmts;}
+      if (Array.isArray(stmts)) {return stmts as ReadonlyArray<Node>;}
 
       return [];
     }

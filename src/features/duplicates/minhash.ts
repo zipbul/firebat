@@ -169,7 +169,7 @@ const computeSignatureImpl = (
   for (const item of items) {
     for (let i = 0; i < k; i++) {
       // seed는 i (0 ~ k-1). Bun.hash.xxHash64 seed는 number 타입.
-      const h = BigInt.asUintN(64, Bun.hash.xxHash64(item, i));
+      const h = BigInt.asUintN(64, Bun.hash.xxHash64(item, BigInt(i)));
 
       if (h < sig[i]!) {
         sig[i] = h;

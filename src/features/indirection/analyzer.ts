@@ -4,7 +4,7 @@ import type { Node } from 'oxc-parser';
 import { GildashError, normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
-import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -12,7 +12,6 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import {
   getNodeHeader,
   isFunctionNode,
-  isNodeRecord,
   isOxcNode,
   walkOxcTree,
   walkOxcTreeWithParent,
@@ -89,11 +88,8 @@ const getCallFromStatement = (statement: Node): Node | null => {
 };
 
 const getParams = (node: Node): IndirectionParamsInfo | null => {
-  if (!isNodeRecord(node)) {
-    return null;
-  }
-
-  const paramsValue = node.params;
+  const rec = node as unknown as Record<string, unknown>;
+  const paramsValue = rec.params;
 
   if (!Array.isArray(paramsValue)) {
     return null;
@@ -117,8 +113,9 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
       const properties = paramNode.properties;
 
       for (const prop of properties) {
-        if (prop.type === 'Property' && isNodeRecord(prop)) {
-          const value = prop.value ?? prop.key;
+        if (prop.type === 'Property') {
+          const propRec = prop as unknown as Record<string, unknown>;
+          const value = (propRec.value ?? propRec.key) as Node | undefined;
 
           if (!isOxcNode(value) || value.type !== 'Identifier') {
             return null;
@@ -129,8 +126,9 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
           continue;
         }
 
-        if (prop.type === 'RestElement' && isNodeRecord(prop)) {
-          const argument = prop.argument;
+        if (prop.type === 'RestElement') {
+          const restRec = prop as unknown as Record<string, unknown>;
+          const argument = restRec.argument as Node;
 
           if (argument.type !== 'Identifier') {
             return null;
@@ -171,11 +169,8 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
 };
 
 const isPassthroughArgs = (callExpression: Node, params: readonly string[], restParam: string | null): boolean => {
-  if (!isNodeRecord(callExpression)) {
-    return false;
-  }
-
-  const args = callExpression.arguments;
+  const rec = callExpression as unknown as Record<string, unknown>;
+  const args = rec.arguments;
 
   if (!Array.isArray(args)) {
     return false;
@@ -227,11 +222,8 @@ const getWrapperCall = (node: Node): Node | null => {
     return null;
   }
 
-  if (!isNodeRecord(node)) {
-    return null;
-  }
-
-  const body = node.body;
+  const nodeRec = node as unknown as Record<string, unknown>;
+  const body = nodeRec.body;
 
   if (!isOxcNode(body)) {
     return null;
@@ -268,11 +260,8 @@ const getWrapperCall = (node: Node): Node | null => {
 };
 
 const resolveCalleeName = (callExpression: Node): string | null => {
-  if (!isNodeRecord(callExpression)) {
-    return null;
-  }
-
-  const callee = callExpression.callee;
+  const rec = callExpression as unknown as Record<string, unknown>;
+  const callee = rec.callee;
 
   if (!isOxcNode(callee)) {
     return null;
@@ -309,11 +298,8 @@ interface NamespaceCalleeRef {
 type SimpleCalleeRef = LocalCalleeRef | NamespaceCalleeRef;
 
 const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
-  if (!isNodeRecord(callExpression)) {
-    return null;
-  }
-
-  const callee = callExpression.callee;
+  const rec = callExpression as unknown as Record<string, unknown>;
+  const callee = rec.callee;
 
   if (!isOxcNode(callee)) {
     return null;
@@ -344,7 +330,7 @@ interface CollectedFunctionNames {
   readonly methodNodes: Set<Node>;
 }
 
-const collectFunctionNames = (program: NodeValue): CollectedFunctionNames => {
+const collectFunctionNames = (program: Node): CollectedFunctionNames => {
   const namesByNode = new Map<Node, string>();
   const methodNodes = new Set<Node>();
 

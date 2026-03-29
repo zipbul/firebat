@@ -4,6 +4,7 @@ import {
   collectFunctionNodes,
   collectFunctionNodesWithParent,
   collectOxcNodes,
+  forEachChildNode,
   getLiteralString,
   getNodeHeader,
   getNodeName,
@@ -12,7 +13,6 @@ import {
   isNodeRecord,
   isOxcNode,
   isOxcNodeArray,
-  visitOxcChildren,
   walkOxcTree,
 } from './oxc-ast-utils';
 import { parseSource } from './parse-source';
@@ -149,9 +149,6 @@ describe('walkOxcTree', () => {
     expect(types).not.toContain('ReturnStatement');
   });
 
-  it('[ED] handles non-OXC input gracefully', () => {
-    expect(() => walkOxcTree(null as never, () => true)).not.toThrow();
-  });
 });
 
 describe('collectOxcNodes', () => {
@@ -194,13 +191,37 @@ describe('collectFunctionNodesWithParent', () => {
   });
 });
 
-describe('visitOxcChildren', () => {
-  it('calls visitor for each child property', () => {
-    const nodes = collectOxcNodes(prog('const x = 1;'), n => n.type === 'VariableDeclaration');
-    const visited: unknown[] = [];
+describe('forEachChildNode', () => {
+  it('yields only Node children of IfStatement (test, consequent, alternate)', () => {
+    const nodes = collectOxcNodes(prog('if (true) { x; } else { y; }'), n => n.type === 'IfStatement');
+    const children: string[] = [];
 
-    visitOxcChildren(nodes[0]!, v => visited.push(v));
-    expect(visited.length).toBeGreaterThan(0);
+    forEachChildNode(nodes[0]!, child => children.push(child.type));
+    expect(children).toEqual(['Literal', 'BlockStatement', 'BlockStatement']);
+  });
+
+  it('yields array children (VariableDeclaration.declarations)', () => {
+    const nodes = collectOxcNodes(prog('const x = 1, y = 2;'), n => n.type === 'VariableDeclaration');
+    const children: string[] = [];
+
+    forEachChildNode(nodes[0]!, child => children.push(child.type));
+    expect(children).toEqual(['VariableDeclarator', 'VariableDeclarator']);
+  });
+
+  it('yields nothing for leaf nodes (Identifier)', () => {
+    const nodes = collectOxcNodes(prog('x;'), n => n.type === 'Identifier');
+    const children: string[] = [];
+
+    forEachChildNode(nodes[0]!, child => children.push(child.type));
+    expect(children).toEqual([]);
+  });
+
+  it('skips null children (IfStatement without alternate)', () => {
+    const nodes = collectOxcNodes(prog('if (true) { x; }'), n => n.type === 'IfStatement');
+    const children: string[] = [];
+
+    forEachChildNode(nodes[0]!, child => children.push(child.type));
+    expect(children).toEqual(['Literal', 'BlockStatement']);
   });
 });
 

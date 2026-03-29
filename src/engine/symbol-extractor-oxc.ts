@@ -1,10 +1,10 @@
 import type { Node } from 'oxc-parser';
 
 import type { SourceSpan } from '../types';
-import type { NodeValue, ParsedFile } from './types';
+import type { ParsedFile } from './types';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-import { getNodeHeader, isFunctionNode, isNodeRecord, isOxcNode } from './ast/oxc-ast-utils';
+import { forEachChildNode, getNodeHeader, isFunctionNode } from './ast/oxc-ast-utils';
 
 type ExtractedSymbolKind = 'function' | 'method' | 'class' | 'type' | 'interface' | 'enum';
 
@@ -13,10 +13,6 @@ interface ExtractedSymbol {
   readonly name: string;
   readonly span: SourceSpan;
   readonly isExported: boolean;
-}
-
-interface NodeWithInit {
-  readonly init?: NodeValue;
 }
 
 const getNodeSpan = (node: Node, sourceText: string): SourceSpan => {
@@ -32,20 +28,7 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
   const out: ExtractedSymbol[] = [];
   const { program, sourceText } = file;
 
-  const visit = (value: NodeValue, exported: boolean): void => {
-    if (Array.isArray(value)) {
-      for (const entry of value as ReadonlyArray<NodeValue>) {
-        visit(entry, exported);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(value)) {
-      return;
-    }
-
-    const node = value;
+  const visit = (node: Node, exported: boolean): void => {
     // Track export context for child declarations
     const isExportWrapper = node.type === 'ExportNamedDeclaration' || node.type === 'ExportDefaultDeclaration';
     const childExported = exported || isExportWrapper;
@@ -58,10 +41,10 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       }
     }
 
-    if (node.type === 'VariableDeclarator' && isNodeRecord(node)) {
-      const init = (node as NodeWithInit).init;
+    if (node.type === 'VariableDeclarator') {
+      const init = node.init;
 
-      if (isOxcNode(init) && isFunctionNode(init)) {
+      if (init !== undefined && init !== null && isFunctionNode(init as Node)) {
         const name = getNodeHeader(node);
 
         if (name !== 'anonymous') {
@@ -110,19 +93,9 @@ const extractSymbolsOxc = (file: ParsedFile): ReadonlyArray<ExtractedSymbol> => 
       }
     }
 
-    if (!isNodeRecord(node)) {
-      return;
-    }
-
-    const entries = Object.entries(node);
-
-    for (const [key, childValue] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(childValue, isExportWrapper);
-    }
+    forEachChildNode(node, child => {
+      visit(child, isExportWrapper);
+    });
   };
 
   visit(program, false);

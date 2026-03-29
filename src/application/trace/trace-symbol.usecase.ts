@@ -219,11 +219,11 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     try {
       const heritage = await gildash.getHeritageChain(input.symbol, entryFile);
 
-      if (heritage.bases && heritage.bases.length > 0) {
-        for (const base of heritage.bases) {
-          const baseNodeId = `type:${base.name}`;
+      if (heritage.children && heritage.children.length > 0) {
+        for (const base of heritage.children) {
+          const baseNodeId = `type:${base.symbolName}`;
 
-          addNode({ id: baseNodeId, kind: 'type', label: base.name });
+          addNode({ id: baseNodeId, kind: 'type', label: base.symbolName });
           addEdge({ from: symbolNodeId, to: baseNodeId, kind: 'type-of', label: 'extends' });
         }
       }

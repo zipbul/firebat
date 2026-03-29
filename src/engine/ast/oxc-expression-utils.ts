@@ -1,27 +1,24 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue } from '../types';
-
-import { isOxcNode } from './oxc-ast-utils';
-
-const unwrapExpression = (node: NodeValue): Node | null => {
-  let current = isOxcNode(node) ? node : null;
+const unwrapExpression = (node: Node | null | undefined): Node | null => {
+  let current: Node | null = node ?? null;
 
   while (current !== null) {
     const nodeType = current.type;
+    const rec = current as unknown as Record<string, unknown>;
 
     if (nodeType === 'ParenthesizedExpression') {
-      const expression = current.expression;
+      const expr = rec.expression;
 
-      current = isOxcNode(expression) ? expression : null;
+      current = expr !== null && expr !== undefined && typeof expr === 'object' && !Array.isArray(expr) ? (expr as Node) : null;
 
       continue;
     }
 
     if (nodeType === 'ChainExpression') {
-      const expression = current.expression;
+      const expr = rec.expression;
 
-      current = isOxcNode(expression) ? expression : null;
+      current = expr !== null && expr !== undefined && typeof expr === 'object' && !Array.isArray(expr) ? (expr as Node) : null;
 
       continue;
     }
@@ -32,7 +29,7 @@ const unwrapExpression = (node: NodeValue): Node | null => {
   return current;
 };
 
-const evalStaticTruthiness = (node: NodeValue): boolean | null => {
+const evalStaticTruthiness = (node: Node | null | undefined): boolean | null => {
   const unwrapped = unwrapExpression(node);
 
   if (unwrapped === null) {
@@ -74,7 +71,7 @@ const evalStaticTruthiness = (node: NodeValue): boolean | null => {
     }
 
     if (operator === '!') {
-      const inner = evalStaticTruthiness(argument);
+      const inner = evalStaticTruthiness(argument as Node | null);
 
       return inner === null ? null : !inner;
     }
@@ -87,7 +84,7 @@ const evalStaticTruthiness = (node: NodeValue): boolean | null => {
  * Returns the primitive literal value of a node if it can be determined statically,
  * or null if the value is dynamic or unknown. Unwraps parenthesized expressions.
  */
-const evalStaticLiteralValue = (node: NodeValue): string | number | boolean | bigint | null | undefined => {
+const evalStaticLiteralValue = (node: Node | null | undefined): string | number | boolean | bigint | null | undefined => {
   const unwrapped = unwrapExpression(node);
 
   if (unwrapped === null) {
@@ -116,7 +113,7 @@ const evalStaticLiteralValue = (node: NodeValue): string | number | boolean | bi
  * false if it is statically known to be non-nullish, or null if unknown.
  * This is distinct from truthiness: `false` is falsy but non-nullish.
  */
-const evalStaticNullish = (node: NodeValue): boolean | null => {
+const evalStaticNullish = (node: Node | null | undefined): boolean | null => {
   const unwrapped = unwrapExpression(node);
 
   if (unwrapped === null) {

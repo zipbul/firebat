@@ -5,7 +5,7 @@ import type { SourceSpan } from '../../types';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
-import { isNodeRecord, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 
 type NodeLike = Record<string, unknown>;
 
@@ -363,18 +363,14 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
       });
     };
 
-    walkOxcTree(file.program as Node, (node: Node) => {
-      if (!isNodeRecord(node)) {
-        return true;
-      }
-
+    walkOxcTree(file.program, (node: Node) => {
       // Collect function/arrow body ranges as scopes
       if (
         node.type === 'FunctionDeclaration' ||
         node.type === 'FunctionExpression' ||
         node.type === 'ArrowFunctionExpression'
       ) {
-        const body = asNodeLike(asNodeLike(node)?.body);
+        const body = asNodeLike((node as unknown as Record<string, unknown>).body);
 
         if (body && typeof body.start === 'number' && typeof body.end === 'number') {
           scopes.push({ start: body.start, end: body.end });
@@ -490,9 +486,7 @@ const collectExpressionCandidates = (input: CollectBindingCandidatesInput): Read
   for (const file of input.program) {
     const candidates: ExpressionCandidate[] = [];
 
-    walkOxcTree(file.program as Node, (node: Node) => {
-      if (!isNodeRecord(node)) {return true;}
-
+    walkOxcTree(file.program, (node: Node) => {
       if (node.type !== 'TSAsExpression' && node.type !== 'TSTypeAssertion') {return true;}
 
       const nodeRecord = asNodeLike(node);

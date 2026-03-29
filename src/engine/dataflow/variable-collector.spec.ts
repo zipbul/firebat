@@ -1,40 +1,38 @@
+import type { Node } from 'oxc-parser';
+
 import { describe, expect, it } from 'bun:test';
 
-import type { NodeValue, VariableUsage } from '../types';
+import type { VariableUsage } from '../types';
 
-import { isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
+import { isOxcNode } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
 import { collectVariables } from './variable-collector';
 
-const getFunctionBodyStatement = (sourceText: string, statementIndex: number): NodeValue => {
+const getFunctionBodyStatement = (sourceText: string, statementIndex: number): Node => {
   const parsed = parseSource('/virtual/variable-collector.spec.ts', sourceText);
   const program = parsed.program;
 
-  if (!isOxcNode(program)) {
-    throw new Error('Expected program node');
-  }
+  const body = Array.isArray(program.body) ? (program.body as ReadonlyArray<Node>) : [];
 
-  const body = program.body;
-
-  if (!isOxcNodeArray(body) || body.length === 0) {
+  if (body.length === 0) {
     throw new Error('Expected program body array');
   }
 
   const functionDecl = body[0];
 
-  if (!isOxcNode(functionDecl)) {
+  if (functionDecl === undefined) {
     throw new Error('Expected function decl node');
   }
 
-  const functionBody = isOxcNode(functionDecl) && 'body' in functionDecl ? functionDecl.body : undefined;
+  const functionBody = 'body' in functionDecl ? (functionDecl.body as Node | undefined) : undefined;
 
   if (!isOxcNode(functionBody)) {
     throw new Error('Expected function body');
   }
 
-  const statements = isOxcNode(functionBody) && 'body' in functionBody ? functionBody.body : undefined;
+  const statements = Array.isArray(functionBody.body) ? (functionBody.body as ReadonlyArray<Node>) : [];
 
-  if (!isOxcNodeArray(statements) || statements.length === 0) {
+  if (statements.length === 0) {
     throw new Error('Expected function body statements');
   }
 

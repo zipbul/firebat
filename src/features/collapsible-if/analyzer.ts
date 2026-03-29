@@ -1,6 +1,6 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { ParsedFile } from '../../engine/types';
 import type { CollapsibleIfItem, SourceSpan } from '../../types';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -8,14 +8,7 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
-import {
-  getNodeHeader,
-  isFunctionNode,
-  isNodeRecord,
-  isOxcNode,
-  isOxcNodeArray,
-  visitOxcChildren,
-} from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 
 const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
   const offsets = buildLineOffsets(sourceText);
@@ -31,17 +24,9 @@ const createEmptyCollapsibleIf = (): ReadonlyArray<CollapsibleIfItem> => [];
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /** Count statements in a block or treat a single statement as 1. */
-const countBlockStatements = (node: NodeValue): number => {
-  if (!isOxcNode(node)) {
-    return 0;
-  }
-
+const countBlockStatements = (node: Node): number => {
   if (node.type !== 'BlockStatement') {
     return 1;
-  }
-
-  if (!isNodeRecord(node)) {
-    return 0;
   }
 
   const body = node.body;
@@ -49,7 +34,7 @@ const countBlockStatements = (node: NodeValue): number => {
   return Array.isArray(body) ? body.length : 0;
 };
 
-// ── Detection ───────────────────────────────────────────────────────
+// ── Detection ────────��──────────────────────────────────────────────
 
 interface Opportunity {
   kind: 'collapsible-if' | 'collapsible-else-if';
@@ -65,28 +50,20 @@ const MIN_INNER_STMTS = 3;
  * where outer if has no else, its body is exactly 1 statement (inner if),
  * and inner if has no else with 3+ statements in its consequent.
  */
-const detectCollapsibleIf = (ifNode: NodeValue, sourceText: string): Opportunity | null => {
-  if (!isOxcNode(ifNode) || ifNode.type !== 'IfStatement') {
-    return null;
-  }
-
-  if (!isNodeRecord(ifNode)) {
+const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | null => {
+  if (ifNode.type !== 'IfStatement') {
     return null;
   }
 
   // Outer if must have no else
-  if (ifNode.alternate !== null && ifNode.alternate !== undefined) {
+  if (ifNode.alternate !== null) {
     return null;
   }
 
-  const outerConsequent = ifNode.consequent as NodeValue;
+  const outerConsequent = ifNode.consequent;
 
   // Outer consequent must be a block with exactly 1 statement
-  if (!isOxcNode(outerConsequent) || outerConsequent.type !== 'BlockStatement') {
-    return null;
-  }
-
-  if (!isNodeRecord(outerConsequent)) {
+  if (outerConsequent.type !== 'BlockStatement') {
     return null;
   }
 
@@ -96,34 +73,27 @@ const detectCollapsibleIf = (ifNode: NodeValue, sourceText: string): Opportunity
     return null;
   }
 
-  const innerStmt = outerBody[0] as NodeValue;
+  const innerStmt = outerBody[0] as Node;
 
   // Inner statement must be an IfStatement with no else
-  if (!isOxcNode(innerStmt) || innerStmt.type !== 'IfStatement') {
+  if (innerStmt.type !== 'IfStatement') {
     return null;
   }
 
-  if (!isNodeRecord(innerStmt)) {
-    return null;
-  }
-
-  if (innerStmt.alternate !== null && innerStmt.alternate !== undefined) {
+  if (innerStmt.alternate !== null) {
     return null;
   }
 
   // Inner consequent must have 3+ statements
-  const innerConsequent = innerStmt.consequent as NodeValue;
-  const innerCount = countBlockStatements(innerConsequent);
+  const innerCount = countBlockStatements(innerStmt.consequent as Node);
 
   if (innerCount < MIN_INNER_STMTS) {
     return null;
   }
 
-  const node = ifNode as Node;
-
   return {
     kind: 'collapsible-if',
-    span: nodeSpan(node, sourceText),
+    span: nodeSpan(ifNode, sourceText),
     depthReduction: 1,
     statementsAffected: innerCount,
   };
@@ -134,28 +104,20 @@ const detectCollapsibleIf = (ifNode: NodeValue, sourceText: string): Opportunity
  * where else block has exactly 1 statement which is an IfStatement.
  * Can be simplified to `if(a) { ... } else if(b) { ... }`.
  */
-const detectCollapsibleElseIf = (ifNode: NodeValue, sourceText: string): Opportunity | null => {
-  if (!isOxcNode(ifNode) || ifNode.type !== 'IfStatement') {
-    return null;
-  }
-
-  if (!isNodeRecord(ifNode)) {
+const detectCollapsibleElseIf = (ifNode: Node, sourceText: string): Opportunity | null => {
+  if (ifNode.type !== 'IfStatement') {
     return null;
   }
 
   // Must have an alternate (else)
-  const alternate = ifNode.alternate as NodeValue;
+  const alternate = ifNode.alternate;
 
-  if (alternate === null || alternate === undefined) {
+  if (alternate === null) {
     return null;
   }
 
   // Alternate must be a BlockStatement
-  if (!isOxcNode(alternate) || alternate.type !== 'BlockStatement') {
-    return null;
-  }
-
-  if (!isNodeRecord(alternate)) {
+  if (alternate.type !== 'BlockStatement') {
     return null;
   }
 
@@ -166,18 +128,18 @@ const detectCollapsibleElseIf = (ifNode: NodeValue, sourceText: string): Opportu
     return null;
   }
 
-  const innerStmt = elseBody[0] as NodeValue;
+  const innerStmt = elseBody[0] as Node;
 
   // That statement must be an IfStatement (inner if may have else — matches Clippy behavior)
-  if (!isOxcNode(innerStmt) || innerStmt.type !== 'IfStatement') {
+  if (innerStmt.type !== 'IfStatement') {
     return null;
   }
 
   // Count total statements across inner if's branches (consequent + alternate if present)
-  let innerTotal = countBlockStatements(innerStmt.consequent as NodeValue);
+  let innerTotal = countBlockStatements(innerStmt.consequent as Node);
 
-  if (isNodeRecord(innerStmt) && innerStmt.alternate != null) {
-    innerTotal += countBlockStatements(innerStmt.alternate as NodeValue);
+  if (innerStmt.alternate !== null) {
+    innerTotal += countBlockStatements(innerStmt.alternate as Node);
   }
 
   // Empty inner if (e.g. `if(b) {}`) has no statements to benefit from collapsing
@@ -186,17 +148,16 @@ const detectCollapsibleElseIf = (ifNode: NodeValue, sourceText: string): Opportu
   }
 
   const statementsAffected = Math.max(innerTotal, MIN_INNER_STMTS);
-  const node = ifNode as Node;
 
   return {
     kind: 'collapsible-else-if',
-    span: nodeSpan(node, sourceText),
+    span: nodeSpan(ifNode, sourceText),
     depthReduction: 1,
     statementsAffected,
   };
 };
 
-// ── Function-level analysis ─────────────────────────────────────────
+// ── Function-level analysis ──────���──────────────────────────────────
 
 const analyzeFunctionNode = (
   functionNode: Node,
@@ -213,25 +174,13 @@ const analyzeFunctionNode = (
   let maxDepth = 0;
   const opportunities: Opportunity[] = [];
 
-  const visit = (value: NodeValue, depth: number): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry, depth);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(value)) {
-      return;
-    }
-
+  const visit = (node: Node, depth: number): void => {
     // Respect function boundaries
-    if (value !== functionNode && isFunctionNode(value)) {
+    if (node !== functionNode && isFunctionNode(node)) {
       return;
     }
 
-    const nodeType = value.type;
+    const nodeType = node.type;
     const nextDepth = shouldIncreaseDepth(nodeType) ? depth + 1 : depth;
 
     if (nextDepth > maxDepth) {
@@ -240,23 +189,19 @@ const analyzeFunctionNode = (
 
     // Check for collapsible-if / collapsible-else-if at each IfStatement
     if (nodeType === 'IfStatement') {
-      const opportunity = detectCollapsibleIf(value, sourceText) ?? detectCollapsibleElseIf(value, sourceText);
+      const opportunity = detectCollapsibleIf(node, sourceText) ?? detectCollapsibleElseIf(node, sourceText);
 
       if (opportunity !== null) {
         opportunities.push(opportunity);
       }
     }
 
-    if (!isNodeRecord(value)) {
-      return;
-    }
-
-    visitOxcChildren(value, entry => {
-      visit(entry, nextDepth);
+    forEachChildNode(node, child => {
+      visit(child, nextDepth);
     });
   };
 
-  visit(bodyValue as NodeValue, 0);
+  visit(bodyValue as Node, 0);
 
   if (opportunities.length === 0) {
     return null;

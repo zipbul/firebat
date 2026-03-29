@@ -4,7 +4,7 @@ import type { BitSet, DefMeta, FunctionBodyAnalysis } from '../types';
 
 import { OxcCFGBuilder } from '../cfg/cfg-builder';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
-import { getNodeName, getNodeType, isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
+import { getNodeName, isOxcNode } from '../ast/oxc-ast-utils';
 import { collectVariables } from './variable-collector';
 
 export interface BindingName {
@@ -13,9 +13,7 @@ export interface BindingName {
 }
 
 export const extractBindingNames = (node: Node, out: BindingName[]): void => {
-  const nodeType = getNodeType(node);
-
-  if (nodeType === 'Identifier') {
+  if (node.type === 'Identifier') {
     const name = getNodeName(node);
 
     if (name !== null) {
@@ -25,29 +23,26 @@ export const extractBindingNames = (node: Node, out: BindingName[]): void => {
     return;
   }
 
-  if (nodeType === 'ObjectPattern' && isNodeRecord(node)) {
+  if (node.type === 'ObjectPattern') {
     const properties = node.properties;
 
     if (!Array.isArray(properties)) {
       return;
     }
 
-    for (const prop of properties) {
-      if (!isOxcNode(prop)) {
-        continue;
-      }
+    for (const prop of properties as ReadonlyArray<Node>) {
+      if (prop.type === 'Property') {
+        const rec = prop as unknown as Record<string, unknown>;
+        const value = (rec.value ?? rec.key) as Node | undefined;
 
-      if (getNodeType(prop) === 'Property' && isNodeRecord(prop)) {
-        const value = prop.value ?? prop.key;
-
-        if (isOxcNode(value)) {
+        if (value !== undefined) {
           extractBindingNames(value, out);
         }
 
         continue;
       }
 
-      if (getNodeType(prop) === 'RestElement' && isNodeRecord(prop)) {
+      if (prop.type === 'RestElement') {
         const argument = prop.argument;
 
         if (isOxcNode(argument)) {
@@ -59,7 +54,7 @@ export const extractBindingNames = (node: Node, out: BindingName[]): void => {
     return;
   }
 
-  if (nodeType === 'ArrayPattern' && isNodeRecord(node)) {
+  if (node.type === 'ArrayPattern') {
     const elements = node.elements;
 
     if (!Array.isArray(elements)) {
@@ -75,17 +70,17 @@ export const extractBindingNames = (node: Node, out: BindingName[]): void => {
     return;
   }
 
-  if (nodeType === 'AssignmentPattern' && isNodeRecord(node)) {
+  if (node.type === 'AssignmentPattern') {
     const left = node.left;
 
     if (isOxcNode(left)) {
-      extractBindingNames(left, out);
+      extractBindingNames(left as Node, out);
     }
 
     return;
   }
 
-  if (nodeType === 'RestElement' && isNodeRecord(node)) {
+  if (node.type === 'RestElement') {
     const argument = node.argument;
 
     if (isOxcNode(argument)) {
@@ -96,14 +91,10 @@ export const extractBindingNames = (node: Node, out: BindingName[]): void => {
 
 export const collectParameterBindings = (functionNode: Node): ReadonlyArray<BindingName> => {
   const bindings: BindingName[] = [];
-  const paramsValue = isNodeRecord(functionNode) ? functionNode.params : undefined;
-  const params = isOxcNodeArray(paramsValue) ? paramsValue : [];
+  const paramsRaw = (functionNode as unknown as Record<string, unknown>).params;
+  const params = Array.isArray(paramsRaw) ? (paramsRaw as ReadonlyArray<Node>) : [];
 
   for (const param of params) {
-    if (!isOxcNode(param)) {
-      continue;
-    }
-
     extractBindingNames(param, bindings);
   }
 
@@ -118,8 +109,9 @@ export const collectLocalVarIndexes = (functionNode: Node): Map<string, number> 
     names.add(binding.name);
   }
 
-  const bodyNode = isNodeRecord(functionNode) ? functionNode.body : undefined;
-  const bodyUsages = collectVariables(bodyNode, { includeNestedFunctions: false });
+  const bodyRaw = (functionNode as unknown as Record<string, unknown>).body;
+  const bodyNode = isOxcNode(bodyRaw) ? bodyRaw : null;
+  const bodyUsages = bodyNode !== null ? collectVariables(bodyNode, { includeNestedFunctions: false }) : [];
 
   for (const usage of bodyUsages) {
     if (usage.isWrite && usage.writeKind === 'declaration') {
@@ -190,7 +182,9 @@ export const analyzeFunctionBody = (
       continue;
     }
 
-    const usages = collectVariables(payload, { includeNestedFunctions: false });
+    const usages = Array.isArray(payload)
+      ? payload.flatMap(p => collectVariables(p, { includeNestedFunctions: false }))
+      : collectVariables(payload as Node, { includeNestedFunctions: false });
     const useIndexes = new Set<number>();
     const writeIndexes = new Set<number>();
 

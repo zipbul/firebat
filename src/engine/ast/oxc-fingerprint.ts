@@ -1,27 +1,14 @@
 import type { Node } from 'oxc-parser';
-
-import type { NodeRecord, NodeValue, NodeWithValue } from '../types';
+import { visitorKeys } from 'oxc-parser';
 
 import { hashString } from '../hasher';
+import { isOxcNode } from './oxc-ast-utils';
 import { normalizeForFingerprint } from './ast-normalizer';
 
-const isOxcNode = (value: NodeValue): value is Node =>
-  typeof value === 'object' && value !== null && !Array.isArray(value) && 'type' in value && typeof value.type === 'string';
-
-const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<NodeValue> => {
-  if (!Array.isArray(value)) {
-    return false;
-  }
-
-  return true;
-};
-
-const isNodeRecord = (node: Node): node is NodeRecord => typeof node === 'object' && node !== null;
-
-const isLiteralNode = (node: Node): node is NodeWithValue => node.type === 'Literal' && 'value' in node;
+const isLiteralWithValue = (node: Node): boolean => node.type === 'Literal' && 'value' in node;
 
 const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boolean): void => {
-  if (!isLiteralNode(node)) {
+  if (!isLiteralWithValue(node)) {
     return;
   }
 
@@ -31,7 +18,7 @@ const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boo
     return;
   }
 
-  const value = node.value;
+  const value = (node as unknown as { value: unknown }).value;
 
   if (typeof value === 'string') {
     diffs.push(`string:${value}`);
@@ -61,11 +48,6 @@ const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boo
     diffs.push('null');
   }
 };
-
-// Oxc AST structure needs normalization for fingerprinting.
-// We traverse the AST and build a string representation of semantics.
-// Ignore names, locations, comments.
-// Focus on structure: types, operators, literals (optional, maybe normalized).
 
 interface OxcFingerprintOptions {
   readonly includeLiteralValues: boolean;
@@ -103,22 +85,10 @@ const escapeFingerprintToken = (token: string): string => {
   return token.replace(/\x00/g, '\\0');
 };
 
-const createOxcFingerprintCore = (node: NodeValue, options: OxcFingerprintOptions): string => {
+const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): string => {
   const diffs: string[] = [];
 
-  const visit = (n: NodeValue) => {
-    if (isOxcNodeArray(n)) {
-      for (const child of n) {
-        visit(child);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(n)) {
-      return;
-    }
-
+  const visit = (n: Node) => {
     // push Type
     if (n.type.length > 0) {
       diffs.push(n.type);
@@ -126,53 +96,51 @@ const createOxcFingerprintCore = (node: NodeValue, options: OxcFingerprintOption
 
     pushLiteralValue(n, diffs, options.includeLiteralValues);
 
-    // push specific semantic properties
-    // e.g. Operator for BinaryExpression
-    if (isNodeRecord(n)) {
-      const operatorValue = n.operator;
+    // push operator (scalar property, not in visitorKeys)
+    const rec = n as unknown as Record<string, unknown>;
+    const operatorValue = rec.operator;
 
-      if (typeof operatorValue === 'string' && operatorValue.length > 0) {
-        diffs.push(operatorValue);
+    if (typeof operatorValue === 'string' && operatorValue.length > 0) {
+      diffs.push(operatorValue);
+    }
+
+    // Identifier name handling
+    if (n.type === 'Identifier') {
+      if (options.includeIdentifierNames) {
+        const nameValue = rec.name;
+        const resolved = typeof nameValue === 'string' ? nameValue : '';
+
+        diffs.push(`id:${resolved}`);
+      } else {
+        diffs.push('$ID');
       }
     }
 
-    // Recursively visit children
-    // Using specific known keys for Oxc nodes to avoid noise would be better,
-    // but generic traversal is safer for completeness unless we map *every* node type.
-    // For 'Physical Limit', we might want a optimized traverser.
-    // Let's stick to generic for now, optimizing later if profiled.
+    // Visit child nodes via visitorKeys (sorted for deterministic fingerprints)
+    const keys = visitorKeys[n.type];
 
-    if (!isNodeRecord(n)) {
+    if (keys === undefined) {
       return;
     }
 
-    const entries = Object.entries(n).sort((left, right) => left[0].localeCompare(right[0]));
+    const sortedKeys = [...keys].sort();
 
-    for (const [key, value] of entries) {
-      if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'span' || key === 'comments') {
-        continue;
-      }
-
+    for (const key of sortedKeys) {
       if (options.ignoredKeys?.has(key)) {
         continue;
       }
 
-      // Identifier name 처리: includeIdentifierNames 옵션으로 제어
-      // exact fingerprint → 이름 포함, shape fingerprint → 이름 제외
-      if (key === 'name' && n.type === 'Identifier') {
-        if (options.includeIdentifierNames) {
-          const nameValue = (n as unknown as { name?: unknown }).name;
-          const resolved = typeof nameValue === 'string' ? nameValue : '';
+      const value = rec[key];
 
-          diffs.push(`id:${resolved}`);
-        } else {
-          diffs.push('$ID');
+      if (isOxcNode(value)) {
+        visit(value);
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isOxcNode(item)) {
+            visit(item);
+          }
         }
-
-        continue;
       }
-
-      visit(value);
     }
   };
 
@@ -183,19 +151,19 @@ const createOxcFingerprintCore = (node: NodeValue, options: OxcFingerprintOption
   return hashString(encoded);
 };
 
-export const createOxcFingerprintExact = (node: NodeValue): string =>
+export const createOxcFingerprintExact = (node: Node): string =>
   createOxcFingerprintCore(node, { includeLiteralValues: true, includeIdentifierNames: true });
 
-export const createOxcFingerprint = (node: NodeValue): string =>
+export const createOxcFingerprint = (node: Node): string =>
   createOxcFingerprintCore(node, { includeLiteralValues: true, includeIdentifierNames: false });
 
-export const createOxcFingerprintShape = (node: NodeValue): string =>
+export const createOxcFingerprintShape = (node: Node): string =>
   createOxcFingerprintCore(node, { includeLiteralValues: false, includeIdentifierNames: false });
 
-export const createOxcFingerprintNormalized = (node: NodeValue): string => {
+export const createOxcFingerprintNormalized = (node: Node): string => {
   const normalized = normalizeForFingerprint(node);
 
-  return createOxcFingerprintCore(normalized, {
+  return createOxcFingerprintCore(normalized as Node, {
     includeLiteralValues: false,
     includeIdentifierNames: false,
     ignoredKeys: NORMALIZED_IGNORED_KEYS,

@@ -1,6 +1,6 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { ParsedFile } from '../../engine/types';
 import type { EarlyReturnItem, EarlyReturnKind, SourceSpan } from '../../types';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -8,14 +8,7 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
-import {
-  getNodeHeader,
-  isFunctionNode,
-  isNodeRecord,
-  isOxcNode,
-  isOxcNodeArray,
-  visitOxcChildren,
-} from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 
 const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
   const offsets = buildLineOffsets(sourceText);
@@ -30,106 +23,12 @@ const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 
 // ── Reused helpers ──────────────────────────────────────────────────
 
-export const isExitStatement = (value: NodeValue): boolean => {
-  if (!isOxcNode(value)) {
-    return false;
-  }
-
-  return value.type === 'ReturnStatement' || value.type === 'ThrowStatement';
+export const isExitStatement = (node: Node): boolean => {
+  return node.type === 'ReturnStatement' || node.type === 'ThrowStatement';
 };
 
 /** Check if the last statement of a block (or a bare statement) is an exit (return/throw). Multi-statement blocks allowed. */
-export const isExitBlock = (value: NodeValue): boolean => {
-  if (!isOxcNode(value)) {
-    return false;
-  }
-
-  if (value.type === 'ReturnStatement' || value.type === 'ThrowStatement') {
-    return true;
-  }
-
-  if (value.type !== 'BlockStatement') {
-    return false;
-  }
-
-  const body = value.body;
-
-  if (!Array.isArray(body) || body.length === 0) {
-    return false;
-  }
-
-  const last = body[body.length - 1];
-
-  return isExitStatement(last as NodeValue);
-};
-
-/** Check if the last statement of a block is a loop-control (continue/break) or exit (return/throw). */
-export const isLoopGuardBlock = (value: NodeValue): boolean => {
-  if (!isOxcNode(value)) {
-    return false;
-  }
-
-  if (
-    value.type === 'ContinueStatement' ||
-    value.type === 'BreakStatement' ||
-    value.type === 'ReturnStatement' ||
-    value.type === 'ThrowStatement'
-  ) {
-    return true;
-  }
-
-  if (value.type !== 'BlockStatement') {
-    return false;
-  }
-
-  const body = value.body;
-
-  if (!Array.isArray(body) || body.length === 0) {
-    return false;
-  }
-
-  const last = body[body.length - 1];
-
-  if (!isOxcNode(last)) {
-    return false;
-  }
-
-  return (
-    last.type === 'ContinueStatement' ||
-    last.type === 'BreakStatement' ||
-    last.type === 'ReturnStatement' ||
-    last.type === 'ThrowStatement'
-  );
-};
-
-export const countStatements = (node: NodeValue): number => {
-  if (!isOxcNode(node)) {
-    return 0;
-  }
-
-  if (node.type !== 'BlockStatement') {
-    // For else-if chains: when alternate is an IfStatement, recursively
-    // count all statements across the entire chain to get a true total.
-    if (node.type === 'IfStatement') {
-      const consequentCount = countStatements(node.consequent as NodeValue);
-      const alternateCount = node.alternate != null ? countStatements(node.alternate as NodeValue) : 0;
-
-      return consequentCount + alternateCount;
-    }
-
-    return 1;
-  }
-
-  const body = node.body;
-
-  return Array.isArray(body) ? body.length : 0;
-};
-
-export const endsWithReturnOrThrow = (node: NodeValue): boolean => {
-  if (!isOxcNode(node)) {
-    return false;
-  }
-
+export const isExitBlock = (node: Node): boolean => {
   if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
     return true;
   }
@@ -144,36 +43,98 @@ export const endsWithReturnOrThrow = (node: NodeValue): boolean => {
     return false;
   }
 
-  const last = body[body.length - 1];
+  const last = body[body.length - 1] as Node;
 
-  return isExitStatement(last as NodeValue);
+  return isExitStatement(last);
 };
 
-/** Check if the last statement of a block is a continue or break. */
-const endsWithLoopExit = (value: NodeValue): boolean => {
-  if (!isOxcNode(value)) {
-    return false;
-  }
-
-  if (value.type === 'ContinueStatement' || value.type === 'BreakStatement') {
+/** Check if the last statement of a block is a loop-control (continue/break) or exit (return/throw). */
+export const isLoopGuardBlock = (node: Node): boolean => {
+  if (
+    node.type === 'ContinueStatement' ||
+    node.type === 'BreakStatement' ||
+    node.type === 'ReturnStatement' ||
+    node.type === 'ThrowStatement'
+  ) {
     return true;
   }
 
-  if (value.type !== 'BlockStatement') {
+  if (node.type !== 'BlockStatement') {
     return false;
   }
 
-  const body = value.body;
+  const body = node.body;
 
   if (!Array.isArray(body) || body.length === 0) {
     return false;
   }
 
-  const last = body[body.length - 1];
+  const last = body[body.length - 1] as Node;
 
-  if (!isOxcNode(last)) {
+  return (
+    last.type === 'ContinueStatement' ||
+    last.type === 'BreakStatement' ||
+    last.type === 'ReturnStatement' ||
+    last.type === 'ThrowStatement'
+  );
+};
+
+export const countStatements = (node: Node): number => {
+  if (node.type !== 'BlockStatement') {
+    // For else-if chains: when alternate is an IfStatement, recursively
+    // count all statements across the entire chain to get a true total.
+    if (node.type === 'IfStatement') {
+      const consequentCount = countStatements(node.consequent as Node);
+      const alternateCount = node.alternate !== null ? countStatements(node.alternate as Node) : 0;
+
+      return consequentCount + alternateCount;
+    }
+
+    return 1;
+  }
+
+  const body = node.body;
+
+  return Array.isArray(body) ? body.length : 0;
+};
+
+export const endsWithReturnOrThrow = (node: Node): boolean => {
+  if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
+    return true;
+  }
+
+  if (node.type !== 'BlockStatement') {
     return false;
   }
+
+  const body = node.body;
+
+  if (!Array.isArray(body) || body.length === 0) {
+    return false;
+  }
+
+  const last = body[body.length - 1] as Node;
+
+  return isExitStatement(last);
+};
+
+/** Check if the last statement of a block is a continue or break. */
+const endsWithLoopExit = (node: Node): boolean => {
+  if (node.type === 'ContinueStatement' || node.type === 'BreakStatement') {
+    return true;
+  }
+
+  if (node.type !== 'BlockStatement') {
+    return false;
+  }
+
+  const body = node.body;
+
+  if (!Array.isArray(body) || body.length === 0) {
+    return false;
+  }
+
+  const last = body[body.length - 1] as Node;
 
   return last.type === 'ContinueStatement' || last.type === 'BreakStatement';
 };
@@ -201,7 +162,7 @@ const isLoopNodeType = (nodeType: string): boolean => {
 
 // ── Consecutive trailing-if detection ────────────────────────────────
 
-export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<NodeValue>): number => {
+export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<Node>): number => {
   let count = 0;
   let startIdx = stmts.length - 1;
 
@@ -213,7 +174,7 @@ export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<NodeValue>): nu
   for (let i = startIdx; i >= 0; i--) {
     const stmt = stmts[i]!;
 
-    if (isOxcNode(stmt) && stmt.type === 'IfStatement' && stmt.alternate == null) {
+    if (stmt.type === 'IfStatement' && stmt.alternate == null) {
       count += 1;
     } else {
       break;
@@ -226,12 +187,8 @@ export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<NodeValue>): nu
 // ── Wrapping-if detection ───────────────────────────────────────────
 
 /** Count statements in the consequent block of an if statement */
-const countConsequentStatements = (ifNode: NodeValue): number => {
-  if (!isNodeRecord(ifNode)) {
-    return 0;
-  }
-
-  return countStatements(ifNode.consequent as NodeValue);
+const countConsequentStatements = (ifNode: Node): number => {
+  return countStatements((ifNode as unknown as Record<string, unknown>).consequent as Node);
 };
 
 /**
@@ -239,41 +196,35 @@ const countConsequentStatements = (ifNode: NodeValue): number => {
  * whose consequent has 2+ statements. Inverting + early exit reduces nesting by 1.
  */
 const detectWrappingIf = (
-  bodyStatements: ReadonlyArray<NodeValue>,
+  bodyStatements: ReadonlyArray<Node>,
   sourceText: string,
 ): Opportunity | null => {
   if (bodyStatements.length === 0) {
     return null;
   }
 
-  const last = bodyStatements[bodyStatements.length - 1];
+  const last = bodyStatements[bodyStatements.length - 1]!;
 
-  if (!isOxcNode(last) || last.type !== 'IfStatement') {
+  if (last.type !== 'IfStatement') {
     return null;
   }
 
   const alternateValue = last.alternate;
 
   // alternate must be absent (pure wrapping-if)
-  if (alternateValue !== null && alternateValue !== undefined) {
+  if (alternateValue !== null) {
     return null;
   }
 
-  const stmtCount = countConsequentStatements(last as NodeValue);
+  const stmtCount = countConsequentStatements(last);
 
   if (stmtCount < 2) {
     return null;
   }
 
-  const ifNode = last as Node;
-
-  // Verify that an exit is possible: for loop body → continue, for function body → return/throw
-  // We don't check the exit type here — the pattern is valid as long as the block scope allows an exit
-  // insideLoop is only used to determine what exit would be used, not to gatekeep detection
-
   return {
     kind: 'wrapping-if',
-    span: nodeSpan(ifNode, sourceText),
+    span: nodeSpan(last, sourceText),
     depthReduction: 1,
     statementsAffected: stmtCount,
   };
@@ -287,7 +238,7 @@ const detectWrappingIf = (
  * Inverting the condition turns the tail into a guard clause and unindents the consequent.
  */
 const detectImplicitElse = (
-  bodyStatements: ReadonlyArray<NodeValue>,
+  bodyStatements: ReadonlyArray<Node>,
   insideLoop: boolean,
   sourceText: string,
 ): ReadonlyArray<Opportunity> => {
@@ -300,16 +251,16 @@ const detectImplicitElse = (
   for (let i = 0; i < bodyStatements.length; i++) {
     const stmt = bodyStatements[i]!;
 
-    if (!isOxcNode(stmt) || stmt.type !== 'IfStatement') {
+    if (stmt.type !== 'IfStatement') {
       continue;
     }
 
     // Must have no alternate (no else)
-    if (stmt.alternate !== null && stmt.alternate !== undefined) {
+    if (stmt.alternate !== null) {
       continue;
     }
 
-    const consequent = stmt.consequent as NodeValue;
+    const consequent = stmt.consequent as Node;
     // Consequent must end with exit (return/throw) or loop-exit (continue/break)
     const exits = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
 
@@ -338,16 +289,14 @@ const detectImplicitElse = (
     if (!insideLoop) {
       const lastRemaining = bodyStatements[bodyStatements.length - 1]!;
 
-      if (!isExitStatement(lastRemaining as NodeValue)) {
+      if (!isExitStatement(lastRemaining)) {
         continue;
       }
     }
 
-    const ifNode = stmt as Node;
-
     results.push({
       kind: 'implicit-else',
-      span: nodeSpan(ifNode, sourceText),
+      span: nodeSpan(stmt, sourceText),
       depthReduction: 1,
       statementsAffected: consequentCount,
     });
@@ -363,26 +312,26 @@ const detectImplicitElse = (
  * so the chain can be flattened to sequential guards.
  */
 const detectCascadeGuard = (
-  ifNode: NodeValue,
+  ifNode: Node,
   insideLoop: boolean,
   sourceText: string,
 ): Opportunity | null => {
-  if (!isOxcNode(ifNode) || ifNode.type !== 'IfStatement') {
+  if (ifNode.type !== 'IfStatement') {
     return null;
   }
 
   // Must have an alternate to be a chain
-  if (ifNode.alternate === null || ifNode.alternate === undefined) {
+  if (ifNode.alternate === null) {
     return null;
   }
 
   let chainLength = 0;
   let singleExitCount = 0;
-  let current: NodeValue = ifNode;
+  let current: Node = ifNode;
 
   // Walk the chain: each link must have consequent ending in exit
-  while (isOxcNode(current) && current.type === 'IfStatement') {
-    const consequent = current.consequent as NodeValue;
+  while (current.type === 'IfStatement') {
+    const consequent = current.consequent as Node;
     const alternate = current.alternate;
     // Check if consequent ends with exit (for loop context: also allow continue/break)
     const isGuard = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
@@ -398,8 +347,8 @@ const detectCascadeGuard = (
     }
 
     // If alternate is another IfStatement, continue the chain
-    if (isOxcNode(alternate) && (alternate as Node).type === 'IfStatement') {
-      current = alternate as NodeValue;
+    if (alternate !== null && (alternate as Node).type === 'IfStatement') {
+      current = alternate as Node;
     } else {
       // alternate is the final branch (could be BlockStatement or null)
       break;
@@ -412,41 +361,35 @@ const detectCascadeGuard = (
 
   // Get the final branch's statement count
   // current is the last IfStatement in the chain — its alternate is the final branch
-  if (!isNodeRecord(current)) {
-    return null;
-  }
+  const finalBranch = (current as unknown as Record<string, unknown>).alternate as Node | null;
 
-  const finalBranch = current.alternate as NodeValue;
-
-  if (finalBranch === null || finalBranch === undefined) {
+  if (finalBranch === null) {
     // Tail-less: all consequents in the chain already end with exit (verified by the while loop).
     // The entire chain can be flattened to sequential guards.
     let totalConsequentCount = 0;
-    let recount: NodeValue = ifNode;
+    let recount: Node = ifNode;
 
-    while (isOxcNode(recount) && recount.type === 'IfStatement') {
-      totalConsequentCount += countStatements(recount.consequent as NodeValue);
+    while (recount.type === 'IfStatement') {
+      totalConsequentCount += countStatements(recount.consequent as Node);
 
       const alt = recount.alternate;
 
-      if (isOxcNode(alt) && (alt as Node).type === 'IfStatement') {
-        recount = alt as NodeValue;
+      if (alt !== null && (alt as Node).type === 'IfStatement') {
+        recount = alt as Node;
       } else {
         break;
       }
     }
 
-    const taillessNode = ifNode as Node;
-
     return {
       kind: 'cascade-guard',
-      span: nodeSpan(taillessNode, sourceText),
+      span: nodeSpan(ifNode, sourceText),
       depthReduction: 1,
       statementsAffected: totalConsequentCount,
     };
   }
 
-  const finalCount = countStatements(finalBranch);
+  const finalCount = countStatements(finalBranch as Node);
 
   if (finalCount === 0) {
     return null;
@@ -457,11 +400,9 @@ const detectCascadeGuard = (
     return null;
   }
 
-  const node = ifNode as Node;
-
   return {
     kind: 'cascade-guard',
-    span: nodeSpan(node, sourceText),
+    span: nodeSpan(ifNode, sourceText),
     depthReduction: chainLength,
     statementsAffected: finalCount,
   };
@@ -485,30 +426,18 @@ const analyzeFunctionNode = (
   const opportunities: Opportunity[] = [];
   const skipNodes = new WeakSet<object>();
 
-  const visit = (value: NodeValue, depth: number, insideLoop: boolean, inTailPosition: boolean): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry, depth, insideLoop, inTailPosition);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(value)) {
-      return;
-    }
-
+  const visit = (node: Node, depth: number, insideLoop: boolean, inTailPosition: boolean): void => {
     // Skip nodes that are part of a detected cascade-guard chain
-    if (skipNodes.has(value as object)) {
+    if (skipNodes.has(node as object)) {
       return;
     }
 
     // Respect function boundaries — don't descend into nested functions
-    if (value !== functionNode && isFunctionNode(value)) {
+    if (node !== functionNode && isFunctionNode(node)) {
       return;
     }
 
-    const nodeType = value.type;
+    const nodeType = node.type;
     const nextDepth = shouldIncreaseDepth(nodeType) ? depth + 1 : depth;
 
     if (nextDepth > maxDepth) {
@@ -516,25 +445,25 @@ const analyzeFunctionNode = (
     }
 
     if (nodeType === 'IfStatement') {
-      const alternateValue = value.alternate;
+      const alternateValue = node.alternate;
 
-      if (alternateValue !== null && alternateValue !== undefined) {
+      if (alternateValue !== null) {
         // 1. Try cascade-guard
-        const cascade = detectCascadeGuard(value as NodeValue, insideLoop, sourceText);
+        const cascade = detectCascadeGuard(node, insideLoop, sourceText);
 
         if (cascade !== null) {
           opportunities.push(cascade);
 
           // Mark all sub-IfStatements in the chain to skip re-analysis
-          let chainNode: NodeValue = value;
+          let chainNode: Node = node;
 
-          while (isOxcNode(chainNode) && chainNode.type === 'IfStatement') {
+          while (chainNode.type === 'IfStatement') {
             const alt = chainNode.alternate;
 
-            if (isOxcNode(alt) && (alt as Node).type === 'IfStatement') {
+            if (alt !== null && (alt as Node).type === 'IfStatement') {
               skipNodes.add(alt as object);
 
-              chainNode = alt as NodeValue;
+              chainNode = alt as Node;
             } else {
               break;
             }
@@ -542,11 +471,11 @@ const analyzeFunctionNode = (
         } else {
           // 2. Try invertible-if-else — skip when alternate is an else-if chain
           //    (countStatements would sum the entire chain, producing a false positive)
-          const alternateNode = alternateValue as NodeValue;
-          const isElseIfChain = isOxcNode(alternateNode) && alternateNode.type === 'IfStatement';
+          const alternateNode = alternateValue as Node;
+          const isElseIfChain = alternateNode.type === 'IfStatement';
 
           if (!isElseIfChain) {
-          const consequentValue = value.consequent as NodeValue;
+          const consequentValue = node.consequent as Node;
           const consequentCount = countStatements(consequentValue);
           const alternateCount = countStatements(alternateNode);
 
@@ -557,11 +486,9 @@ const analyzeFunctionNode = (
             const shortExits = endsWithReturnOrThrow(shortNode) || (insideLoop && endsWithLoopExit(shortNode));
 
             if (shortCount <= 3 && shortExits && longCount >= shortCount * 2) {
-              const ifNode = value as Node;
-
               opportunities.push({
                 kind: 'invertible-if-else',
-                span: nodeSpan(ifNode, sourceText),
+                span: nodeSpan(node, sourceText),
                 depthReduction: 1,
                 statementsAffected: longCount,
               });
@@ -574,10 +501,10 @@ const analyzeFunctionNode = (
 
     // Check for wrapping-if and implicit-else in block statements
     if (nodeType === 'BlockStatement') {
-      const bodyArr = value.body;
+      const bodyArr = node.body;
 
       if (bodyArr.length > 0) {
-        const bodyStmts = bodyArr as ReadonlyArray<NodeValue>;
+        const bodyStmts = bodyArr as ReadonlyArray<Node>;
 
         // Only detect wrapping-if/implicit-else when early exit is safe:
         // - inTailPosition: block is at end of function scope → return is safe
@@ -602,22 +529,22 @@ const analyzeFunctionNode = (
         for (let i = 0; i < bodyStmts.length; i++) {
           const isLast = i === bodyStmts.length - 1;
 
-          visit(bodyStmts[i] as NodeValue, nextDepth, insideLoop, isLast && inTailPosition);
+          visit(bodyStmts[i]!, nextDepth, insideLoop, isLast && inTailPosition);
         }
       }
 
       return;
     }
 
-    visitOxcChildren(value, entry => {
+    forEachChildNode(node, child => {
       const isLoop = isLoopNodeType(nodeType);
       const childTailPos = isLoop ? true : inTailPosition;
 
-      visit(entry, nextDepth, insideLoop || isLoop, childTailPos);
+      visit(child, nextDepth, insideLoop || isLoop, childTailPos);
     });
   };
 
-  visit(bodyValue as NodeValue, 0, false, true);
+  visit(bodyValue as Node, 0, false, true);
 
   if (opportunities.length === 0) {
     return null;

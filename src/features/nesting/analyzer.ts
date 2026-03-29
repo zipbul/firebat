@@ -1,16 +1,9 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue, ParsedFile } from '../../engine/types';
+import type { ParsedFile } from '../../engine/types';
 import type { NestingItem, NestingKind } from '../../types';
 
-import {
-  getNodeHeader,
-  isFunctionNode,
-  isNodeRecord,
-  isOxcNode,
-  isOxcNodeArray,
-  visitOxcChildren,
-} from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 import { getFunctionSpan } from '../../engine/function-span';
@@ -91,22 +84,22 @@ const shouldIncreaseNestingDepth = (nodeType: string): boolean => {
  *   a && b || c       → +1 (one && sequence)
  *   a && b || c && d  → +2 (two && sequences separated by ||)
  */
-const countLogicalComplexity = (node: NodeValue): number => {
-  if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'LogicalExpression') {
+const countLogicalComplexity = (node: Node): number => {
+  if (node.type !== 'LogicalExpression') {
     return 0;
   }
 
   // Flatten the LogicalExpression tree into an ordered list of operators.
   const operators: string[] = [];
 
-  const flatten = (expr: NodeValue): void => {
-    if (!isOxcNode(expr) || !isNodeRecord(expr) || expr.type !== 'LogicalExpression') {
+  const flatten = (expr: Node): void => {
+    if (expr.type !== 'LogicalExpression') {
       return;
     }
 
-    flatten(expr.left as NodeValue);
+    flatten(expr.left as Node);
     operators.push(String(expr.operator ?? ''));
-    flatten(expr.right as NodeValue);
+    flatten(expr.right as Node);
   };
 
   flatten(node);
@@ -146,34 +139,30 @@ const isIterationMethod = (name: string): boolean => {
   );
 };
 
-const getMemberObjectIdentifier = (node: NodeValue): string | null => {
-  if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'MemberExpression') {
+const getMemberObjectIdentifier = (node: Node): string | null => {
+  if (node.type !== 'MemberExpression') {
     return null;
   }
 
-  const obj = node.object;
-  const prop = node.property;
+  const obj = node.object as Node;
+  const prop = node.property as Node;
 
-  if (!isOxcNode(obj) || !isNodeRecord(obj) || obj.type !== 'Identifier') {
+  if (obj.type !== 'Identifier') {
     return null;
   }
 
-  if (!isOxcNode(prop) || !isNodeRecord(prop) || prop.type !== 'Identifier') {
+  if (prop.type !== 'Identifier') {
     return null;
   }
 
   return obj.name;
 };
 
-const getIterationTarget = (node: NodeValue): string | null => {
-  if (!isOxcNode(node) || !isNodeRecord(node)) {
-    return null;
-  }
-
+const getIterationTarget = (node: Node): string | null => {
   if (node.type === 'ForOfStatement' || node.type === 'ForInStatement') {
-    const right = node.right;
+    const right = node.right as Node;
 
-    if (isOxcNode(right) && isNodeRecord(right) && right.type === 'Identifier') {
+    if (right.type === 'Identifier') {
       return right.name;
     }
 
@@ -183,19 +172,25 @@ const getIterationTarget = (node: NodeValue): string | null => {
   if (node.type === 'ForStatement') {
     const test = node.test;
 
-    if (!isOxcNode(test) || !isNodeRecord(test) || test.type !== 'BinaryExpression') {
+    if (test === null || test === undefined) {
       return null;
     }
 
-    const right = test.right;
+    const testNode = test as Node;
 
-    if (!isOxcNode(right) || !isNodeRecord(right) || right.type !== 'MemberExpression') {
+    if (testNode.type !== 'BinaryExpression') {
+      return null;
+    }
+
+    const right = testNode.right as Node;
+
+    if (right.type !== 'MemberExpression') {
       return null;
     }
 
     const objName = getMemberObjectIdentifier(right);
-    const prop = right.property;
-    const propName = isOxcNode(prop) && isNodeRecord(prop) && prop.type === 'Identifier' ? prop.name : null;
+    const prop = right.property as Node;
+    const propName = prop.type === 'Identifier' ? prop.name : null;
 
     if (objName && propName === 'length') {
       return objName;
@@ -205,14 +200,14 @@ const getIterationTarget = (node: NodeValue): string | null => {
   }
 
   if (node.type === 'CallExpression') {
-    const callee = node.callee;
+    const callee = node.callee as Node;
 
-    if (!isOxcNode(callee) || !isNodeRecord(callee) || callee.type !== 'MemberExpression') {
+    if (callee.type !== 'MemberExpression') {
       return null;
     }
 
-    const prop = callee.property;
-    const propName = isOxcNode(prop) && isNodeRecord(prop) && prop.type === 'Identifier' ? prop.name : null;
+    const prop = callee.property as Node;
+    const propName = prop.type === 'Identifier' ? prop.name : null;
 
     if (!propName || !isIterationMethod(propName)) {
       return null;
@@ -238,20 +233,16 @@ const TEST_RUNNER_FUNCTIONS = new Set([
   'afterAll',
 ]);
 
-const isTestRunnerCall = (callee: NodeValue): boolean => {
-  if (!isOxcNode(callee) || !isNodeRecord(callee)) {
-    return false;
-  }
-
+const isTestRunnerCall = (callee: Node): boolean => {
   if (callee.type === 'Identifier') {
     return TEST_RUNNER_FUNCTIONS.has(String(callee.name ?? ''));
   }
 
   // Handle `describe.skip(...)`, `it.only(...)`, etc.
   if (callee.type === 'MemberExpression') {
-    const obj = callee.object;
+    const obj = callee.object as Node;
 
-    if (isOxcNode(obj) && isNodeRecord(obj) && obj.type === 'Identifier') {
+    if (obj.type === 'Identifier') {
       return TEST_RUNNER_FUNCTIONS.has(String(obj.name ?? ''));
     }
   }
@@ -259,32 +250,14 @@ const isTestRunnerCall = (callee: NodeValue): boolean => {
   return false;
 };
 
-const measureMaxCallbackDepth = (value: NodeValue, depth: number = 0): number => {
-  if (isOxcNodeArray(value)) {
-    let max = depth;
-
-    for (const entry of value) {
-      const d = measureMaxCallbackDepth(entry, depth);
-
-      if (d > max) {
-        max = d;
-      }
-    }
-
-    return max;
-  }
-
-  if (!isOxcNode(value) || !isNodeRecord(value)) {
-    return depth;
-  }
-
+const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
   // Do not descend into nested function declarations / expressions that are not callback arguments.
-  if (isFunctionNode(value) && depth === 0) {
+  if (isFunctionNode(node) && depth === 0) {
     // Top-level body — scan children normally.
     let max = depth;
 
-    visitOxcChildren(value, entry => {
-      const d = measureMaxCallbackDepth(entry, depth);
+    forEachChildNode(node, child => {
+      const d = measureMaxCallbackDepth(child, depth);
 
       if (d > max) {
         max = d;
@@ -294,29 +267,27 @@ const measureMaxCallbackDepth = (value: NodeValue, depth: number = 0): number =>
     return max;
   }
 
-  if (value.type === 'CallExpression') {
-    const args = Array.isArray(value.arguments) ? (value.arguments as ReadonlyArray<NodeValue>) : [];
+  if (node.type === 'CallExpression') {
+    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
     let max = depth;
-    const callee = value.callee;
-    const isTestRunner = isTestRunnerCall(callee as NodeValue);
+    const callee = node.callee as Node;
+    const isTestRunner = isTestRunnerCall(callee);
 
-    if (isOxcNode(callee)) {
-      const d = measureMaxCallbackDepth(callee as NodeValue, depth);
+    const d = measureMaxCallbackDepth(callee, depth);
 
-      if (d > max) {
-        max = d;
-      }
+    if (d > max) {
+      max = d;
     }
 
     for (const arg of args) {
-      if (isOxcNode(arg) && isFunctionNode(arg)) {
+      if (isFunctionNode(arg)) {
         // Test runner callbacks (describe/it/test/beforeEach etc.) are structural,
         // not complexity-bearing — do not increase depth.
         const callbackBody = resolveFunctionBody(arg);
 
         if (callbackBody !== null && callbackBody !== undefined) {
           const nextDepth = isTestRunner ? depth : depth + 1;
-          const d = measureMaxCallbackDepth(callbackBody as NodeValue, nextDepth);
+          const d = measureMaxCallbackDepth(callbackBody as Node, nextDepth);
 
           if (d > max) {
             max = d;
@@ -335,14 +306,14 @@ const measureMaxCallbackDepth = (value: NodeValue, depth: number = 0): number =>
   }
 
   // Skip other nested functions (standalone, not callback arguments).
-  if (isFunctionNode(value)) {
+  if (isFunctionNode(node)) {
     return depth;
   }
 
   let max = depth;
 
-  visitOxcChildren(value, entry => {
-    const d = measureMaxCallbackDepth(entry, depth);
+  forEachChildNode(node, child => {
+    const d = measureMaxCallbackDepth(child, depth);
 
     if (d > max) {
       max = d;
@@ -358,31 +329,13 @@ const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
  * Measure promise chain depth: `.then().catch().finally()` chaining and nested chains inside callbacks.
  * Only counts within the current function scope (does not descend into nested function declarations).
  */
-const measurePromiseChainDepth = (value: NodeValue, depth: number = 0): number => {
-  if (isOxcNodeArray(value)) {
-    let max = depth;
-
-    for (const entry of value) {
-      const d = measurePromiseChainDepth(entry, depth);
-
-      if (d > max) {
-        max = d;
-      }
-    }
-
-    return max;
-  }
-
-  if (!isOxcNode(value) || !isNodeRecord(value)) {
-    return depth;
-  }
-
+const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
   // Do not descend into nested function declarations (not callback arguments).
-  if (isFunctionNode(value) && depth === 0) {
+  if (isFunctionNode(node) && depth === 0) {
     let max = depth;
 
-    visitOxcChildren(value, entry => {
-      const d = measurePromiseChainDepth(entry, depth);
+    forEachChildNode(node, child => {
+      const d = measurePromiseChainDepth(child, depth);
 
       if (d > max) {
         max = d;
@@ -392,19 +345,19 @@ const measurePromiseChainDepth = (value: NodeValue, depth: number = 0): number =
     return max;
   }
 
-  if (value.type === 'CallExpression') {
-    const callee = value.callee;
+  if (node.type === 'CallExpression') {
+    const callee = node.callee as Node;
     let chainDepth = depth;
 
     // Check if callee is a MemberExpression with then/catch/finally
-    if (isOxcNode(callee) && isNodeRecord(callee) && callee.type === 'MemberExpression') {
-      const prop = callee.property;
+    if (callee.type === 'MemberExpression') {
+      const prop = callee.property as Node;
 
-      if (isOxcNode(prop) && isNodeRecord(prop) && prop.type === 'Identifier' && PROMISE_METHODS.has(prop.name)) {
+      if (prop.type === 'Identifier' && PROMISE_METHODS.has(prop.name)) {
         chainDepth = depth + 1;
 
         // Recurse into the object (the chained receiver) to count further chain links
-        const objDepth = measurePromiseChainDepth(callee.object as NodeValue, chainDepth);
+        const objDepth = measurePromiseChainDepth(callee.object as Node, chainDepth);
 
         if (objDepth > chainDepth) {
           chainDepth = objDepth;
@@ -413,16 +366,16 @@ const measurePromiseChainDepth = (value: NodeValue, depth: number = 0): number =
     }
 
     // Scan callback arguments for nested promise chains
-    const args = Array.isArray(value.arguments) ? (value.arguments as ReadonlyArray<NodeValue>) : [];
+    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
     let max = chainDepth;
 
     for (const arg of args) {
-      if (isOxcNode(arg) && isFunctionNode(arg)) {
+      if (isFunctionNode(arg)) {
         const callbackBody = resolveFunctionBody(arg);
 
         if (callbackBody !== null && callbackBody !== undefined) {
           // Nested chains inside callbacks count from the current chain depth
-          const d = measurePromiseChainDepth(callbackBody as NodeValue, chainDepth);
+          const d = measurePromiseChainDepth(callbackBody as Node, chainDepth);
 
           if (d > max) {
             max = d;
@@ -441,14 +394,14 @@ const measurePromiseChainDepth = (value: NodeValue, depth: number = 0): number =
   }
 
   // Skip other nested functions (standalone, not callback arguments).
-  if (isFunctionNode(value)) {
+  if (isFunctionNode(node)) {
     return depth;
   }
 
   let max = depth;
 
-  visitOxcChildren(value, entry => {
-    const d = measurePromiseChainDepth(entry, depth);
+  forEachChildNode(node, child => {
+    const d = measurePromiseChainDepth(child, depth);
 
     if (d > max) {
       max = d;
@@ -481,28 +434,16 @@ const analyzeFunctionNode = (
   const uniqueOperators = new Set<string>();
   const uniqueOperands = new Set<string>();
 
-  const hasNestedIterationOnTarget = (value: NodeValue, target: string): boolean => {
+  const hasNestedIterationOnTarget = (startNode: Node, target: string): boolean => {
     let found = false;
 
-    const scan = (candidate: NodeValue): void => {
+    const scan = (candidate: Node): void => {
       if (found) {
         return;
       }
 
-      if (isOxcNodeArray(candidate)) {
-        for (const entry of candidate) {
-          scan(entry);
-        }
-
-        return;
-      }
-
-      if (!isOxcNode(candidate)) {
-        return;
-      }
-
       // Keep scan bounded: do not enter further nested function bodies.
-      if (candidate !== value && isFunctionNode(candidate)) {
+      if (candidate !== startNode && isFunctionNode(candidate)) {
         return;
       }
 
@@ -514,29 +455,25 @@ const analyzeFunctionNode = (
         return;
       }
 
-      if (!isNodeRecord(candidate)) {
-        return;
-      }
-
-      visitOxcChildren(candidate, entry => {
-        scan(entry);
+      forEachChildNode(candidate, child => {
+        scan(child);
       });
     };
 
-    scan(value);
+    scan(startNode);
 
     return found;
   };
 
-  const maybeReportCallbackQuadratic = (node: NodeValue, target: string): void => {
-    if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'CallExpression') {
+  const maybeReportCallbackQuadratic = (node: Node, target: string): void => {
+    if (node.type !== 'CallExpression') {
       return;
     }
 
-    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<NodeValue>) : [];
+    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
     const callback = args[0];
 
-    if (!isOxcNode(callback) || !isFunctionNode(callback) || !isNodeRecord(callback)) {
+    if (callback === undefined || !isFunctionNode(callback)) {
       return;
     }
 
@@ -546,7 +483,7 @@ const analyzeFunctionNode = (
       return;
     }
 
-    if (hasNestedIterationOnTarget(callbackBody as NodeValue, target)) {
+    if (hasNestedIterationOnTarget(callbackBody as Node, target)) {
       accidentalQuadraticTargets.add(target);
     }
   };
@@ -556,25 +493,21 @@ const analyzeFunctionNode = (
    * The LogicalExpression chain itself is handled by countLogicalComplexity();
    * we still need to descend into non-logical operands (e.g. ternary inside &&).
    */
-  const visitLogicalLeaves = (node: NodeValue, depth: number): void => {
-    if (!isOxcNode(node) || !isNodeRecord(node)) {
-      return;
-    }
-
+  const visitLogicalLeaves = (node: Node, depth: number): void => {
     if (node.type === 'LogicalExpression') {
       // Halstead: count ALL logical operators in the chain (visit() only counts the top-level one)
-      collectHalstead(node as NodeValue, 'LogicalExpression');
-      visitLogicalLeaves(node.left as NodeValue, depth);
-      visitLogicalLeaves(node.right as NodeValue, depth);
+      collectHalstead(node, 'LogicalExpression');
+      visitLogicalLeaves(node.left as Node, depth);
+      visitLogicalLeaves(node.right as Node, depth);
 
       return;
     }
 
-    visit(node as NodeValue, depth);
+    visit(node, depth);
   };
 
-  const visitIfStatement = (node: NodeValue, depth: number): void => {
-    if (!isOxcNode(node) || !isNodeRecord(node) || node.type !== 'IfStatement') {
+  const visitIfStatement = (node: Node, depth: number): void => {
+    if (node.type !== 'IfStatement') {
       return;
     }
 
@@ -588,25 +521,25 @@ const analyzeFunctionNode = (
     }
 
     // Visit the test expression at current depth (condition is evaluated before entering if body)
-    visit(node.test as NodeValue, depth);
+    visit(node.test as Node, depth);
 
     // Visit the consequent body
-    visit(node.consequent as NodeValue, nextDepth);
+    visit(node.consequent as Node, nextDepth);
 
     // Handle alternate
     const alt = node.alternate;
 
-    if (alt !== null && alt !== undefined && isOxcNode(alt)) {
-      if (isNodeRecord(alt) && alt.type === 'IfStatement') {
+    if (alt !== null) {
+      if ((alt as Node).type === 'IfStatement') {
         // else if: +1 only (no nesting bonus, no depth increase)
         // Halstead: count the else-if IfStatement operator (bypasses visit())
-        collectHalstead(alt as NodeValue, 'IfStatement');
-        visitIfStatement(alt as NodeValue, depth);
+        collectHalstead(alt as Node, 'IfStatement');
+        visitIfStatement(alt as Node, depth);
       } else {
         // standalone else: +1, then visit body at increased depth
         cognitiveComplexity += 1;
 
-        visit(alt as NodeValue, nextDepth);
+        visit(alt as Node, nextDepth);
       }
     }
   };
@@ -628,10 +561,8 @@ const analyzeFunctionNode = (
     'ContinueStatement',
   ]);
 
-  const collectHalstead = (value: NodeValue, nodeType: string): void => {
-    if (!isNodeRecord(value)) {
-      return;
-    }
+  const collectHalstead = (node: Node, nodeType: string): void => {
+    const rec = node as unknown as Record<string, unknown>;
 
     // Control-flow operators
     if (HALSTEAD_CONTROL_OPS.has(nodeType)) {
@@ -650,7 +581,7 @@ const analyzeFunctionNode = (
       nodeType === 'UnaryExpression' ||
       nodeType === 'UpdateExpression'
     ) {
-      const op = String(value.operator ?? '');
+      const op = String(rec.operator ?? '');
 
       if (op.length > 0) {
         totalOperators++;
@@ -696,8 +627,8 @@ const analyzeFunctionNode = (
 
     // Property access operator
     if (nodeType === 'MemberExpression') {
-      const optional = Boolean(value.optional);
-      const computed = Boolean(value.computed);
+      const optional = Boolean(rec.optional);
+      const computed = Boolean(rec.computed);
       const op = optional ? '?.' : computed ? '[]' : '.';
 
       totalOperators++;
@@ -707,7 +638,7 @@ const analyzeFunctionNode = (
 
     // Operands: Identifier
     if (nodeType === 'Identifier') {
-      const name = String(value.name ?? '');
+      const name = String(rec.name ?? '');
 
       if (name.length > 0) {
         totalOperands++;
@@ -725,7 +656,7 @@ const analyzeFunctionNode = (
       nodeType === 'BigIntLiteral' ||
       nodeType === 'RegExpLiteral'
     ) {
-      const raw = String(value.raw ?? value.value ?? nodeType);
+      const raw = String(rec.raw ?? rec.value ?? nodeType);
 
       totalOperands++;
 
@@ -746,31 +677,19 @@ const analyzeFunctionNode = (
     }
   };
 
-  const visit = (value: NodeValue, depth: number): void => {
-    if (isOxcNodeArray(value)) {
-      for (const entry of value) {
-        visit(entry, depth);
-      }
-
+  const visit = (node: Node, depth: number): void => {
+    if (node !== functionNode && isFunctionNode(node)) {
       return;
     }
 
-    if (!isOxcNode(value)) {
-      return;
-    }
-
-    if (value !== functionNode && isFunctionNode(value)) {
-      return;
-    }
-
-    const nodeType = value.type;
+    const nodeType = node.type;
 
     // IfStatement has custom handling for else-if chains
     if (nodeType === 'IfStatement') {
       // Halstead: count IfStatement operator (else-if handled in visitIfStatement)
-      collectHalstead(value, nodeType);
+      collectHalstead(node, nodeType);
 
-      visitIfStatement(value, depth);
+      visitIfStatement(node, depth);
 
       return;
     }
@@ -778,19 +697,19 @@ const analyzeFunctionNode = (
     // LogicalExpression: flat counting of operator switches, no depth bonus
     // Halstead for all logical operators is handled inside visitLogicalLeaves
     if (nodeType === 'LogicalExpression') {
-      cognitiveComplexity += countLogicalComplexity(value);
+      cognitiveComplexity += countLogicalComplexity(node);
 
-      visitLogicalLeaves(value, depth);
+      visitLogicalLeaves(node, depth);
 
       return;
     }
 
     // Halstead: collect operators and operands for all other node types
-    collectHalstead(value, nodeType);
+    collectHalstead(node, nodeType);
 
     // labeled break/continue: +1
     if (nodeType === 'BreakStatement' || nodeType === 'ContinueStatement') {
-      if (value.label !== null && value.label !== undefined) {
+      if (node.label !== null && node.label !== undefined) {
         cognitiveComplexity += 1;
       }
     }
@@ -807,7 +726,7 @@ const analyzeFunctionNode = (
       cognitiveComplexity += 1 + depth;
     }
 
-    const iterationTarget = getIterationTarget(value);
+    const iterationTarget = getIterationTarget(node);
     const isIteration = iterationTarget !== null;
 
     const pushIteration = (): void => {
@@ -834,12 +753,12 @@ const analyzeFunctionNode = (
       pushIteration();
 
       if (iterationTarget !== null) {
-        maybeReportCallbackQuadratic(value, iterationTarget);
+        maybeReportCallbackQuadratic(node, iterationTarget);
       }
     }
 
-    visitOxcChildren(value, entry => {
-      visit(entry, nextDepth);
+    forEachChildNode(node, child => {
+      visit(child, nextDepth);
     });
 
     if (isIteration) {
@@ -847,13 +766,13 @@ const analyzeFunctionNode = (
     }
   };
 
-  visit(bodyValue as NodeValue, 0);
+  visit(bodyValue as Node, 0);
 
   const header = getNodeHeader(functionNode, parent);
   const span = getFunctionSpan(functionNode, sourceText);
   const nestingScore = Math.max(0, cognitiveComplexity);
-  const callbackDepth = measureMaxCallbackDepth(bodyValue as NodeValue);
-  const promiseChainDepth = measurePromiseChainDepth(bodyValue as NodeValue);
+  const callbackDepth = measureMaxCallbackDepth(bodyValue as Node);
+  const promiseChainDepth = measurePromiseChainDepth(bodyValue as Node);
   const quadraticTargets = Array.from(accidentalQuadraticTargets).sort();
   // Complexity density: CC / LOC
   const loc = span.end.line - span.start.line + 1;

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { NodeRecord, NodeWithBody, OxcBuiltFunctionCfg } from '../types';
+import type { Node } from 'oxc-parser';
+
+import type { NodeRecord, OxcBuiltFunctionCfg } from '../types';
 
 import { isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
 import { OxcCFGBuilder } from './cfg-builder';
 import { EdgeType } from './cfg-types';
 
-const getFunctionBody = (fn: NodeWithBody): NodeRecord => {
+const getFunctionBody = (fn: Node): NodeRecord => {
   const body = fn.body;
 
   if (!isOxcNode(body) || body.type !== 'BlockStatement') {
@@ -21,7 +23,7 @@ const getFunctionBody = (fn: NodeWithBody): NodeRecord => {
   return body;
 };
 
-const getFirstFunction = (sourceText: string): NodeWithBody => {
+const getFirstFunction = (sourceText: string): Node => {
   const parsed = parseSource('/virtual/cfg-builder.spec.ts', sourceText);
   const program = parsed.program;
 

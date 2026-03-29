@@ -10,10 +10,9 @@
  */
 
 import type { Node } from 'oxc-parser';
+import { visitorKeys } from 'oxc-parser';
 
-import type { NodeRecord, NodeValue } from '../../engine/types';
-
-import { isNodeRecord, isOxcNode, isOxcNodeArray } from '../../engine/ast/oxc-ast-utils';
+import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { computeLcsAlignment } from './lcs';
@@ -149,92 +148,85 @@ const pushVariable = (
 
 const traverse = (
   ctx: TraversalContext,
-  left: NodeValue,
-  right: NodeValue,
+  left: Node,
+  right: Node,
   path: string,
 ): void => {
-  // 둘 다 Node인 경우
-  if (isOxcNode(left) && isOxcNode(right)) {
-    const leftNode = left as Node;
-    const rightNode = right as Node;
+  // type이 다르면 → structural variable
+  if (left.type !== right.type) {
+    pushVariable(ctx, path, left.type, right.type, 'structural');
 
-    // type이 다르면 → structural variable
-    if (leftNode.type !== rightNode.type) {
-      pushVariable(ctx, path, leftNode.type, rightNode.type, 'structural');
+    return;
+  }
 
-      return;
+  // 같은 type → shared node
+  ctx.sharedSize += 1;
+
+  // Identifier.name 비교
+  if (left.type === 'Identifier') {
+    const leftName = (left as unknown as { name: string }).name;
+    const rightName = (right as unknown as { name: string }).name;
+
+    if (leftName !== rightName) {
+      pushVariable(ctx, path + '.name', leftName, rightName, 'identifier');
+    }
+    // 자식 노드(typeAnnotation 등)는 아래 일반 순회에서 처리
+  }
+
+  // Literal.value 비교
+  if (left.type === 'Literal') {
+    const leftVal = (left as unknown as { value: unknown }).value;
+    const rightVal = (right as unknown as { value: unknown }).value;
+
+    if (leftVal !== rightVal) {
+      pushVariable(
+        ctx,
+        path + '.value',
+        String(leftVal),
+        String(rightVal),
+        'literal',
+      );
+    }
+    // 자식 노드는 아래 일반 순회에서 처리
+  }
+
+  // TSTypeReference 비교 (type annotation 차이)
+  if (left.type === 'TSTypeReference') {
+    const leftFp = createOxcFingerprintShape(left);
+    const rightFp = createOxcFingerprintShape(right);
+
+    if (leftFp !== rightFp) {
+      pushVariable(ctx, path, left.type, right.type, 'type');
+    } else {
+      ctx.sharedSize += countOxcSize(left) - 1;
     }
 
-    // 같은 type → shared node
-    ctx.sharedSize += 1;
+    return;
+  }
 
-    // Identifier.name 비교
-    if (leftNode.type === 'Identifier') {
-      const leftName = (leftNode as unknown as { name: string }).name;
-      const rightName = (rightNode as unknown as { name: string }).name;
+  const leftRec = left as unknown as Record<string, unknown>;
+  const rightRec = right as unknown as Record<string, unknown>;
 
-      if (leftName !== rightName) {
-        pushVariable(ctx, path + '.name', leftName, rightName, 'identifier');
-      }
-      // 자식 노드(typeAnnotation 등)는 아래 일반 순회에서 처리
-    }
+  // visitorKeys 기반 자식 노드 순회
+  const keys = visitorKeys[left.type];
 
-    // Literal.value 비교
-    if (leftNode.type === 'Literal') {
-      const leftVal = (leftNode as unknown as { value: unknown }).value;
-      const rightVal = (rightNode as unknown as { value: unknown }).value;
+  if (keys !== undefined) {
+    for (const key of keys) {
+      if (SKIP_KEYS.has(key)) {continue;}
 
-      if (leftVal !== rightVal) {
-        pushVariable(
-          ctx,
-          path + '.value',
-          String(leftVal),
-          String(rightVal),
-          'literal',
-        );
-      }
-      // 자식 노드는 아래 일반 순회에서 처리
-    }
-
-    // TSTypeReference 비교 (type annotation 차이)
-    if (leftNode.type === 'TSTypeReference') {
-      const leftFp = createOxcFingerprintShape(leftNode);
-      const rightFp = createOxcFingerprintShape(rightNode);
-
-      if (leftFp !== rightFp) {
-        pushVariable(ctx, path, leftNode.type, rightNode.type, 'type');
-      } else {
-        ctx.sharedSize += countOxcSize(leftNode) - 1;
-      }
-
-      return;
-    }
-
-    // Record로 변환 가능해야 자식 순회
-    if (!isNodeRecord(leftNode) || !isNodeRecord(rightNode)) {return;}
-
-    const leftRec = leftNode as NodeRecord;
-    const rightRec = rightNode as NodeRecord;
-    // 정렬된 키로 자식 순회
-    const leftKeys = Object.keys(leftRec).filter((k) => !SKIP_KEYS.has(k)).sort();
-    const rightKeys = Object.keys(rightRec).filter((k) => !SKIP_KEYS.has(k)).sort();
-    // 양쪽 모두에 있는 키들만 비교
-    const allKeys = new Set([...leftKeys, ...rightKeys]);
-
-    for (const key of allKeys) {
       const leftChild = leftRec[key];
       const rightChild = rightRec[key];
       const childPath = path.length > 0 ? `${path}.${key}` : key;
 
-      // 한쪽에만 키가 있는 경우
+      // 한쪽에만 키가 있는 경우 (optional node properties)
       if (leftChild === undefined && rightChild !== undefined) {
-        pushVariable(ctx, childPath, 'undefined', describeValue(rightChild), 'structural');
+        pushVariable(ctx, childPath, 'undefined', isOxcNode(rightChild) ? rightChild.type : String(rightChild), 'structural');
 
         continue;
       }
 
       if (leftChild !== undefined && rightChild === undefined) {
-        pushVariable(ctx, childPath, describeValue(leftChild), 'undefined', 'structural');
+        pushVariable(ctx, childPath, isOxcNode(leftChild) ? leftChild.type : String(leftChild), 'undefined', 'structural');
 
         continue;
       }
@@ -242,8 +234,8 @@ const traverse = (
       if (leftChild === undefined && rightChild === undefined) {continue;}
 
       // 둘 다 Node 배열인 경우 → LCS 정렬
-      if (isOxcNodeArray(leftChild) && isOxcNodeArray(rightChild)) {
-        traverseArrayChildren(ctx, leftChild, rightChild, childPath);
+      if (Array.isArray(leftChild) && Array.isArray(rightChild)) {
+        traverseArrayChildren(ctx, leftChild as ReadonlyArray<Node>, rightChild as ReadonlyArray<Node>, childPath);
 
         continue;
       }
@@ -251,41 +243,39 @@ const traverse = (
       // 둘 다 Node인 경우 → 재귀
       if (isOxcNode(leftChild) && isOxcNode(rightChild)) {
         traverse(ctx, leftChild, rightChild, childPath);
-
-        continue;
-      }
-
-      // 프리미티브 값 비교 (operator 등)
-      // Identifier.name과 Literal.value/raw는 위에서 이미 처리됨 → skip
-      if (key === 'name' && leftNode.type === 'Identifier') {continue;}
-
-      if ((key === 'value' || key === 'raw') && leftNode.type === 'Literal') {continue;}
-
-      if (leftChild !== rightChild) {
-        if (key === 'name') {
-          pushVariable(ctx, childPath, String(leftChild), String(rightChild), 'identifier');
-        } else if (key === 'value') {
-          pushVariable(ctx, childPath, String(leftChild), String(rightChild), 'literal');
-        } else {
-          // operator, kind 등 구조적 차이
-          pushVariable(ctx, childPath, String(leftChild), String(rightChild), 'structural');
-        }
       }
     }
-
-    return;
   }
 
-  // 둘 다 배열인 경우 (top-level에서는 드물지만 방어적)
-  if (isOxcNodeArray(left) && isOxcNodeArray(right)) {
-    traverseArrayChildren(ctx, left, right, path);
+  // visitorKeys에 포함되지 않는 프리미티브 필드 비교 (operator, kind 등)
+  // Identifier.name, Literal.value/raw는 위에서 이미 처리됨 → skip
+  for (const key of Object.keys(leftRec)) {
+    if (SKIP_KEYS.has(key)) {continue;}
 
-    return;
-  }
+    if (keys !== undefined && keys.includes(key)) {continue;} // 이미 처리한 노드 자식
 
-  // 프리미티브 또는 타입 불일치
-  if (left !== right) {
-    pushVariable(ctx, path, describeValue(left), describeValue(right), 'structural');
+    if (key === 'name' && left.type === 'Identifier') {continue;}
+
+    if ((key === 'value' || key === 'raw') && left.type === 'Literal') {continue;}
+
+    const leftVal = leftRec[key];
+    const rightVal = rightRec[key];
+
+    // 프리미티브가 아닌 값(object/array) 은 건너뜀
+    if (typeof leftVal === 'object' || typeof rightVal === 'object') {continue;}
+
+    if (leftVal !== rightVal) {
+      const childPath = path.length > 0 ? `${path}.${key}` : key;
+
+      if (key === 'name') {
+        pushVariable(ctx, childPath, String(leftVal), String(rightVal), 'identifier');
+      } else if (key === 'value') {
+        pushVariable(ctx, childPath, String(leftVal), String(rightVal), 'literal');
+      } else {
+        // operator, kind 등 구조적 차이
+        pushVariable(ctx, childPath, String(leftVal), String(rightVal), 'structural');
+      }
+    }
   }
 };
 
@@ -294,13 +284,13 @@ const traverse = (
  */
 const traverseArrayChildren = (
   ctx: TraversalContext,
-  leftArr: ReadonlyArray<NodeValue>,
-  rightArr: ReadonlyArray<NodeValue>,
+  leftArr: ReadonlyArray<Node>,
+  rightArr: ReadonlyArray<Node>,
   path: string,
 ): void => {
   // fingerprint로 LCS 정렬
-  const leftFps = leftArr.map((n) => (isOxcNode(n) ? createOxcFingerprintShape(n) : String(n)));
-  const rightFps = rightArr.map((n) => (isOxcNode(n) ? createOxcFingerprintShape(n) : String(n)));
+  const leftFps = leftArr.map((n) => createOxcFingerprintShape(n));
+  const rightFps = rightArr.map((n) => createOxcFingerprintShape(n));
   const alignment = computeLcsAlignment(leftFps, rightFps);
 
   // 매칭된 쌍 → 재귀
@@ -318,7 +308,7 @@ const traverseArrayChildren = (
     pushVariable(
       ctx,
       `${path}[${aIdx}]`,
-      isOxcNode(child) ? (child as Node).type : 'unknown',
+      child !== undefined ? child.type : 'unknown',
       'missing',
       'structural',
     );
@@ -332,20 +322,8 @@ const traverseArrayChildren = (
       ctx,
       `${path}[+${bIdx}]`,
       'missing',
-      isOxcNode(child) ? (child as Node).type : 'unknown',
+      child !== undefined ? child.type : 'unknown',
       'structural',
     );
   }
-};
-
-const describeValue = (val: NodeValue): string => {
-  if (val === null) {return 'null';}
-
-  if (val === undefined) {return 'undefined';}
-
-  if (isOxcNode(val)) {return (val as Node).type;}
-
-  if (Array.isArray(val)) {return `Array(${val.length})`;}
-
-  return typeof val;
 };

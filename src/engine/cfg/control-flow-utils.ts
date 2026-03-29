@@ -1,25 +1,19 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue } from '../types';
+import { isFunctionNode } from '../ast/oxc-ast-utils';
 
-import { isFunctionNode, isNodeRecord } from '../ast/oxc-ast-utils';
-
-const resolveFunctionBody = (functionNode: Node): NodeValue | null => {
+const resolveFunctionBody = (functionNode: Node): Node | null => {
   if (!isFunctionNode(functionNode)) {
     return null;
   }
 
-  if (!isNodeRecord(functionNode)) {
+  const body = (functionNode as unknown as Record<string, unknown>).body;
+
+  if (body === null || body === undefined || typeof body !== 'object' || Array.isArray(body)) {
     return null;
   }
 
-  const bodyValue = functionNode.body as NodeValue | undefined;
-
-  if (bodyValue === null || bodyValue === undefined) {
-    return null;
-  }
-
-  return bodyValue;
+  return body as Node;
 };
 
 const shouldIncreaseDepth = (nodeType: string): boolean => {

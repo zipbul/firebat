@@ -1,23 +1,19 @@
 import type { Node } from 'oxc-parser';
 
-import type { NodeValue, VariableCollectorOptions, VariableUsage } from '../types';
+import type { VariableCollectorOptions, VariableUsage } from '../types';
 
-import { getLiteralString, getNodeName, getNodeType, isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
+import { forEachChildNode, getLiteralString, getNodeName } from '../ast/oxc-ast-utils';
 import { evalStaticNullish, evalStaticTruthiness, unwrapExpression } from '../ast/oxc-expression-utils';
 
 const getNodeStart = (node: Node): number => node.start;
 
-const isFunctionNode = (node: NodeValue): boolean => {
-  if (!isOxcNode(node)) {
-    return false;
-  }
-
-  const nodeType = getNodeType(node);
+const isFunctionNode = (node: Node): boolean => {
+  const nodeType = node.type;
 
   return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
 };
 
-const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
+const getStaticObjectExpressionKeys = (node: Node | null | undefined): Set<string> | null => {
   const n = unwrapExpression(node);
 
   if (n?.type !== 'ObjectExpression') {
@@ -28,17 +24,13 @@ const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
   const properties = (n.properties ?? []) as ReadonlyArray<Node>;
 
   for (const prop of properties) {
-    if (!isOxcNode(prop)) {
-      continue;
-    }
-
     if (prop.type !== 'Property') {
       continue;
     }
 
-    const key = prop.key;
+    const key = prop.key as Node;
 
-    if (isOxcNode(key) && key.type === 'Identifier') {
+    if (key.type === 'Identifier') {
       const name = getNodeName(key);
 
       if (name !== null) {
@@ -48,7 +40,7 @@ const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
       continue;
     }
 
-    if (isOxcNode(key) && key.type === 'Literal') {
+    if (key.type === 'Literal') {
       const value = getLiteralString(key);
 
       if (value !== null) {
@@ -62,28 +54,16 @@ const getStaticObjectExpressionKeys = (node: NodeValue): Set<string> | null => {
   return keys;
 };
 
-export const collectVariables = (node: NodeValue, options: VariableCollectorOptions = {}): VariableUsage[] => {
+export const collectVariables = (node: Node, options: VariableCollectorOptions = {}): VariableUsage[] => {
   const usages: VariableUsage[] = [];
 
   const visit = (
-    current: NodeValue,
+    current: Node,
     allowNestedFunctions: boolean,
     isWriteContext: boolean = false,
     writeKind?: VariableUsage['writeKind'],
   ) => {
-    if (isOxcNodeArray(current)) {
-      for (const item of current) {
-        visit(item, allowNestedFunctions, isWriteContext);
-      }
-
-      return;
-    }
-
-    if (!isOxcNode(current)) {
-      return;
-    }
-
-    const nodeType = getNodeType(current);
+    const nodeType = current.type;
 
     if (!allowNestedFunctions && isFunctionNode(current)) {
       return;
@@ -125,16 +105,14 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     if (current.type === 'MemberExpression') {
       // `obj.prop` does not read `prop` as a variable; only `obj`.
       // `obj[prop]` reads both `obj` and `prop`.
-      const objectNode = current.object;
+      const objectNode = current.object as Node;
 
-      if (objectNode !== undefined && objectNode !== null) {
-        visit(objectNode, allowNestedFunctions, false);
-      }
+      visit(objectNode, allowNestedFunctions, false);
 
       const isComputed = current.computed;
-      const propertyNode = current.property;
+      const propertyNode = current.property as Node;
 
-      if (isComputed && propertyNode !== undefined && propertyNode !== null) {
+      if (isComputed) {
         visit(propertyNode, allowNestedFunctions, false);
       }
 
@@ -144,8 +122,8 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     // Handle constructions
     if (current.type === 'LogicalExpression') {
       const operator = typeof current.operator === 'string' ? current.operator : '';
-      const left = current.left;
-      const right = current.right;
+      const left = current.left as Node;
+      const right = current.right as Node;
 
       // Left is always evaluated.
       visit(left, allowNestedFunctions, false);
@@ -202,9 +180,9 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (current.type === 'ConditionalExpression') {
-      const test = current.test;
-      const consequent = current.consequent;
-      const alternate = current.alternate;
+      const test = current.test as Node;
+      const consequent = current.consequent as Node;
+      const alternate = current.alternate as Node;
 
       // Test is always evaluated.
       visit(test, allowNestedFunctions, false);
@@ -232,8 +210,8 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
 
     if (current.type === 'AssignmentExpression') {
       const operator = typeof current.operator === 'string' ? current.operator : '=';
-      const left = current.left;
-      const right = current.right;
+      const left = current.left as Node;
+      const right = current.right as Node;
 
       if (operator === '=') {
         visit(left, allowNestedFunctions, true, 'assignment'); // LHS is write
@@ -259,7 +237,7 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (current.type === 'UpdateExpression') {
-      const argument = current.argument;
+      const argument = current.argument as Node;
 
       // Treat update as both read and write.
       visit(argument, allowNestedFunctions, false);
@@ -269,26 +247,17 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (current.type === 'VariableDeclarator') {
-      const init = current.init;
-      const id = current.id;
+      const init = current.init as Node | null | undefined;
+      const id = current.id as Node;
       const initKeys = getStaticObjectExpressionKeys(init);
-      const idNode = isOxcNode(id) ? id : null;
 
-      if (idNode?.type === 'ObjectPattern' && initKeys !== null) {
+      if (id.type === 'ObjectPattern' && initKeys !== null) {
         // Object destructuring defaults are only evaluated if the property is missing.
-        const properties = isOxcNodeArray(idNode.properties) ? idNode.properties : [];
+        const properties = Array.isArray(id.properties) ? (id.properties as ReadonlyArray<Node>) : [];
 
         for (const prop of properties) {
-          if (!isOxcNode(prop)) {
-            continue;
-          }
-
           if (prop.type === 'RestElement') {
-            const argument = isNodeRecord(prop) ? prop.argument : undefined;
-
-            if (isOxcNode(argument)) {
-              visit(argument, allowNestedFunctions, true, 'declaration');
-            }
+            visit(prop.argument as Node, allowNestedFunctions, true, 'declaration');
 
             continue;
           }
@@ -297,30 +266,26 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
             continue;
           }
 
-          const keyNode = prop.key;
+          const keyNode = prop.key as Node;
           let keyName: string | null = null;
 
-          if (isOxcNode(keyNode)) {
-            const keyType = keyNode.type;
+          const keyType = keyNode.type;
 
-            if (keyType === 'Identifier') {
-              const name = getNodeName(keyNode);
+          if (keyType === 'Identifier') {
+            keyName = getNodeName(keyNode);
+          } else if (keyType === 'Literal') {
+            const value = getLiteralString(keyNode);
 
-              keyName = name;
-            } else if (keyType === 'Literal') {
-              const value = getLiteralString(keyNode);
-
-              if (value !== null) {
-                keyName = value;
-              }
+            if (value !== null) {
+              keyName = value;
             }
           }
 
-          const valueNode = prop.value;
+          const valueNode = prop.value as Node;
 
-          if (isOxcNode(valueNode) && valueNode.type === 'AssignmentPattern') {
-            const leftNode = valueNode.left;
-            const rightNode = valueNode.right;
+          if (valueNode.type === 'AssignmentPattern') {
+            const leftNode = valueNode.left as Node;
+            const rightNode = valueNode.right as Node;
 
             visit(leftNode, allowNestedFunctions, true, 'declaration');
 
@@ -347,10 +312,10 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (current.type === 'CatchClause') {
-      const param = current.param;
-      const body = current.body;
+      const param = current.param as Node | null | undefined;
+      const body = current.body as Node;
 
-      if (isOxcNode(param)) {
+      if (param !== undefined && param !== null) {
         visit(param, allowNestedFunctions, true, 'declaration');
       }
 
@@ -360,19 +325,11 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (current.type === 'ObjectPattern') {
-      const properties = isOxcNodeArray(current.properties) ? current.properties : [];
+      const properties = Array.isArray(current.properties) ? (current.properties as ReadonlyArray<Node>) : [];
 
       for (const prop of properties) {
-        if (!isOxcNode(prop)) {
-          continue;
-        }
-
         if (prop.type === 'RestElement') {
-          const argument = isNodeRecord(prop) ? prop.argument : undefined;
-
-          if (isOxcNode(argument)) {
-            visit(argument, allowNestedFunctions, isWriteContext, writeKind);
-          }
+          visit(prop.argument as Node, allowNestedFunctions, isWriteContext, writeKind);
 
           continue;
         }
@@ -381,11 +338,11 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
           continue;
         }
 
-        const valueNode = prop.value;
+        const valueNode = prop.value as Node;
 
-        if (isOxcNode(valueNode) && valueNode.type === 'AssignmentPattern') {
-          visit(valueNode.left, allowNestedFunctions, isWriteContext, writeKind);
-          visit(valueNode.right, allowNestedFunctions, false);
+        if (valueNode.type === 'AssignmentPattern') {
+          visit(valueNode.left as Node, allowNestedFunctions, isWriteContext, writeKind);
+          visit(valueNode.right as Node, allowNestedFunctions, false);
 
           continue;
         }
@@ -397,26 +354,22 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (current.type === 'ArrayPattern') {
-      const elements = isOxcNodeArray(current.elements) ? current.elements : [];
+      const elements = Array.isArray(current.elements) ? (current.elements as ReadonlyArray<Node | null>) : [];
 
       for (const element of elements) {
-        if (!isOxcNode(element)) {
+        if (element === null) {
           continue;
         }
 
         if (element.type === 'RestElement') {
-          const argument = isNodeRecord(element) ? element.argument : undefined;
-
-          if (isOxcNode(argument)) {
-            visit(argument, allowNestedFunctions, isWriteContext, writeKind);
-          }
+          visit(element.argument as Node, allowNestedFunctions, isWriteContext, writeKind);
 
           continue;
         }
 
         if (element.type === 'AssignmentPattern') {
-          visit(element.left, allowNestedFunctions, isWriteContext, writeKind);
-          visit(element.right, allowNestedFunctions, false);
+          visit(element.left as Node, allowNestedFunctions, isWriteContext, writeKind);
+          visit(element.right as Node, allowNestedFunctions, false);
 
           continue;
         }
@@ -428,12 +381,9 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
     }
 
     if (nodeType === 'CallExpression') {
-      if (!isNodeRecord(current)) {
-        return;
-      }
-
-      const callee = current.callee;
-      const args = isOxcNodeArray(current.arguments) ? current.arguments : [];
+      const rec = current as unknown as Record<string, unknown>;
+      const callee = rec.callee as Node;
+      const args = Array.isArray(rec.arguments) ? (rec.arguments as ReadonlyArray<Node>) : [];
       const unwrappedCallee = unwrapExpression(callee);
 
       if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {
@@ -449,19 +399,7 @@ export const collectVariables = (node: NodeValue, options: VariableCollectorOpti
       return;
     }
 
-    if (!isNodeRecord(current)) {
-      return;
-    }
-
-    const entries = Object.entries(current);
-
-    for (const [key, value] of entries) {
-      if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      visit(value, allowNestedFunctions, false);
-    }
+    forEachChildNode(current, child => visit(child, allowNestedFunctions, false));
   };
 
   visit(node, options.includeNestedFunctions !== false, false);

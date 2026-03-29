@@ -97,7 +97,7 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
   const ranges: Array<{ start: number; end: number }> = [];
   const callArgRanges: Array<CallArgRange> = [];
 
-  const asRecord = (node: Node) => node as Record<string, unknown>;
+  const asRecord = (node: Node) => node as unknown as Record<string, unknown>;
 
   // Track function bodies with their return type status for ReturnStatement check
   const functionBodies: Array<{ bodyStart: number; bodyEnd: number; hasReturnType: boolean }> = [];

@@ -66,6 +66,10 @@ const variableDeclaration = (kind: 'const' | 'let' | 'var', declarations: Readon
   withType('VariableDeclaration', { kind, declarations: [...declarations] });
 
 const hasReturnStatement = (node: NodeValue): boolean => {
+  if (!isOxcNode(node)) {
+    return false;
+  }
+
   let found = false;
 
   walkOxcTree(node, value => {

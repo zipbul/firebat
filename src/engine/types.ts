@@ -1,7 +1,6 @@
 import type { Node } from 'oxc-parser';
 
-import type { FirebatItemKind } from '../types';
-import type { IntegerCFG } from './cfg';
+import type { IntegerCFG } from './cfg/cfg';
 import type { NodeId } from './cfg/cfg-types';
 
 export { EdgeType } from './cfg/cfg-types';
@@ -55,23 +54,7 @@ export interface FunctionBodyAnalysis {
 
 export type NodeValue = Node | ReadonlyArray<NodeValue> | string | number | boolean | null | undefined;
 
-export type NodeValueVisitor = (value: NodeValue) => void;
-
-export type OxcNodePredicate = (node: Node) => boolean;
-
-export type OxcNodeWalker = (node: Node) => boolean;
-
-export type DuplicateFingerprintResolver = (node: Node) => string;
-
-export type DuplicateItemKindResolver = (node: Node) => FirebatItemKind;
-
 export type NodeRecord = Node & Record<string, NodeValue>;
-
-export type NodeWithBody = Node & Record<'body', Node | ReadonlyArray<Node> | null | undefined>;
-
-export type NodeWithParams = Node & Record<'params', ReadonlyArray<Node>>;
-
-export type NodeWithValue = Node & Record<'value', string | number | boolean | bigint | null>;
 
 export type CfgNodePayload = Node | ReadonlyArray<Node>;
 

@@ -10,8 +10,6 @@ import type { FirebatItemKind, SourceSpan } from '../../types';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
-import { getNodeType } from '../../engine/ast/oxc-ast-utils';
-
 export const CLONE_TARGET_TYPES = new Set([
   'FunctionDeclaration',
   'ClassDeclaration',
@@ -23,10 +21,10 @@ export const CLONE_TARGET_TYPES = new Set([
   'TSInterfaceDeclaration',
 ]);
 
-export const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(getNodeType(node));
+export const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(node.type);
 
 export const getItemKind = (node: Node): FirebatItemKind => {
-  const t = getNodeType(node);
+  const t = node.type;
 
   if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') {return 'function';}
 

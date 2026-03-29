@@ -39,8 +39,8 @@ describe('unwrapExpression', () => {
     expect(unwrapExpression(null as never)).toBeNull();
   });
 
-  it('[ED] returns null for non-OXC input (number)', () => {
-    expect(unwrapExpression(42 as never)).toBeNull();
+  it('[ED] returns null for undefined input', () => {
+    expect(unwrapExpression(undefined)).toBeNull();
   });
 });
 
