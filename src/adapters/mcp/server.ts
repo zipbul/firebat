@@ -479,14 +479,14 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const jsonReport = toJsonReport(report);
       const filePatterns = args.filePatterns ?? [];
       const filteredAnalyses = filterAnalysesByFilePatterns(
-        jsonReport.analyses as unknown as Record<string, unknown>,
+        jsonReport.analyses as Record<string, unknown>,
         filePatterns,
       );
       const filteredReport = { ...jsonReport, analyses: filteredAnalyses };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(filteredReport) }],
-        structuredContent: toStructured(filteredReport as unknown as StructuredRecord),
+        structuredContent: toStructured(filteredReport as StructuredRecord),
       };
     }),
   );

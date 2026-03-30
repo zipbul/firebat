@@ -356,12 +356,8 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
     for (const candidate of relevantCandidates) {
       if (Date.now() > deadline) {break;}
       // fileTypes covers VariableDeclaration, ClassDeclaration, etc.
-      // Function parameters are not in fileTypes (gildash collectFile limitation).
-      // Skip candidates not in fileTypes to avoid expensive per-candidate getResolvedTypeAtPosition calls.
-      // Function parameter unknown/any is already covered by TypeScript's noImplicitAny.
-      const resolvedType = candidate.isCatchParam
-        ? (fileTypes.get(candidate.offset) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.offset))
-        : fileTypes.get(candidate.offset);
+      // Function parameters are not in fileTypes (gildash collectFile limitation) → fallback to single lookup.
+      const resolvedType = fileTypes.get(candidate.offset) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.offset);
 
       if (!resolvedType) {continue;}
 
@@ -407,7 +403,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // CallExpression init → check callee's declared return type for boundary detection
       if (candidate.initCalleeEndOffset !== undefined) {
-        const calleeType = fileTypes.get(candidate.initCalleeEndOffset - 1);
+        const calleeType = fileTypes.get(candidate.initCalleeEndOffset - 1) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.initCalleeEndOffset - 1);
 
         if (calleeType) {
           const calleeFlag = containsUnknownOrAny(calleeType);
@@ -424,7 +420,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // MemberExpression on any/unknown parent → derived type, not binding's fault
       if (candidate.initObjectEndOffset !== undefined) {
-        const objectType = fileTypes.get(candidate.initObjectEndOffset - 1);
+        const objectType = fileTypes.get(candidate.initObjectEndOffset - 1) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.initObjectEndOffset - 1);
 
         if (objectType) {
           const objectFlag = containsUnknownOrAny(objectType);
@@ -438,7 +434,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // ForOf/ForIn loop variable → check iterable's element type
       if (candidate.iterableEndOffset !== undefined) {
-        const iterableType = fileTypes.get(candidate.iterableEndOffset - 1);
+        const iterableType = fileTypes.get(candidate.iterableEndOffset - 1) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.iterableEndOffset - 1);
 
         if (iterableType) {
           const iterableFlag = containsUnknownOrAny(iterableType);
