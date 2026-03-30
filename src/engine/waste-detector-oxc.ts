@@ -1,10 +1,11 @@
-import type { Node } from 'oxc-parser';
+import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { WasteFinding } from '../types';
 import type { ParsedFile } from './types';
 
 import {
   collectOxcNodes,
+  forEachChildNode,
   getNodeName,
   isFunctionNode,
   isOxcNode,
@@ -42,9 +43,8 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
         return;
       }
 
-      const nodeRec = node as unknown as Record<string, unknown>;
-      const functionBody = nodeRec.body;
-      const functionBodyNode = isOxcNode(functionBody) || Array.isArray(functionBody) ? functionBody : undefined;
+      const fn = node as OxcFunction;
+      const functionBodyNode = isFunctionNode(node) ? fn.body ?? undefined : undefined;
 
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
         const localIndexByName = collectLocalVarIndexes(node);
@@ -90,8 +90,8 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               // If a nested FunctionDeclaration is never referenced in the outer body,
               // treat its closure reads as non-executed to enable dead-store detection.
               if (nestedType === 'FunctionDeclaration') {
-                const nestedFunctionRec = nestedFunction as unknown as Record<string, unknown>;
-                const declName = getNodeName(isOxcNode(nestedFunctionRec.id) ? nestedFunctionRec.id : null);
+                const nestedFn = nestedFunction as OxcFunction;
+                const declName = getNodeName(nestedFn.id);
 
                 if (declName !== null && !outerReadNames.has(declName)) {
                   continue;
@@ -200,19 +200,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
         } // end if (localIndexByName.size > 0)
       }
 
-      const nodeRec2 = node as unknown as Record<string, unknown>;
-      const keys = Object.keys(nodeRec2);
-
-      for (const key of keys) {
-        if (key === 'type' || key === 'loc' || key === 'start' || key === 'end') {
-          continue;
-        }
-
-        const value = nodeRec2[key];
-        const visitValue = isOxcNode(value) || Array.isArray(value) ? value : undefined;
-
-        visit(visitValue);
-      }
+      forEachChildNode(node, child => visit(child));
     };
 
     visit(file.program);

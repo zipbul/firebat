@@ -188,7 +188,11 @@ export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<Node>): number 
 
 /** Count statements in the consequent block of an if statement */
 const countConsequentStatements = (ifNode: Node): number => {
-  return countStatements((ifNode as unknown as Record<string, unknown>).consequent as Node);
+  if (ifNode.type !== 'IfStatement') {
+    return 0;
+  }
+
+  return countStatements(ifNode.consequent as Node);
 };
 
 /**
@@ -361,7 +365,7 @@ const detectCascadeGuard = (
 
   // Get the final branch's statement count
   // current is the last IfStatement in the chain — its alternate is the final branch
-  const finalBranch = (current as unknown as Record<string, unknown>).alternate as Node | null;
+  const finalBranch = current.type === 'IfStatement' ? current.alternate as Node | null : null;
 
   if (finalBranch === null) {
     // Tail-less: all consequents in the chain already end with exit (verified by the while loop).

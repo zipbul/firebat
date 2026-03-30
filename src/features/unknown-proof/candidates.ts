@@ -1,4 +1,4 @@
-import type { Node } from 'oxc-parser';
+import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
 import type { SourceSpan } from '../../types';
@@ -370,9 +370,10 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
         node.type === 'FunctionExpression' ||
         node.type === 'ArrowFunctionExpression'
       ) {
-        const body = asNodeLike((node as unknown as Record<string, unknown>).body);
+        const fn = node as OxcFunction;
+        const body = fn.body;
 
-        if (body && typeof body.start === 'number' && typeof body.end === 'number') {
+        if (body !== null && body !== undefined) {
           scopes.push({ start: body.start, end: body.end });
         }
       }

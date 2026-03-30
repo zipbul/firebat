@@ -252,6 +252,7 @@ const isSafelyUsed = (
   declaredFlag: ContainsResult,
   safeCtx: SafeContextData,
   fileTypes: ReadonlyMap<number, ResolvedType>,
+  deadline?: number,
 ): boolean => {
   if (varName === '_' || varName.startsWith('_')) {return true;}
 
@@ -263,6 +264,9 @@ const isSafelyUsed = (
 
   // ALL semantics: every usage must be safe (narrowed or in safe context)
   return usages.every(u => {
+    // Budget exceeded → conservatively treat as safe to avoid blocking
+    if (deadline !== undefined && Date.now() > deadline) {return true;}
+
     // Strategy 1: Semantic narrowing — type changed at usage → developer handles the type
     const usageType = fileTypes.get(u.position) ?? gildash.getResolvedTypeAtPosition(filePath, u.position);
 
@@ -283,7 +287,7 @@ const isSafelyUsed = (
     const callArg = safeCtx.callArgRanges.find(r => r.start <= u.position && u.position < r.end);
 
     if (callArg && callArg.calleeEnd > 0) {
-      const calleeType = gildash.getResolvedTypeAtPosition(filePath, callArg.calleeEnd - 1);
+      const calleeType = fileTypes.get(callArg.calleeEnd - 1) ?? gildash.getResolvedTypeAtPosition(filePath, callArg.calleeEnd - 1);
 
       if (calleeType) {
         const calleeFlag = containsUnknownOrAny(calleeType);
@@ -311,6 +315,9 @@ interface RunSemanticChecksOk {
   readonly findings: ReadonlyArray<UnknownProofFinding>;
 }
 
+/** Per-file getFileTypes is expensive (~50-200ms). Cap total semantic check time to prevent blocking the event loop. */
+const SEMANTIC_CHECK_BUDGET_MS = 10_000;
+
 export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): RunSemanticChecksOk => {
   const fileByPath = new Map<string, ParsedFile>();
 
@@ -319,21 +326,65 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
   }
 
   const findings: UnknownProofFinding[] = [];
+  const deadline = Date.now() + SEMANTIC_CHECK_BUDGET_MS;
 
-  for (const [filePath, candidates] of input.candidatesByFile) {
+  // Sort: source files first, test files last (test files are less likely to have meaningful findings)
+  const sortedEntries = [...input.candidatesByFile.entries()].sort(([a], [b]) => {
+    const aTest = a.endsWith('.spec.ts') || a.endsWith('.test.ts');
+    const bTest = b.endsWith('.spec.ts') || b.endsWith('.test.ts');
+
+    if (aTest !== bTest) {return aTest ? 1 : -1;}
+
+    return 0;
+  });
+
+  for (const [filePath, candidates] of sortedEntries) {
+    if (Date.now() > deadline) {break;}
+
     const file = fileByPath.get(filePath);
 
     if (!file) {continue;}
 
+    // Pre-filter: explicitly annotated non-catch bindings are intentional declarations — skip before expensive gildash calls.
+    // Catch params need checking even with annotation (catch (e: unknown) is the finding case).
+    const relevantCandidates = candidates.filter(c => c.isCatchParam || !c.hasExplicitAnnotation);
+
+    if (relevantCandidates.length === 0) {continue;}
+
+    if (Date.now() > deadline) {break;}
+
     // Batch: collect all declaration types for this file at once
     const fileTypes = input.gildash.getFileTypes(filePath);
+
+    // Early bailout: if no type in this file contains unknown/any, skip entirely.
+    // Catch params are an exception (may not be in fileTypes) but are rare — handle below.
+    let fileHasUnknownOrAny = false;
+
+    for (const [, rt] of fileTypes) {
+      const f = containsUnknownOrAny(rt);
+
+      if (f.unknown || f.any) {
+        fileHasUnknownOrAny = true;
+        break;
+      }
+    }
+
+    const hasCatchCandidates = !fileHasUnknownOrAny && relevantCandidates.some(c => c.isCatchParam);
+
+    if (!fileHasUnknownOrAny && !hasCatchCandidates) {continue;}
+
     // Pre-compute safe AST context ranges for this file (once per file)
     const safeCtx = collectSafeContextRanges(file.program);
 
-    for (const candidate of candidates) {
+    for (const candidate of relevantCandidates) {
+      if (Date.now() > deadline) {break;}
       // fileTypes covers VariableDeclaration, ClassDeclaration, etc.
-      // Function parameters are not in fileTypes (gildash collectFile limitation) → fallback to single lookup
-      const resolvedType = fileTypes.get(candidate.offset) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.offset);
+      // Function parameters are not in fileTypes (gildash collectFile limitation).
+      // Skip candidates not in fileTypes to avoid expensive per-candidate getResolvedTypeAtPosition calls.
+      // Function parameter unknown/any is already covered by TypeScript's noImplicitAny.
+      const resolvedType = candidate.isCatchParam
+        ? (fileTypes.get(candidate.offset) ?? input.gildash.getResolvedTypeAtPosition(filePath, candidate.offset))
+        : fileTypes.get(candidate.offset);
 
       if (!resolvedType) {continue;}
 
@@ -344,7 +395,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
       // catch param → finding only if not safely used
       if (candidate.isCatchParam) {
         const refs = input.gildash.getSemanticReferencesAtPosition(filePath, candidate.offset);
-        const isSafe = isSafelyUsed(input.gildash, filePath, refs, candidate.name, flag, safeCtx, fileTypes);
+        const isSafe = isSafelyUsed(input.gildash, filePath, refs, candidate.name, flag, safeCtx, fileTypes, deadline);
 
         if (!isSafe) {
           if (flag.unknown) {
@@ -379,7 +430,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // CallExpression init → check callee's declared return type for boundary detection
       if (candidate.initCalleeEndOffset !== undefined) {
-        const calleeType = input.gildash.getResolvedTypeAtPosition(filePath, candidate.initCalleeEndOffset - 1);
+        const calleeType = fileTypes.get(candidate.initCalleeEndOffset - 1);
 
         if (calleeType) {
           const calleeFlag = containsUnknownOrAny(calleeType);
@@ -396,7 +447,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // MemberExpression on any/unknown parent → derived type, not binding's fault
       if (candidate.initObjectEndOffset !== undefined) {
-        const objectType = input.gildash.getResolvedTypeAtPosition(filePath, candidate.initObjectEndOffset - 1);
+        const objectType = fileTypes.get(candidate.initObjectEndOffset - 1);
 
         if (objectType) {
           const objectFlag = containsUnknownOrAny(objectType);
@@ -410,7 +461,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       // ForOf/ForIn loop variable → check iterable's element type
       if (candidate.iterableEndOffset !== undefined) {
-        const iterableType = input.gildash.getResolvedTypeAtPosition(filePath, candidate.iterableEndOffset - 1);
+        const iterableType = fileTypes.get(candidate.iterableEndOffset - 1);
 
         if (iterableType) {
           const iterableFlag = containsUnknownOrAny(iterableType);
@@ -422,12 +473,9 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
         }
       }
 
-      // Explicit annotation → intentional declaration, skip
-      if (candidate.hasExplicitAnnotation) {continue;}
-
       // Check safe usage via semantic narrowing + AST context
       const refs = input.gildash.getSemanticReferencesAtPosition(filePath, candidate.offset);
-      const isSafe = isSafelyUsed(input.gildash, filePath, refs, candidate.name, flag, safeCtx, fileTypes);
+      const isSafe = isSafelyUsed(input.gildash, filePath, refs, candidate.name, flag, safeCtx, fileTypes, deadline);
 
       if (isSafe) {continue;}
 

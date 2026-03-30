@@ -562,15 +562,11 @@ const analyzeFunctionNode = (
   ]);
 
   const collectHalstead = (node: Node, nodeType: string): void => {
-    const rec = node as unknown as Record<string, unknown>;
-
     // Control-flow operators
     if (HALSTEAD_CONTROL_OPS.has(nodeType)) {
-      const op = nodeType;
-
       totalOperators++;
 
-      uniqueOperators.add(op);
+      uniqueOperators.add(nodeType);
     }
 
     // Binary/Logical/Assignment/Unary/Update operators
@@ -581,7 +577,7 @@ const analyzeFunctionNode = (
       nodeType === 'UnaryExpression' ||
       nodeType === 'UpdateExpression'
     ) {
-      const op = String(rec.operator ?? '');
+      const op = String((node as unknown as { operator?: unknown }).operator ?? '');
 
       if (op.length > 0) {
         totalOperators++;
@@ -627,8 +623,9 @@ const analyzeFunctionNode = (
 
     // Property access operator
     if (nodeType === 'MemberExpression') {
-      const optional = Boolean(rec.optional);
-      const computed = Boolean(rec.computed);
+      const memberNode = node as unknown as { optional?: boolean; computed?: boolean };
+      const optional = Boolean(memberNode.optional);
+      const computed = Boolean(memberNode.computed);
       const op = optional ? '?.' : computed ? '[]' : '.';
 
       totalOperators++;
@@ -638,7 +635,7 @@ const analyzeFunctionNode = (
 
     // Operands: Identifier
     if (nodeType === 'Identifier') {
-      const name = String(rec.name ?? '');
+      const name = String((node as unknown as { name?: unknown }).name ?? '');
 
       if (name.length > 0) {
         totalOperands++;
@@ -647,7 +644,7 @@ const analyzeFunctionNode = (
       }
     }
 
-    // Operands: Literals
+    // Operands: Literals (legacy node type names from older oxc versions — kept for potential compatibility)
     if (
       nodeType === 'NumericLiteral' ||
       nodeType === 'StringLiteral' ||
@@ -656,7 +653,8 @@ const analyzeFunctionNode = (
       nodeType === 'BigIntLiteral' ||
       nodeType === 'RegExpLiteral'
     ) {
-      const raw = String(rec.raw ?? rec.value ?? nodeType);
+      const literalNode = node as unknown as { raw?: unknown; value?: unknown };
+      const raw = String(literalNode.raw ?? literalNode.value ?? nodeType);
 
       totalOperands++;
 

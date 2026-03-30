@@ -221,25 +221,16 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
     return;
   }
 
-  const body = asNodeLike(file.program)?.body;
-
-  if (!Array.isArray(body)) {
+  if (!isOxcNode(file.program) || file.program.type !== 'Program') {
     return;
   }
 
-  for (const stmt of body) {
-    if (!stmt || typeof stmt !== 'object') {
-      continue;
-    }
+  for (const stmt of file.program.body as ReadonlyArray<Node>) {
+    if (stmt.type === 'ImportDeclaration') {
+      const specifiers = stmt.specifiers as ReadonlyArray<Node>;
 
-    const stmtRecord = asNodeLike(stmt);
-    const type = stmtRecord?.type;
-
-    if (type === 'ImportDeclaration') {
-      const specifiers = stmtRecord?.specifiers;
-
-      if (!Array.isArray(specifiers) || specifiers.length === 0) {
-        const source = getLiteralString(stmtRecord?.source as Node | null | undefined);
+      if (specifiers.length === 0) {
+        const source = getLiteralString(stmt.source as Node | null | undefined);
 
         findings.push({
           kind: 'barrel-side-effect-import',
@@ -252,9 +243,9 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
       }
     }
 
-    if (type === 'ExportNamedDeclaration') {
-      const source = getLiteralString(stmtRecord?.source as Node | null | undefined);
-      const declaration = stmtRecord?.declaration;
+    if (stmt.type === 'ExportNamedDeclaration') {
+      const source = getLiteralString((stmt as unknown as { source: Node | null }).source);
+      const declaration = (stmt as unknown as { declaration: unknown }).declaration;
 
       if (typeof source === 'string' && (declaration === null || declaration === undefined)) {
         // Allow only: export { ... } from '...'; / export type { ... } from '...';
@@ -271,7 +262,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
     }
 
     // ExportAllDeclaration is separately reported via export-star, but still invalid in barrel.
-    if (type === 'ExportAllDeclaration') {
+    if (stmt.type === 'ExportAllDeclaration') {
       findings.push({
         kind: 'invalid-index-statement',
         file: file.filePath,
@@ -286,7 +277,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
       kind: 'invalid-index-statement',
       file: file.filePath,
       span: toNodeSpan(file, stmt),
-      evidence: String(type ?? 'unknown'),
+      evidence: stmt.type,
     });
   }
 };
@@ -362,56 +353,26 @@ interface ImportedBinding {
 const collectImportBindings = (file: ParsedFile): Map<string, ImportedBinding> => {
   // Map: local name → { source, localName }
   const result = new Map<string, ImportedBinding>();
-  const body = asNodeLike(file.program)?.body;
 
-  if (!Array.isArray(body)) {
+  if (!isOxcNode(file.program) || file.program.type !== 'Program') {
     return result;
   }
 
-  for (const stmt of body) {
-    const stmtNode = stmt as unknown as Record<string, unknown>;
-
-    if (!stmtNode || typeof stmtNode !== 'object') {
+  for (const stmt of file.program.body as ReadonlyArray<Node>) {
+    if (stmt.type !== 'ImportDeclaration') {
       continue;
     }
 
-    if (stmtNode['type'] !== 'ImportDeclaration') {
-      continue;
-    }
-
-    const source = getLiteralString(stmtNode['source'] as Node | null | undefined);
+    const source = getLiteralString(stmt.source as Node | null | undefined);
 
     if (typeof source !== 'string') {
       continue;
     }
 
-    const specifiers = stmtNode['specifiers'];
+    for (const spec of stmt.specifiers) {
+      const localName = spec.local.name;
 
-    if (!Array.isArray(specifiers)) {
-      continue;
-    }
-
-    for (const spec of specifiers) {
-      const specNode = spec as unknown as Record<string, unknown>;
-
-      if (!specNode || typeof specNode !== 'object') {
-        continue;
-      }
-
-      // ImportSpecifier: { local: Identifier }
-      // ImportDefaultSpecifier: { local: Identifier }
-      // ImportNamespaceSpecifier: { local: Identifier }
-      const localNode = specNode['local'] as unknown as Record<string, unknown>;
-
-      if (!localNode || typeof localNode !== 'object' || localNode['type'] !== 'Identifier') {
-        continue;
-      }
-
-      const localName = localNode['name'];
-
-      if (typeof localName === 'string') {
-        result.set(localName, { source, localName });
-      }
+      result.set(localName, { source, localName });
     }
   }
 
@@ -491,14 +452,10 @@ const checkCrossModuleReexport = async (
     // 구문 A: ExportNamedDeclaration with source, ExportAllDeclaration
     if (!skipPatternA) {
       for (const stmt of body) {
-        const stmtNode = stmt as unknown as Record<string, unknown>;
+        const stmtNode = stmt as Node;
 
-        if (!stmtNode || typeof stmtNode !== 'object') {
-          continue;
-        }
-
-        if (stmtNode['type'] === 'ExportNamedDeclaration' || stmtNode['type'] === 'ExportAllDeclaration') {
-          const source = getLiteralString(stmtNode['source'] as Node | null | undefined);
+        if (stmtNode.type === 'ExportNamedDeclaration' || stmtNode.type === 'ExportAllDeclaration') {
+          const source = getLiteralString((stmtNode as unknown as { source: Node | null }).source);
 
           if (typeof source !== 'string') {
             continue;
@@ -540,34 +497,24 @@ const checkCrossModuleReexport = async (
     const locallyUsed = collectLocallyUsedImportNames(file.program, importedNames);
 
     for (const stmt of body) {
-      const stmtNode = stmt as unknown as Record<string, unknown>;
-
-      if (!stmtNode || typeof stmtNode !== 'object') {
-        continue;
-      }
+      const stmtNode = stmt as Node;
 
       // 구문 B: ExportNamedDeclaration without source
-      if (stmtNode['type'] === 'ExportNamedDeclaration' && (stmtNode['source'] === null || stmtNode['source'] === undefined)) {
-        const specifiers = stmtNode['specifiers'];
+      if (stmtNode.type === 'ExportNamedDeclaration') {
+        const exportNamed = stmtNode as unknown as { source: Node | null; specifiers: Node[] };
 
-        if (!Array.isArray(specifiers)) {
+        if (exportNamed.source !== null) {
           continue;
         }
 
-        for (const spec of specifiers) {
-          const specNode = spec as unknown as Record<string, unknown>;
+        for (const spec of exportNamed.specifiers) {
+          const localNode = (spec as unknown as { local: Node }).local;
 
-          if (!specNode || typeof specNode !== 'object') {
+          if (!isOxcNode(localNode) || localNode.type !== 'Identifier') {
             continue;
           }
 
-          const localNode = specNode['local'] as unknown as Record<string, unknown>;
-
-          if (!localNode || typeof localNode !== 'object' || localNode['type'] !== 'Identifier') {
-            continue;
-          }
-
-          const localName = localNode['name'];
+          const localName = localNode.name;
 
           if (typeof localName !== 'string') {
             continue;
@@ -612,14 +559,14 @@ const checkCrossModuleReexport = async (
       }
 
       // 구문 C: ExportDefaultDeclaration — declaration이 Identifier
-      if (stmtNode['type'] === 'ExportDefaultDeclaration') {
-        const declaration = stmtNode['declaration'] as unknown as Record<string, unknown>;
+      if (stmtNode.type === 'ExportDefaultDeclaration') {
+        const declaration = (stmtNode as unknown as { declaration: Node }).declaration;
 
-        if (!declaration || typeof declaration !== 'object' || declaration['type'] !== 'Identifier') {
+        if (!isOxcNode(declaration) || declaration.type !== 'Identifier') {
           continue;
         }
 
-        const identName = declaration['name'];
+        const identName = declaration.name;
 
         if (typeof identName !== 'string') {
           continue;

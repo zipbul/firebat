@@ -4,21 +4,14 @@ const unwrapExpression = (node: Node | null | undefined): Node | null => {
   let current: Node | null = node ?? null;
 
   while (current !== null) {
-    const nodeType = current.type;
-    const rec = current as unknown as Record<string, unknown>;
-
-    if (nodeType === 'ParenthesizedExpression') {
-      const expr = rec.expression;
-
-      current = expr !== null && expr !== undefined && typeof expr === 'object' && !Array.isArray(expr) ? (expr as Node) : null;
+    if (current.type === 'ParenthesizedExpression') {
+      current = current.expression as Node;
 
       continue;
     }
 
-    if (nodeType === 'ChainExpression') {
-      const expr = rec.expression;
-
-      current = expr !== null && expr !== undefined && typeof expr === 'object' && !Array.isArray(expr) ? (expr as Node) : null;
+    if (current.type === 'ChainExpression') {
+      current = current.expression as Node;
 
       continue;
     }

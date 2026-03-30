@@ -63,8 +63,6 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     isWriteContext: boolean = false,
     writeKind?: VariableUsage['writeKind'],
   ) => {
-    const nodeType = current.type;
-
     if (!allowNestedFunctions && isFunctionNode(current)) {
       return;
     }
@@ -380,10 +378,9 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       return;
     }
 
-    if (nodeType === 'CallExpression') {
-      const rec = current as unknown as Record<string, unknown>;
-      const callee = rec.callee as Node;
-      const args = Array.isArray(rec.arguments) ? (rec.arguments as ReadonlyArray<Node>) : [];
+    if (current.type === 'CallExpression') {
+      const callee = current.callee as Node;
+      const args = current.arguments as ReadonlyArray<Node>;
       const unwrappedCallee = unwrapExpression(callee);
 
       if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {

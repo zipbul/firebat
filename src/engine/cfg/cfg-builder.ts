@@ -1,68 +1,27 @@
-import type { Node } from 'oxc-parser';
+import type {
+  BlockStatement,
+  BreakStatement,
+  ContinueStatement,
+  DoWhileStatement,
+  ForInStatement,
+  ForOfStatement,
+  ForStatement,
+  ForStatementInit,
+  ForStatementLeft,
+  IfStatement,
+  LabeledStatement,
+  Node,
+  ReturnStatement,
+  SwitchStatement,
+  ThrowStatement,
+  TryStatement,
+  WhileStatement,
+} from 'oxc-parser';
 
 import { IntegerCFG } from './cfg';
-import { getNodeName, isOxcNode } from '../ast/oxc-ast-utils';
+import { isOxcNode } from '../ast/oxc-ast-utils';
 import { evalStaticLiteralValue, evalStaticTruthiness } from '../ast/oxc-expression-utils';
 import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg } from '../types';
-
-type HandledStatementType =
-  | 'BlockStatement'
-  | 'LabeledStatement'
-  | 'IfStatement'
-  | 'WhileStatement'
-  | 'DoWhileStatement'
-  | 'ForOfStatement'
-  | 'ForInStatement'
-  | 'ForStatement'
-  | 'SwitchStatement'
-  | 'BreakStatement'
-  | 'ContinueStatement'
-  | 'ReturnStatement'
-  | 'ThrowStatement'
-  | 'TryStatement';
-
-const handledStatementTypes = new Set<string>([
-  'BlockStatement',
-  'LabeledStatement',
-  'IfStatement',
-  'WhileStatement',
-  'DoWhileStatement',
-  'ForOfStatement',
-  'ForInStatement',
-  'ForStatement',
-  'SwitchStatement',
-  'BreakStatement',
-  'ContinueStatement',
-  'ReturnStatement',
-  'ThrowStatement',
-  'TryStatement',
-]);
-
-const isHandledStatementType = (value: string): value is HandledStatementType => handledStatementTypes.has(value);
-
-const toPayload = (value: Node | ReadonlyArray<Node> | null | undefined): CfgNodePayload | null => {
-  if (isOxcNode(value)) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value as ReadonlyArray<Node>;
-  }
-
-  return null;
-};
-
-const toStatement = (value: Node | ReadonlyArray<Node> | null | undefined): Node | ReadonlyArray<Node> | undefined => {
-  if (isOxcNode(value)) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value as ReadonlyArray<Node>;
-  }
-
-  return undefined;
-};
 
 export class OxcCFGBuilder {
   private cfg: IntegerCFG;
@@ -175,7 +134,7 @@ export class OxcCFGBuilder {
   }
 
   private visitJumpStatement(
-    node: Node,
+    node: BreakStatement | ContinueStatement,
     incoming: readonly NodeId[],
     loopStack: readonly LoopTargets[],
     useBreakTarget: boolean,
@@ -184,8 +143,7 @@ export class OxcCFGBuilder {
 
     this.connect(incoming, jumpNode, EdgeType.Normal);
 
-    const labelNode = 'label' in node ? node.label : undefined;
-    const targetLabel = getNodeName(labelNode);
+    const targetLabel = node.label?.name ?? null;
     const target = this.resolveLoopTarget(loopStack, targetLabel, useBreakTarget);
 
     if (target !== null) {
@@ -215,24 +173,12 @@ export class OxcCFGBuilder {
       return [...incoming];
     }
 
-    if (!isHandledStatementType(node.type)) {
-      const statementNode = this.addNode(node);
-
-      this.connect(incoming, statementNode, EdgeType.Normal);
-      this.addExceptionEdgeIfInTry(statementNode);
-
-      return [statementNode];
-    }
-
-    const nodeType = String(node.type);
-
-    switch (nodeType) {
+    switch (node.type) {
       case 'BlockStatement': {
+        const blockNode = node as BlockStatement;
         let tails: NodeId[] = [...incoming];
-        const nodeRec = node as unknown as Record<string, unknown>;
-        const bodyItems = Array.isArray(nodeRec.body) ? (nodeRec.body as ReadonlyArray<Node>) : [];
 
-        for (const child of bodyItems) {
+        for (const child of blockNode.body) {
           tails = this.visitStatement(child, tails, loopStack, null);
         }
 
@@ -240,31 +186,25 @@ export class OxcCFGBuilder {
       }
 
       case 'LabeledStatement': {
-        const labeledRec = node as unknown as Record<string, unknown>;
-        const labelNode = isOxcNode(labeledRec.label) ? labeledRec.label : undefined;
-        const labelName = getNodeName(labelNode ?? null);
-        const bodyValue = toStatement(isOxcNode(labeledRec.body) ? labeledRec.body : undefined);
+        const labeledNode = node as LabeledStatement;
 
-        return this.visitStatement(bodyValue, incoming, loopStack, labelName);
+        return this.visitStatement(labeledNode.body, incoming, loopStack, labeledNode.label.name);
       }
 
       case 'IfStatement': {
-        const ifRec = node as unknown as Record<string, unknown>;
-        const testValue = isOxcNode(ifRec.test) ? ifRec.test : undefined;
-        const conditionNode = this.addNode(toPayload(testValue));
-        const truthiness = evalStaticTruthiness(testValue);
+        const ifNode = node as IfStatement;
+        const conditionNode = this.addNode(ifNode.test);
+        const truthiness = evalStaticTruthiness(ifNode.test);
 
         this.connect(incoming, conditionNode, EdgeType.Normal);
 
         const trueEntry = this.addNode(null);
         const falseEntry = this.addNode(null);
-        const consequentValue = toStatement(isOxcNode(ifRec.consequent) ? ifRec.consequent : undefined);
-        const alternateValue = toStatement(isOxcNode(ifRec.alternate) ? ifRec.alternate : undefined);
 
         if (truthiness === true) {
           this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
 
-          const trueTails = this.visitStatement(consequentValue, [trueEntry], loopStack, null);
+          const trueTails = this.visitStatement(ifNode.consequent, [trueEntry], loopStack, null);
           const mergeNode = this.addNode(null);
 
           this.connect(trueTails, mergeNode, EdgeType.Normal);
@@ -276,7 +216,9 @@ export class OxcCFGBuilder {
           this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
           const falseTails =
-            alternateValue === undefined ? [falseEntry] : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
+            ifNode.alternate === null
+              ? [falseEntry]
+              : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
           const mergeNode = this.addNode(null);
 
           this.connect(falseTails, mergeNode, EdgeType.Normal);
@@ -287,9 +229,11 @@ export class OxcCFGBuilder {
         this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
         this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
-        const trueTails = this.visitStatement(consequentValue, [trueEntry], loopStack, null);
+        const trueTails = this.visitStatement(ifNode.consequent, [trueEntry], loopStack, null);
         const falseTails =
-          alternateValue === undefined ? [falseEntry] : this.visitStatement(alternateValue, [falseEntry], loopStack, null);
+          ifNode.alternate === null
+            ? [falseEntry]
+            : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
         const mergeNode = this.addNode(null);
 
         this.connect(trueTails, mergeNode, EdgeType.Normal);
@@ -299,10 +243,9 @@ export class OxcCFGBuilder {
       }
 
       case 'WhileStatement': {
-        const whileRec = node as unknown as Record<string, unknown>;
-        const testValue = isOxcNode(whileRec.test) ? whileRec.test : undefined;
-        const conditionNode = this.addNode(toPayload(testValue));
-        const truthiness = evalStaticTruthiness(testValue);
+        const whileNode = node as WhileStatement;
+        const conditionNode = this.addNode(whileNode.test);
+        const truthiness = evalStaticTruthiness(whileNode.test);
 
         this.connect(incoming, conditionNode, EdgeType.Normal);
         this.addExceptionEdgeIfInTry(conditionNode);
@@ -320,8 +263,7 @@ export class OxcCFGBuilder {
           ...loopStack,
           { breakTarget: afterLoop, continueTarget: conditionNode, label: currentLabel },
         ];
-        const bodyValue = toStatement(isOxcNode(whileRec.body) ? whileRec.body : undefined);
-        const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
+        const bodyTails = this.visitStatement(whileNode.body, [bodyEntry], nextLoopStack, null);
 
         this.connect(bodyTails, conditionNode, EdgeType.Normal);
 
@@ -329,10 +271,9 @@ export class OxcCFGBuilder {
       }
 
       case 'DoWhileStatement': {
-        const doWhileRec = node as unknown as Record<string, unknown>;
+        const doWhileNode = node as DoWhileStatement;
         const bodyEntry = this.addNode(null);
-        const testValue = isOxcNode(doWhileRec.test) ? doWhileRec.test : undefined;
-        const conditionNode = this.addNode(toPayload(testValue));
+        const conditionNode = this.addNode(doWhileNode.test);
         const afterLoop = this.addNode(null);
 
         this.connect(incoming, bodyEntry, EdgeType.Normal);
@@ -342,8 +283,7 @@ export class OxcCFGBuilder {
           ...loopStack,
           { breakTarget: afterLoop, continueTarget: conditionNode, label: currentLabel },
         ];
-        const bodyValue = toStatement(isOxcNode(doWhileRec.body) ? doWhileRec.body : undefined);
-        const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
+        const bodyTails = this.visitStatement(doWhileNode.body, [bodyEntry], nextLoopStack, null);
 
         this.connect(bodyTails, conditionNode, EdgeType.Normal);
 
@@ -358,20 +298,9 @@ export class OxcCFGBuilder {
         // Model as: header -> body -> header, with an explicit exit edge.
         // IMPORTANT: keep the header payload free of `body` so that uses in the body
         // are not attributed to the same CFG node as the loop variable write.
-        const forOfInRec = node as unknown as Record<string, unknown>;
-        const headerPayload: Node[] = [];
-        const leftValue = forOfInRec.left;
-        const rightValue = forOfInRec.right;
-
-        if (isOxcNode(leftValue)) {
-          headerPayload.push(leftValue);
-        }
-
-        if (isOxcNode(rightValue)) {
-          headerPayload.push(rightValue);
-        }
-
-        const headerNode = this.addNode(headerPayload.length > 0 ? headerPayload : null);
+        const forOfInNode = node as ForOfStatement | ForInStatement;
+        const headerPayload: Node[] = [forOfInNode.left as Node as ForStatementLeft, forOfInNode.right];
+        const headerNode = this.addNode(headerPayload);
         const bodyEntry = this.addNode(null);
         const afterLoop = this.addNode(null);
 
@@ -386,8 +315,7 @@ export class OxcCFGBuilder {
           ...loopStack,
           { breakTarget: afterLoop, continueTarget: headerNode, label: currentLabel },
         ];
-        const bodyValue = toStatement(isOxcNode(forOfInRec.body) ? forOfInRec.body : undefined);
-        const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
+        const bodyTails = this.visitStatement(forOfInNode.body, [bodyEntry], nextLoopStack, null);
 
         this.connect(bodyTails, headerNode, EdgeType.Normal);
 
@@ -395,14 +323,11 @@ export class OxcCFGBuilder {
       }
 
       case 'ForStatement': {
-        const forRec = node as unknown as Record<string, unknown>;
+        const forNode = node as ForStatement;
         let tails: NodeId[] = [...incoming];
-        const initValue = isOxcNode(forRec.init) ? forRec.init : undefined;
-        const testValue = isOxcNode(forRec.test) ? forRec.test : undefined;
-        const updateValue = isOxcNode(forRec.update) ? forRec.update : undefined;
 
-        if (initValue !== undefined) {
-          const initNode = this.addNode(toPayload(initValue));
+        if (forNode.init !== null) {
+          const initNode = this.addNode(forNode.init as Node as ForStatementInit);
 
           this.connect(tails, initNode, EdgeType.Normal);
           this.addExceptionEdgeIfInTry(initNode);
@@ -410,8 +335,8 @@ export class OxcCFGBuilder {
           tails = [initNode];
         }
 
-        const testNode = this.addNode(toPayload(testValue));
-        const truthiness = evalStaticTruthiness(testValue);
+        const testNode = this.addNode(forNode.test);
+        const truthiness = evalStaticTruthiness(forNode.test ?? undefined);
 
         this.connect(tails, testNode, EdgeType.Normal);
         this.addExceptionEdgeIfInTry(testNode);
@@ -419,13 +344,13 @@ export class OxcCFGBuilder {
         const bodyEntry = this.addNode(null);
         const afterLoop = this.addNode(null);
 
-        this.addConditionalEdges(testNode, bodyEntry, afterLoop, truthiness, testValue === undefined);
+        this.addConditionalEdges(testNode, bodyEntry, afterLoop, truthiness, forNode.test === null);
 
         let continueTarget = testNode;
         let updateNode: NodeId | null = null;
 
-        if (updateValue !== undefined) {
-          updateNode = this.addNode(toPayload(updateValue));
+        if (forNode.update !== null) {
+          updateNode = this.addNode(forNode.update);
 
           this.addExceptionEdgeIfInTry(updateNode);
 
@@ -437,8 +362,7 @@ export class OxcCFGBuilder {
         }
 
         const nextLoopStack: LoopTargets[] = [...loopStack, { breakTarget: afterLoop, continueTarget, label: currentLabel }];
-        const bodyValue = toStatement(isOxcNode(forRec.body) ? forRec.body : undefined);
-        const bodyTails = this.visitStatement(bodyValue, [bodyEntry], nextLoopStack, null);
+        const bodyTails = this.visitStatement(forNode.body, [bodyEntry], nextLoopStack, null);
 
         if (updateNode !== null) {
           this.connect(bodyTails, updateNode, EdgeType.Normal);
@@ -455,25 +379,16 @@ export class OxcCFGBuilder {
         // Case tests are evaluated sequentially against the discriminant, stopping at the
         // first match. If the discriminant is a static literal, cases after the first
         // matching case are statically unreachable and their test expressions are excluded.
-        const switchRec = node as unknown as Record<string, unknown>;
-        const cases = Array.isArray(switchRec.cases) ? (switchRec.cases as ReadonlyArray<Node>) : [];
-        const discriminantPayload: Node[] = [];
-
-        if (isOxcNode(switchRec.discriminant)) {
-          discriminantPayload.push(switchRec.discriminant);
-        }
+        const switchNode = node as SwitchStatement;
+        const discriminantPayload: Node[] = [switchNode.discriminant];
 
         // Attempt to resolve static discriminant value so we can prune unreachable cases.
-        const staticDiscriminant = evalStaticLiteralValue(isOxcNode(switchRec.discriminant) ? switchRec.discriminant : undefined);
+        const staticDiscriminant = evalStaticLiteralValue(switchNode.discriminant);
         let firstMatchFound = false;
 
-        for (const caseNode of cases) {
-          const caseRec = caseNode as unknown as Record<string, unknown>;
-
+        for (const caseNode of switchNode.cases) {
           // default case has no test
-          const testNode = caseRec.test;
-
-          if (!isOxcNode(testNode)) {
+          if (caseNode.test === null) {
             continue;
           }
 
@@ -482,11 +397,11 @@ export class OxcCFGBuilder {
             continue;
           }
 
-          discriminantPayload.push(testNode);
+          discriminantPayload.push(caseNode.test);
 
           // Check if this case matches the discriminant statically.
           if (staticDiscriminant !== undefined) {
-            const staticTest = evalStaticLiteralValue(testNode);
+            const staticTest = evalStaticLiteralValue(caseNode.test);
 
             if (staticTest !== undefined && Object.is(staticDiscriminant, staticTest)) {
               firstMatchFound = true;
@@ -494,12 +409,12 @@ export class OxcCFGBuilder {
           }
         }
 
-        const discriminantNode = this.addNode(discriminantPayload.length > 0 ? discriminantPayload : null);
+        const discriminantNode = this.addNode(discriminantPayload);
 
         this.connect(incoming, discriminantNode, EdgeType.Normal);
 
         const afterSwitch = this.addNode(null);
-        const caseEntries: NodeId[] = cases.map(() => this.addNode(null));
+        const caseEntries: NodeId[] = switchNode.cases.map(() => this.addNode(null));
 
         for (const entry of caseEntries) {
           this.cfg.addEdge(discriminantNode, entry, EdgeType.Normal);
@@ -510,8 +425,8 @@ export class OxcCFGBuilder {
           { breakTarget: afterSwitch, continueTarget: afterSwitch, label: currentLabel },
         ];
 
-        for (let index = 0; index < cases.length; index += 1) {
-          const caseNode = cases[index];
+        for (let index = 0; index < switchNode.cases.length; index += 1) {
+          const caseNode = switchNode.cases[index];
           const caseEntry = caseEntries[index];
 
           if (caseNode === undefined) {
@@ -522,9 +437,7 @@ export class OxcCFGBuilder {
             continue;
           }
 
-          const caseRec = caseNode as unknown as Record<string, unknown>;
-          const consequent = Array.isArray(caseRec.consequent) ? (caseRec.consequent as ReadonlyArray<Node>) : [];
-          const caseTails = this.visitStatement(consequent, [caseEntry], nextLoopStack, null);
+          const caseTails = this.visitStatement(caseNode.consequent, [caseEntry], nextLoopStack, null);
           const nextEntry = index + 1 < caseEntries.length ? caseEntries[index + 1] : undefined;
 
           if (nextEntry !== undefined) {
@@ -538,17 +451,17 @@ export class OxcCFGBuilder {
       }
 
       case 'BreakStatement': {
-        return this.visitJumpStatement(node, incoming, loopStack, true);
+        return this.visitJumpStatement(node as BreakStatement, incoming, loopStack, true);
       }
 
       case 'ContinueStatement': {
-        return this.visitJumpStatement(node, incoming, loopStack, false);
+        return this.visitJumpStatement(node as ContinueStatement, incoming, loopStack, false);
       }
 
       case 'ReturnStatement': {
-        const returnRec = node as unknown as Record<string, unknown>;
-        const returnArg = isOxcNode(returnRec.argument) ? returnRec.argument : node;
-        const returnNode = this.addNode(toPayload(returnArg));
+        const returnNode_node = node as ReturnStatement;
+        const returnPayload: CfgNodePayload = returnNode_node.argument ?? returnNode_node;
+        const returnNode = this.addNode(returnPayload);
 
         this.connect(incoming, returnNode, EdgeType.Normal);
 
@@ -564,9 +477,8 @@ export class OxcCFGBuilder {
       }
 
       case 'ThrowStatement': {
-        const throwRec = node as unknown as Record<string, unknown>;
-        const throwArg = isOxcNode(throwRec.argument) ? throwRec.argument : node;
-        const throwNode = this.addNode(toPayload(throwArg));
+        const throwNode_node = node as ThrowStatement;
+        const throwNode = this.addNode(throwNode_node.argument);
 
         this.connect(incoming, throwNode, EdgeType.Normal);
         this.cfg.addEdge(throwNode, this.exitId, EdgeType.Exception);
@@ -575,9 +487,8 @@ export class OxcCFGBuilder {
       }
 
       case 'TryStatement': {
-        const tryRec = node as unknown as Record<string, unknown>;
-        const finalizerNode = toStatement(isOxcNode(tryRec.finalizer) ? tryRec.finalizer : undefined);
-        const hasFinalizer = finalizerNode !== undefined;
+        const tryNode = node as TryStatement;
+        const hasFinalizer = tryNode.finalizer !== null;
         const finallyEntryNormal = hasFinalizer ? this.addNode(null) : null;
         const finallyEntryReturn = hasFinalizer ? this.addNode(null) : null;
 
@@ -594,30 +505,26 @@ export class OxcCFGBuilder {
         this.cfg.addEdge(tryEntry, tryBlockEntry, EdgeType.Normal);
 
         let catchTails: NodeId[] = [];
-        const handlerNode = isOxcNode(tryRec.handler) ? tryRec.handler : null;
 
-        if (handlerNode !== null) {
+        if (tryNode.handler !== null) {
           const catchEntry = this.addNode(null);
 
           this.activeCatchEntryStack.push(catchEntry);
 
-          const tryTails = this.visitStatement(toStatement(isOxcNode(tryRec.block) ? tryRec.block : undefined), [tryBlockEntry], loopStack, null);
+          const tryTails = this.visitStatement(tryNode.block, [tryBlockEntry], loopStack, null);
 
           this.activeCatchEntryStack.pop();
 
-          const handlerRec = handlerNode as unknown as Record<string, unknown>;
-          const handlerBody = toStatement(isOxcNode(handlerRec.body) ? handlerRec.body : undefined);
+          catchTails = this.visitStatement(tryNode.handler.body, [catchEntry], loopStack, null);
 
-          catchTails = this.visitStatement(handlerBody, [catchEntry], loopStack, null);
-
-          if (finalizerNode !== undefined && finallyEntryNormal !== null && finallyEntryReturn !== null) {
+          if (tryNode.finalizer !== null && finallyEntryNormal !== null && finallyEntryReturn !== null) {
             // Normal completion path.
             this.connect(tryTails, finallyEntryNormal, EdgeType.Normal);
             this.connect(catchTails, finallyEntryNormal, EdgeType.Normal);
 
-            const finallyTails = this.visitStatement(finalizerNode, [finallyEntryNormal], loopStack, null);
+            const finallyTails = this.visitStatement(tryNode.finalizer, [finallyEntryNormal], loopStack, null);
             // Return completion path: run finalizer and then exit.
-            const finallyReturnTails = this.visitStatement(finalizerNode, [finallyEntryReturn], loopStack, null);
+            const finallyReturnTails = this.visitStatement(tryNode.finalizer, [finallyEntryReturn], loopStack, null);
 
             for (const tail of finallyReturnTails) {
               this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
@@ -635,16 +542,16 @@ export class OxcCFGBuilder {
           return [...tryTails, ...catchTails];
         }
 
-        const tryTails = this.visitStatement(toStatement(isOxcNode(tryRec.block) ? tryRec.block : undefined), [tryBlockEntry], loopStack, null);
+        const tryTails = this.visitStatement(tryNode.block, [tryBlockEntry], loopStack, null);
 
-        if (finalizerNode !== undefined && finallyEntryNormal !== null && finallyEntryReturn !== null) {
+        if (tryNode.finalizer !== null && finallyEntryNormal !== null && finallyEntryReturn !== null) {
           // Normal completion path.
           this.connect(tryTails, finallyEntryNormal, EdgeType.Normal);
           this.connect(catchTails, finallyEntryNormal, EdgeType.Normal);
 
-          const finallyTails = this.visitStatement(finalizerNode, [finallyEntryNormal], loopStack, null);
+          const finallyTails = this.visitStatement(tryNode.finalizer, [finallyEntryNormal], loopStack, null);
           // Return completion path: run finalizer and then exit.
-          const finallyReturnTails = this.visitStatement(finalizerNode, [finallyEntryReturn], loopStack, null);
+          const finallyReturnTails = this.visitStatement(tryNode.finalizer, [finallyEntryReturn], loopStack, null);
 
           for (const tail of finallyReturnTails) {
             this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
@@ -663,7 +570,12 @@ export class OxcCFGBuilder {
       }
 
       default: {
-        return [...incoming];
+        const statementNode = this.addNode(node);
+
+        this.connect(incoming, statementNode, EdgeType.Normal);
+        this.addExceptionEdgeIfInTry(statementNode);
+
+        return [statementNode];
       }
     }
   }

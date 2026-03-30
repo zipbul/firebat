@@ -1,4 +1,4 @@
-import type { Node } from 'oxc-parser';
+import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { Gildash } from '@zipbul/gildash';
 
@@ -762,11 +762,11 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
 
   if (funcNode === null) {return false;}
 
-  const funcBodyRaw = (funcNode as unknown as Record<string, unknown>).body;
+  const funcBodyRaw = (funcNode as OxcFunction).body;
 
-  if (!isOxcNode(funcBodyRaw)) {return false;}
+  if (funcBodyRaw === null || funcBodyRaw === undefined) {return false;}
 
-  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw);
+  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find guard condition node IDs:
@@ -890,11 +890,11 @@ const verifyCallerOrderByCfg = (
 
     if (funcNode === null) {return false;}
 
-    const funcBodyRaw = (funcNode as unknown as Record<string, unknown>).body;
+    const funcBodyRaw = (funcNode as OxcFunction).body;
 
-    if (!isOxcNode(funcBodyRaw)) {return false;}
+    if (funcBodyRaw === null || funcBodyRaw === undefined) {return false;}
 
-    const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw);
+    const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
     const { cfg, entryId, nodePayloads } = built;
     const writerNodeIds = findCallNodeIds(nodePayloads, writerBareNames);
     const readerNodeIds = findCallNodeIds(nodePayloads, readerBareNames);
@@ -930,11 +930,11 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
 
   if (funcNode === null) {return false;}
 
-  const funcBodyRaw = (funcNode as unknown as Record<string, unknown>).body;
+  const funcBodyRaw = (funcNode as OxcFunction).body;
 
-  if (!isOxcNode(funcBodyRaw)) {return false;}
+  if (funcBodyRaw === null || funcBodyRaw === undefined) {return false;}
 
-  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw);
+  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find CFG node IDs that contain a write to stateName

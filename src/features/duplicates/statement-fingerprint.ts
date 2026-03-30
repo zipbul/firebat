@@ -59,12 +59,9 @@ export const extractStatementFingerprintBag = (
  * 중첩 함수는 하나의 statement(FunctionDeclaration 등)로 취급 — 내부 재귀 없음.
  */
 const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
-  const rec = node as unknown as Record<string, unknown>;
-  const type = node.type;
-
   // MethodDefinition → value는 FunctionExpression
-  if (type === 'MethodDefinition') {
-    const value = rec.value;
+  if (node.type === 'MethodDefinition') {
+    const value = node.value as Node | null | undefined;
 
     if (isOxcNode(value)) {return getBodyStatements(value);}
 
@@ -73,19 +70,17 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
 
   // FunctionDeclaration, FunctionExpression, ArrowFunctionExpression
   if (
-    type === 'FunctionDeclaration' ||
-    type === 'FunctionExpression' ||
-    type === 'ArrowFunctionExpression'
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ArrowFunctionExpression'
   ) {
-    const body = rec.body;
+    const body = (node as unknown as { body: Node | null }).body;
 
     if (!isOxcNode(body)) {return [];}
 
-    const bodyRec = body as unknown as Record<string, unknown>;
-
     // BlockStatement → .body 배열
     if (body.type === 'BlockStatement') {
-      const stmts = bodyRec.body;
+      const stmts = (body as unknown as { body: unknown }).body;
 
       if (Array.isArray(stmts)) {return stmts as ReadonlyArray<Node>;}
 

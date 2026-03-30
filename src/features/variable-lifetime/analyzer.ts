@@ -1,4 +1,4 @@
-import type { Node } from 'oxc-parser';
+import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { BitSet, FunctionBodyAnalysis, ParsedFile } from '../../engine/types';
 import type {
@@ -11,7 +11,7 @@ import type {
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { collectFunctionNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { collectFunctionNodes, forEachChildNode } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
@@ -63,70 +63,49 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
     return true;
   }
 
-  const type = node.type;
-
   // Literals: number, string, boolean, null, undefined (as Identifier), regex
-  if (type === 'Literal') {
+  if (node.type === 'Literal') {
     return true;
   }
 
   // Identifier reference (e.g. someVar, SomeType)
-  if (type === 'Identifier') {
+  if (node.type === 'Identifier') {
     return true;
   }
 
   // Binary expression: a + b, a > b, etc. — pure if both operands are pure
-  if (type === 'BinaryExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const left = isOxcNode(rec.left) ? rec.left : null;
-    const right = isOxcNode(rec.right) ? rec.right : null;
-
-    return isPureInitializer(left) && isPureInitializer(right);
+  if (node.type === 'BinaryExpression') {
+    return isPureInitializer(node.left as Node) && isPureInitializer(node.right as Node);
   }
 
   // Logical expression: a && b, a || b, a ?? b
-  if (type === 'LogicalExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const left = isOxcNode(rec.left) ? rec.left : null;
-    const right = isOxcNode(rec.right) ? rec.right : null;
-
-    return isPureInitializer(left) && isPureInitializer(right);
+  if (node.type === 'LogicalExpression') {
+    return isPureInitializer(node.left as Node) && isPureInitializer(node.right as Node);
   }
 
   // Conditional expression: cond ? a : b
-  if (type === 'ConditionalExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const test = isOxcNode(rec.test) ? rec.test : null;
-    const consequent = isOxcNode(rec.consequent) ? rec.consequent : null;
-    const alternate = isOxcNode(rec.alternate) ? rec.alternate : null;
-
-    return isPureInitializer(test) && isPureInitializer(consequent) && isPureInitializer(alternate);
+  if (node.type === 'ConditionalExpression') {
+    return (
+      isPureInitializer(node.test as Node) &&
+      isPureInitializer(node.consequent as Node) &&
+      isPureInitializer(node.alternate as Node)
+    );
   }
 
   // Unary expression: typeof x, void 0, !, ~, +, -
-  if (type === 'UnaryExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const operator = rec.operator;
-
-    if (operator === 'delete') {
+  if (node.type === 'UnaryExpression') {
+    if (node.operator === 'delete') {
       return false;
     }
 
-    const argument = isOxcNode(rec.argument) ? rec.argument : null;
-
-    return isPureInitializer(argument);
+    return isPureInitializer(node.argument as Node);
   }
 
   // Template literal (without tag): `hello ${name}`
-  if (type === 'TemplateLiteral') {
-    const rec = node as unknown as Record<string, unknown>;
-    const expressions = rec.expressions;
-
-    if (Array.isArray(expressions)) {
-      for (const expr of expressions) {
-        if (isOxcNode(expr) && !isPureInitializer(expr)) {
-          return false;
-        }
+  if (node.type === 'TemplateLiteral') {
+    for (const expr of node.expressions as ReadonlyArray<Node>) {
+      if (!isPureInitializer(expr)) {
+        return false;
       }
     }
 
@@ -134,28 +113,23 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Tagged template is impure
-  if (type === 'TaggedTemplateExpression') {
+  if (node.type === 'TaggedTemplateExpression') {
     return false;
   }
 
   // Array expression: [1, 2] — pure if no SpreadElement inside
-  if (type === 'ArrayExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const elements = rec.elements;
+  if (node.type === 'ArrayExpression') {
+    for (const el of node.elements as ReadonlyArray<Node | null>) {
+      if (el === null) {
+        continue;
+      }
 
-    if (Array.isArray(elements)) {
-      for (const el of elements) {
-        if (!isOxcNode(el)) {
-          continue;
-        }
+      if (el.type === 'SpreadElement') {
+        return false;
+      }
 
-        if (el.type === 'SpreadElement') {
-          return false;
-        }
-
-        if (!isPureInitializer(el)) {
-          return false;
-        }
+      if (!isPureInitializer(el)) {
+        return false;
       }
     }
 
@@ -163,34 +137,21 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Object expression: { a: 1 } — pure if no SpreadElement
-  if (type === 'ObjectExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const properties = rec.properties;
+  if (node.type === 'ObjectExpression') {
+    for (const prop of node.properties as ReadonlyArray<Node>) {
+      if (prop.type === 'SpreadElement') {
+        return false;
+      }
 
-    if (Array.isArray(properties)) {
-      for (const prop of properties) {
-        if (!isOxcNode(prop)) {
-          continue;
-        }
-
-        if (prop.type === 'SpreadElement') {
-          return false;
-        }
-
-        const propRec = prop as unknown as Record<string, unknown>;
-
+      if (prop.type === 'Property') {
         // Computed key: { [expr]: val } — the key expression must also be pure
-        if (propRec.computed === true) {
-          const key = isOxcNode(propRec.key) ? propRec.key : null;
-
-          if (key !== null && !isPureInitializer(key)) {
+        if ((prop as unknown as { computed: boolean }).computed === true) {
+          if (!isPureInitializer(prop.key as Node)) {
             return false;
           }
         }
 
-        const value = isOxcNode(propRec.value) ? propRec.value : null;
-
-        if (value !== null && !isPureInitializer(value)) {
+        if (!isPureInitializer(prop.value as Node)) {
           return false;
         }
       }
@@ -200,52 +161,40 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Member expression: a.b, a.b.c — treat as pure (getter/proxy risk accepted per spec)
-  if (type === 'MemberExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const object = isOxcNode(rec.object) ? rec.object : null;
-
-    return isPureInitializer(object);
+  if (node.type === 'MemberExpression') {
+    return isPureInitializer(node.object as Node);
   }
 
   // Chain expression: a?.b
-  if (type === 'ChainExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const expression = isOxcNode(rec.expression) ? rec.expression : null;
-
-    return isPureInitializer(expression);
+  if (node.type === 'ChainExpression') {
+    return isPureInitializer(node.expression as Node);
   }
 
   // TypeScript type casts — pure (just a type annotation)
   if (
-    type === 'TSAsExpression' ||
-    type === 'TSSatisfiesExpression' ||
-    type === 'TSNonNullExpression' ||
-    type === 'TSTypeAssertion'
+    node.type === 'TSAsExpression' ||
+    node.type === 'TSSatisfiesExpression' ||
+    node.type === 'TSNonNullExpression' ||
+    node.type === 'TSTypeAssertion'
   ) {
-    const rec = node as unknown as Record<string, unknown>;
-    const expression = isOxcNode(rec.expression) ? rec.expression : null;
-
-    return isPureInitializer(expression);
+    return isPureInitializer(node.expression as Node);
   }
 
   // Parenthesized expression
-  if (type === 'ParenthesizedExpression') {
-    const rec = node as unknown as Record<string, unknown>;
-    const expression = isOxcNode(rec.expression) ? rec.expression : null;
-
-    return isPureInitializer(expression);
+  if (node.type === 'ParenthesizedExpression') {
+    return isPureInitializer(node.expression as Node);
   }
 
   // Impure: function calls, new, await, yield, assignment, update, spread, sequence
   if (
-    type === 'CallExpression' ||
-    type === 'NewExpression' ||
-    type === 'AwaitExpression' ||
-    type === 'YieldExpression' ||
-    type === 'SpreadElement' ||
-    type === 'AssignmentExpression' ||
-    type === 'UpdateExpression' ||
-    type === 'SequenceExpression'
+    node.type === 'CallExpression' ||
+    node.type === 'NewExpression' ||
+    node.type === 'AwaitExpression' ||
+    node.type === 'YieldExpression' ||
+    node.type === 'SpreadElement' ||
+    node.type === 'AssignmentExpression' ||
+    node.type === 'UpdateExpression' ||
+    node.type === 'SequenceExpression'
   ) {
     return false;
   }
@@ -281,9 +230,8 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
 
   for (const stmt of bodyStatements) {
     if (stmt.type === 'IfStatement') {
-      const stmtRec = stmt as unknown as Record<string, unknown>;
-      const consequent = isOxcNode(stmtRec.consequent) ? stmtRec.consequent : null;
-      const alternate = isOxcNode(stmtRec.alternate) ? stmtRec.alternate : null;
+      const consequent = stmt.consequent as Node | null;
+      const alternate = stmt.alternate !== null ? stmt.alternate as Node : null;
 
       if (consequent !== null && consequent.type === 'BlockStatement') {
         blocks.push({ type: 'if-consequent', start: consequent.start, end: consequent.end });
@@ -298,34 +246,22 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
     }
 
     if (stmt.type === 'SwitchStatement') {
-      const stmtRec = stmt as unknown as Record<string, unknown>;
-      const cases = stmtRec.cases;
-
-      if (!Array.isArray(cases)) {
-        continue;
-      }
-
       // Check for fall-through: every case must end with a terminal statement
       let hasFallThrough = false;
 
-      for (const switchCase of cases) {
-        if (!isOxcNode(switchCase)) {
-          continue;
-        }
+      for (const switchCase of stmt.cases) {
+        const switchCaseConsequent = switchCase.consequent;
 
-        const switchCaseRec = switchCase as unknown as Record<string, unknown>;
-        const consequent = switchCaseRec.consequent;
-
-        if (!Array.isArray(consequent) || consequent.length === 0) {
+        if (switchCaseConsequent.length === 0) {
           // Empty case (fall-through by definition)
           hasFallThrough = true;
 
           break;
         }
 
-        const lastStmt = consequent[consequent.length - 1];
+        const lastStmt = switchCaseConsequent[switchCaseConsequent.length - 1];
 
-        if (!isOxcNode(lastStmt) || !isTerminalStatement(lastStmt)) {
+        if (lastStmt === undefined || !isTerminalStatement(lastStmt)) {
           hasFallThrough = true;
 
           break;
@@ -336,11 +272,7 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
         continue;
       }
 
-      for (const switchCase of cases) {
-        if (!isOxcNode(switchCase)) {
-          continue;
-        }
-
+      for (const switchCase of stmt.cases) {
         blocks.push({ type: 'switch-case', start: switchCase.start, end: switchCase.end });
       }
 
@@ -348,22 +280,16 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
     }
 
     if (stmt.type === 'TryStatement') {
-      const stmtRec = stmt as unknown as Record<string, unknown>;
-      const block = isOxcNode(stmtRec.block) ? stmtRec.block : null;
-      const handler = isOxcNode(stmtRec.handler) ? stmtRec.handler : null;
+      const block = stmt.block as Node;
+      const handler = stmt.handler !== null ? stmt.handler as Node : null;
       // finalizer is handled only for exclusion (see checkScopeNarrowing)
 
-      if (block !== null) {
-        blocks.push({ type: 'try-block', start: block.start, end: block.end });
-      }
+      blocks.push({ type: 'try-block', start: block.start, end: block.end });
 
-      if (handler !== null) {
-        const handlerRec = handler as unknown as Record<string, unknown>;
-        const handlerBody = isOxcNode(handlerRec.body) ? handlerRec.body : null;
+      if (handler !== null && handler.type === 'CatchClause') {
+        const handlerBody = handler.body as Node;
 
-        if (handlerBody !== null) {
-          blocks.push({ type: 'catch-block', start: handlerBody.start, end: handlerBody.end });
-        }
+        blocks.push({ type: 'catch-block', start: handlerBody.start, end: handlerBody.end });
       }
 
       continue;
@@ -392,34 +318,17 @@ const collectVarDeclInfo = (bodyStatements: ReadonlyArray<Node>): Map<number, Va
       continue;
     }
 
-    const stmtRec = stmt as unknown as Record<string, unknown>;
-    const kind = stmtRec.kind;
+    const kind = stmt.kind;
 
     if (kind !== 'const' && kind !== 'let' && kind !== 'var') {
       continue;
     }
 
-    const declarations = stmtRec.declarations;
-
-    if (!Array.isArray(declarations)) {
-      continue;
-    }
-
-    for (const decl of declarations) {
-      if (!isOxcNode(decl)) {
-        continue;
-      }
-
-      const declRec = decl as unknown as Record<string, unknown>;
-      const id = isOxcNode(declRec.id) ? declRec.id : null;
-
-      if (id === null) {
-        continue;
-      }
-
+    for (const decl of stmt.declarations) {
+      const id = decl.id;
       const isDestructuring = id.type === 'ObjectPattern' || id.type === 'ArrayPattern';
 
-      result.set(decl.start, { kind: kind as 'const' | 'let' | 'var', isDestructuring });
+      result.set(decl.start, { kind, isDestructuring });
     }
   }
 
@@ -556,27 +465,23 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
       continue;
     }
 
-    const stmtRec = stmt as unknown as Record<string, unknown>;
-    const finalizer = isOxcNode(stmtRec.finalizer) ? stmtRec.finalizer : null;
-    const block = isOxcNode(stmtRec.block) ? stmtRec.block : null;
-    const handler = isOxcNode(stmtRec.handler) ? stmtRec.handler : null;
+    const finalizer = stmt.finalizer !== null ? stmt.finalizer as Node : null;
+    const block = stmt.block as Node;
+    const handler = stmt.handler !== null ? stmt.handler as Node : null;
 
     if (finalizer !== null) {
       finalizerRanges.push({ start: finalizer.start, end: finalizer.end });
     }
 
-    if (block !== null && handler !== null) {
-      const handlerRec = handler as unknown as Record<string, unknown>;
-      const handlerBody = isOxcNode(handlerRec.body) ? handlerRec.body : null;
+    if (handler !== null && handler.type === 'CatchClause') {
+      const handlerBody = handler.body as Node;
 
-      if (handlerBody !== null) {
-        tryHandlerRanges.push({
-          tryStart: block.start,
-          tryEnd: block.end,
-          catchStart: handlerBody.start,
-          catchEnd: handlerBody.end,
-        });
-      }
+      tryHandlerRanges.push({
+        tryStart: block.start,
+        tryEnd: block.end,
+        catchStart: handlerBody.start,
+        catchEnd: handlerBody.end,
+      });
     }
   }
 
@@ -638,25 +543,14 @@ const findInitNode = (bodyStatements: ReadonlyArray<Node>, defLocation: number):
       continue;
     }
 
-    const stmtRec = stmt as unknown as Record<string, unknown>;
-    const declarations = stmtRec.declarations;
-
-    if (!Array.isArray(declarations)) {
-      continue;
-    }
-
-    for (const decl of declarations) {
-      if (!isOxcNode(decl)) {
-        continue;
-      }
-
+    for (const decl of stmt.declarations) {
       if (decl.start !== defLocation) {
         continue;
       }
 
-      const declRec = decl as unknown as Record<string, unknown>;
+      const init = decl.init;
 
-      return isOxcNode(declRec.init) ? declRec.init : null;
+      return init ?? null;
     }
   }
 
@@ -810,7 +704,6 @@ interface LoopBodyRange {
   readonly end: number;
 }
 
-const LOOP_STATEMENT_TYPES = new Set(['ForStatement', 'WhileStatement', 'DoWhileStatement', 'ForInStatement', 'ForOfStatement']);
 
 /**
  * Recursively collects ranges of all loop statements anywhere in the given
@@ -822,40 +715,22 @@ const collectLoopBodyRanges = (stmts: ReadonlyArray<Node>): ReadonlyArray<LoopBo
   const ranges: LoopBodyRange[] = [];
 
   const visit = (node: Node): void => {
-    if (LOOP_STATEMENT_TYPES.has(node.type)) {
+    if (node.type === 'ForStatement') {
       // ForStatement: use full statement range to cover init/test/update clauses
-      if (node.type === 'ForStatement') {
-        ranges.push({ start: node.start, end: node.end });
-      } else {
-        const rec = node as unknown as Record<string, unknown>;
-        const body = isOxcNode(rec.body) ? rec.body : null;
-
-        if (body !== null) {
-          ranges.push({ start: body.start, end: body.end });
-        }
-      }
+      ranges.push({ start: node.start, end: node.end });
+    } else if (
+      node.type === 'WhileStatement' ||
+      node.type === 'DoWhileStatement' ||
+      node.type === 'ForInStatement' ||
+      node.type === 'ForOfStatement'
+    ) {
+      ranges.push({ start: node.body.start, end: node.body.end });
     }
 
     // Recurse into all child Node values
-    const rec = node as unknown as Record<string, unknown>;
-
-    for (const key of Object.keys(rec)) {
-      if (key === 'type' || key === 'start' || key === 'end') {
-        continue;
-      }
-
-      const value = rec[key];
-
-      if (isOxcNode(value)) {
-        visit(value);
-      } else if (Array.isArray(value)) {
-        for (const child of value as unknown[]) {
-          if (isOxcNode(child)) {
-            visit(child);
-          }
-        }
-      }
-    }
+    forEachChildNode(node, child => {
+      visit(child);
+    });
   };
 
   for (const stmt of stmts) {
@@ -899,9 +774,8 @@ const analyzeVariableLifetime = (
       }
 
       const paramBindings = collectParameterBindings(functionNode);
-      const functionRec = functionNode as unknown as Record<string, unknown>;
-      const bodyValue = functionRec.body;
-      const bodyNode = isOxcNode(bodyValue) || Array.isArray(bodyValue) ? bodyValue : undefined;
+      const fn = functionNode as OxcFunction;
+      const bodyNode = fn.body ?? undefined;
 
       if (bodyNode === undefined) {
         continue;
@@ -994,11 +868,9 @@ const analyzeVariableLifetime = (
 
       // Generate scope-narrowing findings
       const paramBindingNames = new Set(paramBindings.map(b => b.name));
-      const bodyNodeRec = !Array.isArray(bodyNode) && bodyNode !== undefined ? (bodyNode as unknown as Record<string, unknown>) : null;
-      const bodyStatements = Array.isArray(bodyNode)
-        ? (bodyNode as ReadonlyArray<Node>)
-        : bodyNodeRec !== null && Array.isArray(bodyNodeRec.body)
-          ? (bodyNodeRec.body as ReadonlyArray<Node>)
+      const bodyStatements =
+        bodyNode !== undefined && bodyNode !== null && bodyNode.type === 'BlockStatement'
+          ? (bodyNode.body as ReadonlyArray<Node>)
           : [];
       const narrowingFindings = checkScopeNarrowing(
         bodyStatements,
