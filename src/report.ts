@@ -158,7 +158,7 @@ const formatText = (report: FirebatReport): string => {
   const analyses = report.analyses;
 
   const getFile = (value: unknown): string => {
-    const v = value as any;
+    const v = value as Record<string, unknown> | null | undefined;
 
     if (typeof v?.file === 'string') {
       return v.file;
@@ -621,7 +621,7 @@ const formatText = (report: FirebatReport): string => {
 
     for (const f of giantFile) {
       const rel = path.relative(process.cwd(), getFile(f));
-      const metrics = (f as any).metrics;
+      const metrics = f.metrics;
       const lineInfo = metrics ? `${metrics.lineCount}/${metrics.maxLines} lines` : '';
 
       lines.push(`    ${cc('·', A.dim)} ${rel} ${cc(lineInfo, A.yellow)}`);
