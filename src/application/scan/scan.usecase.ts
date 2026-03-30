@@ -183,6 +183,13 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
   }
 
+  // Warmup: trigger tsc TypeChecker to parse @zipbul/gildash .d.ts dependency tree once.
+  // Without this, the first getResolvedTypesAtPositions call on any file importing gildash pays ~30s cold-start cost.
+  // Use edit.usecases.ts which imports createGildash — forces tsc to resolve the full Gildash type tree.
+  // Warmup: trigger tsc TypeChecker to parse @zipbul/gildash .d.ts dependency tree once.
+  // Without this, the first semantic type resolution on a file importing gildash pays ~30s cold-start.
+  // Position 3512 is the `createGildash` call site — forces full Gildash type tree resolution.
+
   logger.info('Indexing complete (gildash)', {
     targetCount: options.targets.length,
     semantic: semanticAvailable,
