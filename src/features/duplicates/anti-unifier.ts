@@ -163,9 +163,9 @@ const traverse = (
   ctx.sharedSize += 1;
 
   // Identifier.name 비교
-  if (left.type === 'Identifier') {
-    const leftName = (left as unknown as { name: string }).name;
-    const rightName = (right as unknown as { name: string }).name;
+  if (left.type === 'Identifier' && right.type === 'Identifier') {
+    const leftName = left.name;
+    const rightName = right.name;
 
     if (leftName !== rightName) {
       pushVariable(ctx, path + '.name', leftName, rightName, 'identifier');
@@ -174,9 +174,9 @@ const traverse = (
   }
 
   // Literal.value 비교
-  if (left.type === 'Literal') {
-    const leftVal = (left as unknown as { value: unknown }).value;
-    const rightVal = (right as unknown as { value: unknown }).value;
+  if (left.type === 'Literal' && right.type === 'Literal') {
+    const leftVal = left.value;
+    const rightVal = right.value;
 
     if (leftVal !== rightVal) {
       pushVariable(

@@ -496,7 +496,7 @@ const analyzeFunctionNode = (
   const visitLogicalLeaves = (node: Node, depth: number): void => {
     if (node.type === 'LogicalExpression') {
       // Halstead: count ALL logical operators in the chain (visit() only counts the top-level one)
-      collectHalstead(node, 'LogicalExpression');
+      collectHalstead(node);
       visitLogicalLeaves(node.left as Node, depth);
       visitLogicalLeaves(node.right as Node, depth);
 
@@ -533,7 +533,7 @@ const analyzeFunctionNode = (
       if ((alt as Node).type === 'IfStatement') {
         // else if: +1 only (no nesting bonus, no depth increase)
         // Halstead: count the else-if IfStatement operator (bypasses visit())
-        collectHalstead(alt as Node, 'IfStatement');
+        collectHalstead(alt as Node);
         visitIfStatement(alt as Node, depth);
       } else {
         // standalone else: +1, then visit body at increased depth
@@ -561,23 +561,23 @@ const analyzeFunctionNode = (
     'ContinueStatement',
   ]);
 
-  const collectHalstead = (node: Node, nodeType: string): void => {
+  const collectHalstead = (node: Node): void => {
     // Control-flow operators
-    if (HALSTEAD_CONTROL_OPS.has(nodeType)) {
+    if (HALSTEAD_CONTROL_OPS.has(node.type)) {
       totalOperators++;
 
-      uniqueOperators.add(nodeType);
+      uniqueOperators.add(node.type);
     }
 
     // Binary/Logical/Assignment/Unary/Update operators
     if (
-      nodeType === 'BinaryExpression' ||
-      nodeType === 'LogicalExpression' ||
-      nodeType === 'AssignmentExpression' ||
-      nodeType === 'UnaryExpression' ||
-      nodeType === 'UpdateExpression'
+      node.type === 'BinaryExpression' ||
+      node.type === 'LogicalExpression' ||
+      node.type === 'AssignmentExpression' ||
+      node.type === 'UnaryExpression' ||
+      node.type === 'UpdateExpression'
     ) {
-      const op = String((node as unknown as { operator?: unknown }).operator ?? '');
+      const op = String(node.operator);
 
       if (op.length > 0) {
         totalOperators++;
@@ -587,45 +587,44 @@ const analyzeFunctionNode = (
     }
 
     // ConditionalExpression (ternary)
-    if (nodeType === 'ConditionalExpression') {
+    if (node.type === 'ConditionalExpression') {
       totalOperators++;
 
       uniqueOperators.add('?:');
     }
 
     // Function call operator
-    if (nodeType === 'CallExpression') {
+    if (node.type === 'CallExpression') {
       totalOperators++;
 
       uniqueOperators.add('()');
     }
 
     // Object creation operator
-    if (nodeType === 'NewExpression') {
+    if (node.type === 'NewExpression') {
       totalOperators++;
 
       uniqueOperators.add('new');
     }
 
     // Await operator
-    if (nodeType === 'AwaitExpression') {
+    if (node.type === 'AwaitExpression') {
       totalOperators++;
 
       uniqueOperators.add('await');
     }
 
     // Yield operator
-    if (nodeType === 'YieldExpression') {
+    if (node.type === 'YieldExpression') {
       totalOperators++;
 
       uniqueOperators.add('yield');
     }
 
     // Property access operator
-    if (nodeType === 'MemberExpression') {
-      const memberNode = node as unknown as { optional?: boolean; computed?: boolean };
-      const optional = Boolean(memberNode.optional);
-      const computed = Boolean(memberNode.computed);
+    if (node.type === 'MemberExpression') {
+      const optional = node.optional;
+      const computed = node.computed;
       const op = optional ? '?.' : computed ? '[]' : '.';
 
       totalOperators++;
@@ -634,8 +633,8 @@ const analyzeFunctionNode = (
     }
 
     // Operands: Identifier
-    if (nodeType === 'Identifier') {
-      const name = String((node as unknown as { name?: unknown }).name ?? '');
+    if (node.type === 'Identifier') {
+      const name = node.name;
 
       if (name.length > 0) {
         totalOperands++;
@@ -644,17 +643,9 @@ const analyzeFunctionNode = (
       }
     }
 
-    // Operands: Literals (legacy node type names from older oxc versions — kept for potential compatibility)
-    if (
-      nodeType === 'NumericLiteral' ||
-      nodeType === 'StringLiteral' ||
-      nodeType === 'BooleanLiteral' ||
-      nodeType === 'NullLiteral' ||
-      nodeType === 'BigIntLiteral' ||
-      nodeType === 'RegExpLiteral'
-    ) {
-      const literalNode = node as unknown as { raw?: unknown; value?: unknown };
-      const raw = String(literalNode.raw ?? literalNode.value ?? nodeType);
+    // Operands: Literals
+    if (node.type === 'Literal') {
+      const raw = String(node.raw ?? node.value ?? 'Literal');
 
       totalOperands++;
 
@@ -662,13 +653,13 @@ const analyzeFunctionNode = (
     }
 
     // Operands: this, super
-    if (nodeType === 'ThisExpression') {
+    if (node.type === 'ThisExpression') {
       totalOperands++;
 
       uniqueOperands.add('this');
     }
 
-    if (nodeType === 'Super') {
+    if (node.type === 'Super') {
       totalOperands++;
 
       uniqueOperands.add('super');
@@ -685,7 +676,7 @@ const analyzeFunctionNode = (
     // IfStatement has custom handling for else-if chains
     if (nodeType === 'IfStatement') {
       // Halstead: count IfStatement operator (else-if handled in visitIfStatement)
-      collectHalstead(node, nodeType);
+      collectHalstead(node);
 
       visitIfStatement(node, depth);
 
@@ -703,7 +694,7 @@ const analyzeFunctionNode = (
     }
 
     // Halstead: collect operators and operands for all other node types
-    collectHalstead(node, nodeType);
+    collectHalstead(node);
 
     // labeled break/continue: +1
     if (nodeType === 'BreakStatement' || nodeType === 'ContinueStatement') {

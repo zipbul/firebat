@@ -145,7 +145,7 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
 
       if (prop.type === 'Property') {
         // Computed key: { [expr]: val } — the key expression must also be pure
-        if ((prop as unknown as { computed: boolean }).computed === true) {
+        if (prop.computed === true) {
           if (!isPureInitializer(prop.key as Node)) {
             return false;
           }

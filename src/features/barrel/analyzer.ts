@@ -244,8 +244,8 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
     }
 
     if (stmt.type === 'ExportNamedDeclaration') {
-      const source = getLiteralString((stmt as unknown as { source: Node | null }).source);
-      const declaration = (stmt as unknown as { declaration: unknown }).declaration;
+      const source = getLiteralString(stmt.source);
+      const declaration = stmt.declaration;
 
       if (typeof source === 'string' && (declaration === null || declaration === undefined)) {
         // Allow only: export { ... } from '...'; / export type { ... } from '...';
@@ -455,7 +455,7 @@ const checkCrossModuleReexport = async (
         const stmtNode = stmt as Node;
 
         if (stmtNode.type === 'ExportNamedDeclaration' || stmtNode.type === 'ExportAllDeclaration') {
-          const source = getLiteralString((stmtNode as unknown as { source: Node | null }).source);
+          const source = getLiteralString(stmtNode.source);
 
           if (typeof source !== 'string') {
             continue;
@@ -501,16 +501,14 @@ const checkCrossModuleReexport = async (
 
       // 구문 B: ExportNamedDeclaration without source
       if (stmtNode.type === 'ExportNamedDeclaration') {
-        const exportNamed = stmtNode as unknown as { source: Node | null; specifiers: Node[] };
-
-        if (exportNamed.source !== null) {
+        if (stmtNode.source !== null) {
           continue;
         }
 
-        for (const spec of exportNamed.specifiers) {
-          const localNode = (spec as unknown as { local: Node }).local;
+        for (const spec of stmtNode.specifiers) {
+          const localNode = spec.local;
 
-          if (!isOxcNode(localNode) || localNode.type !== 'Identifier') {
+          if (localNode.type !== 'Identifier') {
             continue;
           }
 
@@ -560,17 +558,13 @@ const checkCrossModuleReexport = async (
 
       // 구문 C: ExportDefaultDeclaration — declaration이 Identifier
       if (stmtNode.type === 'ExportDefaultDeclaration') {
-        const declaration = (stmtNode as unknown as { declaration: Node }).declaration;
+        const declaration = stmtNode.declaration;
 
-        if (!isOxcNode(declaration) || declaration.type !== 'Identifier') {
+        if (declaration.type !== 'Identifier') {
           continue;
         }
 
         const identName = declaration.name;
-
-        if (typeof identName !== 'string') {
-          continue;
-        }
 
         const binding = importBindings.get(identName);
 

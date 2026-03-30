@@ -1,7 +1,7 @@
 import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
-import { isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import type { ResolvedType, SemanticReference } from '../../engine/semantic-types';
 import type { ParsedFile } from '../../engine/types';
 import type { UnknownProofFinding } from '../../types';
@@ -97,8 +97,6 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
   const ranges: Array<{ start: number; end: number }> = [];
   const callArgRanges: Array<CallArgRange> = [];
 
-  const asRecord = (node: Node) => node as unknown as Record<string, unknown>;
-
   // Track function bodies with their return type status for ReturnStatement check
   const functionBodies: Array<{ bodyStart: number; bodyEnd: number; hasReturnType: boolean }> = [];
 
@@ -109,85 +107,68 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
       node.type === 'FunctionExpression' ||
       node.type === 'ArrowFunctionExpression'
     ) {
-      const rec = asRecord(node);
-      const body = rec.body;
-      const hasReturnType = rec.returnType !== undefined && rec.returnType !== null;
+      const body = node.body;
+      const hasReturnType = node.returnType !== undefined && node.returnType !== null;
 
-      if (isOxcNode(body)) {
+      if (body !== null && body !== undefined) {
         functionBodies.push({ bodyStart: body.start, bodyEnd: body.end, hasReturnType });
       }
     }
 
     if (node.type === 'ThrowStatement') {
-      const arg = asRecord(node).argument;
+      const arg = node.argument;
 
-      if (isOxcNode(arg)) {ranges.push({ start: arg.start, end: arg.end });}
+      ranges.push({ start: arg.start, end: arg.end });
     }
 
     // CallExpression/NewExpression args → conditional (need callee type check)
     if (node.type === 'CallExpression' || node.type === 'NewExpression') {
-      const rec = asRecord(node);
-      const args = rec.arguments;
-      const callee = rec.callee;
-      const calleeEnd = isOxcNode(callee) ? callee.end : 0;
+      const calleeEnd = node.callee.end;
 
-      if (Array.isArray(args)) {
-        for (const arg of args) {
-          if (isOxcNode(arg)) {callArgRanges.push({ start: arg.start, end: arg.end, calleeEnd });}
-        }
+      for (const arg of node.arguments) {
+        callArgRanges.push({ start: arg.start, end: arg.end, calleeEnd });
       }
     }
 
     if (node.type === 'TSAsExpression') {
-      const typeAnnotation = asRecord(node).typeAnnotation;
+      const typeAnnotation = node.typeAnnotation;
+      const targetType = typeAnnotation.type;
 
-      if (isOxcNode(typeAnnotation)) {
-        const targetType = typeAnnotation.type;
+      if (targetType !== 'TSAnyKeyword' && targetType !== 'TSUnknownKeyword') {
+        const expr = node.expression;
 
-        if (targetType !== 'TSAnyKeyword' && targetType !== 'TSUnknownKeyword') {
-          const expr = asRecord(node).expression;
-
-          if (isOxcNode(expr)) {ranges.push({ start: expr.start, end: expr.end });}
-        }
+        ranges.push({ start: expr.start, end: expr.end });
       }
     }
 
     if (node.type === 'BinaryExpression') {
-      const operator = asRecord(node).operator;
+      const operator = node.operator;
 
-      if (typeof operator === 'string' && (operator === '===' || operator === '!==' || operator === '==' || operator === '!=' || operator === 'instanceof' || operator === 'in')) {
-        const left = asRecord(node).left;
-        const right = asRecord(node).right;
-
-        if (isOxcNode(left)) {ranges.push({ start: left.start, end: left.end });}
-
-        if (isOxcNode(right)) {ranges.push({ start: right.start, end: right.end });}
+      if (operator === '===' || operator === '!==' || operator === '==' || operator === '!=' || operator === 'instanceof' || operator === 'in') {
+        ranges.push({ start: node.left.start, end: node.left.end });
+        ranges.push({ start: node.right.start, end: node.right.end });
       }
     }
 
     if (node.type === 'UnaryExpression') {
-      const operator = asRecord(node).operator;
+      const operator = node.operator;
 
       if (operator === 'typeof' || operator === '!') {
-        const arg = asRecord(node).argument;
+        const arg = node.argument;
 
-        if (isOxcNode(arg)) {ranges.push({ start: arg.start, end: arg.end });}
+        ranges.push({ start: arg.start, end: arg.end });
       }
     }
 
     if (node.type === 'TemplateLiteral') {
-      const expressions = asRecord(node).expressions;
-
-      if (Array.isArray(expressions)) {
-        for (const expr of expressions) {
-          if (isOxcNode(expr)) {ranges.push({ start: expr.start, end: expr.end });}
-        }
+      for (const expr of node.expressions) {
+        ranges.push({ start: expr.start, end: expr.end });
       }
     }
 
     // ReturnStatement: only safe if enclosing function has explicit return type
     if (node.type === 'ReturnStatement') {
-      const nodeStart = typeof node.start === 'number' ? node.start : 0;
+      const nodeStart = node.start;
       let enclosing: typeof functionBodies[number] | undefined;
 
       for (const fb of functionBodies) {
@@ -199,31 +180,27 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
       }
 
       if (enclosing?.hasReturnType) {
-        const arg = asRecord(node).argument;
+        const arg = node.argument;
 
-        if (isOxcNode(arg)) {ranges.push({ start: arg.start, end: arg.end });}
+        if (arg !== null) {ranges.push({ start: arg.start, end: arg.end });}
       }
     }
 
     if (node.type === 'SpreadElement') {
-      const arg = asRecord(node).argument;
+      const arg = node.argument;
 
-      if (isOxcNode(arg)) {ranges.push({ start: arg.start, end: arg.end });}
+      ranges.push({ start: arg.start, end: arg.end });
     }
 
     if (node.type === 'LogicalExpression') {
-      const left = asRecord(node).left;
-      const right = asRecord(node).right;
-
-      if (isOxcNode(left)) {ranges.push({ start: left.start, end: left.end });}
-
-      if (isOxcNode(right)) {ranges.push({ start: right.start, end: right.end });}
+      ranges.push({ start: node.left.start, end: node.left.end });
+      ranges.push({ start: node.right.start, end: node.right.end });
     }
 
     if (node.type === 'ConditionalExpression') {
-      const test = asRecord(node).test;
+      const test = node.test;
 
-      if (isOxcNode(test)) {ranges.push({ start: test.start, end: test.end });}
+      ranges.push({ start: test.start, end: test.end });
     }
 
     return true;

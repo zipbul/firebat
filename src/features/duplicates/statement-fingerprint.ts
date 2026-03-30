@@ -74,21 +74,17 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
     node.type === 'FunctionExpression' ||
     node.type === 'ArrowFunctionExpression'
   ) {
-    const body = (node as unknown as { body: Node | null }).body;
+    const body = node.body;
 
-    if (!isOxcNode(body)) {return [];}
+    if (body === null || body === undefined) {return [];}
 
     // BlockStatement → .body 배열
     if (body.type === 'BlockStatement') {
-      const stmts = (body as unknown as { body: unknown }).body;
-
-      if (Array.isArray(stmts)) {return stmts as ReadonlyArray<Node>;}
-
-      return [];
+      return body.body as ReadonlyArray<Node>;
     }
 
     // ArrowFunction expression body → 단일 statement
-    return [body];
+    return [body as Node];
   }
 
   return [];
