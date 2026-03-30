@@ -139,64 +139,62 @@ export const collectFunctionNodesWithParent = (program: Node): FunctionNodeWithP
 };
 
 export const getNodeHeader = (node: Node, parent?: Node | null): string => {
-  const rec = node as unknown as Record<string, unknown>;
-  const idNode = rec.id;
+  // Extract name from node's own id (FunctionDeclaration, ClassDeclaration, etc.)
+  if (
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ClassDeclaration' ||
+    node.type === 'ClassExpression' ||
+    node.type === 'TSTypeAliasDeclaration' ||
+    node.type === 'TSInterfaceDeclaration' ||
+    node.type === 'TSEnumDeclaration'
+  ) {
+    const name = node.id?.name;
 
-  if (isOxcNode(idNode)) {
-    const idName = getNodeName(idNode);
-
-    if (typeof idName === 'string' && idName.length > 0) {
-      return idName;
+    if (typeof name === 'string' && name.length > 0) {
+      return name;
     }
   }
 
-  const key = rec.key;
+  // VariableDeclarator: id is BindingPattern (Identifier, ObjectPattern, ArrayPattern)
+  if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
+    return node.id.name;
+  }
 
-  if (key !== undefined && key !== null && isOxcNode(key)) {
-    const keyName = getNodeName(key);
+  // Extract name from node's key (MethodDefinition, PropertyDefinition, Property)
+  if (node.type === 'MethodDefinition' || node.type === 'PropertyDefinition' || node.type === 'Property') {
+    const key = node.key;
 
-    if (typeof keyName === 'string' && keyName.length > 0) {
-      return keyName;
+    if (key.type === 'Identifier') {
+      return key.name;
     }
 
-    const keyValue = getLiteralString(key);
+    const keyValue = getLiteralString(key as Node);
 
     if (typeof keyValue === 'string' && keyValue.length > 0) {
       return keyValue;
     }
   }
 
+  // Extract name from parent context
   if (parent !== undefined && parent !== null) {
-    const parentRec = parent as unknown as Record<string, unknown>;
-    const parentType = parent.type;
-
-    if (parentType === 'VariableDeclarator') {
-      const parentId = parentRec.id;
-
-      if (isOxcNode(parentId)) {
-        const parentIdName = getNodeName(parentId);
-
-        if (typeof parentIdName === 'string' && parentIdName.length > 0) {
-          return parentIdName;
-        }
+    if (parent.type === 'VariableDeclarator') {
+      if (parent.id.type === 'Identifier') {
+        return parent.id.name;
       }
     }
 
-    if (parentType === 'MethodDefinition' || parentType === 'PropertyDefinition' || parentType === 'Property') {
-      const parentKey = parentRec.key;
+    if (parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition' || parent.type === 'Property') {
+      const key = parent.key;
 
-      if (isOxcNode(parentKey)) {
-        const parentKeyName = getNodeName(parentKey);
+      if (key.type === 'Identifier') {
+        return key.name;
+      }
 
-        if (typeof parentKeyName === 'string' && parentKeyName.length > 0) {
-          return parentKeyName;
-        }
+      const keyValue = getLiteralString(key as Node);
 
-        const parentKeyValue = getLiteralString(parentKey);
-
-        if (typeof parentKeyValue === 'string' && parentKeyValue.length > 0) {
-          return parentKeyValue;
-        }
+      if (typeof keyValue === 'string' && keyValue.length > 0) {
+        return keyValue;
       }
     }
   }

@@ -5,10 +5,8 @@ import { hashString } from '../hasher';
 import { isOxcNode } from './oxc-ast-utils';
 import { normalizeForFingerprint } from './ast-normalizer';
 
-const isLiteralWithValue = (node: Node): boolean => node.type === 'Literal' && 'value' in node;
-
 const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boolean): void => {
-  if (!isLiteralWithValue(node)) {
+  if (node.type !== 'Literal') {
     return;
   }
 
@@ -18,7 +16,7 @@ const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boo
     return;
   }
 
-  const value = (node as unknown as { value: unknown }).value;
+  const value = node.value;
 
   if (typeof value === 'string') {
     diffs.push(`string:${value}`);
