@@ -288,22 +288,26 @@ const traverseArrayChildren = (
   rightArr: ReadonlyArray<Node>,
   path: string,
 ): void => {
+  // Filter out null entries (e.g. ArrayPattern.elements may contain null for holes)
+  const leftFiltered = leftArr.filter((n): n is Node => n !== null);
+  const rightFiltered = rightArr.filter((n): n is Node => n !== null);
+
   // fingerprint로 LCS 정렬
-  const leftFps = leftArr.map((n) => createOxcFingerprintShape(n));
-  const rightFps = rightArr.map((n) => createOxcFingerprintShape(n));
+  const leftFps = leftFiltered.map((n) => createOxcFingerprintShape(n));
+  const rightFps = rightFiltered.map((n) => createOxcFingerprintShape(n));
   const alignment = computeLcsAlignment(leftFps, rightFps);
 
   // 매칭된 쌍 → 재귀
   for (const { aIndex, bIndex } of alignment.matched) {
-    const leftChild = leftArr[aIndex]!;
-    const rightChild = rightArr[bIndex]!;
+    const leftChild = leftFiltered[aIndex]!;
+    const rightChild = rightFiltered[bIndex]!;
 
     traverse(ctx, leftChild, rightChild, `${path}[${aIndex}]`);
   }
 
   // A에만 있는 노드 → structural variable
   for (const aIdx of alignment.aOnly) {
-    const child = leftArr[aIdx];
+    const child = leftFiltered[aIdx];
 
     pushVariable(
       ctx,
@@ -316,7 +320,7 @@ const traverseArrayChildren = (
 
   // B에만 있는 노드 → structural variable
   for (const bIdx of alignment.bOnly) {
-    const child = rightArr[bIdx];
+    const child = rightFiltered[bIdx];
 
     pushVariable(
       ctx,
