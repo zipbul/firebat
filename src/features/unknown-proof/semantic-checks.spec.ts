@@ -524,6 +524,19 @@ describe('isSafelyUsed', () => {
 
       return isResolvedType(entry) ? entry : makeType({ flags: entry.flags });
     },
+    getResolvedTypesAtPositions: (_filePath: string, positions: number[]) => {
+      const result = new Map<number, ResolvedType>();
+
+      for (const pos of positions) {
+        const entry = typeMap[pos];
+
+        if (entry) {
+          result.set(pos, isResolvedType(entry) ? entry : makeType({ flags: entry.flags }));
+        }
+      }
+
+      return result;
+    },
     getSemanticReferencesAtPosition: () => [],
   } as unknown as Gildash);
 

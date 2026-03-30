@@ -32,10 +32,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@zipbul/gildash": "0.14.0",
+    "@zipbul/gildash": "0.17.0",
     "drizzle-orm": "^0.45.1",
     "fastbitset": "^0.4.1",
-    "oxc-parser": "0.115.0",
+    "oxc-parser": "0.121.0",
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0",
     "oxlint-tsgolint": "^0.11.5",

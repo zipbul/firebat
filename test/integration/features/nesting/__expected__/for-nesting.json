@@ -1,33 +1,33 @@
 [
   {
+    "file": "/virtual/for-nesting.ts",
+    "header": "processItems",
     "kind": "accidental-quadratic",
+    "metrics": {
+      "callbackDepth": 0,
+      "cognitiveComplexity": 6,
+      "density": 0.46153846153846156,
+      "depth": 3,
+      "halsteadDifficulty": 17.14,
+      "halsteadVolume": 171.67,
+      "quadraticTargets": [
+        "items"
+      ]
+    },
+    "score": 6,
     "signals": [
       "accidental-quadratic",
       "deep-nesting"
     ],
-    "file": "/virtual/for-nesting.ts",
-    "header": "processItems",
     "span": {
-      "start": {
-        "line": 1,
-        "column": 7
-      },
       "end": {
-        "line": 13,
-        "column": 1
+        "column": 1,
+        "line": 13
+      },
+      "start": {
+        "column": 7,
+        "line": 1
       }
-    },
-    "metrics": {
-      "depth": 3,
-      "cognitiveComplexity": 6,
-      "callbackDepth": 0,
-      "quadraticTargets": [
-        "items"
-      ],
-      "density": 0.46153846153846156,
-      "halsteadVolume": 160,
-      "halsteadDifficulty": 18.33
-    },
-    "score": 6
+    }
   }
 ]

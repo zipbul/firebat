@@ -1,65 +1,65 @@
 [
   {
+    "file": "/virtual/accidental-quadratic.ts",
+    "header": "findDuplicates",
     "kind": "accidental-quadratic",
+    "metrics": {
+      "callbackDepth": 0,
+      "cognitiveComplexity": 21,
+      "density": 1.105263157894737,
+      "depth": 6,
+      "halsteadDifficulty": 9.5,
+      "halsteadVolume": 145.95,
+      "quadraticTargets": [
+        "items"
+      ]
+    },
+    "score": 21,
     "signals": [
       "accidental-quadratic",
       "high-cognitive-complexity",
       "deep-nesting",
       "complexity-density"
     ],
-    "file": "/virtual/accidental-quadratic.ts",
-    "header": "findDuplicates",
     "span": {
-      "start": {
-        "line": 3,
-        "column": 7
-      },
       "end": {
-        "line": 21,
-        "column": 1
+        "column": 1,
+        "line": 21
+      },
+      "start": {
+        "column": 7,
+        "line": 3
       }
-    },
-    "metrics": {
-      "depth": 6,
-      "cognitiveComplexity": 21,
-      "callbackDepth": 0,
-      "quadraticTargets": [
-        "items"
-      ],
-      "density": 1.105263157894737,
-      "halsteadVolume": 132,
-      "halsteadDifficulty": 10.93
-    },
-    "score": 21
+    }
   },
   {
+    "file": "/virtual/accidental-quadratic.ts",
+    "header": "nestedFilterSameTarget",
     "kind": "accidental-quadratic",
+    "metrics": {
+      "callbackDepth": 2,
+      "cognitiveComplexity": 0,
+      "density": 0,
+      "depth": 0,
+      "halsteadDifficulty": 1.5,
+      "halsteadVolume": 11.61,
+      "quadraticTargets": [
+        "data"
+      ]
+    },
+    "score": 0,
     "signals": [
       "accidental-quadratic"
     ],
-    "file": "/virtual/accidental-quadratic.ts",
-    "header": "nestedFilterSameTarget",
     "span": {
-      "start": {
-        "line": 23,
-        "column": 7
-      },
       "end": {
-        "line": 27,
-        "column": 1
+        "column": 1,
+        "line": 27
+      },
+      "start": {
+        "column": 7,
+        "line": 23
       }
-    },
-    "metrics": {
-      "depth": 0,
-      "cognitiveComplexity": 0,
-      "callbackDepth": 2,
-      "quadraticTargets": [
-        "data"
-      ],
-      "density": 0,
-      "halsteadVolume": 11.61,
-      "halsteadDifficulty": 1.5
-    },
-    "score": 0
+    }
   }
 ]
