@@ -498,9 +498,20 @@ const analyzeDependencies = async (
         }
       }
 
-      // Note: `export type { X } from './mod'` is recorded as type-references in gildash.
-      // These are already tracked in usageByModule via type-references relation.
-      // Dead type re-exports from index.ts files are covered by re-exports relation above.
+      // `export type { X } from './mod'` → type-references with meta.isReExport: true
+      const typeRefRels = gildash.searchRelations({ type: 'type-references' });
+
+      for (const rel of typeRefRels) {
+        if (rel.meta?.isReExport !== true || !rel.srcSymbolName || !rel.srcFilePath) continue;
+
+        const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
+        const existing = exportsByFile.get(absFilePath) ?? [];
+
+        if (!existing.some(s => s.name === rel.srcSymbolName)) {
+          existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
+          exportsByFile.set(absFilePath, existing);
+        }
+      }
     } catch (e) {
       if (!(e instanceof GildashError)) {throw e;}
     }
@@ -758,6 +769,55 @@ const analyzeDependencies = async (
             name: sym.name,
             symbolKind: sym.kind,
           });
+        }
+      }
+
+      // 2nd pass: propagate dead re-exports upward.
+      // If an export's only consumers are files whose re-export of the same symbol is dead,
+      // then the original export is also dead.
+      const deadSet = new Set(deadExports.map(d => `${resolveAbs(rootAbs, d.module)}::${d.name}`));
+      let changed = true;
+
+      while (changed) {
+        changed = false;
+
+        for (const [moduleAbs, symbols] of exportsByFile) {
+          if (unreachableModules.has(moduleAbs)) continue;
+
+          const usage = usageByModule.get(moduleAbs);
+
+          if (usage?.usesAll) continue;
+
+          const usedNames = usage?.names ?? new Map<string, Set<string>>();
+
+          for (const sym of symbols) {
+            const key = `${moduleAbs}::${sym.name}`;
+
+            if (deadSet.has(key)) continue;
+
+            const consumers = usedNames.get(sym.name);
+
+            if (!consumers || consumers.size === 0) continue;
+
+            // Check if ALL consumers are dead re-exporters of this symbol
+            const allConsumersDead = [...consumers].every(consumerAbs => {
+              const consumerExports = exportsByFile.get(consumerAbs);
+              const isReExporter = consumerExports?.some(s => s.name === sym.name && s.kind === 're-export');
+
+              return isReExporter === true && deadSet.has(`${consumerAbs}::${sym.name}`);
+            });
+
+            if (allConsumersDead) {
+              deadSet.add(key);
+              deadExports.push({
+                kind: 'dead-export',
+                module: toRelativePath(rootAbs, moduleAbs),
+                name: sym.name,
+                symbolKind: sym.kind,
+              });
+              changed = true;
+            }
+          }
         }
       }
 
