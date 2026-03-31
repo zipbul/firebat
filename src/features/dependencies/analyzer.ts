@@ -10,7 +10,11 @@ import type {
   DependencyEdgeCutHint,
   DependencyFanStat,
   DependencyLayerViolation,
+  DependencyUnusedFileFinding,
+  DependencyUnusedDepFinding,
+  DependencyUnresolvedImportFinding,
 } from '../../types';
+import { isTestLikePath } from '../../shared/is-test-like-path';
 
 const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
   return [...items].sort((left, right) => {
@@ -35,6 +39,9 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
   cuts: [],
   layerViolations: [],
   deadExports: [],
+  unusedFiles: [],
+  unusedDeps: [],
+  unresolvedImports: [],
 });
 
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
@@ -57,6 +64,10 @@ interface AnalyzeDependenciesInput {
   readonly layers?: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly readFileFn?: (path: string) => string;
+  /** Workspace package map (name → rootAbs) for monorepo support. When provided, unused/unlisted dep analysis runs per workspace. */
+  readonly workspacePackages?: ReadonlyMap<string, string>;
+  /** Glob patterns for dependencies to ignore in unused dependency detection. */
+  readonly ignoreDependencies?: ReadonlyArray<string>;
 }
 
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -136,19 +147,62 @@ const matchLayerName = (
 };
 
 /* ------------------------------------------------------------------ */
-/*  Path helpers                                                       */
+/*  Package helpers                                                    */
 /* ------------------------------------------------------------------ */
 
-const isTestLikePath = (value: string): boolean => {
-  const normalized = normalizePath(value);
+/** Extract package name from import specifier (e.g. `lodash/merge` → `lodash`, `@scope/pkg/sub` → `@scope/pkg`). */
+const extractPackageName = (specifier: string): string | null => {
+  if (specifier.length === 0 || specifier.startsWith('.') || specifier.startsWith('/')) return null;
 
-  return (
-    normalized.includes('/test/') ||
-    normalized.includes('/tests/') ||
-    normalized.endsWith('.test.ts') ||
-    normalized.endsWith('.spec.ts')
-  );
+  if (specifier.startsWith('@')) {
+    const parts = specifier.split('/');
+
+    return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : null;
+  }
+
+  return specifier.split('/')[0] ?? null;
 };
+
+const isBuiltinModule = (name: string): boolean =>
+  name.startsWith('node:') || name.startsWith('bun:');
+
+const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
+  try {
+    const raw = readFn(path.join(rootAbs, 'package.json'));
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const deps = new Set<string>();
+    const fields = ['dependencies', 'devDependencies'] as const;
+
+    for (const field of fields) {
+      const section = parsed[field];
+
+      if (section && typeof section === 'object' && !Array.isArray(section)) {
+        for (const key of Object.keys(section as Record<string, unknown>)) {
+          deps.add(key);
+        }
+      }
+    }
+
+    return deps;
+  } catch {
+    return new Set();
+  }
+};
+
+const readPackageName = (rootAbs: string, readFn: (p: string) => string): string | null => {
+  try {
+    const raw = readFn(path.join(rootAbs, 'package.json'));
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    return typeof parsed.name === 'string' ? parsed.name : null;
+  } catch {
+    return null;
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/*  Path helpers                                                       */
+/* ------------------------------------------------------------------ */
 
 const readPackageEntrypoints = (rootAbs: string, readFn: (p: string) => string): ReadonlyArray<string> => {
   try {
@@ -404,29 +458,31 @@ const analyzeDependencies = async (
     if (!(e instanceof GildashError)) {throw e;}
   }
 
-  // 6. Dead export detection
+  // 6. Dead export + unused file + unused dep + unresolved import detection
   const deadExports: DependencyDeadExportFinding[] = [];
+  const unusedFiles: DependencyUnusedFileFinding[] = [];
+  const unusedDeps: DependencyUnusedDepFinding[] = [];
+  const unresolvedImports: DependencyUnresolvedImportFinding[] = [];
 
-  if (allExported !== null && exportsByFile.size > 0) {
+  {
     let imports: ReturnType<Gildash['searchRelations']> = [];
     let reExports: ReturnType<Gildash['searchRelations']> = [];
-    let hasRelationData = false;
+    let hasImportData = false;
 
     try {
       imports = gildash.searchRelations({ type: 'imports' });
-      hasRelationData = true;
+      hasImportData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {throw e;}
     }
 
     try {
       reExports = gildash.searchRelations({ type: 're-exports' });
-      hasRelationData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {throw e;}
     }
 
-    if (hasRelationData) {
+    if (hasImportData) {
 
       // Build usage map per module
       const usageByModule = new Map<
@@ -497,9 +553,24 @@ const analyzeDependencies = async (
         }
       }
 
-      // Check each module's exports
+      // Collect unreachable files as unused files (only when entry points are defined)
+      const unreachableModules = new Set<string>();
+
+      if (entryModules.size > 0) {
+        for (const moduleAbs of graphKeys) {
+          if (!reachable.has(moduleAbs) && !isTestLikePath(moduleAbs)) {
+            unreachableModules.add(moduleAbs);
+            unusedFiles.push({
+              kind: 'unused-file',
+              module: toRelativePath(rootAbs, moduleAbs),
+            });
+          }
+        }
+      }
+
+      // Check each module's exports (skip unreachable — already reported as unused file)
       for (const [moduleAbs, symbols] of exportsByFile) {
-        if (symbols.length === 0 || reachable.has(moduleAbs)) {
+        if (symbols.length === 0 || unreachableModules.has(moduleAbs)) {
           continue;
         }
 
@@ -537,6 +608,104 @@ const analyzeDependencies = async (
           });
         }
       }
+
+      // Phase 2: unused/unlisted dependencies + unresolved imports
+      const externalPackages = new Map<string, Set<string>>();
+
+      for (const rel of imports) {
+        // Unresolved internal import
+        if (rel.isExternal === false && rel.dstFilePath === null && rel.specifier) {
+          unresolvedImports.push({
+            kind: 'unresolved-import',
+            module: toRelativePath(rootAbs, rel.srcFilePath),
+            specifier: rel.specifier,
+          });
+
+          continue;
+        }
+
+        // External package import
+        if (rel.isExternal === true && rel.specifier) {
+          const pkgName = extractPackageName(rel.specifier);
+
+          if (pkgName && !isBuiltinModule(pkgName)) {
+            const files = externalPackages.get(pkgName) ?? new Set<string>();
+
+            files.add(toRelativePath(rootAbs, rel.srcFilePath));
+            externalPackages.set(pkgName, files);
+          }
+        }
+      }
+
+      // Compare with package.json dependencies (per workspace or root)
+      const ignorePats = (input?.ignoreDependencies ?? []).map(pat => globToRegExp(pat));
+      const shouldIgnore = (name: string): boolean => ignorePats.some(re => re.test(name));
+
+      const checkDeps = (
+        depRoot: string,
+        usedPackages: Map<string, Set<string>>,
+      ): void => {
+        const pkgDeps = readPackageDependencies(depRoot, readFn);
+        const selfName = readPackageName(depRoot, readFn);
+
+        for (const [pkgName, files] of usedPackages) {
+          if (pkgName === selfName || shouldIgnore(pkgName)) continue;
+
+          if (!pkgDeps.has(pkgName)) {
+            unusedDeps.push({
+              kind: 'unlisted-dependency',
+              packageName: pkgName,
+              files: [...files],
+            });
+          }
+        }
+
+        for (const declared of pkgDeps) {
+          if (declared === selfName || shouldIgnore(declared)) continue;
+          if (usedPackages.has(declared)) continue;
+
+          // @types/* — skip if corresponding package is used
+          if (declared.startsWith('@types/')) {
+            const base = declared.slice('@types/'.length).replace('__', '/');
+
+            if (usedPackages.has(base)) continue;
+          }
+
+          unusedDeps.push({
+            kind: 'unused-dependency',
+            packageName: declared,
+            files: [],
+          });
+        }
+      };
+
+      const workspaces = input?.workspacePackages;
+
+      if (workspaces && workspaces.size > 0) {
+        // Per-workspace analysis: group external imports by workspace
+        for (const [, wsRoot] of workspaces) {
+          const wsRel = toRelativePath(rootAbs, wsRoot);
+          const wsPackages = new Map<string, Set<string>>();
+
+          for (const [pkgName, files] of externalPackages) {
+            const wsFiles = new Set<string>();
+
+            for (const f of files) {
+              if (f.startsWith(wsRel + '/') || f === wsRel) {
+                wsFiles.add(f);
+              }
+            }
+
+            if (wsFiles.size > 0) {
+              wsPackages.set(pkgName, wsFiles);
+            }
+          }
+
+          checkDeps(wsRoot, wsPackages);
+        }
+      } else {
+        checkDeps(rootAbs, externalPackages);
+      }
     }
   }
 
@@ -549,6 +718,9 @@ const analyzeDependencies = async (
     cuts,
     layerViolations,
     deadExports,
+    unusedFiles,
+    unusedDeps,
+    unresolvedImports,
   };
 };
 

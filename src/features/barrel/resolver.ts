@@ -348,57 +348,6 @@ const createImportResolver = (input: ResolverInput): ImportResolver => {
   };
 };
 
-const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, string>> => {
-  const pkgJsonPath = path.join(rootAbs, 'package.json');
-  const parsed = await readJsoncFile(pkgJsonPath);
-
-  if (!parsed || typeof parsed !== 'object') {
-    return new Map();
-  }
-
-  const parsedRecord = asRecord(parsed);
-  const workspacesRaw = parsedRecord?.workspaces;
-  let patterns: string[] = [];
-
-  if (Array.isArray(workspacesRaw) && workspacesRaw.every(v => typeof v === 'string')) {
-    patterns = workspacesRaw as string[];
-  } else if (workspacesRaw && typeof workspacesRaw === 'object') {
-    const packages = asRecord(workspacesRaw)?.packages;
-
-    if (Array.isArray(packages) && packages.every(v => typeof v === 'string')) {
-      patterns = packages as string[];
-    }
-  }
-
-  if (patterns.length === 0) {
-    return new Map();
-  }
-
-  const packageJsonPaths: string[] = [];
-
-  for (const pattern of patterns) {
-    const glob = new Bun.Glob(normalizePath(path.join(pattern, 'package.json')));
-
-    for await (const rel of glob.scan({ cwd: rootAbs, onlyFiles: true, followSymlinks: false })) {
-      packageJsonPaths.push(path.resolve(rootAbs, rel));
-    }
-  }
-
-  const map = new Map<string, string>();
-
-  for (const p of packageJsonPaths) {
-    const pkg = await readJsoncFile(p);
-    const name = typeof asRecord(pkg)?.name === 'string' ? String(asRecord(pkg)?.name) : '';
-
-    if (name.length === 0) {
-      continue;
-    }
-
-    map.set(name, path.dirname(p));
-  }
-
-  return map;
-};
-
-export { createImportResolver, createWorkspacePackageMap };
+export { createImportResolver };
+export { createWorkspacePackageMap } from '../../shared/workspace-packages';
 export type { ImportResolver };

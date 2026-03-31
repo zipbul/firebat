@@ -97,10 +97,14 @@ export type FirebatCatalogCode =
   | 'COUPLING_OFF_MAIN_SEQ'
   | 'COUPLING_UNSTABLE'
   | 'COUPLING_RIGID'
-  // dependencies (3)
+  // dependencies (7)
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
   | 'DEP_TEST_ONLY_EXPORT'
+  | 'DEP_UNUSED_FILE'
+  | 'DEP_UNUSED_DEPENDENCY'
+  | 'DEP_UNLISTED_DEPENDENCY'
+  | 'DEP_UNRESOLVED_IMPORT'
   // duplicates (4)
   | 'DUP_EXACT'
   | 'DUP_SHAPE'
@@ -255,6 +259,23 @@ export interface DependencyDeadExportFinding {
   readonly name: string;
 }
 
+export interface DependencyUnusedFileFinding {
+  readonly kind: 'unused-file';
+  readonly module: string;
+}
+
+export interface DependencyUnusedDepFinding {
+  readonly kind: 'unused-dependency' | 'unlisted-dependency';
+  readonly packageName: string;
+  readonly files: ReadonlyArray<string>;
+}
+
+export interface DependencyUnresolvedImportFinding {
+  readonly kind: 'unresolved-import';
+  readonly module: string;
+  readonly specifier: string;
+}
+
 export interface DependencyExportStats {
   readonly total: number;
   readonly abstract: number;
@@ -271,6 +292,9 @@ export interface DependencyAnalysis {
   readonly cuts: ReadonlyArray<DependencyEdgeCutHint>;
   readonly layerViolations: ReadonlyArray<DependencyLayerViolation>;
   readonly deadExports: ReadonlyArray<DependencyDeadExportFinding>;
+  readonly unusedFiles: ReadonlyArray<DependencyUnusedFileFinding>;
+  readonly unusedDeps: ReadonlyArray<DependencyUnusedDepFinding>;
+  readonly unresolvedImports: ReadonlyArray<DependencyUnresolvedImportFinding>;
 }
 
 // Enriched dependency finding types (post-enrich, array form)
@@ -308,7 +332,39 @@ export interface DepCycleFinding {
   };
 }
 
-export type DependencyFinding = DepLayerViolationFinding | DepDeadExportFinding | DepCycleFinding;
+export interface DepUnusedFileFinding {
+  readonly code: FirebatCatalogCode;
+  readonly kind: 'unused-file';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly module: string;
+}
+
+export interface DepUnusedDepFinding {
+  readonly code: FirebatCatalogCode;
+  readonly kind: 'unused-dependency' | 'unlisted-dependency';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly packageName: string;
+  readonly files: ReadonlyArray<string>;
+}
+
+export interface DepUnresolvedImportFinding {
+  readonly code: FirebatCatalogCode;
+  readonly kind: 'unresolved-import';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly module: string;
+  readonly specifier: string;
+}
+
+export type DependencyFinding =
+  | DepLayerViolationFinding
+  | DepDeadExportFinding
+  | DepCycleFinding
+  | DepUnusedFileFinding
+  | DepUnusedDepFinding
+  | DepUnresolvedImportFinding;
 
 export interface FormatFinding {
   readonly code: FirebatCatalogCode;

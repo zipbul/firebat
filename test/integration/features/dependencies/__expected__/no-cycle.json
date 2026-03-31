@@ -17,5 +17,8 @@
   },
   "fanIn": [],
   "fanOut": [],
-  "layerViolations": []
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": []
 }

@@ -317,6 +317,38 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that keeping the export solely for tests does not mislead production consumers about the public surface.',
     ],
   },
+  DEP_UNUSED_FILE: {
+    cause: 'A source file is not reachable from any entry point in the project, making it effectively dead code.',
+    think: [
+      'Check whether the file is consumed by an entry point not listed in package.json (CLI, script, worker).',
+      'Determine whether the file was left behind after a refactor and can be safely deleted.',
+      'Verify that removing the file does not break dynamic imports or runtime require calls that static analysis cannot see.',
+    ],
+  },
+  DEP_UNUSED_DEPENDENCY: {
+    cause: 'A package listed in package.json dependencies is not imported anywhere in the project source code.',
+    think: [
+      'Check whether the package is used indirectly (CLI tool, PostCSS plugin, Babel preset, or runtime peer dependency).',
+      'Determine whether the package was left behind after migration and can be safely removed.',
+      'Verify that removing the dependency does not break build scripts, tooling configs, or implicit peer requirements.',
+    ],
+  },
+  DEP_UNLISTED_DEPENDENCY: {
+    cause: 'A package is imported in source code but not declared in any dependency section of package.json.',
+    think: [
+      'Determine whether the import relies on a transitive dependency that may break on updates.',
+      'Check whether the package should be added to dependencies or devDependencies based on usage context.',
+      'Verify that the import specifier is correct and not a typo or removed package.',
+    ],
+  },
+  DEP_UNRESOLVED_IMPORT: {
+    cause: 'An import specifier in source code cannot be resolved to any file in the project.',
+    think: [
+      'Check whether the target file was renamed, moved, or deleted without updating the import.',
+      'Determine whether the import relies on path aliases that are not configured or misconfigured.',
+      'Verify that the file is not excluded from the build configuration or gitignored.',
+    ],
+  },
 
   NESTING_DEEP: {
     cause:

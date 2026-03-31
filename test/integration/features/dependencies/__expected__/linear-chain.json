@@ -51,5 +51,8 @@
       "module": "linear-chain/b.ts"
     }
   ],
-  "layerViolations": []
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": []
 }

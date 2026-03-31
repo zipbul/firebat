@@ -1103,6 +1103,51 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       });
     }
 
+    const unusedFiles = Array.isArray(value?.unusedFiles) ? value.unusedFiles : [];
+
+    for (const u of unusedFiles) {
+      const module = String(u?.module ?? '');
+
+      findings.push({
+        kind: 'unused-file',
+        code: 'DEP_UNUSED_FILE',
+        file: module,
+        span: zeroSpan,
+        module,
+      });
+    }
+
+    const unusedDeps = Array.isArray(value?.unusedDeps) ? value.unusedDeps : [];
+
+    for (const u of unusedDeps) {
+      const kind = String(u?.kind ?? 'unused-dependency');
+      const code = kind === 'unlisted-dependency' ? 'DEP_UNLISTED_DEPENDENCY' : 'DEP_UNUSED_DEPENDENCY';
+
+      findings.push({
+        kind,
+        code,
+        file: String(u?.files?.[0] ?? ''),
+        span: zeroSpan,
+        packageName: String(u?.packageName ?? ''),
+        files: Array.isArray(u?.files) ? u.files : [],
+      });
+    }
+
+    const unresolvedImports = Array.isArray(value?.unresolvedImports) ? value.unresolvedImports : [];
+
+    for (const u of unresolvedImports) {
+      const module = String(u?.module ?? '');
+
+      findings.push({
+        kind: 'unresolved-import',
+        code: 'DEP_UNRESOLVED_IMPORT',
+        file: module,
+        span: zeroSpan,
+        module,
+        specifier: String(u?.specifier ?? ''),
+      });
+    }
+
     return findings;
   };
 

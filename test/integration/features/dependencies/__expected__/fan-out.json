@@ -56,5 +56,8 @@
       "module": "fan-out/hub.ts"
     }
   ],
-  "layerViolations": []
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": []
 }
