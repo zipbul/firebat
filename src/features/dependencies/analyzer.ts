@@ -611,10 +611,11 @@ const analyzeDependencies = async (
           perNameConsumerKinds: new Map<string, Set<'test' | 'prod'>>(),
         };
 
-        // null/undefined/'*' dstSymbolName = namespace import (import * as X) or export *
-        if (rel.dstSymbolName === null || rel.dstSymbolName === undefined || rel.dstSymbolName === '*') {
+        // '*' = namespace import (import * as X). re-export with null dstSymbolName = export * from './mod'.
+        // Side-effect imports and CJS require() also produce null — skip (not usesAll, not named).
+        if (rel.dstSymbolName === '*' || (rel.type === 're-exports' && !rel.dstSymbolName)) {
           state.usesAll = true;
-        } else {
+        } else if (rel.dstSymbolName) {
           state.names.add(rel.dstSymbolName);
 
           const prev = state.perNameConsumerKinds.get(rel.dstSymbolName) ?? new Set<'test' | 'prod'>();
@@ -622,6 +623,7 @@ const analyzeDependencies = async (
           prev.add(kind);
           state.perNameConsumerKinds.set(rel.dstSymbolName, prev);
         }
+        // else: null/undefined dstSymbolName on non-re-export → side-effect import, skip
 
         usageByModule.set(target, state);
       }

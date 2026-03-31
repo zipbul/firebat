@@ -446,7 +446,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
 
-        if (query.type === 'imports') {return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null)];}
+        // import * as Lib from './lib' → dstSymbolName = '*'
+        if (query.type === 'imports') {return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', '*')];}
 
         return [];
       },
@@ -457,6 +458,39 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     });
 
     expect(result.deadExports.length).toBe(0);
+  });
+
+  it('should not treat side-effect import (null dstSymbolName) as usesAll', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/main.ts', ['/project/src/lib.ts']],
+      ['/project/src/lib.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];}
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        // import './lib' → dstSymbolName = null (side-effect)
+        if (query.type === 'imports') {return [mkImport('/project/src/main.ts', '/project/src/lib.ts', null)];}
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/main.ts' }),
+    });
+
+    // Side-effect import does NOT mark module as usesAll → export is dead
+    expect(result.deadExports.length).toBe(1);
+    expect(result.deadExports[0]!.name).toBe('unusedFn');
   });
 
   it('should not flag symbol as dead when re-exported', async () => {
