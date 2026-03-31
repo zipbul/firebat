@@ -8,7 +8,6 @@ import {
   getLiteralString,
   getNodeHeader,
   getNodeName,
-  getNodeType,
   isFunctionNode,
   isNodeRecord,
   isOxcNode,
@@ -52,14 +51,6 @@ describe('isNodeRecord', () => {
     const node = { type: 'Identifier', name: 'x', start: 0, end: 1 } as never;
 
     expect(isNodeRecord(node)).toBe(true);
-  });
-});
-
-describe('getNodeType', () => {
-  it('returns the type property', () => {
-    const node = { type: 'Identifier', start: 0, end: 1 } as never;
-
-    expect(getNodeType(node)).toBe('Identifier');
   });
 });
 

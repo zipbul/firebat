@@ -23,7 +23,7 @@ import type {
 
 import type { NodeValue } from '../types';
 
-import { getNodeType, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from './oxc-ast-utils';
+import { isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from './oxc-ast-utils';
 
 type AnyNode = Node & Record<string, unknown>;
 
@@ -448,7 +448,7 @@ const normalizeForToWhile = (node: AnyNode): NodeValue | null => {
   }
 
   // If init is an expression, wrap as an ExpressionStatement.
-  if (getNodeType(initNode) !== 'VariableDeclaration') {
+  if (initNode.type !== 'VariableDeclaration') {
     return [expressionStatement(initNode), whileNode];
   }
 

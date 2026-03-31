@@ -1,21 +1,15 @@
 import type { Gildash } from '@zipbul/gildash';
-import type { Function as OxcFunction, Node } from 'oxc-parser';
+import type { Function as OxcFunction, Node, Program } from 'oxc-parser';
 
 import { GildashError, normalizePath } from '@zipbul/gildash';
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import * as path from 'node:path';
+import { Visitor } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
-import {
-  getNodeHeader,
-  isFunctionNode,
-  isOxcNode,
-  walkOxcTree,
-  walkOxcTreeWithParent,
-} from '../../engine/ast/oxc-ast-utils';
+import { getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
 
 /* ------------------------------------------------------------------ */
 /*  Path utilities                                                     */
@@ -109,7 +103,6 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
   let restParam: string | null = null;
 
   for (const paramNode of paramsValue) {
-
     if (paramNode.type === 'Identifier' && 'name' in paramNode && typeof paramNode.name === 'string') {
       params.push(paramNode.name);
 
@@ -334,59 +327,46 @@ const collectFunctionNames = (program: Node): CollectedFunctionNames => {
   const namesByNode = new Map<Node, string>();
   const methodNodes = new Set<Node>();
 
-  walkOxcTree(program, node => {
-    if (node.type === 'FunctionDeclaration') {
+  new Visitor({
+    FunctionDeclaration(node) {
       const idNode = node.id;
 
       if (idNode !== null) {
         namesByNode.set(node, idNode.name);
       }
+    },
 
-      return true;
-    }
-
-    if (node.type === 'VariableDeclarator') {
+    VariableDeclarator(node) {
       const idNode = node.id;
       const initNode = node.init;
 
       if (idNode.type === 'Identifier' && initNode !== null && isFunctionNode(initNode)) {
         namesByNode.set(initNode, idNode.name);
       }
+    },
 
-      return true;
-    }
-
-    if (node.type === 'Property') {
+    Property(node) {
       const valueNode = node.value;
 
-      if (isOxcNode(valueNode) && isFunctionNode(valueNode)) {
+      if (isFunctionNode(valueNode)) {
         const header = getNodeHeader(node);
 
         if (header.length > 0 && header !== 'anonymous') {
           namesByNode.set(valueNode, header);
         }
       }
+    },
 
-      return true;
-    }
-
-    if (node.type === 'MethodDefinition') {
+    MethodDefinition(node) {
       const valueNode = node.value;
+      const header = getNodeHeader(node);
 
-      if (isOxcNode(valueNode) && isFunctionNode(valueNode)) {
-        const header = getNodeHeader(node);
-
-        if (header.length > 0 && header !== 'anonymous') {
-          namesByNode.set(valueNode, header);
-          methodNodes.add(valueNode);
-        }
+      if (header.length > 0 && header !== 'anonymous') {
+        namesByNode.set(valueNode, header);
+        methodNodes.add(valueNode);
       }
-
-      return true;
-    }
-
-    return true;
-  });
+    },
+  }).visit(program as Program);
 
   return { namesByNode, methodNodes };
 };
@@ -672,15 +652,11 @@ const analyzeIndirection = async (
     const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
     const fileOverloads = overloadIdx.get(normalizedFilePath) ?? emptyOverloads;
 
-    walkOxcTree(file.program, node => {
-      if (!isFunctionNode(node)) {
-        return true;
-      }
-
+    const handleThinWrapper = (node: Node): void => {
       const wrapperCall = getWrapperCall(node);
 
       if (!wrapperCall) {
-        return true;
+        return;
       }
 
       const header = namesByNode.get(node) ?? getNodeHeader(node);
@@ -689,7 +665,7 @@ const analyzeIndirection = async (
       const overloadSet = methodNodes.has(node) ? fileOverloads.methods : fileOverloads.functions;
 
       if (overloadSet.has(header)) {
-        return true;
+        return;
       }
 
       // Decorator check: functions with decorators indicate intentional wrapping — skip
@@ -697,7 +673,7 @@ const analyzeIndirection = async (
         const detail = gildash.getFullSymbol(header, file.filePath);
 
         if (detail !== null && Array.isArray(detail.decorators) && detail.decorators.length > 0) {
-          return true;
+          return;
         }
       } catch {
         // Semantic layer unavailable — keep existing thin-wrapper behavior
@@ -730,9 +706,13 @@ const analyzeIndirection = async (
           });
         }
       }
+    };
 
-      return true;
-    });
+    new Visitor({
+      FunctionDeclaration: handleThinWrapper,
+      FunctionExpression: handleThinWrapper,
+      ArrowFunctionExpression: handleThinWrapper,
+    }).visit(file.program);
 
     if (options.maxForwardDepth >= 1) {
       for (const [name, node] of wrapperNodeByName.entries()) {
@@ -753,8 +733,12 @@ const analyzeIndirection = async (
     }
 
     // type-remap: type A = B (pure synonym, no type args, no type params)
-    walkOxcTree(file.program, node => {
-      if (node.type === 'TSTypeAliasDeclaration' && node.declare !== true) {
+    new Visitor({
+      TSTypeAliasDeclaration(node) {
+        if (node.declare === true) {
+          return;
+        }
+
         const typeAnnotation = node.typeAnnotation;
 
         if (typeAnnotation.type === 'TSTypeReference') {
@@ -806,30 +790,27 @@ const analyzeIndirection = async (
             }
           }
         }
-      }
-
-      return true;
-    });
+      },
+    }).visit(file.program);
 
     // interface-rewrap: empty interface with at least one extends (not declare, not module augmentation, not declaration merging)
     // Count same-name declarations for merging detection: interface+interface AND class+interface merging
     const declarationNameCount = new Map<string, number>();
 
-    walkOxcTree(file.program, node => {
-      if (node.type === 'TSInterfaceDeclaration') {
+    new Visitor({
+      TSInterfaceDeclaration(node) {
         const name = node.id.name;
 
         declarationNameCount.set(name, (declarationNameCount.get(name) ?? 0) + 1);
-      } else if (node.type === 'ClassDeclaration') {
+      },
+      ClassDeclaration(node) {
         const id = node.id;
 
         if (id !== null) {
           declarationNameCount.set(id.name, (declarationNameCount.get(id.name) ?? 0) + 1);
         }
-      }
-
-      return true;
-    });
+      },
+    }).visit(file.program);
 
     walkOxcTreeWithParent(file.program, (node, parent) => {
       if (node.type === 'TSInterfaceDeclaration' && node.declare !== true) {

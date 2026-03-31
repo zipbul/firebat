@@ -1,5 +1,7 @@
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { BitSet, FunctionBodyAnalysis, ParsedFile } from '../../engine/types';
 import type {
   LivenessPressureFinding,
@@ -8,15 +10,12 @@ import type {
   VariableLifetimeFinding,
 } from '../../types';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { collectFunctionNodes, forEachChildNode } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
 import { collectVariables } from '../../engine/dataflow/variable-collector';
-import { getFunctionSpan } from '../../engine/function-span';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
 
@@ -231,7 +230,7 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
   for (const stmt of bodyStatements) {
     if (stmt.type === 'IfStatement') {
       const consequent = stmt.consequent as Node | null;
-      const alternate = stmt.alternate !== null ? stmt.alternate as Node : null;
+      const alternate = stmt.alternate !== null ? (stmt.alternate as Node) : null;
 
       if (consequent !== null && consequent.type === 'BlockStatement') {
         blocks.push({ type: 'if-consequent', start: consequent.start, end: consequent.end });
@@ -281,7 +280,7 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
 
     if (stmt.type === 'TryStatement') {
       const block = stmt.block as Node;
-      const handler = stmt.handler !== null ? stmt.handler as Node : null;
+      const handler = stmt.handler !== null ? (stmt.handler as Node) : null;
       // finalizer is handled only for exclusion (see checkScopeNarrowing)
 
       blocks.push({ type: 'try-block', start: block.start, end: block.end });
@@ -465,9 +464,9 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
       continue;
     }
 
-    const finalizer = stmt.finalizer !== null ? stmt.finalizer as Node : null;
+    const finalizer = stmt.finalizer !== null ? (stmt.finalizer as Node) : null;
     const block = stmt.block as Node;
-    const handler = stmt.handler !== null ? stmt.handler as Node : null;
+    const handler = stmt.handler !== null ? (stmt.handler as Node) : null;
 
     if (finalizer !== null) {
       finalizerRanges.push({ start: finalizer.start, end: finalizer.end });
@@ -704,7 +703,6 @@ interface LoopBodyRange {
   readonly end: number;
 }
 
-
 /**
  * Recursively collects ranges of all loop statements anywhere in the given
  * AST node list (any depth).  For ForStatement the **entire** statement range
@@ -886,7 +884,11 @@ const analyzeVariableLifetime = (
       // Liveness pressure check
       const maxLiveVarsThreshold = options.maxLiveVariables ?? Infinity;
       const minFuncLines = options.minFunctionLines ?? Infinity;
-      const functionSpan = getFunctionSpan(functionNode, file.sourceText);
+      const fnOffsets = buildLineOffsets(file.sourceText);
+      const functionSpan = {
+        start: getLineColumn(fnOffsets, functionNode.start),
+        end: getLineColumn(fnOffsets, functionNode.end),
+      };
       const functionLineCount = functionSpan.end.line - functionSpan.start.line;
 
       if (functionLineCount >= minFuncLines) {

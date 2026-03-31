@@ -2,15 +2,15 @@ import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { normalizePath } from '@zipbul/gildash';
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import * as path from 'node:path';
+import { Visitor } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
 import type { BarrelFinding, SourceSpan } from '../../types';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
 import { collectLocallyUsedImportNames } from '../../engine/ast/collect-locally-used-import-names';
-import { getLiteralString, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { getLiteralString, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
 
 interface BarrelOptions {
@@ -134,58 +134,25 @@ interface ImportLike {
 const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
   const items: ImportLike[] = [];
 
-  walkOxcTree(file.program, node => {
-    if (!isOxcNode(node)) {
-      return false;
+  const addItem = (kind: ImportLikeKind, node: Node, source: Node | null | undefined): void => {
+    const spec = getLiteralString(source);
+
+    if (typeof spec === 'string') {
+      items.push({ kind, specifier: spec, span: toNodeSpan(file, node), rawNode: node });
     }
+  };
 
-    if (node.type === 'ImportDeclaration') {
-      const spec = getLiteralString(asNodeLike(node)?.source as Node | null | undefined);
-
-      if (typeof spec === 'string') {
-        items.push({
-          kind: 'import',
-          specifier: spec,
-          span: toNodeSpan(file, node),
-          rawNode: node,
-        });
-      }
-
-      return true;
-    }
-
-    if (node.type === 'ExportNamedDeclaration') {
-      const spec = getLiteralString(asNodeLike(node)?.source as Node | null | undefined);
-
-      if (typeof spec === 'string') {
-        items.push({
-          kind: 'export-named',
-          specifier: spec,
-          span: toNodeSpan(file, node),
-          rawNode: node,
-        });
-      }
-
-      return true;
-    }
-
-    if (node.type === 'ExportAllDeclaration') {
-      const spec = getLiteralString(asNodeLike(node)?.source as Node | null | undefined);
-
-      if (typeof spec === 'string') {
-        items.push({
-          kind: 'export-all',
-          specifier: spec,
-          span: toNodeSpan(file, node),
-          rawNode: node,
-        });
-      }
-
-      return true;
-    }
-
-    return true;
-  });
+  new Visitor({
+    ImportDeclaration(node) {
+      addItem('import', node, node.source);
+    },
+    ExportNamedDeclaration(node) {
+      addItem('export-named', node, node.source);
+    },
+    ExportAllDeclaration(node) {
+      addItem('export-all', node, node.source);
+    },
+  }).visit(file.program);
 
   return items;
 };
@@ -199,21 +166,15 @@ const isExplicitIndexSpecifier = (specifier: string): boolean => {
 const createEmptyBarrel = (): ReadonlyArray<BarrelFinding> => [];
 
 const checkExportStar = (file: ParsedFile, findings: BarrelFinding[]): void => {
-  walkOxcTree(file.program, node => {
-    if (!isOxcNode(node)) {
-      return false;
-    }
-
-    if (node.type === 'ExportAllDeclaration') {
+  new Visitor({
+    ExportAllDeclaration(node) {
       findings.push({
         kind: 'export-star',
         file: file.filePath,
         span: toNodeSpan(file, node),
       });
-    }
-
-    return true;
-  });
+    },
+  }).visit(file.program);
 };
 
 const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void => {
@@ -390,11 +351,7 @@ const isChildPath = (currentFileAbs: string, resolvedTargetAbs: string): boolean
  * Build a set of files that have cross-module re-exports from gildash relations.
  * Files NOT in this set can skip AST-based cross-module-reexport detection entirely.
  */
-const buildCrossModuleReexportFiles = (
-  gildash: Gildash,
-  rootAbs: string,
-  fileSet: ReadonlySet<string>,
-): Set<string> | null => {
+const buildCrossModuleReexportFiles = (gildash: Gildash, rootAbs: string, fileSet: ReadonlySet<string>): Set<string> | null => {
   let rels: ReturnType<Gildash['searchRelations']>;
 
   try {
@@ -684,9 +641,7 @@ const analyzeBarrel = async (
     fileSet,
     workspacePackages,
   });
-  const crossModuleFiles = options.gildash
-    ? buildCrossModuleReexportFiles(options.gildash, options.rootAbs, fileSet)
-    : null;
+  const crossModuleFiles = options.gildash ? buildCrossModuleReexportFiles(options.gildash, options.rootAbs, fileSet) : null;
   const findings: BarrelFinding[] = [];
 
   for (const file of activeFiles) {

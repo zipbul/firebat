@@ -1,14 +1,13 @@
 import type { Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
 import type { CollapsibleIfItem, SourceSpan } from '../../types';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
+import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
-import { getFunctionSpan } from '../../engine/function-span';
-import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 
 const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
   const offsets = buildLineOffsets(sourceText);
@@ -218,7 +217,11 @@ const analyzeFunctionNode = (
     o.depthReduction * o.statementsAffected > best.depthReduction * best.statementsAffected ? o : best,
   );
   const header = getNodeHeader(functionNode, parent);
-  const span = getFunctionSpan(functionNode, sourceText);
+  const lineOffsets = buildLineOffsets(sourceText);
+  const span: SourceSpan = {
+    start: getLineColumn(lineOffsets, functionNode.start),
+    end: getLineColumn(lineOffsets, functionNode.end),
+  };
 
   return {
     kind: primaryOpportunity.kind,

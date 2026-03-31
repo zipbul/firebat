@@ -10,8 +10,6 @@ export const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> =
 export const isNodeRecord = (node: unknown): node is NodeRecord =>
   typeof node === 'object' && node !== null && !Array.isArray(node);
 
-export const getNodeType = (node: Node): string => node.type;
-
 export const getNodeName = (node: Node | null | undefined): string | null => {
   if (node === null || node === undefined) {
     return null;

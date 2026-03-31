@@ -1,18 +1,17 @@
-import type { Function as OxcFunction, Node } from 'oxc-parser';
-
 import type { Gildash } from '@zipbul/gildash';
+import type { Function as OxcFunction, Node, Program } from 'oxc-parser';
+
+import { GildashError } from '@zipbul/gildash';
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+import { Visitor } from 'oxc-parser';
 
 import type { CfgNodePayload, ParsedFile } from '../../engine/types';
 import type { TemporalCouplingFinding } from '../../types';
 
-import { GildashError } from '@zipbul/gildash';
-
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
+import { normalizeFile } from '../../engine/ast/normalize-file';
+import { getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
 import { EdgeType } from '../../engine/cfg/cfg-types';
-import { collectOxcNodes, getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
-import { normalizeFile } from '../../engine/ast/normalize-file';
 
 interface AnalyzeTemporalCouplingInput {
   readonly gildash?: Gildash;
@@ -33,11 +32,11 @@ const spanForOffset = (sourceText: string, offset: number) => {
 const collectExportedFunctionNames = (program: Node): Set<string> => {
   const names = new Set<string>();
 
-  walkOxcTree(program, node => {
-    if (node.type === 'ExportNamedDeclaration') {
+  new Visitor({
+    ExportNamedDeclaration(node) {
       const decl = node.declaration;
 
-      if (isOxcNode(decl)) {
+      if (decl !== null) {
         if (decl.type === 'FunctionDeclaration') {
           const name = getNodeName(decl.id);
 
@@ -45,23 +44,14 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
             names.add(name);
           }
         } else if (decl.type === 'VariableDeclaration') {
-          const declarations = decl.declarations;
+          for (const declarator of decl.declarations) {
+            const init = declarator.init;
 
-          if (Array.isArray(declarations)) {
-            for (const declarator of declarations) {
-              if (isOxcNode(declarator)) {
-                const init = declarator.init;
+            if (init !== null && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
+              const name = getNodeName(declarator.id);
 
-                if (
-                  isOxcNode(init) &&
-                  (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
-                ) {
-                  const name = getNodeName(declarator.id);
-
-                  if (typeof name === 'string' && name.length > 0) {
-                    names.add(name);
-                  }
-                }
+              if (typeof name === 'string' && name.length > 0) {
+                names.add(name);
               }
             }
           }
@@ -69,35 +59,27 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
       }
 
       // re-export: export { init, query }
-      const specifiers = node.specifiers;
+      for (const specifier of node.specifiers) {
+        const localName = getNodeName(specifier.local);
 
-      if (Array.isArray(specifiers)) {
-        for (const specifier of specifiers) {
-          if (isOxcNode(specifier)) {
-            const localName = getNodeName(specifier.local);
-
-            if (typeof localName === 'string' && localName.length > 0) {
-              names.add(localName);
-            }
-          }
+        if (typeof localName === 'string' && localName.length > 0) {
+          names.add(localName);
         }
       }
-    }
+    },
 
-    if (node.type === 'ExportDefaultDeclaration') {
+    ExportDefaultDeclaration(node) {
       const decl = node.declaration;
 
-      if (isOxcNode(decl) && decl.type === 'FunctionDeclaration') {
+      if (decl.type === 'FunctionDeclaration') {
         const name = getNodeName(decl.id);
 
         if (typeof name === 'string' && name.length > 0) {
           names.add(name);
         }
       }
-    }
-
-    return true;
-  });
+    },
+  }).visit(program as Program);
 
   return names;
 };
@@ -164,10 +146,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
       if (typeof name === 'string' && exportedNames.has(name)) {
         const init = node.init;
 
-        if (
-          isOxcNode(init) &&
-          (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
-        ) {
+        if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
           if (targetOffset >= init.start && targetOffset <= init.end) {
             result = name;
 
@@ -237,25 +216,19 @@ interface WriterReaderResult {
 const collectWritePositionKeys = (program: Node): Set<string> => {
   const keys = new Set<string>();
 
-  walkOxcTree(program, node => {
-    if (node.type === 'AssignmentExpression') {
+  new Visitor({
+    AssignmentExpression(node) {
       const left = node.left;
 
-      if (isOxcNode(left)) {
-        keys.add(`${left.start}:${left.end}`);
-      }
-    }
+      keys.add(`${left.start}:${left.end}`);
+    },
 
-    if (node.type === 'UpdateExpression') {
+    UpdateExpression(node) {
       const argument = node.argument;
 
-      if (isOxcNode(argument)) {
-        keys.add(`${argument.start}:${argument.end}`);
-      }
-    }
-
-    return true;
-  });
+      keys.add(`${argument.start}:${argument.end}`);
+    },
+  }).visit(program as Program);
 
   return keys;
 };
@@ -271,7 +244,15 @@ const classifyExportedFunctions = (
   const writerFns = new Set<string>();
   const readerFns = new Set<string>();
   // Collect all Identifier nodes matching varName
-  const identifiers = collectOxcNodes(program, n => n.type === 'Identifier' && getNodeName(n) === varName);
+  const identifiers: Node[] = [];
+
+  new Visitor({
+    Identifier(node) {
+      if (node.name === varName) {
+        identifiers.push(node);
+      }
+    },
+  }).visit(program as Program);
 
   for (const idNode of identifiers) {
     const fnName = getEnclosingExportedFunction(program, idNode.start, exportedNames);
@@ -303,7 +284,16 @@ const analyzeClassTemporalCoupling = (
   gildash?: Gildash,
 ): TemporalCouplingFinding[] => {
   const findings: TemporalCouplingFinding[] = [];
-  const classes = collectOxcNodes(program, n => n.type === 'ClassDeclaration' || n.type === 'ClassExpression');
+  const classes: Node[] = [];
+
+  new Visitor({
+    ClassDeclaration(node) {
+      classes.push(node);
+    },
+    ClassExpression(node) {
+      classes.push(node);
+    },
+  }).visit(program as Program);
 
   for (const classNode of classes) {
     if (classNode.type !== 'ClassDeclaration' && classNode.type !== 'ClassExpression') continue;
@@ -478,13 +468,23 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
       continue;
     }
 
-    const callNodes = collectOxcNodes(payload as Node, n => n.type === 'CallExpression');
+    const callNodes: Node[] = [];
+
+    walkOxcTree(payload as Node, n => {
+      if (n.type === 'CallExpression') {
+        callNodes.push(n);
+      }
+
+      return true;
+    });
 
     for (const callNode of callNodes) {
       if (callNode.type !== 'CallExpression') continue;
       const callee = callNode.callee;
 
-      if (!isOxcNode(callee)) {continue;}
+      if (!isOxcNode(callee)) {
+        continue;
+      }
 
       let callName: string | null = null;
 
@@ -518,9 +518,13 @@ const writerSetDominatesReader = (
   const writerSet = new Set(writerNodeIds);
 
   // If entry itself is a writer or reader, handle edge cases
-  if (writerSet.has(entryId)) {return true;}
+  if (writerSet.has(entryId)) {
+    return true;
+  }
 
-  if (readerNodeId === entryId) {return false;}
+  if (readerNodeId === entryId) {
+    return false;
+  }
 
   const visited = new Set<number>();
   const queue: number[] = [entryId];
@@ -531,14 +535,22 @@ const writerSetDominatesReader = (
     const current = queue.shift()!;
     const neighbors = adj[current];
 
-    if (neighbors === undefined) {continue;}
+    if (neighbors === undefined) {
+      continue;
+    }
 
     for (const neighbor of neighbors) {
-      if (neighbor === readerNodeId) {return false;} // reached reader without going through all writers
+      if (neighbor === readerNodeId) {
+        return false;
+      } // reached reader without going through all writers
 
-      if (writerSet.has(neighbor)) {continue;} // skip writer nodes
+      if (writerSet.has(neighbor)) {
+        continue;
+      } // skip writer nodes
 
-      if (visited.has(neighbor)) {continue;}
+      if (visited.has(neighbor)) {
+        continue;
+      }
 
       visited.add(neighbor);
       queue.push(neighbor);
@@ -572,7 +584,9 @@ const exceptionBypassExists = (
     const to = edges[offset + 1];
     const type = edges[offset + 2];
 
-    if (from === undefined || to === undefined || type === undefined) {continue;}
+    if (from === undefined || to === undefined || type === undefined) {
+      continue;
+    }
 
     if (writerSet.has(from)) {
       // Only allow exception edges out of writer nodes
@@ -594,12 +608,18 @@ const exceptionBypassExists = (
     const current = queue.shift()!;
     const neighbors = modAdj[current];
 
-    if (neighbors === undefined) {continue;}
+    if (neighbors === undefined) {
+      continue;
+    }
 
     for (const neighbor of neighbors) {
-      if (neighbor === readerNodeId) {return true;}
+      if (neighbor === readerNodeId) {
+        return true;
+      }
 
-      if (visited.has(neighbor)) {continue;}
+      if (visited.has(neighbor)) {
+        continue;
+      }
 
       visited.add(neighbor);
       queue.push(neighbor);
@@ -621,27 +641,39 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
     const methodName = symbolName.slice(dotIndex + 1);
 
     walkOxcTree(program, node => {
-      if (result !== null) {return false;}
+      if (result !== null) {
+        return false;
+      }
 
       if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
         const name = getNodeName(node.id);
 
-        if (name !== className) {return true;}
+        if (name !== className) {
+          return true;
+        }
 
         const classBody = node.body;
 
-        if (!isOxcNode(classBody) || classBody.type !== 'ClassBody') {return false;}
+        if (!isOxcNode(classBody) || classBody.type !== 'ClassBody') {
+          return false;
+        }
 
         const bodyItems = classBody.body;
 
-        if (!Array.isArray(bodyItems)) {return false;}
+        if (!Array.isArray(bodyItems)) {
+          return false;
+        }
 
         for (const item of bodyItems) {
-          if (!isOxcNode(item) || item.type !== 'MethodDefinition') {continue;}
+          if (!isOxcNode(item) || item.type !== 'MethodDefinition') {
+            continue;
+          }
 
           const mName = getNodeName(item.key);
 
-          if (mName !== methodName) {continue;}
+          if (mName !== methodName) {
+            continue;
+          }
 
           const methodValue = item.value;
 
@@ -663,7 +695,9 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 
   // Plain function name
   walkOxcTree(program, node => {
-    if (result !== null) {return false;}
+    if (result !== null) {
+      return false;
+    }
 
     // FunctionDeclaration: function foo() {}
     if (node.type === 'FunctionDeclaration') {
@@ -679,10 +713,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
       if (getNodeName(node.id) === symbolName) {
         const init = node.init;
 
-        if (
-          isOxcNode(init) &&
-          (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')
-        ) {
+        if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
           result = init as Node;
 
           return false;
@@ -701,7 +732,9 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
   let found = false;
 
   walkOxcTree(node, n => {
-    if (found) {return false;}
+    if (found) {
+      return false;
+    }
 
     if (isClassProp) {
       // this.stateName — MemberExpression(ThisExpression, Identifier === stateName)
@@ -734,13 +767,17 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
  * Check if a guard IfStatement's consequent is an early-exit (ThrowStatement or ReturnStatement).
  */
 const isEarlyExit = (node: Node): boolean => {
-  if (node.type === 'ThrowStatement' || node.type === 'ReturnStatement') {return true;}
+  if (node.type === 'ThrowStatement' || node.type === 'ReturnStatement') {
+    return true;
+  }
 
   // BlockStatement with single ThrowStatement/ReturnStatement
   if (node.type === 'BlockStatement') {
     const body = node.body;
 
-    if (!Array.isArray(body)) {return false;}
+    if (!Array.isArray(body)) {
+      return false;
+    }
 
     if (body.length === 1) {
       const first = body[0];
@@ -760,11 +797,15 @@ const isEarlyExit = (node: Node): boolean => {
 const isReaderSelfProtecting = (program: Node, readerName: string, stateName: string, isClassProp: boolean): boolean => {
   const funcNode = findFunctionBody(program, readerName);
 
-  if (funcNode === null) {return false;}
+  if (funcNode === null) {
+    return false;
+  }
 
   const funcBodyRaw = (funcNode as OxcFunction).body;
 
-  if (funcBodyRaw === null || funcBodyRaw === undefined) {return false;}
+  if (funcBodyRaw === null || funcBodyRaw === undefined) {
+    return false;
+  }
 
   const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
   const { cfg, entryId, nodePayloads } = built;
@@ -781,13 +822,19 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
       const testNode = n.test;
       const consequentNode = n.consequent;
 
-      if (!isOxcNode(testNode) || !isOxcNode(consequentNode)) {return true;}
+      if (!isOxcNode(testNode) || !isOxcNode(consequentNode)) {
+        return true;
+      }
 
       // Check: test references stateName
-      if (!nodeReferencesState(testNode as Node, stateName, isClassProp)) {return true;}
+      if (!nodeReferencesState(testNode as Node, stateName, isClassProp)) {
+        return true;
+      }
 
       // Check: consequent is early exit
-      if (!isEarlyExit(consequentNode as Node)) {return true;}
+      if (!isEarlyExit(consequentNode as Node)) {
+        return true;
+      }
 
       // This is a guard — record test node offset
       guardConditionOffsets.add(testNode.start);
@@ -796,7 +843,9 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
     return true;
   });
 
-  if (guardConditionOffsets.size === 0) {return false;}
+  if (guardConditionOffsets.size === 0) {
+    return false;
+  }
 
   // Find CFG node IDs for guard conditions (match by payload start offset)
   const guardNodeIds: number[] = [];
@@ -804,7 +853,9 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
   for (let i = 0; i < nodePayloads.length; i++) {
     const payload = nodePayloads[i];
 
-    if (payload === null || payload === undefined) {continue;}
+    if (payload === null || payload === undefined) {
+      continue;
+    }
 
     // payload for an IfStatement condition is the test expression node
     if (isOxcNode(payload as Node) && guardConditionOffsets.has((payload as Node).start)) {
@@ -812,18 +863,24 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
     }
   }
 
-  if (guardNodeIds.length === 0) {return false;}
+  if (guardNodeIds.length === 0) {
+    return false;
+  }
 
   // Find state access node IDs (nodes that reference stateName, excluding guard condition nodes)
   const guardNodeIdSet = new Set(guardNodeIds);
   const stateAccessNodeIds: number[] = [];
 
   for (let i = 0; i < nodePayloads.length; i++) {
-    if (guardNodeIdSet.has(i)) {continue;}
+    if (guardNodeIdSet.has(i)) {
+      continue;
+    }
 
     const payload = nodePayloads[i];
 
-    if (payload === null || payload === undefined) {continue;}
+    if (payload === null || payload === undefined) {
+      continue;
+    }
 
     // Check if payload references stateName
     const payloadNode = isOxcNode(payload as Node) ? (payload as Node) : null;
@@ -843,7 +900,9 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
   }
 
   // If no state accesses found (shouldn't happen but be safe), not self-protecting
-  if (stateAccessNodeIds.length === 0) {return false;}
+  if (stateAccessNodeIds.length === 0) {
+    return false;
+  }
 
   // Check: guard condition nodes (as a set) dominate all state access nodes
   for (const stateNodeId of stateAccessNodeIds) {
@@ -880,26 +939,36 @@ const verifyCallerOrderByCfg = (
   const readerBareNames = new Set(readerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
 
   for (const caller of callerKeys) {
-    if (caller.srcSymbolName === null) {continue;}
+    if (caller.srcSymbolName === null) {
+      continue;
+    }
 
     const parsed = gildash.getParsedAst(caller.srcFilePath);
 
-    if (parsed === undefined || parsed === null) {return false;}
+    if (parsed === undefined || parsed === null) {
+      return false;
+    }
 
     const funcNode = findFunctionBody(parsed.program, caller.srcSymbolName);
 
-    if (funcNode === null) {return false;}
+    if (funcNode === null) {
+      return false;
+    }
 
     const funcBodyRaw = (funcNode as OxcFunction).body;
 
-    if (funcBodyRaw === null || funcBodyRaw === undefined) {return false;}
+    if (funcBodyRaw === null || funcBodyRaw === undefined) {
+      return false;
+    }
 
     const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
     const { cfg, entryId, nodePayloads } = built;
     const writerNodeIds = findCallNodeIds(nodePayloads, writerBareNames);
     const readerNodeIds = findCallNodeIds(nodePayloads, readerBareNames);
 
-    if (writerNodeIds.length === 0 || readerNodeIds.length === 0) {return false;}
+    if (writerNodeIds.length === 0 || readerNodeIds.length === 0) {
+      return false;
+    }
 
     const adj = cfg.buildAdjacency('forward');
     const edges = cfg.getEdges();
@@ -928,11 +997,15 @@ const verifyCallerOrderByCfg = (
 const isWriterReachable = (program: Node, writerName: string, stateName: string, isClassProp: boolean): boolean => {
   const funcNode = findFunctionBody(program, writerName);
 
-  if (funcNode === null) {return false;}
+  if (funcNode === null) {
+    return false;
+  }
 
   const funcBodyRaw = (funcNode as OxcFunction).body;
 
-  if (funcBodyRaw === null || funcBodyRaw === undefined) {return false;}
+  if (funcBodyRaw === null || funcBodyRaw === undefined) {
+    return false;
+  }
 
   const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
   const { cfg, entryId, nodePayloads } = built;
@@ -943,13 +1016,17 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
   for (let i = 0; i < nodePayloads.length; i++) {
     const payload = nodePayloads[i];
 
-    if (payload === null || payload === undefined) {continue;}
+    if (payload === null || payload === undefined) {
+      continue;
+    }
 
     // Check if payload contains an AssignmentExpression or UpdateExpression targeting stateName
     let hasWrite = false;
 
     const checkNode = (n: Node) => {
-      if (hasWrite) {return false;}
+      if (hasWrite) {
+        return false;
+      }
 
       if (isClassProp) {
         // this.stateName = ...
@@ -1000,7 +1077,9 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
       for (const n of payload as ReadonlyArray<Node>) {
         walkOxcTree(n, checkNode);
 
-        if (hasWrite) {break;}
+        if (hasWrite) {
+          break;
+        }
       }
     }
 
@@ -1010,7 +1089,9 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
   }
 
   // If no write nodes found in CFG, treat as not a writer (no actual write)
-  if (writeNodeIds.length === 0) {return false;}
+  if (writeNodeIds.length === 0) {
+    return false;
+  }
 
   // BFS from entryId: check if any writeNodeId is reachable
   const visited = new Set<number>();
@@ -1021,11 +1102,15 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
   while (queue.length > 0) {
     const current = queue.shift()!;
 
-    if (writeNodeIds.includes(current)) {return true;}
+    if (writeNodeIds.includes(current)) {
+      return true;
+    }
 
     const neighbors = adj[current];
 
-    if (neighbors === undefined) {continue;}
+    if (neighbors === undefined) {
+      continue;
+    }
 
     for (const neighbor of neighbors) {
       if (!visited.has(neighbor)) {
@@ -1111,7 +1196,8 @@ const analyzeTemporalCoupling = (
 
     // Pattern 1: module-scope let/var variables shared across exported functions
     const mutableVars = collectTopLevelMutableVars(file.program as Node);
-    const exportedNames = collectExportedFunctionNamesFromGildash(input?.gildash, rel) ?? collectExportedFunctionNames(file.program as Node);
+    const exportedNames =
+      collectExportedFunctionNamesFromGildash(input?.gildash, rel) ?? collectExportedFunctionNames(file.program as Node);
 
     const writeKeys = collectWritePositionKeys(file.program as Node);
 

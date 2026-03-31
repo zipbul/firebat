@@ -1,14 +1,13 @@
 import type { Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
 import type { EarlyReturnItem, EarlyReturnKind, SourceSpan } from '../../types';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
+import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
-import { getFunctionSpan } from '../../engine/function-span';
-import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 
 const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
   const offsets = buildLineOffsets(sourceText);
@@ -199,10 +198,7 @@ const countConsequentStatements = (ifNode: Node): number => {
  * Detect wrapping-if: the last statement of a block is an IfStatement with no alternate,
  * whose consequent has 2+ statements. Inverting + early exit reduces nesting by 1.
  */
-const detectWrappingIf = (
-  bodyStatements: ReadonlyArray<Node>,
-  sourceText: string,
-): Opportunity | null => {
+const detectWrappingIf = (bodyStatements: ReadonlyArray<Node>, sourceText: string): Opportunity | null => {
   if (bodyStatements.length === 0) {
     return null;
   }
@@ -315,11 +311,7 @@ const detectImplicitElse = (
  * Detect cascade-guard: an else-if chain where all non-final branches end in exit,
  * so the chain can be flattened to sequential guards.
  */
-const detectCascadeGuard = (
-  ifNode: Node,
-  insideLoop: boolean,
-  sourceText: string,
-): Opportunity | null => {
+const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: string): Opportunity | null => {
   if (ifNode.type !== 'IfStatement') {
     return null;
   }
@@ -365,7 +357,7 @@ const detectCascadeGuard = (
 
   // Get the final branch's statement count
   // current is the last IfStatement in the chain — its alternate is the final branch
-  const finalBranch = current.type === 'IfStatement' ? current.alternate as Node | null : null;
+  const finalBranch = current.type === 'IfStatement' ? (current.alternate as Node | null) : null;
 
   if (finalBranch === null) {
     // Tail-less: all consequents in the chain already end with exit (verified by the while loop).
@@ -479,25 +471,25 @@ const analyzeFunctionNode = (
           const isElseIfChain = alternateNode.type === 'IfStatement';
 
           if (!isElseIfChain) {
-          const consequentValue = node.consequent as Node;
-          const consequentCount = countStatements(consequentValue);
-          const alternateCount = countStatements(alternateNode);
+            const consequentValue = node.consequent as Node;
+            const consequentCount = countStatements(consequentValue);
+            const alternateCount = countStatements(alternateNode);
 
-          if (consequentCount > 0 && alternateCount > 0) {
-            const shortCount = consequentCount <= alternateCount ? consequentCount : alternateCount;
-            const longCount = consequentCount <= alternateCount ? alternateCount : consequentCount;
-            const shortNode = consequentCount <= alternateCount ? consequentValue : alternateNode;
-            const shortExits = endsWithReturnOrThrow(shortNode) || (insideLoop && endsWithLoopExit(shortNode));
+            if (consequentCount > 0 && alternateCount > 0) {
+              const shortCount = consequentCount <= alternateCount ? consequentCount : alternateCount;
+              const longCount = consequentCount <= alternateCount ? alternateCount : consequentCount;
+              const shortNode = consequentCount <= alternateCount ? consequentValue : alternateNode;
+              const shortExits = endsWithReturnOrThrow(shortNode) || (insideLoop && endsWithLoopExit(shortNode));
 
-            if (shortCount <= 3 && shortExits && longCount >= shortCount * 2) {
-              opportunities.push({
-                kind: 'invertible-if-else',
-                span: nodeSpan(node, sourceText),
-                depthReduction: 1,
-                statementsAffected: longCount,
-              });
+              if (shortCount <= 3 && shortExits && longCount >= shortCount * 2) {
+                opportunities.push({
+                  kind: 'invertible-if-else',
+                  span: nodeSpan(node, sourceText),
+                  depthReduction: 1,
+                  statementsAffected: longCount,
+                });
+              }
             }
-          }
           }
         }
       }
@@ -566,7 +558,11 @@ const analyzeFunctionNode = (
     o.depthReduction * o.statementsAffected > best.depthReduction * best.statementsAffected ? o : best,
   );
   const header = getNodeHeader(functionNode, parent);
-  const span = getFunctionSpan(functionNode, sourceText);
+  const lineOffsets = buildLineOffsets(sourceText);
+  const span: SourceSpan = {
+    start: getLineColumn(lineOffsets, functionNode.start),
+    end: getLineColumn(lineOffsets, functionNode.end),
+  };
 
   return {
     kind: primaryOpportunity.kind,

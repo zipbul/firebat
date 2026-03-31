@@ -1,12 +1,13 @@
 import type { Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
-import type { NestingItem, NestingKind } from '../../types';
+import type { NestingItem, NestingKind, SourceSpan } from '../../types';
 
 import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
-import { getFunctionSpan } from '../../engine/function-span';
 
 interface AnalyzeNestingOptions {
   readonly maxCognitiveComplexity: number;
@@ -223,15 +224,7 @@ const getIterationTarget = (node: Node): string | null => {
  * Test runner functions whose callbacks are structural (not complexity-bearing).
  * Callbacks passed to these functions do not increase callback depth.
  */
-const TEST_RUNNER_FUNCTIONS = new Set([
-  'describe',
-  'it',
-  'test',
-  'beforeEach',
-  'afterEach',
-  'beforeAll',
-  'afterAll',
-]);
+const TEST_RUNNER_FUNCTIONS = new Set(['describe', 'it', 'test', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll']);
 
 const isTestRunnerCall = (callee: Node): boolean => {
   if (callee.type === 'Identifier') {
@@ -758,7 +751,11 @@ const analyzeFunctionNode = (
   visit(bodyValue as Node, 0);
 
   const header = getNodeHeader(functionNode, parent);
-  const span = getFunctionSpan(functionNode, sourceText);
+  const lineOffsets = buildLineOffsets(sourceText);
+  const span: SourceSpan = {
+    start: getLineColumn(lineOffsets, functionNode.start),
+    end: getLineColumn(lineOffsets, functionNode.end),
+  };
   const nestingScore = Math.max(0, cognitiveComplexity);
   const callbackDepth = measureMaxCallbackDepth(bodyValue as Node);
   const promiseChainDepth = measurePromiseChainDepth(bodyValue as Node);
@@ -786,17 +783,29 @@ const analyzeFunctionNode = (
   const collectSignals = (): NestingKind[] => {
     const signals: NestingKind[] = [];
 
-    if (quadraticTargets.length > 0) {signals.push('accidental-quadratic');}
+    if (quadraticTargets.length > 0) {
+      signals.push('accidental-quadratic');
+    }
 
-    if (cognitiveComplexity >= opts.maxCognitiveComplexity) {signals.push('high-cognitive-complexity');}
+    if (cognitiveComplexity >= opts.maxCognitiveComplexity) {
+      signals.push('high-cognitive-complexity');
+    }
 
-    if (callbackDepth >= opts.maxCallbackDepth) {signals.push('callback-depth');}
+    if (callbackDepth >= opts.maxCallbackDepth) {
+      signals.push('callback-depth');
+    }
 
-    if (promiseChainDepth >= opts.maxPromiseChainDepth) {signals.push('promise-chain-depth');}
+    if (promiseChainDepth >= opts.maxPromiseChainDepth) {
+      signals.push('promise-chain-depth');
+    }
 
-    if (maxDepth >= opts.maxNestingDepth) {signals.push('deep-nesting');}
+    if (maxDepth >= opts.maxNestingDepth) {
+      signals.push('deep-nesting');
+    }
 
-    if (loc >= opts.minDensityLoc && density > opts.maxDensity) {signals.push('complexity-density');}
+    if (loc >= opts.minDensityLoc && density > opts.maxDensity) {
+      signals.push('complexity-density');
+    }
 
     return signals;
   };
