@@ -559,6 +559,7 @@ const analyzeDependencies = async (
     let imports: ReturnType<Gildash['searchRelations']> = [];
     let reExports: ReturnType<Gildash['searchRelations']> = [];
     let typeRefs: ReturnType<Gildash['searchRelations']> = [];
+    let calls: ReturnType<Gildash['searchRelations']> = [];
     let hasImportData = false;
 
     try {
@@ -580,6 +581,12 @@ const analyzeDependencies = async (
       if (!(e instanceof GildashError)) {throw e;}
     }
 
+    try {
+      calls = gildash.searchRelations({ type: 'calls' });
+    } catch (e) {
+      if (!(e instanceof GildashError)) {throw e;}
+    }
+
     if (hasImportData) {
 
       // Build usage map per module
@@ -592,7 +599,7 @@ const analyzeDependencies = async (
         }
       >();
 
-      for (const rel of [...imports, ...reExports, ...typeRefs]) {
+      for (const rel of [...imports, ...reExports, ...typeRefs, ...calls]) {
         if (rel.dstFilePath === null) continue;
         const target = resolveAbs(rootAbs, rel.dstFilePath);
         const consumer = resolveAbs(rootAbs, rel.srcFilePath);
@@ -717,10 +724,62 @@ const analyzeDependencies = async (
         }
       }
 
-      // NOTE: unused enum member / namespace member / namespace import member detection
-      // requires gildash to index individual members (memberName field). As of gildash 0.17.1,
-      // enum and namespace are indexed as single symbols with memberName=null.
-      // These features are deferred until gildash adds member-level indexing or semantic analysis.
+      // Unused enum members: getSymbolsByFile returns kind=property with memberName for enum members.
+      // A member is unused if its parent enum is exported but the member is never referenced
+      // in calls relations (e.g. Color.Red → dstSymbolName includes 'Red').
+      for (const [moduleAbs, symbols] of exportsByFile) {
+        const enumParents = symbols.filter(s => s.kind === 'enum');
+
+        if (enumParents.length === 0) continue;
+
+        const relModule = toRelativePath(rootAbs, moduleAbs);
+
+        // Get all symbols in this file (including non-exported members)
+        let fileSymbols: ReturnType<Gildash['getSymbolsByFile']> = [];
+
+        try {
+          fileSymbols = gildash.getSymbolsByFile(relModule);
+        } catch {
+          continue;
+        }
+
+        for (const parent of enumParents) {
+          // Find enum members: kind=property, name starts with ParentName.
+          const members = fileSymbols.filter(
+            s => s.kind === 'property' && s.memberName !== null && s.name.startsWith(parent.name + '.'),
+          );
+
+          // Build set of used member names from calls relations targeting this module's enum
+          const enumCalls = calls.filter(
+            r =>
+              r.dstFilePath !== null &&
+              resolveAbs(rootAbs, r.dstFilePath) === moduleAbs &&
+              r.dstSymbolName !== null &&
+              r.dstSymbolName.startsWith(parent.name + '.'),
+          );
+
+          // If no calls to this enum at all, skip — can't determine member usage without semantic
+          if (enumCalls.length === 0) continue;
+
+          const usedMembers = new Set(enumCalls.map(r => r.dstSymbolName!));
+
+          // usesAll → skip
+          const moduleUsage = usageByModule.get(moduleAbs);
+
+          if (moduleUsage?.usesAll) continue;
+
+          for (const member of members) {
+            if (!usedMembers.has(`${parent.name}.${member.memberName}`)) {
+              unusedMembers.push({
+                kind: 'unused-enum-member',
+                module: relModule,
+                symbolName: parent.name,
+                memberName: member.memberName!,
+              });
+            }
+          }
+        }
+      }
 
       // Phase 2: unused/unlisted dependencies + unresolved imports
       const externalPackages = new Map<string, Set<string>>();

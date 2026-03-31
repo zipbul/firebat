@@ -20,6 +20,7 @@ interface MockGildashOverrides {
   searchRelations?: (q: unknown) => StoredCodeRelation[];
   getModuleInterface?: (fp: string) => unknown;
   resolveSymbol?: (name: string, filePath: string) => unknown;
+  getSymbolsByFile?: (filePath: string) => unknown[];
 }
 
 const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
@@ -42,6 +43,7 @@ const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
         reExportChain: [],
         circular: false,
       })),
+    getSymbolsByFile: overrides.getSymbolsByFile ?? (() => []),
   } as unknown as Gildash;
 };
 
@@ -1185,25 +1187,111 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.unusedDeps[0]!.packageName).toBe('lodash');
   });
 
-  /* ---------- UM: Unused Members (deferred — gildash 0.17.1 does not index members) ---------- */
+  /* ---------- UM: Unused Enum Members ---------- */
 
-  it('should return empty unusedMembers (gildash does not index enum/namespace members)', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+  it('should detect unused enum members via getSymbolsByFile + calls', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/colors.ts']],
+      ['/project/src/colors.ts', []],
+    ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
         if (query.isExported) {
-          // Real gildash returns memberName=null for enum/namespace
-          return [{ ...mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'), memberName: null }];
+          return [mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum')];
         }
 
         return [];
       },
-      searchRelations: () => [],
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', 'Color')];
+        }
+
+        // Color.Red is called, Color.Blue is not
+        if (query.type === 'calls') {
+          return [{
+            type: 'calls' as const,
+            srcFilePath: '/project/src/index.ts',
+            srcSymbolName: null,
+            dstFilePath: '/project/src/colors.ts',
+            dstSymbolName: 'Color.Red',
+            dstProject: null,
+            isExternal: false,
+            specifier: null,
+          }];
+        }
+
+        return [];
+      },
+      getSymbolsByFile: (filePath: string) => {
+        if (filePath === 'src/colors.ts') {
+          return [
+            { kind: 'enum', name: 'Color', memberName: null, isExported: true },
+            { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
+            { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false },
+            { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false },
+          ];
+        }
+
+        return [];
+      },
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+    const enumMembers = result.unusedMembers.filter(m => m.kind === 'unused-enum-member');
+
+    expect(enumMembers.length).toBe(2);
+    expect(enumMembers.map(m => m.memberName).sort()).toEqual(['Blue', 'Green']);
+  });
+
+  it('should skip all enum members when parent enum is imported with usesAll', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/colors.ts']],
+      ['/project/src/colors.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum')];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        // Namespace import → usesAll
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', '*')];
+        }
+
+        return [];
+      },
+      getSymbolsByFile: (filePath: string) => {
+        if (filePath === 'src/colors.ts') {
+          return [
+            { kind: 'enum', name: 'Color', memberName: null, isExported: true },
+            { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
+          ];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
 
     expect(result.unusedMembers.length).toBe(0);
   });
