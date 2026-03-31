@@ -12,17 +12,17 @@ export const FIREBAT_CODE_CATALOG = {
   WASTE_DEAD_STORE: {
     cause: 'A value is assigned to a variable but is overwritten or goes out of scope before being read.',
     think: [
-      'Determine why this assignment became unnecessary — leftover from a refactor, logic change that bypassed this path, or a control-flow design error.',
-      'Trace the variable through its enclosing scope to identify whether any branch could still read the value.',
-      'Check whether multiple dead stores appear in the same function; if so, examine the function responsibilities and flow rather than individual assignments.',
+      'Read the function containing the dead store. Trace every read of this variable through all branches. If any branch does read the value before it goes out of scope, this is a false positive — stop, no action needed.',
+      'Check git log for the commit that introduced or last modified this assignment. If it was part of a larger refactor that removed the consuming code, the assignment is a leftover — delete it.',
+      'Grep the function for other dead-store findings. If multiple exist in the same function, the function likely handles too many concerns — flag for extraction rather than fixing individual stores.',
     ],
   },
   WASTE_DEAD_STORE_OVERWRITE: {
     cause: 'A variable is assigned, then unconditionally reassigned before the first value is ever read.',
     think: [
-      'Identify whether the first assignment once had a purpose — it may be a remnant of removed branching or a copy-paste artifact.',
-      "Trace the variable's lifecycle to verify that no conditional path reads the first value before the overwrite.",
-      'Check whether this pattern repeats across the function; if so, the function may be accumulating unrelated setup steps that should be separated.',
+      'Read both assignments and all code between them. If any conditional branch between the two assignments reads the first value, this is a false positive — stop, no action needed.',
+      'Delete the first assignment. If the variable declaration and first assignment are the same statement (`let x = value`), change it to `let x` or move the declaration to the second assignment site.',
+      'If the same pattern repeats for multiple variables in this function, the function is accumulating unrelated setup steps — consider splitting it.',
     ],
   },
 
@@ -30,42 +30,41 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       "A function's entire body delegates to another function with identical or trivially transformed arguments, adding no logic.",
     think: [
-      'Determine whether this wrapper serves an intentional purpose: dependency inversion, future extension point, or API stability boundary.',
-      'Trace callers to check whether they rely on the wrapper identity (e.g., for mocking or binding).',
-      'If no purpose is found, verify that callers can reference the target function directly without breaking contracts.',
+      'Read the wrapper function body. If it contains any logic beyond delegation (branching, error handling, argument transformation, logging), this is a false positive — stop, no action needed.',
+      'Grep for all call sites of the wrapper function name across the project. If callers exist in test files that mock or spy on this wrapper specifically, the wrapper serves a test isolation purpose — stop, no action needed.',
+      'Replace all caller references with direct calls to the target function. Update imports in every affected file, then delete the wrapper.',
     ],
   },
   IND_FORWARD_CHAIN: {
     cause: 'Multiple functions form a chain where each forwards to the next with no added logic, creating unnecessary depth.',
     think: [
-      'Trace the chain to find where real logic begins — the intermediate links may be remnants of refactoring.',
-      'Determine whether the chain crosses module boundaries and if each boundary represents a genuine architectural concern.',
-      'Verify that collapsing intermediate hops does not break consumers that import from the middle of the chain.',
+      'Read each function in the chain from first to last. Identify where real logic begins — the function that does more than forward arguments is the true entry point.',
+      'Grep for imports of each intermediate function. If an intermediate function is imported by external consumers (not just the next link), it serves as a public API boundary — stop, no action needed for that link.',
+      'Redirect all callers of the chain entry to call the true entry point directly. Remove each intermediate function that has zero remaining callers after redirection.',
     ],
   },
   IND_CROSS_FILE_CHAIN: {
     cause: 'A forwarding chain spans multiple files, creating cross-file indirection without logic at each hop.',
     think: [
-      'Identify each file boundary in the chain and determine whether it represents a genuine architectural layer.',
-      'Check whether the chain follows a re-export pattern that can be consolidated at the public surface.',
-      'Verify that eliminating intermediate files does not break other consumers that import from those files.',
+      'Read each file in the chain. If a file boundary aligns with a layer in the architecture (e.g., adapter → application → engine), the hop is intentional — stop, no action needed for that hop.',
+      'Grep for imports of each intermediate file from outside the chain. If other consumers import from an intermediate file, it is a public surface that must remain.',
+      'For hops that have no external consumers and no architectural justification, redirect the upstream import to the downstream file and delete the intermediate re-export.',
     ],
   },
   IND_TYPE_REMAP: {
     cause: 'A type alias is a direct synonym for another named type, adding no type-level transformation.',
     think: [
-      'Check whether the alias was introduced for a future extension that never happened.',
-      'If the alias is exported, verify that removing it does not break downstream consumers who import this type.',
-      'Check whether the alias provides a shorter name for a deeply qualified namespace path (e.g., `type Node = ts.Node`) — if so, consider whether the project convention favors named imports over namespace access.',
-      'Replace all usages of the alias with the original type and remove the alias.',
+      'Read the alias definition. If it shortens a deeply qualified namespace path (e.g., `type Node = ts.Node`), check the project convention — if namespace access is standard, the alias is justified — stop, no action needed.',
+      'Grep for all usages of the alias name across the project. Note each file and line that references it.',
+      'Replace every usage with the original type name, update imports, and delete the alias declaration. Run the type checker to confirm no breakage.',
     ],
   },
   IND_INTERFACE_REWRAP: {
     cause: 'An interface extends another type but declares no additional members, making it a pure synonym.',
     think: [
-      'Check whether declaration merging is intended — another file may add members to this interface.',
-      'If this interface is part of a plugin or extension API where consumers are expected to augment it via declaration merging, keep it.',
-      'If no merging exists, replace all usages with the base type and remove the interface.',
+      'Grep for the interface name across the entire project. If another file adds members to this interface via declaration merging (re-declaring the same interface name with additional fields), it is intentional — stop, no action needed.',
+      'If this interface is part of a plugin or extension API where consumers are expected to augment it, keep it — stop, no action needed.',
+      'Replace all usages of the interface with the base type, update imports, and delete the interface declaration.',
     ],
   },
 
@@ -73,312 +72,304 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       "An index file uses 'export *' which re-exports everything from a module, making the public surface implicit and unbounded.",
     think: [
-      'Determine whether all re-exported symbols are intentionally public.',
-      "Check whether 'export *' inadvertently exposes internal implementation details.",
-      'Verify whether switching to named re-exports would provide a controlled public API surface.',
+      'Read the index file and list every symbol re-exported via `export *`. Grep each symbol to see if it is actually imported by any consumer. If all symbols are consumed, the wildcard is justified — stop, no action needed.',
+      'If unused or internal symbols are exposed, replace `export *` with explicit named re-exports for only the consumed symbols.',
+      'After converting, grep for any newly broken imports across the project and fix them.',
     ],
   },
   BARREL_DEEP_IMPORT: {
     cause: "A consumer imports directly from a module's internal file, bypassing its barrel (index) entry point.",
     think: [
-      'Check whether the barrel file exists and exposes the needed symbol.',
-      'Determine whether the deep import is a convenience shortcut that undermines encapsulation.',
-      "If the barrel does not expose the symbol, verify whether it should be added to the public surface or if the consumer's need indicates a missing abstraction.",
+      "Read the module's barrel (index.ts). If the needed symbol is already exported there, update the consumer's import path to use the barrel instead of the deep path.",
+      'If the barrel does not export the needed symbol, add a named re-export for it in the barrel, then update the consumer import.',
+      'If the symbol is intentionally internal (not part of the public API), the consumer may need a different abstraction — flag for review rather than exposing it.',
     ],
   },
   BARREL_INDEX_DEEP_IMPORT: {
     cause: "An index file itself imports from a deep path in another module instead of using that module's barrel.",
     think: [
-      "Determine whether the target module's barrel is incomplete or this index file is taking a shortcut.",
-      'Check whether the target module should expose the symbol publicly through its barrel.',
-      'Verify that adding the missing re-export to the target barrel fixes the transitive deep-import dependency.',
+      "Read the target module's barrel. If the needed symbol is already exported, change this index file's import to use the barrel path.",
+      'If the target barrel does not export the symbol, add it as a named re-export in the target barrel, then update this import.',
+      'After updating, grep for other files that deep-import from the same target path — they likely need the same fix.',
     ],
   },
   BARREL_MISSING_INDEX: {
     cause: 'A directory with multiple source files has no index.ts barrel file, leaving no single entry point for the module.',
     think: [
-      'Determine whether the directory represents a cohesive module that should have a public surface.',
-      'Check whether external consumers already import from individual files — a barrel would centralize those imports.',
-      'If the files are independent utilities that do not form a module, verify that the directory structure reflects this.',
+      'Grep for imports from individual files in this directory. If external consumers import from 2+ files, the directory is acting as a module and needs a barrel.',
+      'If only one file is imported externally, or files are independent utilities with no shared consumers, a barrel is unnecessary — stop, no action needed.',
+      'Create an index.ts with named re-exports for each symbol that external consumers currently import directly.',
     ],
   },
   BARREL_INVALID_INDEX_STMT: {
     cause: 'An index.ts contains statements other than export declarations (e.g., logic, variable declarations, side effects).',
     think: [
-      'Identify what non-export statements the barrel contains and their purpose.',
-      'Determine whether the logic belongs in a dedicated module file that the barrel re-exports.',
-      'Verify that moving the logic out does not break consumers that rely on barrel import side effects.',
+      'Read the index file and identify each non-export statement (variable declarations, function definitions, logic, side effects).',
+      'Move each piece of logic into a dedicated module file within the same directory. Add a named re-export in the index for any public symbols.',
+      'Grep for consumers that rely on the barrel import triggering side effects. If any exist, update them to import from the new dedicated module explicitly.',
     ],
   },
   BARREL_SIDE_EFFECT_IMPORT: {
     cause:
       'A barrel file contains a side-effect import (import without specifiers), which executes code when the barrel is imported.',
     think: [
-      'Identify what side effect the import produces (e.g., polyfill registration, global mutation).',
-      'Determine whether the side effect is intentional and documented.',
-      'If intentional, verify whether it should be isolated into an explicit setup module rather than hiding in a barrel.',
+      'Read the side-effect import target to identify what it does (polyfill registration, global mutation, module augmentation).',
+      'If the side effect is required for the module to function, move it to an explicit setup file (e.g., `setup.ts`) and have consumers import it directly instead of relying on barrel import order.',
+      'If the side effect is not needed by any consumer, remove the import from the barrel.',
     ],
   },
   BARREL_CROSS_MODULE_REEXPORT: {
     cause: 'A file re-exports a symbol from outside its own module boundary, creating an unnecessary indirection layer.',
     think: [
-      'Identify all consumers of this re-export and redirect them to import from the original source.',
-      'Verify that removing the re-export does not break the module public API contract.',
+      'Grep for all consumers of this re-export. Redirect each consumer to import directly from the original source module.',
+      'After redirecting all consumers, remove the re-export statement from this file.',
     ],
   },
 
   EF_THROW_NON_ERROR: {
     cause: 'A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.',
     think: [
-      'Identify what type is being thrown and why an Error subclass was not used.',
-      'Determine whether downstream catch blocks depend on Error properties (stack, message, cause).',
-      'If the thrown value carries domain information, verify that wrapping it in a custom Error subclass preserves that information.',
+      'Read the throw statement and identify the thrown value type (string literal, object, number, etc.). If it is already an Error subclass, this is a false positive — stop, no action needed.',
+      'Wrap the thrown value in a new Error (or a domain-specific Error subclass) using `new Error(message, { cause: originalValue })` to preserve both the stack trace and the original information.',
+      'Grep for catch blocks that handle this throw. If they access `.stack` or `.message`, confirm the new Error subclass provides those properties correctly.',
     ],
   },
   EF_PROMISE_CONSTRUCTOR_HYGIENE: {
     cause:
       'The Promise constructor has a hygiene issue: async executor, throw in sync executor, return value in executor, swapped params, or unnecessary new Promise in async function.',
     think: [
-      'Identify why the Promise constructor is used instead of a plain async function.',
-      'Check whether the code wraps a callback-based API where the Promise constructor is justified.',
-      'Verify whether refactoring to async/await eliminates the Promise constructor entirely.',
+      'Read the Promise constructor call. If the enclosing function is already async, replace `return new Promise(...)` with direct async/await logic and remove the constructor entirely.',
+      'If the Promise wraps a callback-based API (e.g., `fs.readFile` with callback), the constructor is justified — fix only the specific hygiene issue (async executor → sync executor, swapped params → correct order) — stop, no action needed for the constructor itself.',
+      'If none of the above, convert to an async function with try/catch to eliminate the Promise constructor.',
     ],
   },
   EF_MISSING_ERROR_CAUSE: {
     cause:
       "A caught error is re-thrown or wrapped without preserving the original error via the 'cause' option, breaking the error chain.",
     think: [
-      "Determine whether the original error's context is needed for debugging downstream.",
-      'Check whether the new error is created with { cause: originalError } to preserve the chain.',
-      'If re-throwing the original error directly, verify that wrapping is not needed and the error chain is intact.',
+      'Read the catch block. Locate where the new error is created or re-thrown.',
+      'Add `{ cause: caughtError }` as the second argument to the Error constructor (e.g., `new Error("message", { cause: err })`). If the error is re-thrown with `throw err`, no change is needed — stop, no action needed.',
     ],
   },
   EF_USELESS_CATCH: {
     cause: 'A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.',
     think: [
-      'Determine whether the catch was intended to add logging, transformation, or handling that was never implemented.',
-      'Check whether the try-catch once had purpose by examining version history.',
-      'Verify that removing the try-catch does not affect finally blocks or control flow.',
+      'Read the entire try-catch-finally structure. If a `finally` block exists that performs cleanup, the try block must remain — remove only the catch clause, not the try-finally.',
+      'If there is no finally block, remove the entire try-catch wrapper and leave only the body of the try block.',
+      'Check git log for the catch block. If the commit message indicates future handling was planned, leave a TODO comment instead of removing.',
     ],
   },
   EF_UNSAFE_FINALLY: {
     cause:
       'A finally block contains a throw or return statement that can override the try/catch result, silently discarding errors.',
     think: [
-      'Determine whether the throw or return in finally is intentional or accidental.',
-      'Check whether the finally block masks the original error from the try or catch blocks.',
-      'Verify that the finally block contains only cleanup logic (close connections, release resources) that cannot affect control flow.',
+      'Read the finally block and identify the throw or return statement. If it is a return that provides a meaningful fallback value (documented intent), this may be deliberate — stop, no action needed.',
+      'Remove the return/throw from the finally block. Move it into the try block (for success returns) or catch block (for error re-throws). The finally block should contain only cleanup code (close connections, release resources).',
     ],
   },
   EF_PREFER_DOT_CATCH_CATCH: {
     cause:
       'Error handling uses .then(onFulfilled, onRejected) instead of .catch(), which is less readable and can miss errors thrown in onFulfilled.',
     think: [
-      'Determine whether the two-argument .then() form is intentional or a style inconsistency.',
-      'Check whether errors thrown inside the onFulfilled callback would be caught by the onRejected handler (they would not).',
-      'Verify that replacing with .then().catch() provides more predictable error coverage.',
+      'Read the `.then(onFulfilled, onRejected)` call. Note that errors thrown inside `onFulfilled` are NOT caught by `onRejected` in the two-argument form — this is a real bug if `onFulfilled` can throw.',
+      'Replace `.then(onFulfilled, onRejected)` with `.then(onFulfilled).catch(onRejected)` so that both the original rejection and errors from `onFulfilled` are handled.',
     ],
   },
   EF_PREFER_DOT_CATCH_AWAIT: {
     cause:
       'Promise chains use .then()/.catch() inside an async function instead of await, reducing readability and error flow clarity.',
     think: [
-      'Determine whether the .then() chain has a specific reason (parallel execution, chaining) or is a style inconsistency.',
-      'Check whether await provides clearer control flow and automatic error propagation via try-catch.',
-      'Verify that converting to await does not change the concurrency semantics of the code.',
+      'Read the enclosing function. If the .then() chain runs multiple promises in parallel (e.g., `Promise.all([...]).then()`), await would change concurrency semantics — stop, no action needed.',
+      'Replace the .then() chain with `const result = await promise` and move error handling into a try-catch block wrapping the await.',
+      'If there is a .catch() handler, convert it to the catch clause of the try-catch. Ensure the same error handling logic is preserved.',
     ],
   },
   EF_PREFER_DOT_CATCH_NO_WRAP: {
     cause: 'A .then() callback returns Promise.resolve() or Promise.reject() unnecessarily — the value can be returned directly.',
     think: [
-      'Check whether the wrapping in Promise.resolve/reject is intentional.',
-      'Verify that returning the value directly achieves the same result.',
+      'Read the .then() callback body. Replace `return Promise.resolve(value)` with `return value` and `return Promise.reject(error)` with `throw error`.',
+      'Run the type checker to confirm the return type is compatible after removing the wrapper.',
     ],
   },
   EF_UNOBSERVED_PROMISE_FLOATING: {
     cause: 'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
     think: [
-      'Determine whether the fire-and-forget is intentional or accidental.',
-      "Check whether the Promise's result or error matters for correctness.",
-      'If truly fire-and-forget, verify that errors are handled inside the called function and consider adding void prefix for clarity.',
+      'Read the function call that creates the floating Promise. If the result genuinely does not matter and errors are handled inside the called function, add `void` prefix for clarity (e.g., `void doSomething()`) — stop, no action needed.',
+      'If the enclosing function is async, add `await` before the Promise-producing call.',
+      'If the enclosing function is sync, either convert it to async and await, or add `.catch(handleError)` to the floating Promise.',
     ],
   },
   EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN: {
     cause: 'A Promise chain has .then() without a .catch() or the result is not returned/awaited, leaving rejections unhandled.',
     think: [
-      'Determine whether the Promise rejection is intentionally ignored or accidentally unhandled.',
-      "Check whether the code is in an async function where 'await' would capture rejections naturally.",
-      'If using .then(), verify that adding .catch() or returning the chain for the caller to handle resolves the issue.',
+      'Read the Promise chain. If the enclosing function is async, replace the `.then()` chain with `await` so rejections propagate automatically.',
+      'If the enclosing function is sync, add `.catch(err => { /* handle */ })` at the end of the chain, or return the chain so the caller can handle rejections.',
     ],
   },
   EF_UNOBSERVED_PROMISE_MISUSED: {
     cause:
       'A Promise is used in a context that expects a synchronous value (e.g., array.forEach callback, conditional expression), leading to always-truthy checks or ignored results.',
     think: [
-      'Determine what the code expected to happen — forEach does not await returned Promises and boolean checks on Promises are always true.',
-      'Identify whether replacing with for-of + await restructures the logic to properly handle asynchronous values.',
-      'Verify that the fix preserves iteration order and error propagation semantics.',
+      'Read the misuse site. If it is `array.forEach(async item => ...)`, replace with `for (const item of array) { await ... }` to process items sequentially, or use `await Promise.all(array.map(async item => ...))` for parallel execution.',
+      'If it is a conditional check on a Promise (e.g., `if (promise)`), add `await` before the Promise to get the resolved value before checking.',
+      'After fixing, verify that error propagation is preserved — each awaited call should be inside a try-catch or the enclosing function should propagate rejections.',
     ],
   },
   EF_UNOBSERVED_PROMISE_VARIABLE: {
     cause: 'A Promise is assigned to a variable but never awaited, .then()ed, or .catch()ed in the same scope.',
     think: [
-      'Check whether the variable is consumed elsewhere (passed to another function, returned, etc.).',
-      'Determine whether the Promise result matters or can be safely ignored.',
+      'Grep for the variable name in the current file. If it is passed to another function, returned, or used in `Promise.all()`, the Promise is observed elsewhere — stop, no action needed.',
+      'If the variable is truly unused after assignment, add `await` before the assignment expression, or remove the assignment if the result is not needed.',
     ],
   },
   EF_UNOBSERVED_PROMISE_ALWAYS_RETURN: {
     cause: 'A .then() callback does not return a value, breaking the Promise chain and losing the resolved value.',
     think: [
-      'Determine whether the callback is intended to transform the value or just perform a side effect.',
-      'If transforming, add an explicit return. If side-effecting, consider using await instead of .then().',
+      'Read the .then() callback. If it performs a side effect (logging, mutation) and no downstream .then() depends on the return value, this is acceptable — stop, no action needed.',
+      'If downstream .then() calls or the final consumer expects a transformed value, add an explicit `return` statement to the callback.',
     ],
   },
   EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE: {
     cause: 'A callback-style API is used inside a Promise chain, mixing two async patterns and risking unhandled errors.',
     think: [
-      'Determine whether the callback API has a Promise-based alternative (e.g., fs/promises).',
-      'If no Promise alternative exists, wrap the callback in a new Promise explicitly.',
+      'Read the callback-style API call. Check if a Promise-based alternative exists (e.g., `fs/promises` instead of `fs`, `util.promisify()` for Node.js callbacks). If so, replace the callback API with the Promise version.',
+      'If no Promise alternative exists, wrap the callback in `new Promise((resolve, reject) => { api(args, (err, result) => err ? reject(err) : resolve(result)) })` and await it.',
     ],
   },
   EF_RETURN_AWAIT_IN_TRY: {
     cause:
       'A return statement inside a try block does not await a promise-returning expression, so the catch clause cannot intercept rejections.',
     think: [
-      'Verify that the returned expression actually produces a Promise (function call, new Promise, etc.).',
-      "Add 'await' before the returned expression so that rejections are caught by the surrounding catch.",
-      'Consider whether the try/catch is meant to handle this rejection or if it should propagate.',
+      'Read the return statement in the try block. Verify the returned expression produces a Promise (async function call, fetch, etc.). If it returns a plain value, this is a false positive — stop, no action needed.',
+      "Add `await` before the returned expression (change `return fetchData()` to `return await fetchData()`) so that rejections are caught by the surrounding catch block.",
     ],
   },
   UNKNOWN_UNNARROWED: {
     cause: "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
     think: [
-      'Determine where the unknown value originates (external input, catch clause, generic parameter).',
-      'Identify the appropriate narrowing strategy: typeof guard, instanceof check, or schema validation.',
-      'If the value crosses a trust boundary, verify that validation is at the boundary rather than each usage site.',
+      'Read the code where the unknown value is used. Trace its origin — catch clause (`catch (e)`), external API response, generic parameter, or JSON.parse result.',
+      'Add a type guard before the usage site: `typeof` for primitives, `instanceof` for class instances, or a schema validator (e.g., zod) for complex objects. If the value comes from a catch clause, narrow with `if (e instanceof Error)`.',
+      'If multiple usage sites exist for the same unknown value, add a single validation function at the entry point and reuse the narrowed result downstream.',
     ],
   },
   UNKNOWN_INFERRED: {
     cause: "TypeScript infers 'unknown' for a value where a more specific type was likely intended.",
     think: [
-      'Determine what type the value should have based on its usage context.',
-      'Check whether the inference results from a missing return type annotation, untyped dependency, or insufficient generic constraints.',
-      'Verify that adding an explicit type annotation makes the intent clear and catches mismatches earlier.',
+      'Read the declaration site. Identify why TypeScript infers unknown: missing return type annotation on a function, untyped third-party import, or insufficient generic constraints.',
+      'Add an explicit type annotation at the declaration site (e.g., `const result: ExpectedType = ...`). Run the type checker — if it reports a mismatch, the annotation reveals a real bug.',
     ],
   },
   UNKNOWN_ANY_INFERRED: {
     cause: "TypeScript infers 'any' for a value, disabling type checking for all downstream usage.",
     think: [
-      "Identify the source of the 'any' inference: untyped import, missing type parameter, JSON.parse result, or catch clause.",
-      'Trace how far the any type propagates downstream to assess the blast radius.',
-      'Fix the source by adding a type annotation at the root rather than suppressing any at each usage site.',
+      'Read the declaration and identify the `any` source: untyped import (add `@types/` package or declare module), `JSON.parse` result (add `as Type` or validate with schema), catch clause (use `unknown` instead), or missing generic parameter.',
+      'Add a type annotation at the root source. Grep for downstream usages of this variable — each one is currently unchecked and may hide bugs.',
+      'After adding the annotation, run the type checker. Any new errors indicate places where the code relied on the implicit `any` bypass.',
     ],
   },
   UNKNOWN_ANY_CAST: {
     cause: "An explicit 'as any' cast removes type safety, allowing any operation on the value without type checking.",
     think: [
-      'Determine why the cast was added — missing types for a library, workaround for a type error, or intentional escape hatch.',
-      'Check whether adding proper types or using a type assertion to a specific type eliminates the need for `as any`.',
-      'If the cast is unavoidable, verify that the scope of the `any` is minimized and does not propagate.',
+      'Read the `as any` cast site. If it works around a missing type definition for a third-party library, add proper types (`@types/` package or local declaration file) and remove the cast.',
+      'If it works around a type error in your own code, fix the underlying type mismatch instead. Replace `as any` with a specific type assertion (`as SpecificType`) if a cast is truly needed.',
+      'If the cast is unavoidable at a system boundary, minimize its scope — cast in a single wrapper function and return a typed result so `any` does not propagate.',
     ],
   },
   UNKNOWN_DOUBLE_CAST: {
     cause:
       "A double assertion (e.g. `x as unknown as T`) bypasses TypeScript's type safety by casting through an intermediate type.",
     think: [
-      'Determine whether the double assertion masks a genuine type incompatibility that should be resolved structurally.',
-      'Check whether a type guard, generic constraint, or interface refinement can replace the double assertion.',
-      'If the cast is unavoidable at a boundary, verify that it is documented and the scope is minimized.',
+      'Read the double assertion and the types involved. If `x` and `T` are structurally incompatible, this masks a genuine type mismatch — investigate why the code needs this value as type `T`.',
+      'Try replacing the double assertion with a type guard (`if (isT(x))`) or a generic constraint. If neither works, add an interface that both types satisfy and use a single assertion.',
+      'If the cast is at a system boundary (FFI, serialization), isolate it in a typed wrapper function and document why the assertion is safe.',
     ],
   },
 
   DEP_LAYER_VIOLATION: {
     cause: 'A module imports from a layer that the architecture rules prohibit, breaking the intended dependency direction.',
     think: [
-      'Determine whether the import represents a genuine architectural violation or an inaccurate layer definition.',
-      'Check whether the imported symbol should be exposed through an allowed layer (e.g., via a port interface).',
-      'Verify that fixing the import does not require restructuring the layer boundaries themselves.',
+      'Read the import statement and identify which layers are involved (e.g., application importing from infrastructure). Check the architecture rules in CLAUDE.md or firebat config to confirm this is a violation.',
+      'If the imported symbol represents a capability (e.g., database access), create or use an existing port interface in the allowed layer and have the infrastructure implement it. Update the import to reference the port.',
+      'If the layer rules themselves are wrong (the dependency direction makes sense architecturally), update the firebat configuration rather than restructuring the code.',
     ],
   },
   DEP_DEAD_EXPORT: {
     cause: 'An exported symbol is not imported by any other module in the project, making the export unnecessary.',
     think: [
-      'Determine whether the export is unused because it is obsolete or because it serves an external consumer not visible to static analysis.',
-      'Check whether the symbol is consumed via CLI entry, test helper, or library public API.',
-      "If truly unused, verify that removing the export reduces the module's public surface without breaking external contracts.",
+      'Grep for the symbol name across the entire project (including test files, scripts, and config files). If it is referenced anywhere outside this file, this is a false positive — stop, no action needed.',
+      'Check if the symbol is part of a public library API (listed in package.json exports or a public barrel). If so, it is consumed by external packages — stop, no action needed.',
+      'Remove the `export` keyword from the symbol declaration. If the symbol is also unused locally, delete it entirely.',
     ],
   },
   DEP_TEST_ONLY_EXPORT: {
     cause:
       'An exported symbol is imported only by test files, meaning production code does not use it but the export exists for testability.',
     think: [
-      'Determine whether the symbol should be internal (unexported, tested via public API).',
-      'Check whether the symbol represents a testing concern that should live in a test utility module.',
-      'Verify that keeping the export solely for tests does not mislead production consumers about the public surface.',
+      'Read the test files that import this symbol. If they test the symbol directly (unit test of an internal function), consider whether the behavior can be tested through the public API instead.',
+      'If direct access is needed for testing, rename the export to use a `__testing__` prefix or move it to a `__testing__` named export block to signal its purpose.',
+      'If the symbol is a test utility (helper, factory, mock builder), move it to a test utility file instead of exporting from production code.',
     ],
   },
   DEP_UNUSED_FILE: {
     cause: 'A source file is not reachable from any entry point in the project, making it effectively dead code.',
     think: [
-      'Check whether the file is consumed by an entry point not listed in package.json (CLI, script, worker).',
-      'Determine whether the file was left behind after a refactor and can be safely deleted.',
-      'Verify that removing the file does not break dynamic imports or runtime require calls that static analysis cannot see.',
+      'Grep for the file name (without extension) across the project to check for dynamic imports (`import()`, `require()`), worker references, or script entries not in package.json. If found, this is a false positive — stop, no action needed.',
+      'Check git log for this file. If it was recently created and is part of an in-progress feature, leave it. If the last meaningful change was before a major refactor, it is likely a leftover.',
+      'Delete the file. Run the build and tests to confirm nothing breaks.',
     ],
   },
   DEP_UNUSED_DEPENDENCY: {
     cause: 'A package listed in package.json dependencies is not imported anywhere in the project source code.',
     think: [
-      'Check whether the package is used indirectly (CLI tool, PostCSS plugin, Babel preset, or runtime peer dependency).',
-      'Determine whether the package was left behind after migration and can be safely removed.',
-      'Verify that removing the dependency does not break build scripts, tooling configs, or implicit peer requirements.',
+      'Grep for the package name in all config files (e.g., `.babelrc`, `postcss.config`, `jest.config`, `tsconfig.json`, build scripts). If it is used as a plugin, preset, or CLI tool, it is consumed indirectly — stop, no action needed.',
+      'Check if it is a peer dependency required by another installed package. Run `bun pm ls` or check `node_modules` to see if another package depends on it.',
+      'Remove the package from package.json and run `bun install`. Run the build and tests to confirm nothing breaks.',
     ],
   },
   DEP_UNLISTED_DEPENDENCY: {
     cause: 'A package is imported in source code but not declared in any dependency section of package.json.',
     think: [
-      'Determine whether the import relies on a transitive dependency that may break on updates.',
-      'Check whether the package should be added to dependencies or devDependencies based on usage context.',
-      'Verify that the import specifier is correct and not a typo or removed package.',
+      'Read the import statement. If the specifier is a typo or refers to a renamed/removed package, fix the import path.',
+      'If the package exists in node_modules via a transitive dependency, add it explicitly to package.json — transitive dependencies can disappear on updates. Use `dependencies` for runtime imports, `devDependencies` for build/test-only imports.',
     ],
   },
   DEP_UNRESOLVED_IMPORT: {
     cause: 'An import specifier in source code cannot be resolved to any file in the project.',
     think: [
-      'Check whether the target file was renamed, moved, or deleted without updating the import.',
-      'Determine whether the import relies on path aliases that are not configured or misconfigured.',
-      'Verify that the file is not excluded from the build configuration or gitignored.',
+      'Check if the target file was renamed or moved. Search for files with a similar name using glob patterns. If found, update the import path.',
+      'If the import uses path aliases (e.g., `@/utils`), check `tsconfig.json` paths configuration. If the alias is missing or misconfigured, fix it.',
+      'If the file was deleted intentionally, remove the import and any code that depends on the imported symbols.',
     ],
   },
   DEP_DUPLICATE_EXPORT: {
     cause: 'The same symbol name is exported from multiple files in the project, creating ambiguity for consumers.',
     think: [
-      'Determine whether the duplicates are intentional re-exports or accidental copies.',
-      'Check whether one of the exports should be the canonical source and the others should import from it.',
-      'Verify that removing duplicates does not break consumers that depend on a specific file path.',
+      'Grep for all export sites of the symbol name. Read each one to determine if they are the same implementation (copy-paste) or different implementations sharing a name.',
+      'If they are copies, choose one canonical source file and update all consumers to import from it. Delete the duplicate export from the other file.',
+      'If they are different implementations, rename one to disambiguate (e.g., `parseJSON` vs `parseXML` instead of both being `parse`).',
     ],
   },
   DEP_UNUSED_ENUM_MEMBER: {
     cause: 'An exported enum member is never referenced by any consumer in the project.',
     think: [
-      'Check whether the member is consumed via dynamic access (e.g. enum[value]) that static analysis cannot see.',
-      'Determine whether the member was added for future use or is genuinely dead.',
-      'Verify that removing the member does not break serialization contracts or API boundaries.',
+      'Grep for the enum member name (e.g., `MyEnum.MemberName` and `MemberName`) across the project. Also search for dynamic access patterns like `MyEnum[variable]`. If found, this is a false positive — stop, no action needed.',
+      'Check if the enum maps to an external contract (API response codes, database status values). If so, the member must exist for completeness — stop, no action needed.',
+      'Remove the unused enum member. Run the type checker to catch any references that static search missed.',
     ],
   },
   DEP_UNUSED_NS_EXPORT: {
     cause: 'A module export is not accessed through the namespace import that brings in the module.',
     think: [
-      'Check whether the export is used via a separate named import from a different file.',
-      'Determine whether the namespace import should be replaced with selective named imports.',
-      'Verify that the unused export is not accessed dynamically or via spread.',
+      'Grep for the export name as a standalone named import (e.g., `import { symbolName } from ...`) in other files. If it is imported directly elsewhere, the namespace import is not the only consumer — stop, no action needed.',
+      'If the export is truly unused everywhere, remove the `export` keyword. If the symbol is also unused locally, delete it.',
     ],
   },
   DEP_UNUSED_NS_MEMBER: {
     cause: 'A TypeScript namespace member is exported but never referenced outside the namespace.',
     think: [
-      'Determine whether the member is part of a public API surface consumed by external packages.',
-      'Check whether the namespace pattern should be refactored to module-level exports.',
-      'Verify that the member is not accessed via computed property names.',
+      'Grep for the namespace member name across the project (e.g., `Namespace.MemberName`). Also check for computed property access patterns. If found, this is a false positive — stop, no action needed.',
+      'If the namespace is part of a public API consumed by external packages, the member may be needed for completeness — stop, no action needed.',
+      'Remove the member from the namespace. If the namespace becomes empty, consider removing the namespace entirely and converting remaining members to module-level exports.',
     ],
   },
 
@@ -386,52 +377,50 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       'A function has deeply nested control structures, increasing indentation and making the execution path hard to follow.',
     think: [
-      'Determine why nesting accumulated: multiple concerns interleaved, missing early-return guards, or error paths mixed with happy paths.',
-      'Check whether other findings (waste, coupling) co-occur in the same function, indicating the nesting is a symptom of doing too much.',
-      'Identify which nesting levels can be eliminated by extracting helper functions or applying guard clauses.',
+      'Read the function and identify the deepest nesting path. Check if the outermost levels are precondition checks (null checks, error checks) that can be converted to early returns/guard clauses to reduce nesting by 1-2 levels.',
+      'Check if other firebat findings (WASTE_DEAD_STORE, COUPLING_GOD_MODULE) co-occur in this function. If so, the nesting is a symptom of the function doing too much — split by responsibility rather than flattening nesting mechanically.',
+      'For remaining deep nesting, extract the inner block into a named helper function. The extracted function name should describe what the block does, making the parent function read as a sequence of high-level steps.',
     ],
   },
   NESTING_HIGH_CC: {
     cause: 'A function has high cognitive complexity, meaning it contains many interacting control-flow decisions.',
     think: [
-      'Identify which decision axes within the function are independent and can be extracted into separate functions.',
-      'Check whether the complexity stems from validation logic that could use a declarative approach.',
-      'Verify that the extracted functions reduce the original function to a readable orchestration of named steps.',
+      'Read the function and group its if/switch/loop branches by what they decide (validation, routing, transformation, error handling). If groups are independent of each other, each group is a candidate for extraction into its own function.',
+      'If the complexity comes from validation logic (multiple field checks), replace the chain with a declarative validation schema or a data-driven lookup table.',
+      'Extract each identified group into a named function. After extraction, the original function should read as a linear orchestration of named steps with CC under the threshold.',
     ],
   },
   NESTING_ACCIDENTAL_QUADRATIC: {
     cause: 'A nested loop or iteration pattern creates O(n²) complexity that may not be intentional.',
     think: [
-      'Determine whether the quadratic behavior is inherent to the problem or accidental.',
-      'Check for common accidental patterns: array.includes() inside a loop (use a Set), nested find/filter, or repeated linear scans.',
-      'If quadratic is inherent, verify that the expected input size is documented and the complexity is acceptable.',
+      'Read the nested iteration. Identify the inner operation: if it is `array.includes()`, `array.find()`, or `array.filter()` inside a loop, replace it with a Set or Map lookup (O(1) per check instead of O(n)).',
+      'If the quadratic behavior is inherent to the problem (e.g., pairwise comparison), check the expected input size. If the input is bounded and small (< 100 items), the quadratic cost is acceptable — stop, no action needed.',
+      'For large or unbounded inputs, restructure: pre-build a Map/Set from the inner collection before the outer loop, then perform lookups inside the loop.',
     ],
   },
   NESTING_CALLBACK_DEPTH: {
     cause:
       'A function contains deeply nested callback chains (depth ≥ 3), making control flow hard to follow and error handling fragile.',
     think: [
-      'Determine whether the nesting reflects genuine sequential async steps or structural accumulation.',
-      'Check whether async/await can flatten the callback chain while preserving the same sequencing.',
-      'If callbacks are nested for event handling, verify whether extracting each level into a named function makes the flow explicit.',
+      'Read the callback chain. If the enclosing function can be made async, convert each nested callback into a sequential `await` call, flattening the chain entirely.',
+      'If the callbacks are event listeners (not sequential async steps), extract each level into a named function with a descriptive name. Wire them together at the top level so the event flow reads linearly.',
     ],
   },
   NESTING_PROMISE_CHAIN: {
     cause:
       'A function contains a deeply chained or nested Promise chain (.then/.catch/.finally), creating hard-to-follow asynchronous control flow that cognitive complexity metrics miss.',
     think: [
-      'Determine whether the chain can be converted to async/await to flatten the control flow.',
-      'Check whether intermediate .then() callbacks contain logic that should be extracted into named functions.',
-      'If the chain must remain, verify that error handling (.catch) is placed at appropriate points rather than only at the end.',
+      'Read the Promise chain. If the enclosing function is async (or can be made async), convert the `.then()` chain to sequential `await` calls with try-catch for error handling.',
+      'If individual `.then()` callbacks contain substantial logic (more than 2-3 lines), extract each into a named function. The chain should read as: `.then(validate).then(transform).then(persist)`.',
+      'Verify that `.catch()` handlers cover all rejection paths. After converting to await, ensure every awaited call is inside a try-catch or the function propagates rejections to its caller.',
     ],
   },
   NESTING_COMPLEXITY_DENSITY: {
     cause:
       'A function has high cognitive complexity relative to its size (CC/LOC), indicating dense decision logic packed into a small number of lines.',
     think: [
-      'Determine whether the density reflects inherently complex logic or multiple concerns compressed together.',
-      'Check whether extracting sub-decisions into named helper functions reduces the density without increasing total complexity.',
-      'Verify that the function size is not artificially small due to missing error handling or edge cases.',
+      'Read the function. If it is a compact decision table (short switch/if-else chain mapping inputs to outputs), the density may be inherent and acceptable — stop, no action needed.',
+      'If the function mixes multiple concerns in few lines (validation + transformation + error handling), split each concern into a separate function. The density drops because LOC increases proportionally to CC.',
     ],
   },
 
@@ -439,36 +428,33 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       "A block's last statement is an if (no else) that wraps remaining code. Inverting the condition and adding an early exit (return/continue) reduces nesting by one level.",
     think: [
-      'Check if the wrapping condition tests a precondition or error case that naturally becomes a guard.',
-      'If inside a loop, verify that a continue statement preserves the iteration intent.',
-      'Count how many lines of code would be un-indented — larger blocks benefit more.',
+      'Read the wrapping if statement. Invert its condition and add an early `return` (or `continue` if inside a loop) for the negated case. Move the wrapped code block out by one indentation level.',
+      'After inverting, re-read the guard clause. It should express the exceptional/short-circuit case (e.g., `if (!valid) return`). If the inverted condition reads unnaturally, the original nesting may be clearer — stop, no action needed.',
     ],
   },
   EARLY_RETURN_INVERTIBLE: {
     cause:
       'An if-else structure has a short branch (≤3 statements) ending in return/throw and a long branch, which can be inverted to reduce nesting.',
     think: [
-      'Determine whether inverting the condition and returning early improves readability.',
-      'Check whether the short branch handles an edge case or error condition that naturally becomes a guard clause.',
-      'If the pattern repeats across the function, verify whether each guard represents a distinct precondition.',
+      'Read the if-else structure. Move the short branch (the one ending in return/throw) to the top as a guard clause. Remove the else keyword and un-indent the long branch.',
+      'If the short branch handles the error/edge case, the guard naturally reads as a precondition check. If it handles the happy path, inverting would make the code less intuitive — stop, no action needed.',
     ],
   },
   EARLY_RETURN_CASCADE_GUARD: {
     cause:
       'An else-if chain has all non-final branches ending in return/throw/continue, which can be flattened to sequential guard clauses.',
     think: [
-      'Verify that each guard tests an independent precondition rather than a shared computation.',
-      'Check whether flattening the chain makes the final "happy path" easier to follow.',
-      'If the chain exceeds 3-4 guards, consider whether a lookup table or strategy pattern is clearer.',
+      'Read the else-if chain. Since each non-final branch exits early, remove the `else` keywords and convert to sequential if statements, each ending with return/throw/continue. The final branch becomes the un-indented default path.',
+      'After flattening, verify that the guards test independent preconditions. If a guard depends on a previous guard having failed (shared computation), add a comment or keep the else-if to make the dependency explicit.',
+      'If the chain exceeds 4 guards, the function may be handling too many cases — consider a lookup table or strategy pattern instead of sequential guards.',
     ],
   },
   EARLY_RETURN_IMPLICIT_ELSE: {
     cause:
       'An if block (no else) ends with return/throw/continue, followed by a short tail that acts as an implicit else. Inverting the condition and using the tail as a guard clause reduces nesting.',
     think: [
-      'Check whether the tail represents an error/edge case that naturally becomes a guard clause.',
-      'Verify that inverting the condition reads clearly — the guard should express the exceptional case.',
-      'If inside a loop, confirm that adding a continue to the guard preserves iteration semantics.',
+      'Read the if block and the tail code after it. If the tail is shorter and handles the exceptional case (error, edge case), invert the condition: move the tail into the if block as a guard clause with early return, then un-indent the original if body.',
+      'If inside a loop, use `continue` instead of `return` for the guard. Verify that the loop accumulator or iterator state is not affected by the inversion.',
     ],
   },
 
@@ -476,98 +462,96 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       'Nested if statements with no else branches can be merged into a single if with a combined condition (&&), reducing one level of nesting.',
     think: [
-      'Check whether the two conditions are logically independent or if one depends on the other being true.',
-      'Verify that merging the conditions does not reduce readability — named variables may be clearer than a long && chain.',
-      'If either condition has side effects, confirm that short-circuit evaluation preserves the intended behavior.',
+      'Read both conditions. If merging them into `if (condA && condB)` produces a condition longer than ~80 characters, extract the combined condition into a named boolean variable (e.g., `const isEligible = condA && condB`) for readability.',
+      'If either condition has side effects (function call that mutates state), confirm that short-circuit evaluation preserves the intended behavior — `condB` will not execute when `condA` is false. If this changes behavior, do not merge — stop, no action needed.',
     ],
   },
   COLLAPSIBLE_ELSE_IF: {
     cause:
       'An else block contains a single if statement that can be collapsed into else-if, removing unnecessary braces and one level of nesting.',
     think: [
-      'Check whether the inner if was wrapped in braces intentionally (e.g., for a comment or future expansion) or by accident.',
-      'Verify that collapsing to else-if does not obscure the logical grouping — sometimes the brace separation aids readability.',
-      'If the inner if has its own else, confirm that the resulting else-if-else chain reads clearly and maintains the intended branching logic.',
+      'Read the else block. If it contains only a single if statement (no other code), collapse `else { if (...) }` into `else if (...)` and remove the extra braces.',
+      'If the inner if has its own else, verify that the resulting `else if ... else` chain reads correctly and maintains the intended branching logic.',
     ],
   },
 
   COUPLING_GOD_MODULE: {
     cause: 'A module has both high fan-in and high fan-out, meaning many modules depend on it and it depends on many modules.',
     think: [
-      'Determine which responsibilities this module holds that attract so many dependents.',
-      'Identify clusters of related imports and exports — each cluster may form a cohesive module if extracted.',
-      'Verify that splitting the module along cluster boundaries reduces both fan-in and fan-out.',
+      'Read the module and list all its exports. Group exports by domain responsibility (e.g., types, utilities, business logic, constants). Each group that has its own set of consumers is a candidate for extraction.',
+      'Grep for each export to identify consumer clusters. If group A is consumed only by modules X and Y, and group B only by modules Z and W, the module serves two unrelated audiences and should be split.',
+      'Extract each responsibility group into its own module. Update all consumer imports. After splitting, verify that the original module is either deleted or reduced to a thin re-export barrel.',
     ],
   },
   COUPLING_BIDIRECTIONAL: {
     cause: 'Two modules import from each other, creating a circular dependency that prevents independent reasoning about either.',
     think: [
-      'Determine which import direction is primary and which is incidental.',
-      'Check whether the incidental direction can be inverted via dependency injection or an event bus.',
-      'If both directions are essential, verify whether the two modules logically should be merged.',
+      'Read the import statements in both directions. Identify which direction is primary (core logic depends on it) and which is incidental (convenience, type reference, or utility access).',
+      'For the incidental direction: extract the shared symbol into a third module that both can import, or invert the dependency using dependency injection (pass the dependency as a parameter instead of importing).',
+      'If both directions are truly essential (each module needs the other to function), the two modules are a single cohesive unit — merge them into one module.',
     ],
   },
   COUPLING_OFF_MAIN_SEQ: {
     cause:
       "A module's instability-abstractness balance places it far from the main sequence, indicating it is either too abstract for its stability or too concrete for how many depend on it.",
     think: [
-      'Determine whether the module should be more abstract (add interfaces/contracts) or less depended-upon (reduce fan-in).',
-      'Check the distance value to assess severity — high-distance modules create conflicting forces on change.',
-      'Verify whether splitting the module or adding abstractions brings it closer to the main sequence.',
+      'Read the module. If it is too concrete (many dependents but no interfaces), add interfaces/contracts for the capabilities it provides so dependents can depend on abstractions instead of implementations.',
+      'If it is too abstract (mostly interfaces but few dependents), the abstractions may be premature — inline them into the modules that use them.',
+      'If the module is a mixed bag, split it: concrete implementations in one module, abstract contracts in another.',
     ],
   },
   COUPLING_UNSTABLE: {
     cause:
       'A module has high instability (many outgoing dependencies, few incoming) and high fan-out, making it sensitive to changes in its dependencies.',
     think: [
-      'Determine whether the high fan-out is essential or whether the module can depend on fewer abstractions.',
-      'Check whether introducing port interfaces can isolate the module from concrete implementation changes.',
-      'If the module is a thin orchestrator, verify that instability is acceptable by design and documented.',
+      'Read the module and list all its imports. If it is an orchestrator (composition root, adapter, controller), high fan-out is by design — stop, no action needed.',
+      'If it is not an orchestrator, identify which imports can be replaced with port interfaces. Create interfaces for the volatile dependencies and inject implementations via the composition root.',
+      'After adding interfaces, verify that the module only depends on stable abstractions (ports, types) rather than concrete implementations.',
     ],
   },
   COUPLING_RIGID: {
     cause:
       'A module has very low instability (many dependents, few dependencies) and high fan-in, making it extremely costly to change.',
     think: [
-      "Determine whether the module's interface is stable by design or frozen by accident (too many dependents accumulated).",
-      'Check whether the interface needs to evolve and if versioning or adapter layers can shield existing dependents.',
-      'Verify whether extracting the stable subset into a separate module allows the rest to evolve independently.',
+      'Read the module and its exports. If the module is intentionally stable (core types, shared constants, fundamental utilities), rigidity is by design — stop, no action needed.',
+      'If the module needs to evolve, identify the stable subset that dependents rely on. Extract this subset into a separate module that remains frozen, allowing the rest to change freely.',
+      'If dependents use different subsets of the module, split it by consumer group so that changes affect only the relevant consumers.',
     ],
   },
 
   DUP_EXACT: {
     cause: 'Two or more code blocks are character-for-character identical, indicating copy-paste duplication.',
     think: [
-      'Determine why the same code exists in multiple places — a missing shared abstraction, an incomplete module API, or a concern with no clear owner.',
-      'Check whether the duplicated blocks change together historically; synchronized changes signal a missing single source of truth.',
-      'Assess whether the duplication is structural (same pattern recurring across the codebase) or isolated (one-off copy-paste).',
+      'Read both duplicate blocks and their surrounding context. Identify what varies between the call sites (different arguments, different modules, different data types).',
+      'Extract the duplicated code into a shared function in the nearest common ancestor module. Parameterize any differences between call sites as function arguments.',
+      'Check git log for both blocks. If they always change together (same commits), the single source of truth is overdue. If they diverge independently, they may serve different purposes — verify before unifying.',
     ],
   },
   DUP_SHAPE: {
     cause:
       'Two or more code blocks share identical structure but differ only in identifier names, suggesting the codebase repeatedly handles a concept without a unifying abstraction.',
     think: [
-      'Identify what the varying names represent — they often reveal a domain concept (entity type, resource kind, operation) that the design does not yet model explicitly.',
-      'Check whether this pattern appears beyond the reported clones; if the same shape recurs elsewhere, the missing abstraction is systemic, not local.',
-      'Assess whether the repetition reflects an intentional design choice (e.g., explicit per-entity handling for clarity) or an accidental gap in the module structure.',
+      'Read the clones and list the differing identifiers. These names usually represent a domain concept (entity type, resource kind, operation variant) that the code handles repeatedly without an explicit model.',
+      'Grep for the same structural pattern elsewhere in the codebase. If the shape recurs beyond the reported clones, the missing abstraction is systemic — a generic function parameterized by the varying concept is warranted.',
+      'If the repetition is intentional (explicit per-entity handling for clarity), and the blocks are short (< 10 lines each), the duplication cost may be acceptable — stop, no action needed.',
     ],
   },
   DUP_NORMALIZED: {
     cause:
       'Two or more code blocks share the same normalized structure after removing cosmetic differences, indicating similar logic with minor variations.',
     think: [
-      'Examine what the variations between clones represent — they often encode decisions (data type, error strategy, business rule) that the codebase makes repeatedly without a shared policy.',
-      'Check whether the variations are accidental divergence from a common origin or intentional specialization; version history clarifies which.',
-      'Assess whether the responsibility for this logic is scattered across modules that should instead share a common concern.',
+      'Read the clones side by side and identify the specific variations (different data types, error strategies, business rules). These variations encode decisions the codebase makes repeatedly without a shared policy.',
+      'Check git log for both blocks to determine if the variations are accidental divergence from a common origin or intentional specialization. If divergence happened gradually without clear intent, unification is likely correct.',
+      'Create a shared function that accepts the varying parts as parameters or callbacks. If the variations are too complex to parameterize cleanly, the duplication may be preferable to a forced abstraction — stop, no action needed.',
     ],
   },
   DUP_NEAR_MISS: {
     cause:
       'Two or more code blocks are structurally similar but have diverged beyond simple naming or cosmetic differences, suggesting shared origin with incremental drift.',
     think: [
-      'Identify the divergence points between clones — they reveal where requirements or assumptions differ and whether those differences are intentional design decisions.',
-      'Check whether the drift is growing over time; increasing divergence suggests the clones serve genuinely different purposes and may be better kept separate with clear documentation.',
-      'Assess whether the similar structure indicates a missing abstraction that accommodates variation, or whether forced unification would create a fragile over-generalized component.',
+      'Read the clones and highlight the divergence points. Each divergence represents either a deliberate design decision or accidental drift. Check git log to see when and why the blocks diverged.',
+      'If the drift is growing (more differences in recent commits), the clones serve genuinely different purposes — keep them separate, but add comments documenting the intentional differences.',
+      'If the clones should be unified, create a shared function that handles the common structure, with hooks (callbacks or options) for the divergent parts. Test both call sites to ensure behavioral equivalence.',
     ],
   },
 
@@ -575,148 +559,146 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       'A single function triggers multiple finding types simultaneously (nesting + waste, or responsibility-boundary), indicating it handles multiple independent concerns.',
     think: [
-      'Determine how many independent concerns this function handles by examining variable clusters.',
-      'Check whether variables form distinct groups that do not interact — each group likely represents a separable concern.',
-      'Verify that individual findings (nesting, waste) are symptoms of responsibility overload rather than standalone issues.',
+      'Read the function and list all variables. Group variables by which ones interact with each other (read/write dependencies). Groups that share no variables represent independent concerns.',
+      'For each independent group, extract the code block into a named helper function. The function name should describe the concern (e.g., `validateInput`, `transformPayload`, `persistResult`).',
+      'After extraction, verify that the individual findings (NESTING_DEEP, WASTE_DEAD_STORE) disappear — they were symptoms of responsibility overload. If findings remain, address them in the extracted functions.',
     ],
   },
   DIAG_CIRCULAR_DEPENDENCY: {
     cause:
       'A group of modules form a dependency cycle, making it impossible to understand or modify any one module in isolation.',
     think: [
-      "Identify the weakest link in the cycle — the import that contributes least to the module's core purpose.",
-      'Determine whether introducing an interface at the boundary or moving shared types to a neutral location breaks the cycle.',
-      'If the cycle involves only two modules, verify whether they logically should be merged.',
+      'Read the import statements of each module in the cycle. Identify the weakest link — the import that contributes least to the module\'s core purpose (often a type import or a utility function reference).',
+      'Break the cycle at the weakest link: extract the shared symbol (type, interface, constant) into a new module that both sides can import from, or invert the dependency by passing the needed value as a parameter.',
+      'If the cycle involves only two modules that are tightly intertwined, merge them into a single module — the cycle indicates they are a single cohesive unit.',
     ],
   },
   DIAG_GOD_MODULE: {
     cause:
       'A module acts as a hub with excessive fan-in and fan-out, coupling a large portion of the codebase through one point.',
     think: [
-      'Analyze what responsibilities attract dependencies to this module.',
-      "Group the module's exports by their consumers — each consumer cluster may indicate a natural split boundary.",
-      'Verify that splitting along consumer boundaries reduces both inbound and outbound coupling.',
+      'Read the module and list all exports. Grep for each export to identify which consumers use it. Group exports by consumer overlap — exports used by the same set of consumers belong together.',
+      'Split the module along consumer group boundaries. Each new module should serve a cohesive set of consumers. Update all import paths.',
+      'After splitting, verify that no new module has both high fan-in and high fan-out. If one does, repeat the analysis on that module.',
     ],
   },
   DIAG_DATA_CLUMP: {
     cause: 'The same group of parameters appears together across multiple function signatures, indicating a missing abstraction.',
     think: [
-      'Determine whether the parameter group represents a coherent domain concept.',
-      'Check whether introducing a type or interface to bundle them reduces parameter counts across all affected functions.',
-      'If the parameters are coincidentally grouped, verify that no action is needed by confirming they vary independently.',
+      'Read the function signatures that share the parameter group. If the parameters represent a coherent domain concept (e.g., `x, y, z` → `Point`, `host, port, protocol` → `ConnectionConfig`), create an interface or type for the group.',
+      'Replace the parameter group with a single parameter of the new type in all affected function signatures. Update all call sites.',
+      'If the parameters are coincidentally grouped (they vary independently across call sites and have no semantic relationship), this is a false positive — stop, no action needed.',
     ],
   },
   DIAG_SHOTGUN_SURGERY: {
     cause:
       'A single conceptual change requires modifications across many files, indicating the concept is scattered across the codebase.',
     think: [
-      'Determine whether the scatter reflects an architectural choice (layered architecture naturally touches multiple layers) or accidental distribution.',
-      'Check whether the same change type repeatedly touches the same file set.',
-      'If files change together repeatedly, verify whether colocation or centralization of the shared aspect reduces the change set.',
+      'Check git log for recent commits that touched many files for a single change. If the scattered files all belong to different architectural layers (adapter, application, port), this is inherent to layered architecture — stop, no action needed.',
+      'If the scattered files are at the same architectural level, the concept they share should be colocated. Identify the shared aspect (validation rule, business logic, configuration) and centralize it in one module.',
+      'After centralizing, grep for remaining references to the old scattered locations and redirect them to the new central module.',
     ],
   },
   DIAG_OVER_INDIRECTION: {
     cause:
       'Multiple forwarding layers exist with single-implementation interfaces, adding navigation cost without runtime variation.',
     think: [
-      'Determine whether each abstraction layer serves a genuine purpose: dependency inversion for testing, plugin points, or architectural boundaries.',
-      'Check whether any interface has only one implementation and no test double.',
-      'If an abstraction does not earn its cost, verify that removing it does not break testability or future extensibility.',
+      'Read each interface in the indirection chain. Grep for implementations of each interface. If an interface has exactly one implementation and no test double (mock/stub), the abstraction does not earn its cost.',
+      'For interfaces with only one implementation: inline the implementation into the consumer, remove the interface, and remove the forwarding layer. Update all references.',
+      'If the interface exists for testability (used with `mock.module()` or `spyOn`), keep it — stop, no action needed.',
     ],
   },
   DIAG_MIXED_ABSTRACTION: {
     cause:
       'A single function mixes high-level orchestration with low-level implementation detail, visible as large nesting depth variation within the function.',
     think: [
-      'Identify which parts are orchestration (calling other functions, deciding what to do) and which are implementation (manipulating data, performing computations).',
-      'Check whether the implementation details can be extracted into named helper functions.',
-      'Verify that after extraction, the orchestrator reads as a sequence of high-level steps.',
+      'Read the function and mark each block as either orchestration (calling named functions, deciding what to do next, routing) or implementation (data manipulation, computation, string building, iteration over raw data).',
+      'Extract each implementation block into a named helper function. The function name should describe the operation at the same abstraction level as the orchestration calls around it.',
+      'After extraction, the function should read as a linear sequence of high-level steps with no inline implementation details.',
     ],
   },
 
   TEMPORAL_COUPLING: {
     cause: 'Two or more operations must be called in a specific order, but this constraint is not expressed in the type system.',
     think: [
-      'Determine whether the ordering constraint can be encoded in types (e.g., requiring the result of step A as input to step B).',
-      'Check whether combining the steps into a single function eliminates the temporal dependency.',
-      'If the constraint remains, verify that it is documented explicitly and validated at runtime if possible.',
+      'Read the operations that must be ordered. If step B requires output from step A, refactor step B to take step A\'s result as a parameter — the type system then enforces the ordering (you cannot call B without first calling A to get the input).',
+      'If both steps are independent but must run in sequence (e.g., init before use), combine them into a single function that encapsulates the ordering.',
+      'If the constraint cannot be encoded in types or combined, add a runtime assertion at the start of step B that checks whether step A has completed (e.g., check a state flag or non-null value).',
     ],
   },
   SYMMETRY_BREAK: {
     cause:
       'Functions in the same group have inconsistent shapes — different parameter patterns, return types, or async modifiers — breaking expected symmetry.',
     think: [
-      'Examine the outliers to determine whether their differences are intentional variations or accidental drift.',
-      'If the differences represent distinct responsibilities, check whether renaming clarifies the distinct roles.',
-      'If they should be uniform, verify that aligning them to the majority pattern does not break callers.',
+      'Read all functions in the group and identify the majority pattern (most common parameter order, return type, async modifier). Identify which functions are outliers.',
+      'For each outlier, check if the difference is intentional (the function genuinely does something different). If so, rename it to clarify the distinct role — stop, no action needed for that function.',
+      'If the difference is accidental drift, align the outlier to the majority pattern. Update all callers of the modified function to match the new signature.',
     ],
   },
   VAR_LIFETIME: {
     cause:
       'A variable has a longer lifetime than necessary — it is declared far from its use or lives across multiple unrelated operations.',
     think: [
-      'Determine the actual first read and last write of the variable.',
-      'Check whether the variable can be introduced closer to its use or eliminated by restructuring the flow.',
-      'Verify that reducing the lifetime does not break readability by scattering related declarations.',
+      'Read the function and find the first read and last write of the variable. Count the lines between the declaration and the first use.',
+      'Move the declaration to just before the first use. If the variable is initialized with a value, ensure the initialization expression does not depend on code that runs between the old and new declaration site.',
+      'If the variable spans unrelated operations (used in block A, then again in block C with unrelated block B in between), split it into two separate variables — one for each usage context.',
     ],
   },
   LIFETIME_SCOPE_NARROWING: {
     cause: 'A variable is declared in a wider scope than necessary — all its uses are inside a single narrower block.',
     think: [
-      "Move the declaration inside the target block to reduce the variable's visibility.",
-      'Verify that the initializer has no side effects that depend on execution order.',
-      'If the variable is a `let` with reassignments, ensure all assignments are also inside the target block.',
+      'Read the variable declaration and all its usages. Confirm that every read and write is inside the same block (if, for, while, or nested function). Move the declaration inside that block.',
+      'If the variable is a `let` with reassignments, verify that all assignments are also inside the target block. If any assignment is outside, the variable cannot be narrowed — stop, no action needed.',
     ],
   },
   LIFETIME_LIVENESS_PRESSURE: {
     cause:
       'A function has too many simultaneously live variables at a single point, indicating excessive state to track mentally.',
     think: [
-      'Identify clusters of variables that are alive together and determine whether they represent independent concerns that can be separated into sub-functions.',
-      'Check whether the function is flat and long — if so, grouping related operations into named helper functions reduces the maximum live variable count.',
-      'Verify that the high liveness is not caused by premature variable declarations that can be moved closer to their use.',
+      'Read the function and identify the point of maximum liveness (where the most variables are alive simultaneously). Group the live variables by which ones interact — independent groups can be separated.',
+      'Extract each independent group into a helper function. The helper takes its group\'s inputs as parameters and returns the outputs, reducing the parent function\'s live variable count at any given point.',
+      'If liveness is high because variables are declared too early, move each declaration to just before its first use — this alone may reduce the peak liveness count.',
     ],
   },
   LIFETIME_MUTATION_DENSITY: {
     cause:
       'A variable is reassigned too many times outside of loop accumulation, suggesting the variable serves multiple unrelated purposes.',
     think: [
-      'Check whether the variable can be split into separate variables, each with a single purpose.',
-      'Consider whether a pipeline or intermediate variables would make the data flow clearer.',
-      'Verify that the reassignments are not caused by incremental string/object building that could be refactored into a builder pattern or template.',
+      'Read the variable\'s assignments. If it is reassigned for different purposes (e.g., first holds a URL, then holds a response, then holds parsed data), split it into separate `const` variables — one per purpose, with a descriptive name for each.',
+      'If the reassignments build up a value incrementally (string concatenation, object assembly), replace with a pipeline pattern: `const result = steps.reduce(...)` or a builder.',
+      'If the variable is a loop accumulator (e.g., `sum += item.value`), the mutations are inherent — stop, no action needed.',
     ],
   },
   GIANT_FILE: {
     cause: 'A source file exceeds the line threshold, concentrating too many responsibilities in a single file.',
     think: [
-      'Identify the distinct concerns within the file by grouping related functions, types, and constants by purpose.',
-      'Check whether each cohesive group is a candidate for extraction into its own module.',
-      'If the file resists decomposition, verify that tight coupling between its parts is the root cause and address that first.',
+      'Read the file and group its exports (functions, types, constants) by domain responsibility. Each group that has a distinct purpose and its own set of consumers is a candidate for extraction into a separate module.',
+      'Extract the largest cohesive group first into a new file in the same directory. Update all imports across the project. Repeat until the original file is under the threshold.',
+      'If the file resists decomposition (every function depends on every other), the tight coupling is the root cause. Address coupling first (break circular dependencies, extract shared types) before splitting the file.',
     ],
   },
 
   LINT: {
     cause: 'A lint rule violation was detected by the configured linter.',
     think: [
-      'Review the specific lint rule that was violated and its rationale.',
-      'Determine whether the violation reflects a genuine code quality issue or a misconfigured rule.',
-      'If the rule does not apply to this context, verify that a targeted suppression with an explanatory comment is appropriate.',
+      'Read the lint error message and the violated rule name. Look up the rule in the linter documentation to understand its rationale.',
+      'Fix the violation according to the rule\'s guidance. If the fix is an autofix-capable rule, run the linter with `--fix` flag.',
+      'If the rule does not apply to this specific context (e.g., a lint rule about browser APIs in a Node.js file), add a targeted inline suppression comment with an explanation of why the rule is inapplicable.',
     ],
   },
   FORMAT: {
     cause: 'A source file does not conform to the project formatting standard.',
     think: [
-      'Determine whether the formatting difference is in hand-written source, generated code, or vendored files — generated and vendored files may legitimately diverge.',
-      'Check whether the formatter is integrated into the development workflow (pre-commit hook or editor save action).',
-      'If formatting conflicts recur, verify that the formatter configuration is consistent across the team.',
+      'Run the project formatter on the file (e.g., `oxfmt --write <file>`). If the file is generated code or vendored, formatting divergence may be intentional — stop, no action needed.',
+      'If formatting conflicts recur after running the formatter, check whether the formatter configuration (`.oxfmtrc`, `printWidth`, etc.) matches the project standard.',
     ],
   },
   TYPECHECK: {
     cause: 'A TypeScript type error was detected during type checking.',
     think: [
-      'Examine the type error message and the types involved to determine the mismatch.',
-      'Determine whether the mismatch represents a genuine logic error or an overly strict type annotation.',
-      'Verify whether the type error is local to one declaration or symptomatic of a structural mismatch between modules — repeated errors sharing the same root type suggest the contract itself is wrong, not individual call sites.',
+      'Read the type error message. Identify the expected type and the actual type. If the mismatch is in your own code, fix the source: add a missing property, correct a return type, or update the function signature.',
+      'If the error repeats across multiple call sites with the same root type, the type definition itself is wrong — fix the interface/type declaration rather than patching each call site.',
+      'If the error comes from a third-party library type mismatch, check if a newer version of `@types/` exists. If not, add a targeted type assertion at the boundary with a comment explaining the mismatch.',
     ],
   },
 } satisfies Record<FirebatCatalogCode, CatalogEntry>;
