@@ -97,7 +97,7 @@ export type FirebatCatalogCode =
   | 'COUPLING_OFF_MAIN_SEQ'
   | 'COUPLING_UNSTABLE'
   | 'COUPLING_RIGID'
-  // dependencies (7)
+  // dependencies (8)
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
   | 'DEP_TEST_ONLY_EXPORT'
@@ -105,6 +105,7 @@ export type FirebatCatalogCode =
   | 'DEP_UNUSED_DEPENDENCY'
   | 'DEP_UNLISTED_DEPENDENCY'
   | 'DEP_UNRESOLVED_IMPORT'
+  | 'DEP_DUPLICATE_EXPORT'
   // duplicates (4)
   | 'DUP_EXACT'
   | 'DUP_SHAPE'
@@ -257,6 +258,8 @@ export interface DependencyDeadExportFinding {
   readonly kind: 'dead-export' | 'test-only-export';
   readonly module: string;
   readonly name: string;
+  /** Symbol kind from gildash (function, class, type, interface, enum, etc.) */
+  readonly symbolKind?: string;
 }
 
 export interface DependencyUnusedFileFinding {
@@ -274,6 +277,12 @@ export interface DependencyUnresolvedImportFinding {
   readonly kind: 'unresolved-import';
   readonly module: string;
   readonly specifier: string;
+}
+
+export interface DependencyDuplicateExportFinding {
+  readonly kind: 'duplicate-export';
+  readonly name: string;
+  readonly modules: ReadonlyArray<string>;
 }
 
 export interface DependencyExportStats {
@@ -295,6 +304,7 @@ export interface DependencyAnalysis {
   readonly unusedFiles: ReadonlyArray<DependencyUnusedFileFinding>;
   readonly unusedDeps: ReadonlyArray<DependencyUnusedDepFinding>;
   readonly unresolvedImports: ReadonlyArray<DependencyUnresolvedImportFinding>;
+  readonly duplicateExports: ReadonlyArray<DependencyDuplicateExportFinding>;
 }
 
 // Enriched dependency finding types (post-enrich, array form)
@@ -358,13 +368,23 @@ export interface DepUnresolvedImportFinding {
   readonly specifier: string;
 }
 
+export interface DepDuplicateExportFinding {
+  readonly code: FirebatCatalogCode;
+  readonly kind: 'duplicate-export';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly name: string;
+  readonly modules: ReadonlyArray<string>;
+}
+
 export type DependencyFinding =
   | DepLayerViolationFinding
   | DepDeadExportFinding
   | DepCycleFinding
   | DepUnusedFileFinding
   | DepUnusedDepFinding
-  | DepUnresolvedImportFinding;
+  | DepUnresolvedImportFinding
+  | DepDuplicateExportFinding;
 
 export interface FormatFinding {
   readonly code: FirebatCatalogCode;

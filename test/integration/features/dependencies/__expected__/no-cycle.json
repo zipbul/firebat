@@ -6,9 +6,11 @@
     {
       "kind": "dead-export",
       "module": "no-cycle.ts",
-      "name": "greet"
+      "name": "greet",
+      "symbolKind": "function"
     }
   ],
+  "duplicateExports": [],
   "exportStats": {
     "no-cycle.ts": {
       "abstract": 0,

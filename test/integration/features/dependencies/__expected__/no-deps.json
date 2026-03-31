@@ -6,14 +6,17 @@
     {
       "kind": "dead-export",
       "module": "no-deps.ts",
-      "name": "helper"
+      "name": "helper",
+      "symbolKind": "function"
     },
     {
       "kind": "dead-export",
       "module": "no-deps.ts",
-      "name": "standalone"
+      "name": "standalone",
+      "symbolKind": "variable"
     }
   ],
+  "duplicateExports": [],
   "exportStats": {
     "no-deps.ts": {
       "abstract": 0,

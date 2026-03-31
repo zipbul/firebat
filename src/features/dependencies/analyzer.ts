@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { Gildash, SymbolDetail } from '@zipbul/gildash';
@@ -13,6 +12,7 @@ import type {
   DependencyUnusedFileFinding,
   DependencyUnusedDepFinding,
   DependencyUnresolvedImportFinding,
+  DependencyDuplicateExportFinding,
 } from '../../types';
 import { isTestLikePath } from '../../shared/is-test-like-path';
 
@@ -42,6 +42,7 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
   unusedFiles: [],
   unusedDeps: [],
   unresolvedImports: [],
+  duplicateExports: [],
 });
 
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
@@ -341,7 +342,7 @@ const analyzeDependencies = async (
   const rootAbs = input?.rootAbs ?? process.cwd();
   const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
   const allowedDependencies = input?.allowedDependencies ?? {};
-  const readFn = input?.readFileFn ?? ((p: string) => readFileSync(p, 'utf8'));
+  const readFn = input?.readFileFn ?? ((_p: string) => '{}');
   // 1. Import graph
   let graph: Map<string, string[]>;
 
@@ -458,7 +459,34 @@ const analyzeDependencies = async (
     if (!(e instanceof GildashError)) {throw e;}
   }
 
-  // 6. Dead export + unused file + unused dep + unresolved import detection
+  // 6. Duplicate export detection
+  const duplicateExports: DependencyDuplicateExportFinding[] = [];
+
+  if (exportsByFile.size > 0) {
+    // Group exports by name across all files
+    const nameToModules = new Map<string, string[]>();
+
+    for (const [moduleAbs, symbols] of exportsByFile) {
+      for (const sym of symbols) {
+        const existing = nameToModules.get(sym.name) ?? [];
+
+        existing.push(toRelativePath(rootAbs, moduleAbs));
+        nameToModules.set(sym.name, existing);
+      }
+    }
+
+    for (const [name, modules] of nameToModules) {
+      if (modules.length > 1) {
+        duplicateExports.push({
+          kind: 'duplicate-export',
+          name,
+          modules,
+        });
+      }
+    }
+  }
+
+  // 7. Dead export + unused file + unused dep + unresolved import detection
   const deadExports: DependencyDeadExportFinding[] = [];
   const unusedFiles: DependencyUnusedFileFinding[] = [];
   const unusedDeps: DependencyUnusedDepFinding[] = [];
@@ -595,6 +623,7 @@ const analyzeDependencies = async (
                 kind: 'test-only-export',
                 module: relModule,
                 name: sym.name,
+                symbolKind: sym.kind,
               });
             }
 
@@ -605,6 +634,7 @@ const analyzeDependencies = async (
             kind: 'dead-export',
             module: relModule,
             name: sym.name,
+            symbolKind: sym.kind,
           });
         }
       }
@@ -721,6 +751,7 @@ const analyzeDependencies = async (
     unusedFiles,
     unusedDeps,
     unresolvedImports,
+    duplicateExports,
   };
 };
 

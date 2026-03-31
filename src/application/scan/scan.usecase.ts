@@ -1,4 +1,5 @@
 // MUST: MUST-1
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { ErrorFlowFindingKind } from '../../features/error-flow';
@@ -538,6 +539,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     dependencies = await analyzeDependencies(gildash, {
       rootAbs: ctx.rootAbs,
+      readFileFn: (p: string) => readFileSync(p, 'utf8'),
       ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
       ...(options.dependenciesAllowedDependencies !== undefined
         ? { allowedDependencies: options.dependenciesAllowedDependencies }
@@ -1145,6 +1147,21 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         span: zeroSpan,
         module,
         specifier: String(u?.specifier ?? ''),
+      });
+    }
+
+    const duplicateExports = Array.isArray(value?.duplicateExports) ? value.duplicateExports : [];
+
+    for (const d of duplicateExports) {
+      const modules = Array.isArray(d?.modules) ? d.modules : [];
+
+      findings.push({
+        kind: 'duplicate-export',
+        code: 'DEP_DUPLICATE_EXPORT',
+        file: String(modules[0] ?? ''),
+        span: zeroSpan,
+        name: String(d?.name ?? ''),
+        modules,
       });
     }
 

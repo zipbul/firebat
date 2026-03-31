@@ -15,9 +15,11 @@
     {
       "kind": "dead-export",
       "module": "fan-out/hub.ts",
-      "name": "combined"
+      "name": "combined",
+      "symbolKind": "function"
     }
   ],
+  "duplicateExports": [],
   "exportStats": {
     "fan-out/hub.ts": {
       "abstract": 0,

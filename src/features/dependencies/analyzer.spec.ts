@@ -979,4 +979,60 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     expect(result.unusedDeps.length).toBe(0);
   });
+
+  /* ---------- DE: Duplicate Exports ---------- */
+
+  it('should detect duplicate exports with same name across files', async () => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [
+            mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
+            mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
+            mkSymbol(3, '/project/src/c.ts', 'unique', 'function'),
+          ];
+        }
+
+        return [];
+      },
+      searchRelations: () => [],
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.duplicateExports.length).toBe(1);
+    expect(result.duplicateExports[0]!.name).toBe('helper');
+    expect(result.duplicateExports[0]!.modules).toEqual(['src/a.ts', 'src/b.ts']);
+  });
+
+  it('should include symbolKind in dead export findings', async () => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', ['/project/src/lib.ts']]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [
+            mkSymbol(1, '/project/src/lib.ts', 'MyType', 'type'),
+            mkSymbol(2, '/project/src/lib.ts', 'MyEnum', 'enum'),
+          ];
+        }
+
+        return [];
+      },
+      searchRelations: () => [],
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+
+    expect(result.deadExports.length).toBe(2);
+    expect(result.deadExports[0]!.symbolKind).toBe('type');
+    expect(result.deadExports[1]!.symbolKind).toBe('enum');
+  });
 });

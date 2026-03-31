@@ -14,9 +14,11 @@
     {
       "kind": "dead-export",
       "module": "linear-chain/a.ts",
-      "name": "a"
+      "name": "a",
+      "symbolKind": "function"
     }
   ],
+  "duplicateExports": [],
   "exportStats": {
     "linear-chain/a.ts": {
       "abstract": 0,

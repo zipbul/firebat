@@ -23,6 +23,7 @@
     }
   ],
   "deadExports": [],
+  "duplicateExports": [],
   "exportStats": {
     "cycle/a.ts": {
       "abstract": 0,

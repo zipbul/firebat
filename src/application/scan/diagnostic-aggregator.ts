@@ -349,6 +349,14 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that the file is not excluded from the build configuration or gitignored.',
     ],
   },
+  DEP_DUPLICATE_EXPORT: {
+    cause: 'The same symbol name is exported from multiple files in the project, creating ambiguity for consumers.',
+    think: [
+      'Determine whether the duplicates are intentional re-exports or accidental copies.',
+      'Check whether one of the exports should be the canonical source and the others should import from it.',
+      'Verify that removing duplicates does not break consumers that depend on a specific file path.',
+    ],
+  },
 
   NESTING_DEEP: {
     cause:
