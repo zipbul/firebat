@@ -481,6 +481,30 @@ const analyzeDependencies = async (
       exportsByFile.set(absFilePath, existing);
     }
 
+    // Also collect re-exported symbols (not in searchSymbols({ isExported: true }))
+    try {
+      const reExportRels = gildash.searchRelations({ type: 're-exports' });
+
+      for (const rel of reExportRels) {
+        if (!rel.srcSymbolName || !rel.srcFilePath) continue;
+
+        const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
+        const existing = exportsByFile.get(absFilePath) ?? [];
+
+        // Avoid duplicates
+        if (!existing.some(s => s.name === rel.srcSymbolName)) {
+          existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
+          exportsByFile.set(absFilePath, existing);
+        }
+      }
+
+      // Note: `export type { X } from './mod'` is recorded as type-references in gildash.
+      // These are already tracked in usageByModule via type-references relation.
+      // Dead type re-exports from index.ts files are covered by re-exports relation above.
+    } catch (e) {
+      if (!(e instanceof GildashError)) {throw e;}
+    }
+
     for (const [filePath, symbols] of exportsByFile) {
       const total = symbols.length;
       const abstract = symbols.filter(
@@ -505,6 +529,9 @@ const analyzeDependencies = async (
 
     for (const [moduleAbs, symbols] of exportsByFile) {
       for (const sym of symbols) {
+        // Skip re-exports for duplicate detection — they're not independent definitions
+        if (sym.kind === 're-export') continue;
+
         const existing = nameToEntries.get(sym.name) ?? [];
 
         existing.push({ relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs });
@@ -590,24 +617,28 @@ const analyzeDependencies = async (
     if (hasImportData) {
 
       // Build usage map per module
-      const usageByModule = new Map<
-        string,
-        {
-          usesAll: boolean;
-          names: Set<string>;
-          perNameConsumerKinds: Map<string, Set<'test' | 'prod'>>;
-        }
-      >();
+      interface ModuleUsage {
+        usesAll: boolean;
+        /** symbol name → set of external consumer file paths (self-references excluded) */
+        names: Map<string, Set<string>>;
+        perNameConsumerKinds: Map<string, Set<'test' | 'prod'>>;
+      }
+
+      const usageByModule = new Map<string, ModuleUsage>();
 
       for (const rel of [...imports, ...reExports, ...typeRefs, ...calls]) {
         if (rel.dstFilePath === null) continue;
         const target = resolveAbs(rootAbs, rel.dstFilePath);
         const consumer = resolveAbs(rootAbs, rel.srcFilePath);
+
+        // Self-reference (same file calls/references itself) — not external usage
+        if (target === consumer) continue;
+
         const isTestConsumer = isTestLikePath(consumer);
         const kind: 'test' | 'prod' = isTestConsumer ? 'test' : 'prod';
         const state = usageByModule.get(target) ?? {
           usesAll: false,
-          names: new Set<string>(),
+          names: new Map<string, Set<string>>(),
           perNameConsumerKinds: new Map<string, Set<'test' | 'prod'>>(),
         };
 
@@ -616,7 +647,10 @@ const analyzeDependencies = async (
         if (rel.dstSymbolName === '*' || (rel.type === 're-exports' && !rel.dstSymbolName)) {
           state.usesAll = true;
         } else if (rel.dstSymbolName) {
-          state.names.add(rel.dstSymbolName);
+          const consumers = state.names.get(rel.dstSymbolName) ?? new Set<string>();
+
+          consumers.add(consumer);
+          state.names.set(rel.dstSymbolName, consumers);
 
           const prev = state.perNameConsumerKinds.get(rel.dstSymbolName) ?? new Set<'test' | 'prod'>();
 
@@ -695,13 +729,14 @@ const analyzeDependencies = async (
           continue;
         }
 
-        const usedNames = usage?.names ?? new Set<string>();
+        const usedNames = usage?.names ?? new Map<string, Set<string>>();
         const perNameConsumerKinds = usage?.perNameConsumerKinds ?? new Map<string, Set<'test' | 'prod'>>();
 
         for (const sym of symbols) {
           const relModule = toRelativePath(rootAbs, moduleAbs);
+          const symConsumers = usedNames.get(sym.name);
 
-          if (usedNames.has(sym.name)) {
+          if (symConsumers && symConsumers.size > 0) {
             const kinds = perNameConsumerKinds.get(sym.name) ?? new Set<'test' | 'prod'>();
             const isTestOnly = kinds.size > 0 && !kinds.has('prod');
 
