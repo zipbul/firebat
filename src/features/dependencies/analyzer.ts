@@ -785,13 +785,8 @@ const analyzeDependencies = async (
       const externalPackages = new Map<string, Set<string>>();
 
       for (const rel of imports) {
-        // Unresolved internal import (skip relative paths — likely .ts extension omission)
-        if (
-          rel.isExternal === false &&
-          rel.dstFilePath === null &&
-          rel.specifier &&
-          !rel.specifier.startsWith('.')
-        ) {
+        // Unresolved internal import
+        if (rel.isExternal === false && rel.dstFilePath === null && rel.specifier) {
           unresolvedImports.push({
             kind: 'unresolved-import',
             module: toRelativePath(rootAbs, rel.srcFilePath),

@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@zipbul/gildash": "0.17.1",
+    "@zipbul/gildash": "0.17.2",
     "drizzle-orm": "^0.45.1",
     "fastbitset": "^0.4.1",
     "oxc-parser": "0.121.0",
@@ -40,7 +40,6 @@
     "oxlint": "^1.47.0",
     "oxlint-tsgolint": "^0.11.5",
     "table": "^6.9.0",
-    "typescript": "^5.8.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -52,6 +51,7 @@
     "drizzle-kit": "^0.31.9",
     "husky": "^9.1.7",
     "knip": "^5.83.1",
-    "lint-staged": "^16.2.7"
+    "lint-staged": "^16.2.7",
+    "typescript": "5.8.2"
   }
 }

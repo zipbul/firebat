@@ -983,7 +983,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.unresolvedImports[0]!.module).toBe('src/index.ts');
   });
 
-  it('should skip relative path unresolved imports (likely .ts extension omission)', async () => {
+  it('should report relative path unresolved imports (gildash 0.17.2 resolves dotted filenames)', async () => {
     const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
@@ -1005,7 +1005,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
     });
 
-    expect(result.unresolvedImports.length).toBe(0);
+    expect(result.unresolvedImports.length).toBe(1);
+    expect(result.unresolvedImports[0]!.specifier).toBe('./missing-module');
   });
 
   /* ---------- IG: ignoreDependencies ---------- */
