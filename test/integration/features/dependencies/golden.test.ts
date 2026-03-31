@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe } from 'bun:test';
 
 import type { FixtureSources } from '../../shared/golden-runner';
@@ -10,7 +12,10 @@ const gildashAdapter = async (_program: ReadonlyArray<unknown>, sources: Fixture
   const { gildash, tmpDir, cleanup } = await createTempGildash(sources);
 
   try {
-    return await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    return await analyzeDependencies(gildash, {
+      rootAbs: tmpDir,
+      readFileFn: (p: string) => readFileSync(p, 'utf8'),
+    });
   } finally {
     await cleanup();
   }
