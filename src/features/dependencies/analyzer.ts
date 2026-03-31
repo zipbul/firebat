@@ -839,11 +839,11 @@ const analyzeDependencies = async (
           // Skip packages used as CLI binaries in scripts
           if (scriptBins.has(declared)) continue;
 
-          // @types/* — skip if corresponding package is used
+          // @types/* — skip if corresponding package is used or is a builtin
           if (declared.startsWith('@types/')) {
             const base = declared.slice('@types/'.length).replace('__', '/');
 
-            if (usedPackages.has(base)) continue;
+            if (usedPackages.has(base) || isBuiltinModule(base)) continue;
           }
 
           unusedDeps.push({
