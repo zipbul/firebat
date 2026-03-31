@@ -82,15 +82,37 @@ const mkImport = (
   specifier: extra.specifier ?? null,
 });
 
-const mkReExport = (srcFilePath: string, dstFilePath: string, dstSymbolName: string | null = null): StoredCodeRelation => ({
+const mkReExport = (
+  srcFilePath: string,
+  dstFilePath: string,
+  dstSymbolName: string | null = null,
+  srcSymbolName: string | null = null,
+): StoredCodeRelation => ({
   type: 're-exports',
   srcFilePath,
-  srcSymbolName: null,
+  srcSymbolName,
   dstFilePath,
   dstSymbolName,
   dstProject: null,
   isExternal: false,
   specifier: null,
+});
+
+const mkTypeRef = (
+  srcFilePath: string,
+  dstFilePath: string,
+  symbolName: string,
+  isReExport: boolean = false,
+): StoredCodeRelation => ({
+  type: 'type-references' as StoredCodeRelation['type'],
+  srcFilePath,
+  srcSymbolName: symbolName,
+  dstFilePath,
+  dstSymbolName: symbolName,
+  dstProject: null,
+  isExternal: false,
+  specifier: null,
+  ...(isReExport ? { meta: { isReExport: true } } : {}),
 });
 
 /* ------------------------------------------------------------------ */
@@ -1529,5 +1551,134 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.duplicateExports.length).toBe(0);
+  });
+
+  /* ---------- RX: Re-export dead detection ---------- */
+
+  it('should collect re-exports from re-exports relation and detect dead ones', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/lib.ts']],
+      ['/project/src/lib.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [
+            mkSymbol(1, '/project/src/lib.ts', 'usedFn', 'function'),
+            mkSymbol(2, '/project/src/lib.ts', 'deadFn', 'function'),
+          ];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        // index.ts re-exports both, but only usedFn is consumed externally
+        if (query.type === 're-exports') {
+          return [
+            mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'usedFn', 'usedFn'),
+            mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'deadFn', 'deadFn'),
+          ];
+        }
+
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/consumer.ts', '/project/src/index.ts', 'usedFn')];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+    const deadReExports = result.deadExports.filter(d => d.module === 'src/index.ts');
+
+    expect(deadReExports.length).toBe(1);
+    expect(deadReExports[0]!.name).toBe('deadFn');
+  });
+
+  it('should collect type re-exports via meta.isReExport and detect dead ones', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/types.ts', ['/project/src/shared/config.ts']],
+      ['/project/src/shared/config.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/shared/config.ts', 'MyConfig', 'type')];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        // types.ts does `export type { MyConfig } from './shared/config'`
+        if (query.type === 'type-references') {
+          return [mkTypeRef('/project/src/types.ts', '/project/src/shared/config.ts', 'MyConfig', true)];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/types.ts' }),
+    });
+    // types.ts re-exports MyConfig but nobody imports it via types.ts → dead
+    const deadReExports = result.deadExports.filter(d => d.module === 'src/types.ts');
+
+    expect(deadReExports.length).toBe(1);
+    expect(deadReExports[0]!.name).toBe('MyConfig');
+  });
+
+  it('should propagate dead through re-export chain — original also dead when only consumer is dead re-export', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/lib.ts']],
+      ['/project/src/lib.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/lib.ts', 'orphanFn', 'function')];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        // index.ts re-exports orphanFn, but nobody imports from index.ts
+        if (query.type === 're-exports') {
+          return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn')];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+
+    // index.ts re-export is dead (no consumers) → lib.ts original also dead (only consumer was dead re-export)
+    const libDead = result.deadExports.filter(d => d.module === 'src/lib.ts');
+    const indexDead = result.deadExports.filter(d => d.module === 'src/index.ts');
+
+    expect(indexDead.length).toBe(1);
+    expect(indexDead[0]!.name).toBe('orphanFn');
+    expect(libDead.length).toBe(1);
+    expect(libDead[0]!.name).toBe('orphanFn');
   });
 });
