@@ -1,4 +1,2 @@
 #!/usr/bin/env sh
 set -eu
-
-#bunx depcruise -c .dependency-cruiser.cjs index.ts src

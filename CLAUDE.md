@@ -16,7 +16,6 @@ bun test <path>           # 단일 테스트 파일 실행
 bun test --coverage       # 커버리지 (임계값은 bunfig.toml 참조)
 bun run lint              # oxlint 린트
 bun run format            # oxfmt 포맷 검사
-bun run deps              # 아키텍처 의존성 규칙 검증
 bun run db:generate       # Drizzle 마이그레이션 생성
 bun run db:migrate        # Drizzle 마이그레이션 실행
 ```
@@ -36,7 +35,7 @@ src/
   oxlint-plugin/   커스텀 oxlint 룰
 ```
 
-의존성 규칙 (`bun run deps`로 검증):
+의존성 규칙 (firebat `DEP_LAYER_VIOLATION`으로 검증):
 - `application/` → `ports/`만 의존 (`infrastructure/` 직접 참조 금지)
 - `infrastructure/` → `ports/` 구현
 - `adapters/` → 조합 루트 (composition root)
