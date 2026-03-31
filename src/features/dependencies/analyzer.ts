@@ -167,7 +167,7 @@ const extractPackageName = (specifier: string): string | null => {
 };
 
 const isBuiltinModule = (name: string): boolean =>
-  name.startsWith('node:') || name.startsWith('bun:');
+  name === 'bun' || name.startsWith('node:') || name.startsWith('bun:');
 
 const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
   try {
@@ -187,6 +187,41 @@ const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string)
     }
 
     return deps;
+  } catch {
+    return new Set();
+  }
+};
+
+/** Extract package names referenced in scripts (binary usage like `oxlint`, `knip`, `husky`, etc.). */
+const readScriptBinaries = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
+  try {
+    const raw = readFn(path.join(rootAbs, 'package.json'));
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const scripts = parsed.scripts;
+    const bins = new Set<string>();
+
+    if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) return bins;
+
+    for (const cmd of Object.values(scripts as Record<string, unknown>)) {
+      if (typeof cmd !== 'string') continue;
+
+      // Extract first word of each command segment (split on && | ; ||)
+      for (const segment of cmd.split(/&&|\|\||[;|]/)) {
+        const trimmed = segment.trim();
+        // Skip variable assignments and empty segments
+        if (trimmed.length === 0 || trimmed.includes('=')) continue;
+
+        const words = trimmed.split(/\s+/);
+        // Skip prefix commands like bunx, npx, etc.
+        const binary = words[0] === 'bunx' || words[0] === 'npx' ? words[1] : words[0];
+
+        if (binary && binary.length > 0) {
+          bins.add(binary);
+        }
+      }
+    }
+
+    return bins;
   } catch {
     return new Set();
   }
@@ -624,9 +659,9 @@ const analyzeDependencies = async (
         }
       }
 
-      // Check each module's exports (skip unreachable — already reported as unused file)
+      // Check each module's exports (skip unreachable, test files)
       for (const [moduleAbs, symbols] of exportsByFile) {
-        if (symbols.length === 0 || unreachableModules.has(moduleAbs)) {
+        if (symbols.length === 0 || unreachableModules.has(moduleAbs) || isTestLikePath(moduleAbs)) {
           continue;
         }
 
@@ -676,8 +711,13 @@ const analyzeDependencies = async (
       const externalPackages = new Map<string, Set<string>>();
 
       for (const rel of imports) {
-        // Unresolved internal import
-        if (rel.isExternal === false && rel.dstFilePath === null && rel.specifier) {
+        // Unresolved internal import (skip relative paths — likely .ts extension omission)
+        if (
+          rel.isExternal === false &&
+          rel.dstFilePath === null &&
+          rel.specifier &&
+          !rel.specifier.startsWith('.')
+        ) {
           unresolvedImports.push({
             kind: 'unresolved-import',
             module: toRelativePath(rootAbs, rel.srcFilePath),
@@ -710,6 +750,7 @@ const analyzeDependencies = async (
       ): void => {
         const pkgDeps = readPackageDependencies(depRoot, readFn);
         const selfName = readPackageName(depRoot, readFn);
+        const scriptBins = readScriptBinaries(depRoot, readFn);
 
         for (const [pkgName, files] of usedPackages) {
           if (pkgName === selfName || shouldIgnore(pkgName)) continue;
@@ -726,6 +767,8 @@ const analyzeDependencies = async (
         for (const declared of pkgDeps) {
           if (declared === selfName || shouldIgnore(declared)) continue;
           if (usedPackages.has(declared)) continue;
+          // Skip packages used as CLI binaries in scripts
+          if (scriptBins.has(declared)) continue;
 
           // @types/* — skip if corresponding package is used
           if (declared.startsWith('@types/')) {

@@ -954,7 +954,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
   /* ---------- UR: Unresolved Imports ---------- */
 
-  it('should detect unresolved internal imports', async () => {
+  it('should detect unresolved non-relative internal imports', async () => {
     const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
@@ -964,7 +964,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
         if (query.type === 'imports') {
           return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing' }),
+            mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: '#config/missing' }),
           ];
         }
 
@@ -977,8 +977,33 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     });
 
     expect(result.unresolvedImports.length).toBe(1);
-    expect(result.unresolvedImports[0]!.specifier).toBe('./missing');
+    expect(result.unresolvedImports[0]!.specifier).toBe('#config/missing');
     expect(result.unresolvedImports[0]!.module).toBe('src/index.ts');
+  });
+
+  it('should skip relative path unresolved imports (likely .ts extension omission)', async () => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'imports') {
+          return [
+            mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing-module' }),
+          ];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+
+    expect(result.unresolvedImports.length).toBe(0);
   });
 
   /* ---------- IG: ignoreDependencies ---------- */
