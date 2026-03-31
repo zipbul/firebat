@@ -388,6 +388,16 @@ export interface DepDuplicateExportFinding {
   readonly modules: ReadonlyArray<string>;
 }
 
+export interface DepUnusedMemberFinding {
+  readonly code: FirebatCatalogCode;
+  readonly kind: 'unused-enum-member' | 'unused-ns-export' | 'unused-ns-member';
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly module: string;
+  readonly symbolName: string;
+  readonly memberName: string;
+}
+
 export type DependencyFinding =
   | DepLayerViolationFinding
   | DepDeadExportFinding
@@ -395,7 +405,8 @@ export type DependencyFinding =
   | DepUnusedFileFinding
   | DepUnusedDepFinding
   | DepUnresolvedImportFinding
-  | DepDuplicateExportFinding;
+  | DepDuplicateExportFinding
+  | DepUnusedMemberFinding;
 
 export interface FormatFinding {
   readonly code: FirebatCatalogCode;

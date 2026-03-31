@@ -1113,7 +1113,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(enumMembers[0]!.symbolName).toBe('Color');
   });
 
-  it('should detect unused namespace import members', async () => {
+  it('should not report dead exports for namespace-imported modules', async () => {
     const graph = new Map<string, string[]>([
       ['/project/src/index.ts', ['/project/src/utils.ts']],
       ['/project/src/utils.ts', []],
@@ -1138,7 +1138,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         if (query.type === 'imports') {
           return [
             mkImport('/project/src/index.ts', '/project/src/utils.ts', '*', { specifier: './utils', srcSymbolName: 'Utils' }),
-            mkImport('/project/src/index.ts', '/project/src/utils.ts', 'foo'),
           ];
         }
 
@@ -1149,9 +1148,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
     });
-    const nsExports = result.unusedMembers.filter(m => m.kind === 'unused-ns-export');
 
-    expect(nsExports.length).toBe(1);
-    expect(nsExports[0]!.memberName).toBe('bar');
+    // Namespace import marks module as usesAll → no dead exports
+    expect(result.deadExports.length).toBe(0);
   });
 });

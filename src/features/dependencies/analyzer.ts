@@ -562,8 +562,8 @@ const analyzeDependencies = async (
           perNameConsumerKinds: new Map<string, Set<'test' | 'prod'>>(),
         };
 
-        // null/undefined dstSymbolName = namespace import (import * as X) or export *
-        if (rel.dstSymbolName === null || rel.dstSymbolName === undefined) {
+        // null/undefined/'*' dstSymbolName = namespace import (import * as X) or export *
+        if (rel.dstSymbolName === null || rel.dstSymbolName === undefined || rel.dstSymbolName === '*') {
           state.usesAll = true;
         } else {
           state.names.add(rel.dstSymbolName);
@@ -676,9 +676,12 @@ const analyzeDependencies = async (
           const parentModule = resolveAbs(rootAbs, member.filePath);
           const relModule = toRelativePath(rootAbs, parentModule);
 
-          // Check if this member name is referenced in any import relation
+          // Check if this member or its parent symbol is referenced in any import relation
           const memberUsage = usageByModule.get(parentModule);
-          const isUsed = memberUsage?.names.has(member.memberName!) === true || memberUsage?.usesAll === true;
+          const isUsed =
+            memberUsage?.usesAll === true ||
+            memberUsage?.names.has(member.memberName!) === true ||
+            memberUsage?.names.has(member.name) === true;
 
           if (!isUsed) {
             const parentKind = member.kind;
@@ -699,40 +702,9 @@ const analyzeDependencies = async (
         }
       }
 
-      // Unused namespace import members (import * as NS — NS.foo used, NS.bar unused)
-      for (const rel of imports) {
-        if (rel.dstSymbolName !== '*' || rel.dstFilePath === null) continue;
-
-        const targetModule = resolveAbs(rootAbs, rel.dstFilePath);
-        const targetExports = exportsByFile.get(targetModule);
-
-        if (!targetExports || targetExports.length === 0) continue;
-
-        // Collect all NS.xxx member accesses from the source file's other import relations
-        const nsLocalName = rel.srcSymbolName;
-
-        if (!nsLocalName) continue;
-
-        // Find which exports of the target module are actually used via NS.xxx
-        // We check other import relations from the same source file to the same target
-        const namedImportsFromSameFile = imports.filter(
-          r => r.srcFilePath === rel.srcFilePath && r.dstFilePath === rel.dstFilePath && r.dstSymbolName !== '*' && r.dstSymbolName !== null,
-        );
-        const usedViaNamedImport = new Set(namedImportsFromSameFile.map(r => r.dstSymbolName!));
-
-        for (const sym of targetExports) {
-          if (!usedViaNamedImport.has(sym.name)) {
-            const relModule = toRelativePath(rootAbs, targetModule);
-
-            unusedMembers.push({
-              kind: 'unused-ns-export',
-              module: relModule,
-              symbolName: nsLocalName,
-              memberName: sym.name,
-            });
-          }
-        }
-      }
+      // NOTE: namespace import unused member detection (import * as NS — NS.foo used, NS.bar unused)
+      // requires semantic analysis (gildash semantic: true + getSemanticReferences) to accurately
+      // determine which NS.xxx accesses exist in the source file. Deferred until semantic support is available.
 
       // Phase 2: unused/unlisted dependencies + unresolved imports
       const externalPackages = new Map<string, Set<string>>();
