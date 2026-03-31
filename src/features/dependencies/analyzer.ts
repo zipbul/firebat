@@ -667,44 +667,10 @@ const analyzeDependencies = async (
         }
       }
 
-      // Unused enum members + namespace members
-      // Collect all symbols with memberName (enum members, namespace members)
-      if (allExported !== null) {
-        const membersWithParent = allExported.filter(s => s.memberName !== null && s.memberName !== undefined);
-
-        for (const member of membersWithParent) {
-          const parentModule = resolveAbs(rootAbs, member.filePath);
-          const relModule = toRelativePath(rootAbs, parentModule);
-
-          // Check if this member or its parent symbol is referenced in any import relation
-          const memberUsage = usageByModule.get(parentModule);
-          const isUsed =
-            memberUsage?.usesAll === true ||
-            memberUsage?.names.has(member.memberName!) === true ||
-            memberUsage?.names.has(member.name) === true;
-
-          if (!isUsed) {
-            const parentKind = member.kind;
-            const findingKind: DependencyUnusedMemberFinding['kind'] =
-              parentKind === 'enum'
-                ? 'unused-enum-member'
-                : parentKind === 'namespace'
-                  ? 'unused-ns-member'
-                  : 'unused-ns-export';
-
-            unusedMembers.push({
-              kind: findingKind,
-              module: relModule,
-              symbolName: member.name,
-              memberName: member.memberName!,
-            });
-          }
-        }
-      }
-
-      // NOTE: namespace import unused member detection (import * as NS — NS.foo used, NS.bar unused)
-      // requires semantic analysis (gildash semantic: true + getSemanticReferences) to accurately
-      // determine which NS.xxx accesses exist in the source file. Deferred until semantic support is available.
+      // NOTE: unused enum member / namespace member / namespace import member detection
+      // requires gildash to index individual members (memberName field). As of gildash 0.17.1,
+      // enum and namespace are indexed as single symbols with memberName=null.
+      // These features are deferred until gildash adds member-level indexing or semantic analysis.
 
       // Phase 2: unused/unlisted dependencies + unresolved imports
       const externalPackages = new Map<string, Set<string>>();

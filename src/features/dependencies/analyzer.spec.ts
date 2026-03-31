@@ -1086,42 +1086,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.deadExports[1]!.symbolKind).toBe('enum');
   });
 
-  /* ---------- UM: Unused Members ---------- */
-
-  it('should detect unused enum members', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
-          return [
-            { ...mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'), memberName: null },
-            { ...mkSymbol(2, '/project/src/colors.ts', 'Color', 'enum'), memberName: 'Red' },
-            { ...mkSymbol(3, '/project/src/colors.ts', 'Color', 'enum'), memberName: 'Blue' },
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
-          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', 'Red')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-    const enumMembers = result.unusedMembers.filter(m => m.kind === 'unused-enum-member');
-
-    expect(enumMembers.length).toBe(1);
-    expect(enumMembers[0]!.memberName).toBe('Blue');
-    expect(enumMembers[0]!.symbolName).toBe('Color');
-  });
+  /* ---------- NS: Namespace import ---------- */
 
   it('should not report dead exports for namespace-imported modules', async () => {
     const graph = new Map<string, string[]>([
@@ -1193,6 +1158,29 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.unusedDeps.length).toBe(1);
     expect(result.unusedDeps[0]!.kind).toBe('unlisted-dependency');
     expect(result.unusedDeps[0]!.packageName).toBe('lodash');
+  });
+
+  /* ---------- UM: Unused Members (deferred — gildash 0.17.1 does not index members) ---------- */
+
+  it('should return empty unusedMembers (gildash does not index enum/namespace members)', async () => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          // Real gildash returns memberName=null for enum/namespace
+          return [{ ...mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'), memberName: null }];
+        }
+
+        return [];
+      },
+      searchRelations: () => [],
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.unusedMembers.length).toBe(0);
   });
 
   /* ---------- EP: Entry point edge cases ---------- */
@@ -1310,74 +1298,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
   /* ---------- EM: Enum member — parent import skip ---------- */
 
-  it('should skip enum members when parent enum is imported by name', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/colors.ts']],
-      ['/project/src/colors.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
-          return [
-            { ...mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'), memberName: null },
-            { ...mkSymbol(2, '/project/src/colors.ts', 'Color', 'enum'), memberName: 'Red' },
-            { ...mkSymbol(3, '/project/src/colors.ts', 'Color', 'enum'), memberName: 'Blue' },
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        // Import the enum itself, not individual members
-        if (query.type === 'imports') {
-          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', 'Color')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-
-    // Parent enum imported → all members considered used
-    expect(result.unusedMembers.length).toBe(0);
-  });
-
-  /* ---------- NM: TS namespace member ---------- */
-
-  it('should detect unused namespace members with kind namespace', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
-          return [
-            { ...mkSymbol(1, '/project/src/ns.ts', 'MyNS', 'namespace'), memberName: null },
-            { ...mkSymbol(2, '/project/src/ns.ts', 'MyNS', 'namespace'), memberName: 'helper' },
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-    const nsMembers = result.unusedMembers.filter(m => m.kind === 'unused-ns-member');
-
-    expect(nsMembers.length).toBe(1);
-    expect(nsMembers[0]!.symbolName).toBe('MyNS');
-    expect(nsMembers[0]!.memberName).toBe('helper');
-  });
-
   /* ---------- RE: re-export usesAll ---------- */
 
   it('should treat re-export with null dstSymbolName as usesAll', async () => {
@@ -1438,35 +1358,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     expect(result.unusedDeps.length).toBe(0);
     expect(result.unresolvedImports.length).toBe(0);
-  });
-
-  it('should return empty unusedMembers when all enum members are used', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
-          return [
-            { ...mkSymbol(1, '/project/src/e.ts', 'E', 'enum'), memberName: null },
-            { ...mkSymbol(2, '/project/src/e.ts', 'E', 'enum'), memberName: 'A' },
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {return [mkImport('/project/src/index.ts', '/project/src/e.ts', 'A')];}
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-
-    expect(result.unusedMembers.length).toBe(0);
   });
 
   it('should return empty duplicateExports when no name collision exists', async () => {
