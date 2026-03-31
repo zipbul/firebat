@@ -28,5 +28,6 @@
   "layerViolations": [],
   "unresolvedImports": [],
   "unusedDeps": [],
-  "unusedFiles": []
+  "unusedFiles": [],
+  "unusedMembers": []
 }

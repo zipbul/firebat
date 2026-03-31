@@ -13,6 +13,7 @@ import type {
   DependencyUnusedDepFinding,
   DependencyUnresolvedImportFinding,
   DependencyDuplicateExportFinding,
+  DependencyUnusedMemberFinding,
 } from '../../types';
 import { isTestLikePath } from '../../shared/is-test-like-path';
 
@@ -43,6 +44,7 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
   unusedDeps: [],
   unresolvedImports: [],
   duplicateExports: [],
+  unusedMembers: [],
 });
 
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
@@ -459,38 +461,64 @@ const analyzeDependencies = async (
     if (!(e instanceof GildashError)) {throw e;}
   }
 
-  // 6. Duplicate export detection
+  // 6. Duplicate export detection (same origin via resolveSymbol)
   const duplicateExports: DependencyDuplicateExportFinding[] = [];
 
   if (exportsByFile.size > 0) {
     // Group exports by name across all files
-    const nameToModules = new Map<string, string[]>();
+    const nameToEntries = new Map<string, Array<{ relModule: string; absModule: string }>>();
 
     for (const [moduleAbs, symbols] of exportsByFile) {
       for (const sym of symbols) {
-        const existing = nameToModules.get(sym.name) ?? [];
+        const existing = nameToEntries.get(sym.name) ?? [];
 
-        existing.push(toRelativePath(rootAbs, moduleAbs));
-        nameToModules.set(sym.name, existing);
+        existing.push({ relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs });
+        nameToEntries.set(sym.name, existing);
       }
     }
 
-    for (const [name, modules] of nameToModules) {
-      if (modules.length > 1) {
-        duplicateExports.push({
-          kind: 'duplicate-export',
-          name,
-          modules,
-        });
+    for (const [name, entries] of nameToEntries) {
+      if (entries.length < 2) continue;
+
+      // Use resolveSymbol to group by original source
+      const originToModules = new Map<string, string[]>();
+
+      for (const entry of entries) {
+        let originKey: string;
+
+        try {
+          const resolved = gildash.resolveSymbol(name, toRelativePath(rootAbs, entry.absModule));
+
+          originKey = `${resolved.originalFilePath}::${resolved.originalName}`;
+        } catch {
+          // resolveSymbol failed — use the module itself as origin
+          originKey = `${entry.relModule}::${name}`;
+        }
+
+        const group = originToModules.get(originKey) ?? [];
+
+        group.push(entry.relModule);
+        originToModules.set(originKey, group);
+      }
+
+      for (const [, modules] of originToModules) {
+        if (modules.length > 1) {
+          duplicateExports.push({
+            kind: 'duplicate-export',
+            name,
+            modules,
+          });
+        }
       }
     }
   }
 
-  // 7. Dead export + unused file + unused dep + unresolved import detection
+  // 7. Dead export + unused file + unused dep + unresolved import + unused member detection
   const deadExports: DependencyDeadExportFinding[] = [];
   const unusedFiles: DependencyUnusedFileFinding[] = [];
   const unusedDeps: DependencyUnusedDepFinding[] = [];
   const unresolvedImports: DependencyUnresolvedImportFinding[] = [];
+  const unusedMembers: DependencyUnusedMemberFinding[] = [];
 
   {
     let imports: ReturnType<Gildash['searchRelations']> = [];
@@ -639,6 +667,73 @@ const analyzeDependencies = async (
         }
       }
 
+      // Unused enum members + namespace members
+      // Collect all symbols with memberName (enum members, namespace members)
+      if (allExported !== null) {
+        const membersWithParent = allExported.filter(s => s.memberName !== null && s.memberName !== undefined);
+
+        for (const member of membersWithParent) {
+          const parentModule = resolveAbs(rootAbs, member.filePath);
+          const relModule = toRelativePath(rootAbs, parentModule);
+
+          // Check if this member name is referenced in any import relation
+          const memberUsage = usageByModule.get(parentModule);
+          const isUsed = memberUsage?.names.has(member.memberName!) === true || memberUsage?.usesAll === true;
+
+          if (!isUsed) {
+            const parentKind = member.kind;
+            const findingKind: DependencyUnusedMemberFinding['kind'] =
+              parentKind === 'enum'
+                ? 'unused-enum-member'
+                : parentKind === 'namespace'
+                  ? 'unused-ns-member'
+                  : 'unused-ns-export';
+
+            unusedMembers.push({
+              kind: findingKind,
+              module: relModule,
+              symbolName: member.name,
+              memberName: member.memberName!,
+            });
+          }
+        }
+      }
+
+      // Unused namespace import members (import * as NS — NS.foo used, NS.bar unused)
+      for (const rel of imports) {
+        if (rel.dstSymbolName !== '*' || rel.dstFilePath === null) continue;
+
+        const targetModule = resolveAbs(rootAbs, rel.dstFilePath);
+        const targetExports = exportsByFile.get(targetModule);
+
+        if (!targetExports || targetExports.length === 0) continue;
+
+        // Collect all NS.xxx member accesses from the source file's other import relations
+        const nsLocalName = rel.srcSymbolName;
+
+        if (!nsLocalName) continue;
+
+        // Find which exports of the target module are actually used via NS.xxx
+        // We check other import relations from the same source file to the same target
+        const namedImportsFromSameFile = imports.filter(
+          r => r.srcFilePath === rel.srcFilePath && r.dstFilePath === rel.dstFilePath && r.dstSymbolName !== '*' && r.dstSymbolName !== null,
+        );
+        const usedViaNamedImport = new Set(namedImportsFromSameFile.map(r => r.dstSymbolName!));
+
+        for (const sym of targetExports) {
+          if (!usedViaNamedImport.has(sym.name)) {
+            const relModule = toRelativePath(rootAbs, targetModule);
+
+            unusedMembers.push({
+              kind: 'unused-ns-export',
+              module: relModule,
+              symbolName: nsLocalName,
+              memberName: sym.name,
+            });
+          }
+        }
+      }
+
       // Phase 2: unused/unlisted dependencies + unresolved imports
       const externalPackages = new Map<string, Set<string>>();
 
@@ -752,6 +847,7 @@ const analyzeDependencies = async (
     unusedDeps,
     unresolvedImports,
     duplicateExports,
+    unusedMembers,
   };
 };
 

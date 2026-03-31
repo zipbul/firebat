@@ -19,6 +19,7 @@ interface MockGildashOverrides {
   searchSymbols?: (q: unknown) => SymbolSearchResult[];
   searchRelations?: (q: unknown) => StoredCodeRelation[];
   getModuleInterface?: (fp: string) => unknown;
+  resolveSymbol?: (name: string, filePath: string) => unknown;
 }
 
 const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
@@ -32,6 +33,14 @@ const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
       ((fp: string) => ({
         filePath: fp,
         exports: [],
+      })),
+    resolveSymbol:
+      overrides.resolveSymbol ??
+      ((name: string, filePath: string) => ({
+        originalName: name,
+        originalFilePath: filePath,
+        reExportChain: [],
+        circular: false,
       })),
   } as unknown as Gildash;
 };
@@ -59,11 +68,11 @@ const mkImport = (
   srcFilePath: string,
   dstFilePath: string | null,
   dstSymbolName: string | null = null,
-  extra: { isExternal?: boolean; specifier?: string | null } = {},
+  extra: { isExternal?: boolean; specifier?: string | null; srcSymbolName?: string | null } = {},
 ): StoredCodeRelation => ({
   type: 'imports',
   srcFilePath,
-  srcSymbolName: null,
+  srcSymbolName: extra.srcSymbolName ?? null,
   dstFilePath,
   dstSymbolName,
   dstProject: null,
@@ -982,7 +991,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
   /* ---------- DE: Duplicate Exports ---------- */
 
-  it('should detect duplicate exports with same name across files', async () => {
+  it('should detect duplicate exports pointing to same origin via resolveSymbol', async () => {
     const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
@@ -1000,12 +1009,43 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         return [];
       },
       searchRelations: () => [],
+      // Both a.ts and b.ts re-export from the same original source
+      resolveSymbol: (name: string, filePath: string) => ({
+        originalName: name,
+        originalFilePath: name === 'helper' ? 'src/origin.ts' : filePath,
+        reExportChain: [],
+        circular: false,
+      }),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.duplicateExports.length).toBe(1);
     expect(result.duplicateExports[0]!.name).toBe('helper');
     expect(result.duplicateExports[0]!.modules).toEqual(['src/a.ts', 'src/b.ts']);
+  });
+
+  it('should not report duplicate exports with different origins', async () => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [
+            mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
+            mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
+          ];
+        }
+
+        return [];
+      },
+      searchRelations: () => [],
+      // Default mock: each resolves to itself (different origins)
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.duplicateExports.length).toBe(0);
   });
 
   it('should include symbolKind in dead export findings', async () => {
@@ -1034,5 +1074,84 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.deadExports.length).toBe(2);
     expect(result.deadExports[0]!.symbolKind).toBe('type');
     expect(result.deadExports[1]!.symbolKind).toBe('enum');
+  });
+
+  /* ---------- UM: Unused Members ---------- */
+
+  it('should detect unused enum members', async () => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [
+            { ...mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'), memberName: null },
+            { ...mkSymbol(2, '/project/src/colors.ts', 'Color', 'enum'), memberName: 'Red' },
+            { ...mkSymbol(3, '/project/src/colors.ts', 'Color', 'enum'), memberName: 'Blue' },
+          ];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', 'Red')];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+    const enumMembers = result.unusedMembers.filter(m => m.kind === 'unused-enum-member');
+
+    expect(enumMembers.length).toBe(1);
+    expect(enumMembers[0]!.memberName).toBe('Blue');
+    expect(enumMembers[0]!.symbolName).toBe('Color');
+  });
+
+  it('should detect unused namespace import members', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/utils.ts']],
+      ['/project/src/utils.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [
+            mkSymbol(1, '/project/src/utils.ts', 'foo', 'function'),
+            mkSymbol(2, '/project/src/utils.ts', 'bar', 'function'),
+          ];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'imports') {
+          return [
+            mkImport('/project/src/index.ts', '/project/src/utils.ts', '*', { specifier: './utils', srcSymbolName: 'Utils' }),
+            mkImport('/project/src/index.ts', '/project/src/utils.ts', 'foo'),
+          ];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+    const nsExports = result.unusedMembers.filter(m => m.kind === 'unused-ns-export');
+
+    expect(nsExports.length).toBe(1);
+    expect(nsExports[0]!.memberName).toBe('bar');
   });
 });

@@ -97,7 +97,7 @@ export type FirebatCatalogCode =
   | 'COUPLING_OFF_MAIN_SEQ'
   | 'COUPLING_UNSTABLE'
   | 'COUPLING_RIGID'
-  // dependencies (8)
+  // dependencies (11)
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
   | 'DEP_TEST_ONLY_EXPORT'
@@ -106,6 +106,9 @@ export type FirebatCatalogCode =
   | 'DEP_UNLISTED_DEPENDENCY'
   | 'DEP_UNRESOLVED_IMPORT'
   | 'DEP_DUPLICATE_EXPORT'
+  | 'DEP_UNUSED_ENUM_MEMBER'
+  | 'DEP_UNUSED_NS_EXPORT'
+  | 'DEP_UNUSED_NS_MEMBER'
   // duplicates (4)
   | 'DUP_EXACT'
   | 'DUP_SHAPE'
@@ -285,6 +288,13 @@ export interface DependencyDuplicateExportFinding {
   readonly modules: ReadonlyArray<string>;
 }
 
+export interface DependencyUnusedMemberFinding {
+  readonly kind: 'unused-enum-member' | 'unused-ns-export' | 'unused-ns-member';
+  readonly module: string;
+  readonly symbolName: string;
+  readonly memberName: string;
+}
+
 export interface DependencyExportStats {
   readonly total: number;
   readonly abstract: number;
@@ -305,6 +315,7 @@ export interface DependencyAnalysis {
   readonly unusedDeps: ReadonlyArray<DependencyUnusedDepFinding>;
   readonly unresolvedImports: ReadonlyArray<DependencyUnresolvedImportFinding>;
   readonly duplicateExports: ReadonlyArray<DependencyDuplicateExportFinding>;
+  readonly unusedMembers: ReadonlyArray<DependencyUnusedMemberFinding>;
 }
 
 // Enriched dependency finding types (post-enrich, array form)

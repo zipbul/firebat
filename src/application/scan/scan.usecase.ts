@@ -1165,6 +1165,28 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       });
     }
 
+    const unusedMembers = Array.isArray(value?.unusedMembers) ? value.unusedMembers : [];
+    const memberKindToCode: Record<string, FirebatCatalogCode> = {
+      'unused-enum-member': 'DEP_UNUSED_ENUM_MEMBER',
+      'unused-ns-export': 'DEP_UNUSED_NS_EXPORT',
+      'unused-ns-member': 'DEP_UNUSED_NS_MEMBER',
+    };
+
+    for (const m of unusedMembers) {
+      const kind = String(m?.kind ?? 'unused-enum-member');
+      const code = memberKindToCode[kind] ?? 'DEP_UNUSED_ENUM_MEMBER';
+
+      findings.push({
+        kind,
+        code,
+        file: String(m?.module ?? ''),
+        span: zeroSpan,
+        module: String(m?.module ?? ''),
+        symbolName: String(m?.symbolName ?? ''),
+        memberName: String(m?.memberName ?? ''),
+      });
+    }
+
     return findings;
   };
 

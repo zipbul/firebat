@@ -357,6 +357,30 @@ export const FIREBAT_CODE_CATALOG = {
       'Verify that removing duplicates does not break consumers that depend on a specific file path.',
     ],
   },
+  DEP_UNUSED_ENUM_MEMBER: {
+    cause: 'An exported enum member is never referenced by any consumer in the project.',
+    think: [
+      'Check whether the member is consumed via dynamic access (e.g. enum[value]) that static analysis cannot see.',
+      'Determine whether the member was added for future use or is genuinely dead.',
+      'Verify that removing the member does not break serialization contracts or API boundaries.',
+    ],
+  },
+  DEP_UNUSED_NS_EXPORT: {
+    cause: 'A module export is not accessed through the namespace import that brings in the module.',
+    think: [
+      'Check whether the export is used via a separate named import from a different file.',
+      'Determine whether the namespace import should be replaced with selective named imports.',
+      'Verify that the unused export is not accessed dynamically or via spread.',
+    ],
+  },
+  DEP_UNUSED_NS_MEMBER: {
+    cause: 'A TypeScript namespace member is exported but never referenced outside the namespace.',
+    think: [
+      'Determine whether the member is part of a public API surface consumed by external packages.',
+      'Check whether the namespace pattern should be refactored to module-level exports.',
+      'Verify that the member is not accessed via computed property names.',
+    ],
+  },
 
   NESTING_DEEP: {
     cause:
