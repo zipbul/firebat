@@ -195,7 +195,6 @@ src/
 bun test                # Run all tests
 bun run build           # Build to dist/
 bun run deps            # Check dependency rules
-bun run knip            # Find unused exports
 ```
 
 ## License

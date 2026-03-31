@@ -17,7 +17,6 @@ bun test --coverage       # 커버리지 (임계값은 bunfig.toml 참조)
 bun run lint              # oxlint 린트
 bun run format            # oxfmt 포맷 검사
 bun run deps              # 아키텍처 의존성 규칙 검증
-bun run knip              # 미사용 export 탐지
 bun run db:generate       # Drizzle 마이그레이션 생성
 bun run db:migrate        # Drizzle 마이그레이션 실행
 ```
