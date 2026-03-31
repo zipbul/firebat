@@ -15,7 +15,7 @@ import type {
   DependencyDuplicateExportFinding,
   DependencyUnusedMemberFinding,
 } from '../../types';
-import { isTestLikePath } from '../../shared/is-test-like-path';
+import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
 
 const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
   return [...items].sort((left, right) => {
@@ -558,6 +558,7 @@ const analyzeDependencies = async (
   {
     let imports: ReturnType<Gildash['searchRelations']> = [];
     let reExports: ReturnType<Gildash['searchRelations']> = [];
+    let typeRefs: ReturnType<Gildash['searchRelations']> = [];
     let hasImportData = false;
 
     try {
@@ -569,6 +570,12 @@ const analyzeDependencies = async (
 
     try {
       reExports = gildash.searchRelations({ type: 're-exports' });
+    } catch (e) {
+      if (!(e instanceof GildashError)) {throw e;}
+    }
+
+    try {
+      typeRefs = gildash.searchRelations({ type: 'type-references' });
     } catch (e) {
       if (!(e instanceof GildashError)) {throw e;}
     }
@@ -585,7 +592,7 @@ const analyzeDependencies = async (
         }
       >();
 
-      for (const rel of [...imports, ...reExports]) {
+      for (const rel of [...imports, ...reExports, ...typeRefs]) {
         if (rel.dstFilePath === null) continue;
         const target = resolveAbs(rootAbs, rel.dstFilePath);
         const consumer = resolveAbs(rootAbs, rel.srcFilePath);
@@ -613,6 +620,7 @@ const analyzeDependencies = async (
       }
 
       // Entry point reachability via BFS
+      // Entry points: package.json fields + test/config/script files in graph
       const graphKeys = new Set(absGraph.keys());
       const entrySpecs = readPackageEntrypoints(rootAbs, readFn);
       const entryModules = new Set<string>();
@@ -622,6 +630,13 @@ const analyzeDependencies = async (
 
         if (resolved) {
           entryModules.add(resolved);
+        }
+      }
+
+      // Test files, config files, and scripts are implicit entry points
+      for (const fileAbs of graphKeys) {
+        if (isTestLikePath(fileAbs) || isConfigLikePath(fileAbs)) {
+          entryModules.add(fileAbs);
         }
       }
 
@@ -659,9 +674,9 @@ const analyzeDependencies = async (
         }
       }
 
-      // Check each module's exports (skip unreachable, test files)
+      // Check each module's exports (skip unreachable — already reported as unused file)
       for (const [moduleAbs, symbols] of exportsByFile) {
-        if (symbols.length === 0 || unreachableModules.has(moduleAbs) || isTestLikePath(moduleAbs)) {
+        if (symbols.length === 0 || unreachableModules.has(moduleAbs)) {
           continue;
         }
 
