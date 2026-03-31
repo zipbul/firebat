@@ -1353,6 +1353,67 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.unusedMembers.length).toBe(0);
   });
 
+  it('should detect unused namespace members via getSymbolsByFile + calls', async () => {
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/guards.ts']],
+      ['/project/src/guards.ts', []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: (q: unknown) => {
+        const query = q as { isExported?: boolean };
+
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/guards.ts', 'Guards', 'namespace')];
+        }
+
+        return [];
+      },
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/index.ts', '/project/src/guards.ts', 'Guards')];
+        }
+
+        if (query.type === 'calls') {
+          return [{
+            type: 'calls' as const,
+            srcFilePath: '/project/src/index.ts',
+            srcSymbolName: null,
+            dstFilePath: '/project/src/guards.ts',
+            dstSymbolName: 'Guards.isString',
+            dstProject: null,
+            isExternal: false,
+            specifier: null,
+          }];
+        }
+
+        return [];
+      },
+      getSymbolsByFile: (filePath: string) => {
+        if (filePath === 'src/guards.ts') {
+          return [
+            { kind: 'namespace', name: 'Guards', memberName: null, isExported: true },
+            { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false },
+            { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false },
+          ];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    });
+    const nsMembers = result.unusedMembers.filter(m => m.kind === 'unused-ns-member');
+
+    expect(nsMembers.length).toBe(1);
+    expect(nsMembers[0]!.memberName).toBe('isNumber');
+    expect(nsMembers[0]!.symbolName).toBe('Guards');
+  });
+
   /* ---------- EP: Entry point edge cases ---------- */
 
   it('should skip unused-file detection when package.json main points to non-existent file', async () => {

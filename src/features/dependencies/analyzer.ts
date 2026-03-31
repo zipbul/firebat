@@ -821,13 +821,13 @@ const analyzeDependencies = async (
         }
       }
 
-      // Unused enum members: getSymbolsByFile returns kind=property with memberName for enum members.
-      // A member is unused if its parent enum is exported but the member is never referenced
-      // in calls relations (e.g. Color.Red → dstSymbolName includes 'Red').
+      // Unused enum/namespace members: getSymbolsByFile returns members with memberName.
+      // A member is unused if its parent is exported but the member is never referenced
+      // in calls relations (e.g. Color.Red, Guards.isString).
       for (const [moduleAbs, symbols] of exportsByFile) {
-        const enumParents = symbols.filter(s => s.kind === 'enum');
+        const memberParents = symbols.filter(s => s.kind === 'enum' || s.kind === 'namespace');
 
-        if (enumParents.length === 0) continue;
+        if (memberParents.length === 0) continue;
 
         const relModule = toRelativePath(rootAbs, moduleAbs);
 
@@ -840,14 +840,14 @@ const analyzeDependencies = async (
           continue;
         }
 
-        for (const parent of enumParents) {
-          // Find enum members: kind=property, name starts with ParentName.
+        for (const parent of memberParents) {
+          // Find members: memberName != null, name starts with ParentName.
           const members = fileSymbols.filter(
-            s => s.kind === 'property' && s.memberName !== null && s.name.startsWith(parent.name + '.'),
+            s => s.memberName !== null && s.name.startsWith(parent.name + '.'),
           );
 
-          // Build set of used member names from calls relations targeting this module's enum
-          const enumCalls = calls.filter(
+          // Build set of used member names from calls relations targeting this module
+          const memberCalls = calls.filter(
             r =>
               r.dstFilePath !== null &&
               resolveAbs(rootAbs, r.dstFilePath) === moduleAbs &&
@@ -855,10 +855,10 @@ const analyzeDependencies = async (
               r.dstSymbolName.startsWith(parent.name + '.'),
           );
 
-          // If no calls to this enum at all, skip — can't determine member usage without semantic
-          if (enumCalls.length === 0) continue;
+          // If no calls at all, skip — can't determine member usage without semantic
+          if (memberCalls.length === 0) continue;
 
-          const usedMembers = new Set(enumCalls.map(r => r.dstSymbolName!));
+          const usedMembers = new Set(memberCalls.map(r => r.dstSymbolName!));
 
           // usesAll → skip
           const moduleUsage = usageByModule.get(moduleAbs);
@@ -867,8 +867,11 @@ const analyzeDependencies = async (
 
           for (const member of members) {
             if (!usedMembers.has(`${parent.name}.${member.memberName}`)) {
+              const findingKind: DependencyUnusedMemberFinding['kind'] =
+                parent.kind === 'enum' ? 'unused-enum-member' : 'unused-ns-member';
+
               unusedMembers.push({
-                kind: 'unused-enum-member',
+                kind: findingKind,
                 module: relModule,
                 symbolName: parent.name,
                 memberName: member.memberName!,
