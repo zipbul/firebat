@@ -199,7 +199,18 @@ firebat는 **프로젝트 루트에 설치**하고 전체 워크스페이스를 
 - 잔존 자체 유틸 (`isOxcNode`, `isNodeRecord`, `NodeRecord`, `NodeValue`, `forEachChildNode`, `getNodeName`, `isFunctionNode`): visitorKeys 동적 순회에 구조적 필요. Visitor API의 early-return 미지원으로 전면 교체 불가.
 - `symbol-extractor-oxc.ts`: gildash 인스턴스 주입 필요로 단순 삭제 불가. Phase 1에서 처리.
 
-### Phase 1: unused files + unused exports 정밀화
+### Phase 1: unused files + unused exports 정밀화 ✅ 완료 (2026-03-31)
+
+**완료:**
+- ✅ 1: unused files — DEP_UNUSED_FILE, BFS reachability + entry point guard
+- ✅ 2: unused type export — symbolKind 필드로 type/enum 구분
+- ✅ 6: duplicate exports — DEP_DUPLICATE_EXPORT, resolveSymbol 기반 원본 추적
+
+**보류 (gildash 0.17.1 한계):**
+- ⏸ 3: unused enum member — gildash가 enum member를 개별 심볼로 인덱싱하지 않음 (memberName=null). member-level 인덱싱 추가 후 구현.
+- ⏸ 4: nsExports/nsTypes — namespace import 멤버 접근 추적에 semantic 분석 필요.
+- ⏸ 5: namespaceMembers — gildash가 namespace member를 개별 심볼로 인덱싱하지 않음. 동일 제약.
+
 
 기존 dependencies 디텍터에 가장 자연스럽게 추가되는 기능. gildash 인프라 그대로 활용.
 gildash 현재 버전으로 구현 가능.
