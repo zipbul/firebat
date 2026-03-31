@@ -204,12 +204,15 @@ firebat는 **프로젝트 루트에 설치**하고 전체 워크스페이스를 
 **완료:**
 - ✅ 1: unused files — DEP_UNUSED_FILE, BFS reachability + entry point guard
 - ✅ 2: unused type export — symbolKind 필드로 type/enum 구분
+- ✅ 3: unused enum member — getSymbolsByFile + calls relation으로 멤버별 사용 추적
+- ✅ 4: nsExports — calls relation (type: 'calls')으로 NS.foo 접근 추적
 - ✅ 6: duplicate exports — DEP_DUPLICATE_EXPORT, resolveSymbol 기반 원본 추적
 
-**보류 (gildash 0.17.1 한계):**
-- ⏸ 3: unused enum member — gildash가 enum member를 개별 심볼로 인덱싱하지 않음 (memberName=null). member-level 인덱싱 추가 후 구현.
-- ⏸ 4: nsExports/nsTypes — namespace import 멤버 접근 추적에 semantic 분석 필요.
-- ⏸ 5: namespaceMembers — gildash가 namespace member를 개별 심볼로 인덱싱하지 않음. 동일 제약.
+**블로커 (gildash 버그):**
+- ⏸ dotted filename resolve 실패 — `extname()`이 `.usecase`, `.controller`, `.service`를 확장자로 오인. `withTypeScriptCandidates`에서 TypeScript 확장자가 아닌 경우 후보 미생성. 33건 unresolved import 발생. gildash 수정 후 firebat 업그레이드 필요.
+
+**보류:**
+- ⏸ 5: namespaceMembers (TS `namespace Foo { export function bar() {} }`) — getSymbolsByFile에서 조회 가능하나, TS namespace 패턴 자체가 드물어 우선순위 낮음.
 
 
 기존 dependencies 디텍터에 가장 자연스럽게 추가되는 기능. gildash 인프라 그대로 활용.
