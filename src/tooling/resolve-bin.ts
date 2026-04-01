@@ -76,4 +76,3 @@ const tryResolveBunxCommand = (): BunxCommand | null => {
 };
 
 export { tryResolveBunxCommand, tryResolveLocalBin };
-export type { BunxCommand, ResolveLocalBinInput };

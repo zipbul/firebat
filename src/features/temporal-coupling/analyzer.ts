@@ -47,12 +47,14 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
           for (const declarator of decl.declarations) {
             const init = declarator.init;
 
-            if (init !== null && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
-              const name = getNodeName(declarator.id);
+            if (init === null || (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression')) {
+              continue;
+            }
 
-              if (typeof name === 'string' && name.length > 0) {
-                names.add(name);
-              }
+            const name = getNodeName(declarator.id);
+
+            if (typeof name === 'string' && name.length > 0) {
+              names.add(name);
             }
           }
         }
@@ -71,12 +73,14 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
     ExportDefaultDeclaration(node) {
       const decl = node.declaration;
 
-      if (decl.type === 'FunctionDeclaration') {
-        const name = getNodeName(decl.id);
+      if (decl.type !== 'FunctionDeclaration') {
+        return;
+      }
 
-        if (typeof name === 'string' && name.length > 0) {
-          names.add(name);
-        }
+      const name = getNodeName(decl.id);
+
+      if (typeof name === 'string' && name.length > 0) {
+        names.add(name);
       }
     },
   }).visit(program as Program);
@@ -130,12 +134,14 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
     if (node.type === 'FunctionDeclaration') {
       const name = getNodeName(node.id);
 
-      if (typeof name === 'string' && exportedNames.has(name)) {
-        if (targetOffset >= node.start && targetOffset <= node.end) {
-          result = name;
+      if (typeof name !== 'string' || !exportedNames.has(name)) {
+        return true;
+      }
 
-          return false;
-        }
+      if (targetOffset >= node.start && targetOffset <= node.end) {
+        result = name;
+
+        return false;
       }
     }
 
@@ -143,16 +149,20 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
     if (node.type === 'VariableDeclarator') {
       const name = getNodeName(node.id);
 
-      if (typeof name === 'string' && exportedNames.has(name)) {
-        const init = node.init;
+      if (typeof name !== 'string' || !exportedNames.has(name)) {
+        return true;
+      }
 
-        if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
-          if (targetOffset >= init.start && targetOffset <= init.end) {
-            result = name;
+      const init = node.init;
 
-            return false;
-          }
-        }
+      if (!isOxcNode(init) || (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression')) {
+        return true;
+      }
+
+      if (targetOffset >= init.start && targetOffset <= init.end) {
+        result = name;
+
+        return false;
       }
     }
 
@@ -197,9 +207,11 @@ const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset
       for (const declarator of declarations) {
         const name = getNodeName(declarator.id);
 
-        if (typeof name === 'string' && name.length > 0) {
-          vars.push({ name, offset: stmt.start });
+        if (typeof name !== 'string' || name.length === 0) {
+          continue;
         }
+
+        vars.push({ name, offset: stmt.start });
       }
     }
   }
@@ -296,7 +308,10 @@ const analyzeClassTemporalCoupling = (
   }).visit(program as Program);
 
   for (const classNode of classes) {
-    if (classNode.type !== 'ClassDeclaration' && classNode.type !== 'ClassExpression') continue;
+    if (classNode.type !== 'ClassDeclaration' && classNode.type !== 'ClassExpression') {
+      continue;
+    }
+
     // Extract class name — anonymous classes cannot be matched via gildash
     const className = typeof getNodeName(classNode.id) === 'string' ? (getNodeName(classNode.id) as string) : null;
     const classBody = classNode.body;
@@ -479,7 +494,10 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
     });
 
     for (const callNode of callNodes) {
-      if (callNode.type !== 'CallExpression') continue;
+      if (callNode.type !== 'CallExpression') {
+        continue;
+      }
+
       const callee = callNode.callee;
 
       if (!isOxcNode(callee)) {
@@ -494,11 +512,13 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
         callName = getNodeName(callee.property);
       }
 
-      if (callName !== null && targetNames.has(callName)) {
-        ids.push(i);
-
-        break;
+      if (callName === null || !targetNames.has(callName)) {
+        continue;
       }
+
+      ids.push(i);
+
+      break;
     }
   }
 
@@ -748,13 +768,11 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
           return false;
         }
       }
-    } else {
+    } else if (n.type === 'Identifier' && getNodeName(n) === stateName) {
       // module-scope: plain Identifier === stateName
-      if (n.type === 'Identifier' && getNodeName(n) === stateName) {
-        found = true;
+      found = true;
 
-        return false;
-      }
+      return false;
     }
 
     return true;
@@ -807,7 +825,7 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
     return false;
   }
 
-  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+  const built = OxcCFGBuilder.build(funcBodyRaw as Node);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find guard condition node IDs:
@@ -890,11 +908,13 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
       stateAccessNodeIds.push(i);
     } else if (payloadArr !== null) {
       for (const n of payloadArr) {
-        if (nodeReferencesState(n, stateName, isClassProp)) {
-          stateAccessNodeIds.push(i);
-
-          break;
+        if (!nodeReferencesState(n, stateName, isClassProp)) {
+          continue;
         }
+
+        stateAccessNodeIds.push(i);
+
+        break;
       }
     }
   }
@@ -961,7 +981,7 @@ const verifyCallerOrderByCfg = (
       return false;
     }
 
-    const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+    const built = OxcCFGBuilder.build(funcBodyRaw as Node);
     const { cfg, entryId, nodePayloads } = built;
     const writerNodeIds = findCallNodeIds(nodePayloads, writerBareNames);
     const readerNodeIds = findCallNodeIds(nodePayloads, readerBareNames);
@@ -1007,7 +1027,7 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
     return false;
   }
 
-  const built = new OxcCFGBuilder().buildFunctionBody(funcBodyRaw as Node);
+  const built = OxcCFGBuilder.build(funcBodyRaw as Node);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find CFG node IDs that contain a write to stateName
@@ -1113,10 +1133,12 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
     }
 
     for (const neighbor of neighbors) {
-      if (!visited.has(neighbor)) {
-        visited.add(neighbor);
-        queue.push(neighbor);
+      if (visited.has(neighbor)) {
+        continue;
       }
+
+      visited.add(neighbor);
+      queue.push(neighbor);
     }
   }
 
@@ -1198,7 +1220,6 @@ const analyzeTemporalCoupling = (
     const mutableVars = collectTopLevelMutableVars(file.program as Node);
     const exportedNames =
       collectExportedFunctionNamesFromGildash(input?.gildash, rel) ?? collectExportedFunctionNames(file.program as Node);
-
     const writeKeys = collectWritePositionKeys(file.program as Node);
 
     for (const { name, offset } of mutableVars) {
@@ -1212,33 +1233,35 @@ const analyzeTemporalCoupling = (
       // Phase 6: dead writer 제외 — unreachable write는 writer가 아님
       const writers = rawWriters.filter(w => isWriterReachable(file.program as Node, w, name, false));
 
-      if (writers.length > 0 && readers.length > 0) {
-        // gildash 억제 검사
-        if (input?.gildash !== undefined) {
-          try {
-            if (shouldSuppressByCallGraph(input.gildash, rel, writers, readers)) {
-              continue;
-            }
-          } catch {
-            // gildash 에러 → AST-only fallback
-          }
-        }
+      if (writers.length === 0 || readers.length === 0) {
+        continue;
+      }
 
-        for (const readerName of readers) {
-          // Phase 5: guard 패턴 — reader가 self-protecting이면 finding 억제
-          if (isReaderSelfProtecting(file.program as Node, readerName, name, false)) {
+      // gildash 억제 검사
+      if (input?.gildash !== undefined) {
+        try {
+          if (shouldSuppressByCallGraph(input.gildash, rel, writers, readers)) {
             continue;
           }
-
-          findings.push({
-            kind: 'temporal-coupling',
-            file: rel,
-            span: spanForOffset(file.sourceText, offset),
-            state: name,
-            writers: writers.length,
-            readers: readers.length,
-          });
+        } catch {
+          // gildash 에러 → AST-only fallback
         }
+      }
+
+      for (const readerName of readers) {
+        // Phase 5: guard 패턴 — reader가 self-protecting이면 finding 억제
+        if (isReaderSelfProtecting(file.program as Node, readerName, name, false)) {
+          continue;
+        }
+
+        findings.push({
+          kind: 'temporal-coupling',
+          file: rel,
+          span: spanForOffset(file.sourceText, offset),
+          state: name,
+          writers: writers.length,
+          readers: readers.length,
+        });
       }
     }
 

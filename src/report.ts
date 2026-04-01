@@ -172,7 +172,7 @@ const formatText = (report: FirebatReport): string => {
   };
 
   const waste = analyses.waste ?? [];
-  const barrel = analyses['barrel'] ?? [];
+  const barrel = analyses.barrel ?? [];
   const unknownProof = analyses['unknown-proof'] ?? [];
   const errorFlow = analyses['error-flow'] ?? [];
   const lint = analyses.lint ?? [];

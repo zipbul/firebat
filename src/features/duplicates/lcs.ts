@@ -14,11 +14,10 @@
  * 두 문자열 배열의 Longest Common Subsequence 길이를 계산한다.
  * Hunt-Szymanski 알고리즘 — 평균 O((r+n) log n), 최악 O(n² log n).
  */
-export const computeLcsLength = (
-  a: ReadonlyArray<string>,
-  b: ReadonlyArray<string>,
-): number => {
-  if (a.length === 0 || b.length === 0) {return 0;}
+export const computeLcsLength = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): number => {
+  if (a.length === 0 || b.length === 0) {
+    return 0;
+  }
 
   // b의 각 값 → 출현 인덱스 목록 (오름차순)
   const matchIndex = buildMatchIndex(b);
@@ -28,7 +27,9 @@ export const computeLcsLength = (
   for (const val of a) {
     const positions = matchIndex.get(val);
 
-    if (positions === undefined) {continue;}
+    if (positions === undefined) {
+      continue;
+    }
 
     // 역순으로 처리해야 같은 row에서 중복 사용 방지
     for (let p = positions.length - 1; p >= 0; p--) {
@@ -50,13 +51,12 @@ export const computeLcsLength = (
  * LCS 기반 Dice 유사도: 2×|LCS| / (|A|+|B|).
  * 범위: [0, 1]. 1이면 동일 시퀀스. 양쪽 모두 빈 경우 0.
  */
-export const computeSequenceSimilarity = (
-  a: ReadonlyArray<string>,
-  b: ReadonlyArray<string>,
-): number => {
+export const computeSequenceSimilarity = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): number => {
   const total = a.length + b.length;
 
-  if (total === 0) {return 0;}
+  if (total === 0) {
+    return 0;
+  }
 
   return (2 * computeLcsLength(a, b)) / total;
 };
@@ -76,10 +76,7 @@ export interface LcsAlignment {
   readonly bOnly: ReadonlyArray<number>;
 }
 
-export const computeLcsAlignment = (
-  a: ReadonlyArray<string>,
-  b: ReadonlyArray<string>,
-): LcsAlignment => {
+export const computeLcsAlignment = (a: ReadonlyArray<string>, b: ReadonlyArray<string>): LcsAlignment => {
   const m = a.length;
   const n = b.length;
   // dp[i][j] = a[0..i-1], b[0..j-1]의 LCS 길이
@@ -100,8 +97,12 @@ export const computeLcsAlignment = (
   const aOnlySet = new Set<number>();
   const bOnlySet = new Set<number>();
 
-  for (let i = 0; i < m; i++) {aOnlySet.add(i);}
-  for (let j = 0; j < n; j++) {bOnlySet.add(j);}
+  for (let i = 0; i < m; i++) {
+    aOnlySet.add(i);
+  }
+  for (let j = 0; j < n; j++) {
+    bOnlySet.add(j);
+  }
 
   let i = m;
   let j = n;

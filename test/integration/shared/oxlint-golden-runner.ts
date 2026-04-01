@@ -21,17 +21,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseSync as oxcParseSync } from 'oxc-parser';
 
-import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
-
-import type {
-  AstNode,
-  AstNodeValue,
-  RuleContext,
-  Variable,
-} from '../../../src/test-api';
+import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../../src/test-api';
 
 import { applyFixes, createRuleContext, createSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../oxlint-plugin/utils/token-utils';
+import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,9 +67,7 @@ interface AstNodeShape {
   type?: string;
 }
 
-const isAstNode = (
-  value: AstNodeValue | AstNodeShape | null | undefined,
-): value is AstNode => {
+const isAstNode = (value: AstNodeValue | AstNodeShape | null | undefined): value is AstNode => {
   if (value === null || value === undefined || Array.isArray(value)) {
     return false;
   }
@@ -148,10 +140,7 @@ const ensureRangesDeep = (root: AstNodeValue | null | undefined): void => {
   walk(root);
 };
 
-const traverseAndVisit = (
-  root: AstNodeValue | null | undefined,
-  visitor: Visitor,
-): void => {
+const traverseAndVisit = (root: AstNodeValue | null | undefined, visitor: Visitor): void => {
   const seen = new WeakSet<AstNode>();
 
   const walk = (value: AstNodeValue | null | undefined): void => {
@@ -209,9 +198,7 @@ const traverseAndVisit = (
  * Build a getDeclaredVariables callback for import-aware rules (e.g. unused-imports).
  * Walks the real program AST to collect identifier usages.
  */
-const buildGetDeclaredVariables = (
-  program: AstNode,
-): ((node: AstNode) => Variable[]) => {
+const buildGetDeclaredVariables = (program: AstNode): ((node: AstNode) => Variable[]) => {
   const getRangeTuple = (node: AstNode | null | undefined): [number, number] | null => {
     if (!node || !Array.isArray(node.range) || node.range.length !== 2) {
       return null;
@@ -330,10 +317,12 @@ const buildGetDeclaredVariables = (
 
       const references = collectUsages(idName, nodeRange);
 
-      return [{
-        identifiers: [{ type: 'Identifier', range: idRange, name: idName }],
-        references,
-      } satisfies Variable];
+      return [
+        {
+          identifiers: [{ type: 'Identifier', range: idRange, name: idName }],
+          references,
+        } satisfies Variable,
+      ];
     }
 
     return [];
@@ -342,11 +331,7 @@ const buildGetDeclaredVariables = (
 
 // ── Rule execution ────────────────────────────────────────────────────────────
 
-const runRuleOnSource = (
-  fixtureSource: string,
-  rule: RuleModule,
-  opts: RuleGoldenOptions = {},
-): GoldenRuleResult => {
+const runRuleOnSource = (fixtureSource: string, rule: RuleModule, opts: RuleGoldenOptions = {}): GoldenRuleResult => {
   const filename = opts.filename ?? 'fixture.ts';
   const options = opts.options ?? [];
   const parsed = oxcParseSync(filename, fixtureSource);
@@ -382,9 +367,7 @@ const runRuleOnSource = (
 
   const goldenReports: GoldenReport[] = reports.map(r => {
     const node = r.node as AstNode;
-    const range = Array.isArray(node?.range) && node.range.length === 2
-      ? (node.range as [number, number])
-      : undefined;
+    const range = Array.isArray(node?.range) && node.range.length === 2 ? (node.range as [number, number]) : undefined;
     const entry: GoldenReport = { messageId: r.messageId };
 
     if (r.data && Object.keys(r.data).length > 0) {
@@ -428,12 +411,7 @@ const readFixtureSource = (fixturesDir: string, name: string): string => {
  * @param rule     - The rule module under test
  * @param opts     - Optional: rule options, filename override
  */
-export const runGoldenRule = (
-  testDir: string,
-  name: string,
-  rule: RuleModule,
-  opts: RuleGoldenOptions = {},
-): void => {
+export const runGoldenRule = (testDir: string, name: string, rule: RuleModule, opts: RuleGoldenOptions = {}): void => {
   const fixturesDir = path.join(testDir, '__fixtures__');
   const expectedDir = path.join(testDir, '__expected__');
 
@@ -447,8 +425,7 @@ export const runGoldenRule = (
       writeExpected(expectedDir, name, actualJson);
 
       throw new Error(
-        `[golden] Created new expected file for "${name}". ` +
-          `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
+        `[golden] Created new expected file for "${name}". ` + `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
       );
     }
 
@@ -465,12 +442,9 @@ export const runGoldenRule = (
       expect(roundTripResult.reports).toHaveLength(0);
 
       // Idempotency: applying fixes a second time should not change the source.
-      const fixedAgain = typeof roundTripResult.fixedSource === 'string'
-        ? roundTripResult.fixedSource
-        : actual.fixedSource;
+      const fixedAgain = typeof roundTripResult.fixedSource === 'string' ? roundTripResult.fixedSource : actual.fixedSource;
 
       expect(fixedAgain).toBe(actual.fixedSource);
     }
   });
 };
-

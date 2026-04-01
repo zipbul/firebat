@@ -241,7 +241,7 @@ export const FIREBAT_CODE_CATALOG = {
       'A return statement inside a try block does not await a promise-returning expression, so the catch clause cannot intercept rejections.',
     think: [
       'Read the return statement in the try block. Verify the returned expression produces a Promise (async function call, fetch, etc.). If it returns a plain value, this is a false positive — stop, no action needed.',
-      "Add `await` before the returned expression (change `return fetchData()` to `return await fetchData()`) so that rejections are caught by the surrounding catch block.",
+      'Add `await` before the returned expression (change `return fetchData()` to `return await fetchData()`) so that rejections are caught by the surrounding catch block.',
     ],
   },
   UNKNOWN_UNNARROWED: {
@@ -568,7 +568,7 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       'A group of modules form a dependency cycle, making it impossible to understand or modify any one module in isolation.',
     think: [
-      'Read the import statements of each module in the cycle. Identify the weakest link — the import that contributes least to the module\'s core purpose (often a type import or a utility function reference).',
+      "Read the import statements of each module in the cycle. Identify the weakest link — the import that contributes least to the module's core purpose (often a type import or a utility function reference).",
       'Break the cycle at the weakest link: extract the shared symbol (type, interface, constant) into a new module that both sides can import from, or invert the dependency by passing the needed value as a parameter.',
       'If the cycle involves only two modules that are tightly intertwined, merge them into a single module — the cycle indicates they are a single cohesive unit.',
     ],
@@ -621,7 +621,7 @@ export const FIREBAT_CODE_CATALOG = {
   TEMPORAL_COUPLING: {
     cause: 'Two or more operations must be called in a specific order, but this constraint is not expressed in the type system.',
     think: [
-      'Read the operations that must be ordered. If step B requires output from step A, refactor step B to take step A\'s result as a parameter — the type system then enforces the ordering (you cannot call B without first calling A to get the input).',
+      "Read the operations that must be ordered. If step B requires output from step A, refactor step B to take step A's result as a parameter — the type system then enforces the ordering (you cannot call B without first calling A to get the input).",
       'If both steps are independent but must run in sequence (e.g., init before use), combine them into a single function that encapsulates the ordering.',
       'If the constraint cannot be encoded in types or combined, add a runtime assertion at the start of step B that checks whether step A has completed (e.g., check a state flag or non-null value).',
     ],
@@ -656,7 +656,7 @@ export const FIREBAT_CODE_CATALOG = {
       'A function has too many simultaneously live variables at a single point, indicating excessive state to track mentally.',
     think: [
       'Read the function and identify the point of maximum liveness (where the most variables are alive simultaneously). Group the live variables by which ones interact — independent groups can be separated.',
-      'Extract each independent group into a helper function. The helper takes its group\'s inputs as parameters and returns the outputs, reducing the parent function\'s live variable count at any given point.',
+      "Extract each independent group into a helper function. The helper takes its group's inputs as parameters and returns the outputs, reducing the parent function's live variable count at any given point.",
       'If liveness is high because variables are declared too early, move each declaration to just before its first use — this alone may reduce the peak liveness count.',
     ],
   },
@@ -664,7 +664,7 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       'A variable is reassigned too many times outside of loop accumulation, suggesting the variable serves multiple unrelated purposes.',
     think: [
-      'Read the variable\'s assignments. If it is reassigned for different purposes (e.g., first holds a URL, then holds a response, then holds parsed data), split it into separate `const` variables — one per purpose, with a descriptive name for each.',
+      "Read the variable's assignments. If it is reassigned for different purposes (e.g., first holds a URL, then holds a response, then holds parsed data), split it into separate `const` variables — one per purpose, with a descriptive name for each.",
       'If the reassignments build up a value incrementally (string concatenation, object assembly), replace with a pipeline pattern: `const result = steps.reduce(...)` or a builder.',
       'If the variable is a loop accumulator (e.g., `sum += item.value`), the mutations are inherent — stop, no action needed.',
     ],
@@ -682,7 +682,7 @@ export const FIREBAT_CODE_CATALOG = {
     cause: 'A lint rule violation was detected by the configured linter.',
     think: [
       'Read the lint error message and the violated rule name. Look up the rule in the linter documentation to understand its rationale.',
-      'Fix the violation according to the rule\'s guidance. If the fix is an autofix-capable rule, run the linter with `--fix` flag.',
+      "Fix the violation according to the rule's guidance. If the fix is an autofix-capable rule, run the linter with `--fix` flag.",
       'If the rule does not apply to this specific context (e.g., a lint rule about browser APIs in a Node.js file), add a targeted inline suppression comment with an explanation of why the rule is inapplicable.',
     ],
   },

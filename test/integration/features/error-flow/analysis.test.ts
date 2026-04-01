@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { Gildash } from '@zipbul/gildash';
+
 import { analyzeErrorFlow } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
+
+const noopGildash = {
+  isTypeAssignableToType: () => null,
+  getResolvedTypesAtPositions: () => new Map(),
+  isTypeAssignableToTypeAtPositions: () => new Map(),
+} as unknown as Gildash;
 
 describe('integration/error-flow', () => {
   it('should return no findings when input is empty', async () => {
@@ -9,7 +17,7 @@ describe('integration/error-flow', () => {
     let sources = new Map<string, string>();
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
 
     // Assert
     expect(analysis.length).toBe(0);
@@ -25,7 +33,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -42,7 +50,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -59,7 +67,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -76,7 +84,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -93,7 +101,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -110,7 +118,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -127,7 +135,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -144,7 +152,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
@@ -171,7 +179,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -198,7 +206,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -225,7 +233,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -252,7 +260,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -269,7 +277,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
@@ -286,7 +294,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
@@ -303,7 +311,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert
@@ -320,7 +328,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
@@ -345,7 +353,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -370,7 +378,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -387,7 +395,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -412,7 +420,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -440,7 +448,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert — inner arrow's return is NOT inside its own try/catch, so should not be flagged
@@ -465,7 +473,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
@@ -490,7 +498,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
@@ -515,7 +523,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
@@ -544,7 +552,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
@@ -573,7 +581,7 @@ describe('integration/error-flow', () => {
 
     // Act
     let program = createProgramFromMap(sources);
-    let analysis = await analyzeErrorFlow(program);
+    let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
     let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert

@@ -69,14 +69,16 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
 
       if (Array.isArray(elements)) {
         for (const el of elements) {
-          if (el !== null && el !== undefined) {
-            const elNode = el as Node & Record<string, unknown>;
+          if (el === null || el === undefined) {
+            continue;
+          }
 
-            if (elNode.type === 'RestElement') {
-              collectBindingNames(elNode.argument as Node, target);
-            } else {
-              collectBindingNames(el as Node, target);
-            }
+          const elNode = el as Node & Record<string, unknown>;
+
+          if (elNode.type === 'RestElement') {
+            collectBindingNames(elNode.argument as Node, target);
+          } else {
+            collectBindingNames(el as Node, target);
           }
         }
       }
@@ -92,10 +94,10 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
   // scope 진입 시 새 scope를 만들고 해당 노드의 직접 바인딩을 수집
   const collectScopeBindings = (node: Node): Set<string> => {
     const bindings = new Set<string>();
-    const nodeRecord = node as Node & Record<string, unknown>;
 
     // FunctionDeclaration / FunctionExpression / ArrowFunctionExpression — 파라미터
     if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+      const nodeRecord = node as Node & Record<string, unknown>;
       const params = nodeRecord.params;
 
       if (Array.isArray(params)) {
@@ -125,6 +127,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
 
     for (const decl of declarations) {
       const declNode = decl as Node & Record<string, unknown>;
+
       collectBindingNames(declNode.id as Node, bindings);
     }
 
@@ -144,12 +147,14 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
       const p = param as Node & Record<string, unknown>;
 
       // AssignmentPattern: left = right (default value)
-      if (p.type === 'AssignmentPattern') {
-        const right = p.right;
+      if (p.type !== 'AssignmentPattern') {
+        continue;
+      }
 
-        if (right !== null && right !== undefined) {
-          visit(right as Node, false);
-        }
+      const right = p.right;
+
+      if (right !== null && right !== undefined) {
+        visit(right as Node, false);
       }
     }
   };
@@ -223,7 +228,6 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
       if (Array.isArray(declarations)) {
         for (const decl of declarations) {
           const declNode = decl as Node & Record<string, unknown>;
-
           // id의 typeAnnotation 방문 (타입 annotation 내 Identifier 수집)
           const id = declNode.id as Node & Record<string, unknown>;
           const typeAnnotation = id.typeAnnotation;

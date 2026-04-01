@@ -21,23 +21,25 @@ const findPatternUseCase = async (input: FindPatternInput): Promise<ReadonlyArra
 
   logger.debug('find-pattern: searching', { pattern, targetCount: filePaths.length });
 
-  if (filePaths.length === 0) {return [];}
+  if (filePaths.length === 0) {
+    return [];
+  }
 
   const gildash = await createGildash({ projectRoot: root, watchMode: false });
 
   try {
     return await gildash.findPattern(pattern, { filePaths });
   } catch (e) {
-    if (e instanceof GildashError) {
-      logger.debug('find-pattern: error', { message: e.message });
-
-      return [];
+    if (!(e instanceof GildashError)) {
+      throw e;
     }
-    throw e;
+
+    logger.debug('find-pattern: error', { message: e.message });
+
+    return [];
   } finally {
     await gildash.close({ cleanup: true });
   }
 };
 
 export { findPatternUseCase };
-export type { FindPatternInput };

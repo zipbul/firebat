@@ -1,16 +1,16 @@
 export type Range = [number, number];
 
-export interface SourcePosition {
+interface SourcePosition {
   line: number;
   column: number;
 }
 
-export interface SourceLocation {
+interface SourceLocation {
   start: SourcePosition;
   end: SourcePosition;
 }
 
-export type JsonPrimitive = string | number | boolean | null;
+type JsonPrimitive = string | number | boolean | null;
 
 export interface JsonObject {
   [key: string]: JsonValue;
@@ -23,24 +23,24 @@ export interface TemplateElementValue {
   raw?: string;
 }
 
-export interface Token {
+interface Token {
   value?: string;
   range?: Range;
 }
 
-export interface CommentNode {
+interface CommentNode {
   value?: string;
   range?: Range;
   type?: string;
 }
 
-export interface AstRoot {
+interface AstRoot {
   comments?: CommentNode[];
 }
 
-export interface Scope {}
+interface Scope {}
 
-export type SourceToken = Token;
+type SourceToken = Token;
 
 export interface Fix {
   range: Range;
@@ -127,7 +127,7 @@ export interface Fixer {
   remove(node: AstNode): Fix;
 }
 
-export interface ReportDescriptor {
+interface ReportDescriptor {
   messageId: string;
   node: AstNode | CommentNode;
   data?: Record<string, string>;
@@ -155,9 +155,4 @@ export interface PaddingRule {
   blankLine: string;
   prev: string | string[];
   next: string | string[];
-}
-
-export interface DescribeCallInfo {
-  program: AstNode;
-  call: AstNode;
 }

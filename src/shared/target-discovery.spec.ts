@@ -1,7 +1,7 @@
 import { describe, expect, it, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { expandTargets, resolveTargets } from './target-discovery';
 
@@ -40,7 +40,9 @@ describe('resolveTargets - exclude', () => {
   it('resolveTargets - exclude patterns - filters matching files', async () => {
     // Arrange
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-test-'));
+
     const fixturesDir = path.join(tmpDir, '__fixtures__');
+
     await fs.mkdir(fixturesDir, { recursive: true });
     await fs.writeFile(path.join(tmpDir, 'app.ts'), '');
     await fs.writeFile(path.join(tmpDir, 'util.ts'), '');
@@ -48,9 +50,9 @@ describe('resolveTargets - exclude', () => {
 
     // Act
     const result = await resolveTargets(tmpDir, [tmpDir], ['**/__fixtures__/**']);
-
     // Assert
     const relResults = result.map(p => path.relative(tmpDir, p));
+
     expect(relResults).toContain('app.ts');
     expect(relResults).toContain('util.ts');
     expect(relResults).not.toContain(path.join('__fixtures__', 'fixture.ts'));
@@ -59,16 +61,18 @@ describe('resolveTargets - exclude', () => {
   it('resolveTargets - no exclude - returns all files', async () => {
     // Arrange
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-test-'));
+
     const fixturesDir = path.join(tmpDir, '__fixtures__');
+
     await fs.mkdir(fixturesDir, { recursive: true });
     await fs.writeFile(path.join(tmpDir, 'app.ts'), '');
     await fs.writeFile(path.join(fixturesDir, 'fixture.ts'), '');
 
     // Act
     const result = await resolveTargets(tmpDir, [tmpDir]);
-
     // Assert
     const relResults = result.map(p => path.relative(tmpDir, p));
+
     expect(relResults).toContain('app.ts');
     expect(relResults).toContain(path.join('__fixtures__', 'fixture.ts'));
   });
@@ -76,16 +80,18 @@ describe('resolveTargets - exclude', () => {
   it('resolveTargets - empty exclude array - returns all files', async () => {
     // Arrange
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-test-'));
+
     const fixturesDir = path.join(tmpDir, '__fixtures__');
+
     await fs.mkdir(fixturesDir, { recursive: true });
     await fs.writeFile(path.join(tmpDir, 'app.ts'), '');
     await fs.writeFile(path.join(fixturesDir, 'fixture.ts'), '');
 
     // Act
     const result = await resolveTargets(tmpDir, [tmpDir], []);
-
     // Assert
     const relResults = result.map(p => path.relative(tmpDir, p));
+
     expect(relResults).toContain('app.ts');
     expect(relResults).toContain(path.join('__fixtures__', 'fixture.ts'));
   });

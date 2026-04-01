@@ -1,9 +1,10 @@
 import type { Node } from 'oxc-parser';
+
 import { visitorKeys } from 'oxc-parser';
 
 import { hashString } from '../hasher';
-import { isOxcNode } from './oxc-ast-utils';
 import { normalizeForFingerprint } from './ast-normalizer';
+import { isOxcNode } from './oxc-ast-utils';
 
 const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boolean): void => {
   if (node.type !== 'Literal') {

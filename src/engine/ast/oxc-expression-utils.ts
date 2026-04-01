@@ -10,13 +10,11 @@ const unwrapExpression = (node: Node | null | undefined): Node | null => {
       continue;
     }
 
-    if (current.type === 'ChainExpression') {
-      current = current.expression as Node;
-
-      continue;
+    if (current.type !== 'ChainExpression') {
+      break;
     }
 
-    break;
+    current = current.expression as Node;
   }
 
   return current;

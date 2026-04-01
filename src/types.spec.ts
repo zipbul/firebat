@@ -157,7 +157,16 @@ describe('countBlockers', () => {
       format: [{ code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: 'a.ts', span: span() } as FormatFinding],
       lint: [{ severity: 'error', code: 'no-unused-vars', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic],
       typecheck: [{ severity: 'error', code: 'TS2322', msg: 'err', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem],
-      indirection: [{ kind: 'thin-wrapper', filePath: 'a.ts', span: span(), header: 'fn', depth: 1, evidence: '' } as unknown as IndirectionFinding],
+      indirection: [
+        {
+          kind: 'thin-wrapper',
+          filePath: 'a.ts',
+          span: span(),
+          header: 'fn',
+          depth: 1,
+          evidence: '',
+        } as unknown as IndirectionFinding,
+      ],
     };
 
     expect(countBlockers(analyses)).toBe(9);

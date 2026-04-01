@@ -27,9 +27,10 @@ export const analyzeUnknownProof = (
     for (const c of candidates) {
       exprFindings.push({
         kind: c.kind,
-        message: c.kind === 'double-cast'
-          ? 'Double assertion bypasses type safety (as unknown as T)'
-          : 'Explicit `as any` cast removes type safety',
+        message:
+          c.kind === 'double-cast'
+            ? 'Double assertion bypasses type safety (as unknown as T)'
+            : 'Explicit `as any` cast removes type safety',
         filePath,
         span: c.span,
         evidence: c.sourceSnippet,

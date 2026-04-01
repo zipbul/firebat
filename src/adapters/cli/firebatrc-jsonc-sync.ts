@@ -218,14 +218,16 @@ class Scanner {
         continue;
       }
 
-      if (ch === quote) {
-        const end = this.i;
+      if (ch !== quote) {
+        out += ch;
 
-        // Keep raw escapes as part of value; key extraction uses raw content anyway.
-        return { value: out, start, end };
+        continue;
       }
 
-      out += ch;
+      // Keep raw escapes as part of value; key extraction uses raw content anyway.
+      const end = this.i;
+
+      return { value: out, start, end };
     }
 
     throw this.error('Unterminated string');
@@ -266,12 +268,11 @@ class Scanner {
     while (!this.eof()) {
       const ch = this.peek();
 
-      if (/[-+0-9.eE]/.test(ch)) {
-        this.i += 1;
-
-        continue;
+      if (!/[-+0-9.eE]/.test(ch)) {
+        break;
       }
-      break;
+
+      this.i += 1;
     }
 
     return { kind: 'number', start, end: this.i };

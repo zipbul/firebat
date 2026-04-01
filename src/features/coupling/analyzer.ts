@@ -83,10 +83,12 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
       cycle.path.length > 1 && cycle.path[0] === cycle.path[cycle.path.length - 1] ? cycle.path.slice(0, -1) : cycle.path;
     const unique = Array.from(new Set(nodes));
 
-    if (unique.length === 2) {
-      bidirectionalModules.add(unique[0] ?? '');
-      bidirectionalModules.add(unique[1] ?? '');
+    if (unique.length !== 2) {
+      continue;
     }
+
+    bidirectionalModules.add(unique[0] ?? '');
+    bidirectionalModules.add(unique[1] ?? '');
   }
 
   const computeAbstractness = (module: string): number => {

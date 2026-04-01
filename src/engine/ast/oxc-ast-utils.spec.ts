@@ -139,7 +139,6 @@ describe('walkOxcTree', () => {
     expect(types).toContain('FunctionDeclaration');
     expect(types).not.toContain('ReturnStatement');
   });
-
 });
 
 describe('collectOxcNodes', () => {

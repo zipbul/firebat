@@ -11,14 +11,18 @@ import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash'
 /* ------------------------------------------------------------------ */
 
 const resolveSpecifier = (fromPath: string, specifier: string): string => {
-  if (!specifier.startsWith('.')) {return specifier;}
+  if (!specifier.startsWith('.')) {
+    return specifier;
+  }
 
   const dir = fromPath.replace(/\/[^/]+$/, '');
   const segments = [...dir.split('/'), ...specifier.split('/')];
   const resolved: string[] = [];
 
   for (const seg of segments) {
-    if (seg === '.') {continue;}
+    if (seg === '.') {
+      continue;
+    }
 
     if (seg === '..') {
       resolved.pop();
@@ -102,7 +106,9 @@ export const buildMockGildashFromSources = (sources: Map<string, string> | Recor
   const reverseAdj = new Map<string, string[]>();
 
   for (const rel of relations) {
-    if (rel.type !== 'imports') {continue;}
+    if (rel.type !== 'imports') {
+      continue;
+    }
 
     let list = reverseAdj.get(rel.dstFilePath);
 

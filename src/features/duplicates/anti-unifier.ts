@@ -10,6 +10,7 @@
  */
 
 import type { Node } from 'oxc-parser';
+
 import { visitorKeys } from 'oxc-parser';
 
 import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
@@ -19,7 +20,7 @@ import { computeLcsAlignment } from './lcs';
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
 
-export interface AntiUnificationVariable {
+interface AntiUnificationVariable {
   readonly id: number;
   /** dotpath — 예: "body.body[0].consequent.body[2]" */
   readonly location: string;
@@ -37,12 +38,7 @@ export interface AntiUnificationResult {
   readonly variables: ReadonlyArray<AntiUnificationVariable>;
 }
 
-export type DiffClassification =
-  | 'rename-only'
-  | 'literal-variant'
-  | 'type-variant'
-  | 'structural-diff'
-  | 'mixed';
+export type DiffClassification = 'rename-only' | 'literal-variant' | 'type-variant' | 'structural-diff' | 'mixed';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -53,10 +49,7 @@ export type DiffClassification =
  * - 다른 type → 변수(차이점) 생성
  * - 배열 자식 → LCS 정렬 후 매칭된 쌍만 재귀, 미매칭은 structural variable
  */
-export const antiUnify = (
-  left: Node,
-  right: Node,
-): AntiUnificationResult => {
+export const antiUnify = (left: Node, right: Node): AntiUnificationResult => {
   const leftSize = countOxcSize(left);
   const rightSize = countOxcSize(right);
   const ctx: TraversalContext = {
@@ -89,12 +82,12 @@ export const antiUnify = (
  * - 'structural' kind가 하나라도 → 'structural-diff'
  * - 그 외 (identifier+literal 혼합 등) → 'mixed'
  */
-export const classifyDiff = (
-  result: AntiUnificationResult,
-): DiffClassification => {
+export const classifyDiff = (result: AntiUnificationResult): DiffClassification => {
   const { variables } = result;
 
-  if (variables.length === 0) {return 'rename-only';}
+  if (variables.length === 0) {
+    return 'rename-only';
+  }
 
   let hasIdentifier = false;
   let hasLiteral = false;
@@ -102,19 +95,32 @@ export const classifyDiff = (
   let hasType = false;
 
   for (const v of variables) {
-    if (v.kind === 'identifier') {hasIdentifier = true;}
-    else if (v.kind === 'literal') {hasLiteral = true;}
-    else if (v.kind === 'structural') {hasStructural = true;}
-    else if (v.kind === 'type') {hasType = true;}
+    if (v.kind === 'identifier') {
+      hasIdentifier = true;
+    } else if (v.kind === 'literal') {
+      hasLiteral = true;
+    } else if (v.kind === 'structural') {
+      hasStructural = true;
+    } else if (v.kind === 'type') {
+      hasType = true;
+    }
   }
 
-  if (hasStructural) {return 'structural-diff';}
+  if (hasStructural) {
+    return 'structural-diff';
+  }
 
-  if (hasIdentifier && !hasLiteral && !hasType) {return 'rename-only';}
+  if (hasIdentifier && !hasLiteral && !hasType) {
+    return 'rename-only';
+  }
 
-  if (hasLiteral && !hasIdentifier && !hasType) {return 'literal-variant';}
+  if (hasLiteral && !hasIdentifier && !hasType) {
+    return 'literal-variant';
+  }
 
-  if (hasType && !hasIdentifier && !hasLiteral && !hasStructural) {return 'type-variant';}
+  if (hasType && !hasIdentifier && !hasLiteral && !hasStructural) {
+    return 'type-variant';
+  }
 
   return 'mixed';
 };
@@ -146,12 +152,7 @@ const pushVariable = (
   });
 };
 
-const traverse = (
-  ctx: TraversalContext,
-  left: Node,
-  right: Node,
-  path: string,
-): void => {
+const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string): void => {
   // type이 다르면 → structural variable
   if (left.type !== right.type) {
     pushVariable(ctx, path, left.type, right.type, 'structural');
@@ -179,13 +180,7 @@ const traverse = (
     const rightVal = right.value;
 
     if (leftVal !== rightVal) {
-      pushVariable(
-        ctx,
-        path + '.value',
-        String(leftVal),
-        String(rightVal),
-        'literal',
-      );
+      pushVariable(ctx, path + '.value', String(leftVal), String(rightVal), 'literal');
     }
     // 자식 노드는 아래 일반 순회에서 처리
   }
@@ -206,13 +201,14 @@ const traverse = (
 
   const leftRec = left as unknown as Record<string, unknown>;
   const rightRec = right as unknown as Record<string, unknown>;
-
   // visitorKeys 기반 자식 노드 순회
   const keys = visitorKeys[left.type];
 
   if (keys !== undefined) {
     for (const key of keys) {
-      if (SKIP_KEYS.has(key)) {continue;}
+      if (SKIP_KEYS.has(key)) {
+        continue;
+      }
 
       const leftChild = leftRec[key];
       const rightChild = rightRec[key];
@@ -231,7 +227,9 @@ const traverse = (
         continue;
       }
 
-      if (leftChild === undefined && rightChild === undefined) {continue;}
+      if (leftChild === undefined && rightChild === undefined) {
+        continue;
+      }
 
       // 둘 다 Node 배열인 경우 → LCS 정렬
       if (Array.isArray(leftChild) && Array.isArray(rightChild)) {
@@ -250,19 +248,29 @@ const traverse = (
   // visitorKeys에 포함되지 않는 프리미티브 필드 비교 (operator, kind 등)
   // Identifier.name, Literal.value/raw는 위에서 이미 처리됨 → skip
   for (const key of Object.keys(leftRec)) {
-    if (SKIP_KEYS.has(key)) {continue;}
+    if (SKIP_KEYS.has(key)) {
+      continue;
+    }
 
-    if (keys !== undefined && keys.includes(key)) {continue;} // 이미 처리한 노드 자식
+    if (keys !== undefined && keys.includes(key)) {
+      continue;
+    } // 이미 처리한 노드 자식
 
-    if (key === 'name' && left.type === 'Identifier') {continue;}
+    if (key === 'name' && left.type === 'Identifier') {
+      continue;
+    }
 
-    if ((key === 'value' || key === 'raw') && left.type === 'Literal') {continue;}
+    if ((key === 'value' || key === 'raw') && left.type === 'Literal') {
+      continue;
+    }
 
     const leftVal = leftRec[key];
     const rightVal = rightRec[key];
 
     // 프리미티브가 아닌 값(object/array) 은 건너뜀
-    if (typeof leftVal === 'object' || typeof rightVal === 'object') {continue;}
+    if (typeof leftVal === 'object' || typeof rightVal === 'object') {
+      continue;
+    }
 
     if (leftVal !== rightVal) {
       const childPath = path.length > 0 ? `${path}.${key}` : key;
@@ -291,10 +299,9 @@ const traverseArrayChildren = (
   // Filter out null entries (e.g. ArrayPattern.elements may contain null for holes)
   const leftFiltered = leftArr.filter((n): n is Node => n !== null);
   const rightFiltered = rightArr.filter((n): n is Node => n !== null);
-
   // fingerprint로 LCS 정렬
-  const leftFps = leftFiltered.map((n) => createOxcFingerprintShape(n));
-  const rightFps = rightFiltered.map((n) => createOxcFingerprintShape(n));
+  const leftFps = leftFiltered.map(n => createOxcFingerprintShape(n));
+  const rightFps = rightFiltered.map(n => createOxcFingerprintShape(n));
   const alignment = computeLcsAlignment(leftFps, rightFps);
 
   // 매칭된 쌍 → 재귀
@@ -309,25 +316,13 @@ const traverseArrayChildren = (
   for (const aIdx of alignment.aOnly) {
     const child = leftFiltered[aIdx];
 
-    pushVariable(
-      ctx,
-      `${path}[${aIdx}]`,
-      child !== undefined ? child.type : 'unknown',
-      'missing',
-      'structural',
-    );
+    pushVariable(ctx, `${path}[${aIdx}]`, child !== undefined ? child.type : 'unknown', 'missing', 'structural');
   }
 
   // B에만 있는 노드 → structural variable
   for (const bIdx of alignment.bOnly) {
     const child = rightFiltered[bIdx];
 
-    pushVariable(
-      ctx,
-      `${path}[+${bIdx}]`,
-      'missing',
-      child !== undefined ? child.type : 'unknown',
-      'structural',
-    );
+    pushVariable(ctx, `${path}[+${bIdx}]`, 'missing', child !== undefined ? child.type : 'unknown', 'structural');
   }
 };

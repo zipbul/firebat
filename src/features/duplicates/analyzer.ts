@@ -10,6 +10,7 @@
 
 import type { Node } from 'oxc-parser';
 
+import type { ParsedFile } from '../../engine/types';
 import type {
   CloneDiff,
   CloneDiffPair,
@@ -19,16 +20,15 @@ import type {
   DuplicateItem,
   SourceSpan,
 } from '../../types';
-import type { ParsedFile } from '../../engine/types';
 import type { InternalCloneGroup, InternalCloneItem } from './types';
 
 import { collectOxcNodes, getNodeHeader } from '../../engine/ast/oxc-ast-utils';
-import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import {
   createOxcFingerprintExact,
   createOxcFingerprintNormalized,
   createOxcFingerprintShape,
 } from '../../engine/ast/oxc-fingerprint';
+import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
 import { getItemKind, isCloneTarget, resolveSpan } from './clone-targets';
 import { detectNearMissClones, type NearMissDetectorOptions } from './near-miss-detector';
@@ -37,7 +37,7 @@ export { isCloneTarget };
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
 
-export interface DuplicatesAnalyzerOptions {
+interface DuplicatesAnalyzerOptions {
   readonly minSize: number;
   /** LCS 유사도 임계값 (default: 0.7) */
   readonly nearMissSimilarityThreshold?: number;
@@ -63,8 +63,10 @@ export const analyzeDuplicates = (
   const enableAntiUnification = options.enableAntiUnification ?? true;
   // ── Step 2-6: 파일 중복 입력 방어 ─────────────────────────────────────────
   const seenPaths = new Set<string>();
-  const uniqueFiles = files.filter((f) => {
-    if (seenPaths.has(f.filePath)) {return false;}
+  const uniqueFiles = files.filter(f => {
+    if (seenPaths.has(f.filePath)) {
+      return false;
+    }
 
     seenPaths.add(f.filePath);
 
@@ -79,15 +81,15 @@ export const analyzeDuplicates = (
   const shapeGroups = groupByHash(uniqueFiles, minSize, cachedShape, 'shape');
   const normalizedGroups = groupByHash(uniqueFiles, minSize, cachedNormalized, 'normalized');
   // exact에 이미 잡힌 해시는 shape/normalized에서 제외 (중복 보고 방지)
-  const exactHashes = new Set(exactGroups.map((g) => cachedShape(g.items[0]!.node)));
-  const filteredShape = shapeGroups.filter((g) => {
+  const exactHashes = new Set(exactGroups.map(g => cachedShape(g.items[0]!.node)));
+  const filteredShape = shapeGroups.filter(g => {
     const hash = cachedShape(g.items[0]!.node);
 
     return !exactHashes.has(hash);
   });
   // shape에 잡힌 해시도 normalized에서 제외
-  const shapeHashes = new Set(filteredShape.map((g) => cachedNormalized(g.items[0]!.node)));
-  const filteredNormalized = normalizedGroups.filter((g) => {
+  const shapeHashes = new Set(filteredShape.map(g => cachedNormalized(g.items[0]!.node)));
+  const filteredNormalized = normalizedGroups.filter(g => {
     const hash = cachedNormalized(g.items[0]!.node);
 
     return !exactHashes.has(cachedShape(g.items[0]!.node)) && !shapeHashes.has(hash);
@@ -119,7 +121,7 @@ export const analyzeDuplicates = (
     for (const nmGroup of nearMissGroups) {
       allGroups.push({
         cloneType: 'near-miss',
-        items: nmGroup.items.map((nmItem) => ({
+        items: nmGroup.items.map(nmItem => ({
           node: nmItem.node,
           kind: nmItem.kind,
           header: nmItem.header,
@@ -162,7 +164,9 @@ const createCachedFingerprint = (fn: (node: Node) => string): ((node: Node) => s
   return (node: Node): string => {
     const cached = cache.get(node);
 
-    if (cached !== undefined) {return cached;}
+    if (cached !== undefined) {
+      return cached;
+    }
 
     const hash = fn(node);
 
@@ -183,14 +187,18 @@ const groupByHash = (
   const map = new Map<string, InternalCloneItem[]>();
 
   for (const file of files) {
-    if (file.errors.length > 0) {continue;}
+    if (file.errors.length > 0) {
+      continue;
+    }
 
     const nodes = collectOxcNodes(file.program, isCloneTarget);
 
     for (const node of nodes) {
       const size = countOxcSize(node);
 
-      if (size < minSize) {continue;}
+      if (size < minSize) {
+        continue;
+      }
 
       const hash = fingerprintFn(node);
       const span = resolveSpan(file.sourceText, node);
@@ -230,9 +238,9 @@ const deriveSuggestedParams = (
   classifications: DiffClassification[],
   auResults: ReadonlyArray<{ idx: number; result: AntiUnificationResult }>,
 ): { params: CloneDiff | undefined; findingKindOverride: DuplicateFindingKind | undefined } => {
-  const allRenameOnly = classifications.every((c) => c === 'rename-only');
-  const allLiteralVariant = classifications.every((c) => c === 'literal-variant');
-  const allTypeVariant = classifications.every((c) => c === 'type-variant');
+  const allRenameOnly = classifications.every(c => c === 'rename-only');
+  const allLiteralVariant = classifications.every(c => c === 'literal-variant');
+  const allTypeVariant = classifications.every(c => c === 'type-variant');
   let params: CloneDiff | undefined;
   let findingKindOverride: DuplicateFindingKind | undefined;
 
@@ -253,17 +261,18 @@ type DiffClassification = ReturnType<typeof classifyDiff>;
 const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup[] => {
   const { items } = group;
   // representative: AST 노드 수가 median에 가장 가까운 멤버
-  const sizes = items.map((item) => item.size);
+  const sizes = items.map(item => item.size);
   const sorted = [...sizes].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)]!;
-  const repIdx = sizes.reduce((best, size, idx) =>
-    Math.abs(size - median) < Math.abs(sizes[best]! - median) ? idx : best, 0);
+  const repIdx = sizes.reduce((best, size, idx) => (Math.abs(size - median) < Math.abs(sizes[best]! - median) ? idx : best), 0);
   const representative = items[repIdx]!;
   // 각 멤버(≠ representative)에 anti-unify
   const auResults: Array<{ idx: number; result: AntiUnificationResult }> = [];
 
   for (let i = 0; i < items.length; i++) {
-    if (i === repIdx) {continue;}
+    if (i === repIdx) {
+      continue;
+    }
 
     const result = antiUnify(representative.node, items[i]!.node);
 
@@ -324,13 +333,10 @@ const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup[] => {
   return [toDuplicateGroup(group, suggestedParams, findingKindOverride)];
 };
 
-const buildCloneDiff = (
-  kind: CloneDiff['kind'],
-  auResult: AntiUnificationResult,
-): CloneDiff => {
+const buildCloneDiff = (kind: CloneDiff['kind'], auResult: AntiUnificationResult): CloneDiff => {
   const pairs: CloneDiffPair[] = auResult.variables
-    .filter((v) => v.kind === kind)
-    .map((v) => ({
+    .filter(v => v.kind === kind)
+    .map(v => ({
       left: v.leftType,
       right: v.rightType,
       location: v.location,
@@ -377,10 +383,8 @@ const toDuplicateItem = (item: InternalCloneItem): DuplicateItem => ({
 // ─── 중첩 그룹 필터링 (H-2) ──────────────────────────────────────────────────
 
 const isSpanContained = (inner: SourceSpan, outer: SourceSpan): boolean =>
-  (inner.start.line > outer.start.line ||
-    (inner.start.line === outer.start.line && inner.start.column >= outer.start.column)) &&
-  (inner.end.line < outer.end.line ||
-    (inner.end.line === outer.end.line && inner.end.column <= outer.end.column));
+  (inner.start.line > outer.start.line || (inner.start.line === outer.start.line && inner.start.column >= outer.start.column)) &&
+  (inner.end.line < outer.end.line || (inner.end.line === outer.end.line && inner.end.column <= outer.end.column));
 
 const CLONE_TYPE_PRIORITY: Readonly<Record<DuplicateCloneType, number>> = {
   exact: 0,
@@ -393,18 +397,22 @@ const filterSubsumedGroups = (groups: DuplicateGroup[]): DuplicateGroup[] =>
   groups.filter(
     (child, childIdx) =>
       !groups.some((parent, parentIdx) => {
-        if (childIdx === parentIdx) {return false;}
+        if (childIdx === parentIdx) {
+          return false;
+        }
 
-        if (parent.items.length < child.items.length) {return false;}
+        if (parent.items.length < child.items.length) {
+          return false;
+        }
 
         // 덜 구체적인 그룹이 더 구체적인 그룹을 subsume하면 안 됨
-        if (CLONE_TYPE_PRIORITY[parent.cloneType] > CLONE_TYPE_PRIORITY[child.cloneType]) {return false;}
+        if (CLONE_TYPE_PRIORITY[parent.cloneType] > CLONE_TYPE_PRIORITY[child.cloneType]) {
+          return false;
+        }
 
-        return child.items.every((childItem) =>
+        return child.items.every(childItem =>
           parent.items.some(
-            (parentItem) =>
-              childItem.filePath === parentItem.filePath &&
-              isSpanContained(childItem.span, parentItem.span),
+            parentItem => childItem.filePath === parentItem.filePath && isSpanContained(childItem.span, parentItem.span),
           ),
         );
       }),

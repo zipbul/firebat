@@ -123,4 +123,3 @@ const resolveFirebatRootFromCwd = async (startDirAbs: string = process.cwd()): P
 };
 
 export { resolveFirebatRootFromCwd };
-export type { ResolveFirebatRootResult };

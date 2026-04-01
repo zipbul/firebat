@@ -110,4 +110,3 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
 };
 
 export { runOxfmt };
-export type { OxfmtRunResult, RunOxfmtInput };

@@ -78,7 +78,9 @@ const splitLines = (text: string): string[] => text.split(/\r?\n/);
 const extractEvidenceText = async (filePath: string, span: SourceSpan): Promise<string | undefined> => {
   const text = await readFileText(filePath);
 
-  if (text.length === 0) {return undefined;}
+  if (text.length === 0) {
+    return undefined;
+  }
 
   const lines = splitLines(text);
   const lineIdx = Math.max(0, Math.min(lines.length - 1, span.start.line - 1));
@@ -156,7 +158,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const edgeIds = new Set<string>();
 
   const addNode = (node: TraceNode): void => {
-    if (nodeIds.has(node.id)) {return;}
+    if (nodeIds.has(node.id)) {
+      return;
+    }
 
     nodeIds.add(node.id);
     nodes.push(node);
@@ -165,7 +169,9 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
   const addEdge = (edge: TraceEdge): void => {
     const id = `${edge.from}->${edge.to}:${edge.kind}:${edge.label ?? ''}`;
 
-    if (edgeIds.has(id)) {return;}
+    if (edgeIds.has(id)) {
+      return;
+    }
 
     edgeIds.add(id);
     edges.push(edge);
@@ -216,19 +222,15 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     }
 
     // Heritage chain
-    try {
-      const heritage = await gildash.getHeritageChain(input.symbol, entryFile);
+    const heritage = await gildash.getHeritageChain(input.symbol, entryFile);
 
-      if (heritage.children && heritage.children.length > 0) {
-        for (const base of heritage.children) {
-          const baseNodeId = `type:${base.symbolName}`;
+    if (heritage.children && heritage.children.length > 0) {
+      for (const base of heritage.children) {
+        const baseNodeId = `type:${base.symbolName}`;
 
-          addNode({ id: baseNodeId, kind: 'type', label: base.symbolName });
-          addEdge({ from: symbolNodeId, to: baseNodeId, kind: 'type-of', label: 'extends' });
-        }
+        addNode({ id: baseNodeId, kind: 'type', label: base.symbolName });
+        addEdge({ from: symbolNodeId, to: baseNodeId, kind: 'type-of', label: 'extends' });
       }
-    } catch {
-      // Heritage chain is best-effort
     }
 
     const output: TraceSymbolOutput = {
@@ -257,4 +259,3 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
 };
 
 export { traceSymbolUseCase };
-export type { TraceSymbolInput, TraceSymbolOutput };

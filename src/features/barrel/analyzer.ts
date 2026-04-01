@@ -78,14 +78,14 @@ const globToRegExp = (glob: string): RegExp => {
     if (ch === '*') {
       const next = normalized[i + 1];
 
-      if (next === '*') {
-        out += '.*';
-        i += 1;
+      if (next !== '*') {
+        out += '[^/]*';
 
         continue;
       }
 
-      out += '[^/]*';
+      out += '.*';
+      i += 1;
 
       continue;
     }
@@ -363,7 +363,10 @@ const buildCrossModuleReexportFiles = (gildash: Gildash, rootAbs: string, fileSe
   const result = new Set<string>();
 
   for (const rel of rels) {
-    if (rel.dstFilePath === null) continue;
+    if (rel.dstFilePath === null) {
+      continue;
+    }
+
     const srcAbs = normalizePath(path.resolve(rootAbs, rel.srcFilePath));
     const dstAbs = normalizePath(path.resolve(rootAbs, rel.dstFilePath));
 
@@ -399,7 +402,6 @@ const checkCrossModuleReexport = async (
     // gildash가 이 파일에 cross-module re-export 없다고 판단하면 구문 A 건너뛰기
     // (구문 B/C는 import+export 패턴이라 gildash re-export relation에 안 잡힐 수 있으므로 유지)
     const skipPatternA = crossModuleFiles !== null && !crossModuleFiles.has(fileAbs);
-
     const body = asNodeLike(file.program)?.body;
 
     if (!Array.isArray(body)) {
@@ -411,34 +413,36 @@ const checkCrossModuleReexport = async (
       for (const stmt of body) {
         const stmtNode = stmt as Node;
 
-        if (stmtNode.type === 'ExportNamedDeclaration' || stmtNode.type === 'ExportAllDeclaration') {
-          const source = getLiteralString(stmtNode.source);
-
-          if (typeof source !== 'string') {
-            continue;
-          }
-
-          const resolved = await resolver.resolve(fileAbs, source);
-
-          if (!resolved) {
-            continue;
-          }
-
-          if (!fileSet.has(normalizePath(resolved))) {
-            continue;
-          }
-
-          if (isChildPath(fileAbs, resolved)) {
-            continue;
-          }
-
-          findings.push({
-            kind: 'cross-module-reexport',
-            file: file.filePath,
-            span: toNodeSpan(file, stmt),
-            evidence: source,
-          });
+        if (stmtNode.type !== 'ExportNamedDeclaration' && stmtNode.type !== 'ExportAllDeclaration') {
+          continue;
         }
+
+        const source = getLiteralString(stmtNode.source);
+
+        if (typeof source !== 'string') {
+          continue;
+        }
+
+        const resolved = await resolver.resolve(fileAbs, source);
+
+        if (!resolved) {
+          continue;
+        }
+
+        if (!fileSet.has(normalizePath(resolved))) {
+          continue;
+        }
+
+        if (isChildPath(fileAbs, resolved)) {
+          continue;
+        }
+
+        findings.push({
+          kind: 'cross-module-reexport',
+          file: file.filePath,
+          span: toNodeSpan(file, stmt),
+          evidence: source,
+        });
       }
     }
 
@@ -522,7 +526,6 @@ const checkCrossModuleReexport = async (
         }
 
         const identName = declaration.name;
-
         const binding = importBindings.get(identName);
 
         if (!binding) {
@@ -658,4 +661,3 @@ const analyzeBarrel = async (
 };
 
 export { analyzeBarrel, createEmptyBarrel };
-export type { BarrelOptions };

@@ -25,9 +25,9 @@ describe('liveness', () => {
       [], // n1: no writes
       [], // n2: no writes
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1);
+
     // Assert
     expect(result.maxLiveCount).toBe(1);
   });
@@ -48,9 +48,9 @@ describe('liveness', () => {
       [0, 1, 2], // n0: writes var0, var1, var2
       [], // n1: no writes
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3);
+
     // Assert
     expect(result.maxLiveCount).toBe(3);
   });
@@ -73,9 +73,9 @@ describe('liveness', () => {
       [0], // n0: writes var0
       [1], // n1: writes var1
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2);
+
     // Assert
     expect(result.maxLiveCount).toBe(2);
   });
@@ -89,9 +89,9 @@ describe('liveness', () => {
 
     const useVarIndexesByNode: number[][] = [[], []];
     const writeVarIndexesByNode: number[][] = [[], []];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 0);
+
     // Assert
     expect(result.maxLiveCount).toBe(0);
     expect(result.liveInByNode).toHaveLength(0);
@@ -120,9 +120,9 @@ describe('liveness', () => {
       [], // n1: no writes
       [], // n2: no writes
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2);
+
     // Assert
     expect(result.maxLiveCount).toBe(1);
   });
@@ -148,9 +148,9 @@ describe('liveness', () => {
       [0], // n1: updates var0 (loop variable)
       [], // n2: no writes
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1);
+
     // Assert — fixed-point must converge
     expect(result.maxLiveCount).toBe(1);
     expect(result.liveInByNode).toHaveLength(3);
@@ -159,9 +159,9 @@ describe('liveness', () => {
   it('computeLiveness - empty CFG (nodeCount=0) - returns empty result', () => {
     // Arrange
     const cfg = new IntegerCFG();
-
     // Act
     const result = computeLiveness(cfg, [], [], 1);
+
     // Assert
     expect(result.maxLiveCount).toBe(0);
     expect(result.maxLiveNodeId).toBe(0);
@@ -200,9 +200,9 @@ describe('liveness', () => {
       [], // n2: no writes
       [], // n3: no writes
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2);
+
     // Assert — join point n3 and both branches have 2 live vars; entry n0 has 0 (defs kill both)
     expect(result.maxLiveCount).toBe(2);
     expect(result.liveInByNode).toHaveLength(4);
@@ -236,9 +236,9 @@ describe('liveness', () => {
       [], // n2: no writes
       [], // n3: no writes
     ];
-
     // Act
     const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3);
+
     // Assert — live counts: n0=0, n1=3, n2=2, n3=1  → maxLiveCount = 3 at n1
     expect(result.maxLiveCount).toBe(3);
     expect(result.liveInByNode[0]?.size()).toBe(0);

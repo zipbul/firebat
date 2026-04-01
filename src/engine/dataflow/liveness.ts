@@ -3,7 +3,7 @@ import type { BitSet } from '../types';
 
 import { createBitSet, equalsBitSet, subtractBitSet, unionBitSet } from './dataflow';
 
-export interface LivenessResult {
+interface LivenessResult {
   readonly liveInByNode: ReadonlyArray<BitSet>;
   readonly maxLiveCount: number;
   readonly maxLiveNodeId: number;
@@ -105,10 +105,12 @@ export const computeLiveness = (
 
     const count = nodeIn.size();
 
-    if (count > maxLiveCount) {
-      maxLiveCount = count;
-      maxLiveNodeId = n;
+    if (count <= maxLiveCount) {
+      continue;
     }
+
+    maxLiveCount = count;
+    maxLiveNodeId = n;
   }
 
   return { liveInByNode: liveIn, maxLiveCount, maxLiveNodeId };

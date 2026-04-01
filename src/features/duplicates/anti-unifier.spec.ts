@@ -15,7 +15,9 @@ const parseFunctions = (source: string) => {
 const firstTwo = (source: string) => {
   const fns = parseFunctions(source);
 
-  if (fns.length < 2) {throw new Error('함수 2개 이상 필요');}
+  if (fns.length < 2) {
+    throw new Error('함수 2개 이상 필요');
+  }
 
   return [fns[0]!, fns[1]!] as const;
 };

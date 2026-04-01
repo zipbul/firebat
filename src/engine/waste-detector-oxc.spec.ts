@@ -213,6 +213,35 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
   });
 
   // Bug 7: for-of 기존 변수 대입 write 추적
+  // Bug 8: IIFE 내부 변수가 외부 함수 locals로 잘못 등록되어 false dead-store 발생
+  it('detectWasteOxc - IIFE with inner variable - should not report IIFE-internal variable as dead-store', () => {
+    // Arrange
+    const source = `function outer() {
+      (function inner() { const x = getX(); console.log(x); })();
+    }`;
+    const f = toFile('/iife-inner.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — x belongs to inner, not outer; outer has no dead-store
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
+  });
+
+  it('detectWasteOxc - async arrow IIFE with inner variable - should not report IIFE-internal variable as dead-store', () => {
+    // Arrange
+    const source = `const getOrmDb = async () => {
+      const created = (async () => { const x = getX(); return x; })();
+      return created;
+    };`;
+    const f = toFile('/async-iife.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — x belongs to async IIFE, not outer; created is used
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'created')).toBe(false);
+  });
+
   it('detectWasteOxc - existing variable assigned in for-of and used after loop - should not report dead-store', () => {
     // Arrange
     const source = `function f(items: number[]) {

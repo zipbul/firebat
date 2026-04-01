@@ -30,7 +30,9 @@ mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => {
         const key = `${projectKey}:${memoryKey}`;
         const val = store.get(key);
 
-        if (!val) {return null;}
+        if (!val) {
+          return null;
+        }
 
         return { projectKey, memoryKey, payloadJson: val, createdAt: 0, updatedAt: 0 };
       },

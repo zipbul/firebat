@@ -722,9 +722,13 @@ class Beta {
     // 즉, class 그룹의 span 안에 완전히 포함되는 method 그룹은 결과에서 제거됨
     for (const classGroup of classGroups) {
       for (const methodGroup of result) {
-        if (methodGroup === classGroup) {continue;}
+        if (methodGroup === classGroup) {
+          continue;
+        }
 
-        if (!methodGroup.items.every(mi => mi.kind === 'method')) {continue;}
+        if (!methodGroup.items.every(mi => mi.kind === 'method')) {
+          continue;
+        }
 
         // method 그룹의 모든 아이템이 대응하는 class 그룹 아이템의 span에 완전히 포함되면
         // filterSubsumedGroups가 제거했어야 함

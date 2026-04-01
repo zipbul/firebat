@@ -32,7 +32,7 @@ export interface MinHasher {
 export const createMinHasher = (k: number = DEFAULT_K): MinHasher => {
   return {
     k,
-    computeSignature: (items) => computeSignatureImpl(items, k),
+    computeSignature: items => computeSignatureImpl(items, k),
   };
 };
 
@@ -54,13 +54,13 @@ export const findLshCandidates = (
   threshold: number = DEFAULT_THRESHOLD,
   bands: number = DEFAULT_BANDS,
 ): ReadonlyArray<LshCandidate> => {
-  if (signatures.length < 2) {return [];}
+  if (signatures.length < 2) {
+    return [];
+  }
 
   const k = signatures[0]!.length;
   const config =
-    bands !== DEFAULT_BANDS
-      ? { bands, rowsPerBand: Math.max(1, Math.floor(k / bands)) }
-      : computeOptimalBandConfig(k, threshold);
+    bands !== DEFAULT_BANDS ? { bands, rowsPerBand: Math.max(1, Math.floor(k / bands)) } : computeOptimalBandConfig(k, threshold);
   const rowsPerBand = config.rowsPerBand;
   const effectiveBands = config.bands;
   const candidateSet = new Set<number>();
@@ -86,7 +86,9 @@ export const findLshCandidates = (
 
     // 같은 버킷에 2개 이상 → 후보 쌍
     for (const bucket of buckets.values()) {
-      if (bucket.length < 2) {continue;}
+      if (bucket.length < 2) {
+        continue;
+      }
       for (let p = 0; p < bucket.length; p++) {
         for (let q = p + 1; q < bucket.length; q++) {
           const a = bucket[p]!;
@@ -95,10 +97,12 @@ export const findLshCandidates = (
           const hi = a < c ? c : a;
           const key = lo * signatures.length + hi;
 
-          if (!candidateSet.has(key)) {
-            candidateSet.add(key);
-            candidates.push({ i: lo, j: hi });
+          if (candidateSet.has(key)) {
+            continue;
           }
+
+          candidateSet.add(key);
+          candidates.push({ i: lo, j: hi });
         }
       }
     }
@@ -111,16 +115,17 @@ export const findLshCandidates = (
  * 두 시그니처의 추정 Jaccard 유사도를 계산한다.
  * 동일한 위치에서 값이 같은 비율.
  */
-export const estimateJaccard = (
-  sigA: ReadonlyArray<bigint>,
-  sigB: ReadonlyArray<bigint>,
-): number => {
-  if (sigA.length === 0) {return 0;}
+export const estimateJaccard = (sigA: ReadonlyArray<bigint>, sigB: ReadonlyArray<bigint>): number => {
+  if (sigA.length === 0) {
+    return 0;
+  }
 
   let matches = 0;
 
   for (let i = 0; i < sigA.length; i++) {
-    if (sigA[i] === sigB[i]) {matches++;}
+    if (sigA[i] === sigB[i]) {
+      matches++;
+    }
   }
 
   return matches / sigA.length;
@@ -132,10 +137,7 @@ export const estimateJaccard = (
  * threshold를 기준으로 LSH S-curve가 0.5 확률에 가장 가까운 bands/rows 설정을 찾는다.
  * Pr[같은 버킷] = 1 - (1 - threshold^r)^b 가 0.5에 근접하는 r을 탐색.
  */
-const computeOptimalBandConfig = (
-  k: number,
-  threshold: number,
-): { bands: number; rowsPerBand: number } => {
+const computeOptimalBandConfig = (k: number, threshold: number): { bands: number; rowsPerBand: number } => {
   let bestBands = DEFAULT_BANDS;
   let bestRows = DEFAULT_ROWS_PER_BAND;
   let bestDiff = Infinity;
@@ -143,28 +145,31 @@ const computeOptimalBandConfig = (
   for (let r = 1; r <= k; r++) {
     const b = Math.floor(k / r);
 
-    if (b < 1) {break;}
+    if (b < 1) {
+      break;
+    }
 
     const pr = 1 - Math.pow(1 - Math.pow(threshold, r), b);
     const diff = Math.abs(pr - 0.5);
 
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestBands = b;
-      bestRows = r;
+    if (diff >= bestDiff) {
+      continue;
     }
+
+    bestDiff = diff;
+    bestBands = b;
+    bestRows = r;
   }
 
   return { bands: bestBands, rowsPerBand: bestRows };
 };
 
-const computeSignatureImpl = (
-  items: ReadonlyArray<string>,
-  k: number,
-): ReadonlyArray<bigint> => {
+const computeSignatureImpl = (items: ReadonlyArray<string>, k: number): ReadonlyArray<bigint> => {
   const sig = new Array<bigint>(k).fill(MAX_U64);
 
-  if (items.length === 0) {return sig;}
+  if (items.length === 0) {
+    return sig;
+  }
 
   for (const item of items) {
     for (let i = 0; i < k; i++) {
@@ -184,11 +189,7 @@ const computeSignatureImpl = (
  * band의 row 범위 [start, end)에 해당하는 시그니처 슬라이스를 해시한다.
  * 단순 XOR + 곱셈 조합으로 band 버킷 키 생성.
  */
-const hashBand = (
-  sig: ReadonlyArray<bigint>,
-  start: number,
-  end: number,
-): bigint => {
+const hashBand = (sig: ReadonlyArray<bigint>, start: number, end: number): bigint => {
   // FNV-like 조합
   const FNV_PRIME = 1099511628211n;
   let h = 14695981039346656037n;

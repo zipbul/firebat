@@ -427,22 +427,21 @@ const blankLinesBetweenStatementGroupsRule = {
         const hasBlankLine = hasBlankLineBetweenStatements(prev, next);
         const needBlankLine = prevGroup !== nextGroup || (prevGroup === nextGroup && requiresBlankLineEvenWithinGroup(prevGroup));
 
-        if (needBlankLine) {
-          if (!hasBlankLine) {
-            context.report({
-              fix(fixer) {
-                return insertBlankLine(sourceCode, prev, next, fixer);
-              },
-              messageId: 'expectedBlankLine',
-              node: next,
-            });
-          }
-
+        if (!needBlankLine) {
+          // NOTE: Do not remove blank lines. This rule only enforces required blank lines.
+          // Other rules (e.g., padding-line-between-statements) handle the rest.
           continue;
         }
 
-        // NOTE: Do not remove blank lines. This rule only enforces required blank lines.
-        // Other rules (e.g., padding-line-between-statements) handle the rest.
+        if (!hasBlankLine) {
+          context.report({
+            fix(fixer) {
+              return insertBlankLine(sourceCode, prev, next, fixer);
+            },
+            messageId: 'expectedBlankLine',
+            node: next,
+          });
+        }
       }
     };
 

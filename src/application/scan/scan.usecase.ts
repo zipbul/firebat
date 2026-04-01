@@ -166,7 +166,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Repositories created');
 
-  const needsSemantic = options.detectors.includes('unknown-proof') || options.detectors.includes('error-flow') || options.detectors.includes('typecheck');
+  const needsSemantic =
+    options.detectors.includes('unknown-proof') ||
+    options.detectors.includes('error-flow') ||
+    options.detectors.includes('typecheck');
   const tIndex0 = nowMs();
   let gildash: Awaited<ReturnType<typeof createGildash>>;
   let semanticAvailable = false;
@@ -338,25 +341,24 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       logger.debug('format: start', { mode: 'check', targetCount: options.targets.length });
 
-      formatPromise = resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc')
-        .then(oxfmtConfigPath =>
-          analyzeFormat({
+      formatPromise = (async () => {
+        try {
+          const oxfmtConfigPath = await resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc');
+          const r = await analyzeFormat({
             targets: options.targets,
             fix: false,
             cwd: ctx.rootAbs,
             resolveMode: 'project-only',
             ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
             logger,
-          }),
-        )
-        .then(r => {
+          });
+
           fixTimings.format = nowMs() - tFormat0;
 
           logger.debug('format: complete', { durationMs: Math.round(fixTimings.format) });
 
           return r;
-        })
-        .catch(err => {
+        } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
 
           metaErrors.format = message;
@@ -366,7 +368,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           logger.debug('format: failed', { durationMs: Math.round(fixTimings.format), message });
 
           return null;
-        });
+        }
+      })();
     }
 
     if (shouldRunLint) {
@@ -374,25 +377,24 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       logger.debug('lint: start', { fix: false, targetCount: options.targets.length });
 
-      lintPromise = resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc')
-        .then(oxlintConfigPath =>
-          analyzeLint({
+      lintPromise = (async () => {
+        try {
+          const oxlintConfigPath = await resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc');
+          const r = await analyzeLint({
             targets: options.targets,
             fix: false,
             cwd: ctx.rootAbs,
             resolveMode: 'project-only',
             ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
             logger,
-          }),
-        )
-        .then(r => {
+          });
+
           fixTimings.lint = nowMs() - tLint0;
 
           logger.debug('lint: complete', { durationMs: Math.round(fixTimings.lint) });
 
           return r;
-        })
-        .catch(err => {
+        } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
 
           metaErrors.lint = message;
@@ -402,7 +404,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           logger.debug('lint: failed', { durationMs: Math.round(fixTimings.lint), message });
 
           return null;
-        });
+        }
+      })();
     }
   }
 
@@ -565,30 +568,30 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     coupling = createEmptyCoupling();
   }
 
-  const nestingCfg = config?.features?.nesting;
-  const resolvedNestingOptions = {
-    maxCognitiveComplexity:
-      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCognitiveComplexity : undefined) ??
-      DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
-    maxCallbackDepth:
-      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCallbackDepth : undefined) ??
-      DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
-    maxPromiseChainDepth:
-      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxPromiseChainDepth : undefined) ??
-      DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
-    maxNestingDepth:
-      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxNestingDepth : undefined) ??
-      DEFAULT_NESTING_OPTIONS.maxNestingDepth,
-    minDensityLoc:
-      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.minDensityLoc : undefined) ??
-      DEFAULT_NESTING_OPTIONS.minDensityLoc,
-    maxDensity:
-      (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxDensity : undefined) ??
-      DEFAULT_NESTING_OPTIONS.maxDensity,
-  };
   let nesting: ReturnType<typeof analyzeNesting>;
 
   if (options.detectors.includes('nesting')) {
+    const nestingCfg = config?.features?.nesting;
+    const resolvedNestingOptions = {
+      maxCognitiveComplexity:
+        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCognitiveComplexity : undefined) ??
+        DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
+      maxCallbackDepth:
+        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCallbackDepth : undefined) ??
+        DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
+      maxPromiseChainDepth:
+        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxPromiseChainDepth : undefined) ??
+        DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
+      maxNestingDepth:
+        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxNestingDepth : undefined) ??
+        DEFAULT_NESTING_OPTIONS.maxNestingDepth,
+      minDensityLoc:
+        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.minDensityLoc : undefined) ??
+        DEFAULT_NESTING_OPTIONS.minDensityLoc,
+      maxDensity:
+        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxDensity : undefined) ??
+        DEFAULT_NESTING_OPTIONS.maxDensity,
+    };
     const t0 = nowMs();
     const detectorKey = 'nesting';
 
@@ -649,7 +652,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: detectorKey });
 
     try {
-      errorFlow = await analyzeErrorFlow(program, semanticAvailable ? { gildash } : {});
+      errorFlow = await analyzeErrorFlow(program, { gildash });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
@@ -704,36 +707,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 
-  const defaultFeatureOptions = {
-    giantFileMaxLines: 1000,
-    variableLifetimeMaxLifetimeLines: 30,
-    variableLifetimeMaxLiveVariables: 7,
-    variableLifetimeMinFunctionLines: 40,
-    variableLifetimeMaxMutationCount: Infinity,
-  };
-  const { 'giant-file': giantFileCfg, 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
-  const resolvedGiantFileMaxLines =
-    (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ??
-    defaultFeatureOptions.giantFileMaxLines;
-  const resolvedVariableLifetimeMaxLifetimeLines =
-    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-      ? variableLifetimeCfg.maxLifetimeLines
-      : undefined) ?? defaultFeatureOptions.variableLifetimeMaxLifetimeLines;
-  const resolvedMaxLiveVariables =
-    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-      ? variableLifetimeCfg.maxLiveVariables
-      : undefined) ?? defaultFeatureOptions.variableLifetimeMaxLiveVariables;
-  const resolvedMinFunctionLines =
-    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-      ? variableLifetimeCfg.minFunctionLines
-      : undefined) ?? defaultFeatureOptions.variableLifetimeMinFunctionLines;
-  const resolvedMaxMutationCount =
-    (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-      ? variableLifetimeCfg.maxMutationCount
-      : undefined) ?? defaultFeatureOptions.variableLifetimeMaxMutationCount;
   let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
 
   if (options.detectors.includes('giant-file')) {
+    const { 'giant-file': giantFileCfg } = config?.features ?? {};
+    const resolvedGiantFileMaxLines =
+      (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
     const t0 = nowMs();
     const detectorKey = 'giant-file';
 
@@ -748,6 +727,23 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   let variableLifetime: ReturnType<typeof analyzeVariableLifetime> = createEmptyVariableLifetime();
 
   if (options.detectors.includes('variable-lifetime')) {
+    const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
+    const resolvedVariableLifetimeMaxLifetimeLines =
+      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+        ? variableLifetimeCfg.maxLifetimeLines
+        : undefined) ?? 30;
+    const resolvedMaxLiveVariables =
+      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+        ? variableLifetimeCfg.maxLiveVariables
+        : undefined) ?? 7;
+    const resolvedMinFunctionLines =
+      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+        ? variableLifetimeCfg.minFunctionLines
+        : undefined) ?? 40;
+    const resolvedMaxMutationCount =
+      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
+        ? variableLifetimeCfg.maxMutationCount
+        : undefined) ?? Infinity;
     const t0 = nowMs();
     const detectorKey = 'variable-lifetime';
 
@@ -1328,9 +1324,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf) } : {}),
     ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection) } : {}),
     ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile, 'GIANT_FILE') } : {}),
-    ...(selectedDetectors.has('variable-lifetime')
-      ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime) }
-      : {}),
+    ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime) } : {}),
     ...(selectedDetectors.has('temporal-coupling')
       ? { 'temporal-coupling': enrichPhase1(temporalCoupling, 'TEMPORAL_COUPLING') }
       : {}),

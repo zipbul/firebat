@@ -1,11 +1,11 @@
-export type FirebatSubcommand = 'install' | 'update' | 'cache' | 'mcp' | 'scan' | undefined;
+type FirebatSubcommand = 'install' | 'update' | 'cache' | 'mcp' | 'scan' | undefined;
 
-export type FirebatGlobalLogOptions = {
+type FirebatGlobalLogOptions = {
   readonly logLevel?: string;
   readonly logStack: boolean;
 };
 
-export type FirebatArgvRoute = {
+type FirebatArgvRoute = {
   readonly subcommand: FirebatSubcommand;
   readonly global: FirebatGlobalLogOptions;
   readonly scanArgv: ReadonlyArray<string>;

@@ -62,6 +62,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     allowNestedFunctions: boolean,
     isWriteContext: boolean = false,
     writeKind?: VariableUsage['writeKind'],
+    suppressDeclarations: boolean = false,
   ) => {
     if (!allowNestedFunctions && isFunctionNode(current)) {
       return;
@@ -73,6 +74,12 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const name = getNodeName(current);
 
       if (name === null) {
+        return;
+      }
+
+      // When suppressDeclarations is active (e.g. visiting inside an IIFE body),
+      // skip declaration writes — they belong to the nested scope, not the outer scope.
+      if (suppressDeclarations && isWriteContext && writeKind === 'declaration') {
         return;
       }
 
@@ -95,7 +102,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     // IdentifierReference/BindingIdentifier/AssignmentTargetIdentifier are represented as Identifier nodes.
 
     if (current.type === 'ChainExpression') {
-      visit(current.expression, allowNestedFunctions, false);
+      visit(current.expression, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       return;
     }
@@ -105,13 +112,13 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       // `obj[prop]` reads both `obj` and `prop`.
       const objectNode = current.object as Node;
 
-      visit(objectNode, allowNestedFunctions, false);
+      visit(objectNode, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       const isComputed = current.computed;
       const propertyNode = current.property as Node;
 
       if (isComputed) {
-        visit(propertyNode, allowNestedFunctions, false);
+        visit(propertyNode, allowNestedFunctions, false, undefined, suppressDeclarations);
       }
 
       return;
@@ -124,7 +131,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const right = current.right as Node;
 
       // Left is always evaluated.
-      visit(left, allowNestedFunctions, false);
+      visit(left, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       const leftTruthiness = evalStaticTruthiness(left);
 
@@ -133,7 +140,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
           return;
         }
 
-        visit(right, allowNestedFunctions, false);
+        visit(right, allowNestedFunctions, false, undefined, suppressDeclarations);
 
         return;
       }
@@ -143,7 +150,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
           return;
         }
 
-        visit(right, allowNestedFunctions, false);
+        visit(right, allowNestedFunctions, false, undefined, suppressDeclarations);
 
         return;
       }
@@ -160,19 +167,19 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
         if (leftNullish === true) {
           // Left is statically nullish → only right is evaluated.
-          visit(right, allowNestedFunctions, false);
+          visit(right, allowNestedFunctions, false, undefined, suppressDeclarations);
 
           return;
         }
 
         // Unknown: both branches may execute.
-        visit(right, allowNestedFunctions, false);
+        visit(right, allowNestedFunctions, false, undefined, suppressDeclarations);
 
         return;
       }
 
       // For unknown operators or unknown truthiness, be conservative.
-      visit(right, allowNestedFunctions, false);
+      visit(right, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       return;
     }
@@ -183,25 +190,25 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const alternate = current.alternate as Node;
 
       // Test is always evaluated.
-      visit(test, allowNestedFunctions, false);
+      visit(test, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       const truthiness = evalStaticTruthiness(test);
 
       if (truthiness === true) {
-        visit(consequent, allowNestedFunctions, false);
+        visit(consequent, allowNestedFunctions, false, undefined, suppressDeclarations);
 
         return;
       }
 
       if (truthiness === false) {
-        visit(alternate, allowNestedFunctions, false);
+        visit(alternate, allowNestedFunctions, false, undefined, suppressDeclarations);
 
         return;
       }
 
       // Unknown: either branch may execute.
-      visit(consequent, allowNestedFunctions, false);
-      visit(alternate, allowNestedFunctions, false);
+      visit(consequent, allowNestedFunctions, false, undefined, suppressDeclarations);
+      visit(alternate, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       return;
     }
@@ -212,24 +219,24 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const right = current.right as Node;
 
       if (operator === '=') {
-        visit(left, allowNestedFunctions, true, 'assignment'); // LHS is write
-        visit(right, allowNestedFunctions, false); // RHS is read
+        visit(left, allowNestedFunctions, true, 'assignment', suppressDeclarations); // LHS is write
+        visit(right, allowNestedFunctions, false, undefined, suppressDeclarations); // RHS is read
 
         return;
       }
 
       if (operator === '||=' || operator === '&&=' || operator === '??=') {
-        visit(left, allowNestedFunctions, false);
-        visit(left, allowNestedFunctions, true, 'logical-assignment');
-        visit(right, allowNestedFunctions, false);
+        visit(left, allowNestedFunctions, false, undefined, suppressDeclarations);
+        visit(left, allowNestedFunctions, true, 'logical-assignment', suppressDeclarations);
+        visit(right, allowNestedFunctions, false, undefined, suppressDeclarations);
 
         return;
       }
 
       // Compound assignment (+=, -=, ...)
-      visit(left, allowNestedFunctions, false); // reads LHS
-      visit(left, allowNestedFunctions, true, 'compound-assignment'); // writes LHS
-      visit(right, allowNestedFunctions, false); // RHS is read
+      visit(left, allowNestedFunctions, false, undefined, suppressDeclarations); // reads LHS
+      visit(left, allowNestedFunctions, true, 'compound-assignment', suppressDeclarations); // writes LHS
+      visit(right, allowNestedFunctions, false, undefined, suppressDeclarations); // RHS is read
 
       return;
     }
@@ -238,8 +245,8 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const argument = current.argument as Node;
 
       // Treat update as both read and write.
-      visit(argument, allowNestedFunctions, false);
-      visit(argument, allowNestedFunctions, true, 'update');
+      visit(argument, allowNestedFunctions, false, undefined, suppressDeclarations);
+      visit(argument, allowNestedFunctions, true, 'update', suppressDeclarations);
 
       return;
     }
@@ -255,7 +262,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
         for (const prop of properties) {
           if (prop.type === 'RestElement') {
-            visit(prop.argument as Node, allowNestedFunctions, true, 'declaration');
+            visit(prop.argument as Node, allowNestedFunctions, true, 'declaration', suppressDeclarations);
 
             continue;
           }
@@ -266,7 +273,6 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
           const keyNode = prop.key as Node;
           let keyName: string | null = null;
-
           const keyType = keyNode.type;
 
           if (keyType === 'Identifier') {
@@ -281,29 +287,29 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
           const valueNode = prop.value as Node;
 
-          if (valueNode.type === 'AssignmentPattern') {
-            const leftNode = valueNode.left as Node;
-            const rightNode = valueNode.right as Node;
-
-            visit(leftNode, allowNestedFunctions, true, 'declaration');
-
-            const shouldEvaluateDefault = keyName === null ? true : !initKeys.has(keyName);
-
-            if (shouldEvaluateDefault) {
-              visit(rightNode, allowNestedFunctions, false);
-            }
+          if (valueNode.type !== 'AssignmentPattern') {
+            visit(valueNode, allowNestedFunctions, true, 'declaration', suppressDeclarations);
 
             continue;
           }
 
-          visit(valueNode, allowNestedFunctions, true, 'declaration');
+          const leftNode = valueNode.left as Node;
+          const rightNode = valueNode.right as Node;
+
+          visit(leftNode, allowNestedFunctions, true, 'declaration', suppressDeclarations);
+
+          const shouldEvaluateDefault = keyName === null ? true : !initKeys.has(keyName);
+
+          if (shouldEvaluateDefault) {
+            visit(rightNode, allowNestedFunctions, false, undefined, suppressDeclarations);
+          }
         }
       } else {
-        visit(id, allowNestedFunctions, true, 'declaration'); // Def
+        visit(id, allowNestedFunctions, true, 'declaration', suppressDeclarations); // Def
       }
 
       if (init !== undefined && init !== null) {
-        visit(init, allowNestedFunctions, false);
+        visit(init, allowNestedFunctions, false, undefined, suppressDeclarations);
       } // Use
 
       return;
@@ -314,10 +320,10 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const body = current.body as Node;
 
       if (param !== undefined && param !== null) {
-        visit(param, allowNestedFunctions, true, 'declaration');
+        visit(param, allowNestedFunctions, true, 'declaration', suppressDeclarations);
       }
 
-      visit(body, allowNestedFunctions, false);
+      visit(body, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       return;
     }
@@ -327,7 +333,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
       for (const prop of properties) {
         if (prop.type === 'RestElement') {
-          visit(prop.argument as Node, allowNestedFunctions, isWriteContext, writeKind);
+          visit(prop.argument as Node, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
           continue;
         }
@@ -339,13 +345,13 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
         const valueNode = prop.value as Node;
 
         if (valueNode.type === 'AssignmentPattern') {
-          visit(valueNode.left as Node, allowNestedFunctions, isWriteContext, writeKind);
-          visit(valueNode.right as Node, allowNestedFunctions, false);
+          visit(valueNode.left as Node, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
+          visit(valueNode.right as Node, allowNestedFunctions, false, undefined, suppressDeclarations);
 
           continue;
         }
 
-        visit(valueNode, allowNestedFunctions, isWriteContext, writeKind);
+        visit(valueNode, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
       }
 
       return;
@@ -360,19 +366,19 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
         }
 
         if (element.type === 'RestElement') {
-          visit(element.argument as Node, allowNestedFunctions, isWriteContext, writeKind);
+          visit(element.argument as Node, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
           continue;
         }
 
         if (element.type === 'AssignmentPattern') {
-          visit(element.left as Node, allowNestedFunctions, isWriteContext, writeKind);
-          visit(element.right as Node, allowNestedFunctions, false);
+          visit(element.left as Node, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
+          visit(element.right as Node, allowNestedFunctions, false, undefined, suppressDeclarations);
 
           continue;
         }
 
-        visit(element, allowNestedFunctions, isWriteContext, writeKind);
+        visit(element, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
       }
 
       return;
@@ -384,19 +390,22 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       const unwrappedCallee = unwrapExpression(callee);
 
       if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {
-        visit(unwrappedCallee, true, false);
+        // IIFE: enter the function body with allowNestedFunctions=true so we can collect
+        // outer-variable captures (reads). However, suppress declaration writes because
+        // those variables belong to the IIFE's own scope, not the enclosing function scope.
+        visit(unwrappedCallee, true, false, undefined, true);
       } else {
-        visit(callee, allowNestedFunctions, false);
+        visit(callee, allowNestedFunctions, false, undefined, suppressDeclarations);
       }
 
       for (const arg of args) {
-        visit(arg, allowNestedFunctions, false);
+        visit(arg, allowNestedFunctions, false, undefined, suppressDeclarations);
       }
 
       return;
     }
 
-    forEachChildNode(current, child => visit(child, allowNestedFunctions, false));
+    forEachChildNode(current, child => visit(child, allowNestedFunctions, false, undefined, suppressDeclarations));
   };
 
   visit(node, options.includeNestedFunctions !== false, false);

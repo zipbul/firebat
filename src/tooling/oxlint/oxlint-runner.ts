@@ -198,7 +198,6 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
 };
 
 export { runOxlint };
-export type { OxlintDiagnostic, OxlintRunResult, RunOxlintInput };
 
 export const __testing__ = {
   parseOxlintOutput: (rawJson: string): ReadonlyArray<OxlintDiagnostic> => {

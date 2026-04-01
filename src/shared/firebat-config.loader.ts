@@ -35,7 +35,7 @@ const loadFirebatConfigFile = async (params: LoadFirebatConfigParams): Promise<L
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    throw new Error(`[firebat] Failed to parse config: ${resolvedPath}\n${message}`);
+    throw new Error(`[firebat] Failed to parse config: ${resolvedPath}\n${message}`, { cause: err });
   }
 
   // Apply detector alias remapping for backward compatibility (e.g. 'exception-hygiene' → 'error-flow')

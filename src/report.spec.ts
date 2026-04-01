@@ -979,6 +979,7 @@ describe('formatReport', () => {
       };
       // Act
       const out = formatReport(makeReport(['variable-lifetime'], { 'variable-lifetime': [finding] }), 'text');
+
       // Assert
       expect(out).toContain('liveness-pressure');
       expect(out).toContain('maxLive=9');

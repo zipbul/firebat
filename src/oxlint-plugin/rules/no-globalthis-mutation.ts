@@ -53,16 +53,18 @@ const noGlobalThisMutationRule = {
       },
       CallExpression(node: AstNode) {
         if (
-          isObjectStaticCall(node, 'defineProperty') ||
-          isObjectStaticCall(node, 'defineProperties') ||
-          isObjectStaticCall(node, 'assign') ||
-          isObjectStaticCall(node, 'setPrototypeOf')
+          !isObjectStaticCall(node, 'defineProperty') &&
+          !isObjectStaticCall(node, 'defineProperties') &&
+          !isObjectStaticCall(node, 'assign') &&
+          !isObjectStaticCall(node, 'setPrototypeOf')
         ) {
-          const first = node.arguments?.[0];
+          return;
+        }
 
-          if (isIdentifierNamed(first, 'globalThis')) {
-            context.report({ messageId: 'globalThisMutation', node });
-          }
+        const first = node.arguments?.[0];
+
+        if (isIdentifierNamed(first, 'globalThis')) {
+          context.report({ messageId: 'globalThisMutation', node });
         }
       },
     };

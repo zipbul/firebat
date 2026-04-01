@@ -390,21 +390,21 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
           isOxcNode(leftC as NodeValue) &&
           isOxcNode(leftA as NodeValue) &&
           isOxcNode(rightC as NodeValue) &&
-          isOxcNode(rightA as NodeValue)
+          isOxcNode(rightA as NodeValue) &&
+          (leftC as Node).type === 'Identifier' &&
+          (leftA as Node).type === 'Identifier'
         ) {
-          if ((leftC as Node).type === 'Identifier' && (leftA as Node).type === 'Identifier') {
-            const nameC = (leftC as IdentifierReference).name;
-            const nameA = (leftA as IdentifierReference).name;
+          const nameC = (leftC as IdentifierReference).name;
+          const nameA = (leftA as IdentifierReference).name;
 
-            if (typeof nameC === 'string' && typeof nameA === 'string' && nameC === nameA) {
-              const assignment = withType('AssignmentExpression', {
-                operator: '=',
-                left: leftC,
-                right: conditional(test as Node, rightC, rightA),
-              }) as unknown as Node;
+          if (typeof nameC === 'string' && typeof nameA === 'string' && nameC === nameA) {
+            const assignment = withType('AssignmentExpression', {
+              operator: '=',
+              left: leftC,
+              right: conditional(test as Node, rightC, rightA),
+            }) as unknown as Node;
 
-              return expressionStatement(assignment);
-            }
+            return expressionStatement(assignment);
           }
         }
       }

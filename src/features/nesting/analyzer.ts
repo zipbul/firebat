@@ -265,7 +265,6 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
     let max = depth;
     const callee = node.callee as Node;
     const isTestRunner = isTestRunnerCall(callee);
-
     const d = measureMaxCallbackDepth(callee, depth);
 
     if (d > max) {
@@ -278,13 +277,15 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
         // not complexity-bearing — do not increase depth.
         const callbackBody = resolveFunctionBody(arg);
 
-        if (callbackBody !== null && callbackBody !== undefined) {
-          const nextDepth = isTestRunner ? depth : depth + 1;
-          const d = measureMaxCallbackDepth(callbackBody as Node, nextDepth);
+        if (callbackBody === null || callbackBody === undefined) {
+          continue;
+        }
 
-          if (d > max) {
-            max = d;
-          }
+        const nextDepth = isTestRunner ? depth : depth + 1;
+        const d = measureMaxCallbackDepth(callbackBody as Node, nextDepth);
+
+        if (d > max) {
+          max = d;
         }
       } else {
         const d = measureMaxCallbackDepth(arg, depth);
@@ -366,13 +367,15 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
       if (isFunctionNode(arg)) {
         const callbackBody = resolveFunctionBody(arg);
 
-        if (callbackBody !== null && callbackBody !== undefined) {
-          // Nested chains inside callbacks count from the current chain depth
-          const d = measurePromiseChainDepth(callbackBody as Node, chainDepth);
+        if (callbackBody === null || callbackBody === undefined) {
+          continue;
+        }
 
-          if (d > max) {
-            max = d;
-          }
+        // Nested chains inside callbacks count from the current chain depth
+        const d = measurePromiseChainDepth(callbackBody as Node, chainDepth);
+
+        if (d > max) {
+          max = d;
         }
       } else {
         const d = measurePromiseChainDepth(arg, depth);
@@ -854,4 +857,3 @@ const analyzeNesting = (
 };
 
 export { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS };
-export type { AnalyzeNestingOptions };

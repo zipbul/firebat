@@ -12,7 +12,7 @@ export interface MemoryRecord {
   readonly payloadJson: string;
 }
 
-export interface MemoryKeyEntry {
+interface MemoryKeyEntry {
   readonly memoryKey: string;
   readonly updatedAt: number;
 }

@@ -139,9 +139,7 @@ describe('analyzer', () => {
       await fs.mkdir(distDir, { recursive: true });
 
       const f = toFile(path.join(distDir, 'index.ts'), `export * from './other';`);
-
       const result = await analyzeBarrel([f], { rootAbs: tmpDir, ignoreGlobs: ['generated/**'] });
-
       const starFindings = result.filter(r => r.kind === 'export-star');
 
       expect(starFindings.length).toBeGreaterThanOrEqual(1);
@@ -461,9 +459,10 @@ export default X;`,
       const indexFile = makeSrcFile(tmpDir, 'src/index.ts', `export { X } from '../other';`);
       const otherFile = makeSrcFile(tmpDir, 'other.ts', `export const X = 1;`);
       const gildash = {
-        searchRelations: () => [{ type: 're-exports', srcFilePath: 'src/index.ts', dstFilePath: 'other.ts', srcSymbolName: 'X', dstSymbolName: 'X' }],
+        searchRelations: () => [
+          { type: 're-exports', srcFilePath: 'src/index.ts', dstFilePath: 'other.ts', srcSymbolName: 'X', dstSymbolName: 'X' },
+        ],
       } as any;
-
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
@@ -477,12 +476,10 @@ export default X;`,
 
       const indexFile = makeSrcFile(tmpDir, 'src/index.ts', `export { X } from '../other';`);
       const otherFile = makeSrcFile(tmpDir, 'other.ts', `export const X = 1;`);
-
       // gildash returns empty re-exports — no cross-module files detected
       const gildash = {
         searchRelations: () => [],
       } as any;
-
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
@@ -499,11 +496,11 @@ export default X;`,
 
       const indexFile = makeSrcFile(tmpDir, 'src/index.ts', `export { X } from '../other';`);
       const otherFile = makeSrcFile(tmpDir, 'other.ts', `export const X = 1;`);
-
       const gildash = {
-        searchRelations: () => { throw new Error('gildash error'); },
+        searchRelations: () => {
+          throw new Error('gildash error');
+        },
       } as any;
-
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 

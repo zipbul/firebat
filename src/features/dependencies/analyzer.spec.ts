@@ -273,7 +273,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
+        }
 
         return [];
       },
@@ -300,7 +302,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
+        }
 
         return [];
       },
@@ -327,14 +331,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/util.ts', 'helperFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/util.ts', 'helperFn')];
+        }
 
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
 
-        if (query.type === 'imports') {return [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')];}
+        if (query.type === 'imports') {
+          return [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')];
+        }
 
         return [];
       },
@@ -359,14 +367,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'publicFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/lib.ts', 'publicFn')];
+        }
 
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
 
-        if (query.type === 'imports') {return [mkImport('/project/src/index.ts', '/project/src/lib.ts', 'publicFn')];}
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/index.ts', '/project/src/lib.ts', 'publicFn')];
+        }
 
         return [];
       },
@@ -391,7 +403,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return exported;}
+        if (query.isExported) {
+          return exported;
+        }
 
         return [];
       },
@@ -418,7 +432,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return exported;}
+        if (query.isExported) {
+          return exported;
+        }
 
         return [];
       },
@@ -461,7 +477,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
+        }
 
         return [];
       },
@@ -469,7 +487,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         // import * as Lib from './lib' → dstSymbolName = '*'
-        if (query.type === 'imports') {return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', '*')];}
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', '*')];
+        }
 
         return [];
       },
@@ -492,7 +512,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
+        }
 
         return [];
       },
@@ -500,7 +522,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         // import './lib' → dstSymbolName = null (side-effect)
-        if (query.type === 'imports') {return [mkImport('/project/src/main.ts', '/project/src/lib.ts', null)];}
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/main.ts', '/project/src/lib.ts', null)];
+        }
 
         return [];
       },
@@ -525,14 +549,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')];
+        }
 
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
 
-        if (query.type === 're-exports') {return [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')];}
+        if (query.type === 're-exports') {
+          return [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')];
+        }
 
         return [];
       },
@@ -622,7 +650,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
+        }
 
         return [];
       },
@@ -651,7 +681,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
+        }
 
         return [];
       },
@@ -784,14 +816,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return exported;}
+        if (query.isExported) {
+          return exported;
+        }
 
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
 
-        if (query.type === 'imports') {return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'testOnlyFn')];}
+        if (query.type === 'imports') {
+          return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'testOnlyFn')];
+        }
 
         return [];
       },
@@ -889,9 +925,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         if (query.type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' }),
-          ];
+          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' })];
         }
 
         return [];
@@ -916,9 +950,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         if (query.type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'unlisted-pkg' }),
-          ];
+          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'unlisted-pkg' })];
         }
 
         return [];
@@ -952,7 +984,11 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: () =>
-        JSON.stringify({ main: './src/index.ts', dependencies: { express: '^4.0.0' }, devDependencies: { '@types/express': '^4.0.0' } }),
+        JSON.stringify({
+          main: './src/index.ts',
+          dependencies: { express: '^4.0.0' },
+          devDependencies: { '@types/express': '^4.0.0' },
+        }),
     });
 
     expect(result.unusedDeps.length).toBe(0);
@@ -994,9 +1030,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         if (query.type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg/sub' }),
-          ];
+          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg/sub' })];
         }
 
         return [];
@@ -1021,9 +1055,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         if (query.type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: '#config/missing' }),
-          ];
+          return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: '#config/missing' })];
         }
 
         return [];
@@ -1048,9 +1080,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { type?: string };
 
         if (query.type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing-module' }),
-          ];
+          return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing-module' })];
         }
 
         return [];
@@ -1126,10 +1156,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { isExported?: boolean };
 
         if (query.isExported) {
-          return [
-            mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
-            mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
-          ];
+          return [mkSymbol(1, '/project/src/a.ts', 'helper', 'function'), mkSymbol(2, '/project/src/b.ts', 'helper', 'function')];
         }
 
         return [];
@@ -1150,10 +1177,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { isExported?: boolean };
 
         if (query.isExported) {
-          return [
-            mkSymbol(1, '/project/src/lib.ts', 'MyType', 'type'),
-            mkSymbol(2, '/project/src/lib.ts', 'MyEnum', 'enum'),
-          ];
+          return [mkSymbol(1, '/project/src/lib.ts', 'MyType', 'type'), mkSymbol(2, '/project/src/lib.ts', 'MyEnum', 'enum')];
         }
 
         return [];
@@ -1232,7 +1256,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: (p: string) => {
-        if (p.includes('ws1')) return JSON.stringify({ name: 'ws1', dependencies: {} });
+        if (p.includes('ws1')) {
+          return JSON.stringify({ name: 'ws1', dependencies: {} });
+        }
 
         return JSON.stringify({});
       },
@@ -1271,16 +1297,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
         // Color.Red is called, Color.Blue is not
         if (query.type === 'calls') {
-          return [{
-            type: 'calls' as const,
-            srcFilePath: '/project/src/index.ts',
-            srcSymbolName: null,
-            dstFilePath: '/project/src/colors.ts',
-            dstSymbolName: 'Color.Red',
-            dstProject: null,
-            isExternal: false,
-            specifier: null,
-          }];
+          return [
+            {
+              type: 'calls' as const,
+              srcFilePath: '/project/src/index.ts',
+              srcSymbolName: null,
+              dstFilePath: '/project/src/colors.ts',
+              dstSymbolName: 'Color.Red',
+              dstProject: null,
+              isExternal: false,
+              specifier: null,
+            },
+          ];
         }
 
         return [];
@@ -1377,16 +1405,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         }
 
         if (query.type === 'calls') {
-          return [{
-            type: 'calls' as const,
-            srcFilePath: '/project/src/index.ts',
-            srcSymbolName: null,
-            dstFilePath: '/project/src/guards.ts',
-            dstSymbolName: 'Guards.isString',
-            dstProject: null,
-            isExternal: false,
-            specifier: null,
-          }];
+          return [
+            {
+              type: 'calls' as const,
+              srcFilePath: '/project/src/index.ts',
+              srcSymbolName: null,
+              dstFilePath: '/project/src/guards.ts',
+              dstSymbolName: 'Guards.isString',
+              dstProject: null,
+              isExternal: false,
+              specifier: null,
+            },
+          ];
         }
 
         return [];
@@ -1491,7 +1521,11 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: () =>
-        JSON.stringify({ main: './src/index.ts', peerDependencies: { react: '^18.0.0' }, optionalDependencies: { fsevents: '^2.0.0' } }),
+        JSON.stringify({
+          main: './src/index.ts',
+          peerDependencies: { react: '^18.0.0' },
+          optionalDependencies: { fsevents: '^2.0.0' },
+        }),
     });
 
     // peerDependencies and optionalDependencies are not in declared deps → not reported as unused
@@ -1508,10 +1542,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { isExported?: boolean };
 
         if (query.isExported) {
-          return [
-            mkSymbol(1, '/project/src/a.ts', 'util', 'function'),
-            mkSymbol(2, '/project/src/b.ts', 'util', 'function'),
-          ];
+          return [mkSymbol(1, '/project/src/a.ts', 'util', 'function'), mkSymbol(2, '/project/src/b.ts', 'util', 'function')];
         }
 
         return [];
@@ -1541,14 +1572,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: (q: unknown) => {
         const query = q as { isExported?: boolean };
 
-        if (query.isExported) {return [mkSymbol(1, '/project/src/lib.ts', 'fn', 'function')];}
+        if (query.isExported) {
+          return [mkSymbol(1, '/project/src/lib.ts', 'fn', 'function')];
+        }
 
         return [];
       },
       searchRelations: (q: unknown) => {
         const query = q as { type?: string };
 
-        if (query.type === 're-exports') {return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', null)];}
+        if (query.type === 're-exports') {
+          return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', null)];
+        }
 
         return [];
       },
@@ -1599,10 +1634,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         const query = q as { isExported?: boolean };
 
         if (query.isExported) {
-          return [
-            mkSymbol(1, '/project/src/a.ts', 'foo', 'function'),
-            mkSymbol(2, '/project/src/b.ts', 'bar', 'function'),
-          ];
+          return [mkSymbol(1, '/project/src/a.ts', 'foo', 'function'), mkSymbol(2, '/project/src/b.ts', 'bar', 'function')];
         }
 
         return [];
@@ -1732,7 +1764,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       rootAbs: ROOT,
       readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
     });
-
     // index.ts re-export is dead (no consumers) → lib.ts original also dead (only consumer was dead re-export)
     const libDead = result.deadExports.filter(d => d.module === 'src/lib.ts');
     const indexDead = result.deadExports.filter(d => d.module === 'src/index.ts');

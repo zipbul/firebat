@@ -116,7 +116,11 @@ export const discoverDefaultTargets = async (cwd: string = process.cwd()): Promi
   return toAbsolutePaths(cwd, globMatches).filter(shouldIncludeSourceFile);
 };
 
-export const resolveTargets = async (cwd: string, targets?: ReadonlyArray<string>, exclude?: ReadonlyArray<string>): Promise<string[]> => {
+export const resolveTargets = async (
+  cwd: string,
+  targets?: ReadonlyArray<string>,
+  exclude?: ReadonlyArray<string>,
+): Promise<string[]> => {
   let results: string[];
 
   if (targets && targets.length > 0) {
@@ -129,15 +133,15 @@ export const resolveTargets = async (cwd: string, targets?: ReadonlyArray<string
     results = await expandTargets(discovered);
   }
 
-  if (exclude && exclude.length > 0) {
-    const matchers = exclude.map(pattern => new Bun.Glob(pattern));
-
-    return results.filter(absPath => {
-      const rel = normalizePath(path.relative(cwd, absPath));
-
-      return !matchers.some(g => g.match(rel));
-    });
+  if (!exclude || exclude.length === 0) {
+    return results;
   }
 
-  return results;
+  const matchers = exclude.map(pattern => new Bun.Glob(pattern));
+
+  return results.filter(absPath => {
+    const rel = normalizePath(path.relative(cwd, absPath));
+
+    return !matchers.some(g => g.match(rel));
+  });
 };

@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-
 import { parseSync } from 'oxc-parser';
 
 import type { BindingName } from './reaching-defs';
 
-import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, extractBindingNames } from './reaching-defs';
 import { collectFunctionNodes } from '../ast/oxc-ast-utils';
+import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, extractBindingNames } from './reaching-defs';
 
 const parseFunctions = (code: string) => {
   const parsed = parseSync('test.ts', code);
@@ -39,6 +38,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f(x: number) { return x; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -52,6 +52,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f({ a, b }: { a: number; b: number }) { return a + b; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -64,6 +65,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f([a, b]: number[]) { return a + b; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -76,6 +78,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f({ a, ...rest }: any) { return rest; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -87,6 +90,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f({ a = 1 }: { a?: number }) { return a; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -99,6 +103,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f([{ a }]: [{ a: number }]) { return a; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -111,6 +116,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f(...args: number[]) { return args; }');
       const params = (fn as any).params as any[];
       const out: BindingName[] = [];
+
       // Act
       extractBindingNames(params[0], out);
       // Assert
@@ -127,6 +133,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f(a: number, b: string) { return a; }');
       // Act
       const bindings = collectParameterBindings(fn);
+
       // Assert
       expect(bindings.length).toBe(2);
       expect(bindings.map(b => b.name)).toEqual(['a', 'b']);
@@ -137,6 +144,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f({ x, y }: { x: number; y: number }) { return x; }');
       // Act
       const bindings = collectParameterBindings(fn);
+
       // Assert
       expect(bindings.length).toBe(2);
       expect(bindings.map(b => b.name).sort()).toEqual(['x', 'y']);
@@ -147,6 +155,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f() { return 1; }');
       // Act
       const bindings = collectParameterBindings(fn);
+
       // Assert
       expect(bindings.length).toBe(0);
     });
@@ -156,6 +165,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f(a: number, ...rest: number[]) { return rest; }');
       // Act
       const bindings = collectParameterBindings(fn);
+
       // Assert
       expect(bindings.length).toBe(2);
       expect(bindings.map(b => b.name)).toEqual(['a', 'rest']);
@@ -170,6 +180,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f(a: number) { const b = 1; return a + b; }');
       // Act
       const indexes = collectLocalVarIndexes(fn);
+
       // Assert
       expect(indexes.size).toBe(2);
       expect(indexes.has('a')).toBe(true);
@@ -181,6 +192,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f() { const a = 1; let b = 2; return a + b; }');
       // Act
       const indexes = collectLocalVarIndexes(fn);
+
       // Assert
       expect(indexes.size).toBe(2);
       expect(indexes.has('a')).toBe(true);
@@ -192,6 +204,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f() { const { a, b } = { a: 1, b: 2 }; return a + b; }');
       // Act
       const indexes = collectLocalVarIndexes(fn);
+
       // Assert
       expect(indexes.has('a')).toBe(true);
       expect(indexes.has('b')).toBe(true);
@@ -208,6 +221,29 @@ describe('engine/dataflow/reaching-defs', () => {
 
       expect(uniqueValues.size).toBe(values.length);
     });
+
+    it('collectLocalVarIndexes - IIFE inside function body - does not include IIFE-internal declarations', () => {
+      // Arrange — x inside the IIFE belongs to the IIFE scope, not outer
+      const fn = firstFunction('function outer() { (function inner() { const x = getX(); console.log(x); })(); }');
+      // Act
+      const indexes = collectLocalVarIndexes(fn);
+
+      // Assert — outer has no locals of its own; x is IIFE-internal
+      expect(indexes.has('x')).toBe(false);
+    });
+
+    it('collectLocalVarIndexes - async arrow IIFE inside async arrow - does not include IIFE-internal declarations', () => {
+      // Arrange
+      const fn = firstFunction(
+        'const getOrmDb = async () => { const created = (async () => { const x = getX(); return x; })(); return created; };',
+      );
+      // Act
+      const indexes = collectLocalVarIndexes(fn);
+
+      // Assert — x belongs to async IIFE scope; created belongs to outer
+      expect(indexes.has('x')).toBe(false);
+      expect(indexes.has('created')).toBe(true);
+    });
   });
 
   // ── analyzeFunctionBody ──
@@ -216,6 +252,7 @@ describe('engine/dataflow/reaching-defs', () => {
     it('analyzeFunctionBody - simple function - defs and usedDefs populated', () => {
       // Arrange & Act
       const analysis = analyzeFirstFunction('function f() { const x = 1; return x; }');
+
       // Assert
       expect(analysis.defs.length).toBeGreaterThanOrEqual(1);
       expect(analysis.usedDefs.array().length).toBeGreaterThanOrEqual(1);
@@ -243,6 +280,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const body = (fn as any).body;
       // Act
       const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings);
+
       // Assert
       expect(analysis.defsOfVar.length).toBe(localIndexByName.size);
 

@@ -23,9 +23,8 @@ const createGildash = async (opts: CreateGildashOptions): Promise<Gildash> => {
   } catch (e) {
     const msg = e instanceof GildashError ? e.message : String(e);
 
-    throw new Error(`Gildash open failed: ${msg}`);
+    throw new Error(`Gildash open failed: ${msg}`, { cause: e });
   }
 };
 
 export { createGildash };
-export type { CreateGildashOptions };

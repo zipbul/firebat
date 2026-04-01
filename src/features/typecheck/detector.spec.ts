@@ -1,6 +1,6 @@
-import { describe, expect, it, mock } from 'bun:test';
-
 import type { SemanticDiagnostic } from '@zipbul/gildash';
+
+import { describe, expect, it, mock } from 'bun:test';
 
 describe('features/typecheck/detector', () => {
   it('createEmptyTypecheck - returns empty array', async () => {
@@ -19,7 +19,6 @@ describe('features/typecheck/detector', () => {
 
   it('analyzeTypecheck - gildash provided, error diagnostic - maps to TypecheckItem with 1-based column', async () => {
     const { analyzeTypecheck } = await import('./detector');
-
     const fakeDiag: SemanticDiagnostic = {
       filePath: '/root/src/foo.ts',
       line: 3,
@@ -28,13 +27,10 @@ describe('features/typecheck/detector', () => {
       code: 2322,
       category: 'error',
     };
-
     const fakeGildash = {
       getSemanticDiagnostics: mock((_filePath: string, _opts?: { preEmit?: boolean }) => [fakeDiag]),
     };
-
     const program = [{ filePath: '/root/src/foo.ts', sourceText: 'const x: number = "hello";' }];
-
     const result = await analyzeTypecheck(program as any, {
       rootAbs: '/root',
       gildash: fakeGildash as any,
@@ -53,7 +49,6 @@ describe('features/typecheck/detector', () => {
 
   it('analyzeTypecheck - gildash provided, suggestion diagnostic - skipped', async () => {
     const { analyzeTypecheck } = await import('./detector');
-
     const suggestionDiag: SemanticDiagnostic = {
       filePath: '/root/src/bar.ts',
       line: 1,
@@ -62,13 +57,10 @@ describe('features/typecheck/detector', () => {
       code: 9999,
       category: 'suggestion',
     };
-
     const fakeGildash = {
       getSemanticDiagnostics: mock((_filePath: string, _opts?: { preEmit?: boolean }) => [suggestionDiag]),
     };
-
     const program = [{ filePath: '/root/src/bar.ts', sourceText: 'const x = 1;' }];
-
     const result = await analyzeTypecheck(program as any, {
       rootAbs: '/root',
       gildash: fakeGildash as any,
@@ -79,7 +71,6 @@ describe('features/typecheck/detector', () => {
 
   it('analyzeTypecheck - gildash provided, warning diagnostic - mapped to error severity', async () => {
     const { analyzeTypecheck } = await import('./detector');
-
     const warningDiag: SemanticDiagnostic = {
       filePath: '/root/src/baz.ts',
       line: 2,
@@ -88,13 +79,10 @@ describe('features/typecheck/detector', () => {
       code: 6133,
       category: 'warning',
     };
-
     const fakeGildash = {
       getSemanticDiagnostics: mock((_filePath: string, _opts?: { preEmit?: boolean }) => [warningDiag]),
     };
-
     const program = [{ filePath: '/root/src/baz.ts', sourceText: 'const unused = 1;' }];
-
     const result = await analyzeTypecheck(program as any, {
       rootAbs: '/root',
       gildash: fakeGildash as any,
@@ -106,11 +94,8 @@ describe('features/typecheck/detector', () => {
 
   it('analyzeTypecheck - gildash provided - calls getSemanticDiagnostics with preEmit true for each file', async () => {
     const { analyzeTypecheck } = await import('./detector');
-
     const fakeGetSemanticDiagnostics = mock((_filePath: string, _opts?: { preEmit?: boolean }) => [] as SemanticDiagnostic[]);
-
     const fakeGildash = { getSemanticDiagnostics: fakeGetSemanticDiagnostics };
-
     const program = [
       { filePath: '/root/src/a.ts', sourceText: '' },
       { filePath: '/root/src/b.ts', sourceText: '' },

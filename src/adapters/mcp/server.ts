@@ -1,24 +1,28 @@
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import type { CallToolResult, LoggingMessageNotification, ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import type {
+  CallToolResult,
+  LoggingMessageNotification,
+  ServerNotification,
+  ServerRequest,
+} from '@modelcontextprotocol/sdk/types.js';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { GildashError } from '@zipbul/gildash';
 import { z } from 'zod';
 
-import type { FirebatConfig, FirebatLogLevel } from '../../shared/firebat-config';
 import type { FirebatCliOptions } from '../../interfaces';
+import type { FirebatConfig, FirebatLogLevel } from '../../shared/firebat-config';
 import type { FirebatLogger, FirebatLogFields } from '../../shared/logger';
 import type { FirebatDetector } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
-import { toJsonReport } from '../../types';
 import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
 import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { resolveTargets } from '../../shared/target-discovery';
 import { createGildash } from '../../store/gildash';
-
-import { GildashError } from '@zipbul/gildash';
+import { toJsonReport } from '../../types';
 
 const ALL_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
@@ -214,19 +218,22 @@ type McpLoggingLevel = LoggingMessageNotification['params']['level'];
 
 const toMcpLevel = (level: FirebatLogLevel): McpLoggingLevel => {
   switch (level) {
-    case 'error': return 'error';
-    case 'warn': return 'warning';
-    case 'info': return 'info';
-    case 'debug': return 'debug';
-    case 'trace': return 'debug'; // MCP has no trace level
+    case 'error':
+      return 'error';
+    case 'warn':
+      return 'warning';
+    case 'info':
+      return 'info';
+    case 'debug':
+      return 'debug';
+    case 'trace':
+      return 'debug'; // MCP has no trace level
   }
 };
 
 const createMcpLogger = (server: McpServer, baseLogger: FirebatLogger): FirebatLogger => {
   const forward = (level: FirebatLogLevel, message: string, fields?: FirebatLogFields): void => {
-    const data: unknown = fields !== undefined && Object.keys(fields).length > 0
-      ? { message, ...fields }
-      : message;
+    const data: unknown = fields !== undefined && Object.keys(fields).length > 0 ? { message, ...fields } : message;
 
     server.sendLoggingMessage({ level: toMcpLevel(level), data }).catch(() => {
       // fire-and-forget: suppress send errors
@@ -235,12 +242,30 @@ const createMcpLogger = (server: McpServer, baseLogger: FirebatLogger): FirebatL
 
   return {
     level: baseLogger.level,
-    log: (lvl, msg, fields, error) => { baseLogger.log(lvl, msg, fields, error); forward(lvl, msg, fields); },
-    error: (msg, fields, error) => { baseLogger.error(msg, fields, error); forward('error', msg, fields); },
-    warn: (msg, fields, error) => { baseLogger.warn(msg, fields, error); forward('warn', msg, fields); },
-    info: (msg, fields, error) => { baseLogger.info(msg, fields, error); forward('info', msg, fields); },
-    debug: (msg, fields, error) => { baseLogger.debug(msg, fields, error); forward('debug', msg, fields); },
-    trace: (msg, fields, error) => { baseLogger.trace(msg, fields, error); forward('trace', msg, fields); },
+    log: (lvl, msg, fields, error) => {
+      baseLogger.log(lvl, msg, fields, error);
+      forward(lvl, msg, fields);
+    },
+    error: (msg, fields, error) => {
+      baseLogger.error(msg, fields, error);
+      forward('error', msg, fields);
+    },
+    warn: (msg, fields, error) => {
+      baseLogger.warn(msg, fields, error);
+      forward('warn', msg, fields);
+    },
+    info: (msg, fields, error) => {
+      baseLogger.info(msg, fields, error);
+      forward('info', msg, fields);
+    },
+    debug: (msg, fields, error) => {
+      baseLogger.debug(msg, fields, error);
+      forward('debug', msg, fields);
+    },
+    trace: (msg, fields, error) => {
+      baseLogger.trace(msg, fields, error);
+      forward('trace', msg, fields);
+    },
   };
 };
 
@@ -249,18 +274,21 @@ const createMcpLogger = (server: McpServer, baseLogger: FirebatLogger): FirebatL
 const extractFindingFilePaths = (finding: unknown): ReadonlyArray<string> => {
   const f = finding as Record<string, unknown>;
 
-  if (typeof f.file === 'string' && f.file.length > 0) {return [f['file']];}
+  if (typeof f.file === 'string' && f.file.length > 0) {
+    return [f.file];
+  }
 
-  if (typeof f.filePath === 'string' && f.filePath.length > 0) {return [f['filePath']];}
+  if (typeof f.filePath === 'string' && f.filePath.length > 0) {
+    return [f.filePath];
+  }
 
-  if (typeof f.module === 'string' && f.module.length > 0) {return [f['module']];}
+  if (typeof f.module === 'string' && f.module.length > 0) {
+    return [f.module];
+  }
 
   if (Array.isArray(f.items)) {
     return (f.items as Record<string, unknown>[])
-      .flatMap(item => [
-        typeof item.filePath === 'string' ? item.filePath : '',
-        typeof item.file === 'string' ? item.file : '',
-      ])
+      .flatMap(item => [typeof item.filePath === 'string' ? item.filePath : '', typeof item.file === 'string' ? item.file : ''])
       .filter(Boolean);
   }
 
@@ -283,8 +311,7 @@ const filterAnalysesByFilePatterns = (
 
   const globs = filePatterns.map(p => new Bun.Glob(p));
 
-  const matchesAny = (filePath: string): boolean =>
-    globs.some(glob => glob.match(filePath));
+  const matchesAny = (filePath: string): boolean => globs.some(glob => glob.match(filePath));
 
   const filtered: Record<string, unknown> = {};
 
@@ -307,10 +334,7 @@ const filterAnalysesByFilePatterns = (
 
 export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): Promise<McpServer> => {
   const { rootAbs, config, logger } = options;
-  const server = new McpServer(
-    { name: 'firebat', version: '2.0.0-scan-only' },
-    { capabilities: { logging: {} } },
-  );
+  const server = new McpServer({ name: 'firebat', version: '2.0.0-scan-only' }, { capabilities: { logging: {} } });
   // ── Shared gildash for query tools ──────────────────────────────────────────
   let sharedGildash: Awaited<ReturnType<typeof createGildash>> | null = null;
 
@@ -425,10 +449,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
           errors: z.record(z.string(), z.string()).optional(),
           blockers: z.number(),
           analyses: z.record(z.string(), z.unknown()),
-          catalog: z.record(
-            z.string(),
-            z.object({ cause: z.string(), think: z.array(z.string()) }).strict(),
-          ),
+          catalog: z.record(z.string(), z.object({ cause: z.string(), think: z.array(z.string()) }).strict()),
         })
         .strict(),
     },
@@ -478,10 +499,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const report = await scanUseCase(cliOptions, { logger: mcpLogger });
       const jsonReport = toJsonReport(report);
       const filePatterns = args.filePatterns ?? [];
-      const filteredAnalyses = filterAnalysesByFilePatterns(
-        jsonReport.analyses as Record<string, unknown>,
-        filePatterns,
-      );
+      const filteredAnalyses = filterAnalysesByFilePatterns(jsonReport.analyses as Record<string, unknown>, filePatterns);
       const filteredReport = { ...jsonReport, analyses: filteredAnalyses };
 
       return {
@@ -495,9 +513,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
   const DependencyQueryInputSchema = z
     .object({
-      filePath: z
-        .string()
-        .describe('Absolute path of the file to query.'),
+      filePath: z.string().describe('Absolute path of the file to query.'),
       direction: z
         .enum(['dependencies', 'dependents'])
         .describe('"dependencies" returns files this file imports; "dependents" returns files that import this file.'),
@@ -519,9 +535,8 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
       const gildash = await ensureGildash();
 
       try {
-        const result = args.direction === 'dependencies'
-          ? gildash.getDependencies(args.filePath)
-          : gildash.getDependents(args.filePath);
+        const result =
+          args.direction === 'dependencies' ? gildash.getDependencies(args.filePath) : gildash.getDependents(args.filePath);
 
         const toRel = (p: string): string => {
           const rel = p.startsWith(rootAbs) ? p.slice(rootAbs.length + 1) : p;
@@ -530,15 +545,17 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         };
 
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              filePath: args.filePath,
-              direction: args.direction,
-              count: result.length,
-              files: result.map(toRel),
-            }),
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                filePath: args.filePath,
+                direction: args.direction,
+                count: result.length,
+                files: result.map(toRel),
+              }),
+            },
+          ],
         };
       } catch (e) {
         if (e instanceof GildashError) {
@@ -554,9 +571,7 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
 
   const SymbolsByFileInputSchema = z
     .object({
-      filePath: z
-        .string()
-        .describe('Absolute path of the file to list symbols from.'),
+      filePath: z.string().describe('Absolute path of the file to list symbols from.'),
     })
     .strict();
 
@@ -584,10 +599,12 @@ export const createFirebatMcpServer = async (options: FirebatMcpServerOptions): 
         }));
 
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({ filePath: args.filePath, count: symbols.length, symbols }),
-          }],
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ filePath: args.filePath, count: symbols.length, symbols }),
+            },
+          ],
         };
       } catch (e) {
         if (e instanceof GildashError) {

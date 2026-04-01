@@ -12,8 +12,8 @@
 
 import type { Node } from 'oxc-parser';
 
-import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
 import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -25,25 +25,21 @@ import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
  * - MethodDefinition → value(FunctionExpression)에서 추출
  * - 함수 body가 없는 노드(TypeAlias, Interface 등) → 빈 배열
  */
-export const extractStatementFingerprints = (
-  functionNode: Node,
-): ReadonlyArray<string> => {
+export const extractStatementFingerprints = (functionNode: Node): ReadonlyArray<string> => {
   const statements = getBodyStatements(functionNode);
 
-  return statements.map((s) => createOxcFingerprintShape(s));
+  return statements.map(s => createOxcFingerprintShape(s));
 };
 
 /**
  * 함수의 statement fingerprint를 bag(중복 허용 집합)으로 반환.
  * MinHash 입력용. 순서 정보가 없으므로 삽입/삭제된 코드에 더 robust.
  */
-export const extractStatementFingerprintBag = (
-  functionNode: Node,
-): ReadonlyArray<string> => {
+export const extractStatementFingerprintBag = (functionNode: Node): ReadonlyArray<string> => {
   const fps = extractStatementFingerprints(functionNode);
   const counts = new Map<string, number>();
 
-  return fps.map((fp) => {
+  return fps.map(fp => {
     const count = counts.get(fp) ?? 0;
 
     counts.set(fp, count + 1);
@@ -63,20 +59,20 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
   if (node.type === 'MethodDefinition') {
     const value = node.value as Node | null | undefined;
 
-    if (isOxcNode(value)) {return getBodyStatements(value);}
+    if (isOxcNode(value)) {
+      return getBodyStatements(value);
+    }
 
     return [];
   }
 
   // FunctionDeclaration, FunctionExpression, ArrowFunctionExpression
-  if (
-    node.type === 'FunctionDeclaration' ||
-    node.type === 'FunctionExpression' ||
-    node.type === 'ArrowFunctionExpression'
-  ) {
+  if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
     const body = node.body;
 
-    if (body === null || body === undefined) {return [];}
+    if (body === null || body === undefined) {
+      return [];
+    }
 
     // BlockStatement → .body 배열
     if (body.type === 'BlockStatement') {

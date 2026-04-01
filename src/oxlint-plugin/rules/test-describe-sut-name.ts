@@ -119,13 +119,13 @@ function getExportedClassNameFromText(text: string): string | null {
     .filter((n): n is string => typeof n === 'string' && n.length > 0);
   const unique = Array.from(new Set(matches));
 
-  if (unique.length === 1) {
-    const only = unique[0];
-
-    return typeof only === 'string' ? only : null;
+  if (unique.length !== 1) {
+    return null;
   }
 
-  return null;
+  const only = unique[0];
+
+  return typeof only === 'string' ? only : null;
 }
 
 const testDescribeSutNameRule = {

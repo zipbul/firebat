@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
-
 import { describe } from 'bun:test';
+import { readFileSync } from 'node:fs';
 
 import type { FixtureSources } from '../../shared/golden-runner';
 

@@ -11,7 +11,7 @@ import type {
 } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { collectFunctionNodes, forEachChildNode } from '../../engine/ast/oxc-ast-utils';
+import { collectFunctionNodes, collectOxcNodes, forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
@@ -781,8 +781,9 @@ const analyzeVariableLifetime = (
 
       const analysis = analyzeFunctionBody(bodyNode, localIndexByName, paramBindings);
       const { defs, reachingInByNode, useVarIndexesByNode, nodePayloads, defsOfVar } = analysis;
-      // Compute last use offset for each defId via reaching definitions.
+      // Compute first/last use offset for each defId via reaching definitions.
       const lastUseOffsetByDefId = new Map<number, number>();
+      const firstUseOffsetByDefId = new Map<number, number>();
 
       for (let cfgNodeId = 0; cfgNodeId < nodePayloads.length; cfgNodeId += 1) {
         const reachingIn = reachingInByNode[cfgNodeId];
@@ -815,12 +816,51 @@ const analyzeVariableLifetime = (
           const defIds = reachingDefs.array();
 
           for (const defId of defIds) {
-            const existing = lastUseOffsetByDefId.get(defId);
+            const existingLast = lastUseOffsetByDefId.get(defId);
 
-            if (existing === undefined || useOffset > existing) {
+            if (existingLast === undefined || useOffset > existingLast) {
               lastUseOffsetByDefId.set(defId, useOffset);
             }
+
+            const existingFirst = firstUseOffsetByDefId.get(defId);
+
+            if (existingFirst === undefined || useOffset < existingFirst) {
+              firstUseOffsetByDefId.set(defId, useOffset);
+            }
           }
+        }
+      }
+
+      // Build parameter location set for filtering.
+      const paramLocationSet = new Set(paramBindings.map(b => `${b.name}@${b.location}`));
+      // Collect nested function definitions with their captured variable names.
+      // Each entry: { startOffset, capturedNames } — used to check if moving a declaration
+      // past a closure definition would break capture semantics.
+      const nestedFunctions: Array<{ readonly startOffset: number; readonly capturedNames: Set<string> }> = [];
+      const outerUsages = collectVariables(bodyNode as Node, { includeNestedFunctions: false });
+      const outerReadKeys = new Set(outerUsages.filter(u => u.isRead).map(u => `${u.name}@${u.location}`));
+      const outerWriteKeys = new Set(outerUsages.filter(u => u.isWrite).map(u => `${u.name}@${u.location}`));
+      const nestedFnNodes = collectOxcNodes(bodyNode as Node, n => isFunctionNode(n));
+
+      for (const nfn of nestedFnNodes) {
+        const nestedUsages = collectVariables(nfn, { includeNestedFunctions: true });
+        const captured = new Set<string>();
+
+        for (const u of nestedUsages) {
+          // A usage is "captured" if it references a local variable and the same name@location
+          // is NOT present in the outer (non-nested) usages — meaning it's only accessed inside the closure.
+          const key = `${u.name}@${u.location}`;
+
+          if (
+            localIndexByName.has(u.name) &&
+            ((u.isRead && !outerReadKeys.has(key)) || (u.isWrite && !outerWriteKeys.has(key)))
+          ) {
+            captured.add(u.name);
+          }
+        }
+
+        if (captured.size > 0) {
+          nestedFunctions.push({ startOffset: nfn.start, capturedNames: captured });
         }
       }
 
@@ -834,18 +874,58 @@ const analyzeVariableLifetime = (
           continue;
         }
 
+        // Filter 1: Skip parameters — cannot move.
+        if (paramLocationSet.has(`${defMeta.name}@${defMeta.location}`)) {
+          continue;
+        }
+
         const defLoc = lineColumnAt(file.sourceText, defMeta.location);
         const useLoc = lineColumnAt(file.sourceText, lastUseOffset);
         const lifetime = useLoc.line - defLoc.line;
 
-        if (lifetime > maxLifetimeLines) {
-          longLived.push({
-            variable: defMeta.name,
-            defOffset: defMeta.location,
-            lastUseOffset,
-            lifetimeLines: lifetime,
-          });
+        if (lifetime <= maxLifetimeLines) {
+          continue;
         }
+
+        // Filter 2: Check if moving to firstUse would actually reduce lifetime below threshold.
+        const firstUseOffset = firstUseOffsetByDefId.get(defId);
+
+        if (firstUseOffset !== undefined) {
+          const firstUseLoc = lineColumnAt(file.sourceText, firstUseOffset);
+          const improvedLifetime = useLoc.line - firstUseLoc.line;
+
+          if (improvedLifetime > maxLifetimeLines) {
+            // Even after moving, lifetime still exceeds threshold — not actionable.
+            continue;
+          }
+        }
+
+        // Filter 3: Check if any closure defined BEFORE the move target captures this variable.
+        // Move target = firstUseOffset. If a closure defined between defOffset and firstUseOffset
+        // captures this variable, moving the declaration past the closure would break it.
+        if (firstUseOffset !== undefined) {
+          const defOffset = defMeta.location;
+          let blockedByClosure = false;
+
+          for (const nf of nestedFunctions) {
+            if (nf.startOffset > defOffset && nf.startOffset < firstUseOffset && nf.capturedNames.has(defMeta.name)) {
+              blockedByClosure = true;
+
+              break;
+            }
+          }
+
+          if (blockedByClosure) {
+            continue;
+          }
+        }
+
+        longLived.push({
+          variable: defMeta.name,
+          defOffset: defMeta.location,
+          lastUseOffset,
+          lifetimeLines: lifetime,
+        });
       }
 
       const contextBurden = longLived.length;

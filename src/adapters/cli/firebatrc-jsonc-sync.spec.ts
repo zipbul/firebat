@@ -17,10 +17,12 @@ describe('syncJsoncTextToTemplateKeys', () => {
 
     expect(result.ok).toBe(true);
 
-    if (result.ok) {
-      expect(result.changed).toBe(false);
-      expect(result.text).toBe('{"key": "value"}');
+    if (!result.ok) {
+      return;
     }
+
+    expect(result.changed).toBe(false);
+    expect(result.text).toBe('{"key": "value"}');
   });
 
   it('should return ok:true with unchanged text when already in sync', () => {
@@ -30,9 +32,11 @@ describe('syncJsoncTextToTemplateKeys', () => {
 
     expect(result.ok).toBe(true);
 
-    if (result.ok) {
-      expect(result.changed).toBe(false);
+    if (!result.ok) {
+      return;
     }
+
+    expect(result.changed).toBe(false);
   });
 
   it('should insert missing keys from template', () => {
@@ -42,10 +46,12 @@ describe('syncJsoncTextToTemplateKeys', () => {
 
     expect(result.ok).toBe(true);
 
-    if (result.ok) {
-      expect(result.changed).toBe(true);
-      expect(result.text).toContain('"version"');
+    if (!result.ok) {
+      return;
     }
+
+    expect(result.changed).toBe(true);
+    expect(result.text).toContain('"version"');
   });
 
   it('should remove keys not present in template', () => {
@@ -55,10 +61,12 @@ describe('syncJsoncTextToTemplateKeys', () => {
 
     expect(result.ok).toBe(true);
 
-    if (result.ok) {
-      expect(result.changed).toBe(true);
-      expect(result.text).not.toContain('"extra"');
+    if (!result.ok) {
+      return;
     }
+
+    expect(result.changed).toBe(true);
+    expect(result.text).not.toContain('"extra"');
   });
 
   it('should return ok:false when userText is invalid JSON', () => {
@@ -90,10 +98,12 @@ describe('syncJsoncTextToTemplateKeys', () => {
 
     expect(result.ok).toBe(true);
 
-    if (result.ok) {
-      // Comments preserved — no change needed
-      expect(result.changed).toBe(false);
+    if (!result.ok) {
+      return;
     }
+
+    // Comments preserved — no change needed
+    expect(result.changed).toBe(false);
   });
 
   it('should handle empty user object with non-empty template', () => {
@@ -104,11 +114,13 @@ describe('syncJsoncTextToTemplateKeys', () => {
 
     expect(result.ok).toBe(true);
 
-    if (result.ok) {
-      expect(result.changed).toBe(true);
-      expect(result.text).toContain('"key"');
-      expect(result.text).toContain('"num"');
+    if (!result.ok) {
+      return;
     }
+
+    expect(result.changed).toBe(true);
+    expect(result.text).toContain('"key"');
+    expect(result.text).toContain('"num"');
   });
 
   it('should handle nested objects from template', () => {

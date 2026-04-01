@@ -11,7 +11,6 @@ import { collectVariables } from './variable-collector';
 const getFunctionBodyStatement = (sourceText: string, statementIndex: number): Node => {
   const parsed = parseSource('/virtual/variable-collector.spec.ts', sourceText);
   const program = parsed.program;
-
   const body = Array.isArray(program.body) ? (program.body as ReadonlyArray<Node>) : [];
 
   if (body.length === 0) {

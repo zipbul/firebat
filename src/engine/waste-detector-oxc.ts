@@ -1,18 +1,13 @@
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { WasteFinding } from '../types';
 import type { ParsedFile } from './types';
 
-import {
-  collectOxcNodes,
-  forEachChildNode,
-  getNodeName,
-  isFunctionNode,
-  isOxcNode,
-} from './ast/oxc-ast-utils';
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-import { collectVariables } from './dataflow/variable-collector';
+import { collectOxcNodes, forEachChildNode, getNodeName, isFunctionNode, isOxcNode } from './ast/oxc-ast-utils';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from './dataflow/reaching-defs';
+import { collectVariables } from './dataflow/variable-collector';
 
 export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
   const findings: WasteFinding[] = [];
@@ -44,7 +39,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
       }
 
       const fn = node as OxcFunction;
-      const functionBodyNode = isFunctionNode(node) ? fn.body ?? undefined : undefined;
+      const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
 
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
         const localIndexByName = collectLocalVarIndexes(node);
@@ -58,9 +53,15 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
           const reachingInByNode = analysis.reachingInByNode;
           const nodePayloads = analysis.nodePayloads;
           const varHasAnyUsedDef: boolean[] = Array.from({ length: localIndexByName.size }, () => false);
-          const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode) ? (functionBodyNode as ReadonlyArray<Node>) : [functionBodyNode as Node];
-          const allReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: true })).filter(u => u.isRead);
-          const outerReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: false })).filter(u => u.isRead);
+          const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
+            ? (functionBodyNode as ReadonlyArray<Node>)
+            : [functionBodyNode as Node];
+          const allReads = functionBodyNodes
+            .flatMap(n => collectVariables(n, { includeNestedFunctions: true }))
+            .filter(u => u.isRead);
+          const outerReads = functionBodyNodes
+            .flatMap(n => collectVariables(n, { includeNestedFunctions: false }))
+            .filter(u => u.isRead);
           const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
           const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
           const outerReadNames = new Set(outerReads.map(u => u.name));
@@ -74,7 +75,9 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               continue;
             }
 
-            const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+            const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload)
+              ? (payload as ReadonlyArray<Node>)
+              : [payload as Node];
             const nested = payloadNodes.flatMap(pn => collectOxcNodes(pn, n => isFunctionNode(n)));
 
             if (nested.length === 0) {
@@ -101,9 +104,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               hasRelevantNested = true;
 
               // Collect read names specific to this nested function for per-entry precision.
-              const nestedReads = collectVariables(nestedFunction, { includeNestedFunctions: true }).filter(
-                u => u.isRead,
-              );
+              const nestedReads = collectVariables(nestedFunction, { includeNestedFunctions: true }).filter(u => u.isRead);
 
               for (const r of nestedReads) {
                 if (closureReadNames.has(r.name)) {
@@ -112,10 +113,12 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
               }
             }
 
-            if (hasRelevantNested) {
-              nestedFunctionEntryNodeIds.push(nodeId);
-              closureReadNamesByEntryNodeId.set(nodeId, entryReadNames);
+            if (!hasRelevantNested) {
+              continue;
             }
+
+            nestedFunctionEntryNodeIds.push(nodeId);
+            closureReadNamesByEntryNodeId.set(nodeId, entryReadNames);
           }
 
           for (let defId = 0; defId < defs.length; defId += 1) {

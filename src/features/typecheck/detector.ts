@@ -1,10 +1,8 @@
-import * as path from 'node:path';
-
-import ts from 'typescript';
-
 import type { Gildash } from '@zipbul/gildash';
 
 import { normalizePath } from '@zipbul/gildash';
+import * as path from 'node:path';
+import ts from 'typescript';
 
 import type { ParsedFile } from '../../engine/types';
 import type { FirebatLogger } from '../../shared/logger';
@@ -113,7 +111,9 @@ const analyzeTypecheckViaGildash = (
     const diagnostics = gildash.getSemanticDiagnostics(file.filePath, { preEmit: true });
 
     for (const diag of diagnostics) {
-      if (!shouldIncludeGildashDiagnostic(diag.category)) {continue;}
+      if (!shouldIncludeGildashDiagnostic(diag.category)) {
+        continue;
+      }
 
       const column1Based = diag.column + 1;
       const span: SourceSpan = {
@@ -140,11 +140,11 @@ const analyzeTypecheck = async (
 ): Promise<ReadonlyArray<TypecheckItem>> => {
   const root = input?.rootAbs ?? process.cwd();
   const logger = input?.logger ?? createNoopLogger();
-
   let itemsWithoutFrames: ReadonlyArray<Omit<TypecheckItem, 'codeFrame'>>;
 
   if (input?.gildash) {
     logger.debug('typecheck: using gildash getSemanticDiagnostics');
+
     itemsWithoutFrames = analyzeTypecheckViaGildash(program, root, input.gildash);
   } else {
     const tsconfigPath = findTsconfigPath(root);
@@ -171,12 +171,16 @@ const analyzeTypecheck = async (
     for (const file of program) {
       const sourceFile = tsProgram.getSourceFile(file.filePath);
 
-      if (!sourceFile) {continue;}
+      if (!sourceFile) {
+        continue;
+      }
 
       const diagnostics = ts.getPreEmitDiagnostics(tsProgram, sourceFile);
 
       for (const diag of diagnostics) {
-        if (!shouldIncludeDiagnostic(diag.category)) {continue;}
+        if (!shouldIncludeDiagnostic(diag.category)) {
+          continue;
+        }
 
         const filePath = diag.file?.fileName ?? file.filePath;
         let span: SourceSpan;
@@ -209,9 +213,13 @@ const analyzeTypecheck = async (
   const itemsWithFrames = attachCodeFrames(program, itemsWithoutFrames);
 
   return [...itemsWithFrames].sort((left, right) => {
-    if (left.file !== right.file) {return left.file.localeCompare(right.file);}
+    if (left.file !== right.file) {
+      return left.file.localeCompare(right.file);
+    }
 
-    if (left.span.start.line !== right.span.start.line) {return left.span.start.line - right.span.start.line;}
+    if (left.span.start.line !== right.span.start.line) {
+      return left.span.start.line - right.span.start.line;
+    }
 
     return left.span.start.column - right.span.start.column;
   });

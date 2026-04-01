@@ -2,9 +2,9 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { BitSet, DefMeta, FunctionBodyAnalysis } from '../types';
 
+import { getNodeName } from '../ast/oxc-ast-utils';
 import { OxcCFGBuilder } from '../cfg/cfg-builder';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
-import { getNodeName } from '../ast/oxc-ast-utils';
 import { collectVariables } from './variable-collector';
 
 export interface BindingName {
@@ -117,8 +117,7 @@ export const analyzeFunctionBody = (
   localIndexByName: Map<string, number>,
   parameterBindings: ReadonlyArray<BindingName>,
 ): FunctionBodyAnalysis => {
-  const cfgBuilder = new OxcCFGBuilder();
-  const built = cfgBuilder.buildFunctionBody(bodyNode);
+  const built = OxcCFGBuilder.build(bodyNode);
   const nodeCount = built.cfg.nodeCount;
   const nodePayloads = built.nodePayloads;
   const entryId = built.entryId;

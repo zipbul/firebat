@@ -1,4 +1,5 @@
 import type { Node } from 'oxc-parser';
+
 import { visitorKeys } from 'oxc-parser';
 
 import type { NodeRecord, NodeValue } from '../types';
@@ -117,7 +118,7 @@ export const collectOxcNodes = (program: Node, predicate: OxcNodePredicate): Nod
 
 export const collectFunctionNodes = (program: Node): Node[] => collectOxcNodes(program, isFunctionNode);
 
-export interface FunctionNodeWithParent {
+interface FunctionNodeWithParent {
   readonly node: Node;
   readonly parent: Node | null;
 }

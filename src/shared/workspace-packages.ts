@@ -39,7 +39,6 @@ const parsePnpmWorkspacePatterns = async (rootAbs: string): Promise<string[]> =>
 
     const text = await file.text();
     const patterns: string[] = [];
-
     // Simple YAML list parser: lines starting with `- ` under `packages:` key
     let inPackages = false;
 
@@ -54,7 +53,10 @@ const parsePnpmWorkspacePatterns = async (rootAbs: string): Promise<string[]> =>
 
       if (inPackages) {
         if (trimmed.startsWith('- ')) {
-          const value = trimmed.slice(2).trim().replace(/^['"]|['"]$/g, '');
+          const value = trimmed
+            .slice(2)
+            .trim()
+            .replace(/^['"]|['"]$/g, '');
 
           if (value.length > 0) {
             patterns.push(value);

@@ -4,11 +4,17 @@ import type { Gildash } from '@zipbul/gildash';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
 
+const noopGildash = {
+  isTypeAssignableToType: () => null,
+  getResolvedTypesAtPositions: () => new Map(),
+  isTypeAssignableToTypeAtPositions: () => new Map<number, boolean>(),
+} as unknown as Gildash;
+
 const analyzeSingle = async (filePath: string, sourceText: string) => {
   // Arrange
   const program = [parseSource(filePath, sourceText)];
   // Act
-  const findings = await analyzeErrorFlow(program);
+  const findings = await analyzeErrorFlow(program, { gildash: noopGildash });
 
   // Assert (shape)
   expect(Array.isArray(findings)).toBe(true);
@@ -25,10 +31,34 @@ const analyzeWithSemantic = async (
     targetTypeExpression: string,
     options?: { anyConstituent?: boolean },
   ) => boolean | null,
+  mockBatchPositions?: (
+    filePath: string,
+    positions: number[],
+    targetTypeExpression: string,
+    options?: { anyConstituent?: boolean },
+  ) => Map<number, boolean>,
 ) => {
   const program = [parseSource(filePath, sourceText)];
   const gildash = {
     isTypeAssignableToType: mockIsTypeAssignableToType,
+    getResolvedTypesAtPositions: (_f: string, positions: number[]) => {
+      const result = new Map<number, { text: string; flags: number }>();
+
+      for (const pos of positions) {
+        result.set(pos, { text: 'unknown', flags: 0 });
+      }
+
+      return result;
+    },
+    isTypeAssignableToTypeAtPositions: mockBatchPositions ?? ((_f: string, positions: number[]) => {
+      const result = new Map<number, boolean>();
+
+      for (const pos of positions) {
+        result.set(pos, true);
+      }
+
+      return result;
+    }),
   } as unknown as Gildash;
 
   return analyzeErrorFlow(program, { gildash });
@@ -43,7 +73,7 @@ describe('error-flow/analyzer', () => {
     // Arrange
     const program: ReturnType<typeof parseSource>[] = [];
     // Act
-    const findings = await analyzeErrorFlow(program);
+    const findings = await analyzeErrorFlow(program, { gildash: noopGildash });
 
     // Assert
     expect(findings.length).toBe(0);
@@ -1765,16 +1795,36 @@ describe('error-flow/analyzer', () => {
 
   // --- unobserved-variable ---
 
-  it('should report unobserved-variable when call result is assigned but never awaited', async () => {
-    // Arrange
+  it('should report unobserved-variable when Promise call result is never awaited', async () => {
+    // Arrange — gildash batch confirms fetchData returns Promise
     const filePath = '/virtual/src/features/unobserved-var.ts';
     const source = ['export function f() {', '  const p = fetchData();', '  console.log("done");', '}'].join('\n');
     // Act
-    const analysis = await analyzeSingle(filePath, source);
+    const analysis = await analyzeWithSemantic(filePath, source, () => null);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
     expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report unobserved-variable when non-Promise call result (gildash confirms)', async () => {
+    // Arrange — gildash batch confirms fetchData does NOT return Promise
+    const filePath = '/virtual/src/features/sync-var.ts';
+    const source = ['export function f() {', '  const x = getData();', '  console.log("done");', '}'].join('\n');
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => null, (_f, positions) => {
+      const m = new Map<number, boolean>();
+
+      for (const p of positions) {
+        m.set(p, false);
+      }
+
+      return m;
+    });
+    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+
+    // Assert
+    expect(hits.length).toBe(0);
   });
 
   it('should not report unobserved-variable when call result is awaited', async () => {
@@ -1782,7 +1832,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/observed-var.ts';
     const source = ['export async function f() {', '  const p = fetchData();', '  await p;', '}'].join('\n');
     // Act
-    const analysis = await analyzeSingle(filePath, source);
+    const analysis = await analyzeWithSemantic(filePath, source, () => null);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
@@ -1794,7 +1844,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/returned-var.ts';
     const source = ['export function f() {', '  const p = fetchData();', '  return p;', '}'].join('\n');
     // Act
-    const analysis = await analyzeSingle(filePath, source);
+    const analysis = await analyzeWithSemantic(filePath, source, () => null);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert

@@ -18,10 +18,10 @@ import type {
   WhileStatement,
 } from 'oxc-parser';
 
-import { IntegerCFG } from './cfg';
 import { isOxcNode } from '../ast/oxc-ast-utils';
 import { evalStaticLiteralValue, evalStaticTruthiness } from '../ast/oxc-expression-utils';
 import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg } from '../types';
+import { IntegerCFG } from './cfg';
 
 export class OxcCFGBuilder {
   private cfg: IntegerCFG;
@@ -30,15 +30,20 @@ export class OxcCFGBuilder {
   private finallyReturnEntryStack: NodeId[];
   private activeCatchEntryStack: NodeId[];
 
-  constructor() {
-    this.cfg = new IntegerCFG();
-    this.nodePayloads = [];
-    this.exitId = 0;
-    this.finallyReturnEntryStack = [];
-    this.activeCatchEntryStack = [];
+  /**
+   * Build a CFG for a function body.
+   *
+   * Using a static factory ensures all mutable state is created here and
+   * passed into the builder — readers can never observe a partially-written
+   * builder from a previous call (temporal-coupling eliminated).
+   */
+  public static build(bodyNode: Node | ReadonlyArray<Node> | undefined): OxcBuiltFunctionCfg {
+    return new OxcCFGBuilder(bodyNode).result;
   }
 
-  public buildFunctionBody(bodyNode: Node | ReadonlyArray<Node> | undefined): OxcBuiltFunctionCfg {
+  private readonly result: OxcBuiltFunctionCfg;
+
+  private constructor(bodyNode: Node | ReadonlyArray<Node> | undefined) {
     this.cfg = new IntegerCFG();
     this.nodePayloads = [];
     this.finallyReturnEntryStack = [];
@@ -54,12 +59,17 @@ export class OxcCFGBuilder {
       this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
     }
 
-    return {
+    this.result = {
       cfg: this.cfg,
       entryId,
       exitId: this.exitId,
       nodePayloads: this.nodePayloads,
     };
+  }
+
+  /** @deprecated Use `OxcCFGBuilder.build()` instead. */
+  public buildFunctionBody(bodyNode: Node | ReadonlyArray<Node> | undefined): OxcBuiltFunctionCfg {
+    return OxcCFGBuilder.build(bodyNode);
   }
 
   private addNode(payload: CfgNodePayload | null): NodeId {
@@ -216,9 +226,7 @@ export class OxcCFGBuilder {
           this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
 
           const falseTails =
-            ifNode.alternate === null
-              ? [falseEntry]
-              : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
+            ifNode.alternate === null ? [falseEntry] : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
           const mergeNode = this.addNode(null);
 
           this.connect(falseTails, mergeNode, EdgeType.Normal);
@@ -231,9 +239,7 @@ export class OxcCFGBuilder {
 
         const trueTails = this.visitStatement(ifNode.consequent, [trueEntry], loopStack, null);
         const falseTails =
-          ifNode.alternate === null
-            ? [falseEntry]
-            : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
+          ifNode.alternate === null ? [falseEntry] : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
         const mergeNode = this.addNode(null);
 
         this.connect(trueTails, mergeNode, EdgeType.Normal);
@@ -381,7 +387,6 @@ export class OxcCFGBuilder {
         // matching case are statically unreachable and their test expressions are excluded.
         const switchNode = node as SwitchStatement;
         const discriminantPayload: Node[] = [switchNode.discriminant];
-
         // Attempt to resolve static discriminant value so we can prune unreachable cases.
         const staticDiscriminant = evalStaticLiteralValue(switchNode.discriminant);
         let firstMatchFound = false;
@@ -400,12 +405,14 @@ export class OxcCFGBuilder {
           discriminantPayload.push(caseNode.test);
 
           // Check if this case matches the discriminant statically.
-          if (staticDiscriminant !== undefined) {
-            const staticTest = evalStaticLiteralValue(caseNode.test);
+          if (staticDiscriminant === undefined) {
+            continue;
+          }
 
-            if (staticTest !== undefined && Object.is(staticDiscriminant, staticTest)) {
-              firstMatchFound = true;
-            }
+          const staticTest = evalStaticLiteralValue(caseNode.test);
+
+          if (staticTest !== undefined && Object.is(staticDiscriminant, staticTest)) {
+            firstMatchFound = true;
           }
         }
 

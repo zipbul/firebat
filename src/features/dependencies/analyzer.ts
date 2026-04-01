@@ -1,7 +1,7 @@
-import * as path from 'node:path';
-
 import type { Gildash, SymbolDetail } from '@zipbul/gildash';
+
 import { GildashError, normalizePath } from '@zipbul/gildash';
+import * as path from 'node:path';
 
 import type {
   DependencyAnalysis,
@@ -15,6 +15,7 @@ import type {
   DependencyDuplicateExportFinding,
   DependencyUnusedMemberFinding,
 } from '../../types';
+
 import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
 
 const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
@@ -50,8 +51,7 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
 
 /** Ensure a path from gildash (may be project-relative) is absolute. */
-const resolveAbs = (rootAbs: string, p: string): string =>
-  normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
+const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
 
 /* ------------------------------------------------------------------ */
 /*  Layer matching                                                     */
@@ -155,7 +155,9 @@ const matchLayerName = (
 
 /** Extract package name from import specifier (e.g. `lodash/merge` → `lodash`, `@scope/pkg/sub` → `@scope/pkg`). */
 const extractPackageName = (specifier: string): string | null => {
-  if (specifier.length === 0 || specifier.startsWith('.') || specifier.startsWith('/')) return null;
+  if (specifier.length === 0 || specifier.startsWith('.') || specifier.startsWith('/')) {
+    return null;
+  }
 
   if (specifier.startsWith('@')) {
     const parts = specifier.split('/');
@@ -166,8 +168,7 @@ const extractPackageName = (specifier: string): string | null => {
   return specifier.split('/')[0] ?? null;
 };
 
-const isBuiltinModule = (name: string): boolean =>
-  name === 'bun' || name.startsWith('node:') || name.startsWith('bun:');
+const isBuiltinModule = (name: string): boolean => name === 'bun' || name.startsWith('node:') || name.startsWith('bun:');
 
 const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
   try {
@@ -200,16 +201,23 @@ const readScriptBinaries = (rootAbs: string, readFn: (p: string) => string): Set
     const scripts = parsed.scripts;
     const bins = new Set<string>();
 
-    if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) return bins;
+    if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) {
+      return bins;
+    }
 
     for (const cmd of Object.values(scripts as Record<string, unknown>)) {
-      if (typeof cmd !== 'string') continue;
+      if (typeof cmd !== 'string') {
+        continue;
+      }
 
       // Extract first word of each command segment (split on && | ; ||)
       for (const segment of cmd.split(/&&|\|\||[;|]/)) {
         const trimmed = segment.trim();
+
         // Skip variable assignments and empty segments
-        if (trimmed.length === 0 || trimmed.includes('=')) continue;
+        if (trimmed.length === 0 || trimmed.includes('=')) {
+          continue;
+        }
 
         const words = trimmed.split(/\s+/);
         // Skip prefix commands like bunx, npx, etc.
@@ -342,10 +350,12 @@ const buildEdgeCutHints = (
       const from = cycle[index] ?? '';
       const score = outDegree.get(from) ?? 0;
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = index;
+      if (score <= bestScore) {
+        continue;
       }
+
+      bestScore = score;
+      bestIndex = index;
     }
 
     const from = cycle[bestIndex] ?? '';
@@ -371,14 +381,10 @@ const buildEdgeCutHints = (
 /*  Main analysis function                                             */
 /* ------------------------------------------------------------------ */
 
-const analyzeDependencies = async (
-  gildash: Gildash,
-  input?: AnalyzeDependenciesInput,
-): Promise<DependencyAnalysis> => {
+const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependenciesInput): Promise<DependencyAnalysis> => {
   const empty = createEmptyDependencies();
   const rootAbs = input?.rootAbs ?? process.cwd();
   const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
-  const allowedDependencies = input?.allowedDependencies ?? {};
   const readFn = input?.readFileFn ?? ((_p: string) => '{}');
   // 1. Import graph
   let graph: Map<string, string[]>;
@@ -386,7 +392,9 @@ const analyzeDependencies = async (
   try {
     graph = await gildash.getImportGraph();
   } catch (e) {
-    if (e instanceof GildashError) {return empty;}
+    if (e instanceof GildashError) {
+      return empty;
+    }
     throw e;
   }
 
@@ -394,7 +402,10 @@ const analyzeDependencies = async (
   const absGraph = new Map<string, string[]>();
 
   for (const [from, targets] of graph) {
-    absGraph.set(resolveAbs(rootAbs, from), targets.map(t => resolveAbs(rootAbs, t)));
+    absGraph.set(
+      resolveAbs(rootAbs, from),
+      targets.map(t => resolveAbs(rootAbs, t)),
+    );
   }
 
   // 2. Adjacency & fan metrics
@@ -428,7 +439,9 @@ const analyzeDependencies = async (
 
     cyclePaths = (cycleResult as string[][]).map(p => p.map(e => resolveAbs(rootAbs, e)));
   } catch (e) {
-    if (!(e instanceof GildashError)) {throw e;}
+    if (!(e instanceof GildashError)) {
+      throw e;
+    }
   }
 
   const cycles = cyclePaths.map(p => ({ path: p.map(entry => toRelativePath(rootAbs, entry)) }));
@@ -437,6 +450,8 @@ const analyzeDependencies = async (
   const layerViolations: DependencyLayerViolation[] = [];
 
   if (layerMatchers.length > 0) {
+    const allowedDependencies = input?.allowedDependencies ?? {};
+
     for (const [from, targets] of absGraph.entries()) {
       const fromLayer = matchLayerName(rootAbs, from, layerMatchers);
 
@@ -467,11 +482,10 @@ const analyzeDependencies = async (
 
   // 5. Export stats via searchSymbols
   const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
-  let allExported: ReturnType<Gildash['searchSymbols']> | null = null;
   const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: SymbolDetail }>>();
 
   try {
-    allExported = gildash.searchSymbols({ isExported: true });
+    const allExported = gildash.searchSymbols({ isExported: true });
 
     for (const sym of allExported) {
       const absFilePath = resolveAbs(rootAbs, sym.filePath);
@@ -482,38 +496,42 @@ const analyzeDependencies = async (
     }
 
     // Also collect re-exported symbols (not in searchSymbols({ isExported: true }))
-    try {
-      const reExportRels = gildash.searchRelations({ type: 're-exports' });
+    const reExportRels = gildash.searchRelations({ type: 're-exports' });
 
-      for (const rel of reExportRels) {
-        if (!rel.srcSymbolName || !rel.srcFilePath) continue;
-
-        const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
-        const existing = exportsByFile.get(absFilePath) ?? [];
-
-        // Avoid duplicates
-        if (!existing.some(s => s.name === rel.srcSymbolName)) {
-          existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
-          exportsByFile.set(absFilePath, existing);
-        }
+    for (const rel of reExportRels) {
+      if (!rel.srcSymbolName || !rel.srcFilePath) {
+        continue;
       }
 
-      // `export type { X } from './mod'` → type-references with meta.isReExport: true
-      const typeRefRels = gildash.searchRelations({ type: 'type-references' });
+      const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
+      const existing = exportsByFile.get(absFilePath) ?? [];
 
-      for (const rel of typeRefRels) {
-        if (rel.meta?.isReExport !== true || !rel.srcSymbolName || !rel.srcFilePath) continue;
-
-        const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
-        const existing = exportsByFile.get(absFilePath) ?? [];
-
-        if (!existing.some(s => s.name === rel.srcSymbolName)) {
-          existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
-          exportsByFile.set(absFilePath, existing);
-        }
+      // Avoid duplicates
+      if (existing.some(s => s.name === rel.srcSymbolName)) {
+        continue;
       }
-    } catch (e) {
-      if (!(e instanceof GildashError)) {throw e;}
+
+      existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
+      exportsByFile.set(absFilePath, existing);
+    }
+
+    // `export type { X } from './mod'` → type-references with meta.isReExport: true
+    const typeRefRels = gildash.searchRelations({ type: 'type-references' });
+
+    for (const rel of typeRefRels) {
+      if (rel.meta?.isReExport !== true || !rel.srcSymbolName || !rel.srcFilePath) {
+        continue;
+      }
+
+      const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
+      const existing = exportsByFile.get(absFilePath) ?? [];
+
+      if (existing.some(s => s.name === rel.srcSymbolName)) {
+        continue;
+      }
+
+      existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
+      exportsByFile.set(absFilePath, existing);
     }
 
     for (const [filePath, symbols] of exportsByFile) {
@@ -528,7 +546,9 @@ const analyzeDependencies = async (
       exportStats[toRelativePath(rootAbs, filePath)] = { total, abstract };
     }
   } catch (e) {
-    if (!(e instanceof GildashError)) {throw e;}
+    if (!(e instanceof GildashError)) {
+      throw e;
+    }
   }
 
   // 6. Duplicate export detection (same origin via resolveSymbol)
@@ -541,7 +561,9 @@ const analyzeDependencies = async (
     for (const [moduleAbs, symbols] of exportsByFile) {
       for (const sym of symbols) {
         // Skip re-exports for duplicate detection — they're not independent definitions
-        if (sym.kind === 're-export') continue;
+        if (sym.kind === 're-export') {
+          continue;
+        }
 
         const existing = nameToEntries.get(sym.name) ?? [];
 
@@ -551,7 +573,9 @@ const analyzeDependencies = async (
     }
 
     for (const [name, entries] of nameToEntries) {
-      if (entries.length < 2) continue;
+      if (entries.length < 2) {
+        continue;
+      }
 
       // Use resolveSymbol to group by original source
       const originToModules = new Map<string, string[]>();
@@ -604,29 +628,36 @@ const analyzeDependencies = async (
       imports = gildash.searchRelations({ type: 'imports' });
       hasImportData = true;
     } catch (e) {
-      if (!(e instanceof GildashError)) {throw e;}
+      if (!(e instanceof GildashError)) {
+        throw e;
+      }
     }
 
     try {
       reExports = gildash.searchRelations({ type: 're-exports' });
     } catch (e) {
-      if (!(e instanceof GildashError)) {throw e;}
+      if (!(e instanceof GildashError)) {
+        throw e;
+      }
     }
 
     try {
       typeRefs = gildash.searchRelations({ type: 'type-references' });
     } catch (e) {
-      if (!(e instanceof GildashError)) {throw e;}
+      if (!(e instanceof GildashError)) {
+        throw e;
+      }
     }
 
     try {
       calls = gildash.searchRelations({ type: 'calls' });
     } catch (e) {
-      if (!(e instanceof GildashError)) {throw e;}
+      if (!(e instanceof GildashError)) {
+        throw e;
+      }
     }
 
     if (hasImportData) {
-
       // Build usage map per module
       interface ModuleUsage {
         usesAll: boolean;
@@ -638,12 +669,17 @@ const analyzeDependencies = async (
       const usageByModule = new Map<string, ModuleUsage>();
 
       for (const rel of [...imports, ...reExports, ...typeRefs, ...calls]) {
-        if (rel.dstFilePath === null) continue;
+        if (rel.dstFilePath === null) {
+          continue;
+        }
+
         const target = resolveAbs(rootAbs, rel.dstFilePath);
         const consumer = resolveAbs(rootAbs, rel.srcFilePath);
 
         // Self-reference (same file calls/references itself) — not external usage
-        if (target === consumer) continue;
+        if (target === consumer) {
+          continue;
+        }
 
         const isTestConsumer = isTestLikePath(consumer);
         const kind: 'test' | 'prod' = isTestConsumer ? 'test' : 'prod';
@@ -782,22 +818,30 @@ const analyzeDependencies = async (
         changed = false;
 
         for (const [moduleAbs, symbols] of exportsByFile) {
-          if (unreachableModules.has(moduleAbs)) continue;
+          if (unreachableModules.has(moduleAbs)) {
+            continue;
+          }
 
           const usage = usageByModule.get(moduleAbs);
 
-          if (usage?.usesAll) continue;
+          if (usage?.usesAll) {
+            continue;
+          }
 
           const usedNames = usage?.names ?? new Map<string, Set<string>>();
 
           for (const sym of symbols) {
             const key = `${moduleAbs}::${sym.name}`;
 
-            if (deadSet.has(key)) continue;
+            if (deadSet.has(key)) {
+              continue;
+            }
 
             const consumers = usedNames.get(sym.name);
 
-            if (!consumers || consumers.size === 0) continue;
+            if (!consumers || consumers.size === 0) {
+              continue;
+            }
 
             // Check if ALL consumers are dead re-exporters of this symbol
             const allConsumersDead = [...consumers].every(consumerAbs => {
@@ -815,6 +859,7 @@ const analyzeDependencies = async (
                 name: sym.name,
                 symbolKind: sym.kind,
               });
+
               changed = true;
             }
           }
@@ -827,10 +872,11 @@ const analyzeDependencies = async (
       for (const [moduleAbs, symbols] of exportsByFile) {
         const memberParents = symbols.filter(s => s.kind === 'enum' || s.kind === 'namespace');
 
-        if (memberParents.length === 0) continue;
+        if (memberParents.length === 0) {
+          continue;
+        }
 
         const relModule = toRelativePath(rootAbs, moduleAbs);
-
         // Get all symbols in this file (including non-exported members)
         let fileSymbols: ReturnType<Gildash['getSymbolsByFile']> = [];
 
@@ -842,10 +888,7 @@ const analyzeDependencies = async (
 
         for (const parent of memberParents) {
           // Find members: memberName != null, name starts with ParentName.
-          const members = fileSymbols.filter(
-            s => s.memberName !== null && s.name.startsWith(parent.name + '.'),
-          );
-
+          const members = fileSymbols.filter(s => s.memberName !== null && s.name.startsWith(parent.name + '.'));
           // Build set of used member names from calls relations targeting this module
           const memberCalls = calls.filter(
             r =>
@@ -856,14 +899,17 @@ const analyzeDependencies = async (
           );
 
           // If no calls at all, skip — can't determine member usage without semantic
-          if (memberCalls.length === 0) continue;
+          if (memberCalls.length === 0) {
+            continue;
+          }
 
           const usedMembers = new Set(memberCalls.map(r => r.dstSymbolName!));
-
           // usesAll → skip
           const moduleUsage = usageByModule.get(moduleAbs);
 
-          if (moduleUsage?.usesAll) continue;
+          if (moduleUsage?.usesAll) {
+            continue;
+          }
 
           for (const member of members) {
             if (!usedMembers.has(`${parent.name}.${member.memberName}`)) {
@@ -911,18 +957,18 @@ const analyzeDependencies = async (
 
       // Compare with package.json dependencies (per workspace or root)
       const ignorePats = (input?.ignoreDependencies ?? []).map(pat => globToRegExp(pat));
+
       const shouldIgnore = (name: string): boolean => ignorePats.some(re => re.test(name));
 
-      const checkDeps = (
-        depRoot: string,
-        usedPackages: Map<string, Set<string>>,
-      ): void => {
+      const checkDeps = (depRoot: string, usedPackages: Map<string, Set<string>>): void => {
         const pkgDeps = readPackageDependencies(depRoot, readFn);
         const selfName = readPackageName(depRoot, readFn);
         const scriptBins = readScriptBinaries(depRoot, readFn);
 
         for (const [pkgName, files] of usedPackages) {
-          if (pkgName === selfName || shouldIgnore(pkgName)) continue;
+          if (pkgName === selfName || shouldIgnore(pkgName)) {
+            continue;
+          }
 
           if (!pkgDeps.has(pkgName)) {
             unusedDeps.push({
@@ -934,16 +980,26 @@ const analyzeDependencies = async (
         }
 
         for (const declared of pkgDeps) {
-          if (declared === selfName || shouldIgnore(declared)) continue;
-          if (usedPackages.has(declared)) continue;
+          if (declared === selfName || shouldIgnore(declared)) {
+            continue;
+          }
+
+          if (usedPackages.has(declared)) {
+            continue;
+          }
+
           // Skip packages used as CLI binaries in scripts
-          if (scriptBins.has(declared)) continue;
+          if (scriptBins.has(declared)) {
+            continue;
+          }
 
           // @types/* — skip if corresponding package is used or is a builtin
           if (declared.startsWith('@types/')) {
             const base = declared.slice('@types/'.length).replace('__', '/');
 
-            if (usedPackages.has(base) || isBuiltinModule(base)) continue;
+            if (usedPackages.has(base) || isBuiltinModule(base)) {
+              continue;
+            }
           }
 
           unusedDeps.push({

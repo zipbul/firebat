@@ -12,7 +12,9 @@ const firstFunction = (source: string) => {
   const { program } = parse(source);
   const fns = collectFunctionNodes(program);
 
-  if (fns.length === 0) {throw new Error('함수 노드 없음');}
+  if (fns.length === 0) {
+    throw new Error('함수 노드 없음');
+  }
 
   return fns[0]!;
 };

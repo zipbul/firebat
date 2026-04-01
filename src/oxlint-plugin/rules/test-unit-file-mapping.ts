@@ -80,16 +80,16 @@ function isLogicful(program: AstNode): boolean {
       const declaration = stmt.declaration;
       const declarationNode = isAstNodeValue(declaration) ? declaration : null;
 
-      if (declarationNode) {
-        if (isTypeDeclaration(declarationNode)) {
-          continue;
-        }
-
-        return true;
+      if (!declarationNode) {
+        // export { X } / export { X as Y } / export * are treated as logicless.
+        continue;
       }
 
-      // export { X } / export { X as Y } / export * are treated as logicless.
-      continue;
+      if (isTypeDeclaration(declarationNode)) {
+        continue;
+      }
+
+      return true;
     }
 
     if (isTypeDeclaration(stmt)) {

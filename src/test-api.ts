@@ -95,5 +95,5 @@ export { unusedImportsRule } from './oxlint-plugin/rules/unused-imports';
 // ---------------------------------------------------------------------------
 // oxlint-plugin — Types
 // ---------------------------------------------------------------------------
-export type { AstNode, AstNodeValue, SourceToken, ReportDescriptor } from './oxlint-plugin/types';
+export type { AstNode, AstNodeValue } from './oxlint-plugin/types';
 export { type RuleContext, type Variable } from './oxlint-plugin/types';

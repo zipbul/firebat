@@ -149,51 +149,7 @@ export interface SourceSpan {
   readonly end: SourcePosition;
 }
 
-export interface ItemFinding {
-  readonly code: FirebatCatalogCode;
-  readonly file: string;
-  readonly span: SourceSpan;
-}
-
-export interface GroupFinding {
-  readonly code: FirebatCatalogCode;
-  readonly items: ReadonlyArray<{
-    readonly file: string;
-    readonly span: SourceSpan;
-  }>;
-}
-
 export type CouplingKind = 'god-module' | 'bidirectional-coupling' | 'off-main-sequence' | 'unstable-module' | 'rigid-module';
-
-export type FirebatTraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
-
-export interface FirebatTraceNode {
-  readonly id: string;
-  readonly kind: FirebatTraceNodeKind;
-  readonly label: string;
-  readonly filePath?: string;
-  readonly span?: SourceSpan;
-}
-
-export type FirebatTraceEdgeKind = 'references' | 'imports' | 'exports' | 'calls' | 'type-of' | 'unknown';
-
-export interface FirebatTraceEdge {
-  readonly from: string;
-  readonly to: string;
-  readonly kind: FirebatTraceEdgeKind;
-  readonly label?: string;
-}
-
-export interface FirebatTraceGraph {
-  readonly nodes: ReadonlyArray<FirebatTraceNode>;
-  readonly edges: ReadonlyArray<FirebatTraceEdge>;
-}
-
-export interface FirebatTraceEvidenceSpan {
-  readonly filePath: string;
-  readonly span: SourceSpan;
-  readonly text?: string;
-}
 
 export interface DuplicateItem {
   readonly kind: FirebatItemKind;
@@ -433,10 +389,6 @@ export interface CouplingHotspot {
   readonly suggestedRefactor: string;
 }
 
-export interface CouplingAnalysis {
-  readonly hotspots: ReadonlyArray<CouplingHotspot>;
-}
-
 export interface NestingMetrics {
   readonly depth: number;
   readonly cognitiveComplexity: number;
@@ -542,10 +494,6 @@ export interface IndirectionParamsInfo {
   readonly restParam: string | null;
 }
 
-export interface IndirectionAnalysis {
-  readonly findings: ReadonlyArray<IndirectionFinding>;
-}
-
 export interface WasteFinding {
   readonly kind: WasteKind;
   readonly label: string;
@@ -556,12 +504,6 @@ export interface WasteFinding {
 }
 
 export type TypecheckSeverity = 'error' | 'warning';
-
-export type TypecheckStatus = 'ok' | 'unavailable' | 'failed';
-
-export type LintStatus = 'ok' | 'unavailable' | 'failed';
-
-export type FormatStatus = 'ok' | 'unavailable' | 'needs-formatting' | 'failed';
 
 export type LintSeverity = 'error' | 'warning' | 'info';
 
@@ -574,28 +516,6 @@ export interface LintDiagnostic {
   readonly catalogCode?: FirebatCatalogCode;
 }
 
-export interface LintAnalysis {
-  readonly status: LintStatus;
-  readonly tool: 'oxlint';
-  readonly exitCode?: number;
-  readonly error?: string;
-  readonly diagnostics: ReadonlyArray<LintDiagnostic>;
-}
-
-export interface FormatAnalysis {
-  readonly status: FormatStatus;
-  readonly tool: 'oxfmt';
-  readonly exitCode?: number;
-  readonly error?: string;
-  readonly fileCount?: number;
-}
-
-export interface TypecheckRunResult {
-  readonly exitCode: number | null;
-  readonly combinedOutput: string;
-  readonly status: TypecheckStatus;
-}
-
 export interface TypecheckItem {
   readonly severity: TypecheckSeverity;
   readonly code: string;
@@ -605,8 +525,6 @@ export interface TypecheckItem {
   readonly codeFrame: string;
   readonly catalogCode?: FirebatCatalogCode;
 }
-
-export type UnknownProofStatus = 'ok' | 'unavailable' | 'failed';
 
 export type UnknownProofFindingKind =
   | 'tool-unavailable'
@@ -625,13 +543,6 @@ export interface UnknownProofFinding {
   readonly symbol?: string;
   readonly evidence?: string;
   readonly typeText?: string;
-}
-
-export interface UnknownProofAnalysis {
-  readonly status: UnknownProofStatus;
-  readonly tool: 'gildash';
-  readonly error?: string;
-  readonly findings: ReadonlyArray<UnknownProofFinding>;
 }
 
 export interface CatalogEntry {
@@ -658,8 +569,6 @@ export interface TemporalCouplingFinding {
   readonly writers: number;
   readonly readers: number;
 }
-
-export type VariableLifetimeFindingKind = 'variable-lifetime' | 'scope-narrowing' | 'liveness-pressure' | 'mutation-density';
 
 export interface VariableLifetimeFinding {
   readonly kind: 'variable-lifetime';

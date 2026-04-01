@@ -206,11 +206,13 @@ const collectThirdPartyNotices = async (): Promise<ThirdPartyNotices> => {
     let licenseFilePath: string | null = null;
 
     for (const candidate of licenseCandidates) {
-      if (await fileExists(candidate)) {
-        licenseFilePath = candidate;
-
-        break;
+      if (!(await fileExists(candidate))) {
+        continue;
       }
+
+      licenseFilePath = candidate;
+
+      break;
     }
     if (!licenseFilePath) {
       licenseFilePath = await findFileByPrefix(pkgDir, 'LICENSE');
@@ -223,11 +225,13 @@ const collectThirdPartyNotices = async (): Promise<ThirdPartyNotices> => {
     let noticeFilePath: string | null = null;
 
     for (const candidate of noticeCandidates) {
-      if (await fileExists(candidate)) {
-        noticeFilePath = candidate;
-
-        break;
+      if (!(await fileExists(candidate))) {
+        continue;
       }
+
+      noticeFilePath = candidate;
+
+      break;
     }
     if (!noticeFilePath) {
       noticeFilePath = await findFileByPrefix(pkgDir, 'NOTICE');

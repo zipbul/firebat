@@ -81,7 +81,7 @@ describe('runWithConcurrency', () => {
     const results: string[] = [];
 
     const worker = async (label: string): Promise<void> => {
-      await new Promise<void>(resolve => setTimeout(resolve, 1));
+      await Bun.sleep(1);
       results.push(label);
     };
 

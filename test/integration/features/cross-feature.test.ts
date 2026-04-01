@@ -7,6 +7,8 @@
  */
 import { describe, expect, it } from 'bun:test';
 
+import type { Gildash } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../../src/test-api';
 
 import { parseSource } from '../../../src/test-api';
@@ -14,6 +16,12 @@ import { analyzeEarlyReturn } from '../../../src/test-api';
 import { analyzeErrorFlow } from '../../../src/test-api';
 import { analyzeDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
+
+const noopGildash = {
+  isTypeAssignableToType: () => null,
+  getResolvedTypesAtPositions: () => new Map(),
+  isTypeAssignableToTypeAtPositions: () => new Map(),
+} as unknown as Gildash;
 
 const SOURCE = `
 import { readFileSync } from 'node:fs';
@@ -76,7 +84,7 @@ describe('cross-feature integration', () => {
     const program = buildProgram(SOURCE);
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
-    const errorFlow = await analyzeErrorFlow(program);
+    const errorFlow = await analyzeErrorFlow(program, { gildash: noopGildash });
     const duplicates = analyzeDuplicates([...program], { minSize: 5 });
     const nesting = analyzeNesting(program);
 

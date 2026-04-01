@@ -7,6 +7,7 @@ export const countOxcSize = (node: Node): number => {
 
   const visit = (current: Node) => {
     count += 1;
+
     forEachChildNode(current, visit);
   };
 

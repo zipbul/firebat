@@ -446,11 +446,17 @@ describe('temporal-coupling/analyzer', () => {
   const createMockGildash = (relations: CodeRelation[]) => ({
     searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
       return relations.filter(r => {
-        if (query.type !== undefined && r.type !== query.type) {return false;}
+        if (query.type !== undefined && r.type !== query.type) {
+          return false;
+        }
 
-        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) {return false;}
+        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) {
+          return false;
+        }
 
-        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) {return false;}
+        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) {
+          return false;
+        }
 
         return true;
       });
@@ -479,6 +485,7 @@ describe('temporal-coupling/analyzer', () => {
             { name: 'query', kind: 'function', isExported: true, filePath: 'src/a.ts' },
           ];
         }
+
         return [];
       },
     };
@@ -530,6 +537,7 @@ describe('temporal-coupling/analyzer', () => {
             { name: 'query', kind: 'function', isExported: true, filePath: 'src/a.ts' },
           ];
         }
+
         return [];
       },
     };
@@ -680,11 +688,17 @@ describe('temporal-coupling/analyzer', () => {
   const createMockGildashWithAst = (relations: CodeRelation[], astMap: Record<string, GildashParsedFile>) => ({
     searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
       return relations.filter(r => {
-        if (query.type !== undefined && r.type !== query.type) {return false;}
+        if (query.type !== undefined && r.type !== query.type) {
+          return false;
+        }
 
-        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) {return false;}
+        if (query.dstFilePath !== undefined && r.dstFilePath !== query.dstFilePath) {
+          return false;
+        }
 
-        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) {return false;}
+        if (query.dstSymbolName !== undefined && r.dstSymbolName !== query.dstSymbolName) {
+          return false;
+        }
 
         return true;
       });

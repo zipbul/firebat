@@ -146,13 +146,15 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
     if (paramNode.type === 'RestElement') {
       const argument = paramNode.argument;
 
-      if (argument.type === 'Identifier') {
-        restParam = argument.name;
-
-        params.push(argument.name);
-
-        continue;
+      if (argument.type !== 'Identifier') {
+        return null;
       }
+
+      restParam = argument.name;
+
+      params.push(argument.name);
+
+      continue;
     }
 
     return null;
@@ -340,20 +342,24 @@ const collectFunctionNames = (program: Node): CollectedFunctionNames => {
       const idNode = node.id;
       const initNode = node.init;
 
-      if (idNode.type === 'Identifier' && initNode !== null && isFunctionNode(initNode)) {
-        namesByNode.set(initNode, idNode.name);
+      if (idNode.type !== 'Identifier' || initNode === null || !isFunctionNode(initNode)) {
+        return;
       }
+
+      namesByNode.set(initNode, idNode.name);
     },
 
     Property(node) {
       const valueNode = node.value;
 
-      if (isFunctionNode(valueNode)) {
-        const header = getNodeHeader(node);
+      if (!isFunctionNode(valueNode)) {
+        return;
+      }
 
-        if (header.length > 0 && header !== 'anonymous') {
-          namesByNode.set(valueNode, header);
-        }
+      const header = getNodeHeader(node);
+
+      if (header.length > 0 && header !== 'anonymous') {
+        namesByNode.set(valueNode, header);
       }
     },
 
@@ -361,10 +367,12 @@ const collectFunctionNames = (program: Node): CollectedFunctionNames => {
       const valueNode = node.value;
       const header = getNodeHeader(node);
 
-      if (header.length > 0 && header !== 'anonymous') {
-        namesByNode.set(valueNode, header);
-        methodNodes.add(valueNode);
+      if (header.length === 0 || header === 'anonymous') {
+        return;
       }
+
+      namesByNode.set(valueNode, header);
+      methodNodes.add(valueNode);
     },
   }).visit(program as Program);
 
@@ -588,18 +596,22 @@ const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, File
     const methods = new Set<string>();
 
     for (const [, { count, astKey, kind }] of fileCounts) {
-      if (count > 1) {
-        if (kind === 'function') {
-          functions.add(astKey);
-        } else {
-          methods.add(astKey);
-        }
+      if (count <= 1) {
+        continue;
+      }
+
+      if (kind === 'function') {
+        functions.add(astKey);
+      } else {
+        methods.add(astKey);
       }
     }
 
-    if (functions.size > 0 || methods.size > 0) {
-      index.set(file, { functions, methods });
+    if (functions.size === 0 && methods.size === 0) {
+      continue;
     }
+
+    index.set(file, { functions, methods });
   }
 
   return index;
@@ -637,7 +649,6 @@ const analyzeIndirection = async (
   const importIdx = buildImportIndex(gildash, rootAbs);
   const exportIdx = buildExportIndex(gildash, rootAbs);
   const overloadIdx = buildOverloadIndex(gildash, rootAbs);
-
   const crossFileWrappers = new Map<string, CrossFileWrapper>();
 
   for (const file of files) {
@@ -660,7 +671,6 @@ const analyzeIndirection = async (
       }
 
       const header = namesByNode.get(node) ?? getNodeHeader(node);
-
       // Overloaded functions provide type narrowing — not simple indirection
       const overloadSet = methodNodes.has(node) ? fileOverloads.methods : fileOverloads.functions;
 
@@ -684,27 +694,27 @@ const analyzeIndirection = async (
 
       addFinding(findings, 'thin-wrapper', node, file.filePath, file.sourceText, header, 1, evidence);
 
-      if (header.length > 0 && header !== 'anonymous') {
-        calleeByName.set(header, calleeName);
-        wrapperNodeByName.set(header, node);
+      if (header.length === 0 || header === 'anonymous') {
+        return;
+      }
 
-        // Cross-file: only track exported functions
-        if (fileExports.has(header)) {
-          const calleeRef = getSimpleCalleeRef(wrapperCall);
-          const crossTarget = calleeRef
-            ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs)
-            : null;
-          const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
-          const key = `${normalizedFilePath}:${header}`;
+      calleeByName.set(header, calleeName);
+      wrapperNodeByName.set(header, node);
 
-          crossFileWrappers.set(key, {
-            node,
-            file,
-            header,
-            depth: 0,
-            targetKey,
-          });
-        }
+      // Cross-file: only track exported functions
+      if (fileExports.has(header)) {
+        const calleeRef = getSimpleCalleeRef(wrapperCall);
+        const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs) : null;
+        const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
+        const key = `${normalizedFilePath}:${header}`;
+
+        crossFileWrappers.set(key, {
+          node,
+          file,
+          header,
+          depth: 0,
+          targetKey,
+        });
       }
     };
 
@@ -741,52 +751,54 @@ const analyzeIndirection = async (
 
         const typeAnnotation = node.typeAnnotation;
 
-        if (typeAnnotation.type === 'TSTypeReference') {
-          const typeArgs = typeAnnotation.typeArguments;
-          const typeParams = node.typeParameters;
-          const hasTypeArgs = typeArgs !== null;
-          const hasTypeParams = typeParams !== null;
+        if (typeAnnotation.type !== 'TSTypeReference') {
+          return;
+        }
 
-          if (!hasTypeArgs && !hasTypeParams) {
-            const header = node.id.name;
-            const typeName = typeAnnotation.typeName;
-            let targetName = 'unknown';
+        const typeArgs = typeAnnotation.typeArguments;
+        const typeParams = node.typeParameters;
+        const hasTypeArgs = typeArgs !== null;
+        const hasTypeParams = typeParams !== null;
 
-            if (typeName.type === 'Identifier') {
-              targetName = typeName.name;
-            } else if (typeName.type === 'TSQualifiedName') {
-              targetName = getNodeHeader(typeName);
-            }
+        if (!hasTypeArgs && !hasTypeParams) {
+          const header = node.id.name;
+          const typeName = typeAnnotation.typeName;
+          let targetName = 'unknown';
 
-            const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
+          if (typeName.type === 'Identifier') {
+            targetName = typeName.name;
+          } else if (typeName.type === 'TSQualifiedName') {
+            targetName = getNodeHeader(typeName);
+          }
 
-            addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, header, 1, evidence);
-          } else {
-            // Semantic verification: complex aliases (with type args/params) may still be structurally equivalent
-            // e.g. type A = Readonly<B> where B is already fully readonly — bidirectional assignability confirms equivalence
-            const aliasHeader = node.id.name;
-            const typeName = typeAnnotation.typeName;
-            let targetTypeName: string | null = null;
+          const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
 
-            if (typeName.type === 'Identifier') {
-              targetTypeName = typeName.name;
-            } else if (typeName.type === 'TSQualifiedName') {
-              targetTypeName = getNodeHeader(typeName);
-            }
+          addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, header, 1, evidence);
+        } else {
+          // Semantic verification: complex aliases (with type args/params) may still be structurally equivalent
+          // e.g. type A = Readonly<B> where B is already fully readonly — bidirectional assignability confirms equivalence
+          const aliasHeader = node.id.name;
+          const typeName = typeAnnotation.typeName;
+          let targetTypeName: string | null = null;
 
-            if (targetTypeName !== null) {
-              try {
-                const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
-                const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
+          if (typeName.type === 'Identifier') {
+            targetTypeName = typeName.name;
+          } else if (typeName.type === 'TSQualifiedName') {
+            targetTypeName = getNodeHeader(typeName);
+          }
 
-                if (fwd === true && bwd === true) {
-                  const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+          if (targetTypeName !== null) {
+            try {
+              const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
+              const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
 
-                  addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
-                }
-              } catch {
-                // Semantic layer unavailable — skip this check
+              if (fwd === true && bwd === true) {
+                const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+
+                addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
               }
+            } catch {
+              // Semantic layer unavailable — skip this check
             }
           }
         }

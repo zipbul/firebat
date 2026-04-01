@@ -426,23 +426,25 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
           ? { start: funcBody.start, end: funcBody.end }
           : undefined;
 
-      if (Array.isArray(params)) {
-        const fallbackStart = typeof node.start === 'number' ? node.start : 0;
+      if (!Array.isArray(params)) {
+        return;
+      }
 
-        for (const p of params) {
-          const paramNode = asNodeLike(p);
-          const ids = extractBindingIdentifiers(p);
-          // Check annotation on the parameter node itself (covers AssignmentPattern, RestElement, etc.)
-          const paramHasAnnotation = paramNode?.typeAnnotation !== undefined && paramNode?.typeAnnotation !== null;
+      const fallbackStart = typeof node.start === 'number' ? node.start : 0;
 
-          for (const id of ids) {
-            const idHasAnnotation = id.typeAnnotation !== undefined && id.typeAnnotation !== null;
+      for (const p of params) {
+        const paramNode = asNodeLike(p);
+        const ids = extractBindingIdentifiers(p);
+        // Check annotation on the parameter node itself (covers AssignmentPattern, RestElement, etc.)
+        const paramHasAnnotation = paramNode?.typeAnnotation !== undefined && paramNode?.typeAnnotation !== null;
 
-            pushCandidate(id, false, undefined, fallbackStart, {
-              ...(paramHasAnnotation || idHasAnnotation ? { hasExplicitAnnotation: true } : {}),
-              ...(funcBodyRange !== undefined ? { explicitScopeRange: funcBodyRange } : {}),
-            });
-          }
+        for (const id of ids) {
+          const idHasAnnotation = id.typeAnnotation !== undefined && id.typeAnnotation !== null;
+
+          pushCandidate(id, false, undefined, fallbackStart, {
+            ...(paramHasAnnotation || idHasAnnotation ? { hasExplicitAnnotation: true } : {}),
+            ...(funcBodyRange !== undefined ? { explicitScopeRange: funcBodyRange } : {}),
+          });
         }
       }
     };
@@ -453,19 +455,23 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
       const rightEnd = right && typeof right.end === 'number' ? right.end : undefined;
       const left = asNodeLike(forNode?.left);
 
-      if (left?.type === 'VariableDeclaration' && rightEnd !== undefined) {
-        const declarations = left.declarations;
+      if (left?.type !== 'VariableDeclaration' || rightEnd === undefined) {
+        return;
+      }
 
-        if (Array.isArray(declarations)) {
-          for (const decl of declarations) {
-            const declNode = asNodeLike(decl);
-            const ids = extractBindingIdentifiers(declNode?.id);
-            const fallbackStart = typeof node.start === 'number' ? node.start : 0;
+      const declarations = left.declarations;
 
-            for (const id of ids) {
-              pushCandidate(id, false, undefined, fallbackStart, { iterableEndOffset: rightEnd });
-            }
-          }
+      if (!Array.isArray(declarations)) {
+        return;
+      }
+
+      for (const decl of declarations) {
+        const declNode = asNodeLike(decl);
+        const ids = extractBindingIdentifiers(declNode?.id);
+        const fallbackStart = typeof node.start === 'number' ? node.start : 0;
+
+        for (const id of ids) {
+          pushCandidate(id, false, undefined, fallbackStart, { iterableEndOffset: rightEnd });
         }
       }
     };

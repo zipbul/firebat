@@ -131,7 +131,7 @@ const parseJsoncOrThrow = (filePath: string, text: string): JsonValue => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
 
-    throw new Error(`[firebat] Failed to parse JSONC: ${filePath}: ${msg}`);
+    throw new Error(`[firebat] Failed to parse JSONC: ${filePath}: ${msg}`, { cause: err });
   }
 };
 
@@ -513,16 +513,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         return 1;
       }
 
-      let manifest: unknown;
-
-      try {
-        manifest = await mf.json();
-      } catch {
-        logger.error('update aborted: install manifest is unreadable. Run `firebat install` first.');
-
-        return 1;
-      }
-
+      const manifest: unknown = await mf.json();
       const manifestObject = isPlainObject(manifest) ? (manifest as Record<string, unknown>) : null;
       const bases = manifestObject?.baseSnapshots;
 
@@ -667,13 +658,11 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
         logger.warn('Some files differ from the current templates. Per policy, install never overwrites.');
         logger.info('See install manifest for template hashes and paths', { installManifestPath });
       }
+    } else if (assetResults.length === 0) {
+      logger.info('update: no changes');
     } else {
-      if (assetResults.length === 0) {
-        logger.info('update: no changes');
-      } else {
-        for (const r of assetResults) {
-          logger.info('updated', { filePath: r.filePath });
-        }
+      for (const r of assetResults) {
+        logger.info('updated', { filePath: r.filePath });
       }
     }
 

@@ -402,18 +402,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
   })
   .strict();
 
-export type {
-  FirebatBarrelConfig,
-  FirebatConfig,
-  FirebatCouplingConfig,
-  FirebatDuplicatesConfig,
-  FirebatFeaturesConfig,
-  FirebatIndirectionConfig,
-  FirebatLogLevel,
-  FirebatMcpConfig,
-  FirebatMcpConfigObject,
-  FirebatMcpFeaturesConfig,
-  FirebatNestingConfig,
-};
+export type { FirebatConfig, FirebatCouplingConfig, FirebatLogLevel };
 
 export { FirebatConfigSchema };

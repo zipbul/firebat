@@ -213,9 +213,13 @@ describe('computeLcsAlignment', () => {
     const bIndexes = new Set([...result.matched.map(m => m.bIndex), ...result.bOnly]);
 
     // 모든 A 인덱스가 포함됨
-    for (let i = 0; i < a.length; i++) {expect(aIndexes.has(i)).toBe(true);}
+    for (let i = 0; i < a.length; i++) {
+      expect(aIndexes.has(i)).toBe(true);
+    }
     // 모든 B 인덱스가 포함됨
-    for (let j = 0; j < b.length; j++) {expect(bIndexes.has(j)).toBe(true);}
+    for (let j = 0; j < b.length; j++) {
+      expect(bIndexes.has(j)).toBe(true);
+    }
     // matched의 값이 실제로 일치함
     for (const { aIndex, bIndex } of result.matched) {
       expect(a[aIndex]).toBe(b[bIndex]);

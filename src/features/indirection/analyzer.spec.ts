@@ -81,10 +81,46 @@ describe('analyzer', () => {
     const gildash = createMockGildash({
       searchSymbols: () =>
         [
-          { name: 'greet', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
-          { name: 'greet', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 2, column: 0 }, end: { line: 2, column: 0 } }, id: 2, signature: 'params:2|async:0', fingerprint: null },
-          { name: 'greet', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } }, id: 3, signature: 'params:2|async:0', fingerprint: null },
-          { name: 'wrapper', kind: 'function', filePath: 'mixed.ts', isExported: false, span: { start: { line: 6, column: 0 }, end: { line: 8, column: 0 } }, id: 4, signature: 'params:1|async:0', fingerprint: null },
+          {
+            name: 'greet',
+            kind: 'function',
+            filePath: 'mixed.ts',
+            isExported: false,
+            span: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+            id: 1,
+            signature: 'params:1|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'greet',
+            kind: 'function',
+            filePath: 'mixed.ts',
+            isExported: false,
+            span: { start: { line: 2, column: 0 }, end: { line: 2, column: 0 } },
+            id: 2,
+            signature: 'params:2|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'greet',
+            kind: 'function',
+            filePath: 'mixed.ts',
+            isExported: false,
+            span: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } },
+            id: 3,
+            signature: 'params:2|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'wrapper',
+            kind: 'function',
+            filePath: 'mixed.ts',
+            isExported: false,
+            span: { start: { line: 6, column: 0 }, end: { line: 8, column: 0 } },
+            id: 4,
+            signature: 'params:1|async:0',
+            fingerprint: null,
+          },
         ] as unknown as SymbolSearchResult[],
     });
     // Act
@@ -110,9 +146,36 @@ describe('analyzer', () => {
     const gildash = createMockGildash({
       searchSymbols: () =>
         [
-          { name: 'greet', kind: 'function', filePath: 'overloaded.ts', isExported: false, span: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
-          { name: 'greet', kind: 'function', filePath: 'overloaded.ts', isExported: false, span: { start: { line: 2, column: 0 }, end: { line: 2, column: 0 } }, id: 2, signature: 'params:2|async:0', fingerprint: null },
-          { name: 'greet', kind: 'function', filePath: 'overloaded.ts', isExported: false, span: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } }, id: 3, signature: 'params:2|async:0', fingerprint: null },
+          {
+            name: 'greet',
+            kind: 'function',
+            filePath: 'overloaded.ts',
+            isExported: false,
+            span: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+            id: 1,
+            signature: 'params:1|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'greet',
+            kind: 'function',
+            filePath: 'overloaded.ts',
+            isExported: false,
+            span: { start: { line: 2, column: 0 }, end: { line: 2, column: 0 } },
+            id: 2,
+            signature: 'params:2|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'greet',
+            kind: 'function',
+            filePath: 'overloaded.ts',
+            isExported: false,
+            span: { start: { line: 3, column: 0 }, end: { line: 5, column: 0 } },
+            id: 3,
+            signature: 'params:2|async:0',
+            fingerprint: null,
+          },
         ] as unknown as SymbolSearchResult[],
     });
     // Act
@@ -138,9 +201,39 @@ describe('analyzer', () => {
     const gildash = createMockGildash({
       searchSymbols: () =>
         [
-          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'method-overload.ts', isExported: false, span: { start: { line: 2, column: 2 }, end: { line: 2, column: 30 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
-          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'method-overload.ts', isExported: false, span: { start: { line: 3, column: 2 }, end: { line: 3, column: 38 } }, id: 2, signature: 'params:2|async:0', fingerprint: null },
-          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'method-overload.ts', isExported: false, span: { start: { line: 4, column: 2 }, end: { line: 6, column: 3 } }, id: 3, signature: 'params:2|async:0', fingerprint: null },
+          {
+            name: 'MyClass.greet',
+            memberName: 'greet',
+            kind: 'method',
+            filePath: 'method-overload.ts',
+            isExported: false,
+            span: { start: { line: 2, column: 2 }, end: { line: 2, column: 30 } },
+            id: 1,
+            signature: 'params:1|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'MyClass.greet',
+            memberName: 'greet',
+            kind: 'method',
+            filePath: 'method-overload.ts',
+            isExported: false,
+            span: { start: { line: 3, column: 2 }, end: { line: 3, column: 38 } },
+            id: 2,
+            signature: 'params:2|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'MyClass.greet',
+            memberName: 'greet',
+            kind: 'method',
+            filePath: 'method-overload.ts',
+            isExported: false,
+            span: { start: { line: 4, column: 2 }, end: { line: 6, column: 3 } },
+            id: 3,
+            signature: 'params:2|async:0',
+            fingerprint: null,
+          },
         ] as unknown as SymbolSearchResult[],
     });
     // Act
@@ -164,8 +257,28 @@ describe('analyzer', () => {
     const gildash = createMockGildash({
       searchSymbols: () =>
         [
-          { name: 'greet', memberName: null, kind: 'function', filePath: 'collision.ts', isExported: false, span: { start: { line: 1, column: 0 }, end: { line: 1, column: 40 } }, id: 1, signature: 'params:1|async:0', fingerprint: null },
-          { name: 'MyClass.greet', memberName: 'greet', kind: 'method', filePath: 'collision.ts', isExported: false, span: { start: { line: 3, column: 2 }, end: { line: 3, column: 40 } }, id: 2, signature: 'params:1|async:0', fingerprint: null },
+          {
+            name: 'greet',
+            memberName: null,
+            kind: 'function',
+            filePath: 'collision.ts',
+            isExported: false,
+            span: { start: { line: 1, column: 0 }, end: { line: 1, column: 40 } },
+            id: 1,
+            signature: 'params:1|async:0',
+            fingerprint: null,
+          },
+          {
+            name: 'MyClass.greet',
+            memberName: 'greet',
+            kind: 'method',
+            filePath: 'collision.ts',
+            isExported: false,
+            span: { start: { line: 3, column: 2 }, end: { line: 3, column: 40 } },
+            id: 2,
+            signature: 'params:1|async:0',
+            fingerprint: null,
+          },
         ] as unknown as SymbolSearchResult[],
     });
     // Act
@@ -673,7 +786,6 @@ describe('analyzer', () => {
         parseSource('/virtual/b.ts', 'import { baz } from "./c";\nexport function bar(x: any) { return baz(x); }'),
         parseSource('/virtual/c.ts', 'export function baz(x: any) { return x + 1; }'),
       ];
-
       const gildash = createMockGildash({
         searchRelations: () => [
           {
@@ -744,8 +856,14 @@ describe('analyzer', () => {
       const gildash = createMockGildash({
         isTypeAssignableTo: (src, _srcFile, dst, _dstFile) => {
           // Both directions return true — structurally equivalent
-          if (src === 'AlreadyReadonly' && dst === 'Readonly') return true;
-          if (src === 'Readonly' && dst === 'AlreadyReadonly') return true;
+          if (src === 'AlreadyReadonly' && dst === 'Readonly') {
+            return true;
+          }
+
+          if (src === 'Readonly' && dst === 'AlreadyReadonly') {
+            return true;
+          }
+
           return null;
         },
       });
@@ -765,8 +883,14 @@ describe('analyzer', () => {
       const program = createProgram('/virtual/remap.ts', source);
       const gildash = createMockGildash({
         isTypeAssignableTo: (src, _srcFile, dst, _dstFile) => {
-          if (src === 'Narrowed' && dst === 'Readonly') return true;
-          if (src === 'Readonly' && dst === 'Narrowed') return false; // not bidirectional
+          if (src === 'Narrowed' && dst === 'Readonly') {
+            return true;
+          }
+
+          if (src === 'Readonly' && dst === 'Narrowed') {
+            return false;
+          } // not bidirectional
+
           return null;
         },
       });
@@ -803,9 +927,11 @@ describe('analyzer', () => {
       const gildash = createMockGildash({
         isTypeAssignableTo: () => {
           called = true;
+
           return true;
         },
       });
+
       // Act
       await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
 
@@ -817,9 +943,14 @@ describe('analyzer', () => {
   describe('thin-wrapper decorator filter', () => {
     it('analyzeIndirection - decorated wrapper function - skips thin-wrapper', async () => {
       // Arrange: wrapper has decorators (e.g. @Injectable) — intentional wrapping
-      const source = ['function target(value) {', '  return value;', '}', 'function wrapper(value) {', '  return target(value);', '}'].join(
-        '\n',
-      );
+      const source = [
+        'function target(value) {',
+        '  return value;',
+        '}',
+        'function wrapper(value) {',
+        '  return target(value);',
+        '}',
+      ].join('\n');
       const program = createProgram('/virtual/decorated.ts', source);
       const gildash = createMockGildash({
         getFullSymbol: (name, _filePath) => {
@@ -836,6 +967,7 @@ describe('analyzer', () => {
               decorators: [{ name: 'Injectable' }],
             } as unknown as FullSymbol;
           }
+
           return null;
         },
       });
@@ -849,9 +981,14 @@ describe('analyzer', () => {
 
     it('analyzeIndirection - undecorated wrapper function - reports thin-wrapper', async () => {
       // Arrange: wrapper has no decorators → still flagged
-      const source = ['function target(value) {', '  return value;', '}', 'function wrapper(value) {', '  return target(value);', '}'].join(
-        '\n',
-      );
+      const source = [
+        'function target(value) {',
+        '  return value;',
+        '}',
+        'function wrapper(value) {',
+        '  return target(value);',
+        '}',
+      ].join('\n');
       const program = createProgram('/virtual/nodecorators.ts', source);
       const gildash = createMockGildash({
         getFullSymbol: (name, _filePath) => {
@@ -868,6 +1005,7 @@ describe('analyzer', () => {
               decorators: [],
             } as unknown as FullSymbol;
           }
+
           return null;
         },
       });
@@ -881,9 +1019,14 @@ describe('analyzer', () => {
 
     it('analyzeIndirection - getFullSymbol throws - keeps existing thin-wrapper behavior', async () => {
       // Arrange: getFullSymbol throws — fallback to original behavior
-      const source = ['function target(value) {', '  return value;', '}', 'function wrapper(value) {', '  return target(value);', '}'].join(
-        '\n',
-      );
+      const source = [
+        'function target(value) {',
+        '  return value;',
+        '}',
+        'function wrapper(value) {',
+        '  return target(value);',
+        '}',
+      ].join('\n');
       const program = createProgram('/virtual/fallback.ts', source);
       const gildash = createMockGildash({
         getFullSymbol: () => {

@@ -1,0 +1,17 @@
+[
+  {
+    "kind": "catch-or-return",
+    "file": "/virtual/unobserved-variable.ts",
+    "span": {
+      "start": {
+        "line": 16,
+        "column": 2
+      },
+      "end": {
+        "line": 16,
+        "column": 30
+      }
+    },
+    "evidence": "p.then(r => console.log(r));"
+  }
+]

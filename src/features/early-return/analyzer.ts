@@ -449,22 +449,27 @@ const analyzeFunctionNode = (
 
         if (cascade !== null) {
           opportunities.push(cascade);
+        }
 
-          // Mark all sub-IfStatements in the chain to skip re-analysis
+        // Mark all sub-IfStatements in else-if chains to skip re-analysis.
+        // This prevents the tail of an else-if chain from being detected as invertible-if-else.
+        {
           let chainNode: Node = node;
 
           while (chainNode.type === 'IfStatement') {
             const alt = chainNode.alternate;
 
-            if (alt !== null && (alt as Node).type === 'IfStatement') {
-              skipNodes.add(alt as object);
-
-              chainNode = alt as Node;
-            } else {
+            if (alt === null || (alt as Node).type !== 'IfStatement') {
               break;
             }
+
+            skipNodes.add(alt as object);
+
+            chainNode = alt as Node;
           }
-        } else {
+        }
+
+        if (cascade === null) {
           // 2. Try invertible-if-else — skip when alternate is an else-if chain
           //    (countStatements would sum the entire chain, producing a false positive)
           const alternateNode = alternateValue as Node;

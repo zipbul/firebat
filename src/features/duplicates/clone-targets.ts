@@ -6,11 +6,11 @@
 
 import type { Node } from 'oxc-parser';
 
-import type { FirebatItemKind, SourceSpan } from '../../types';
-
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
-export const CLONE_TARGET_TYPES = new Set([
+import type { FirebatItemKind, SourceSpan } from '../../types';
+
+const CLONE_TARGET_TYPES = new Set([
   'FunctionDeclaration',
   'ClassDeclaration',
   'ClassExpression',
@@ -26,13 +26,21 @@ export const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(nod
 export const getItemKind = (node: Node): FirebatItemKind => {
   const t = node.type;
 
-  if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') {return 'function';}
+  if (t === 'FunctionDeclaration' || t === 'FunctionExpression' || t === 'ArrowFunctionExpression') {
+    return 'function';
+  }
 
-  if (t === 'MethodDefinition') {return 'method';}
+  if (t === 'MethodDefinition') {
+    return 'method';
+  }
 
-  if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'TSTypeAliasDeclaration') {return 'type';}
+  if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'TSTypeAliasDeclaration') {
+    return 'type';
+  }
 
-  if (t === 'TSInterfaceDeclaration') {return 'interface';}
+  if (t === 'TSInterfaceDeclaration') {
+    return 'interface';
+  }
 
   return 'node';
 };

@@ -1,9 +1,10 @@
-import type { Node } from 'oxc-parser';
 import type { Gildash } from '@zipbul/gildash';
+import type { Node } from 'oxc-parser';
 
 import { describe, expect, it } from 'bun:test';
 
 import type { ResolvedType } from '../../engine/semantic-types';
+
 import { parseSource } from '../../engine/ast/parse-source';
 import { __testing__ } from './semantic-checks';
 
@@ -169,7 +170,9 @@ describe('collectSafeContextRanges', () => {
   ): boolean => {
     const pos = code.indexOf(substring);
 
-    if (pos === -1) {throw new Error(`Substring "${substring}" not found in code`);}
+    if (pos === -1) {
+      throw new Error(`Substring "${substring}" not found in code`);
+    }
 
     return ranges.some(r => r.start <= pos && pos < r.end);
   };
@@ -516,29 +519,32 @@ describe('isSafelyUsed', () => {
 
   const isResolvedType = (entry: TypeMapEntry): entry is ResolvedType => 'text' in entry;
 
-  const makeSemantic = (typeMap: Record<number, TypeMapEntry> = {}) => ({
-    getResolvedTypeAtPosition: (_filePath: string, position: number) => {
-      const entry = typeMap[position];
+  const makeSemantic = (typeMap: Record<number, TypeMapEntry> = {}) =>
+    ({
+      getResolvedTypeAtPosition: (_filePath: string, position: number) => {
+        const entry = typeMap[position];
 
-      if (!entry) {return null;}
-
-      return isResolvedType(entry) ? entry : makeType({ flags: entry.flags });
-    },
-    getResolvedTypesAtPositions: (_filePath: string, positions: number[]) => {
-      const result = new Map<number, ResolvedType>();
-
-      for (const pos of positions) {
-        const entry = typeMap[pos];
-
-        if (entry) {
-          result.set(pos, isResolvedType(entry) ? entry : makeType({ flags: entry.flags }));
+        if (!entry) {
+          return null;
         }
-      }
 
-      return result;
-    },
-    getSemanticReferencesAtPosition: () => [],
-  } as unknown as Gildash);
+        return isResolvedType(entry) ? entry : makeType({ flags: entry.flags });
+      },
+      getResolvedTypesAtPositions: (_filePath: string, positions: number[]) => {
+        const result = new Map<number, ResolvedType>();
+
+        for (const pos of positions) {
+          const entry = typeMap[pos];
+
+          if (entry) {
+            result.set(pos, isResolvedType(entry) ? entry : makeType({ flags: entry.flags }));
+          }
+        }
+
+        return result;
+      },
+      getSemanticReferencesAtPosition: () => [],
+    }) as unknown as Gildash;
 
   const makeRef = (
     position: number,

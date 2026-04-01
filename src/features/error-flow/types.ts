@@ -18,7 +18,7 @@ export type ErrorFlowFindingKind =
   | 'always-return'
   | 'no-callback-in-promise';
 
-export interface SourcePosition {
+interface SourcePosition {
   readonly line: number;
   readonly column: number;
 }

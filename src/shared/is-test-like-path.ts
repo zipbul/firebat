@@ -12,25 +12,13 @@ const isTestLikePath = (value: string): boolean => {
   );
 };
 
-const CONFIG_PATTERNS = [
-  '.config.ts',
-  '.config.js',
-  '.config.cjs',
-  '.config.mjs',
-  'rc.ts',
-  'rc.js',
-  'rc.cjs',
-];
+const CONFIG_PATTERNS = ['.config.ts', '.config.js', '.config.cjs', '.config.mjs', 'rc.ts', 'rc.js', 'rc.cjs'];
 
 const isConfigLikePath = (value: string): boolean => {
   const normalized = normalizePath(value);
   const basename = normalized.split('/').pop() ?? '';
 
-  return (
-    CONFIG_PATTERNS.some(p => basename.endsWith(p)) ||
-    normalized.includes('/scripts/') ||
-    normalized.includes('/bin/')
-  );
+  return CONFIG_PATTERNS.some(p => basename.endsWith(p)) || normalized.includes('/scripts/') || normalized.includes('/bin/');
 };
 
 export { isConfigLikePath, isTestLikePath };

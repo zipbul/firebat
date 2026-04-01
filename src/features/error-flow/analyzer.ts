@@ -540,6 +540,28 @@ const extractConstructorName = (callee: Node): string | null => {
   return null;
 };
 
+/** Pre-scan: collect variable identifier positions for VariableDeclarators with CallExpression init.
+ *  Uses id.start (Identifier position) instead of init.start (CallExpression position) because
+ *  gildash resolves types at identifier positions, and the variable's type IS the call result type. */
+const collectCallVarPositions = (program: Node): number[] => {
+  const positions: number[] = [];
+
+  walkOxcTree(program, node => {
+    if (node.type === 'VariableDeclarator') {
+      const id = node.id;
+      const init = node.init;
+
+      if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && (init.type === 'CallExpression' || init.type === 'NewExpression')) {
+        positions.push(id.start);
+      }
+    }
+
+    return true;
+  });
+
+  return positions;
+};
+
 const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): CollectFindingsResult => {
   const findings: ErrorFlowFinding[] = [];
   const constructorNames: Map<ErrorFlowFinding, string> = new Map();
@@ -551,6 +573,47 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // Unobserved-variable tracking: stack of candidate/observed sets per function scope
   const unobservedCandidates: Map<string, Node>[] = [];
   const unobservedObserved: Set<string>[] = [];
+
+  // Pre-compute which variable positions have Promise types (one batch call per file).
+  // Uses id.start positions so gildash resolves the variable's type (= call result type).
+  // Filters out `any` typed positions since `any` is assignable to everything.
+  let promisePositions: Set<number> | null = null;
+
+  if (gildash) {
+    const allPositions = collectCallVarPositions(program);
+
+    if (allPositions.length > 0) {
+      try {
+        // Step 1: Resolve types to filter out `any` positions (TypeFlags.Any = 1).
+        const resolvedTypes = gildash.getResolvedTypesAtPositions(filePath, allPositions);
+        const nonAnyPositions = allPositions.filter(pos => {
+          const resolved = resolvedTypes.get(pos);
+
+          return resolved !== undefined && (resolved.flags & 1) === 0;
+        });
+
+        // Step 2: Check PromiseLike assignability only for non-any positions.
+        promisePositions = new Set<number>();
+
+        if (nonAnyPositions.length > 0) {
+          const results = gildash.isTypeAssignableToTypeAtPositions(
+            filePath,
+            nonAnyPositions,
+            'PromiseLike<any>',
+            { anyConstituent: true },
+          );
+
+          for (const [pos, isPromise] of results) {
+            if (isPromise) {
+              promisePositions.add(pos);
+            }
+          }
+        }
+      } catch {
+        // Semantic layer error — promisePositions stays null, all candidates will be registered.
+      }
+    }
+  }
 
   const pushUnobservedScope = (): void => {
     unobservedCandidates.push(new Map());
@@ -581,10 +644,21 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   const markObserved = (name: string): void => {
-    const top = unobservedObserved[unobservedObserved.length - 1];
+    // Walk from innermost scope outward. Mark observed in each scope,
+    // but stop at the first scope that has this name as a candidate —
+    // that scope "owns" this variable, and outer scopes with the same name are different variables.
+    for (let i = unobservedObserved.length - 1; i >= 0; i -= 1) {
+      const scope = unobservedObserved[i];
 
-    if (top !== undefined) {
-      top.add(name);
+      if (scope !== undefined) {
+        scope.add(name);
+      }
+
+      const candidates = unobservedCandidates[i];
+
+      if (candidates !== undefined && candidates.has(name)) {
+        break;
+      }
     }
   };
 
@@ -1177,12 +1251,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const id = node.id;
       const init = node.init;
 
-      if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && init.type === 'CallExpression') {
-        // node.parent is VariableDeclaration; we need the declaration node.
-        // Walk up: use the statement node (VariableDeclaration) for position — use init.start as proxy.
-        // Actually we need the VariableDeclaration node. Since visit doesn't have parent tracking,
-        // we record the VariableDeclarator node's start position via the oxc Node cast.
-        addCandidate(id.name, node);
+      if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && (init.type === 'CallExpression' || init.type === 'NewExpression')) {
+        // Only register as candidate if the call returns a Promise (or if we can't determine).
+        // promisePositions === null means gildash unavailable — register all (existing behavior).
+        // promisePositions !== null means gildash confirmed — only register Promise-returning calls.
+        if (promisePositions === null || promisePositions.has(id.start)) {
+          addCandidate(id.name, node);
+        }
       }
     }
 
@@ -1213,10 +1288,18 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      // Unobserved-variable: fn(p) — passed as function argument marks p as observed
+      // Unobserved-variable: fn(p) or fn([p]) — passed as function argument marks p as observed
       for (const callArg of node.arguments) {
         if (callArg.type === 'Identifier') {
-          markObserved(callArg.name);
+          markObserved((callArg as unknown as { name: string }).name);
+        }
+
+        if (callArg.type === 'ArrayExpression') {
+          for (const el of (callArg as unknown as { elements: Node[] }).elements) {
+            if (el !== null && el !== undefined && el.type === 'Identifier') {
+              markObserved((el as unknown as { name: string }).name);
+            }
+          }
         }
       }
 

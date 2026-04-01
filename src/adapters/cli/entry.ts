@@ -326,7 +326,11 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     ...options,
     ...(options.explicit?.minSize ? {} : cfgMinSize !== undefined ? { minSize: cfgMinSize } : {}),
     ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
-    ...(options.explicit?.crossFileMinDepth ? {} : cfgCrossFileMinDepth !== undefined ? { crossFileMinDepth: cfgCrossFileMinDepth } : {}),
+    ...(options.explicit?.crossFileMinDepth
+      ? {}
+      : cfgCrossFileMinDepth !== undefined
+        ? { crossFileMinDepth: cfgCrossFileMinDepth }
+        : {}),
     ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
     ...(cfgBarrelIgnoreGlobs !== undefined ? { barrelIgnoreGlobs: cfgBarrelIgnoreGlobs } : {}),
     ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
@@ -334,7 +338,6 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     ...(cfgCouplingConfig !== undefined ? { couplingConfig: cfgCouplingConfig } : {}),
     configPath: loaded.resolvedPath,
   };
-
   const cfgExclude = config?.exclude;
 
   if (merged.targets.length > 0) {

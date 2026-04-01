@@ -78,12 +78,14 @@ const singleExportedClassRule = {
         const classDeclarations = new Set<string>();
 
         for (const stmt of body) {
-          if (stmt.type === 'ClassDeclaration') {
-            const className = getClassDeclarationName(stmt);
+          if (stmt.type !== 'ClassDeclaration') {
+            continue;
+          }
 
-            if (typeof className === 'string' && className.length > 0) {
-              classDeclarations.add(className);
-            }
+          const className = getClassDeclarationName(stmt);
+
+          if (typeof className === 'string' && className.length > 0) {
+            classDeclarations.add(className);
           }
         }
 

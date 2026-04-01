@@ -47,6 +47,7 @@ describe('variable-lifetime/analyzer', () => {
     const files: any[] = [];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
+
     // Assert
     expect(result).toEqual(createEmptyVariableLifetime());
   });
@@ -56,6 +57,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [fileWithErrors('src/a.ts', 'function f() { const a = 1;\nreturn a; }')];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -65,6 +67,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.js', 'function f() { const a = 1;\nreturn a; }')];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -75,6 +78,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -85,6 +89,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -110,6 +115,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 10 });
+
     // Assert
     expect(result.length).toBe(0);
   });
@@ -120,6 +126,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: -1 });
+
     // Assert
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
@@ -139,6 +146,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
+
     // Assert — lifetime 3 === threshold 3, strictly greater required, so not reported
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
@@ -157,6 +165,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
+
     // Assert — lifetime 4 > threshold 3
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
@@ -180,6 +189,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
+
     // Assert — lifetime 0 is NOT > 0, so not reported
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
@@ -222,6 +232,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert — lifetime = 2 (line 2 to line 4), within threshold
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
@@ -240,6 +251,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 2 });
+
     // Assert — no function body → no analysis
     expect(result.length).toBe(0);
   });
@@ -262,6 +274,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert — neither x exceeds threshold (both have lifetime 1)
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
@@ -281,6 +294,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert — x has no direct use in outer scope (only nested), so no finding
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
@@ -299,6 +313,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
   });
@@ -319,6 +334,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert — x used in both branches, the farther one determines lifetime
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
@@ -337,6 +353,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert
     expect(lifetimeOnly(result).filter(f => f.variable === 'multiplier').length).toBe(1);
   });
@@ -357,6 +374,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert
     expect(lifetimeOnly(result).filter(f => f.variable === 'resource').length).toBe(1);
   });
@@ -401,6 +419,7 @@ describe('variable-lifetime/analyzer', () => {
     const xFindings = lifetimeOnly(result).filter(f => f.variable === 'x');
 
     expect(xFindings.length).toBe(2);
+
     // def1 has longer lifetime than def2
     const lifetimes = xFindings.map(f => f.lifetimeLines).sort((a, b) => b - a);
 
@@ -409,7 +428,7 @@ describe('variable-lifetime/analyzer', () => {
 
   // ── 파라미터 / 구조분해 ──
 
-  it('analyzeVariableLifetime - parameter - tracked from declaration line', () => {
+  it('analyzeVariableLifetime - parameter - excluded from findings (cannot move)', () => {
     // Arrange
     const sourceText = [
       'function f(param: number) {', // line 1
@@ -420,11 +439,10 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
-    // Assert
+    // Assert — parameters cannot be moved, so they should not be reported
     const paramFindings = lifetimeOnly(result).filter(f => f.variable === 'param');
 
-    expect(paramFindings.length).toBe(1);
-    expect(paramFindings[0]?.lifetimeLines).toBeGreaterThan(5);
+    expect(paramFindings.length).toBe(0);
   });
 
   it('analyzeVariableLifetime - destructuring - each binding has independent lifetime', () => {
@@ -440,6 +458,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert — both a and b reported
     expect(lifetimeOnly(result).filter(f => f.variable === 'a').length).toBe(1);
     expect(lifetimeOnly(result).filter(f => f.variable === 'b').length).toBe(1);
@@ -459,6 +478,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
@@ -475,6 +495,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 5 });
+
     // Assert
     expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
   });
@@ -487,6 +508,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 0 });
+
     // Assert — unused has no use, so no lastUseOffset → no finding
     expect(lifetimeOnly(result).filter(f => f.variable === 'unused').length).toBe(0);
   });
@@ -540,6 +562,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
     const finding = lifetimeOnly(result).find(f => f.variable === 'x');
+
     // Assert
     expect(finding).toBeDefined();
     expect(finding!.span.start.line).toBe(2);
@@ -587,6 +610,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', source1), file('src/b.ts', source2)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 3 });
+
     // Assert
     expect(lifetimeOnly(result).filter(f => f.variable === 'a').length).toBe(1);
     expect(lifetimeOnly(result).filter(f => f.variable === 'b').length).toBe(1);
@@ -611,6 +635,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - numeric literal - returns true', () => {
       // Arrange
       const node = parse('1');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(true);
     });
@@ -618,6 +643,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - string literal - returns true', () => {
       // Arrange
       const node = parse('"hello"');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(true);
     });
@@ -625,6 +651,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - identifier reference - returns true', () => {
       // Arrange
       const node = parse('someVar');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(true);
     });
@@ -632,6 +659,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - binary expression with pure operands - returns true', () => {
       // Arrange
       const node = parse('a + b');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(true);
     });
@@ -639,6 +667,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - conditional expression with pure operands - returns true', () => {
       // Arrange
       const node = parse('cond ? 1 : 2');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(true);
     });
@@ -652,6 +681,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - call expression - returns false', () => {
       // Arrange
       const node = parse('compute()');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(false);
     });
@@ -659,6 +689,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - new expression - returns false', () => {
       // Arrange
       const node = parse('new Foo()');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(false);
     });
@@ -666,6 +697,7 @@ describe('variable-lifetime/analyzer', () => {
     it('isPureInitializer - spread in array - returns false', () => {
       // Arrange
       const node = parse('[...arr]');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(false);
     });
@@ -773,6 +805,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -783,6 +816,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -793,6 +827,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -805,6 +840,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -815,6 +851,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -825,6 +862,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -835,6 +873,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -845,6 +884,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -855,6 +895,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -867,6 +908,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -878,6 +920,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -890,6 +933,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -900,6 +944,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -913,6 +958,7 @@ describe('variable-lifetime/analyzer', () => {
       const files = [file('src/a.ts', sourceText)];
       // Act
       const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
       // Assert
       expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
     });
@@ -1065,6 +1111,7 @@ describe('variable-lifetime/analyzer', () => {
 
       // Assert — must complete in under 5 seconds
       expect(elapsed).toBeLessThan(5000);
+
       const findings = scopeOnly(result).filter(f => f.variable === 'x');
 
       expect(findings.length).toBe(1);
@@ -1170,6 +1217,7 @@ describe('variable-lifetime/analyzer', () => {
       };
 
       const node = parse('(a, b)');
+
       // Act + Assert
       expect(isPureInitializer(node)).toBe(false);
     });
@@ -1617,6 +1665,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
     const lp = livenessOnly(result);
+
     // Assert
     expect(lp.length).toBeGreaterThanOrEqual(1);
     expect(lp[0]!.hotSpotLine).toBeGreaterThan(0);
@@ -1639,6 +1688,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
     const lp = livenessOnly(result);
+
     // Assert: maxLiveCount is 2 (x + a), which is below threshold 3 → no liveness-pressure
     expect(lp.length).toBe(0);
   });
@@ -1668,6 +1718,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
     const lp = livenessOnly(result);
+
     // Assert
     expect(lp.length).toBeGreaterThanOrEqual(1);
     expect(lp[0]!.maxLiveVariables).toBeGreaterThanOrEqual(7);
@@ -1690,11 +1741,13 @@ describe('variable-lifetime/analyzer', () => {
         '  return a + b + c + d + e + f + g + h;',
         '}',
       ].join('\n');
+
     const sourceText = [makeHeavyFn('functionA'), makeHeavyFn('functionB')].join('\n');
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
     const lp = livenessOnly(result);
+
     // Assert: both functions emit liveness-pressure
     expect(lp.length).toBe(2);
   });
@@ -1716,6 +1769,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999 });
+
     // Assert
     expect(mutationOnly(result).length).toBe(0);
   });
@@ -1736,6 +1790,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 3 });
     const mutations = mutationOnly(result);
+
     // Assert
     expect(mutations.length).toBe(1);
     expect(mutations[0]!.variable).toBe('x');
@@ -1748,6 +1803,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 3 });
+
     // Assert
     expect(mutationOnly(result).length).toBe(0);
   });
@@ -1766,6 +1822,7 @@ describe('variable-lifetime/analyzer', () => {
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 0 });
+
     // Assert — sum += item inside loop is suppressed
     expect(mutationOnly(result).length).toBe(0);
   });
@@ -1786,6 +1843,7 @@ describe('variable-lifetime/analyzer', () => {
     // Act — threshold 1: a has 2 writes (exceeds), b has 1 write (equal, no finding)
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 1 });
     const mutations = mutationOnly(result);
+
     // Assert
     expect(mutations.length).toBe(1);
     expect(mutations[0]!.variable).toBe('a');
@@ -1793,16 +1851,13 @@ describe('variable-lifetime/analyzer', () => {
 
   it('analyzeVariableLifetime - for-statement update clause i++ - suppressed as loop write', () => {
     // Arrange — i++ in update clause should be treated as loop write
-    const sourceText = [
-      'function f(n: number) {',
-      '  for (let i = 0; i < n; i++) {',
-      '    console.log(i);',
-      '  }',
-      '}',
-    ].join('\n');
+    const sourceText = ['function f(n: number) {', '  for (let i = 0; i < n; i++) {', '    console.log(i);', '  }', '}'].join(
+      '\n',
+    );
     const files = [file('src/a.ts', sourceText)];
     // Act — threshold 0 means any non-loop write triggers finding
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: 999, maxMutationCount: 0 });
+
     // Assert — i++ is inside ForStatement range, suppressed
     expect(mutationOnly(result).length).toBe(0);
   });

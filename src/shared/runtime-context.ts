@@ -1,6 +1,6 @@
 import { resolveFirebatRootFromCwd } from './root-resolver';
 
-export interface FirebatRuntimeContext {
+interface FirebatRuntimeContext {
   readonly rootAbs: string;
   readonly reason: 'declared-dependency' | 'self-repo';
 }

@@ -1,53 +1,36 @@
 [
   {
-    "contextBurden": 3,
-    "file": "string-literal-fp.ts",
     "kind": "variable-lifetime",
-    "lifetimeLines": 6,
+    "file": "string-literal-fp.ts",
     "span": {
-      "end": {
-        "column": 2,
-        "line": 7
-      },
       "start": {
-        "column": 31,
-        "line": 1
+        "line": 3,
+        "column": 8
+      },
+      "end": {
+        "line": 9,
+        "column": 2
       }
     },
-    "variable": "data"
+    "variable": "a",
+    "lifetimeLines": 6,
+    "contextBurden": 2
   },
   {
-    "contextBurden": 3,
-    "file": "string-literal-fp.ts",
     "kind": "variable-lifetime",
-    "lifetimeLines": 6,
+    "file": "string-literal-fp.ts",
     "span": {
-      "end": {
-        "column": 2,
-        "line": 9
-      },
       "start": {
-        "column": 8,
-        "line": 3
+        "line": 5,
+        "column": 8
+      },
+      "end": {
+        "line": 11,
+        "column": 9
       }
     },
-    "variable": "a"
-  },
-  {
-    "contextBurden": 3,
-    "file": "string-literal-fp.ts",
-    "kind": "variable-lifetime",
+    "variable": "c",
     "lifetimeLines": 6,
-    "span": {
-      "end": {
-        "column": 9,
-        "line": 11
-      },
-      "start": {
-        "column": 8,
-        "line": 5
-      }
-    },
-    "variable": "c"
+    "contextBurden": 2
   }
 ]

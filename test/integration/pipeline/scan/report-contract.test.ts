@@ -851,10 +851,7 @@ exit 7
 
   it('indirection - type alias synonym - reports IND_TYPE_REMAP with correct code', async () => {
     // Arrange
-    const project = await createScanProjectFixture(
-      'firebat-report-contract-ind-type-remap',
-      'type A = B;\n',
-    );
+    const project = await createScanProjectFixture('firebat-report-contract-ind-type-remap', 'type A = B;\n');
 
     try {
       const logger = createLogger();
@@ -891,10 +888,7 @@ exit 7
 
   it('indirection - empty interface with extends - reports IND_INTERFACE_REWRAP with correct code', async () => {
     // Arrange
-    const project = await createScanProjectFixture(
-      'firebat-report-contract-ind-interface-rewrap',
-      'interface C extends D {}\n',
-    );
+    const project = await createScanProjectFixture('firebat-report-contract-ind-interface-rewrap', 'interface C extends D {}\n');
 
     try {
       const logger = createLogger();

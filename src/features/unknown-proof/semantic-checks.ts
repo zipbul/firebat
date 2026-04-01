@@ -110,7 +110,6 @@ interface SafeContextData {
 const collectSafeContextRanges = (program: Node): SafeContextData => {
   const ranges: Array<{ start: number; end: number }> = [];
   const callArgRanges: Array<CallArgRange> = [];
-
   // Track function bodies with their return type status for ReturnStatement check
   const functionBodies: Array<{ bodyStart: number; bodyEnd: number; hasReturnType: boolean }> = [];
 
@@ -157,37 +156,43 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
       const typeAnnotation = node.typeAnnotation;
       const targetType = typeAnnotation.type;
 
-      if (targetType !== 'TSAnyKeyword' && targetType !== 'TSUnknownKeyword') {
-        const expr = node.expression;
-
-        ranges.push({ start: expr.start, end: expr.end });
+      if (targetType === 'TSAnyKeyword' || targetType === 'TSUnknownKeyword') {
+        return;
       }
+
+      const expr = node.expression;
+
+      ranges.push({ start: expr.start, end: expr.end });
     },
 
     BinaryExpression(node) {
       const operator = node.operator;
 
       if (
-        operator === '===' ||
-        operator === '!==' ||
-        operator === '==' ||
-        operator === '!=' ||
-        operator === 'instanceof' ||
-        operator === 'in'
+        operator !== '===' &&
+        operator !== '!==' &&
+        operator !== '==' &&
+        operator !== '!=' &&
+        operator !== 'instanceof' &&
+        operator !== 'in'
       ) {
-        ranges.push({ start: node.left.start, end: node.left.end });
-        ranges.push({ start: node.right.start, end: node.right.end });
+        return;
       }
+
+      ranges.push({ start: node.left.start, end: node.left.end });
+      ranges.push({ start: node.right.start, end: node.right.end });
     },
 
     UnaryExpression(node) {
       const operator = node.operator;
 
-      if (operator === 'typeof' || operator === '!') {
-        const arg = node.argument;
-
-        ranges.push({ start: arg.start, end: arg.end });
+      if (operator !== 'typeof' && operator !== '!') {
+        return;
       }
+
+      const arg = node.argument;
+
+      ranges.push({ start: arg.start, end: arg.end });
     },
 
     TemplateLiteral(node) {
@@ -202,19 +207,23 @@ const collectSafeContextRanges = (program: Node): SafeContextData => {
       let enclosing: (typeof functionBodies)[number] | undefined;
 
       for (const fb of functionBodies) {
-        if (fb.bodyStart <= nodeStart && nodeStart < fb.bodyEnd) {
-          if (!enclosing || fb.bodyEnd - fb.bodyStart < enclosing.bodyEnd - enclosing.bodyStart) {
-            enclosing = fb;
-          }
+        if (fb.bodyStart > nodeStart || nodeStart >= fb.bodyEnd) {
+          continue;
+        }
+
+        if (!enclosing || fb.bodyEnd - fb.bodyStart < enclosing.bodyEnd - enclosing.bodyStart) {
+          enclosing = fb;
         }
       }
 
-      if (enclosing?.hasReturnType) {
-        const arg = node.argument;
+      if (!enclosing?.hasReturnType) {
+        return;
+      }
 
-        if (arg !== null) {
-          ranges.push({ start: arg.start, end: arg.end });
-        }
+      const arg = node.argument;
+
+      if (arg !== null) {
+        ranges.push({ start: arg.start, end: arg.end });
       }
     },
 
@@ -277,6 +286,7 @@ const isSafelyUsed = (
 
   for (const u of usages) {
     usagePositions.add(u.position);
+
     const callArg = safeCtx.callArgRanges.find(r => r.start <= u.position && u.position < r.end);
 
     if (callArg && callArg.calleeEnd > 0) {
@@ -318,23 +328,23 @@ const isSafelyUsed = (
     // Strategy 3: Call argument — safe only if callee is a typed function (not any/unknown itself)
     const callArg = safeCtx.callArgRanges.find(r => r.start <= u.position && u.position < r.end);
 
-    if (callArg && callArg.calleeEnd > 0) {
-      const calleeType = usageTypes.get(callArg.calleeEnd - 1);
-
-      if (calleeType) {
-        const calleeFlag = containsUnknownOrAny(calleeType);
-
-        // Callee itself is directly any/unknown → propagation, not safe
-        if (calleeFlag.isDirect && (calleeFlag.any || calleeFlag.unknown)) {
-          return false;
-        }
-      }
-
-      // Callee is a typed function → consumption, safe
-      return true;
+    if (!callArg || callArg.calleeEnd <= 0) {
+      return false;
     }
 
-    return false;
+    const calleeType = usageTypes.get(callArg.calleeEnd - 1);
+
+    if (calleeType) {
+      const calleeFlag = containsUnknownOrAny(calleeType);
+
+      // Callee itself is directly any/unknown → propagation, not safe
+      if (calleeFlag.isDirect && (calleeFlag.any || calleeFlag.unknown)) {
+        return false;
+      }
+    }
+
+    // Callee is a typed function → consumption, safe
+    return true;
   });
 };
 
@@ -399,7 +409,6 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
     }
 
     const resolvedTypes = input.gildash.getResolvedTypesAtPositions(filePath, [...positions]);
-
     // Early bailout: if no resolved type contains unknown/any, skip entirely.
     let fileHasUnknownOrAny = false;
 
@@ -408,6 +417,7 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
 
       if (f.unknown || f.any) {
         fileHasUnknownOrAny = true;
+
         break;
       }
     }

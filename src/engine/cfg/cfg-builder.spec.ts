@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'bun:test';
-
 import type { Node } from 'oxc-parser';
+
+import { describe, expect, it } from 'bun:test';
 
 import type { NodeRecord, OxcBuiltFunctionCfg } from '../types';
 
@@ -177,9 +177,8 @@ describe('cfg-builder', () => {
     const fn = getFirstFunction(
       ['function f() {', '  let value = 1;', '  try {', '    return 0;', '  } finally {', '    value;', '  }', '}'].join('\n'),
     );
-    const builder = new OxcCFGBuilder();
     // Act
-    const built = builder.buildFunctionBody(getFunctionBody(fn));
+    const built = OxcCFGBuilder.build(getFunctionBody(fn));
     const returnLiteralNodeId = findLiteralNodeId(built, 0);
     const hasDirectEdgeToExit = hasEdge(built.cfg.getEdges(), returnLiteralNodeId, built.exitId);
 
@@ -192,9 +191,8 @@ describe('cfg-builder', () => {
     const fn = getFirstFunction(
       ['function f() {', '  try {', '    const x = 1;', '  } catch (e) {', '    return 0;', '  }', '}'].join('\n'),
     );
-    const builder = new OxcCFGBuilder();
     // Act
-    const built = builder.buildFunctionBody(getFunctionBody(fn));
+    const built = OxcCFGBuilder.build(getFunctionBody(fn));
     const edges = built.cfg.getEdges();
     // Collect all (from, to) pairs connected by an Exception edge
     const exceptionEdges: Array<{ from: number; to: number }> = [];
@@ -235,9 +233,8 @@ describe('cfg-builder', () => {
         '}',
       ].join('\n'),
     );
-    const builder = new OxcCFGBuilder();
     // Act
-    const built = builder.buildFunctionBody(getFunctionBody(fn));
+    const built = OxcCFGBuilder.build(getFunctionBody(fn));
     const returnValueNodeId = findIdentifierNodeId(built, 'value');
     const adjacency = buildAdjacency(built.cfg.getEdges(), built.cfg.nodeCount);
     const reachable = isReachable(adjacency, built.entryId, returnValueNodeId);
