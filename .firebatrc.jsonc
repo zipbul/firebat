@@ -35,6 +35,5 @@
     "nesting": true,
     "early-return": true,
     "indirection": { "maxForwardDepth": 0 }
-  },
-  "mcp": "inherit"
+  }
 }

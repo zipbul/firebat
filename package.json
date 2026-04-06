@@ -18,9 +18,8 @@
     "firebat": "bun dist/firebat.js --log-level trace",
     "firebat:install": "bun dist/firebat.js install",
     "firebat:update": "bun dist/firebat.js update",
-    "firebat:fix": "bun dist/firebat.js --fix --log-level trace",
-    "firebat:agent": "bun dist/firebat.js --format json --no-exit --log-level error --fix",
-    "firebat:ci": "bun dist/firebat.js --format json --log-level debug",
+    "firebat:agent": "bun dist/firebat.js --log-level error",
+    "firebat:ci": "bun dist/firebat.js --log-level debug",
     "db:generate": "bunx -y drizzle-kit generate --config ./drizzle.config.ts",
     "db:migrate": "bunx -y drizzle-kit migrate --config ./drizzle.config.ts",
     "coverage": "bun test --coverage",
@@ -29,7 +28,6 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
     "@zipbul/gildash": "0.19.0",
     "drizzle-orm": "^0.45.1",
     "fastbitset": "^0.4.1",
@@ -37,7 +35,6 @@
     "oxfmt": "^0.32.0",
     "oxlint": "^1.47.0",
     "oxlint-tsgolint": "^0.11.5",
-    "table": "^6.9.0",
     "typescript": "5.9.3",
     "zod": "^4.3.6"
   },

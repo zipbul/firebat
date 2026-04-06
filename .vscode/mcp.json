@@ -6,12 +6,6 @@
         "-y",
         "@modelcontextprotocol/server-sequential-thinking"
       ]
-    },
-    "firebat": {
-      "type": "stdio",
-      "command": "bun",
-      "args": ["firebat.js", "mcp"],
-      "cwd": "${workspaceFolder}/dist"
     }
   }
 }

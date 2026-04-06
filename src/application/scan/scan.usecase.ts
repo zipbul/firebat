@@ -120,7 +120,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.info('Scanning', {
     targetCount: options.targets.length,
     detectorCount: options.detectors.length,
-    fixMode: options.fix,
+    fixMode: true,
   });
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
 
@@ -237,7 +237,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Artifact key computed', { artifactKey });
 
-  const allowCache = options.fix === false;
+  const allowCache = false;
 
   logger.debug('Cache strategy', { allowCache });
 
@@ -275,7 +275,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   let lintPromise: Promise<LintResult | null> | null = null;
   const fixTimings: Record<string, number> = {};
 
-  if (options.fix) {
+  {
     logger.info('Fix mode: running fixable tools before parse', {
       format: shouldRunFormat,
       lint: shouldRunLint,
@@ -335,78 +335,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     }
 
     logger.info('Fix mode: tools complete', { durationMs: fixDur });
-  } else {
-    if (shouldRunFormat) {
-      const tFormat0 = nowMs();
-
-      logger.debug('format: start', { mode: 'check', targetCount: options.targets.length });
-
-      formatPromise = (async () => {
-        try {
-          const oxfmtConfigPath = await resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc');
-          const r = await analyzeFormat({
-            targets: options.targets,
-            fix: false,
-            cwd: ctx.rootAbs,
-            resolveMode: 'project-only',
-            ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
-            logger,
-          });
-
-          fixTimings.format = nowMs() - tFormat0;
-
-          logger.debug('format: complete', { durationMs: Math.round(fixTimings.format) });
-
-          return r;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-
-          metaErrors.format = message;
-
-          fixTimings.format = nowMs() - tFormat0;
-
-          logger.debug('format: failed', { durationMs: Math.round(fixTimings.format), message });
-
-          return null;
-        }
-      })();
-    }
-
-    if (shouldRunLint) {
-      const tLint0 = nowMs();
-
-      logger.debug('lint: start', { fix: false, targetCount: options.targets.length });
-
-      lintPromise = (async () => {
-        try {
-          const oxlintConfigPath = await resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc');
-          const r = await analyzeLint({
-            targets: options.targets,
-            fix: false,
-            cwd: ctx.rootAbs,
-            resolveMode: 'project-only',
-            ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
-            logger,
-          });
-
-          fixTimings.lint = nowMs() - tLint0;
-
-          logger.debug('lint: complete', { durationMs: Math.round(fixTimings.lint) });
-
-          return r;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-
-          metaErrors.lint = message;
-
-          fixTimings.lint = nowMs() - tLint0;
-
-          logger.debug('lint: failed', { durationMs: Math.round(fixTimings.lint), message });
-
-          return null;
-        }
-      })();
-    }
   }
 
   const tProgram0 = nowMs();

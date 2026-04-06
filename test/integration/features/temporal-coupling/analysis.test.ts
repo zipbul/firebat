@@ -30,12 +30,9 @@ describe('integration/temporal-coupling', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['temporal-coupling' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -71,12 +68,9 @@ describe('integration/temporal-coupling', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['temporal-coupling' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -114,12 +108,9 @@ describe('integration/temporal-coupling', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['temporal-coupling' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -157,12 +148,9 @@ describe('integration/temporal-coupling', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['temporal-coupling' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -194,12 +182,9 @@ describe('integration/temporal-coupling', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['temporal-coupling' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -236,12 +221,9 @@ describe('integration/temporal-coupling', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['temporal-coupling' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },

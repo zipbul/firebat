@@ -12,10 +12,8 @@ describe('arg-parse', () => {
 
     // Assert
     expect(result.targets).toEqual([]);
-    expect(result.format).toBe('text');
     expect(result.minSize).toBe('auto');
     expect(result.maxForwardDepth).toBe(0);
-    expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
       'duplicates',
       'waste',
@@ -35,7 +33,6 @@ describe('arg-parse', () => {
       'variable-lifetime',
       'giant-file',
     ]);
-    expect(result.fix).toBe(false);
     expect(result.help).toBe(false);
     expect(result.explicit).toBeDefined();
   });
@@ -49,10 +46,8 @@ describe('arg-parse', () => {
     // Assert
     expect(result.help).toBe(true);
     expect(result.targets).toEqual([]);
-    expect(result.format).toBe('text');
     expect(result.minSize).toBe('auto');
     expect(result.maxForwardDepth).toBe(0);
-    expect(result.exitOnFindings).toBe(true);
     expect(result.detectors).toEqual([
       'duplicates',
       'waste',
@@ -72,18 +67,16 @@ describe('arg-parse', () => {
       'variable-lifetime',
       'giant-file',
     ]);
-    expect(result.fix).toBe(false);
     expect(result.explicit).toBeDefined();
   });
 
-  it('should parse format, minSize, and targets when options are provided', () => {
+  it('should parse minSize and targets when options are provided', () => {
     // Arrange
-    let argv = ['--format', 'json', '--min-size', '120', '--max-forward-depth', '2', 'packages'];
+    let argv = ['--min-size', '120', '--max-forward-depth', '2', 'packages'];
     // Act
     let result = parseArgs(argv);
 
     // Assert
-    expect(result.format).toBe('json');
     expect(result.minSize).toBe(120);
     expect(result.maxForwardDepth).toBe(2);
     expect(result.targets).toEqual([path.resolve('packages')]);
@@ -106,20 +99,8 @@ describe('arg-parse', () => {
       'variable-lifetime',
       'giant-file',
     ]);
-    expect(result.fix).toBe(false);
     expect(result.help).toBe(false);
     expect(result.explicit).toBeDefined();
-  });
-
-  it('should enable fix mode when --fix is provided', () => {
-    // Arrange
-    let argv = ['--fix'];
-    // Act
-    let result = parseArgs(argv);
-
-    // Assert
-    expect(result.fix).toBe(true);
-    expect(result.explicit?.fix).toBe(true);
   });
 
   it('should parse detectors when --only is provided', () => {

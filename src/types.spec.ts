@@ -83,14 +83,14 @@ describe('toJsonReport', () => {
     expect(out.analyses).toBe(report.analyses);
   });
 
-  it('should pass catalog through unchanged', () => {
+  it('should not include catalog in JSON output', () => {
     const report: FirebatReport = {
       ...makeReport(),
       catalog: { WASTE_DEAD_STORE: { cause: 'unused variable', think: ['remove it'] } },
     };
     const out = toJsonReport(report);
 
-    expect(out.catalog).toBe(report.catalog);
+    expect((out as unknown as Record<string, unknown>).catalog).toBeUndefined();
   });
 
   it('should not include meta key in output', () => {

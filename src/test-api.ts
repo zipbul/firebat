@@ -64,12 +64,6 @@ export { __testing__ as __testing__OxlintRunner } from './tooling/oxlint/oxlint-
 export { createNoopLogger } from './shared/logger';
 
 // ---------------------------------------------------------------------------
-// Adapters — MCP  (Phase 4)
-// ---------------------------------------------------------------------------
-export { createFirebatMcpServer } from './adapters/mcp/server';
-export { __testing__ as __testing__McpServer } from './adapters/mcp/server';
-
-// ---------------------------------------------------------------------------
 // Adapters — CLI  (Phase 4)
 // ---------------------------------------------------------------------------
 export { runInstall, runUpdate } from './adapters/cli/install';

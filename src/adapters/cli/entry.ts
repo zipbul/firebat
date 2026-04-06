@@ -73,17 +73,13 @@ const printHelp = (): void => {
     `    ${hc('install', `${H.bold}${H.white}`, c)}    ${hc('Set up firebat config files in this project', H.dim, c)}`,
     `    ${hc('update', `${H.bold}${H.white}`, c)}     ${hc('Sync config files with latest templates', H.dim, c)}`,
     `    ${hc('cache', `${H.bold}${H.white}`, c)} ${hc('clean', H.white, c)}  ${hc('Delete cached analysis data (.firebat/*.sqlite)', H.dim, c)}`,
-    `    ${hc('mcp', `${H.bold}${H.white}`, c)}        ${hc('Start MCP server (stdio transport)', H.dim, c)}`,
     '',
     `  ${hc('SCAN OPTIONS', `${H.bold}${H.yellow}`, c)}`,
     '',
-    `    ${hc('--format', `${H.bold}${H.green}`, c)} ${hc('text|json', H.gray, c)}       Output format ${hc('(default: text)', H.dim, c)}`,
     `    ${hc('--min-size', `${H.bold}${H.green}`, c)} ${hc('<n|auto>', H.gray, c)}     Min AST node size for duplicate detection ${hc('(default: auto)', H.dim, c)}`,
     `    ${hc('--max-forward-depth', `${H.bold}${H.green}`, c)} ${hc('<n>', H.gray, c)}  Max thin-wrapper chain depth ${hc('(default: 0)', H.dim, c)}`,
     `    ${hc('--only', `${H.bold}${H.green}`, c)} ${hc('<list>', H.gray, c)}            Comma-separated detectors to run`,
-    `    ${hc('--fix', `${H.bold}${H.green}`, c)}                    Apply safe autofixes ${hc('(oxfmt --write; oxlint --fix)', H.dim, c)}`,
     `    ${hc('--config', `${H.bold}${H.green}`, c)} ${hc('<path>', H.gray, c)}          Config file path ${hc('(default: <root>/.firebatrc.jsonc)', H.dim, c)}`,
-    `    ${hc('--no-exit', `${H.bold}${H.green}`, c)}                Always exit 0, even with findings`,
     '',
     `  ${hc('LOG OPTIONS', `${H.bold}${H.yellow}`, c)}`,
     '',
@@ -109,8 +105,7 @@ const printHelp = (): void => {
     '',
     `    ${hc('$', H.dim, c)} firebat                              ${hc('# Scan entire project', H.dim, c)}`,
     `    ${hc('$', H.dim, c)} firebat src/app.ts src/utils.ts       ${hc('# Scan specific files', H.dim, c)}`,
-    `    ${hc('$', H.dim, c)} firebat --only waste,lint --format json`,
-    `    ${hc('$', H.dim, c)} firebat --fix                        ${hc('# Auto-fix lint & format issues', H.dim, c)}`,
+    `    ${hc('$', H.dim, c)} firebat --only waste,lint`,
     `    ${hc('$', H.dim, c)} firebat install                      ${hc('# Set up config files', H.dim, c)}`,
     '',
   ];
@@ -287,7 +282,7 @@ const resolveCouplingConfigFromFeatures = (
 const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): Promise<FirebatCliOptions> => {
   const options = parseArgs(argv);
 
-  logger.trace('CLI args parsed', { targets: options.targets.length, format: options.format, help: options.help });
+  logger.trace('CLI args parsed', { targets: options.targets.length, help: options.help });
 
   if (options.help) {
     return options;
@@ -388,7 +383,6 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     logger.debug('Options resolved', {
       targetCount: options.targets.length,
       detectorCount: options.detectors.length,
-      format: options.format,
     });
 
     if (exitCode === 0) {
@@ -407,9 +401,9 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
       }
 
       if (report) {
-        const output = formatReport(report, options.format);
+        const output = formatReport(report);
 
-        logger.trace('Report formatted', { format: options.format, length: output.length });
+        logger.trace('Report formatted', { length: output.length });
 
         process.stdout.write(output + '\n');
 
@@ -417,7 +411,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
 
         logger.debug('Blocking findings counted', { blockers });
 
-        exitCode = blockers > 0 && options.exitOnFindings ? 1 : 0;
+        exitCode = blockers > 0 ? 1 : 0;
       }
     }
   }

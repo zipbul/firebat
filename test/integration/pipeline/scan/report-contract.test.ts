@@ -108,12 +108,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['waste'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -142,12 +139,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['format', 'waste'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -175,12 +169,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['lint'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -207,12 +198,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['dependencies', 'coupling'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -240,12 +228,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['dependencies', 'coupling'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -285,12 +270,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['dependencies'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -336,12 +318,9 @@ describe('integration/scan/report-contract', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['duplicates'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -411,12 +390,9 @@ exit 1
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['lint'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -444,12 +420,9 @@ exit 1
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['waste'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -483,12 +456,9 @@ exit 1
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['barrel'],
-            fix: false,
             help: false,
             barrelIgnoreGlobs: [],
           },
@@ -545,12 +515,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['format', 'waste'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -591,12 +558,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['error-flow'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -637,12 +601,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['unknown-proof'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -683,12 +644,9 @@ exit 7
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 5,
-            exitOnFindings: false,
             detectors: ['indirection'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -738,12 +696,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['duplicates'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -785,12 +740,9 @@ exit 7
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['waste', 'barrel', 'error-flow', 'lint', 'format', 'typecheck'],
-            fix: false,
             help: false,
             barrelIgnoreGlobs: [],
           },
@@ -821,12 +773,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['waste'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -860,12 +809,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['indirection'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -897,12 +843,9 @@ exit 7
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['indirection'],
-            fix: false,
             help: false,
           },
           { logger },

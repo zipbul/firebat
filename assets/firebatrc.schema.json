@@ -36,41 +36,6 @@
         "variable-lifetime": { "$ref": "#/$defs/variableLifetimeToggle" },
         "giant-file": { "$ref": "#/$defs/giantFileToggle" }
       }
-    },
-    "mcp": {
-      "description": "MCP tool overrides. Use 'inherit' to reuse root config. Per-feature values can be false | true | 'inherit' | {options} (empty objects are allowed).",
-      "oneOf": [
-        { "type": "string", "const": "inherit" },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "features": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "duplicates": { "$ref": "#/$defs/duplicatesInheritable" },
-                "barrel": { "$ref": "#/$defs/barrelInheritable" },
-                "unknown-proof": { "$ref": "#/$defs/unknownProofInheritable" },
-                "format": { "$ref": "#/$defs/emptyInheritable" },
-                "indirection": { "$ref": "#/$defs/indirectionInheritable" },
-                "waste": { "$ref": "#/$defs/wasteInheritable" },
-                "lint": { "$ref": "#/$defs/emptyInheritable" },
-                "typecheck": { "$ref": "#/$defs/emptyInheritable" },
-                "dependencies": { "$ref": "#/$defs/dependenciesInheritable" },
-                "coupling": { "$ref": "#/$defs/couplingInheritable" },
-                "nesting": { "$ref": "#/$defs/nestingInheritable" },
-                "early-return": { "$ref": "#/$defs/emptyInheritable" },
-                "error-flow": { "$ref": "#/$defs/emptyInheritable" },
-
-                "temporal-coupling": { "$ref": "#/$defs/emptyInheritable" },
-                "variable-lifetime": { "$ref": "#/$defs/variableLifetimeInheritable" },
-                "giant-file": { "$ref": "#/$defs/giantFileInheritable" }
-              }
-            }
-          }
-        }
-      ]
     }
   },
   "$defs": {
@@ -83,10 +48,6 @@
     "emptyToggle": {
       "description": "false disables; true enables.",
       "type": "boolean"
-    },
-    "emptyInheritable": {
-      "description": "false disables; true enables; 'inherit' uses root.",
-      "oneOf": [{ "type": "boolean" }, { "type": "string", "const": "inherit" }]
     },
     "dependenciesOptions": {
       "type": "object",
@@ -124,22 +85,8 @@
         { "$ref": "#/$defs/dependenciesOptions" }
       ]
     },
-    "dependenciesInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        { "$ref": "#/$defs/dependenciesOptions" }
-      ]
-    },
     "wasteToggle": {
       "type": "boolean"
-    },
-    "wasteInheritable": {
-      "oneOf": [
-        { "type": "boolean" },
-        { "type": "string", "const": "inherit" }
-      ]
     },
     "duplicatesToggle": {
       "oneOf": [
@@ -189,58 +136,6 @@
         }
       ]
     },
-    "duplicatesInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "minSize": { "$ref": "#/$defs/minSize", "default": "auto" } },
-          "required": ["minSize"],
-          "minProperties": 1
-        }
-      ]
-    },
-    "unknownProofInheritable": {
-      "description": "false disables; true enables; 'inherit' uses root.",
-      "oneOf": [{ "type": "boolean" }, { "type": "string", "const": "inherit" }]
-    },
-    "barrelInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "ignoreGlobs": {
-              "type": "array",
-              "items": { "type": "string" },
-              "minItems": 1,
-              "description": "Additional ignore globs for barrel. Default ignores are minimal: node_modules/** and dist/**."
-            }
-          }
-        }
-      ]
-    },
-    "indirectionInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "maxForwardDepth": { "type": "integer", "minimum": 0, "default": 0 } },
-          "required": ["maxForwardDepth"],
-          "minProperties": 1
-        }
-      ]
-    },
-
     "nestingOptions": {
       "type": "object",
       "additionalProperties": false,
@@ -268,15 +163,6 @@
     "nestingToggle": {
       "oneOf": [{ "type": "boolean", "const": false }, { "type": "boolean", "const": true }, { "$ref": "#/$defs/nestingOptions" }]
     },
-    "nestingInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        { "$ref": "#/$defs/nestingOptions" }
-      ]
-    },
-
     "couplingOptions": {
       "type": "object",
       "additionalProperties": false,
@@ -323,15 +209,6 @@
         { "$ref": "#/$defs/couplingOptions" }
       ]
     },
-    "couplingInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        { "$ref": "#/$defs/couplingOptions" }
-      ]
-    },
-
     "variableLifetimeToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
@@ -347,23 +224,6 @@
         }
       ]
     },
-    "variableLifetimeInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "maxLifetimeLines": { "type": "integer", "minimum": 0 },
-            "maxLiveVariables": { "type": "integer", "minimum": 0 },
-            "minFunctionLines": { "type": "integer", "minimum": 0 }
-          }
-        }
-      ]
-    },
-
     "giantFileToggle": {
       "oneOf": [
         { "type": "boolean", "const": false },
@@ -375,17 +235,5 @@
         }
       ]
     },
-    "giantFileInheritable": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "string", "const": "inherit" },
-        { "type": "boolean", "const": true },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": { "maxLines": { "type": "integer", "minimum": 0 } }
-        }
-      ]
-    }
   }
 }

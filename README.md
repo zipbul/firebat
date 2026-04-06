@@ -2,7 +2,7 @@
 
 Code quality scanner that surfaces **maintainability issues** so teams can prioritize refactoring based on observable signals, not gut feeling.
 
-Built on **Bun** + **oxc**, designed for fast repeated runs and seamless integration with AI agents via MCP.
+Built on **Bun** + **oxc**, designed for fast repeated runs. JSON-only CLI output for AI agent integration.
 
 ## Install
 
@@ -23,13 +23,7 @@ firebat
 firebat src/app.ts src/utils.ts
 
 # Select detectors and output JSON
-firebat --only waste,lint --format json
-
-# Auto-fix lint & format issues
-firebat --fix
-
-# Start MCP server (stdio)
-firebat mcp
+firebat --only waste,lint
 ```
 
 ## CLI Reference
@@ -47,19 +41,15 @@ firebat scan [targets...] [options]
 | `install` | Set up firebat config files in this project |
 | `update` | Sync config files with latest templates |
 | `cache clean` | Delete cached analysis data (`.firebat/*.sqlite`) |
-| `mcp` | Start MCP server (stdio transport) |
 
 ### Scan Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--format text\|json` | `text` | Output format |
 | `--min-size <n\|auto>` | `auto` | Min AST node size for duplicate detection |
 | `--max-forward-depth <n>` | `0` | Max thin-wrapper chain depth |
 | `--only <list>` | all | Comma-separated detectors to run |
-| `--fix` | off | Apply safe autofixes (oxfmt --write; oxlint --fix) |
 | `--config <path>` | `.firebatrc.jsonc` | Config file path |
-| `--no-exit` | off | Always exit 0, even with findings |
 | `--log-level <level>` | `info` | error \| warn \| info \| debug \| trace |
 | `--log-stack` | off | Include stack traces in log output |
 
@@ -106,50 +96,6 @@ If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be
 | **format** | oxfmt | Files that need formatting |
 | **typecheck** | tsgo | Type errors and warnings with code frames |
 
-## MCP Integration
-
-firebat exposes a single tool (`scan`) via the [Model Context Protocol](https://modelcontextprotocol.io/) for AI agent integration.
-
-### Setup
-
-Add to your MCP client config (e.g. Claude Desktop, VS Code):
-
-```json
-{
-  "mcpServers": {
-    "firebat": {
-      "command": "node",
-      "args": ["path/to/dist/firebat.js", "mcp"]
-    }
-  }
-}
-```
-
-### Agent Prompt (Recommended)
-
-Copy the following block into your agent's instruction file
-(e.g. `copilot-instructions.md`, `AGENTS.md`, `.cursor/rules`)
-so your AI agent can discover and leverage all firebat tools automatically:
-
-```markdown
-## firebat (MCP Code Quality Scanner)
-
-This project uses a firebat MCP server for automated code quality analysis.
-
-### Tools
-- 🔍 Analysis: `scan`
-
-### Required Rules
-- After any code change, always run `scan` to check for quality regressions.
-- Review scan findings and address them in priority order before moving on.
-
-### When to Use What
-- After editing code → `scan`
-
-```
-
-> **Tip:** `firebat install` prints this block automatically so you can copy it right away.
-
 ## Configuration
 
 Create `.firebatrc.jsonc` in your project root:
@@ -175,7 +121,7 @@ Create `.firebatrc.jsonc` in your project root:
 
 ```
 src/
-  adapters/       Entrypoints & composition root (CLI, MCP)
+  adapters/       Entrypoints & composition root (CLI)
   application/    Use-case orchestration (no direct I/O imports)
   ports/          Interfaces for external I/O
   infrastructure/ I/O implementations (SQLite, tsgo, oxlint, ast-grep)

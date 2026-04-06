@@ -1,4 +1,4 @@
-type FirebatSubcommand = 'install' | 'update' | 'cache' | 'mcp' | 'scan' | undefined;
+type FirebatSubcommand = 'install' | 'update' | 'cache' | 'scan' | undefined;
 
 type FirebatGlobalLogOptions = {
   readonly logLevel?: string;
@@ -60,8 +60,7 @@ const isCommandToken = (token: string): token is Exclude<FirebatSubcommand, unde
     token === 'i' ||
     token === 'update' ||
     token === 'u' ||
-    token === 'cache' ||
-    token === 'mcp'
+    token === 'cache'
   );
 };
 
@@ -74,7 +73,7 @@ const normalizeSubcommand = (token: string): FirebatSubcommand => {
     return 'update';
   }
 
-  if (token === 'scan' || token === 'install' || token === 'update' || token === 'cache' || token === 'mcp') {
+  if (token === 'scan' || token === 'install' || token === 'update' || token === 'cache') {
     return token;
   }
 

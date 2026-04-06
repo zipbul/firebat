@@ -25,12 +25,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -63,12 +60,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -100,12 +94,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -142,12 +133,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -174,12 +162,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -213,12 +198,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -262,12 +244,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -318,12 +297,9 @@ describe('integration/variable-lifetime', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['variable-lifetime' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },

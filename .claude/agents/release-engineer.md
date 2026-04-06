@@ -22,7 +22,7 @@ model: sonnet
 
 - `type(scope): subject`
 - type: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
-- scope: cli, mcp, lint, repo, config, scripts, agents, duplicates
+- scope: cli, lint, repo, config, scripts, agents, duplicates
 - scope는 kebab-case, subject 끝에 마침표 금지
 
 ## 작업 흐름

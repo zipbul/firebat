@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import type { FirebatCliExplicitFlags, FirebatCliOptions } from '../interfaces';
-import type { FirebatDetector, MinSizeOption, OutputFormat } from '../types';
+import type { FirebatDetector, MinSizeOption } from '../types';
 import type { FirebatLogLevel } from './firebat-config';
 
 import { DETECTOR_ALIASES } from '../types';
@@ -53,14 +53,6 @@ const parseMinSize = (value: string): MinSizeOption => {
   }
 
   return parseNumber(value, '--min-size');
-};
-
-const parseOutputFormat = (value: string): OutputFormat => {
-  if (value === 'text' || value === 'json') {
-    return value;
-  }
-
-  throw new Error(`[firebat] Invalid --format: ${value}. Expected text|json`);
 };
 
 const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
@@ -130,13 +122,10 @@ const normalizeTarget = (raw: string): string => {
 };
 
 interface ExplicitMutable {
-  format: boolean;
   minSize: boolean;
   maxForwardDepth: boolean;
   crossFileMinDepth: boolean;
-  exitOnFindings: boolean;
   detectors: boolean;
-  fix: boolean;
   configPath: boolean;
   logLevel: boolean;
   logStack: boolean;
@@ -144,26 +133,20 @@ interface ExplicitMutable {
 
 const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   const targets: string[] = [];
-  let format: OutputFormat = 'text';
   let minSize: MinSizeOption = DEFAULT_MIN_SIZE;
   let maxForwardDepth = DEFAULT_MAX_FORWARD_DEPTH;
   let crossFileMinDepth = DEFAULT_CROSS_FILE_MIN_DEPTH;
-  let exitOnFindings = true;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
-  let fix = false;
   let configPath: string | undefined;
   let logLevel: FirebatLogLevel | undefined;
   let logStack: boolean | undefined;
 
   const toExplicitFlags = (input: ExplicitMutable): FirebatCliExplicitFlags => {
     return {
-      format: input.format,
       minSize: input.minSize,
       maxForwardDepth: input.maxForwardDepth,
       crossFileMinDepth: input.crossFileMinDepth,
-      exitOnFindings: input.exitOnFindings,
       detectors: input.detectors,
-      fix: input.fix,
       configPath: input.configPath,
       logLevel: input.logLevel,
       logStack: input.logStack,
@@ -171,13 +154,10 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   };
 
   const explicit: ExplicitMutable = {
-    format: false,
     minSize: false,
     maxForwardDepth: false,
     crossFileMinDepth: false,
-    exitOnFindings: false,
     detectors: false,
-    fix: false,
     configPath: false,
     logLevel: false,
     logStack: false,
@@ -193,33 +173,15 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     if (arg === '--help' || arg === '-h') {
       return {
         targets: [],
-        format,
         minSize,
         maxForwardDepth,
         crossFileMinDepth,
-        exitOnFindings,
         detectors,
-        fix,
         help: true,
         ...(configPath !== undefined ? { configPath } : {}),
         ...(logLevel !== undefined ? { logLevel } : {}),
         explicit: toExplicitFlags(explicit),
       };
-    }
-
-    if (arg === '--format') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --format');
-      }
-
-      format = parseOutputFormat(value);
-      explicit.format = true;
-
-      i += 1;
-
-      continue;
     }
 
     if (arg === '--min-size') {
@@ -267,19 +229,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
-    if (arg === '--no-exit') {
-      exitOnFindings = false;
-      explicit.exitOnFindings = true;
-
-      continue;
-    }
-
-    if (arg === '--fix') {
-      fix = true;
-      explicit.fix = true;
-
-      continue;
-    }
 
     if (arg === '--only') {
       const value = argv[i + 1];
@@ -342,13 +291,10 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
 
   return {
     targets,
-    format,
     minSize,
     maxForwardDepth,
     crossFileMinDepth,
-    exitOnFindings,
     detectors,
-    fix,
     help: false,
     ...(configPath !== undefined ? { configPath } : {}),
     ...(logLevel !== undefined ? { logLevel } : {}),

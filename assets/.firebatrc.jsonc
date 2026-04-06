@@ -67,8 +67,5 @@
 
     // Giant files (optional line threshold).
     "giant-file": { "maxLines": 800 }
-  },
-
-  // MCP overrides (use "inherit" to reuse root config).
-  "mcp": "inherit"
+  }
 }

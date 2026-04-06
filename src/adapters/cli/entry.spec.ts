@@ -28,7 +28,7 @@ mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loade
 }));
 
 mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => ({
-  formatReport: mock((_r: unknown, _f: unknown) => '[]'),
+  formatReport: mock((_r: unknown) => '[]'),
 }));
 
 mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({

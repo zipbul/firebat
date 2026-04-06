@@ -4,7 +4,7 @@ Claude Code (claude.ai/code) 가 이 저장소에서 작업할 때 참고하는 
 
 ## 프로젝트 개요
 
-코드 품질 스캐너. 중복, 데드 스토어, 깊은 중첩, 의존성 순환, 스코프 축소 기회, 불필요한 re-export 등 유지보수성 이슈를 탐지한다. Bun + oxc 기반, 17개 디텍터, MCP 서버 지원.
+코드 품질 스캐너. 중복, 데드 스토어, 깊은 중첩, 의존성 순환, 스코프 축소 기회, 불필요한 re-export 등 유지보수성 이슈를 탐지한다. Bun + oxc 기반, 17개 디텍터, JSON-only CLI.
 
 ## 명령어
 
@@ -24,7 +24,7 @@ bun run db:migrate        # Drizzle 마이그레이션 실행
 
 ```
 src/
-  adapters/        진입점 (CLI, MCP 서버)
+  adapters/        진입점 (CLI)
   application/     유스케이스 오케스트레이션 — I/O 직접 참조 금지
   ports/           외부 I/O 인터페이스
   infrastructure/  I/O 구현체 (SQLite + Drizzle ORM, in-memory, hybrid)
@@ -48,7 +48,7 @@ src/
 commitlint으로 conventional commits 강제. `type(scope): subject`
 
 - **type**: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
-- **scope**: cli, mcp, lint, repo, config, scripts, agents, duplicates
+- **scope**: cli, lint, repo, config, scripts, agents, duplicates
 - scope는 kebab-case, subject 끝에 마침표 금지
 
 ## 컨벤션

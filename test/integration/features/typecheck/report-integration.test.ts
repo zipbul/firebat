@@ -100,12 +100,9 @@ describe('integration/typecheck/report-integration', () => {
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['typecheck'],
-            fix: false,
             help: false,
           },
           { logger },
@@ -160,12 +157,9 @@ describe('integration/typecheck/report-integration', () => {
         scanUseCase(
           {
             targets: [project.srcFileAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['typecheck'],
-            fix: false,
             help: false,
           },
           { logger },

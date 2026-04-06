@@ -372,9 +372,9 @@ const ASSETS: ReadonlyArray<AssetSpec> = [
   { asset: '.firebatrc.jsonc', dest: '.firebatrc.jsonc' },
 ];
 const AGENT_PROMPT_BLOCK = [
-  '## firebat (MCP Code Quality Scanner)',
+  '## firebat (Code Quality Scanner)',
   '',
-  'Firebat provides both a CLI and an MCP server for code quality analysis.',
+  'Firebat provides a CLI for code quality analysis.',
   '',
   '### What to do (for your AI agent)',
   '- Ask the user about their project constraints (stack, CI, coding conventions, risk tolerance).',

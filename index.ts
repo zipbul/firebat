@@ -2,13 +2,12 @@ import { routeFirebatArgv } from './src/adapters/cli/argv-router';
 import { runCache } from './src/adapters/cli/cache';
 import { runCli } from './src/adapters/cli/entry';
 import { runInstall, runUpdate } from './src/adapters/cli/install';
-import { runMcp } from './src/adapters/mcp/entry';
 import { appendFirebatLog } from './src/shared/logger';
 import { createPrettyConsoleLogger } from './src/shared/logger';
 import { resolveFirebatRootFromCwd } from './src/shared/root-resolver';
 
-const appendErrorLogSafe = async (subcommand: string | undefined, message: string): Promise<void> => {
-  const relativeLogPath = subcommand === 'mcp' ? '.firebat/mcp-error.log' : '.firebat/cli-error.log';
+const appendErrorLogSafe = async (_subcommand: string | undefined, message: string): Promise<void> => {
+  const relativeLogPath = '.firebat/cli-error.log';
   const rootAbs = await resolveFirebatRootFromCwd()
     .then(result => result.rootAbs)
     .catch(err => {
@@ -59,9 +58,7 @@ const main = async (): Promise<void> => {
           ? await runUpdate(routed.subcommandArgv, logger)
           : subcommand === 'cache'
             ? await runCache(routed.subcommandArgv, logger)
-            : subcommand === 'mcp'
-              ? (await runMcp(), null)
-              : await runCli(routed.scanArgv);
+            : await runCli(routed.scanArgv);
 
     if (exitCode !== null) {
       process.exit(exitCode);

@@ -1,7 +1,5 @@
 import type { ErrorFlowFinding } from './features/error-flow/types';
 
-export type OutputFormat = 'text' | 'json';
-
 export type { FirebatConfig } from './shared/firebat-config';
 
 export type MinSizeOption = number | 'auto';
@@ -660,7 +658,6 @@ export interface FirebatJsonReport {
   readonly errors?: Readonly<Record<string, string>>;
   readonly blockers: number;
   readonly analyses: Partial<FirebatAnalyses>;
-  readonly catalog: Readonly<Partial<Record<FirebatCatalogCode, CatalogEntry>>>;
 }
 
 export const countBlockers = (analyses: Partial<FirebatAnalyses>): number => {
@@ -672,7 +669,6 @@ export const toJsonReport = (report: FirebatReport): FirebatJsonReport => ({
   ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0 ? { errors: report.meta.errors } : {}),
   blockers: countBlockers(report.analyses),
   analyses: report.analyses,
-  catalog: report.catalog,
 });
 
 export interface NodeHeader {

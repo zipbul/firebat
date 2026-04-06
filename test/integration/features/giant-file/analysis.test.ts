@@ -26,12 +26,9 @@ describe('integration/giant-file', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['giant-file' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -64,12 +61,9 @@ describe('integration/giant-file', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['giant-file' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -98,12 +92,9 @@ describe('integration/giant-file', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['giant-file' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -134,12 +125,9 @@ describe('integration/giant-file', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['giant-file' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -174,12 +162,9 @@ describe('integration/giant-file', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['giant-file' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
@@ -213,12 +198,9 @@ describe('integration/giant-file', () => {
         scanUseCase(
           {
             targets: [...project.targetsAbs],
-            format: 'json',
             minSize: 0,
             maxForwardDepth: 0,
-            exitOnFindings: false,
             detectors: ['giant-file' as any],
-            fix: false,
             help: false,
           },
           { logger: createScanLogger() },
