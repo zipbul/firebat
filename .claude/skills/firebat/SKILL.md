@@ -39,19 +39,26 @@ After root-cause fixes, order remaining findings by impact:
 6. **duplicates** — extract shared abstractions only when the duplication is clearly accidental.
 7. **lint, format, typecheck** — mechanical fixes. Address last since earlier refactors may resolve them.
 
-### 5. Address findings
+### 5. Plan all fixes before writing code
 
-For each remaining finding:
+For each finding to address:
 
-1. Look up the detector name (the key in `analyses`) in the **routing table** below.
-2. Read the corresponding reference file.
-3. Find the section matching the finding's `code` value.
-4. Read `cause` to understand why this was flagged.
-5. Follow `think` steps **in order**. If any step concludes with *"stop, no action needed"*, skip this finding and move on — it is a false positive in context. Otherwise, execute the fix described in the `think` steps.
+1. Look up the detector name in the **routing table** below and read the reference file.
+2. Find the section matching the finding's `code` and read `cause` + `think` steps.
+3. If any `think` step concludes with *"stop, no action needed"*, mark as false positive and skip.
 
-### 6. Verify
+Produce a **complete fix plan** covering all actionable findings before making any changes. The plan must describe every extraction, rename, or restructure as a single coherent set of changes — not piecemeal edits.
 
-After making changes, re-run firebat on the entire project **without `--only` and without target files** to confirm findings are resolved and no new ones were introduced across the codebase.
+### 6. Establish baseline
+
+Before modifying any code, run the existing tests for the affected files to establish a passing baseline. If tests fail before your changes, stop and report.
+
+### 7. Execute fixes and verify
+
+Apply all planned changes, then verify in this order:
+
+1. **Tests** — run the same tests from step 6. All must still pass. Failures mean the refactoring altered behavior — fix before proceeding.
+2. **Full scan** — run firebat on the entire project without `--only` or target restrictions. Compare blockers against the step 1 scan. New findings (especially typecheck, lint) introduced by your changes must be resolved before finishing.
 
 </procedure>
 
