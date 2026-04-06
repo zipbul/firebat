@@ -27,7 +27,19 @@ Scan the full `analyses` object. Note which **files appear under multiple detect
 
 When a file appears under 2+ detectors (e.g. nesting + waste in the same file, or coupling + dependencies in the same module), read `references/diagnostics.md`. It documents composite patterns — god function, circular dependency, god module — that explain **why** multiple detectors fire together. Resolving the root cause eliminates downstream findings.
 
-### 4. Address remaining findings
+### 4. Prioritize
+
+After root-cause fixes, order remaining findings by impact:
+
+1. **dependencies** — layer violations, circular dependencies, dead exports. These are architectural constraints; violations compound over time.
+2. **coupling** — god modules, bidirectional dependencies. High fan-in modules amplify the cost of every change.
+3. **error-flow** — unobserved promises, unsafe finally, missing error cause. Silent failures in production.
+4. **nesting, early-return, collapsible-if** — complexity findings. Fix these together per-function since they often overlap.
+5. **waste** — dead stores. Safe to fix individually.
+6. **duplicates** — extract shared abstractions only when the duplication is clearly accidental.
+7. **lint, format, typecheck** — mechanical fixes. Address last since earlier refactors may resolve them.
+
+### 5. Address findings
 
 For each remaining finding:
 
@@ -35,11 +47,11 @@ For each remaining finding:
 2. Read the corresponding reference file.
 3. Find the section matching the finding's `code` value.
 4. Read `cause` to understand why this was flagged.
-5. Follow `think` steps **in order**. If any step concludes with *"stop, no action needed"*, skip this finding and move on — it is a false positive in context.
+5. Follow `think` steps **in order**. If any step concludes with *"stop, no action needed"*, skip this finding and move on — it is a false positive in context. Otherwise, execute the fix described in the `think` steps.
 
-### 5. Verify
+### 6. Verify
 
-After making changes, re-run firebat on the modified files to confirm findings are resolved and no new ones were introduced.
+After making changes, re-run firebat on the entire project **without `--only` and without target files** to confirm findings are resolved and no new ones were introduced across the codebase.
 
 </procedure>
 
@@ -94,6 +106,7 @@ After making changes, re-run firebat on the modified files to confirm findings a
 - **Do not modify code based on a finding without first reading its reference file.** The `think` steps contain false-positive checks that prevent unnecessary changes.
 - **Do not treat all findings as errors.** Some `think` steps explicitly identify cases where the flagged pattern is intentional or justified.
 - **Prioritize root causes over individual findings.** A single structural fix (splitting a god function, breaking a cycle) often resolves 5–10 findings at once.
+- **Preserve TypeScript strict compliance when making fixes.** This project uses `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. When extracting functions or refactoring, use type guards instead of `as` casts, and ensure extracted functions have explicit parameter and return types.
 
 ## Example
 
