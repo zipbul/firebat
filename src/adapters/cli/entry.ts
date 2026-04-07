@@ -334,14 +334,18 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     configPath: loaded.resolvedPath,
   };
   const cfgExclude = config?.exclude;
+  const mergedWithExclude: FirebatCliOptions = {
+    ...merged,
+    ...(cfgExclude !== undefined && cfgExclude.length > 0 ? { exclude: cfgExclude } : {}),
+  };
 
-  if (merged.targets.length > 0) {
-    const targets = await resolveTargets(rootAbs, merged.targets, cfgExclude);
+  if (mergedWithExclude.targets.length > 0) {
+    const targets = await resolveTargets(rootAbs, mergedWithExclude.targets, cfgExclude);
 
-    logger.debug('Targets expanded', { inputTargetCount: merged.targets.length, expandedTargetCount: targets.length });
+    logger.debug('Targets expanded', { inputTargetCount: mergedWithExclude.targets.length, expandedTargetCount: targets.length });
 
     return {
-      ...merged,
+      ...mergedWithExclude,
       targets,
     };
   }
@@ -351,7 +355,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   logger.debug('Targets auto-discovered', { discoveredTargetCount: targets.length, rootAbs });
 
   return {
-    ...merged,
+    ...mergedWithExclude,
     targets,
   };
 };

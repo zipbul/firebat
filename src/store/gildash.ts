@@ -5,6 +5,7 @@ interface CreateGildashOptions {
   readonly watchMode?: boolean;
   readonly extensions?: string[];
   readonly semantic?: boolean;
+  readonly ignorePatterns?: string[];
 }
 
 /** @internal Exposed for unit tests to spy on Gildash.open without mock.module. */
@@ -19,6 +20,7 @@ const createGildash = async (opts: CreateGildashOptions): Promise<Gildash> => {
       watchMode: opts.watchMode ?? false,
       extensions: opts.extensions ?? ['.ts', '.mts', '.cts', '.tsx'],
       ...(opts.semantic === true ? { semantic: true } : {}),
+      ...(opts.ignorePatterns ? { ignorePatterns: opts.ignorePatterns } : {}),
     });
   } catch (e) {
     const msg = e instanceof GildashError ? e.message : String(e);

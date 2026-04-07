@@ -173,18 +173,19 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   const tIndex0 = nowMs();
   let gildash: Awaited<ReturnType<typeof createGildash>>;
   let semanticAvailable = false;
+  const gildashIgnore = options.exclude ? { ignorePatterns: [...options.exclude] } : {};
 
   if (needsSemantic) {
     try {
-      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true });
+      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true, ...gildashIgnore });
       semanticAvailable = true;
     } catch {
       logger.warn('Semantic init failed, falling back to AST-only');
 
-      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
+      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, ...gildashIgnore });
     }
   } else {
-    gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false });
+    gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, ...gildashIgnore });
   }
 
   // Warmup: trigger tsc TypeChecker to parse @zipbul/gildash .d.ts dependency tree once.
