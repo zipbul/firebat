@@ -393,8 +393,26 @@ const CLONE_TYPE_PRIORITY: Readonly<Record<DuplicateCloneType, number>> = {
   'near-miss': 3,
 };
 
-const filterSubsumedGroups = (groups: DuplicateGroup[]): DuplicateGroup[] =>
-  groups.filter(
+const buildSpanIndex = (items: ReadonlyArray<DuplicateItem>): Map<string, ReadonlyArray<DuplicateItem>> => {
+  const index = new Map<string, DuplicateItem[]>();
+
+  for (const item of items) {
+    const existing = index.get(item.filePath);
+
+    if (existing !== undefined) {
+      existing.push(item);
+    } else {
+      index.set(item.filePath, [item]);
+    }
+  }
+
+  return index;
+};
+
+const filterSubsumedGroups = (groups: DuplicateGroup[]): DuplicateGroup[] => {
+  const parentIndices = groups.map(g => buildSpanIndex(g.items));
+
+  return groups.filter(
     (child, childIdx) =>
       !groups.some((parent, parentIdx) => {
         if (childIdx === parentIdx) {
@@ -410,10 +428,17 @@ const filterSubsumedGroups = (groups: DuplicateGroup[]): DuplicateGroup[] =>
           return false;
         }
 
-        return child.items.every(childItem =>
-          parent.items.some(
-            parentItem => childItem.filePath === parentItem.filePath && isSpanContained(childItem.span, parentItem.span),
-          ),
-        );
+        const parentIndex = parentIndices[parentIdx]!;
+
+        return child.items.every(childItem => {
+          const sameFileItems = parentIndex.get(childItem.filePath);
+
+          if (sameFileItems === undefined) {
+            return false;
+          }
+
+          return sameFileItems.some(parentItem => isSpanContained(childItem.span, parentItem.span));
+        });
       }),
   );
+};

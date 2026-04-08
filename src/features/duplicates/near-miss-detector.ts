@@ -56,6 +56,30 @@ export interface NearMissDetectorOptions {
   readonly minStatementCount: number;
 }
 
+const collectPairwiseSimilarities = (
+  groupA: readonly IndexedItem[],
+  groupB: readonly IndexedItem[],
+  options: NearMissDetectorOptions,
+  out: ConfirmedPair[],
+): void => {
+  for (let p = 0; p < groupA.length; p++) {
+    for (let q = p + 1; q < groupB.length; q++) {
+      const a = groupA[p]!;
+      const b = groupB[q]!;
+
+      if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) {
+        continue;
+      }
+
+      const sim = computeSequenceSimilarity(a.item.statementFingerprints, b.item.statementFingerprints);
+
+      if (sim >= options.similarityThreshold) {
+        out.push({ a: a.index, b: b.index, similarity: sim });
+      }
+    }
+  }
+};
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -117,22 +141,7 @@ export const detectNearMissClones = (
 
   // 5. 소규모 함수: 직접 pairwise LCS
   if (smallItems.length >= 2) {
-    for (let p = 0; p < smallItems.length; p++) {
-      for (let q = p + 1; q < smallItems.length; q++) {
-        const a = smallItems[p]!;
-        const b = smallItems[q]!;
-
-        if (!passesSizeFilter(a.item, b.item, options.sizeRatio)) {
-          continue;
-        }
-
-        const sim = computeSequenceSimilarity(a.item.statementFingerprints, b.item.statementFingerprints);
-
-        if (sim >= options.similarityThreshold) {
-          confirmedPairs.push({ a: a.index, b: b.index, similarity: sim });
-        }
-      }
-    }
+    collectPairwiseSimilarities(smallItems, smallItems, options, confirmedPairs);
   }
 
   // 6. small × large 교차 비교: 직접 pairwise LCS
@@ -310,20 +319,25 @@ const fillMissingPairSimilarities = (
   fingerprints: readonly ReadonlyArray<string>[],
   pairSimilarities: Map<string, number>,
 ): void => {
+  // Pre-collect missing pairs to avoid redundant key construction
+  const missingPairs: Array<{ a: number; b: number; key: string }> = [];
+
   for (let p = 0; p < memberIndices.length; p++) {
     for (let q = p + 1; q < memberIndices.length; q++) {
       const a = memberIndices[p]!;
       const b = memberIndices[q]!;
       const key = `${Math.min(a, b)}-${Math.max(a, b)}`;
 
-      if (pairSimilarities.has(key)) {
-        continue;
+      if (!pairSimilarities.has(key)) {
+        missingPairs.push({ a, b, key });
       }
-
-      const sim = computeSequenceSimilarity(fingerprints[a]!, fingerprints[b]!);
-
-      pairSimilarities.set(key, sim);
     }
+  }
+
+  for (const { a, b, key } of missingPairs) {
+    const sim = computeSequenceSimilarity(fingerprints[a]!, fingerprints[b]!);
+
+    pairSimilarities.set(key, sim);
   }
 };
 

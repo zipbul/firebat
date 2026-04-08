@@ -41,6 +41,30 @@ interface LshCandidate {
   readonly j: number;
 }
 
+const emitBucketPairs = (
+  bucket: readonly number[],
+  sigCount: number,
+  candidateSet: Set<number>,
+  candidates: LshCandidate[],
+): void => {
+  for (let p = 0; p < bucket.length; p++) {
+    for (let q = p + 1; q < bucket.length; q++) {
+      const a = bucket[p]!;
+      const c = bucket[q]!;
+      const lo = a < c ? a : c;
+      const hi = a < c ? c : a;
+      const key = lo * sigCount + hi;
+
+      if (candidateSet.has(key)) {
+        continue;
+      }
+
+      candidateSet.add(key);
+      candidates.push({ i: lo, j: hi });
+    }
+  }
+};
+
 /**
  * LSH banding으로 후보 쌍을 선별한다.
  *
@@ -89,22 +113,8 @@ export const findLshCandidates = (
       if (bucket.length < 2) {
         continue;
       }
-      for (let p = 0; p < bucket.length; p++) {
-        for (let q = p + 1; q < bucket.length; q++) {
-          const a = bucket[p]!;
-          const c = bucket[q]!;
-          const lo = a < c ? a : c;
-          const hi = a < c ? c : a;
-          const key = lo * signatures.length + hi;
 
-          if (candidateSet.has(key)) {
-            continue;
-          }
-
-          candidateSet.add(key);
-          candidates.push({ i: lo, j: hi });
-        }
-      }
+      emitBucketPairs(bucket, signatures.length, candidateSet, candidates);
     }
   }
 
