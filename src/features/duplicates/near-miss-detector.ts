@@ -279,10 +279,12 @@ const splitByThreshold = (
       component.push(curr);
 
       for (const neighbor of adj.get(curr)!) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push(neighbor);
+        if (visited.has(neighbor)) {
+          continue;
         }
+
+        visited.add(neighbor);
+        queue.push(neighbor);
       }
     }
 

@@ -1,10 +1,10 @@
 import type { Gildash, HeritageNode } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../engine/types';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
-
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import { forEachChildNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { PartialResultError } from '../../engine/partial-result-error';
@@ -443,13 +443,13 @@ const containsIdentifierUse = (node: Node, name: string): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (inner.type === 'Identifier' && inner.name === name) {
-      found = true;
-
-      return false;
+    if (!(inner.type === 'Identifier' && inner.name === name)) {
+      return true;
     }
 
-    return true;
+    found = true;
+
+    return false;
   });
 
   return found;
@@ -470,9 +470,7 @@ const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
 
       const key = prop.key;
       const value = prop.value;
-      const isCauseKey =
-        (key.type === 'Identifier' && key.name === 'cause') ||
-        (key.type === 'Literal' && key.value === 'cause');
+      const isCauseKey = (key.type === 'Identifier' && key.name === 'cause') || (key.type === 'Literal' && key.value === 'cause');
 
       if (!isCauseKey) {
         continue;
@@ -551,7 +549,12 @@ const collectCallVarPositions = (program: Node): number[] => {
       const id = node.id;
       const init = node.init;
 
-      if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && (init.type === 'CallExpression' || init.type === 'NewExpression')) {
+      if (
+        id.type === 'Identifier' &&
+        typeof id.name === 'string' &&
+        init !== null &&
+        (init.type === 'CallExpression' || init.type === 'NewExpression')
+      ) {
         positions.push(id.start);
       }
     }
@@ -573,7 +576,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // Unobserved-variable tracking: stack of candidate/observed sets per function scope
   const unobservedCandidates: Map<string, Node>[] = [];
   const unobservedObserved: Set<string>[] = [];
-
   // Pre-compute which variable positions have Promise types (one batch call per file).
   // Uses id.start positions so gildash resolves the variable's type (= call result type).
   // Filters out `any` typed positions since `any` is assignable to everything.
@@ -596,12 +598,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         promisePositions = new Set<number>();
 
         if (nonAnyPositions.length > 0) {
-          const results = gildash.isTypeAssignableToTypeAtPositions(
-            filePath,
-            nonAnyPositions,
-            'PromiseLike<any>',
-            { anyConstituent: true },
-          );
+          const results = gildash.isTypeAssignableToTypeAtPositions(filePath, nonAnyPositions, 'PromiseLike<any>', {
+            anyConstituent: true,
+          });
 
           for (const [pos, isPromise] of results) {
             if (isPromise) {
@@ -979,23 +978,19 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const hasFinalizer = node.finalizer !== null;
 
       // EF-03 unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
-      if (hasFinalizer) {
-        const finalizer = node.finalizer;
+      if (hasFinalizer && node.finalizer !== null) {
+        const unsafeKind = findUnsafeControlFlowInFinally(node.finalizer);
 
-        if (finalizer !== null) {
-          const unsafeKind = findUnsafeControlFlowInFinally(finalizer);
-
-          if (unsafeKind !== null) {
-            pushFinding(findings, {
-              kind: 'unsafe-finally',
-              node,
-              filePath,
-              sourceText,
-              message: `finally masks original control flow with ${unsafeKind}`,
-              evidence: `finally contains ${unsafeKind}`,
-              recipes: ['RCP-03'],
-            });
-          }
+        if (unsafeKind !== null) {
+          pushFinding(findings, {
+            kind: 'unsafe-finally',
+            node,
+            filePath,
+            sourceText,
+            message: `finally masks original control flow with ${unsafeKind}`,
+            evidence: `finally contains ${unsafeKind}`,
+            recipes: ['RCP-03'],
+          });
         }
       }
 
@@ -1112,9 +1107,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // CallExpression is allowed in general (e.g. createError()),
       // but reject known primitive wrappers that never produce Error instances.
       const isCallButPrimitiveWrapper =
-        arg.type === 'CallExpression' &&
-        arg.callee.type === 'Identifier' &&
-        isPrimitiveWrapperName(arg.callee.name);
+        arg.type === 'CallExpression' && arg.callee.type === 'Identifier' && isPrimitiveWrapperName(arg.callee.name);
       const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
 
       if (!isLikelyError && !isAllowedCall) {
@@ -1145,8 +1138,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       if (isPromiseIdent || isPromiseMember) {
         const executor = node.arguments[0];
         const isInlineExecutor =
-          executor !== undefined &&
-          (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression');
+          executor !== undefined && (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression');
 
         if (isInlineExecutor) {
           const isAsync = executor.async === true;
@@ -1251,7 +1243,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const id = node.id;
       const init = node.init;
 
-      if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && (init.type === 'CallExpression' || init.type === 'NewExpression')) {
+      if (
+        id.type === 'Identifier' &&
+        typeof id.name === 'string' &&
+        init !== null &&
+        (init.type === 'CallExpression' || init.type === 'NewExpression')
+      ) {
         // Only register as candidate if the call returns a Promise (or if we can't determine).
         // promisePositions === null means gildash unavailable — register all (existing behavior).
         // promisePositions !== null means gildash confirmed — only register Promise-returning calls.
@@ -1340,8 +1337,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // EF-07 prefer-await-to-then: long then chains with block callbacks
       if (method === 'then') {
         const inner = callee.type === 'MemberExpression' ? callee.object : null;
-        const hasNestedThen =
-          inner !== null && inner.type === 'CallExpression' && getMemberPropertyName(inner.callee) === 'then';
+        const hasNestedThen = inner !== null && inner.type === 'CallExpression' && getMemberPropertyName(inner.callee) === 'then';
 
         if (hasNestedThen) {
           const anyBlockCb = node.arguments.some(
@@ -1365,34 +1361,34 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // no-return-wrap: .then(() => Promise.resolve(x)) — unnecessary wrapping
       if (method === 'then') {
         for (const arg of node.arguments) {
-          if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
-            const body = arg.body;
+          if (arg.type !== 'ArrowFunctionExpression' && arg.type !== 'FunctionExpression') {
+            continue;
+          }
 
-            if (body !== null && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
-              pushFinding(findings, {
-                kind: 'no-return-wrap',
-                node,
-                filePath,
-                sourceText,
-                message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
-                evidence: getEvidenceLineAt(sourceText, node.start),
-                recipes: [],
-              });
-            }
+          const body = arg.body;
 
-            if (body !== null && body.type === 'BlockStatement') {
-              if (containsPromiseWrapReturn(body)) {
-                pushFinding(findings, {
-                  kind: 'no-return-wrap',
-                  node,
-                  filePath,
-                  sourceText,
-                  message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
-                  evidence: getEvidenceLineAt(sourceText, node.start),
-                  recipes: [],
-                });
-              }
-            }
+          if (body !== null && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
+            pushFinding(findings, {
+              kind: 'no-return-wrap',
+              node,
+              filePath,
+              sourceText,
+              message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
+          }
+
+          if (body !== null && body.type === 'BlockStatement' && containsPromiseWrapReturn(body)) {
+            pushFinding(findings, {
+              kind: 'no-return-wrap',
+              node,
+              filePath,
+              sourceText,
+              message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
+              evidence: getEvidenceLineAt(sourceText, node.start),
+              recipes: [],
+            });
           }
         }
       }

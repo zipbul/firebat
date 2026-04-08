@@ -206,11 +206,13 @@ describe('detectNearMissClones', () => {
     const result = detectNearMissClones([fileA, fileB, fileC], opts);
 
     // 구조가 거의 동일하므로 하나의 그룹에 3개 함수
-    if (result.length > 0) {
-      const totalItems = result.reduce((s, g) => s + g.items.length, 0);
-
-      expect(totalItems).toBeGreaterThanOrEqual(2);
+    if (result.length <= 0) {
+      return;
     }
+
+    const totalItems = result.reduce((s, g) => s + g.items.length, 0);
+
+    expect(totalItems).toBeGreaterThanOrEqual(2);
   });
 
   it('파싱 에러 있는 파일은 건너뜀', () => {

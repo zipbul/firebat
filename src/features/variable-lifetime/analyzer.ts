@@ -260,11 +260,13 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
 
         const lastStmt = switchCaseConsequent[switchCaseConsequent.length - 1];
 
-        if (lastStmt === undefined || !isTerminalStatement(lastStmt)) {
-          hasFallThrough = true;
-
-          break;
+        if (lastStmt !== undefined && isTerminalStatement(lastStmt)) {
+          continue;
         }
+
+        hasFallThrough = true;
+
+        break;
       }
 
       if (hasFallThrough) {
@@ -651,11 +653,13 @@ const checkScopeNarrowing = (
     for (const block of scopeBlocks) {
       const allInBlock = allSiteOffsets.every(o => o > block.start && o < block.end);
 
-      if (allInBlock) {
-        matchingBlock = block;
-
-        break;
+      if (!allInBlock) {
+        continue;
       }
+
+      matchingBlock = block;
+
+      break;
     }
 
     if (!matchingBlock) {
@@ -998,61 +1002,63 @@ const analyzeVariableLifetime = (
       // Mutation density check
       const maxMutationCount = options.maxMutationCount ?? Infinity;
 
-      if (maxMutationCount < Infinity) {
-        const loopBodyRanges = collectLoopBodyRanges(bodyStatements);
+      if (maxMutationCount >= Infinity) {
+        continue;
+      }
 
-        const isInLoopBody = (offset: number): boolean => loopBodyRanges.some(r => offset >= r.start && offset < r.end);
+      const loopBodyRanges = collectLoopBodyRanges(bodyStatements);
 
-        // Group non-declaration defs by variable name, excluding loop-body writes
-        const nonDeclWriteCountByVar = new Map<string, { count: number; firstWriteOffset: number }>();
+      const isInLoopBody = (offset: number): boolean => loopBodyRanges.some(r => offset >= r.start && offset < r.end);
 
-        for (const [defId, defMeta] of analysis.defs.entries()) {
-          if (!defMeta) {
-            continue;
-          }
+      // Group non-declaration defs by variable name, excluding loop-body writes
+      const nonDeclWriteCountByVar = new Map<string, { count: number; firstWriteOffset: number }>();
 
-          if (defMeta.writeKind === 'declaration' || defMeta.writeKind === undefined) {
-            continue;
-          }
-
-          const nodeId = analysis.defNodeIdByDefId[defId];
-
-          if (nodeId === undefined) {
-            continue;
-          }
-
-          const payload = analysis.nodePayloads[nodeId];
-          const offset = payload !== null && payload !== undefined ? payloadOffset(payload as Node | ReadonlyArray<Node>) : -1;
-
-          // Skip writes whose location cannot be determined or that are inside loop bodies
-          if (offset < 0 || isInLoopBody(offset)) {
-            continue;
-          }
-
-          const existing = nonDeclWriteCountByVar.get(defMeta.name);
-
-          if (existing === undefined) {
-            nonDeclWriteCountByVar.set(defMeta.name, { count: 1, firstWriteOffset: defMeta.location });
-          } else {
-            nonDeclWriteCountByVar.set(defMeta.name, {
-              count: existing.count + 1,
-              firstWriteOffset: Math.min(existing.firstWriteOffset, defMeta.location),
-            });
-          }
+      for (const [defId, defMeta] of analysis.defs.entries()) {
+        if (!defMeta) {
+          continue;
         }
 
-        for (const [varName, info] of nonDeclWriteCountByVar) {
-          if (info.count > maxMutationCount) {
-            const defLoc = lineColumnAt(file.sourceText, info.firstWriteOffset);
+        if (defMeta.writeKind === 'declaration' || defMeta.writeKind === undefined) {
+          continue;
+        }
 
-            findings.push({
-              kind: 'mutation-density',
-              file: rel,
-              span: { start: defLoc, end: defLoc },
-              variable: varName,
-              mutationCount: info.count,
-            });
-          }
+        const nodeId = analysis.defNodeIdByDefId[defId];
+
+        if (nodeId === undefined) {
+          continue;
+        }
+
+        const payload = analysis.nodePayloads[nodeId];
+        const offset = payload !== null && payload !== undefined ? payloadOffset(payload as Node | ReadonlyArray<Node>) : -1;
+
+        // Skip writes whose location cannot be determined or that are inside loop bodies
+        if (offset < 0 || isInLoopBody(offset)) {
+          continue;
+        }
+
+        const existing = nonDeclWriteCountByVar.get(defMeta.name);
+
+        if (existing === undefined) {
+          nonDeclWriteCountByVar.set(defMeta.name, { count: 1, firstWriteOffset: defMeta.location });
+        } else {
+          nonDeclWriteCountByVar.set(defMeta.name, {
+            count: existing.count + 1,
+            firstWriteOffset: Math.min(existing.firstWriteOffset, defMeta.location),
+          });
+        }
+      }
+
+      for (const [varName, info] of nonDeclWriteCountByVar) {
+        if (info.count > maxMutationCount) {
+          const defLoc = lineColumnAt(file.sourceText, info.firstWriteOffset);
+
+          findings.push({
+            kind: 'mutation-density',
+            file: rel,
+            span: { start: defLoc, end: defLoc },
+            variable: varName,
+            mutationCount: info.count,
+          });
         }
       }
     }

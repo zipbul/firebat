@@ -709,40 +709,38 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 
       return true;
     });
-
-    return result;
-  }
-
-  // Plain function name
-  walkOxcTree(program, node => {
-    if (result !== null) {
-      return false;
-    }
-
-    // FunctionDeclaration: function foo() {}
-    if (node.type === 'FunctionDeclaration') {
-      if (getNodeName(node.id) === symbolName) {
-        result = node as Node;
-
+  } else {
+    // Plain function name
+    walkOxcTree(program, node => {
+      if (result !== null) {
         return false;
       }
-    }
 
-    // VariableDeclarator: const foo = () => {} or function() {}
-    if (node.type === 'VariableDeclarator') {
-      if (getNodeName(node.id) === symbolName) {
-        const init = node.init;
-
-        if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
-          result = init as Node;
+      // FunctionDeclaration: function foo() {}
+      if (node.type === 'FunctionDeclaration') {
+        if (getNodeName(node.id) === symbolName) {
+          result = node as Node;
 
           return false;
         }
       }
-    }
 
-    return true;
-  });
+      // VariableDeclarator: const foo = () => {} or function() {}
+      if (node.type === 'VariableDeclarator') {
+        if (getNodeName(node.id) === symbolName) {
+          const init = node.init;
+
+          if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
+            result = init as Node;
+
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }
 
   return result;
 };
@@ -1273,4 +1271,3 @@ const analyzeTemporalCoupling = (
 };
 
 export { analyzeTemporalCoupling, createEmptyTemporalCoupling };
-export type { AnalyzeTemporalCouplingInput };

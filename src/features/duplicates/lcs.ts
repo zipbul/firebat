@@ -67,7 +67,7 @@ export const computeSequenceSimilarity = (a: ReadonlyArray<string>, b: ReadonlyA
  *
  * DP traceback O(mn) — statement 시퀀스(보통 수십 개)에 적합.
  */
-export interface LcsAlignment {
+interface LcsAlignment {
   readonly matched: ReadonlyArray<{
     readonly aIndex: number;
     readonly bIndex: number;

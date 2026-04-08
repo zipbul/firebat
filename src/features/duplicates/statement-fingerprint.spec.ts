@@ -190,11 +190,13 @@ describe('extractStatementFingerprints', () => {
     // abstract 메서드는 value가 FunctionExpression이지만 body가 없을 수 있음
     // 또는 isOxcNode(value) === false인 경우를 커버
     // 어떤 경우든 에러 없이 빈 배열이어야 함
-    if (methodNodes.length > 0) {
-      const fps = extractStatementFingerprints(methodNodes[0]!);
-
-      expect(Array.isArray(fps)).toBe(true);
+    if (methodNodes.length <= 0) {
+      return;
     }
+
+    const fps = extractStatementFingerprints(methodNodes[0]!);
+
+    expect(Array.isArray(fps)).toBe(true);
   });
 
   it('ClassDeclaration → 빈 배열', () => {

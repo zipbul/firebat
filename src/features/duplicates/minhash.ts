@@ -20,7 +20,7 @@ const DEFAULT_THRESHOLD = 0.5;
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export interface MinHasher {
+interface MinHasher {
   readonly computeSignature: (items: ReadonlyArray<string>) => ReadonlyArray<bigint>;
   readonly k: number;
 }
@@ -36,7 +36,7 @@ export const createMinHasher = (k: number = DEFAULT_K): MinHasher => {
   };
 };
 
-export interface LshCandidate {
+interface LshCandidate {
   readonly i: number;
   readonly j: number;
 }

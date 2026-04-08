@@ -80,23 +80,15 @@ const globToRegExp = (glob: string): RegExp => {
 
       if (next !== '*') {
         out += '[^/]*';
-
-        continue;
+      } else {
+        out += '.*';
+        i += 1;
       }
-
-      out += '.*';
-      i += 1;
-
-      continue;
-    }
-
-    if (ch === '?') {
+    } else if (ch === '?') {
       out += '[^/]';
-
-      continue;
+    } else {
+      out += escapeRegex(ch);
     }
-
-    out += escapeRegex(ch);
   }
 
   out += '$';
@@ -199,47 +191,34 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
           span: toNodeSpan(file, stmt),
           ...(typeof source === 'string' ? { evidence: source } : {}),
         });
-
-        continue;
       }
-    }
-
-    if (stmt.type === 'ExportNamedDeclaration') {
+    } else if (stmt.type === 'ExportNamedDeclaration') {
       const source = getLiteralString(stmt.source);
       const declaration = stmt.declaration;
 
-      if (typeof source === 'string' && (declaration === null || declaration === undefined)) {
-        // Allow only: export { ... } from '...'; / export type { ... } from '...';
-        continue;
+      if (!(typeof source === 'string' && (declaration === null || declaration === undefined))) {
+        findings.push({
+          kind: 'invalid-index-statement',
+          file: file.filePath,
+          span: toNodeSpan(file, stmt),
+        });
       }
-
+    } else if (stmt.type === 'ExportAllDeclaration') {
+      // ExportAllDeclaration is separately reported via export-star, but still invalid in barrel.
       findings.push({
         kind: 'invalid-index-statement',
         file: file.filePath,
         span: toNodeSpan(file, stmt),
       });
-
-      continue;
-    }
-
-    // ExportAllDeclaration is separately reported via export-star, but still invalid in barrel.
-    if (stmt.type === 'ExportAllDeclaration') {
+    } else {
+      // Everything else is invalid in a strict index barrel.
       findings.push({
         kind: 'invalid-index-statement',
         file: file.filePath,
         span: toNodeSpan(file, stmt),
+        evidence: stmt.type,
       });
-
-      continue;
     }
-
-    // Everything else is invalid in a strict index barrel.
-    findings.push({
-      kind: 'invalid-index-statement',
-      file: file.filePath,
-      span: toNodeSpan(file, stmt),
-      evidence: stmt.type,
-    });
   }
 };
 

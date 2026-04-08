@@ -1,7 +1,3 @@
-import type { ErrorFlowFinding } from './features/error-flow/types';
-
-export type { FirebatConfig } from './shared/firebat-config';
-
 export type MinSizeOption = number | 'auto';
 
 export type FirebatDetector =
@@ -147,6 +143,32 @@ export interface SourceSpan {
   readonly end: SourcePosition;
 }
 
+export type ErrorFlowFindingKind =
+  | 'tool-unavailable'
+  | 'throw-non-error'
+  | 'promise-constructor-hygiene'
+  | 'missing-error-cause'
+  | 'useless-catch'
+  | 'unsafe-finally'
+  | 'return-await-in-try'
+  | 'prefer-catch'
+  | 'prefer-await-to-then'
+  | 'no-return-wrap'
+  | 'floating-promises'
+  | 'catch-or-return'
+  | 'misused-promises'
+  | 'unobserved-variable'
+  | 'always-return'
+  | 'no-callback-in-promise';
+
+export interface ErrorFlowFinding {
+  readonly kind: ErrorFlowFindingKind;
+  readonly file: string;
+  readonly span: SourceSpan;
+  readonly code?: FirebatCatalogCode;
+  readonly evidence: string;
+}
+
 export type CouplingKind = 'god-module' | 'bidirectional-coupling' | 'off-main-sequence' | 'unstable-module' | 'rigid-module';
 
 export interface DuplicateItem {
@@ -186,7 +208,7 @@ export interface DuplicateGroup {
   readonly similarity?: number;
 }
 
-export interface DependencyCycle {
+interface DependencyCycle {
   readonly path: ReadonlyArray<string>;
 }
 
@@ -249,7 +271,7 @@ export interface DependencyUnusedMemberFinding {
   readonly memberName: string;
 }
 
-export interface DependencyExportStats {
+interface DependencyExportStats {
   readonly total: number;
   readonly abstract: number;
 }
@@ -273,7 +295,7 @@ export interface DependencyAnalysis {
 }
 
 // Enriched dependency finding types (post-enrich, array form)
-export interface DepLayerViolationFinding {
+interface DepLayerViolationFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'layer-violation';
   readonly file: string;
@@ -284,7 +306,7 @@ export interface DepLayerViolationFinding {
   readonly toLayer: string;
 }
 
-export interface DepDeadExportFinding {
+interface DepDeadExportFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'dead-export' | 'test-only-export';
   readonly file: string;
@@ -293,7 +315,7 @@ export interface DepDeadExportFinding {
   readonly name: string;
 }
 
-export interface DepCycleFinding {
+interface DepCycleFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'circular-dependency';
   readonly items: ReadonlyArray<{
@@ -307,7 +329,7 @@ export interface DepCycleFinding {
   };
 }
 
-export interface DepUnusedFileFinding {
+interface DepUnusedFileFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'unused-file';
   readonly file: string;
@@ -315,7 +337,7 @@ export interface DepUnusedFileFinding {
   readonly module: string;
 }
 
-export interface DepUnusedDepFinding {
+interface DepUnusedDepFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'unused-dependency' | 'unlisted-dependency';
   readonly file: string;
@@ -324,7 +346,7 @@ export interface DepUnusedDepFinding {
   readonly files: ReadonlyArray<string>;
 }
 
-export interface DepUnresolvedImportFinding {
+interface DepUnresolvedImportFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'unresolved-import';
   readonly file: string;
@@ -333,7 +355,7 @@ export interface DepUnresolvedImportFinding {
   readonly specifier: string;
 }
 
-export interface DepDuplicateExportFinding {
+interface DepDuplicateExportFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'duplicate-export';
   readonly file: string;
@@ -342,7 +364,7 @@ export interface DepDuplicateExportFinding {
   readonly modules: ReadonlyArray<string>;
 }
 
-export interface DepUnusedMemberFinding {
+interface DepUnusedMemberFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'unused-enum-member' | 'unused-ns-export' | 'unused-ns-member';
   readonly file: string;
@@ -352,7 +374,7 @@ export interface DepUnusedMemberFinding {
   readonly memberName: string;
 }
 
-export type DependencyFinding =
+type DependencyFinding =
   | DepLayerViolationFinding
   | DepDeadExportFinding
   | DepCycleFinding
@@ -369,7 +391,7 @@ export interface FormatFinding {
   readonly span: SourceSpan;
 }
 
-export interface CouplingMetrics {
+interface CouplingMetrics {
   readonly fanIn: number;
   readonly fanOut: number;
   readonly instability: number;
@@ -387,7 +409,7 @@ export interface CouplingHotspot {
   readonly suggestedRefactor: string;
 }
 
-export interface NestingMetrics {
+interface NestingMetrics {
   readonly depth: number;
   readonly cognitiveComplexity: number;
   readonly callbackDepth: number;
@@ -417,7 +439,7 @@ export interface NestingItem {
   readonly score: number;
 }
 
-export interface EarlyReturnMetrics {
+interface EarlyReturnMetrics {
   readonly maxDepth: number;
   readonly depthReduction: number;
   readonly statementsAffected: number;
@@ -436,7 +458,7 @@ export interface EarlyReturnItem {
   readonly score: number;
 }
 
-export interface CollapsibleIfMetrics {
+interface CollapsibleIfMetrics {
   readonly maxDepth: number;
   readonly depthReduction: number;
   readonly statementsAffected: number;
@@ -501,9 +523,9 @@ export interface WasteFinding {
   readonly code?: FirebatCatalogCode;
 }
 
-export type TypecheckSeverity = 'error' | 'warning';
+type TypecheckSeverity = 'error' | 'warning';
 
-export type LintSeverity = 'error' | 'warning' | 'info';
+type LintSeverity = 'error' | 'warning' | 'info';
 
 export interface LintDiagnostic {
   readonly file?: string;
@@ -548,7 +570,7 @@ export interface CatalogEntry {
   readonly think: ReadonlyArray<string>;
 }
 
-export interface FirebatMeta {
+interface FirebatMeta {
   readonly engine: 'oxc';
   readonly targetCount: number;
   readonly minSize: number;
@@ -609,7 +631,7 @@ export interface MutationDensityFinding {
   readonly mutationCount: number;
 }
 
-export interface GiantFileMetrics {
+interface GiantFileMetrics {
   readonly lineCount: number;
   readonly maxLines: number;
 }
@@ -653,7 +675,7 @@ export interface FirebatReport {
   readonly catalog: Readonly<Partial<Record<FirebatCatalogCode, CatalogEntry>>>;
 }
 
-export interface FirebatJsonReport {
+interface FirebatJsonReport {
   readonly detectors: ReadonlyArray<FirebatDetector>;
   readonly errors?: Readonly<Record<string, string>>;
   readonly blockers: number;

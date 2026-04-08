@@ -392,10 +392,11 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
   try {
     graph = await gildash.getImportGraph();
   } catch (e) {
-    if (e instanceof GildashError) {
-      return empty;
+    if (!(e instanceof GildashError)) {
+      throw e;
     }
-    throw e;
+
+    return empty;
   }
 
   // Normalise gildash paths (may be project-relative) to absolute

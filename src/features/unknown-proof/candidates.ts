@@ -589,4 +589,4 @@ const collectExpressionCandidates = (
 };
 
 export { collectBindingCandidates, collectExpressionCandidates };
-export type { BindingCandidate, ExpressionCandidate };
+export type { BindingCandidate };

@@ -415,11 +415,13 @@ export const runSemanticUnknownProofChecks = (input: RunSemanticChecksInput): Ru
     for (const [, rt] of resolvedTypes) {
       const f = containsUnknownOrAny(rt);
 
-      if (f.unknown || f.any) {
-        fileHasUnknownOrAny = true;
-
-        break;
+      if (!f.unknown && !f.any) {
+        continue;
       }
+
+      fileHasUnknownOrAny = true;
+
+      break;
     }
 
     const hasCatchCandidates = !fileHasUnknownOrAny && relevantCandidates.some(c => c.isCatchParam);

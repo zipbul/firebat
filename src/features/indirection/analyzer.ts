@@ -702,20 +702,22 @@ const analyzeIndirection = async (
       wrapperNodeByName.set(header, node);
 
       // Cross-file: only track exported functions
-      if (fileExports.has(header)) {
-        const calleeRef = getSimpleCalleeRef(wrapperCall);
-        const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs) : null;
-        const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
-        const key = `${normalizedFilePath}:${header}`;
-
-        crossFileWrappers.set(key, {
-          node,
-          file,
-          header,
-          depth: 0,
-          targetKey,
-        });
+      if (!fileExports.has(header)) {
+        return;
       }
+
+      const calleeRef = getSimpleCalleeRef(wrapperCall);
+      const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs) : null;
+      const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
+      const key = `${normalizedFilePath}:${header}`;
+
+      crossFileWrappers.set(key, {
+        node,
+        file,
+        header,
+        depth: 0,
+        targetKey,
+      });
     };
 
     new Visitor({
@@ -728,12 +730,14 @@ const analyzeIndirection = async (
       for (const [name, node] of wrapperNodeByName.entries()) {
         const depth = computeChainDepth(name, calleeByName, new Set<string>());
 
-        if (depth > options.maxForwardDepth) {
-          const evidence = `forwarding chain depth ${depth} exceeds max ${options.maxForwardDepth}`;
-          const header = namesByNode.get(node) ?? getNodeHeader(node);
-
-          addFinding(findings, 'forward-chain', node, file.filePath, file.sourceText, header, depth, evidence);
+        if (depth <= options.maxForwardDepth) {
+          continue;
         }
+
+        const evidence = `forwarding chain depth ${depth} exceeds max ${options.maxForwardDepth}`;
+        const header = namesByNode.get(node) ?? getNodeHeader(node);
+
+        addFinding(findings, 'forward-chain', node, file.filePath, file.sourceText, header, depth, evidence);
       }
     }
 
@@ -787,19 +791,21 @@ const analyzeIndirection = async (
             targetTypeName = getNodeHeader(typeName);
           }
 
-          if (targetTypeName !== null) {
-            try {
-              const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
-              const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
+          if (targetTypeName === null) {
+            return;
+          }
 
-              if (fwd === true && bwd === true) {
-                const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+          try {
+            const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
+            const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
 
-                addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
-              }
-            } catch {
-              // Semantic layer unavailable — skip this check
+            if (fwd === true && bwd === true) {
+              const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+
+              addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
             }
+          } catch {
+            // Semantic layer unavailable — skip this check
           }
         }
       },

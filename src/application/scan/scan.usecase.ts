@@ -590,7 +590,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       const partial = (err as { partial?: unknown })?.partial;
 
       if (Array.isArray(partial)) {
-        errorFlow = partial as ReadonlyArray<import('../../features/error-flow').ErrorFlowFinding>;
+        errorFlow = partial as ReadonlyArray<import('../../types').ErrorFlowFinding>;
       } else {
         errorFlow = createEmptyErrorFlow();
       }

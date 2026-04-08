@@ -114,10 +114,15 @@ Read `.claude/firebat-plan.md`. Find the next uncompleted directory (first unche
 ### 2.1 Work one directory
 
 For each finding in the current directory, in category priority order:
-1. Read the reference file section for the finding's `code`
-2. Read the source file to be modified
-3. Apply the fix
-4. Run affected tests
+1. Read the reference file section for the finding's `code` — quote the matching think step
+2. Read the source file at the reported span
+3. Evaluate think step conditions against the actual code — state which condition matched
+4. Apply the fix — if the standard think-step fix does not apply, apply an alternative fix that resolves the scanner's concern
+5. Run affected tests
+
+<gate>
+The agent must never conclude "no change needed" for any finding. If a think step's "stop" condition is met, the scanner still flagged the code — find what the scanner detected and fix it differently. "No code change" is not an available outcome.
+</gate>
 
 When all fixes in the directory are applied, mark the directory `[x]` in `.claude/firebat-plan.md`.
 
@@ -151,7 +156,7 @@ The Stop Hook will rescan automatically:
 9. **lint, format, typecheck** — mechanical
 </priority-order>
 
-**Every finding, no exceptions.** Every finding reported by the scanner must have a fix applied. Do not skip, omit, ignore, or deprioritize any finding. Only narrow scope when the user explicitly instructs it.
+**Every finding, no exceptions.** Every finding reported by the scanner must have a code change applied. Do not skip, omit, ignore, or deprioritize any finding. The agent must never conclude that existing code is acceptable — if the scanner flagged it, the code must change. Only narrow scope when the user explicitly instructs it.
 
 **Module boundaries.** Feature types stay in the feature. Shared types stay in shared.
 

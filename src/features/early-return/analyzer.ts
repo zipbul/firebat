@@ -22,12 +22,12 @@ const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 
 // ── Reused helpers ──────────────────────────────────────────────────
 
-export const isExitStatement = (node: Node): boolean => {
+const isExitStatement = (node: Node): boolean => {
   return node.type === 'ReturnStatement' || node.type === 'ThrowStatement';
 };
 
 /** Check if the last statement of a block (or a bare statement) is an exit (return/throw). Multi-statement blocks allowed. */
-export const isExitBlock = (node: Node): boolean => {
+const isExitBlock = (node: Node): boolean => {
   if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
     return true;
   }
@@ -48,7 +48,7 @@ export const isExitBlock = (node: Node): boolean => {
 };
 
 /** Check if the last statement of a block is a loop-control (continue/break) or exit (return/throw). */
-export const isLoopGuardBlock = (node: Node): boolean => {
+const isLoopGuardBlock = (node: Node): boolean => {
   if (
     node.type === 'ContinueStatement' ||
     node.type === 'BreakStatement' ||
@@ -78,7 +78,7 @@ export const isLoopGuardBlock = (node: Node): boolean => {
   );
 };
 
-export const countStatements = (node: Node): number => {
+const countStatements = (node: Node): number => {
   if (node.type !== 'BlockStatement') {
     // For else-if chains: when alternate is an IfStatement, recursively
     // count all statements across the entire chain to get a true total.
@@ -97,7 +97,7 @@ export const countStatements = (node: Node): number => {
   return Array.isArray(body) ? body.length : 0;
 };
 
-export const endsWithReturnOrThrow = (node: Node): boolean => {
+const endsWithReturnOrThrow = (node: Node): boolean => {
   if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
     return true;
   }
@@ -161,7 +161,7 @@ const isLoopNodeType = (nodeType: string): boolean => {
 
 // ── Consecutive trailing-if detection ────────────────────────────────
 
-export const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<Node>): number => {
+const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<Node>): number => {
   let count = 0;
   let startIdx = stmts.length - 1;
 
