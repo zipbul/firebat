@@ -593,3 +593,12 @@ const analyzeEarlyReturn = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<Ear
 };
 
 export { analyzeEarlyReturn, createEmptyEarlyReturn };
+
+export const __testing__ = {
+  isExitStatement,
+  isExitBlock,
+  isLoopGuardBlock,
+  countStatements,
+  endsWithReturnOrThrow,
+  countConsecutiveTrailingIfs,
+};

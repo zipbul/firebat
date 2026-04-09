@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/ast/parse-source';
-import {
-  analyzeEarlyReturn,
+import { analyzeEarlyReturn, __testing__ } from './analyzer';
+
+const {
   countConsecutiveTrailingIfs,
   countStatements,
   endsWithReturnOrThrow,
   isExitBlock,
   isExitStatement,
   isLoopGuardBlock,
-} from './analyzer';
+} = __testing__;
 
 const node = (type: string, extra: Record<string, unknown> = {}) => ({ type, ...extra });
 

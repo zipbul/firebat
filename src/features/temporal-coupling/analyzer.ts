@@ -288,6 +288,109 @@ const classifyExportedFunctions = (
   return { writers: [...writerFns], readers: pureReaders };
 };
 
+const collectStateProperties = (bodyItems: ReadonlyArray<unknown>): Array<{ name: string; offset: number }> => {
+  const stateProps: Array<{ name: string; offset: number }> = [];
+
+  for (const item of bodyItems) {
+    if (!isOxcNode(item) || item.type !== 'PropertyDefinition') {
+      continue;
+    }
+
+    const propName = getNodeName(item.key);
+
+    if (typeof propName !== 'string' || propName.length === 0) {
+      continue;
+    }
+
+    stateProps.push({ name: propName, offset: item.start });
+  }
+
+  return stateProps;
+};
+
+const classifyMethodAccess = (
+  methodBody: Node,
+  propName: string,
+): { hasWrite: boolean; hasRead: boolean } => {
+  let hasWrite = false;
+  let hasRead = false;
+
+  walkOxcTree(methodBody, node => {
+    if (node.type === 'MemberExpression') {
+      const object = node.object;
+      const property = node.property;
+
+      if (
+        isOxcNode(object) &&
+        object.type === 'ThisExpression' &&
+        isOxcNode(property) &&
+        getNodeName(property) === propName
+      ) {
+        hasRead = true;
+      }
+    }
+
+    if (node.type === 'AssignmentExpression') {
+      const left = node.left;
+
+      if (isOxcNode(left) && left.type === 'MemberExpression') {
+        const obj = left.object;
+        const p = left.property;
+
+        if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
+          hasWrite = true;
+        }
+      }
+    }
+
+    return true;
+  });
+
+  return { hasWrite, hasRead };
+};
+
+const classifyMethods = (
+  bodyItems: ReadonlyArray<unknown>,
+  propName: string,
+): { writerMethods: Set<string>; readerMethods: Set<string> } => {
+  const writerMethods = new Set<string>();
+  const readerMethods = new Set<string>();
+
+  for (const item of bodyItems) {
+    if (!isOxcNode(item) || item.type !== 'MethodDefinition') {
+      continue;
+    }
+
+    const methodName = getNodeName(item.key);
+
+    if (typeof methodName !== 'string' || methodName.length === 0) {
+      continue;
+    }
+
+    if (methodName === 'constructor') {
+      continue;
+    }
+
+    const methodBody = isOxcNode(item.value) ? item.value : null;
+
+    if (methodBody === null) {
+      continue;
+    }
+
+    const { hasWrite, hasRead } = classifyMethodAccess(methodBody as Node, propName);
+
+    if (hasWrite) {
+      writerMethods.add(methodName);
+    }
+
+    if (hasRead && !hasWrite) {
+      readerMethods.add(methodName);
+    }
+  }
+
+  return { writerMethods, readerMethods };
+};
+
 /** Collect class state properties and classify methods as writers/readers. */
 const analyzeClassTemporalCoupling = (
   program: Node,
@@ -327,91 +430,11 @@ const analyzeClassTemporalCoupling = (
     }
 
     // 1. Collect state properties (PropertyDefinition with initializer)
-    const stateProps: Array<{ name: string; offset: number }> = [];
-
-    for (const item of bodyItems) {
-      if (!isOxcNode(item) || item.type !== 'PropertyDefinition') {
-        continue;
-      }
-
-      const propName = getNodeName(item.key);
-
-      if (typeof propName !== 'string' || propName.length === 0) {
-        continue;
-      }
-
-      stateProps.push({ name: propName, offset: item.start });
-    }
+    const stateProps = collectStateProperties(bodyItems);
 
     // 2. For each state property, classify methods as writers/readers
     for (const prop of stateProps) {
-      const writerMethods = new Set<string>();
-      const readerMethods = new Set<string>();
-
-      for (const item of bodyItems) {
-        if (!isOxcNode(item) || item.type !== 'MethodDefinition') {
-          continue;
-        }
-
-        const methodName = getNodeName(item.key);
-
-        if (typeof methodName !== 'string' || methodName.length === 0) {
-          continue;
-        }
-
-        if (methodName === 'constructor') {
-          continue;
-        }
-
-        const methodBody = isOxcNode(item.value) ? item.value : null;
-
-        if (methodBody === null) {
-          continue;
-        }
-
-        // Check all MemberExpression (this.propName) inside this method
-        let hasWrite = false;
-        let hasRead = false;
-
-        walkOxcTree(methodBody, node => {
-          if (node.type === 'MemberExpression') {
-            const object = node.object;
-            const property = node.property;
-
-            if (
-              isOxcNode(object) &&
-              object.type === 'ThisExpression' &&
-              isOxcNode(property) &&
-              getNodeName(property) === prop.name
-            ) {
-              hasRead = true;
-            }
-          }
-
-          if (node.type === 'AssignmentExpression') {
-            const left = node.left;
-
-            if (isOxcNode(left) && left.type === 'MemberExpression') {
-              const obj = left.object;
-              const p = left.property;
-
-              if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === prop.name) {
-                hasWrite = true;
-              }
-            }
-          }
-
-          return true;
-        });
-
-        if (hasWrite) {
-          writerMethods.add(methodName);
-        }
-
-        if (hasRead && !hasWrite) {
-          readerMethods.add(methodName);
-        }
-      }
+      const { writerMethods, readerMethods } = classifyMethods(bodyItems, prop.name);
 
       // Phase 6: dead writer 제외 — named class method 내 unreachable write는 writer가 아님
       // anonymous class(className === null)는 findFunctionBody로 찾을 수 없으므로 건너뜀
