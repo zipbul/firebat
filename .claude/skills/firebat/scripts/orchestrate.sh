@@ -4,7 +4,7 @@
 # 단일 외부 while 루프: state.json의 phase를 매 반복 jq로 읽어 분기.
 # Phase 2 staleness 감지 시 phase=PLANNING으로 회귀.
 #
-# Stagnation 감지 (기법 13): 같은 slug에 대한 reviewer FAIL이 N회 연속이면
+# Stagnation 감지 (기법 13): 같은 slug에 대한 linter(verify-plan.sh) FAIL이 N회 연속이면
 # Cooldown 격리 (기법 15): blocked로 마킹 후 다음 slug로 진행.
 #
 # 종료: blockers=0 AND 모든 [x] AND 잔여 unchecked가 모두 blocked 상태일 때만.
@@ -94,6 +94,31 @@ rescan() {
   bash "$SCRIPTS/scan-split.sh" >&2
 }
 
+# Phase 2 조건부 rescan (α2):
+# 직전 fixer가 파일을 하나도 수정 안 했으면 source 변화 없음 → rescan 생략.
+# last-fix-summary.json의 files_modified 배열이 비어있으면 skip.
+maybe_rescan() {
+  local summary="$ROOT/last-fix-summary.json"
+
+  if [[ ! -f "$summary" ]]; then
+    # 첫 Phase 2 iter: scan.json이 Phase 1 시점 것. 그대로 사용 가능.
+    log "rescan: skipped (no prior fixer output)"
+    return
+  fi
+
+  local mod_count
+  mod_count=$(jq -r '.files_modified | length' "$summary" 2>/dev/null || echo 0)
+
+  if [[ "$mod_count" == "0" ]]; then
+    log "rescan: skipped (last fixer modified 0 files)"
+    return
+  fi
+
+  rescan
+  # summary 소비 후 제거 (다음 iter가 자기 fixer 출력을 보게 함)
+  rm -f "$summary"
+}
+
 # ============================================================
 # Setup
 # ============================================================
@@ -103,10 +128,10 @@ mkdir -p "$ROOT"
 log "step 1: initial build + scan"
 rescan
 
-BLOCKERS=$(jq '.blockers' "$ROOT/scan.json")
-log "initial blockers: $BLOCKERS"
+TOTAL=$(jq '.total' "$ROOT/scan.json")
+log "initial total findings: $TOTAL"
 
-if [[ "$BLOCKERS" == "0" ]]; then
+if [[ "$TOTAL" == "0" ]]; then
   log "clean — no findings"
   rm -rf "$ROOT"
   exit 0
@@ -163,13 +188,42 @@ while true; do
       continue
     fi
 
-    "$CLAUDE_BIN" -p "firebat Phase 1 iteration. Read .firebat/state.json (jq) and .firebat/plan/index.md. Execute the Phase 1 procedure from .claude/skills/firebat/SKILL.md. Process one directory (planner + reviewer) OR global review this session, then end. After reviewer verdict, write the slug + result to .firebat/state.json log via jq." \
-      --allowed-tools "Read,Write,Edit,Bash,Glob,Grep,Task" \
-      2>&1 | sed 's/^/  [claude] /' >&2 || {
-      log "iter $ITER: claude exited non-zero — continuing"
-    }
+    # α3: bash가 다음 action을 결정. claude는 Task dispatch만.
+    NEXT=$(bash "$SCRIPTS/pick-next.sh" planning)
+    ACTION=$(echo "$NEXT" | jq -r '.action')
 
-    # Stagnation 검사 (기법 13 + 15): 모든 slug별 fail count 평가
+    case "$ACTION" in
+      plan)
+        SLUG=$(echo "$NEXT" | jq -r '.slug')
+        DIR=$(echo "$NEXT" | jq -r '.dir')
+        PLAN_FILE=$(echo "$NEXT" | jq -r '.plan_file')
+        FEEDBACK=$(echo "$NEXT" | jq -r '.feedback_file')
+
+        log "iter $ITER: plan dir=$DIR slug=$SLUG"
+
+        "$CLAUDE_BIN" -p "Invoke firebat-planner agent via Task tool with: DIR_SLUG='$SLUG', DIR_PATH='$DIR', PLAN_FILE='$PLAN_FILE', FEEDBACK_FILE='$FEEDBACK'. The agent writes the plan file. Return when the Task completes. Do not run any verification yourself — the orchestrator handles it." \
+          --allowed-tools "Task" \
+          2>&1 | sed 's/^/  [claude] /' >&2 || {
+          log "iter $ITER: claude exited non-zero — continuing"
+        }
+
+        # bash가 verify + index.md + feedback 처리
+        bash "$SCRIPTS/post-plan-verify.sh" "$PLAN_FILE" "$SLUG" >/dev/null
+        ;;
+      global-review)
+        log "iter $ITER: global review"
+        "$CLAUDE_BIN" -p "Invoke firebat-global-reviewer agent via Task tool. The agent reads all plans + finding-index.json and creates .firebat/plan/global-review-pass on PASS, or reverts affected plans on FAIL. Return when Task completes." \
+          --allowed-tools "Task,Read,Edit,Write,Bash" \
+          2>&1 | sed 's/^/  [claude] /' >&2 || {
+          log "iter $ITER: global reviewer exited non-zero — continuing"
+        }
+        ;;
+      none)
+        log "iter $ITER: Phase 1 idle — $(echo "$NEXT" | jq -r '.reason // "no action"')"
+        ;;
+    esac
+
+    # Stagnation 검사: verify-plan.sh FAIL 연속 N회면 blocked
     STAGNANT_SLUGS=$(jq -r --argjson lim "$STAGNATION_LIMIT" '
       .fail_log // {} | to_entries[]
       | select(.value >= $lim and (.key as $k | (.blocked // {}) | has($k) | not))
@@ -178,8 +232,7 @@ while true; do
 
     while IFS= read -r slug; do
       [[ -z "$slug" ]] && continue
-      state_block "$slug" "reviewer-stagnation: $STAGNATION_LIMIT consecutive FAILs"
-      # plan 파일을 review-failed로 마킹하여 plan-complete.sh가 다음 단계로 진행
+      state_block "$slug" "linter-stagnation: $STAGNATION_LIMIT consecutive FAILs"
       plan_file=$(ls "$ROOT"/plan/[0-9][0-9]-"$slug".md 2>/dev/null | head -1 || true)
       if [[ -n "$plan_file" ]]; then
         sed -i -E 's/^status: draft$/status: review-failed/' "$plan_file"
@@ -187,18 +240,18 @@ while true; do
     done <<< "$STAGNANT_SLUGS"
 
   elif [[ "$PHASE" == "EXECUTING" ]]; then
-    rescan
-    BLOCKERS=$(jq '.blockers' "$ROOT/scan.json")
+    maybe_rescan
+    TOTAL=$(jq '.total' "$ROOT/scan.json")
     UNCHECKED=$(grep -cE '^- \[ \]' "$ROOT/plan/index.md" 2>/dev/null || true)
     UNCHECKED="${UNCHECKED:-0}"
 
     # blocked slug 수 — unchecked 중 blocked인 것들은 종료 조건에서 제외
     BLOCKED_COUNT=$(jq -r '.blocked // {} | length' "$STATE")
 
-    log "iter $ITER: blockers=$BLOCKERS unchecked=$UNCHECKED blocked=$BLOCKED_COUNT"
+    log "iter $ITER: blockers=$TOTAL unchecked=$UNCHECKED blocked=$BLOCKED_COUNT"
 
     # 종료: blockers=0 AND (unchecked=0 OR 모든 unchecked가 blocked)
-    if [[ "$BLOCKERS" == "0" ]]; then
+    if [[ "$TOTAL" == "0" ]]; then
       # unchecked slug 중 blocked가 아닌 것이 0개여야 종료
       if [[ "$UNCHECKED" == "0" ]]; then
         log "Phase 2 complete — blockers=0, all dirs checked"
@@ -224,11 +277,26 @@ while true; do
       fi
     fi
 
-    "$CLAUDE_BIN" -p "firebat Phase 2 iteration. Read .firebat/state.json (jq) and .firebat/plan/index.md. Execute the Phase 2 procedure from .claude/skills/firebat/SKILL.md, including the staleness check in step-2. Fix one directory this session (or revert to PLANNING if staleness detected), then end." \
-      --allowed-tools "Read,Write,Edit,Bash,Glob,Grep,Task" \
-      2>&1 | sed 's/^/  [claude] /' >&2 || {
-      log "iter $ITER: claude exited non-zero — continuing"
-    }
+    # α3: Phase 2도 bash 라우팅. staleness 체크는 SKILL.md Phase 2 step-2에 있지만
+    # 간소화를 위해 claude가 fixer만 dispatch. staleness는 다음 iter rescan 후 감지.
+    NEXT=$(bash "$SCRIPTS/pick-next.sh" executing)
+    ACTION=$(echo "$NEXT" | jq -r '.action')
+
+    if [[ "$ACTION" == "fix" ]]; then
+      SLUG=$(echo "$NEXT" | jq -r '.slug')
+      DIR=$(echo "$NEXT" | jq -r '.dir')
+      PLAN_FILE=$(echo "$NEXT" | jq -r '.plan_file')
+
+      log "iter $ITER: fix dir=$DIR slug=$SLUG"
+
+      "$CLAUDE_BIN" -p "Invoke firebat-fixer agent via Task tool with: DIR_SLUG='$SLUG', DIR_PATH='$DIR', PLAN_FILE='$PLAN_FILE'. The agent applies fixes per plan and returns an execution-summary. Save the summary JSON to .firebat/last-fix-summary.json. If directory_status == 'complete', mark '- [x] $SLUG' in .firebat/plan/index.md." \
+        --allowed-tools "Task,Read,Edit,Write,Bash" \
+        2>&1 | sed 's/^/  [claude] /' >&2 || {
+        log "iter $ITER: claude exited non-zero — continuing"
+      }
+    else
+      log "iter $ITER: Phase 2 idle — $(echo "$NEXT" | jq -r '.reason // "no action"')"
+    fi
 
   else
     log "ERROR: unknown phase '$PHASE' — aborting"

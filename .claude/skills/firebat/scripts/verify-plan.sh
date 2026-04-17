@@ -223,8 +223,10 @@ else
     "Remove these checkbox lines or correct the IDs."
 fi
 
-# C7 — 자식 plan 충돌: semantic 검증 필요. LLM reviewer에 위임.
-set_check "C7" "true" "deferred to LLM reviewer (semantic check)"
+# C7 — cross-plan semantic conflict: deferred to global-reviewer G6
+# (broader check: detects conflicts across ALL plans, not just direct children).
+# Removing per-plan C7 saves an LLM call per review; G6 catches the same issues.
+set_check "C7" "true" "deferred to global-reviewer G6"
 
 # ============================================================
 # C8: Vague actions
