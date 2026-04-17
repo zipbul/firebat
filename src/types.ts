@@ -676,26 +676,16 @@ export interface FirebatReport {
   readonly findings: ReadonlyArray<Finding>;
 }
 
-interface FirebatJsonReport {
-  readonly detectors: ReadonlyArray<FirebatDetector>;
-  readonly errors?: Readonly<Record<string, string>>;
-  readonly blockers: number;
-  readonly analyses: Partial<FirebatAnalyses>;
-}
-
-export const countBlockers = (analyses: Partial<FirebatAnalyses>): number => {
-  return Object.values(analyses).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
-};
-
-export const toJsonReport = (report: FirebatReport): FirebatJsonReport => ({
-  detectors: report.meta.detectors,
-  ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0 ? { errors: report.meta.errors } : {}),
-  blockers: countBlockers(report.analyses),
-  analyses: report.analyses,
-});
-
 // ── Flat Finding schema (agent-optimized scan output) ────────────────────────
 
+/**
+ * Agent-optimized finding shape.
+ *
+ * Optional fields convention (absent = default):
+ *   - groupId absent → no group (file-type finding)
+ *   - primary absent → true (is primary)
+ *   - detail absent → null (no fixer-only data)
+ */
 export interface Finding {
   readonly id: string;
   readonly category: string;
@@ -704,9 +694,9 @@ export interface Finding {
   readonly line: number;
   readonly kind: string;
   readonly label: string;
-  readonly group_id: string | null;
-  readonly primary: boolean;
-  readonly detail: Readonly<Record<string, unknown>> | null;
+  readonly groupId?: string;
+  readonly primary?: false;
+  readonly detail?: Readonly<Record<string, unknown>>;
 }
 
 export interface ScanJsonResult {
@@ -718,15 +708,15 @@ export interface ScanJsonResult {
   readonly findings: ReadonlyArray<Finding>;
 }
 
-export const toScanResult = (report: FirebatReport, findings: ReadonlyArray<Finding>): ScanJsonResult => ({
+export const toScanResult = (report: FirebatReport): ScanJsonResult => ({
   meta: {
     detectors: report.meta.detectors,
     ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0
       ? { errors: report.meta.errors }
       : {}),
   },
-  total: findings.length,
-  findings,
+  total: report.findings.length,
+  findings: report.findings,
 });
 
 export interface NodeHeader {

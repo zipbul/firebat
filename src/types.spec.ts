@@ -1,33 +1,15 @@
 import { describe, it, expect } from 'bun:test';
 
-import type { ErrorFlowFinding } from './features/error-flow/types';
-import type {
-  FirebatReport,
-  FirebatAnalyses,
-  LintDiagnostic,
-  TypecheckItem,
-  FormatFinding,
-  SourceSpan,
-  WasteFinding,
-  BarrelFinding,
-  UnknownProofFinding,
-  IndirectionFinding,
-  DuplicateGroup,
-  GiantFileFinding,
-} from './types';
+import type { FirebatReport, FirebatAnalyses } from './types';
 
-import { toJsonReport, countBlockers } from './types';
+import { toScanResult } from './types';
 
 // ── Helpers ─────────────────────────────────────────────────────────
-
-const span = (line = 1, col = 0): SourceSpan => ({
-  start: { line, column: col },
-  end: { line: line + 1, column: 0 },
-});
 
 const makeReport = (
   overrides: Partial<FirebatReport['meta']> = {},
   analyses: Partial<FirebatAnalyses> = { waste: [] },
+  findings: FirebatReport['findings'] = [],
 ): FirebatReport => ({
   meta: {
     engine: 'oxc',
@@ -41,240 +23,160 @@ const makeReport = (
   },
   analyses,
   catalog: {},
-  findings: [],
+  findings,
 });
 
 // ── Tests ────────────────────────────────────────────────────────────
 
-describe('toJsonReport', () => {
-  it('should include errors at root when meta.errors is non-empty', () => {
+describe('toScanResult', () => {
+  it('includes errors in meta when meta.errors is non-empty', () => {
     const report = makeReport({ errors: { 'src/a.ts': 'parse error' } });
-    const out = toJsonReport(report);
+    const out = toScanResult(report);
 
-    expect(out.errors).toEqual({ 'src/a.ts': 'parse error' });
+    expect(out.meta.errors).toEqual({ 'src/a.ts': 'parse error' });
   });
 
-  it('should omit errors key when meta.errors is not present', () => {
+  it('omits errors in meta when meta.errors is not present', () => {
     const base = makeReport();
     const { errors: _e, ...metaNoErrors } = base.meta;
     const report: FirebatReport = { ...base, meta: metaNoErrors as FirebatReport['meta'] };
-    const out = toJsonReport(report);
+    const out = toScanResult(report);
 
-    expect('errors' in out).toBe(false);
+    expect('errors' in out.meta).toBe(false);
   });
 
-  it('should omit errors key when meta.errors is empty object', () => {
+  it('omits errors in meta when meta.errors is empty object', () => {
     const report = makeReport({ errors: {} });
-    const out = toJsonReport(report);
+    const out = toScanResult(report);
 
-    expect('errors' in out).toBe(false);
+    expect('errors' in out.meta).toBe(false);
   });
 
-  it('should place detectors at root level from meta.detectors', () => {
+  it('places detectors under meta from meta.detectors', () => {
     const report = makeReport({ detectors: ['waste', 'nesting'] });
-    const out = toJsonReport(report);
+    const out = toScanResult(report);
 
-    expect(out.detectors).toEqual(['waste', 'nesting']);
+    expect(out.meta.detectors).toEqual(['waste', 'nesting']);
   });
 
-  it('should pass analyses through unchanged', () => {
-    const report = makeReport();
-    const out = toJsonReport(report);
+  it('uses findings.length as total', () => {
+    const report = makeReport({}, { waste: [] }, [
+      {
+        id: 'waste-abc',
+        category: 'waste',
+        code: 'WASTE_DEAD_STORE',
+        file: 'src/a.ts',
+        line: 10,
+        kind: 'dead-store',
+        label: 'unused x',
+      },
+    ]);
+    const out = toScanResult(report);
 
-    expect(out.analyses).toBe(report.analyses);
+    expect(out.total).toBe(1);
+    expect(out.findings).toHaveLength(1);
   });
 
-  it('should not include catalog in JSON output', () => {
+  it('does not include analyses or catalog in output', () => {
     const report: FirebatReport = {
       ...makeReport(),
       catalog: { WASTE_DEAD_STORE: { cause: 'unused variable', think: ['remove it'] } },
     };
-    const out = toJsonReport(report);
+    const out = toScanResult(report);
 
+    expect((out as unknown as Record<string, unknown>).analyses).toBeUndefined();
     expect((out as unknown as Record<string, unknown>).catalog).toBeUndefined();
   });
 
-  it('should not include meta key in output', () => {
-    const report = makeReport();
-    const out = toJsonReport(report);
+  it('sets total to 0 when no findings', () => {
+    const report = makeReport({}, { waste: [] }, []);
+    const out = toScanResult(report);
 
-    expect('meta' in out).toBe(false);
+    expect(out.total).toBe(0);
+    expect(out.findings).toEqual([]);
   });
 
-  it('should include errors at root when meta.errors has exactly one key', () => {
+  it('includes errors in meta when meta.errors has exactly one key', () => {
     const report = makeReport({ errors: { 'src/only.ts': 'error' } });
-    const out = toJsonReport(report);
+    const out = toScanResult(report);
 
-    expect(out.errors).toBeDefined();
-    expect(Object.keys(out.errors!).length).toBe(1);
+    expect(out.meta.errors).toBeDefined();
+    expect(Object.keys(out.meta.errors!).length).toBe(1);
   });
 
-  it('should include blockers field in output', () => {
-    const report = makeReport({}, { waste: [] });
-    const out = toJsonReport(report);
+  it('top-level keys are exactly meta, total, findings (no extras)', () => {
+    const report = makeReport({ errors: { x: 'y' } });
+    const out = toScanResult(report);
 
-    expect('blockers' in out).toBe(true);
+    expect(Object.keys(out).sort()).toEqual(['findings', 'meta', 'total']);
   });
 
-  it('should reflect actual blocking count in blockers field', () => {
-    const report = makeReport(
-      {},
+  it('meta does not include targetCount, minSize, maxForwardDepth, detectorTimings, engine', () => {
+    const report = makeReport({
+      engine: 'oxc',
+      targetCount: 99,
+      minSize: 10,
+      maxForwardDepth: 3,
+      detectorTimings: { waste: 5 },
+    });
+    const out = toScanResult(report);
+
+    expect(out.meta).not.toHaveProperty('targetCount');
+    expect(out.meta).not.toHaveProperty('minSize');
+    expect(out.meta).not.toHaveProperty('maxForwardDepth');
+    expect(out.meta).not.toHaveProperty('detectorTimings');
+    expect(out.meta).not.toHaveProperty('engine');
+  });
+
+  it('findings reference is the same array from report (no copy)', () => {
+    const report = makeReport({}, {}, [
+      { id: 'x', category: 'waste', code: 'WASTE_DEAD_STORE', file: 'a.ts', line: 1, kind: 'dead-store', label: 'x' },
+    ]);
+    const out = toScanResult(report);
+
+    expect(out.findings).toBe(report.findings);
+  });
+
+  it('total reflects multi-finding count', () => {
+    const f = (id: string) => ({
+      id,
+      category: 'waste',
+      code: 'WASTE_DEAD_STORE',
+      file: 'a.ts',
+      line: 1,
+      kind: 'dead-store',
+      label: 'x',
+    });
+    const report = makeReport({}, {}, [f('a'), f('b'), f('c')]);
+    const out = toScanResult(report);
+
+    expect(out.total).toBe(3);
+  });
+
+  it('JSON-serializable output round-trip preserves findings', () => {
+    const report = makeReport({ errors: { x: 'y' } }, {}, [
       {
-        waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
-        lint: [
-          { severity: 'error', code: 'a', msg: 'err', file: 'b.ts', span: span() } as LintDiagnostic,
-          { severity: 'warning', code: 'b', msg: 'warn', file: 'b.ts', span: span() } as LintDiagnostic,
-        ],
+        id: 'x',
+        category: 'waste',
+        code: 'WASTE_DEAD_STORE',
+        file: 'a.ts',
+        line: 1,
+        kind: 'dead-store',
+        label: 'x',
+        detail: { span: { start: { line: 1, column: 0 }, end: { line: 1, column: 5 } } },
       },
-    );
-    const out = toJsonReport(report);
+    ]);
+    const out = toScanResult(report);
+    const json = JSON.stringify(out);
 
-    expect(out.blockers).toBe(3);
-  });
+    expect(() => JSON.parse(json)).not.toThrow();
 
-  it('should set blockers to 0 when no blocking findings', () => {
-    const report = makeReport({}, { waste: [] });
-    const out = toJsonReport(report);
+    const roundtrip = JSON.parse(json);
 
-    expect(out.blockers).toBe(0);
-  });
-});
-
-// ── countBlockers ────────────────────────────────────────────────────
-
-describe('countBlockers', () => {
-  it('should return count of all findings across present detectors when all present', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      duplicates: [
-        {
-          findingKind: 'exact-clone',
-          items: [{ kind: 'function', header: 'a', filePath: 'a.ts', span: span() }],
-        } as DuplicateGroup,
-      ],
-      waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
-      barrel: [{ kind: 'deep-import', file: 'a.ts', span: span() } as BarrelFinding],
-      'unknown-proof': [{ kind: 'unknown-type', message: '', filePath: 'a.ts', span: span() } as UnknownProofFinding],
-      'error-flow': [{ kind: 'throw-non-error', file: 'a.ts', span: span(), evidence: '' } as ErrorFlowFinding],
-      format: [{ code: 'FMT_NEEDS_FORMATTING' as any, kind: 'needs-formatting', file: 'a.ts', span: span() } as FormatFinding],
-      lint: [{ severity: 'error', code: 'no-unused-vars', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic],
-      typecheck: [{ severity: 'error', code: 'TS2322', msg: 'err', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem],
-      indirection: [
-        {
-          kind: 'thin-wrapper',
-          filePath: 'a.ts',
-          span: span(),
-          header: 'fn',
-          depth: 1,
-          evidence: '',
-        } as unknown as IndirectionFinding,
-      ],
-    };
-
-    expect(countBlockers(analyses)).toBe(9);
-  });
-
-  it('should return count for single detector when only one present', () => {
-    expect(
-      countBlockers({
-        waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
-      }),
-    ).toBe(1);
-  });
-
-  it('should count all lint findings regardless of severity when mixed severities', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      lint: [
-        { severity: 'error', code: 'a', msg: 'err', file: 'a.ts', span: span() } as LintDiagnostic,
-        { severity: 'error', code: 'b', msg: 'err2', file: 'a.ts', span: span() } as LintDiagnostic,
-        { severity: 'warning', code: 'c', msg: 'warn', file: 'a.ts', span: span() } as LintDiagnostic,
-      ],
-    };
-
-    expect(countBlockers(analyses)).toBe(3);
-  });
-
-  it('should count all typecheck findings regardless of severity when mixed severities', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      typecheck: [
-        { severity: 'error', code: 'TS2322', msg: 'err', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem,
-        { severity: 'warning', code: 'TS6133', msg: 'warn', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem,
-      ],
-    };
-
-    expect(countBlockers(analyses)).toBe(2);
-  });
-
-  it('should return 0 when analyses is empty', () => {
-    expect(countBlockers({})).toBe(0);
-  });
-
-  it('should count lint warnings as blockers when only warnings present', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      lint: [{ severity: 'warning', code: 'a', msg: 'warn', file: 'a.ts', span: span() } as LintDiagnostic],
-    };
-
-    expect(countBlockers(analyses)).toBe(1);
-  });
-
-  it('should return 0 when all blocking detectors have empty arrays', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      duplicates: [],
-      waste: [],
-      barrel: [],
-      'unknown-proof': [],
-      'error-flow': [],
-      format: [],
-      lint: [],
-      typecheck: [],
-      indirection: [],
-    };
-
-    expect(countBlockers(analyses)).toBe(0);
-  });
-
-  it('should treat undefined detectors as 0', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
-      // all others undefined
-    };
-
-    expect(countBlockers(analyses)).toBe(1);
-  });
-
-  it('should count warnings from lint and typecheck as blockers when only warnings and others empty', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      duplicates: [],
-      waste: [],
-      lint: [{ severity: 'warning', code: 'a', msg: 'warn', file: 'a.ts', span: span() } as LintDiagnostic],
-      typecheck: [
-        { severity: 'warning', code: 'TS6133', msg: 'warn', file: 'a.ts', span: span(), codeFrame: '' } as TypecheckItem,
-      ],
-    };
-
-    expect(countBlockers(analyses)).toBe(2);
-  });
-
-  it('should count giant-file findings as blockers when present', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      'giant-file': [
-        {
-          kind: 'giant-file',
-          file: 'src/big.ts',
-          span: span(),
-          metrics: { lineCount: 900, maxLines: 800 },
-          code: 'GIANT_FILE',
-        } as GiantFileFinding,
-      ],
-    };
-
-    expect(countBlockers(analyses)).toBe(1);
-  });
-
-  it('should return same result when called twice with same input', () => {
-    const analyses: Partial<FirebatAnalyses> = {
-      waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: 'a.ts', span: span(), confidence: 1 } as WasteFinding],
-    };
-
-    expect(countBlockers(analyses)).toBe(countBlockers(analyses));
+    expect(roundtrip.total).toBe(1);
+    expect(roundtrip.findings[0].detail.span.start.line).toBe(1);
+    // Default-valued fields are omitted in JSON
+    expect(roundtrip.findings[0]).not.toHaveProperty('groupId');
+    expect(roundtrip.findings[0]).not.toHaveProperty('primary');
   });
 });

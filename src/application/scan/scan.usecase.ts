@@ -46,7 +46,7 @@ import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
-import { flattenToFindings } from './flatten-findings';
+import { buildFunctionRangeMap, flattenToFindings } from './flatten-findings';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
@@ -1269,7 +1269,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as Readonly<Record<string, unknown>> });
   const catalog = buildCatalog({ analyses, diagnostics });
-  const findings = flattenToFindings(analyses);
+  const functionRangeMap = buildFunctionRangeMap(program, toProjectRelative);
+  const findings = flattenToFindings(analyses, functionRangeMap);
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',
