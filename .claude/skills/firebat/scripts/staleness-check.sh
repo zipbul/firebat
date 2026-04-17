@@ -26,8 +26,12 @@ if [[ ! -d "$BY_DIR" ]]; then
   exit 0  # 첫 iter인 경우
 fi
 
-# 현재 primary finding IDs
-CURRENT=$(jq -r '.findings[] | select(.primary) | .id' "$BY_DIR"/*.json 2>/dev/null | sort -u)
+# 현재 primary finding IDs (glob-safe)
+_bdf=("$BY_DIR"/*.json)
+if [[ ${#_bdf[@]} -eq 0 || ! -e "${_bdf[0]}" ]]; then
+  exit 0  # by-dir 비어있음
+fi
+CURRENT=$(jq -r '.findings[] | select(.primary) | .id' "${_bdf[@]}" 2>/dev/null | sort -u)
 
 if [[ -z "$CURRENT" ]]; then
   exit 0  # findings 없음 → staleness 없음

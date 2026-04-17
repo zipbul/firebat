@@ -17,11 +17,18 @@ PHASE="${1:-}"
 ROOT=".firebat"
 TREE="$ROOT/tree.json"
 INDEX="$ROOT/plan/index.md"
+STATE="$ROOT/state.json"
 
 if [[ ! -f "$TREE" ]]; then
   echo '{"action":"none","reason":"tree.json missing"}'
   exit 0
 fi
+
+is_blocked() {
+  local slug="$1"
+  [[ -f "$STATE" ]] || return 1
+  jq -e --arg s "$slug" '.blocked // {} | has($s)' "$STATE" >/dev/null 2>&1
+}
 
 case "$PHASE" in
   planning)
@@ -35,10 +42,13 @@ case "$PHASE" in
       fi
     }
 
-    # 다음 plan 대상 slug 찾기: depth DESC, dir ASC 순서로 draft/review-failed/없음 찾음
+    # 다음 plan 대상 slug 찾기: depth DESC, dir ASC. blocked slug는 건너뜀.
     SLUG=""
     while IFS= read -r s; do
       [[ -z "$s" ]] && continue
+      if is_blocked "$s"; then
+        continue  # blocked slug는 무한 재선택 방지
+      fi
       PLAN=$(find_plan_file "$s")
       if [[ -z "$PLAN" ]]; then
         SLUG="$s"
@@ -87,21 +97,28 @@ case "$PHASE" in
     ;;
 
   executing)
-    # 첫 번째 unchecked 디렉토리 찾기
-    ENTRY=$(grep -E '^- \[ \] ' "$INDEX" 2>/dev/null | head -1 || true)
-    if [[ -z "$ENTRY" ]]; then
-      echo '{"action":"none","reason":"all dirs checked"}'
+    # unchecked 디렉토리 순회, blocked/plan-missing 건너뜀
+    SLUG=""
+    PLAN_FILE=""
+    while IFS= read -r entry; do
+      [[ -z "$entry" ]] && continue
+      s=$(echo "$entry" | awk '{print $3}')
+      if is_blocked "$s"; then
+        continue
+      fi
+      candidates=("$ROOT"/plan/[0-9][0-9]-"$s".md)
+      if [[ ${#candidates[@]} -gt 0 && -e "${candidates[0]}" ]]; then
+        SLUG="$s"
+        PLAN_FILE="${candidates[0]}"
+        break
+      fi
+    done < <(grep -E '^- \[ \] ' "$INDEX" 2>/dev/null || true)
+
+    if [[ -z "$SLUG" ]]; then
+      echo '{"action":"none","reason":"no actionable unchecked dirs"}'
       exit 0
     fi
 
-    SLUG=$(echo "$ENTRY" | awk '{print $3}')
-    # glob-safe lookup (same pattern as planning branch)
-    candidates=("$ROOT"/plan/[0-9][0-9]-"$SLUG".md)
-    if [[ ${#candidates[@]} -gt 0 && -e "${candidates[0]}" ]]; then
-      PLAN_FILE="${candidates[0]}"
-    else
-      PLAN_FILE=""
-    fi
     DIR=$(jq -r --arg s "$SLUG" '.[] | select(.slug == $s) | .dir' "$TREE")
 
     jq -n --arg action fix --arg slug "$SLUG" --arg dir "$DIR" --arg plan_file "$PLAN_FILE" \

@@ -26,8 +26,15 @@ if [[ ! -f "$PLAN_FILE" ]]; then
   exit 0
 fi
 
-VERDICT=$(bash "$SKILL_DIR/scripts/verify-plan.sh" "$PLAN_FILE" "$SLUG")
-RESULT=$(echo "$VERDICT" | jq -r '.result')
+# verify-plan.sh exits 1 on FAIL — still outputs valid verdict JSON.
+# Capture output regardless of exit code; rely on result field, not exit code.
+VERDICT=$(bash "$SKILL_DIR/scripts/verify-plan.sh" "$PLAN_FILE" "$SLUG" || true)
+if [[ -z "$VERDICT" ]] || ! echo "$VERDICT" | jq . >/dev/null 2>&1; then
+  # verify-plan.sh 자체가 깨진 경우
+  jq -n --arg slug "$SLUG" '{result:"FAIL", reason:"verify-plan crashed or emitted invalid JSON", slug:$slug, feedback_for_planner:[{check_id:"internal",issue:"verify-plan.sh internal error",required_change:"re-run after fixing infrastructure"}]}'
+  exit 0
+fi
+RESULT=$(echo "$VERDICT" | jq -r '.result // "FAIL"')
 
 if [[ "$RESULT" == "PASS" ]]; then
   sed -i -E 's/^status: draft$/status: reviewed-pass/' "$PLAN_FILE"

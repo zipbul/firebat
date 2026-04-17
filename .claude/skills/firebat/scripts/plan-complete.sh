@@ -11,6 +11,13 @@ ROOT=".firebat"
 TREE="$ROOT/tree.json"
 BY_DIR="$ROOT/by-dir"
 PLAN="$ROOT/plan"
+STATE="$ROOT/state.json"
+
+is_blocked() {
+  local slug="$1"
+  [[ -f "$STATE" ]] || return 1
+  jq -e --arg s "$slug" '.blocked // {} | has($s)' "$STATE" >/dev/null 2>&1
+}
 
 if [[ ! -f "$TREE" ]]; then
   echo "plan-complete: $TREE missing — run scan-split first" >&2
@@ -40,16 +47,27 @@ for slug in "${SLUGS[@]}"; do
   fi
 done
 
-# 2) 각 plan 파일의 status: reviewed-pass
+# 2) 각 plan 파일의 status: reviewed-pass (blocked slug은 review-failed 허용)
 for plan_file in "$PLAN"/[0-9][0-9]-*.md; do
-  if ! grep -q '^status: reviewed-pass$' "$plan_file"; then
-    FAIL_REASONS+=("not reviewed-pass: $(basename "$plan_file")")
-    FAILED=1
+  # slug 추출
+  plan_slug=$(basename "$plan_file" .md | sed -E 's/^[0-9]+-//')
+  plan_status=$(awk '/^---$/{f=!f; next} f && /^status:/{print $2; exit}' "$plan_file")
+  if [[ "$plan_status" == "reviewed-pass" ]]; then
+    continue
   fi
+  if is_blocked "$plan_slug"; then
+    continue  # blocked slug은 review-failed 상태라도 PASS 판정
+  fi
+  FAIL_REASONS+=("not reviewed-pass: $(basename "$plan_file")")
+  FAILED=1
 done
 
 # 3) 각 plan의 primary finding id가 본문에 정확히 등장 (토큰 경계)
 for slug in "${SLUGS[@]}"; do
+  # blocked slug은 체크 생략
+  if is_blocked "$slug"; then
+    continue
+  fi
   plan_matches=("$PLAN"/[0-9][0-9]-"$slug".md)
   [[ ${#plan_matches[@]} -eq 0 ]] && continue
   plan_file="${plan_matches[0]}"
