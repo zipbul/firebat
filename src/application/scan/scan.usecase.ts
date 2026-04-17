@@ -2,9 +2,7 @@
 import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
-import type { ErrorFlowFindingKind } from '../../features/error-flow';
-import type { FirebatCliOptions } from '../../interfaces';
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatCliOptions } from '../..';
 import type {
   BarrelFindingKind,
   CouplingKind,
@@ -20,9 +18,11 @@ import type {
   UnknownProofFindingKind,
   VariableLifetimeFinding,
   WasteKind,
-} from '../../types';
+} from '../..';
+import type { ErrorFlowFindingKind } from '../../features/error-flow';
+import type { FirebatLogger } from '../../shared';
 
-import { computeAutoMinSize } from '../../engine/auto-min-size';
+import { computeAutoMinSize } from '../../engine';
 import { analyzeBarrel, createEmptyBarrel } from '../../features/barrel';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
@@ -41,15 +41,12 @@ import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unk
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { loadFirebatConfigFile } from '../../shared/firebat-config.loader';
-import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
-import { computeToolVersion } from '../../shared/tool-version';
-import { createFirebatProgram } from '../../shared/ts-program';
-import { createArtifactStore } from '../../store/artifact';
-import { createGildash } from '../../store/gildash';
+import { createFirebatProgram, loadFirebatConfigFile, computeToolVersion, resolveRuntimeContextFromCwd } from '../../shared';
+import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
+import { flattenToFindings } from './flatten-findings';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
@@ -109,6 +106,565 @@ const loadCachedReport = async (params: LoadCachedReportParams): Promise<Firebat
   return undefined;
 };
 
+type FirebatConfig = Awaited<ReturnType<typeof loadFirebatConfigFile>>['config'];
+
+const loadConfig = async (
+  rootAbs: string,
+  configPath: string | undefined,
+  logger: FirebatLogger,
+): Promise<{ config: FirebatConfig | null; configError: string | null }> => {
+  try {
+    const loaded = await loadFirebatConfigFile({
+      rootAbs,
+      ...(configPath ? { configPath } : {}),
+    });
+
+    if (loaded.exists) {
+      logger.trace('Config loaded', { resolvedPath: loaded.resolvedPath });
+    }
+
+    return { config: loaded.config, configError: null };
+  } catch (err) {
+    const configError = err instanceof Error ? err.message : String(err);
+
+    return { config: null, configError };
+  }
+};
+
+interface CreateGildashInstanceParams {
+  readonly rootAbs: string;
+  readonly needsSemantic: boolean;
+  readonly exclude: FirebatCliOptions['exclude'];
+  readonly logger: FirebatLogger;
+}
+
+interface CreateGildashInstanceResult {
+  readonly gildash: Awaited<ReturnType<typeof createGildash>>;
+  readonly semanticAvailable: boolean;
+}
+
+const createGildashInstance = async (params: CreateGildashInstanceParams): Promise<CreateGildashInstanceResult> => {
+  const gildashIgnore = params.exclude ? { ignorePatterns: [...params.exclude] } : {};
+
+  if (!params.needsSemantic) {
+    const gildash = await createGildash({ projectRoot: params.rootAbs, watchMode: false, ...gildashIgnore });
+
+    return { gildash, semanticAvailable: false };
+  }
+
+  try {
+    const gildash = await createGildash({ projectRoot: params.rootAbs, watchMode: false, semantic: true, ...gildashIgnore });
+
+    return { gildash, semanticAvailable: true };
+  } catch {
+    params.logger.warn('Semantic init failed, falling back to AST-only');
+
+    const gildash = await createGildash({ projectRoot: params.rootAbs, watchMode: false, ...gildashIgnore });
+
+    return { gildash, semanticAvailable: false };
+  }
+};
+
+// ── Module-scope enrich helpers ────────────────────────────────────────────────
+
+type ToProjectRelative = (filePath: string) => string;
+
+const WASTE_KIND_TO_CODE: Readonly<Record<WasteKind, FirebatCatalogCode>> = {
+  'dead-store': 'WASTE_DEAD_STORE',
+  'dead-store-overwrite': 'WASTE_DEAD_STORE_OVERWRITE',
+} as const;
+const BARREL_KIND_TO_CODE: Readonly<Record<BarrelFindingKind, FirebatCatalogCode>> = {
+  'export-star': 'BARREL_EXPORT_STAR',
+  'deep-import': 'BARREL_DEEP_IMPORT',
+  'index-deep-import': 'BARREL_INDEX_DEEP_IMPORT',
+  'missing-index': 'BARREL_MISSING_INDEX',
+  'invalid-index-statement': 'BARREL_INVALID_INDEX_STMT',
+  'barrel-side-effect-import': 'BARREL_SIDE_EFFECT_IMPORT',
+  'cross-module-reexport': 'BARREL_CROSS_MODULE_REEXPORT',
+} as const;
+const NESTING_KIND_TO_CODE: Readonly<Record<NestingKind, FirebatCatalogCode>> = {
+  'deep-nesting': 'NESTING_DEEP',
+  'high-cognitive-complexity': 'NESTING_HIGH_CC',
+  'accidental-quadratic': 'NESTING_ACCIDENTAL_QUADRATIC',
+  'callback-depth': 'NESTING_CALLBACK_DEPTH',
+  'promise-chain-depth': 'NESTING_PROMISE_CHAIN',
+  'complexity-density': 'NESTING_COMPLEXITY_DENSITY',
+} as const;
+const EARLY_RETURN_KIND_TO_CODE: Readonly<Record<EarlyReturnKind, FirebatCatalogCode>> = {
+  'wrapping-if': 'EARLY_RETURN_WRAPPING_IF',
+  'invertible-if-else': 'EARLY_RETURN_INVERTIBLE',
+  'cascade-guard': 'EARLY_RETURN_CASCADE_GUARD',
+  'implicit-else': 'EARLY_RETURN_IMPLICIT_ELSE',
+} as const;
+const COLLAPSIBLE_IF_KIND_TO_CODE = {
+  'collapsible-if': 'COLLAPSIBLE_IF',
+  'collapsible-else-if': 'COLLAPSIBLE_ELSE_IF',
+} as const satisfies Record<string, FirebatCatalogCode>;
+const ERROR_FLOW_KIND_TO_CODE: Record<Exclude<ErrorFlowFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
+  'throw-non-error': 'EF_THROW_NON_ERROR',
+  'promise-constructor-hygiene': 'EF_PROMISE_CONSTRUCTOR_HYGIENE',
+  'missing-error-cause': 'EF_MISSING_ERROR_CAUSE',
+  'useless-catch': 'EF_USELESS_CATCH',
+  'unsafe-finally': 'EF_UNSAFE_FINALLY',
+  'return-await-in-try': 'EF_RETURN_AWAIT_IN_TRY',
+  'prefer-catch': 'EF_PREFER_DOT_CATCH_CATCH',
+  'prefer-await-to-then': 'EF_PREFER_DOT_CATCH_AWAIT',
+  'no-return-wrap': 'EF_PREFER_DOT_CATCH_NO_WRAP',
+  'floating-promises': 'EF_UNOBSERVED_PROMISE_FLOATING',
+  'catch-or-return': 'EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN',
+  'misused-promises': 'EF_UNOBSERVED_PROMISE_MISUSED',
+  'unobserved-variable': 'EF_UNOBSERVED_PROMISE_VARIABLE',
+  'always-return': 'EF_UNOBSERVED_PROMISE_ALWAYS_RETURN',
+  'no-callback-in-promise': 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE',
+};
+const UNKNOWN_PROOF_KIND_TO_CODE: Record<Exclude<UnknownProofFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
+  'unknown-type': 'UNKNOWN_UNNARROWED',
+  'unknown-inferred': 'UNKNOWN_INFERRED',
+  'any-inferred': 'UNKNOWN_ANY_INFERRED',
+  'any-cast': 'UNKNOWN_ANY_CAST',
+  'double-cast': 'UNKNOWN_DOUBLE_CAST',
+};
+const INDIRECTION_KIND_TO_CODE: Readonly<Record<IndirectionFindingKind, FirebatCatalogCode>> = {
+  'thin-wrapper': 'IND_THIN_WRAPPER',
+  'forward-chain': 'IND_FORWARD_CHAIN',
+  'cross-file-forwarding-chain': 'IND_CROSS_FILE_CHAIN',
+  'type-remap': 'IND_TYPE_REMAP',
+  'interface-rewrap': 'IND_INTERFACE_REWRAP',
+} as const;
+const COUPLING_KIND_TO_CODE: Readonly<Record<CouplingKind, FirebatCatalogCode>> = {
+  'god-module': 'COUPLING_GOD_MODULE',
+  'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
+  'off-main-sequence': 'COUPLING_OFF_MAIN_SEQ',
+  'unstable-module': 'COUPLING_UNSTABLE',
+  'rigid-module': 'COUPLING_RIGID',
+} as const;
+const DEP_MEMBER_KIND_TO_CODE: Record<string, FirebatCatalogCode> = {
+  'unused-enum-member': 'DEP_UNUSED_ENUM_MEMBER',
+  'unused-ns-export': 'DEP_UNUSED_NS_EXPORT',
+  'unused-ns-member': 'DEP_UNUSED_NS_MEMBER',
+};
+const DUPLICATE_KIND_TO_CODE: Readonly<Record<DuplicateCloneType, FirebatCatalogCode>> = {
+  exact: 'DUP_EXACT',
+  shape: 'DUP_SHAPE',
+  normalized: 'DUP_NORMALIZED',
+  'near-miss': 'DUP_NEAR_MISS',
+} as const;
+const VARIABLE_LIFETIME_KIND_TO_CODE: Readonly<Record<string, FirebatCatalogCode>> = {
+  'scope-narrowing': 'LIFETIME_SCOPE_NARROWING',
+  'liveness-pressure': 'LIFETIME_LIVENESS_PRESSURE',
+  'mutation-density': 'LIFETIME_MUTATION_DENSITY',
+};
+const ENRICH_ZERO_SPAN = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
+
+const enrichFilePath = (toProjectRelative: ToProjectRelative, filePath: string): string =>
+  filePath.length > 0 ? toProjectRelative(filePath) : filePath;
+
+const enrichWaste = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items.map(item => {
+    const kind = String(item?.kind ?? '');
+    const filePath = String(item?.filePath ?? item?.file ?? '');
+
+    return {
+      kind,
+      code: (WASTE_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      file: enrichFilePath(toProjectRelative, filePath),
+      span: item?.span,
+      label: item?.label,
+    };
+  });
+
+const enrichBarrel = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items.map(item => {
+    const kind = String(item?.kind ?? '');
+    const filePath = String(item?.filePath ?? item?.file ?? '');
+
+    return {
+      kind,
+      code: (BARREL_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      file: enrichFilePath(toProjectRelative, filePath),
+      span: item?.span,
+      evidence: item?.evidence,
+    };
+  });
+
+const enrichNesting = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items.map(item => {
+    const kind = String(item?.kind ?? '');
+    const filePath = String(item?.filePath ?? item?.file ?? '');
+
+    return {
+      ...item,
+      code: (NESTING_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      file: enrichFilePath(toProjectRelative, filePath),
+    };
+  });
+
+const enrichEarlyReturn = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items.map(item => {
+    const kind = String(item?.kind ?? '');
+    const filePath = String(item?.filePath ?? item?.file ?? '');
+
+    return {
+      ...item,
+      code: (EARLY_RETURN_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      file: enrichFilePath(toProjectRelative, filePath),
+    };
+  });
+
+const enrichCollapsibleIf = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items.map(item => {
+    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const kind = String(item?.kind ?? 'collapsible-if');
+    const code = COLLAPSIBLE_IF_KIND_TO_CODE[kind as keyof typeof COLLAPSIBLE_IF_KIND_TO_CODE] ?? 'COLLAPSIBLE_IF';
+
+    return {
+      ...item,
+      code,
+      file: enrichFilePath(toProjectRelative, filePath),
+    };
+  });
+
+const enrichErrorFlow = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items
+    .filter((item: any) => item?.kind !== 'tool-unavailable')
+    .map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: (ERROR_FLOW_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+        file: enrichFilePath(toProjectRelative, filePath),
+        span: item?.span,
+        evidence: item?.evidence,
+      };
+    });
+
+const enrichUnknownProof = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items
+    .filter((item: any) => item?.kind !== 'tool-unavailable')
+    .map(item => {
+      const kind = String(item?.kind ?? '');
+      const filePath = String(item?.filePath ?? item?.file ?? '');
+
+      return {
+        kind,
+        code: (UNKNOWN_PROOF_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+        file: enrichFilePath(toProjectRelative, filePath),
+        span: item?.span,
+        symbol: item?.symbol,
+        evidence: item?.evidence,
+        typeText: item?.typeText,
+      };
+    });
+
+const enrichIndirection = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  items.map(item => {
+    const kind = String(item?.kind ?? '');
+    const filePath = String(item?.filePath ?? item?.file ?? '');
+
+    return {
+      kind,
+      code: (INDIRECTION_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      file: enrichFilePath(toProjectRelative, filePath),
+      span: item?.span,
+      header: item?.header,
+      depth: item?.depth,
+      evidence: item?.evidence,
+    };
+  });
+
+const pickCouplingKind = (signals: ReadonlyArray<string>): string => {
+  const s = new Set(signals);
+
+  if (s.has('god-module')) {
+    return 'god-module';
+  }
+
+  if (s.has('bidirectional-coupling')) {
+    return 'bidirectional-coupling';
+  }
+
+  if (s.has('off-main-sequence')) {
+    return 'off-main-sequence';
+  }
+
+  if (s.has('unstable-module')) {
+    return 'unstable-module';
+  }
+
+  if (s.has('rigid-module')) {
+    return 'rigid-module';
+  }
+
+  return signals[0] ?? 'coupling';
+};
+
+const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
+  items.map(item => {
+    const module = String(item?.module ?? '');
+    const signals = Array.isArray(item?.signals) ? (item.signals as string[]) : [];
+    const kind = pickCouplingKind(signals);
+
+    return {
+      kind,
+      code: (COUPLING_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      file: module,
+      span: ENRICH_ZERO_SPAN,
+      module,
+      score: item?.score,
+      signals,
+      metrics: item?.metrics,
+    };
+  });
+
+const mapLayerViolations = (layerViolations: any[]): any[] =>
+  layerViolations.map((v: any) => {
+    const from = String(v?.from ?? '');
+
+    return {
+      kind: 'layer-violation',
+      code: 'DEP_LAYER_VIOLATION',
+      file: from,
+      span: ENRICH_ZERO_SPAN,
+      from,
+      to: String(v?.to ?? ''),
+      fromLayer: String(v?.fromLayer ?? ''),
+      toLayer: String(v?.toLayer ?? ''),
+    };
+  });
+
+const mapDeadExports = (deadExports: any[]): any[] =>
+  deadExports.map((d: any) => {
+    const kind = String(d?.kind ?? 'dead-export');
+    const module = String(d?.module ?? '');
+
+    return {
+      kind,
+      code: kind === 'test-only-export' ? 'DEP_TEST_ONLY_EXPORT' : 'DEP_DEAD_EXPORT',
+      file: module,
+      span: ENRICH_ZERO_SPAN,
+      module,
+      name: String(d?.exportName ?? d?.name ?? ''),
+    };
+  });
+
+const mapCycles = (cycles: any[], cuts: any[], toProjectRelative: ToProjectRelative): any[] =>
+  cycles.map((c: any) => {
+    const pathModules = Array.isArray(c?.path) ? c.path : [];
+    const bestCut = cuts.find((h: any) => pathModules.includes(h?.from) && pathModules.includes(h?.to));
+
+    return Object.assign(
+      {
+        kind: `circular-dependency`,
+        code: `DIAG_CIRCULAR_DEPENDENCY`,
+        items: pathModules.map((mod: string) => ({ file: toProjectRelative(mod), span: ENRICH_ZERO_SPAN })),
+      },
+      bestCut ? { cut: { from: bestCut.from, to: bestCut.to, score: bestCut.score } } : {},
+    );
+  });
+
+const mapUnusedFiles = (unusedFiles: any[]): any[] =>
+  unusedFiles.map((u: any) => {
+    const module = String(u?.module ?? '');
+
+    return { kind: 'unused-file', code: 'DEP_UNUSED_FILE', file: module, span: ENRICH_ZERO_SPAN, module };
+  });
+
+const mapUnusedDeps = (unusedDeps: any[]): any[] =>
+  unusedDeps.map((u: any) => {
+    const kind = String(u?.kind ?? 'unused-dependency');
+
+    return {
+      kind,
+      code: kind === 'unlisted-dependency' ? 'DEP_UNLISTED_DEPENDENCY' : 'DEP_UNUSED_DEPENDENCY',
+      file: String(u?.files?.[0] ?? ''),
+      span: ENRICH_ZERO_SPAN,
+      packageName: String(u?.packageName ?? ''),
+      files: Array.isArray(u?.files) ? u.files : [],
+    };
+  });
+
+const mapUnresolvedImports = (unresolvedImports: any[]): any[] =>
+  unresolvedImports.map((u: any) => {
+    const module = String(u?.module ?? '');
+
+    return {
+      kind: 'unresolved-import',
+      code: 'DEP_UNRESOLVED_IMPORT',
+      file: module,
+      span: ENRICH_ZERO_SPAN,
+      module,
+      specifier: String(u?.specifier ?? ''),
+    };
+  });
+
+const mapDuplicateExports = (duplicateExports: any[]): any[] =>
+  duplicateExports.map((d: any) => {
+    const modules = Array.isArray(d?.modules) ? d.modules : [];
+
+    return {
+      kind: 'duplicate-export',
+      code: 'DEP_DUPLICATE_EXPORT',
+      file: String(modules[0] ?? ''),
+      span: ENRICH_ZERO_SPAN,
+      name: String(d?.name ?? ''),
+      modules,
+    };
+  });
+
+const mapUnusedMembers = (unusedMembers: any[]): any[] =>
+  unusedMembers.map((m: any) => {
+    const kind = String(m?.kind ?? 'unused-enum-member');
+
+    return {
+      kind,
+      code: DEP_MEMBER_KIND_TO_CODE[kind] ?? 'DEP_UNUSED_ENUM_MEMBER',
+      file: String(m?.module ?? ''),
+      span: ENRICH_ZERO_SPAN,
+      module: String(m?.module ?? ''),
+      symbolName: String(m?.symbolName ?? ''),
+      memberName: String(m?.memberName ?? ''),
+    };
+  });
+
+const enrichDependencies = (value: any, toProjectRelative: ToProjectRelative): ReadonlyArray<any> => {
+  const cuts = Array.isArray(value?.edgeCutHints) ? value.edgeCutHints : Array.isArray(value?.cuts) ? value.cuts : [];
+
+  return [
+    ...mapLayerViolations(Array.isArray(value?.layerViolations) ? value.layerViolations : []),
+    ...mapDeadExports(Array.isArray(value?.deadExports) ? value.deadExports : []),
+    ...mapCycles(Array.isArray(value?.cycles) ? value.cycles : [], cuts, toProjectRelative),
+    ...mapUnusedFiles(Array.isArray(value?.unusedFiles) ? value.unusedFiles : []),
+    ...mapUnusedDeps(Array.isArray(value?.unusedDeps) ? value.unusedDeps : []),
+    ...mapUnresolvedImports(Array.isArray(value?.unresolvedImports) ? value.unresolvedImports : []),
+    ...mapDuplicateExports(Array.isArray(value?.duplicateExports) ? value.duplicateExports : []),
+    ...mapUnusedMembers(Array.isArray(value?.unusedMembers) ? value.unusedMembers : []),
+  ];
+};
+
+const enrichDuplicateItem = (item: any, toProjectRelative: ToProjectRelative): any => {
+  const filePath = String(item?.filePath ?? item?.file ?? '');
+
+  return {
+    kind: item?.kind,
+    header: item?.header,
+    file: enrichFilePath(toProjectRelative, filePath),
+    span: item?.span,
+  };
+};
+
+const enrichDuplicateGroups = (groups: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  groups.map(group => {
+    const kind = String(group?.cloneType ?? group?.kind ?? '');
+    const items = Array.isArray(group?.items) ? group.items : [];
+
+    return {
+      kind,
+      code: (DUPLICATE_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
+      items: items.map((item: any) => enrichDuplicateItem(item, toProjectRelative)),
+      ...(group?.suggestedParams !== undefined ? { params: group.suggestedParams } : {}),
+    };
+  });
+
+const enrichPhase1 = <T extends { readonly file?: string; readonly filePath?: string; readonly span?: unknown }>(
+  items: ReadonlyArray<T>,
+  code: FirebatCatalogCode,
+  toProjectRelative: ToProjectRelative,
+): ReadonlyArray<T & { readonly code: FirebatCatalogCode; readonly file: string; readonly span: unknown }> =>
+  items.map(item => {
+    const filePath = String(item.file ?? item.filePath ?? '');
+
+    return {
+      ...item,
+      code,
+      file: enrichFilePath(toProjectRelative, filePath),
+      span: item.span ?? ENRICH_ZERO_SPAN,
+    };
+  });
+
+const enrichVariableLifetime = (
+  findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
+  toProjectRelative: ToProjectRelative,
+): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding> =>
+  findings.map(f => ({
+    ...f,
+    code: (VARIABLE_LIFETIME_KIND_TO_CODE[f.kind] ?? 'VAR_LIFETIME') as FirebatCatalogCode,
+    file: enrichFilePath(toProjectRelative, f.file),
+    span: f.span,
+  }));
+
+const enrichFormat = (files: ReadonlyArray<string>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
+  files.map(filePath => ({
+    kind: 'needs-formatting' as const,
+    code: 'FORMAT' as FirebatCatalogCode,
+    file: enrichFilePath(toProjectRelative, filePath),
+    span: ENRICH_ZERO_SPAN,
+  }));
+
+const enrichLint = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
+  items.map(item => ({
+    ...item,
+    catalogCode: 'LINT' as FirebatCatalogCode,
+  }));
+
+const enrichTypecheck = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
+  items.map(item => ({
+    ...item,
+    catalogCode: 'TYPECHECK' as FirebatCatalogCode,
+  }));
+
+const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void => {
+  const code = item?.code ?? item?.catalogCode;
+
+  if (typeof code === 'string' && code in FIREBAT_CODE_CATALOG) {
+    seenCodes.add(code as FirebatCatalogCode);
+  }
+
+  const nested = item?.outliers ?? item?.items;
+
+  if (!Array.isArray(nested)) {
+    return;
+  }
+
+  for (const sub of nested) {
+    const subCode = (sub as Record<string, unknown>)?.code ?? (sub as Record<string, unknown>)?.catalogCode;
+
+    if (typeof subCode === 'string' && subCode in FIREBAT_CODE_CATALOG) {
+      seenCodes.add(subCode as FirebatCatalogCode);
+    }
+  }
+};
+
+const buildCatalog = (input: {
+  readonly analyses: FirebatReport['analyses'];
+  readonly diagnostics: ReturnType<typeof aggregateDiagnostics>;
+}): FirebatReport['catalog'] => {
+  const seenCodes = new Set<FirebatCatalogCode>();
+
+  for (const [, value] of Object.entries(input.analyses)) {
+    if (!Array.isArray(value)) {
+      continue;
+    }
+
+    for (const item of value as ReadonlyArray<any>) {
+      collectItemCodes(item, seenCodes);
+    }
+  }
+
+  const catalog: Partial<Record<FirebatCatalogCode, any>> = { ...input.diagnostics.catalog };
+
+  for (const code of seenCodes) {
+    if (!(code in catalog)) {
+      catalog[code] = FIREBAT_CODE_CATALOG[code];
+    }
+  }
+
+  return catalog;
+};
+
+// ── End module-scope helpers ────────────────────────────────────────────────────
+
 interface ScanUseCaseDeps {
   readonly logger: FirebatLogger;
 }
@@ -129,24 +685,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Runtime context resolved', { rootAbs: ctx.rootAbs, durationMs: Math.round(nowMs() - tCtx0) });
 
-  let config: Awaited<ReturnType<typeof loadFirebatConfigFile>>['config'] | null = null;
+  const { config, configError } = await loadConfig(ctx.rootAbs, options.configPath, logger);
 
-  try {
-    const loaded = await loadFirebatConfigFile({
-      rootAbs: ctx.rootAbs,
-      ...(options.configPath ? { configPath: options.configPath } : {}),
-    });
-
-    config = loaded.config;
-
-    if (loaded.exists) {
-      logger.trace('Config loaded', { resolvedPath: loaded.resolvedPath });
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
-    metaErrors.config = message;
-    config = null;
+  if (configError !== null) {
+    metaErrors.config = configError;
   }
 
   const toolVersion = computeToolVersion();
@@ -171,22 +713,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     options.detectors.includes('error-flow') ||
     options.detectors.includes('typecheck');
   const tIndex0 = nowMs();
-  let gildash: Awaited<ReturnType<typeof createGildash>>;
-  let semanticAvailable = false;
-  const gildashIgnore = options.exclude ? { ignorePatterns: [...options.exclude] } : {};
-
-  if (needsSemantic) {
-    try {
-      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true, ...gildashIgnore });
-      semanticAvailable = true;
-    } catch {
-      logger.warn('Semantic init failed, falling back to AST-only');
-
-      gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, ...gildashIgnore });
-    }
-  } else {
-    gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, ...gildashIgnore });
-  }
+  const { gildash, semanticAvailable } = await createGildashInstance({
+    rootAbs: ctx.rootAbs,
+    needsSemantic,
+    exclude: options.exclude,
+    logger,
+  });
 
   // Warmup: trigger tsc TypeChecker to parse @zipbul/gildash .d.ts dependency tree once.
   // Without this, the first semantic type resolution on a file importing gildash pays ~30s cold-start.
@@ -262,81 +794,68 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.debug('Fix mode tools', { shouldRunFormat, shouldRunLint });
 
-  type FormatResult = ReturnType<typeof createEmptyFormat>;
-
-  type LintResult = ReturnType<typeof createEmptyLint>;
-
   type BarrelResult = ReturnType<typeof createEmptyBarrel>;
 
   type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
 
   type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
 
-  let formatPromise: Promise<FormatResult | null> | null = null;
-  let lintPromise: Promise<LintResult | null> | null = null;
+  logger.info('Fix mode: running fixable tools before parse', {
+    format: shouldRunFormat,
+    lint: shouldRunLint,
+  });
+
+  const tFix0 = nowMs();
+  const [oxfmtConfigPath, oxlintConfigPath] = await Promise.all([
+    resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc'),
+    resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc'),
+  ]);
+  const [fixedFormat, fixedLint] = await Promise.all([
+    shouldRunFormat
+      ? analyzeFormat({
+          targets: options.targets,
+          fix: true,
+          cwd: ctx.rootAbs,
+          resolveMode: 'project-only',
+          ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
+          logger,
+        }).catch(err => {
+          const message = err instanceof Error ? err.message : String(err);
+
+          metaErrors.format = message;
+
+          return null;
+        })
+      : Promise.resolve(createEmptyFormat()),
+    shouldRunLint
+      ? analyzeLint({
+          targets: options.targets,
+          fix: true,
+          cwd: ctx.rootAbs,
+          resolveMode: 'project-only',
+          ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
+          logger,
+        }).catch(err => {
+          const message = err instanceof Error ? err.message : String(err);
+
+          metaErrors.lint = message;
+
+          return null;
+        })
+      : Promise.resolve(createEmptyLint()),
+  ]);
   const fixTimings: Record<string, number> = {};
+  const fixDur = Math.round(nowMs() - tFix0);
 
-  {
-    logger.info('Fix mode: running fixable tools before parse', {
-      format: shouldRunFormat,
-      lint: shouldRunLint,
-    });
-
-    const tFix0 = nowMs();
-    const [oxfmtConfigPath, oxlintConfigPath] = await Promise.all([
-      resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc'),
-      resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc'),
-    ]);
-    const [format, lint] = await Promise.all([
-      shouldRunFormat
-        ? analyzeFormat({
-            targets: options.targets,
-            fix: true,
-            cwd: ctx.rootAbs,
-            resolveMode: 'project-only',
-            ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
-            logger,
-          }).catch(err => {
-            const message = err instanceof Error ? err.message : String(err);
-
-            metaErrors.format = message;
-
-            return null;
-          })
-        : Promise.resolve(createEmptyFormat()),
-      shouldRunLint
-        ? analyzeLint({
-            targets: options.targets,
-            fix: true,
-            cwd: ctx.rootAbs,
-            resolveMode: 'project-only',
-            ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
-            logger,
-          }).catch(err => {
-            const message = err instanceof Error ? err.message : String(err);
-
-            metaErrors.lint = message;
-
-            return null;
-          })
-        : Promise.resolve(createEmptyLint()),
-    ]);
-
-    formatPromise = Promise.resolve(format);
-    lintPromise = Promise.resolve(lint);
-
-    const fixDur = Math.round(nowMs() - tFix0);
-
-    if (shouldRunFormat) {
-      fixTimings.format = nowMs() - tFix0;
-    }
-
-    if (shouldRunLint) {
-      fixTimings.lint = nowMs() - tFix0;
-    }
-
-    logger.info('Fix mode: tools complete', { durationMs: fixDur });
+  if (shouldRunFormat) {
+    fixTimings.format = nowMs() - tFix0;
   }
+
+  if (shouldRunLint) {
+    fixTimings.lint = nowMs() - tFix0;
+  }
+
+  logger.info('Fix mode: tools complete', { durationMs: fixDur });
 
   const tProgram0 = nowMs();
   const program = await createFirebatProgram({
@@ -356,20 +875,23 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.info('Running detectors', { detectorCount: options.detectors.length });
 
   const detectorTimings: Record<string, number> = {};
-  let waste: ReturnType<typeof detectWaste> = [];
+  const waste: ReturnType<typeof detectWaste> = (() => {
+    if (!options.detectors.includes('waste')) {
+      return [];
+    }
 
-  if (options.detectors.includes('waste')) {
     const t0 = nowMs();
-    const detectorKey = 'waste';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'waste' });
 
-    waste = detectWaste(program);
+    const result = detectWaste(program);
+
     detectorTimings.waste = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.waste) });
-  }
+    logger.debug('detector: complete', { detector: 'waste', durationMs: Math.round(detectorTimings.waste) });
 
+    return result;
+  })();
   const barrelPromise = options.detectors.includes('barrel')
     ? (async (): Promise<BarrelResult> => {
         const t0 = nowMs();
@@ -391,22 +913,27 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         return r;
       })()
     : Promise.resolve(createEmptyBarrel());
-  let unknownProofResult: UnknownProofResult = createEmptyUnknownProof();
+  const unknownProofResult: UnknownProofResult = (() => {
+    if (!options.detectors.includes('unknown-proof')) {
+      return createEmptyUnknownProof();
+    }
 
-  if (options.detectors.includes('unknown-proof')) {
     const t0 = nowMs();
     const detectorKey = 'unknown-proof';
 
     logger.info('detector: start', { detector: detectorKey });
 
     try {
-      unknownProofResult = analyzeUnknownProof(program, {
+      const result = analyzeUnknownProof(program, {
         rootAbs: ctx.rootAbs,
         ...(semanticAvailable ? { gildash } : {}),
       });
+
       detectorTimings[detectorKey] = nowMs() - t0;
 
       logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey]!) });
+
+      return result;
     } catch (err) {
       detectorTimings[detectorKey] = nowMs() - t0;
 
@@ -416,12 +943,9 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       const partial = (err as { partial?: unknown })?.partial;
 
-      if (Array.isArray(partial)) {
-        unknownProofResult = partial as UnknownProofResult;
-      }
+      return Array.isArray(partial) ? (partial as UnknownProofResult) : createEmptyUnknownProof();
     }
-  }
-
+  })();
   const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
     ? (async (): Promise<TypecheckResult | null> => {
         const t0 = nowMs();
@@ -458,15 +982,16 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       })()
     : Promise.resolve(createEmptyTypecheck());
   const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
-  let dependencies: Awaited<ReturnType<typeof analyzeDependencies>>;
+  const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await (async () => {
+    if (!shouldRunDependencies) {
+      return createEmptyDependencies();
+    }
 
-  if (shouldRunDependencies) {
     const t0 = nowMs();
-    const detectorKey = 'dependencies';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'dependencies' });
 
-    dependencies = await analyzeDependencies(gildash, {
+    const result = await analyzeDependencies(gildash, {
       rootAbs: ctx.rootAbs,
       readFileFn: (p: string) => readFileSync(p, 'utf8'),
       ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
@@ -474,249 +999,240 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         ? { allowedDependencies: options.dependenciesAllowedDependencies }
         : {}),
     });
+
     detectorTimings.dependencies = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.dependencies) });
-  } else {
-    dependencies = createEmptyDependencies();
-  }
+    logger.debug('detector: complete', { detector: 'dependencies', durationMs: Math.round(detectorTimings.dependencies) });
 
-  let coupling: ReturnType<typeof analyzeCoupling>;
+    return result;
+  })();
+  const coupling: ReturnType<typeof analyzeCoupling> = (() => {
+    if (!options.detectors.includes('coupling')) {
+      return createEmptyCoupling();
+    }
 
-  if (options.detectors.includes('coupling')) {
     const t0 = nowMs();
-    const detectorKey = 'coupling';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'coupling' });
 
-    coupling = analyzeCoupling(dependencies, options.couplingConfig);
+    const result = analyzeCoupling(dependencies, options.couplingConfig);
+
     detectorTimings.coupling = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.coupling) });
-  } else {
-    coupling = createEmptyCoupling();
-  }
+    logger.debug('detector: complete', { detector: 'coupling', durationMs: Math.round(detectorTimings.coupling) });
 
-  let nesting: ReturnType<typeof analyzeNesting>;
+    return result;
+  })();
+  const nesting: ReturnType<typeof analyzeNesting> = (() => {
+    if (!options.detectors.includes('nesting')) {
+      return createEmptyNesting();
+    }
 
-  if (options.detectors.includes('nesting')) {
     const nestingCfg = config?.features?.nesting;
+    const nestingCfgObj = typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg : null;
     const resolvedNestingOptions = {
-      maxCognitiveComplexity:
-        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCognitiveComplexity : undefined) ??
-        DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
-      maxCallbackDepth:
-        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxCallbackDepth : undefined) ??
-        DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
-      maxPromiseChainDepth:
-        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxPromiseChainDepth : undefined) ??
-        DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
-      maxNestingDepth:
-        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxNestingDepth : undefined) ??
-        DEFAULT_NESTING_OPTIONS.maxNestingDepth,
-      minDensityLoc:
-        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.minDensityLoc : undefined) ??
-        DEFAULT_NESTING_OPTIONS.minDensityLoc,
-      maxDensity:
-        (typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg.maxDensity : undefined) ??
-        DEFAULT_NESTING_OPTIONS.maxDensity,
+      maxCognitiveComplexity: nestingCfgObj?.maxCognitiveComplexity ?? DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
+      maxCallbackDepth: nestingCfgObj?.maxCallbackDepth ?? DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
+      maxPromiseChainDepth: nestingCfgObj?.maxPromiseChainDepth ?? DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
+      maxNestingDepth: nestingCfgObj?.maxNestingDepth ?? DEFAULT_NESTING_OPTIONS.maxNestingDepth,
+      minDensityLoc: nestingCfgObj?.minDensityLoc ?? DEFAULT_NESTING_OPTIONS.minDensityLoc,
+      maxDensity: nestingCfgObj?.maxDensity ?? DEFAULT_NESTING_OPTIONS.maxDensity,
     };
     const t0 = nowMs();
-    const detectorKey = 'nesting';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'nesting' });
 
-    nesting = analyzeNesting(program, resolvedNestingOptions);
+    const result = analyzeNesting(program, resolvedNestingOptions);
+
     detectorTimings.nesting = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.nesting) });
-  } else {
-    nesting = createEmptyNesting();
-  }
+    logger.debug('detector: complete', { detector: 'nesting', durationMs: Math.round(detectorTimings.nesting) });
 
-  let earlyReturn: ReturnType<typeof analyzeEarlyReturn>;
+    return result;
+  })();
+  const earlyReturn: ReturnType<typeof analyzeEarlyReturn> = (() => {
+    if (!options.detectors.includes('early-return')) {
+      return createEmptyEarlyReturn();
+    }
 
-  if (options.detectors.includes('early-return')) {
     const t0 = nowMs();
-    const detectorKey = 'early-return';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'early-return' });
 
-    earlyReturn = analyzeEarlyReturn(program);
-
+    const result = analyzeEarlyReturn(program);
     const durationMs = nowMs() - t0;
 
-    detectorTimings[detectorKey] = durationMs;
+    detectorTimings['early-return'] = durationMs;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-  } else {
-    earlyReturn = createEmptyEarlyReturn();
-  }
+    logger.debug('detector: complete', { detector: 'early-return', durationMs: Math.round(durationMs) });
 
-  let collapsibleIf: ReturnType<typeof analyzeCollapsibleIf>;
+    return result;
+  })();
+  const collapsibleIf: ReturnType<typeof analyzeCollapsibleIf> = (() => {
+    if (!options.detectors.includes('collapsible-if')) {
+      return createEmptyCollapsibleIf();
+    }
 
-  if (options.detectors.includes('collapsible-if')) {
     const t0 = nowMs();
-    const detectorKey = 'collapsible-if';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'collapsible-if' });
 
-    collapsibleIf = analyzeCollapsibleIf(program);
-
+    const result = analyzeCollapsibleIf(program);
     const durationMs = nowMs() - t0;
 
-    detectorTimings[detectorKey] = durationMs;
+    detectorTimings['collapsible-if'] = durationMs;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-  } else {
-    collapsibleIf = createEmptyCollapsibleIf();
-  }
+    logger.debug('detector: complete', { detector: 'collapsible-if', durationMs: Math.round(durationMs) });
 
-  let errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>>;
+    return result;
+  })();
+  const errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>> = await (async () => {
+    if (!options.detectors.includes('error-flow')) {
+      return createEmptyErrorFlow();
+    }
 
-  if (options.detectors.includes('error-flow')) {
     const t0 = nowMs();
-    const detectorKey = 'error-flow';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'error-flow' });
 
     try {
-      errorFlow = await analyzeErrorFlow(program, { gildash });
+      const result = await analyzeErrorFlow(program, { gildash });
+      const durationMs = nowMs() - t0;
+
+      detectorTimings['error-flow'] = durationMs;
+
+      logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
+
+      return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      metaErrors[detectorKey] = message;
+      metaErrors['error-flow'] = message;
+
+      const durationMs = nowMs() - t0;
+
+      detectorTimings['error-flow'] = durationMs;
+
+      logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
 
       const partial = (err as { partial?: unknown })?.partial;
 
-      if (Array.isArray(partial)) {
-        errorFlow = partial as ReadonlyArray<import('../../types').ErrorFlowFinding>;
-      } else {
-        errorFlow = createEmptyErrorFlow();
-      }
+      return Array.isArray(partial) ? (partial as ReadonlyArray<import('../../types').ErrorFlowFinding>) : createEmptyErrorFlow();
+    }
+  })();
+  const indirection: Awaited<ReturnType<typeof analyzeIndirection>> = await (async () => {
+    if (!options.detectors.includes('indirection')) {
+      return createEmptyIndirection();
     }
 
-    const durationMs = nowMs() - t0;
-
-    detectorTimings[detectorKey] = durationMs;
-
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-  } else {
-    errorFlow = createEmptyErrorFlow();
-  }
-
-  let indirection: Awaited<ReturnType<typeof analyzeIndirection>>;
-
-  if (options.detectors.includes('indirection')) {
     const t0 = nowMs();
-    const detectorKey = 'indirection';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'indirection' });
 
-    indirection = await analyzeIndirection(
+    const result = await analyzeIndirection(
       gildash,
       program,
       { maxForwardDepth: options.maxForwardDepth, crossFileMinDepth: options.crossFileMinDepth ?? 2 },
       ctx.rootAbs,
     );
+
     detectorTimings.indirection = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings.indirection) });
-  } else {
-    indirection = createEmptyIndirection();
-  }
+    logger.debug('detector: complete', { detector: 'indirection', durationMs: Math.round(detectorTimings.indirection) });
 
-  const [barrel, lint, typecheck, format] = await Promise.all([
-    barrelPromise,
-    lintPromise ?? Promise.resolve(createEmptyLint()),
-    typecheckPromise,
-    formatPromise ?? Promise.resolve(createEmptyFormat()),
-  ]);
+    return result;
+  })();
+  const [barrel, typecheck] = await Promise.all([barrelPromise, typecheckPromise]);
+  const lint = fixedLint;
+  const format = fixedFormat;
   const unknownProof = unknownProofResult;
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 
-  let giantFile: ReturnType<typeof analyzeGiantFile> = createEmptyGiantFile();
+  const giantFile: ReturnType<typeof analyzeGiantFile> = (() => {
+    if (!options.detectors.includes('giant-file')) {
+      return createEmptyGiantFile();
+    }
 
-  if (options.detectors.includes('giant-file')) {
     const { 'giant-file': giantFileCfg } = config?.features ?? {};
     const resolvedGiantFileMaxLines =
       (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
     const t0 = nowMs();
-    const detectorKey = 'giant-file';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'giant-file' });
 
-    giantFile = analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
-    detectorTimings[detectorKey] = nowMs() - t0;
+    const result = analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
+    detectorTimings['giant-file'] = nowMs() - t0;
 
-  let variableLifetime: ReturnType<typeof analyzeVariableLifetime> = createEmptyVariableLifetime();
+    logger.debug('detector: complete', { detector: 'giant-file', durationMs: Math.round(detectorTimings['giant-file'] ?? 0) });
 
-  if (options.detectors.includes('variable-lifetime')) {
+    return result;
+  })();
+  const variableLifetime: ReturnType<typeof analyzeVariableLifetime> = (() => {
+    if (!options.detectors.includes('variable-lifetime')) {
+      return createEmptyVariableLifetime();
+    }
+
     const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
-    const resolvedVariableLifetimeMaxLifetimeLines =
-      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-        ? variableLifetimeCfg.maxLifetimeLines
-        : undefined) ?? 30;
-    const resolvedMaxLiveVariables =
-      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-        ? variableLifetimeCfg.maxLiveVariables
-        : undefined) ?? 7;
-    const resolvedMinFunctionLines =
-      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-        ? variableLifetimeCfg.minFunctionLines
-        : undefined) ?? 40;
-    const resolvedMaxMutationCount =
-      (typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null
-        ? variableLifetimeCfg.maxMutationCount
-        : undefined) ?? Infinity;
+    const vlCfgObj = typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg : null;
     const t0 = nowMs();
-    const detectorKey = 'variable-lifetime';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'variable-lifetime' });
 
-    variableLifetime = analyzeVariableLifetime(program, {
-      maxLifetimeLines: Number(resolvedVariableLifetimeMaxLifetimeLines),
-      maxLiveVariables: Number(resolvedMaxLiveVariables),
-      minFunctionLines: Number(resolvedMinFunctionLines),
-      maxMutationCount: resolvedMaxMutationCount,
+    const result = analyzeVariableLifetime(program, {
+      maxLifetimeLines: Number(vlCfgObj?.maxLifetimeLines ?? 30),
+      maxLiveVariables: Number(vlCfgObj?.maxLiveVariables ?? 7),
+      minFunctionLines: Number(vlCfgObj?.minFunctionLines ?? 40),
+      maxMutationCount: vlCfgObj?.maxMutationCount ?? Infinity,
     });
-    detectorTimings[detectorKey] = nowMs() - t0;
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
+    detectorTimings['variable-lifetime'] = nowMs() - t0;
 
-  let temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = createEmptyTemporalCoupling();
+    logger.debug('detector: complete', {
+      detector: 'variable-lifetime',
+      durationMs: Math.round(detectorTimings['variable-lifetime'] ?? 0),
+    });
 
-  if (options.detectors.includes('temporal-coupling')) {
+    return result;
+  })();
+  const temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = (() => {
+    if (!options.detectors.includes('temporal-coupling')) {
+      return createEmptyTemporalCoupling();
+    }
+
     const t0 = nowMs();
-    const detectorKey = 'temporal-coupling';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'temporal-coupling' });
 
-    temporalCoupling = analyzeTemporalCoupling(program, { gildash });
-    detectorTimings[detectorKey] = nowMs() - t0;
+    const result = analyzeTemporalCoupling(program, { gildash });
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
+    detectorTimings['temporal-coupling'] = nowMs() - t0;
 
-  let duplicatesUnified: ReturnType<typeof analyzeDuplicates> = createEmptyDuplicates();
+    logger.debug('detector: complete', {
+      detector: 'temporal-coupling',
+      durationMs: Math.round(detectorTimings['temporal-coupling'] ?? 0),
+    });
 
-  if (options.detectors.includes('duplicates')) {
+    return result;
+  })();
+  const duplicatesUnified: ReturnType<typeof analyzeDuplicates> = (() => {
+    if (!options.detectors.includes('duplicates')) {
+      return createEmptyDuplicates();
+    }
+
     const t0 = nowMs();
-    const detectorKey = 'duplicates';
 
-    logger.debug('detector: start', { detector: detectorKey });
+    logger.debug('detector: start', { detector: 'duplicates' });
 
-    duplicatesUnified = analyzeDuplicates(program, { minSize: resolvedMinSize });
-    detectorTimings[detectorKey] = nowMs() - t0;
+    const result = analyzeDuplicates(program, { minSize: resolvedMinSize });
 
-    logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey] ?? 0) });
-  }
+    detectorTimings.duplicates = nowMs() - t0;
 
+    logger.debug('detector: complete', { detector: 'duplicates', durationMs: Math.round(detectorTimings.duplicates ?? 0) });
+
+    return result;
+  })();
   const selectedDetectors = new Set(options.detectors);
 
   const toProjectRelative = (filePath: string): string => {
@@ -726,541 +1242,34 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
   };
 
-  const enrichWaste = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<WasteKind, FirebatCatalogCode>> = {
-      'dead-store': 'WASTE_DEAD_STORE',
-      'dead-store-overwrite': 'WASTE_DEAD_STORE_OVERWRITE',
-    } as const;
-
-    return items.map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item?.span,
-        label: item?.label,
-      };
-    });
-  };
-
-  const enrichBarrel = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<BarrelFindingKind, FirebatCatalogCode>> = {
-      'export-star': 'BARREL_EXPORT_STAR',
-      'deep-import': 'BARREL_DEEP_IMPORT',
-      'index-deep-import': 'BARREL_INDEX_DEEP_IMPORT',
-      'missing-index': 'BARREL_MISSING_INDEX',
-      'invalid-index-statement': 'BARREL_INVALID_INDEX_STMT',
-      'barrel-side-effect-import': 'BARREL_SIDE_EFFECT_IMPORT',
-      'cross-module-reexport': 'BARREL_CROSS_MODULE_REEXPORT',
-    } as const;
-
-    return items.map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item?.span,
-        evidence: item?.evidence,
-      };
-    });
-  };
-
-  const enrichNesting = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<NestingKind, FirebatCatalogCode>> = {
-      'deep-nesting': 'NESTING_DEEP',
-      'high-cognitive-complexity': 'NESTING_HIGH_CC',
-      'accidental-quadratic': 'NESTING_ACCIDENTAL_QUADRATIC',
-      'callback-depth': 'NESTING_CALLBACK_DEPTH',
-      'promise-chain-depth': 'NESTING_PROMISE_CHAIN',
-      'complexity-density': 'NESTING_COMPLEXITY_DENSITY',
-    } as const;
-
-    return items.map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        ...item,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-      };
-    });
-  };
-
-  const enrichEarlyReturn = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<EarlyReturnKind, FirebatCatalogCode>> = {
-      'wrapping-if': 'EARLY_RETURN_WRAPPING_IF',
-      'invertible-if-else': 'EARLY_RETURN_INVERTIBLE',
-      'cascade-guard': 'EARLY_RETURN_CASCADE_GUARD',
-      'implicit-else': 'EARLY_RETURN_IMPLICIT_ELSE',
-    } as const;
-
-    return items.map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        ...item,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-      };
-    });
-  };
-
-  const enrichCollapsibleIf = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode = {
-      'collapsible-if': 'COLLAPSIBLE_IF',
-      'collapsible-else-if': 'COLLAPSIBLE_ELSE_IF',
-    } as const satisfies Record<string, FirebatCatalogCode>;
-
-    return items.map(item => {
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-      const kind = String(item?.kind ?? 'collapsible-if');
-      const code = kindToCode[kind as keyof typeof kindToCode] ?? 'COLLAPSIBLE_IF';
-
-      return {
-        ...item,
-        code,
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-      };
-    });
-  };
-
-  const enrichErrorFlow = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<Exclude<ErrorFlowFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
-      'throw-non-error': 'EF_THROW_NON_ERROR',
-      'promise-constructor-hygiene': 'EF_PROMISE_CONSTRUCTOR_HYGIENE',
-      'missing-error-cause': 'EF_MISSING_ERROR_CAUSE',
-      'useless-catch': 'EF_USELESS_CATCH',
-      'unsafe-finally': 'EF_UNSAFE_FINALLY',
-      'return-await-in-try': 'EF_RETURN_AWAIT_IN_TRY',
-      'prefer-catch': 'EF_PREFER_DOT_CATCH_CATCH',
-      'prefer-await-to-then': 'EF_PREFER_DOT_CATCH_AWAIT',
-      'no-return-wrap': 'EF_PREFER_DOT_CATCH_NO_WRAP',
-      'floating-promises': 'EF_UNOBSERVED_PROMISE_FLOATING',
-      'catch-or-return': 'EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN',
-      'misused-promises': 'EF_UNOBSERVED_PROMISE_MISUSED',
-      'unobserved-variable': 'EF_UNOBSERVED_PROMISE_VARIABLE',
-      'always-return': 'EF_UNOBSERVED_PROMISE_ALWAYS_RETURN',
-      'no-callback-in-promise': 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE',
-    };
-
-    return items
-      .filter((item: any) => item?.kind !== 'tool-unavailable')
-      .map(item => {
-        const kind = String(item?.kind ?? '');
-        const filePath = String(item?.filePath ?? item?.file ?? '');
-
-        return {
-          kind,
-          code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-          file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-          span: item?.span,
-          evidence: item?.evidence,
-        };
-      });
-  };
-
-  const enrichUnknownProof = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Record<Exclude<UnknownProofFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
-      'unknown-type': 'UNKNOWN_UNNARROWED',
-      'unknown-inferred': 'UNKNOWN_INFERRED',
-      'any-inferred': 'UNKNOWN_ANY_INFERRED',
-      'any-cast': 'UNKNOWN_ANY_CAST',
-      'double-cast': 'UNKNOWN_DOUBLE_CAST',
-    };
-
-    return items
-      .filter((item: any) => item?.kind !== 'tool-unavailable')
-      .map(item => {
-        const kind = String(item?.kind ?? '');
-        const filePath = String(item?.filePath ?? item?.file ?? '');
-
-        return {
-          kind,
-          code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-          file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-          span: item?.span,
-          symbol: item?.symbol,
-          evidence: item?.evidence,
-          typeText: item?.typeText,
-        };
-      });
-  };
-
-  const enrichIndirection = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<IndirectionFindingKind, FirebatCatalogCode>> = {
-      'thin-wrapper': 'IND_THIN_WRAPPER',
-      'forward-chain': 'IND_FORWARD_CHAIN',
-      'cross-file-forwarding-chain': 'IND_CROSS_FILE_CHAIN',
-      'type-remap': 'IND_TYPE_REMAP',
-      'interface-rewrap': 'IND_INTERFACE_REWRAP',
-    } as const;
-
-    return items.map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item?.span,
-        header: item?.header,
-        depth: item?.depth,
-        evidence: item?.evidence,
-      };
-    });
-  };
-
-  const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<CouplingKind, FirebatCatalogCode>> = {
-      'god-module': 'COUPLING_GOD_MODULE',
-      'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
-      'off-main-sequence': 'COUPLING_OFF_MAIN_SEQ',
-      'unstable-module': 'COUPLING_UNSTABLE',
-      'rigid-module': 'COUPLING_RIGID',
-    } as const;
-
-    const pickKind = (signals: ReadonlyArray<string>): string => {
-      const s = new Set(signals);
-
-      if (s.has('god-module')) {
-        return 'god-module';
-      }
-
-      if (s.has('bidirectional-coupling')) {
-        return 'bidirectional-coupling';
-      }
-
-      if (s.has('off-main-sequence')) {
-        return 'off-main-sequence';
-      }
-
-      if (s.has('unstable-module')) {
-        return 'unstable-module';
-      }
-
-      if (s.has('rigid-module')) {
-        return 'rigid-module';
-      }
-
-      return signals[0] ?? 'coupling';
-    };
-
-    const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-
-    return items.map(item => {
-      const module = String(item?.module ?? '');
-      const signals = Array.isArray(item?.signals) ? (item.signals as string[]) : [];
-      const kind = pickKind(signals);
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: module,
-        span: zeroSpan,
-        module,
-        score: item?.score,
-        signals,
-        metrics: item?.metrics,
-      };
-    });
-  };
-
-  const enrichDependencies = (value: any): ReadonlyArray<any> => {
-    const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-    const deadExports = Array.isArray(value?.deadExports) ? value.deadExports : [];
-    const layerViolations = Array.isArray(value?.layerViolations) ? value.layerViolations : [];
-    const cycles = Array.isArray(value?.cycles) ? value.cycles : [];
-    const cuts = Array.isArray(value?.edgeCutHints) ? value.edgeCutHints : Array.isArray(value?.cuts) ? value.cuts : [];
-    const findings: any[] = [];
-
-    for (const v of layerViolations) {
-      const from = String(v?.from ?? '');
-
-      findings.push({
-        kind: 'layer-violation',
-        code: 'DEP_LAYER_VIOLATION',
-        file: from,
-        span: zeroSpan,
-        from,
-        to: String(v?.to ?? ''),
-        fromLayer: String(v?.fromLayer ?? ''),
-        toLayer: String(v?.toLayer ?? ''),
-      });
-    }
-
-    for (const d of deadExports) {
-      const kind = String(d?.kind ?? 'dead-export');
-      const module = String(d?.module ?? '');
-      const code = kind === 'test-only-export' ? 'DEP_TEST_ONLY_EXPORT' : 'DEP_DEAD_EXPORT';
-
-      findings.push({
-        kind,
-        code,
-        file: module,
-        span: zeroSpan,
-        module,
-        name: String(d?.exportName ?? d?.name ?? ''),
-      });
-    }
-
-    for (const c of cycles) {
-      const pathModules = Array.isArray(c?.path) ? c.path : [];
-      const bestCut = cuts.find((h: any) => pathModules.includes(h?.from) && pathModules.includes(h?.to));
-
-      findings.push({
-        kind: 'circular-dependency',
-        code: 'DIAG_CIRCULAR_DEPENDENCY',
-        items: pathModules.map((mod: string) => ({
-          file: toProjectRelative(mod),
-          span: zeroSpan,
-        })),
-        ...(bestCut ? { cut: { from: bestCut.from, to: bestCut.to, score: bestCut.score } } : {}),
-      });
-    }
-
-    const unusedFiles = Array.isArray(value?.unusedFiles) ? value.unusedFiles : [];
-
-    for (const u of unusedFiles) {
-      const module = String(u?.module ?? '');
-
-      findings.push({
-        kind: 'unused-file',
-        code: 'DEP_UNUSED_FILE',
-        file: module,
-        span: zeroSpan,
-        module,
-      });
-    }
-
-    const unusedDeps = Array.isArray(value?.unusedDeps) ? value.unusedDeps : [];
-
-    for (const u of unusedDeps) {
-      const kind = String(u?.kind ?? 'unused-dependency');
-      const code = kind === 'unlisted-dependency' ? 'DEP_UNLISTED_DEPENDENCY' : 'DEP_UNUSED_DEPENDENCY';
-
-      findings.push({
-        kind,
-        code,
-        file: String(u?.files?.[0] ?? ''),
-        span: zeroSpan,
-        packageName: String(u?.packageName ?? ''),
-        files: Array.isArray(u?.files) ? u.files : [],
-      });
-    }
-
-    const unresolvedImports = Array.isArray(value?.unresolvedImports) ? value.unresolvedImports : [];
-
-    for (const u of unresolvedImports) {
-      const module = String(u?.module ?? '');
-
-      findings.push({
-        kind: 'unresolved-import',
-        code: 'DEP_UNRESOLVED_IMPORT',
-        file: module,
-        span: zeroSpan,
-        module,
-        specifier: String(u?.specifier ?? ''),
-      });
-    }
-
-    const duplicateExports = Array.isArray(value?.duplicateExports) ? value.duplicateExports : [];
-
-    for (const d of duplicateExports) {
-      const modules = Array.isArray(d?.modules) ? d.modules : [];
-
-      findings.push({
-        kind: 'duplicate-export',
-        code: 'DEP_DUPLICATE_EXPORT',
-        file: String(modules[0] ?? ''),
-        span: zeroSpan,
-        name: String(d?.name ?? ''),
-        modules,
-      });
-    }
-
-    const unusedMembers = Array.isArray(value?.unusedMembers) ? value.unusedMembers : [];
-    const memberKindToCode: Record<string, FirebatCatalogCode> = {
-      'unused-enum-member': 'DEP_UNUSED_ENUM_MEMBER',
-      'unused-ns-export': 'DEP_UNUSED_NS_EXPORT',
-      'unused-ns-member': 'DEP_UNUSED_NS_MEMBER',
-    };
-
-    for (const m of unusedMembers) {
-      const kind = String(m?.kind ?? 'unused-enum-member');
-      const code = memberKindToCode[kind] ?? 'DEP_UNUSED_ENUM_MEMBER';
-
-      findings.push({
-        kind,
-        code,
-        file: String(m?.module ?? ''),
-        span: zeroSpan,
-        module: String(m?.module ?? ''),
-        symbolName: String(m?.symbolName ?? ''),
-        memberName: String(m?.memberName ?? ''),
-      });
-    }
-
-    return findings;
-  };
-
-  const enrichDuplicateGroups = (groups: ReadonlyArray<any>): ReadonlyArray<any> => {
-    const kindToCode: Readonly<Record<DuplicateCloneType, FirebatCatalogCode>> = {
-      exact: 'DUP_EXACT',
-      shape: 'DUP_SHAPE',
-      normalized: 'DUP_NORMALIZED',
-      'near-miss': 'DUP_NEAR_MISS',
-    } as const;
-
-    return groups.map(group => {
-      const kind = String(group?.cloneType ?? group?.kind ?? '');
-      const items = Array.isArray(group?.items) ? group.items : [];
-
-      return {
-        kind,
-        code: (kindToCode as Record<string, FirebatCatalogCode | undefined>)[kind],
-        items: items.map((item: any) => {
-          const filePath = String(item?.filePath ?? item?.file ?? '');
-
-          return {
-            kind: item?.kind,
-            header: item?.header,
-            file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-            span: item?.span,
-          };
-        }),
-        ...(group?.suggestedParams !== undefined ? { params: group.suggestedParams } : {}),
-      };
-    });
-  };
-
-  const zeroSpan = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
-
-  const enrichPhase1 = <T extends { readonly file?: string; readonly filePath?: string; readonly span?: unknown }>(
-    items: ReadonlyArray<T>,
-    code: FirebatCatalogCode,
-  ): ReadonlyArray<T & { readonly code: FirebatCatalogCode; readonly file: string; readonly span: unknown }> =>
-    items.map(item => {
-      const filePath = String(item.file ?? item.filePath ?? '');
-
-      return {
-        ...item,
-        code,
-        file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-        span: item.span ?? zeroSpan,
-      };
-    });
-
-  const enrichVariableLifetime = (
-    findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
-  ): ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding> =>
-    findings.map(f => ({
-      ...f,
-      code: (f.kind === 'scope-narrowing'
-        ? 'LIFETIME_SCOPE_NARROWING'
-        : f.kind === 'liveness-pressure'
-          ? 'LIFETIME_LIVENESS_PRESSURE'
-          : f.kind === 'mutation-density'
-            ? 'LIFETIME_MUTATION_DENSITY'
-            : 'VAR_LIFETIME') as FirebatCatalogCode,
-      file: f.file.length > 0 ? toProjectRelative(f.file) : f.file,
-      span: f.span,
-    }));
-
-  const enrichFormat = (files: ReadonlyArray<string>): ReadonlyArray<any> =>
-    files.map(filePath => ({
-      kind: 'needs-formatting' as const,
-      code: 'FORMAT' as FirebatCatalogCode,
-      file: filePath.length > 0 ? toProjectRelative(filePath) : filePath,
-      span: zeroSpan,
-    }));
-
-  const enrichLint = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
-    items.map(item => ({
-      ...item,
-      catalogCode: 'LINT' as FirebatCatalogCode,
-    }));
-
-  const enrichTypecheck = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
-    items.map(item => ({
-      ...item,
-      catalogCode: 'TYPECHECK' as FirebatCatalogCode,
-    }));
-
-  const buildCatalog = (input: {
-    readonly analyses: FirebatReport['analyses'];
-    readonly diagnostics: ReturnType<typeof aggregateDiagnostics>;
-  }): FirebatReport['catalog'] => {
-    const seenCodes = new Set<FirebatCatalogCode>();
-
-    for (const [, value] of Object.entries(input.analyses)) {
-      if (!Array.isArray(value)) {
-        continue;
-      }
-
-      for (const item of value as ReadonlyArray<any>) {
-        const code = item?.code ?? item?.catalogCode;
-
-        if (typeof code === 'string' && code in FIREBAT_CODE_CATALOG) {
-          seenCodes.add(code as FirebatCatalogCode);
-        }
-
-        const nested = item?.outliers ?? item?.items;
-
-        if (Array.isArray(nested)) {
-          for (const sub of nested) {
-            const subCode = (sub as Record<string, unknown>)?.code ?? (sub as Record<string, unknown>)?.catalogCode;
-
-            if (typeof subCode === 'string' && subCode in FIREBAT_CODE_CATALOG) {
-              seenCodes.add(subCode as FirebatCatalogCode);
-            }
-          }
-        }
-      }
-    }
-
-    const catalog: Partial<Record<FirebatCatalogCode, any>> = { ...input.diagnostics.catalog };
-
-    for (const code of seenCodes) {
-      if (!(code in catalog)) {
-        catalog[code] = FIREBAT_CODE_CATALOG[code];
-      }
-    }
-
-    return catalog;
-  };
-
   const analyses: FirebatReport['analyses'] = {
-    ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste) } : {}),
-    ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel) } : {}),
-    ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof) } : {}),
-    ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow) } : {}),
-    ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format) } : {}),
+    ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format, toProjectRelative) } : {}),
     ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
     ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
-    ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies) } : {}),
+    ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies, toProjectRelative) } : {}),
     ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling) } : {}),
-    ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting) } : {}),
-    ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn) } : {}),
-    ...(selectedDetectors.has('collapsible-if') ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf) } : {}),
-    ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection) } : {}),
-    ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile, 'GIANT_FILE') } : {}),
-    ...(selectedDetectors.has('variable-lifetime') ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime) } : {}),
-    ...(selectedDetectors.has('temporal-coupling')
-      ? { 'temporal-coupling': enrichPhase1(temporalCoupling, 'TEMPORAL_COUPLING') }
+    ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('collapsible-if')
+      ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf, toProjectRelative) }
       : {}),
-    ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified) } : {}),
+    ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection, toProjectRelative) } : {}),
+    ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile, 'GIANT_FILE', toProjectRelative) } : {}),
+    ...(selectedDetectors.has('variable-lifetime')
+      ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime, toProjectRelative) }
+      : {}),
+    ...(selectedDetectors.has('temporal-coupling')
+      ? { 'temporal-coupling': enrichPhase1(temporalCoupling, 'TEMPORAL_COUPLING', toProjectRelative) }
+      : {}),
+    ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified, toProjectRelative) } : {}),
   };
   const diagnostics = aggregateDiagnostics({ analyses: analyses as Readonly<Record<string, unknown>> });
   const catalog = buildCatalog({ analyses, diagnostics });
+  const findings = flattenToFindings(analyses);
   const report: FirebatReport = {
     meta: {
       engine: 'oxc',
@@ -1273,6 +1282,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     },
     analyses,
     catalog,
+    findings,
   };
 
   await gildash.close({ cleanup: false });

@@ -673,6 +673,7 @@ export interface FirebatReport {
   readonly meta: FirebatMeta;
   readonly analyses: Partial<FirebatAnalyses>;
   readonly catalog: Readonly<Partial<Record<FirebatCatalogCode, CatalogEntry>>>;
+  readonly findings: ReadonlyArray<Finding>;
 }
 
 interface FirebatJsonReport {
@@ -691,6 +692,41 @@ export const toJsonReport = (report: FirebatReport): FirebatJsonReport => ({
   ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0 ? { errors: report.meta.errors } : {}),
   blockers: countBlockers(report.analyses),
   analyses: report.analyses,
+});
+
+// ── Flat Finding schema (agent-optimized scan output) ────────────────────────
+
+export interface Finding {
+  readonly id: string;
+  readonly category: string;
+  readonly code: string;
+  readonly file: string;
+  readonly line: number;
+  readonly kind: string;
+  readonly label: string;
+  readonly group_id: string | null;
+  readonly primary: boolean;
+  readonly detail: Readonly<Record<string, unknown>> | null;
+}
+
+export interface ScanJsonResult {
+  readonly meta: {
+    readonly detectors: ReadonlyArray<FirebatDetector>;
+    readonly errors?: Readonly<Record<string, string>>;
+  };
+  readonly total: number;
+  readonly findings: ReadonlyArray<Finding>;
+}
+
+export const toScanResult = (report: FirebatReport, findings: ReadonlyArray<Finding>): ScanJsonResult => ({
+  meta: {
+    detectors: report.meta.detectors,
+    ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0
+      ? { errors: report.meta.errors }
+      : {}),
+  },
+  total: findings.length,
+  findings,
 });
 
 export interface NodeHeader {

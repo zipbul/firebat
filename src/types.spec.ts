@@ -41,6 +41,7 @@ const makeReport = (
   },
   analyses,
   catalog: {},
+  findings: [],
 });
 
 // ── Tests ────────────────────────────────────────────────────────────

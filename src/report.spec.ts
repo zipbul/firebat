@@ -20,6 +20,7 @@ const makeReport = (
   meta: { engine: 'oxc', targetCount: 1, minSize: 0, maxForwardDepth: 0, detectors, detectorTimings: {}, errors: {} },
   analyses,
   catalog: {},
+  findings: [],
 });
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -32,54 +33,54 @@ describe('formatReport', () => {
     expect(() => JSON.parse(out)).not.toThrow();
   });
 
-  it('should output detectors at root level and omit meta key', () => {
+  it('should output meta.detectors and total at root level', () => {
     const report = makeReport(['waste'], {
       waste: [{ kind: 'dead-store', label: 'x', message: '', filePath: testFile, span: span() }],
     });
     const parsed = JSON.parse(formatReport(report));
 
-    expect(Array.isArray(parsed.detectors)).toBe(true);
-    expect(parsed.detectors).toContain('waste');
-    expect('meta' in parsed).toBe(false);
-    expect(Array.isArray(parsed.analyses.waste)).toBe(true);
+    expect(parsed.meta.detectors).toContain('waste');
+    expect(typeof parsed.total).toBe('number');
+    expect(Array.isArray(parsed.findings)).toBe(true);
+    expect('analyses' in parsed).toBe(false);
   });
 
-  it('should include errors at root when meta.errors is non-empty', () => {
+  it('should include errors in meta when meta.errors is non-empty', () => {
     const report: FirebatReport = {
       ...makeReport(['waste'], { waste: [] }),
       meta: { ...makeReport(['waste']).meta, errors: { 'src/a.ts': 'parse error' } },
     };
     const parsed = JSON.parse(formatReport(report));
 
-    expect(parsed.errors).toBeDefined();
-    expect(parsed.errors['src/a.ts']).toBe('parse error');
+    expect(parsed.meta.errors).toBeDefined();
+    expect(parsed.meta.errors['src/a.ts']).toBe('parse error');
   });
 
-  it('should omit errors key when meta.errors is undefined', () => {
+  it('should omit errors key in meta when meta.errors is undefined', () => {
     const report: FirebatReport = {
       ...makeReport(['waste'], { waste: [] }),
       meta: (({ errors: _e, ...rest }) => rest)(makeReport(['waste']).meta),
     };
     const parsed = JSON.parse(formatReport(report));
 
-    expect('errors' in parsed).toBe(false);
+    expect('errors' in parsed.meta).toBe(false);
   });
 
-  it('should omit errors key when meta.errors is empty object', () => {
+  it('should omit errors key in meta when meta.errors is empty object', () => {
     const report = makeReport(['waste'], { waste: [] });
     const parsed = JSON.parse(formatReport(report));
 
-    expect('errors' in parsed).toBe(false);
+    expect('errors' in parsed.meta).toBe(false);
   });
 
-  it('should include errors at root when meta.errors has exactly one key', () => {
+  it('should include errors in meta when meta.errors has exactly one key', () => {
     const report: FirebatReport = {
       ...makeReport(['waste'], { waste: [] }),
       meta: { ...makeReport(['waste']).meta, errors: { 'src/only.ts': 'err' } },
     };
     const parsed = JSON.parse(formatReport(report));
 
-    expect(parsed.errors).toBeDefined();
-    expect(Object.keys(parsed.errors).length).toBe(1);
+    expect(parsed.meta.errors).toBeDefined();
+    expect(Object.keys(parsed.meta.errors).length).toBe(1);
   });
 });

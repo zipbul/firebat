@@ -11,7 +11,7 @@ import { appendFirebatLog } from '../../shared/logger';
 import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { resolveTargets } from '../../shared/target-discovery';
-import { countBlockers } from '../../types';
+
 
 interface CliLoggerInput {
   readonly level: FirebatCliOptions['logLevel'];
@@ -279,6 +279,72 @@ const resolveCouplingConfigFromFeatures = (
   return coupling;
 };
 
+const resolveExpandedTargets = async (
+  rootAbs: string,
+  options: FirebatCliOptions,
+  cfgExclude: readonly string[] | undefined,
+  logger: FirebatLogger,
+): Promise<string[]> => {
+  if (options.targets.length > 0) {
+    const targets = await resolveTargets(rootAbs, options.targets, cfgExclude);
+
+    logger.debug('Targets expanded', { inputTargetCount: options.targets.length, expandedTargetCount: targets.length });
+
+    return targets;
+  }
+
+  const targets = await resolveTargets(rootAbs, undefined, cfgExclude);
+
+  logger.debug('Targets auto-discovered', { discoveredTargetCount: targets.length, rootAbs });
+
+  return targets;
+};
+
+interface ConfigOverrides {
+  readonly cfgDetectors: ReadonlyArray<FirebatDetector>;
+  readonly cfgMinSize: FirebatCliOptions['minSize'] | undefined;
+  readonly cfgMaxForwardDepth: number | undefined;
+  readonly cfgCrossFileMinDepth: number | undefined;
+  readonly cfgBarrelIgnoreGlobs: ReadonlyArray<string> | undefined;
+  readonly cfgDependenciesLayers: ReadonlyArray<{ readonly name: string; readonly glob: string }> | undefined;
+  readonly cfgDependenciesAllowedDeps: Readonly<Record<string, ReadonlyArray<string>>> | undefined;
+  readonly cfgCouplingConfig: FirebatCouplingConfig | undefined;
+  readonly cfgExclude: ReadonlyArray<string> | undefined;
+  readonly resolvedConfigPath: string | undefined;
+}
+
+const applyIfNotExplicit = <K extends string, V>(
+  explicit: boolean | undefined,
+  key: K,
+  value: V | undefined,
+): { [P in K]?: V } => {
+  if (explicit || value === undefined) {
+    return {};
+  }
+
+  return { [key]: value } as { [P in K]?: V };
+};
+
+const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOverrides): FirebatCliOptions => {
+  const { explicit } = options;
+
+  return {
+    ...options,
+    ...applyIfNotExplicit(explicit?.minSize, 'minSize', overrides.cfgMinSize),
+    ...applyIfNotExplicit(explicit?.maxForwardDepth, 'maxForwardDepth', overrides.cfgMaxForwardDepth),
+    ...applyIfNotExplicit(explicit?.crossFileMinDepth, 'crossFileMinDepth', overrides.cfgCrossFileMinDepth),
+    ...(explicit?.detectors ? {} : { detectors: overrides.cfgDetectors }),
+    ...(overrides.cfgBarrelIgnoreGlobs !== undefined ? { barrelIgnoreGlobs: overrides.cfgBarrelIgnoreGlobs } : {}),
+    ...(overrides.cfgDependenciesLayers !== undefined ? { dependenciesLayers: overrides.cfgDependenciesLayers } : {}),
+    ...(overrides.cfgDependenciesAllowedDeps !== undefined
+      ? { dependenciesAllowedDependencies: overrides.cfgDependenciesAllowedDeps }
+      : {}),
+    ...(overrides.cfgCouplingConfig !== undefined ? { couplingConfig: overrides.cfgCouplingConfig } : {}),
+    ...(overrides.cfgExclude !== undefined && overrides.cfgExclude.length > 0 ? { exclude: overrides.cfgExclude } : {}),
+    ...(overrides.resolvedConfigPath !== undefined ? { configPath: overrides.resolvedConfigPath } : {}),
+  };
+};
+
 const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): Promise<FirebatCliOptions> => {
   const options = parseArgs(argv);
 
@@ -292,11 +358,9 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 
   logger.debug('Project root resolved', { rootAbs });
 
-  let config: FirebatConfig | null = null;
   const configPath = options.configPath ?? resolveDefaultFirebatRcPath(rootAbs);
   const loaded = await loadFirebatConfigFile({ rootAbs, configPath });
-
-  config = loaded.config;
+  const config = loaded.config;
 
   logger.debug('Config loaded', { resolvedPath: loaded.resolvedPath, hasConfig: config !== null });
 
@@ -309,6 +373,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(featuresCfg);
   const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(featuresCfg);
   const cfgCouplingConfig = resolveCouplingConfigFromFeatures(featuresCfg);
+  const cfgExclude = config?.exclude;
 
   logger.trace('Features resolved from config', {
     detectors: cfgDetectors.length,
@@ -317,54 +382,59 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     crossFileMinDepth: cfgCrossFileMinDepth,
   });
 
-  const merged: FirebatCliOptions = {
-    ...options,
-    ...(options.explicit?.minSize ? {} : cfgMinSize !== undefined ? { minSize: cfgMinSize } : {}),
-    ...(options.explicit?.maxForwardDepth ? {} : cfgMaxForwardDepth !== undefined ? { maxForwardDepth: cfgMaxForwardDepth } : {}),
-    ...(options.explicit?.crossFileMinDepth
-      ? {}
-      : cfgCrossFileMinDepth !== undefined
-        ? { crossFileMinDepth: cfgCrossFileMinDepth }
-        : {}),
-    ...(options.explicit?.detectors ? {} : { detectors: cfgDetectors }),
-    ...(cfgBarrelIgnoreGlobs !== undefined ? { barrelIgnoreGlobs: cfgBarrelIgnoreGlobs } : {}),
-    ...(cfgDependenciesLayers !== undefined ? { dependenciesLayers: cfgDependenciesLayers } : {}),
-    ...(cfgDependenciesAllowedDeps !== undefined ? { dependenciesAllowedDependencies: cfgDependenciesAllowedDeps } : {}),
-    ...(cfgCouplingConfig !== undefined ? { couplingConfig: cfgCouplingConfig } : {}),
-    configPath: loaded.resolvedPath,
-  };
-  const cfgExclude = config?.exclude;
-  const mergedWithExclude: FirebatCliOptions = {
-    ...merged,
-    ...(cfgExclude !== undefined && cfgExclude.length > 0 ? { exclude: cfgExclude } : {}),
-  };
+  const merged = mergeConfigIntoOptions(options, {
+    cfgDetectors,
+    cfgMinSize,
+    cfgMaxForwardDepth,
+    cfgCrossFileMinDepth,
+    cfgBarrelIgnoreGlobs,
+    cfgDependenciesLayers,
+    cfgDependenciesAllowedDeps,
+    cfgCouplingConfig,
+    cfgExclude,
+    resolvedConfigPath: loaded.resolvedPath,
+  });
+  const targets = await resolveExpandedTargets(rootAbs, merged, cfgExclude, logger);
 
-  if (mergedWithExclude.targets.length > 0) {
-    const targets = await resolveTargets(rootAbs, mergedWithExclude.targets, cfgExclude);
+  return { ...merged, targets };
+};
 
-    logger.debug('Targets expanded', { inputTargetCount: mergedWithExclude.targets.length, expandedTargetCount: targets.length });
+const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof createCliLogger>): Promise<number> => {
+  let report: FirebatReport | null = null;
 
-    return {
-      ...mergedWithExclude,
-      targets,
-    };
+  try {
+    report = await scanUseCase(options, { logger });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+
+    await appendCliErrorLog(err);
+
+    logger.error('Failed', { message }, err);
+
+    return 1;
   }
 
-  const targets = await resolveTargets(rootAbs, undefined, cfgExclude);
+  if (!report) {
+    return 0;
+  }
 
-  logger.debug('Targets auto-discovered', { discoveredTargetCount: targets.length, rootAbs });
+  const output = formatReport(report);
 
-  return {
-    ...mergedWithExclude,
-    targets,
-  };
+  logger.trace('Report formatted', { length: output.length });
+
+  process.stdout.write(output + '\n');
+
+  const total = report.findings.length;
+
+  logger.debug('Findings counted', { total });
+
+  return total > 0 ? 1 : 0;
 };
 
 const runCli = async (argv: readonly string[]): Promise<number> => {
-  let exitCode = 0;
-  let options: FirebatCliOptions | null = null;
   // Create early logger for resolveOptions; upgraded after options are known.
   const earlyLogger = createCliLogger({ level: undefined, logStack: undefined });
+  let options: FirebatCliOptions | null = null;
 
   try {
     options = await resolveOptions(argv, earlyLogger);
@@ -374,53 +444,21 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     await appendCliErrorLog(err);
     createPrettyConsoleLogger({ level: 'error', includeStack: false }).error(message);
 
-    exitCode = 1;
+    return 1;
   }
 
-  if (options?.help) {
+  if (options.help) {
     return printHelpAndExit();
   }
 
-  if (exitCode === 0 && options) {
-    const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
+  const logger = createCliLogger({ level: options.logLevel, logStack: options.logStack });
 
-    logger.debug('Options resolved', {
-      targetCount: options.targets.length,
-      detectorCount: options.detectors.length,
-    });
+  logger.debug('Options resolved', {
+    targetCount: options.targets.length,
+    detectorCount: options.detectors.length,
+  });
 
-    if (exitCode === 0) {
-      let report: FirebatReport | null = null;
-
-      try {
-        report = await scanUseCase(options, { logger });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-
-        await appendCliErrorLog(err);
-
-        logger.error('Failed', { message }, err);
-
-        exitCode = 1;
-      }
-
-      if (report) {
-        const output = formatReport(report);
-
-        logger.trace('Report formatted', { length: output.length });
-
-        process.stdout.write(output + '\n');
-
-        const blockers = countBlockers(report.analyses);
-
-        logger.debug('Blocking findings counted', { blockers });
-
-        exitCode = blockers > 0 ? 1 : 0;
-      }
-    }
-  }
-
-  return exitCode;
+  return runScan(options, logger);
 };
 
 export { runCli };
