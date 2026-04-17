@@ -201,7 +201,7 @@ while true; do
 
         log "iter $ITER: plan dir=$DIR slug=$SLUG"
 
-        "$CLAUDE_BIN" -p "Invoke firebat-planner agent via Task tool with: DIR_SLUG='$SLUG', DIR_PATH='$DIR', PLAN_FILE='$PLAN_FILE', FEEDBACK_FILE='$FEEDBACK'. The agent writes the plan file. Return when the Task completes. Do not run any verification yourself — the orchestrator handles it." \
+        "$CLAUDE_BIN" -p "Invoke firebat-planner agent via Task tool with: DIR_SLUG='$SLUG', DIR_PATH='$DIR', PLAN_FILE='$PLAN_FILE', FEEDBACK_FILE='$FEEDBACK'. The agent writes the plan file. Return when the Task completes." \
           --allowed-tools "Task" \
           2>&1 | sed 's/^/  [claude] /' >&2 || {
           log "iter $ITER: claude exited non-zero — continuing"
@@ -212,11 +212,16 @@ while true; do
         ;;
       global-review)
         log "iter $ITER: global review"
-        "$CLAUDE_BIN" -p "Invoke firebat-global-reviewer agent via Task tool. The agent reads all plans + finding-index.json and creates .firebat/plan/global-review-pass on PASS, or reverts affected plans on FAIL. Return when Task completes." \
-          --allowed-tools "Task,Read,Edit,Write,Bash" \
-          2>&1 | sed 's/^/  [claude] /' >&2 || {
+        CLAUDE_OUT=$(mktemp -t firebat-claude.XXXXXX.txt)
+        "$CLAUDE_BIN" -p "Invoke firebat-global-reviewer agent via Task tool. The agent returns a <verdict> JSON block. Just dispatch the Task and return when done — do not modify files yourself." \
+          --allowed-tools "Task" \
+          > "$CLAUDE_OUT" 2>&1 || {
           log "iter $ITER: global reviewer exited non-zero — continuing"
         }
+        # 로그 출력 + 파일 기반 post 처리
+        sed 's/^/  [claude] /' < "$CLAUDE_OUT" >&2 || true
+        bash "$SCRIPTS/post-global-review.sh" < "$CLAUDE_OUT"
+        rm -f "$CLAUDE_OUT"
         ;;
       none)
         log "iter $ITER: Phase 1 idle — $(echo "$NEXT" | jq -r '.reason // "no action"')"
@@ -233,14 +238,24 @@ while true; do
     while IFS= read -r slug; do
       [[ -z "$slug" ]] && continue
       state_block "$slug" "linter-stagnation: $STAGNATION_LIMIT consecutive FAILs"
-      plan_file=$(ls "$ROOT"/plan/[0-9][0-9]-"$slug".md 2>/dev/null | head -1 || true)
-      if [[ -n "$plan_file" ]]; then
-        sed -i -E 's/^status: draft$/status: review-failed/' "$plan_file"
+      # glob-safe lookup (nullglob + ls에 매치 없는 glob 전달 시 cwd 나열되는 함정 회피)
+      _cand=("$ROOT"/plan/[0-9][0-9]-"$slug".md)
+      if [[ ${#_cand[@]} -gt 0 && -e "${_cand[0]}" ]]; then
+        sed -i -E 's/^status: draft$/status: review-failed/' "${_cand[0]}"
       fi
     done <<< "$STAGNANT_SLUGS"
 
   elif [[ "$PHASE" == "EXECUTING" ]]; then
     maybe_rescan
+
+    # Staleness 감지: 새 findings 있으면 해당 dir을 draft로 되돌리고 PLANNING 회귀
+    if ! bash "$SCRIPTS/staleness-check.sh" >/dev/null; then
+      log "iter $ITER: staleness detected — regressing to PLANNING"
+      state_set '.phase = "PLANNING"'
+      state_log "staleness regression: phase -> PLANNING"
+      continue
+    fi
+
     TOTAL=$(jq '.total' "$ROOT/scan.json")
     UNCHECKED=$(grep -cE '^- \[ \]' "$ROOT/plan/index.md" 2>/dev/null || true)
     UNCHECKED="${UNCHECKED:-0}"
@@ -289,11 +304,16 @@ while true; do
 
       log "iter $ITER: fix dir=$DIR slug=$SLUG"
 
-      "$CLAUDE_BIN" -p "Invoke firebat-fixer agent via Task tool with: DIR_SLUG='$SLUG', DIR_PATH='$DIR', PLAN_FILE='$PLAN_FILE'. The agent applies fixes per plan and returns an execution-summary. Save the summary JSON to .firebat/last-fix-summary.json. If directory_status == 'complete', mark '- [x] $SLUG' in .firebat/plan/index.md." \
-        --allowed-tools "Task,Read,Edit,Write,Bash" \
-        2>&1 | sed 's/^/  [claude] /' >&2 || {
+      CLAUDE_OUT=$(mktemp -t firebat-claude.XXXXXX.txt)
+      "$CLAUDE_BIN" -p "Invoke firebat-fixer agent via Task tool with: DIR_SLUG='$SLUG', DIR_PATH='$DIR', PLAN_FILE='$PLAN_FILE'. The agent returns an <execution-summary> JSON block. Just dispatch the Task and return when done — do not write files yourself." \
+        --allowed-tools "Task" \
+        > "$CLAUDE_OUT" 2>&1 || {
         log "iter $ITER: claude exited non-zero — continuing"
       }
+      # 로그 + bash 후처리 (summary 저장, index.md, blocked 기록)
+      sed 's/^/  [claude] /' < "$CLAUDE_OUT" >&2 || true
+      bash "$SCRIPTS/post-fix.sh" "$SLUG" < "$CLAUDE_OUT"
+      rm -f "$CLAUDE_OUT"
     else
       log "iter $ITER: Phase 2 idle — $(echo "$NEXT" | jq -r '.reason // "no action"')"
     fi

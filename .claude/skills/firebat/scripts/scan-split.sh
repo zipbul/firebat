@@ -72,7 +72,8 @@ jq -c '
   echo "$line" | jq '.' > "$BY_DIR/$slug.json"
 done
 
-BY_DIR_COUNT=$(ls "$BY_DIR"/*.json 2>/dev/null | wc -l | tr -d ' ')
+_bdf=("$BY_DIR"/*.json); BY_DIR_COUNT=${#_bdf[@]}
+[[ $BY_DIR_COUNT -gt 0 && ! -e "${_bdf[0]}" ]] && BY_DIR_COUNT=0
 echo "scan-split: $BY_DIR_COUNT by-dir files"
 
 # ── 3) tree.json ─────────────────────────────────────────────────────────────
@@ -136,7 +137,8 @@ jq -c '.[]' "$SLIM_FILE" | while IFS= read -r line; do
   }' > "$BY_DIR_SLIM/$slug.json"
 done
 
-SLIM_COUNT=$(ls "$BY_DIR_SLIM"/*.json 2>/dev/null | wc -l | tr -d ' ')
+_sf=("$BY_DIR_SLIM"/*.json); SLIM_COUNT=${#_sf[@]}
+[[ $SLIM_COUNT -gt 0 && ! -e "${_sf[0]}" ]] && SLIM_COUNT=0
 echo "scan-split: $SLIM_COUNT slim files"
 
 # ── 5) finding-index.json: 전역 인덱스 (global-reviewer 전용) ────────────────

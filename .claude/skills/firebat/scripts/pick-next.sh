@@ -25,11 +25,21 @@ fi
 
 case "$PHASE" in
   planning)
+    # glob-safe plan file lookup: nullglob 켜진 상태에서 ls에 glob 전달 시
+    # 매치 실패면 ls가 인자 없이 실행되어 cwd를 나열함 → glob array로 명시적 체크.
+    find_plan_file() {
+      local slug="$1"
+      local candidates=("$ROOT"/plan/[0-9][0-9]-"$slug".md)
+      if [[ ${#candidates[@]} -gt 0 && -e "${candidates[0]}" ]]; then
+        printf '%s' "${candidates[0]}"
+      fi
+    }
+
     # 다음 plan 대상 slug 찾기: depth DESC, dir ASC 순서로 draft/review-failed/없음 찾음
     SLUG=""
     while IFS= read -r s; do
       [[ -z "$s" ]] && continue
-      PLAN=$(ls "$ROOT"/plan/[0-9][0-9]-"$s".md 2>/dev/null | head -1 || true)
+      PLAN=$(find_plan_file "$s")
       if [[ -z "$PLAN" ]]; then
         SLUG="$s"
         break
@@ -42,12 +52,16 @@ case "$PHASE" in
     done < <(jq -r '.[].slug' "$TREE")
 
     if [[ -n "$SLUG" ]]; then
-      # plan 대상 있음
-      EXISTING=$(ls "$ROOT"/plan/[0-9][0-9]-"$SLUG".md 2>/dev/null | head -1 || true)
+      EXISTING=$(find_plan_file "$SLUG")
       if [[ -n "$EXISTING" ]]; then
         PLAN_FILE="$EXISTING"
       else
-        COUNT=$(ls "$ROOT"/plan/[0-9][0-9]-*.md 2>/dev/null | wc -l | tr -d ' ')
+        all_plans=("$ROOT"/plan/[0-9][0-9]-*.md)
+        COUNT=${#all_plans[@]}
+        # nullglob: 매치 없으면 빈 배열. 그래도 ${#arr[@]}은 0 반환.
+        if [[ $COUNT -gt 0 && ! -e "${all_plans[0]}" ]]; then
+          COUNT=0
+        fi
         NN=$(printf "%02d" $((COUNT + 1)))
         PLAN_FILE="$ROOT/plan/$NN-$SLUG.md"
       fi
@@ -81,7 +95,13 @@ case "$PHASE" in
     fi
 
     SLUG=$(echo "$ENTRY" | awk '{print $3}')
-    PLAN_FILE=$(ls "$ROOT"/plan/[0-9][0-9]-"$SLUG".md 2>/dev/null | head -1 || true)
+    # glob-safe lookup (same pattern as planning branch)
+    candidates=("$ROOT"/plan/[0-9][0-9]-"$SLUG".md)
+    if [[ ${#candidates[@]} -gt 0 && -e "${candidates[0]}" ]]; then
+      PLAN_FILE="${candidates[0]}"
+    else
+      PLAN_FILE=""
+    fi
     DIR=$(jq -r --arg s "$SLUG" '.[] | select(.slug == $s) | .dir' "$TREE")
 
     jq -n --arg action fix --arg slug "$SLUG" --arg dir "$DIR" --arg plan_file "$PLAN_FILE" \

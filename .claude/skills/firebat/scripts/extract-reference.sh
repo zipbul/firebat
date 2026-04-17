@@ -52,7 +52,13 @@ awk -v code="## $CODE" '
 #    그 블록의 fix_action 부분을 인용. 첫 매치 1개만.
 PLAN_DIR=".firebat/plan"
 if [[ -d "$PLAN_DIR" ]]; then
-  PAST_PLAN=$(grep -lE "\\*\\*code\\*\\*: $CODE\$" "$PLAN_DIR"/[0-9][0-9]-*.md 2>/dev/null | head -1 || true)
+  # glob-safe grep: nullglob으로 매치 없으면 파일 인자 없음 → stdin hang 방지
+  _pf=("$PLAN_DIR"/[0-9][0-9]-*.md)
+  if [[ ${#_pf[@]} -gt 0 ]]; then
+    PAST_PLAN=$(grep -lE "\\*\\*code\\*\\*: $CODE\$" "${_pf[@]}" 2>/dev/null | head -1 || true)
+  else
+    PAST_PLAN=""
+  fi
   if [[ -n "$PAST_PLAN" ]]; then
     # 해당 code 블록의 fix_action 라인부터 verification 라인 직전까지 추출
     # plan 본문의 필드는 "- **code**: ..." 같이 bullet으로 시작하기도 함
