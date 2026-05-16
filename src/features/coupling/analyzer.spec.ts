@@ -15,6 +15,11 @@ const emptyDeps = (): DependencyAnalysis => ({
   cuts: [],
   layerViolations: [],
   deadExports: [],
+  unusedFiles: [],
+  unusedDeps: [],
+  unresolvedImports: [],
+  duplicateExports: [],
+  unusedMembers: [],
 });
 
 describe('createEmptyCoupling', () => {
@@ -41,6 +46,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
 
@@ -66,6 +76,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
@@ -97,6 +112,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
@@ -116,6 +136,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const modules = result.map(h => h.module);
@@ -141,6 +166,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const sHotspot = result.find(h => h.module === 'S');
@@ -168,6 +198,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
@@ -197,6 +232,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
@@ -225,6 +265,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
@@ -248,6 +293,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const sHotspot = result.find(h => h.module === 'S');
@@ -278,6 +328,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
@@ -302,6 +357,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
@@ -330,6 +390,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
@@ -361,6 +426,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const aHotspot = result.find(h => h.module === 'A');
@@ -390,6 +460,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
     const hubHotspot = result.find(h => h.module === 'hub');
@@ -408,6 +483,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
     const result = analyzeCoupling(deps);
 
@@ -424,6 +504,11 @@ describe('analyzeCoupling', () => {
       cuts: [],
       layerViolations: [],
       deadExports: [],
+      unusedFiles: [],
+      unusedDeps: [],
+      unresolvedImports: [],
+      duplicateExports: [],
+      unusedMembers: [],
     };
 
     expect(analyzeCoupling(deps)).toEqual([]);

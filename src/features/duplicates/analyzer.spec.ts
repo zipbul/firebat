@@ -1,8 +1,8 @@
 import { mock, afterAll, describe, it, expect, beforeEach } from 'bun:test';
 import path from 'node:path';
+import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
-import type { DuplicateGroup } from '../../types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
 import type { NearMissCloneGroup } from './near-miss-detector';
 
@@ -271,22 +271,24 @@ describe('analyzeDuplicates', () => {
     const file = makeFile('a.ts', RENAMED_PAIR_A);
     const nmGroupItems = [
       {
-        node: {} as unknown,
+        node: {} as Node,
         kind: 'function' as const,
         header: 'nmFunc',
         filePath: 'a.ts',
         span: { start: { line: 1, column: 0 }, end: { line: 5, column: 1 } },
         size: 10,
         statementFingerprints: [],
+        fingerprintBag: [],
       },
       {
-        node: {} as unknown,
+        node: {} as Node,
         kind: 'function' as const,
         header: 'nmFunc2',
         filePath: 'b.ts',
         span: { start: { line: 1, column: 0 }, end: { line: 5, column: 1 } },
         size: 10,
         statementFingerprints: [],
+        fingerprintBag: [],
       },
     ];
 
@@ -812,22 +814,24 @@ class Beta {
     const file = makeFile('a.ts', RENAMED_PAIR_A);
     const nmGroupItems = [
       {
-        node: {} as unknown,
+        node: {} as Node,
         kind: 'function' as const,
         header: 'nmFunc',
         filePath: 'a.ts',
         span: { start: { line: 1, column: 0 }, end: { line: 5, column: 1 } },
         size: 10,
         statementFingerprints: [],
+        fingerprintBag: [],
       },
       {
-        node: {} as unknown,
+        node: {} as Node,
         kind: 'function' as const,
         header: 'nmFunc2',
         filePath: 'b.ts',
         span: { start: { line: 1, column: 0 }, end: { line: 5, column: 1 } },
         size: 10,
         statementFingerprints: [],
+        fingerprintBag: [],
       },
     ];
 

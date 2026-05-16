@@ -57,7 +57,7 @@ describe('threshold/variable-lifetime', () => {
     const findings = analyzeVariableLifetime([parse(src)], { maxLifetimeLines: 2 });
 
     // x: def line2, use line4 → lifetime=2 → should NOT fire (>2 required)
-    expect(findings.filter(f => f.variable === 'x')).toHaveLength(0);
+    expect(findings.filter(f => 'variable' in f && f.variable === 'x')).toHaveLength(0);
   });
 
   it('lifetime one over maxLifetimeLines → finding', () => {
@@ -73,7 +73,7 @@ describe('threshold/variable-lifetime', () => {
     ].join('\n');
     const findings = analyzeVariableLifetime([parse(src)], { maxLifetimeLines: 3 });
     // x: def line2, use line6 → lifetime=4 > 3 → should fire
-    const xFindings = findings.filter(f => f.variable === 'x');
+    const xFindings = findings.filter(f => 'variable' in f && f.variable === 'x');
 
     expect(xFindings.length).toBeGreaterThan(0);
   });

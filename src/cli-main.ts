@@ -1,5 +1,7 @@
-import { routeFirebatArgv, runCache, runCli, runInstall, runUpdate, type InstallDependencies } from './adapters/cli';
-import { getOrmDb } from './infrastructure/sqlite';
+import { routeFirebatArgv } from './adapters/cli/argv-router';
+import { runCache } from './adapters/cli/cache';
+import { runCli } from './adapters/cli/entry';
+import { runInstall, runUpdate } from './adapters/cli/install';
 import { appendFirebatLog, createPrettyConsoleLogger, resolveFirebatRootFromCwd } from './shared';
 
 const appendErrorLogSafe = async (_subcommand: string | undefined, message: string): Promise<void> => {
@@ -45,14 +47,9 @@ export const main = async (): Promise<void> => {
 
   const logger = createPrettyConsoleLogger({ level: logLevel ?? 'info', includeStack: routed.global.logStack });
   const subcommand = routed.subcommand;
-  const installDeps: InstallDependencies = {
-    warmupDb: async ({ rootAbs, logger: log }) => {
-      await getOrmDb({ rootAbs, logger: log });
-    },
-  };
   const subcommandHandlers: Record<string, () => Promise<number | null>> = {
-    install: () => runInstall(routed.subcommandArgv, logger, installDeps),
-    update: () => runUpdate(routed.subcommandArgv, logger, installDeps),
+    install: () => runInstall(routed.subcommandArgv, logger),
+    update: () => runUpdate(routed.subcommandArgv, logger),
     cache: () => runCache(routed.subcommandArgv, logger),
   };
 

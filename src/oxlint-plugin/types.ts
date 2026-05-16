@@ -34,13 +34,13 @@ interface CommentNode {
   type?: string;
 }
 
-interface AstRoot {
+export interface AstRoot {
   comments?: CommentNode[];
 }
 
-interface Scope {}
+export interface Scope {}
 
-type SourceToken = Token;
+export type SourceToken = Token;
 
 export interface Fix {
   range: Range;
@@ -127,7 +127,7 @@ export interface Fixer {
   remove(node: AstNode): Fix;
 }
 
-interface ReportDescriptor {
+export interface ReportDescriptor {
   messageId: string;
   node: AstNode | CommentNode;
   data?: Record<string, string>;

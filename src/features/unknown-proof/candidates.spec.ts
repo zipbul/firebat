@@ -233,7 +233,6 @@ describe('features/unknown-proof/candidates — collectBindingCandidates', () =>
     expect(zCandidate!.scopeRange).toBeDefined();
 
     // inner body is narrower than outer body
-    const outerBody = f.sourceText.indexOf('{ function inner');
     const innerBody = f.sourceText.indexOf('{ const z');
 
     expect(zCandidate!.scopeRange!.start).toBeGreaterThanOrEqual(innerBody);

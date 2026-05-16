@@ -106,7 +106,7 @@ export const buildMockGildashFromSources = (sources: Map<string, string> | Recor
   const reverseAdj = new Map<string, string[]>();
 
   for (const rel of relations) {
-    if (rel.type !== 'imports') {
+    if (rel.type !== 'imports' || rel.dstFilePath === null) {
       continue;
     }
 

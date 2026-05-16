@@ -144,7 +144,7 @@ describe('integration/dependencies', () => {
     }
   });
 
-  it.todo('should resolve index modules when importing a directory');
+  it.todo('should resolve index modules when importing a directory', () => {});
 
   it('should include export-from edges when building the graph', async () => {
     const sources = new Map<string, string>();
