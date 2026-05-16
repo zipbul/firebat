@@ -52,6 +52,24 @@ describe('engine/ast/ast-normalizer', () => {
         'export function f(n) { let i = 0; while (i < n) { console.log(i); i++; } }',
       );
     });
+
+    it('should NOT normalize for-loop with continue (semantics differ)', () => {
+      // for-loop: continue runs the update; manual while equivalent must explicitly run it.
+      // Appending update to the body unconditionally changes meaning when continue is present
+      // (continue would skip the appended update → semantically different / infinite loop).
+      expectDifferentNormalized(
+        'export function f(n) { for (let i = 0; i < n; i++) { if (i % 2 === 0) continue; console.log(i); } }',
+        'export function f(n) { let i = 0; while (i < n) { if (i % 2 === 0) continue; console.log(i); i++; } }',
+      );
+    });
+
+    it('should still normalize for-loop when continue is inside a NESTED loop only', () => {
+      // The continue here targets the inner loop, not the outer for; outer for is safe to normalize.
+      expectSameNormalized(
+        'export function f(n) { for (let i = 0; i < n; i++) { for (let j = 0; j < 3; j++) { if (j === 1) continue; } } }',
+        'export function f(n) { let i = 0; while (i < n) { for (let j = 0; j < 3; j++) { if (j === 1) continue; } i++; } }',
+      );
+    });
   });
 
   describe('rule 3: template literal → concatenation normalization', () => {
