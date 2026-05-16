@@ -415,15 +415,18 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
   const outDegree = new Map<string, number>();
 
   for (const [from, targets] of absGraph.entries()) {
-    adjacencyOut[toRelativePath(rootAbs, from)] = targets.map(t => toRelativePath(rootAbs, t));
+    // Dedupe edges: multiple import declarations to the same target count as one edge.
+    const uniqueTargets = Array.from(new Set(targets));
 
-    outDegree.set(from, targets.length);
+    adjacencyOut[toRelativePath(rootAbs, from)] = uniqueTargets.map(t => toRelativePath(rootAbs, t));
+
+    outDegree.set(from, uniqueTargets.length);
 
     if (!inDegree.has(from)) {
       inDegree.set(from, 0);
     }
 
-    for (const target of targets) {
+    for (const target of uniqueTargets) {
       const prev = inDegree.get(target) ?? 0;
 
       inDegree.set(target, prev + 1);

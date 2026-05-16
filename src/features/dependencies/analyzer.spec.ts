@@ -195,6 +195,26 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.fanOut[0]!.count).toBe(2);
   });
 
+  it('should deduplicate repeated edges to the same module in adjacency and fan metrics', async () => {
+    // a.ts imports b.ts twice (e.g. two import declarations to same module).
+    // Previously fanIn=2 and fanOut=2 were reported because targets.length / per-target
+    // increment counted duplicates.
+    const graph = new Map<string, string[]>([
+      ['/project/a.ts', ['/project/b.ts', '/project/b.ts']],
+      ['/project/b.ts', []],
+    ]);
+    const g = createMockGildash({ getImportGraph: async () => graph });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.adjacency['a.ts']).toEqual(['b.ts']);
+
+    const aFanOut = result.fanOut.find(entry => entry.module === 'a.ts');
+    const bFanIn = result.fanIn.find(entry => entry.module === 'b.ts');
+
+    expect(aFanOut?.count).toBe(1);
+    expect(bFanIn?.count).toBe(1);
+  });
+
   it('should detect cycles via getCyclePaths with relative paths', async () => {
     const graph = new Map<string, string[]>([
       ['/project/a.ts', ['/project/b.ts']],
