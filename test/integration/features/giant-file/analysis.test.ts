@@ -3,9 +3,9 @@ import { describe, expect, it } from 'bun:test';
 import { scanUseCase } from '../../../../src/test-api';
 import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
 
-const expectBaseFinding = (item: any): void => {
+const expectBaseFinding = (item: any, expectedKind: string = 'giant-file'): void => {
   expect(item).toBeDefined();
-  expect(typeof item.kind).toBe('string');
+  expect(item.kind).toBe(expectedKind);
   expect(typeof item.file).toBe('string');
   expect(item.file.endsWith('.ts')).toBe(true);
   expect(item.span).toBeDefined();
@@ -175,7 +175,7 @@ describe('integration/giant-file', () => {
 
       expect(Array.isArray(list)).toBe(true);
       expect((list ?? []).length).toBeGreaterThan(0);
-      expect(typeof list?.[0]?.kind).toBe('string');
+      expect(list?.[0]?.kind).toBe('giant-file');
       expect(typeof list?.[0]?.file).toBe('string');
       expect(list?.[0]?.span).toBeDefined();
       expect(list?.[0]?.code).toBeDefined();

@@ -3,9 +3,22 @@ import { describe, expect, it } from 'bun:test';
 import { scanUseCase } from '../../../../src/test-api';
 import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
 
-const expectBaseFinding = (item: any): void => {
+const VARIABLE_LIFETIME_KINDS: ReadonlyArray<string> = [
+  'variable-lifetime',
+  'scope-narrowing',
+  'liveness-pressure',
+  'mutation-density',
+];
+
+const expectBaseFinding = (item: any, expectedKind?: string): void => {
   expect(item).toBeDefined();
-  expect(typeof item.kind).toBe('string');
+
+  if (expectedKind !== undefined) {
+    expect(item.kind).toBe(expectedKind);
+  } else {
+    expect(VARIABLE_LIFETIME_KINDS).toContain(item.kind);
+  }
+
   expect(typeof item.file).toBe('string');
   expect(item.file.endsWith('.ts')).toBe(true);
   expect(item.span).toBeDefined();

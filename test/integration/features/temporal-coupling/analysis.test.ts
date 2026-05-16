@@ -3,9 +3,9 @@ import { describe, expect, it } from 'bun:test';
 import { scanUseCase } from '../../../../src/test-api';
 import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
 
-const expectBaseFinding = (item: any): void => {
+const expectBaseFinding = (item: any, expectedKind: string = 'temporal-coupling'): void => {
   expect(item).toBeDefined();
-  expect(typeof item.kind).toBe('string');
+  expect(item.kind).toBe(expectedKind);
   expect(typeof item.file).toBe('string');
   expect(item.file.endsWith('.ts')).toBe(true);
   expect(item.span).toBeDefined();
