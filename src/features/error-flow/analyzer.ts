@@ -1076,14 +1076,14 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
               if (assignable !== null) {
                 shouldFlag = assignable;
               } else {
-                shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+                shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
               }
             } catch {
               // semantic layer 미활성 등 → AST 휴리스틱 fallback
-              shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+              shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
             }
           } else {
-            shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression';
+            shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
           }
 
           if (shouldFlag) {

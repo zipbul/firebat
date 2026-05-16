@@ -1211,6 +1211,26 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('should report return-await-in-try when returning import() without await in try block with catch', async () => {
+    // Arrange — dynamic import returns a Promise; without await, catch cannot intercept
+    const filePath = '/virtual/src/features/return-import-no-await.ts';
+    const source = [
+      'export async function f() {',
+      '  try {',
+      '    return import("./mod");',
+      '  } catch (e) {',
+      '    return null;',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
+
+    // Assert
+    expect(hits.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('should not report return-await-in-try when return uses await', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-with-await.ts';
