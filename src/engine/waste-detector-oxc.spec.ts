@@ -212,6 +212,23 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  it('detectWasteOxc - try { throw } catch(e) { read x } - no FP on x', () => {
+    // Arrange — `x` is read inside catch. Previously the CFG sent every throw straight
+    // to function exit (ignoring the active catch entry), so catch-body reads were
+    // invisible to the dataflow and `let x = 1` was wrongly flagged as dead.
+    const source = `function f() {
+      let x = 1;
+      try { throw new Error('boom'); }
+      catch (e) { console.log(x); }
+    }`;
+    const f = toFile('/try-catch-read.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
+  });
+
   it('detectWasteOxc - outer let shadowed by inner block let - outer is dead', () => {
     // Arrange — outer `x = 1` is never read; inner `x = 2` is read only inside its block.
     // Previously the name-only var-index treated both as one variable, and the
