@@ -141,21 +141,22 @@ const buildVarHasAnyUsedDef = (
  * refer to different bindings (one shadows the other).
  *
  * Implementation: walk the function body with `ScopeTracker`, recording each
- * Identifier's site → its declaration's scope. ScopeTracker handles every
- * binding kind (let/const/var/param/catch/import/class) and every scope-
- * creating construct (block / for / catch / function / class) automatically,
- * which covers cases the hand-rolled BlockStatement-only logic missed
- * (for-init scope, catch-param scope, class-body, IIFE).
+ * Identifier's location → its declaration's scope. ScopeTracker handles every
+ * binding kind (let/const/var/catch/import/class) and every scope-creating
+ * construct (block / for / catch / function / class) automatically.
  *
- * `PARAM_SCOPE = ""` is the sentinel for parameter bindings and any def
- * whose location ScopeTracker doesn't resolve (e.g. seeded entry defs).
+ * Defs whose location ScopeTracker doesn't resolve fall back to PARAM_SCOPE.
+ * This covers function-parameter bindings (their identifiers live outside the
+ * body that the walk traverses) and any seed defs introduced by the CFG
+ * builder. Inner shadows (`function f(x) { { let x = 1; ... } }`) keep their
+ * distinct inner scope key — parameter-name lookup is NOT used to coalesce
+ * them.
  */
 const PARAM_SCOPE = '';
 
 const buildScopeMapForFunctionBody = (
   body: Node | ReadonlyArray<Node>,
   defs: ReadonlyArray<{ name: string; location: number } | undefined>,
-  parameterNames: ReadonlySet<string>,
 ): ReadonlyArray<string> => {
   const bodies: ReadonlyArray<Node> = Array.isArray(body) ? (body as ReadonlyArray<Node>) : [body as Node];
   const scopeByIdLocation = new Map<number, string>();
@@ -187,12 +188,6 @@ const buildScopeMapForFunctionBody = (
     const meta = defs[defId];
 
     if (!meta) {
-      continue;
-    }
-
-    if (parameterNames.has(meta.name)) {
-      result[defId] = PARAM_SCOPE;
-
       continue;
     }
 
@@ -303,8 +298,7 @@ const collectWasteFindingsForFunction = (
     closureReadNames,
   );
   const varHasAnyUsedDef = buildVarHasAnyUsedDef(defs, usedDefs, localIndexByName.size);
-  const parameterNameSet = new Set(parameterBindings.map(b => b.name));
-  const scopeOfDef = buildScopeMapForFunctionBody(functionBodyNode, defs, parameterNameSet);
+  const scopeOfDef = buildScopeMapForFunctionBody(functionBodyNode, defs);
   const varScopeHasUsedDef = buildVarScopeHasUsedDef(defs, usedDefs, scopeOfDef);
 
   // Deduplicate findings by (name, source location). The CFG may model the same

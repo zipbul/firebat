@@ -347,7 +347,10 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
         }
 
         // FormalParameter (BindingPattern) or FormalParameterRest (RestElement).
-        const paramHasAnnotation = param.type !== 'Identifier' || param.typeAnnotation != null;
+        // Every parameter variant in oxc-parser exposes `typeAnnotation`; check it
+        // directly rather than aliasing the `!== 'Identifier'` discriminator to
+        // "annotated" (which falsely flagged every destructured/rest param).
+        const paramHasAnnotation = param.typeAnnotation != null;
         const targetPattern: BindingPattern = param.type === 'RestElement' ? param.argument : param;
         const ids = extractBindingIdentifiers(targetPattern);
 
@@ -385,7 +388,10 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
       const initObjectEnd = getInitObjectEndOffset(node.init);
       const explicitAnyTypeArg = hasExplicitAnyTypeArgument(node.init);
       const explicitCast = hasExplicitCastToAnyUnknown(node.init);
-      const hasAnnotation = node.id.type !== 'Identifier' || node.id.typeAnnotation != null;
+      // BindingPattern variants (Identifier / Object / Array / Assignment) all
+      // expose `typeAnnotation`; check it directly. The earlier `type !== 'Identifier'`
+      // shortcut wrongly flagged every destructured/array-pattern declarator as annotated.
+      const hasAnnotation = node.id.typeAnnotation != null;
 
       for (const id of ids) {
         pushCandidate(id, false, initCalleeEndOffset, {
