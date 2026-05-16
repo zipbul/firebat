@@ -60,17 +60,18 @@ describe('formatReport', () => {
     expect(parsed.findings[0].line).toBe(10);
   });
 
-  it('never emits errors in meta — detector errors go to stderr, not stdout JSON', () => {
+  it('should include errors in meta when meta.errors is non-empty', () => {
     const report: FirebatReport = {
       ...makeReport(['waste'], { waste: [] }),
-      meta: { ...makeReport(['waste']).meta, errors: { 'src/a.ts': 'parse error', typecheck: 'tsconfig missing' } },
+      meta: { ...makeReport(['waste']).meta, errors: { 'src/a.ts': 'parse error' } },
     };
     const parsed = JSON.parse(formatReport(report));
 
-    expect('errors' in parsed.meta).toBe(false);
+    expect(parsed.meta.errors).toBeDefined();
+    expect(parsed.meta.errors['src/a.ts']).toBe('parse error');
   });
 
-  it('omits errors key in meta when meta.errors is undefined', () => {
+  it('should omit errors key in meta when meta.errors is undefined', () => {
     const report: FirebatReport = {
       ...makeReport(['waste'], { waste: [] }),
       meta: (({ errors: _e, ...rest }) => rest)(makeReport(['waste']).meta),
@@ -80,11 +81,22 @@ describe('formatReport', () => {
     expect('errors' in parsed.meta).toBe(false);
   });
 
-  it('omits errors key in meta when meta.errors is empty object', () => {
+  it('should omit errors key in meta when meta.errors is empty object', () => {
     const report = makeReport(['waste'], { waste: [] });
     const parsed = JSON.parse(formatReport(report));
 
     expect('errors' in parsed.meta).toBe(false);
+  });
+
+  it('should include errors in meta when meta.errors has exactly one key', () => {
+    const report: FirebatReport = {
+      ...makeReport(['waste'], { waste: [] }),
+      meta: { ...makeReport(['waste']).meta, errors: { 'src/only.ts': 'err' } },
+    };
+    const parsed = JSON.parse(formatReport(report));
+
+    expect(parsed.meta.errors).toBeDefined();
+    expect(Object.keys(parsed.meta.errors).length).toBe(1);
   });
 
   it('preserves required Finding fields through JSON round-trip', () => {

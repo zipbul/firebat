@@ -417,12 +417,6 @@ const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof cre
     return 0;
   }
 
-  if (report.meta.errors !== undefined) {
-    for (const [key, message] of Object.entries(report.meta.errors)) {
-      logger.error('Detector error', { key, message });
-    }
-  }
-
   const output = formatReport(report);
 
   logger.trace('Report formatted', { length: output.length });
@@ -430,8 +424,13 @@ const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof cre
   process.stdout.write(output + '\n');
 
   const total = report.findings.length;
+  const hasDetectorErrors = report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0;
 
-  logger.debug('Findings counted', { total });
+  logger.debug('Findings counted', { total, hasDetectorErrors });
+
+  if (hasDetectorErrors) {
+    return 2;
+  }
 
   return total > 0 ? 1 : 0;
 };
