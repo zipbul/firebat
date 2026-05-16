@@ -89,6 +89,24 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
 
     logger.debug('oxfmt: process exited', { exitCode });
 
+    // Distinguish "files need formatting" (exit non-zero, stdout lists files) from
+    // "tool failed" (exit non-zero, stdout empty, stderr has error text). Without
+    // this guard a config-error report was treated as a successful check with zero
+    // files needing format.
+    if (exitCode !== 0 && stdout.trim().length === 0) {
+      const trimmedStderr = stderr.trim();
+      const error = trimmedStderr.length > 0 ? trimmedStderr.split('\n')[0]! : `oxfmt exited with code ${exitCode}`;
+
+      return {
+        ok: false,
+        tool: 'oxfmt',
+        exitCode,
+        rawStdout: stdout,
+        rawStderr: stderr,
+        error,
+      };
+    }
+
     return {
       ok: true,
       tool: 'oxfmt',

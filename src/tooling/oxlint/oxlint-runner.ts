@@ -184,8 +184,28 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
     logger.trace('oxlint: non-zero exit code (may indicate findings)', { exitCode });
   }
 
+  // Distinguish "expected non-zero exit because of lint findings" from "tool failed":
+  // when oxlint exits non-zero AND we could not parse any diagnostics from stdout/stderr,
+  // something went wrong (typically a config error printed to stderr as plain text).
+  // Report ok:false so analyzers surface the failure instead of silently returning [].
+  const looksLikeFailure = exitCode !== 0 && diagnostics.length === 0;
+  const trimmedStderr = stderr.trim();
+  const stderrSummary = trimmedStderr.length > 0 ? trimmedStderr.split('\n')[0]! : `oxlint exited with code ${exitCode}`;
+
+  if (looksLikeFailure) {
+    return {
+      ok: false,
+      tool: 'oxlint',
+      exitCode,
+      rawStdout: stdout,
+      rawStderr: stderr,
+      diagnostics,
+      error: stderrSummary,
+    };
+  }
+
   // Non-zero exit codes are expected when lint findings exist. Treat the run as successful
-  // as long as the tool executed.
+  // as long as the tool produced diagnostics.
   return {
     ok: true,
     tool: 'oxlint',

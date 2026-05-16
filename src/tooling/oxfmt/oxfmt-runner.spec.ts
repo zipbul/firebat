@@ -107,6 +107,37 @@ describe('runOxfmt', () => {
     expect(capturedCmd).not.toContain('--config');
   });
 
+  it('should return ok:false when exit code is non-zero with empty stdout (config error)', async () => {
+    // Real-world scenario: `bunx oxfmt --check --config /tmp/no-such.json` exits 1 with
+    // stderr "Failed to load configuration file" and empty stdout. Previously oxfmt-runner
+    // returned ok:true and analyzeFormat silently returned [] (no files-need-format) and
+    // the failure was invisible.
+    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
+      makeProc('', 'Failed to load configuration file\nFailed to read /tmp/no-such.json: File not found\n', 1) as ReturnType<
+        typeof Bun.spawn
+      >,
+    );
+
+    const result = await runOxfmt({ targets: ['/f.ts'], mode: 'check', logger });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.error).toBeDefined();
+  });
+
+  it('should return ok:true when exit code is non-zero but stdout lists files (check mode with diffs)', async () => {
+    // Normal check-mode failure path: exit 1 means files need formatting, stdout lists them.
+    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
+      makeProc('src/a.ts\nsrc/b.ts\n', '', 1) as ReturnType<typeof Bun.spawn>,
+    );
+
+    const result = await runOxfmt({ targets: ['/f.ts'], mode: 'check', logger });
+
+    expect(result.ok).toBe(true);
+    expect(result.exitCode).toBe(1);
+    expect(result.rawStdout).toContain('src/a.ts');
+  });
+
   it('should return ok:false with error message when spawn throws', async () => {
     // Arrange
     spawnSpy = spyOn(Bun, 'spawn').mockImplementation(() => {

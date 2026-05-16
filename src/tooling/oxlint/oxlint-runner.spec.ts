@@ -146,6 +146,21 @@ describe('runOxlint', () => {
     expect(result.ok).toBe(true);
     expect(result.diagnostics).toEqual([]);
   });
+
+  it('should return ok:false when exit code is non-zero and no diagnostics were parsed (config error)', async () => {
+    // Real-world scenario: `bunx oxlint --config /tmp/no-such.json` exits 1 with stderr
+    // "Failed to parse oxlint configuration file." and empty stdout. Previously oxlint-runner
+    // returned ok:true with empty diagnostics, so analyzeLint silently returned [].
+    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
+      makeProc('', 'Failed to parse oxlint configuration file.\n', 1) as ReturnType<typeof Bun.spawn>,
+    );
+
+    const result = await runOxlint({ targets: ['/a.ts'], logger });
+
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(1);
+    expect(result.error).toBeDefined();
+  });
 });
 
 afterAll(() => {
