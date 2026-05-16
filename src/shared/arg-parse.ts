@@ -229,7 +229,6 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
-
     if (arg === '--only') {
       const value = argv[i + 1];
 

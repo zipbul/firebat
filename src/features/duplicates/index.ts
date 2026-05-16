@@ -1,1 +1,1 @@
-export { analyzeDuplicates, createEmptyDuplicates } from './analyzer';
+export { analyzeDuplicates, createEmptyDuplicates, isCloneTarget } from './analyzer';

@@ -188,7 +188,7 @@ fi
 # ============================================================
 
 CDD_BLOCK=$(awk '/^## Cross-Directory Decisions Locked/,0' "$PLAN_FILE" || true)
-DEFERRAL_PATTERNS='나중에|TBD|to be determined|to be decided|will decide|pending|parent plan|parent will|parent defines|yields to|finalized by|selected by|awaits?|subject to'
+DEFERRAL_PATTERNS='나중에|TBD|to be determined|to be decided|will decide|pending|parent plan|parent will|parent defines|yields to|finalized by|selected by|\bawaits\b|subject to'
 
 if [[ -z "$CDD_BLOCK" ]]; then
   set_check "C5" "false" "Cross-Directory Decisions Locked section missing"

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'bun:test';
-
 import type { Gildash } from '@zipbul/gildash';
+
+import { describe, expect, it } from 'bun:test';
 
 import { analyzeErrorFlow } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';

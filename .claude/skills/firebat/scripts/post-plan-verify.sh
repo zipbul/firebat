@@ -40,7 +40,7 @@ if [[ "$RESULT" == "PASS" ]]; then
   sed -i -E 's/^status: draft$/status: reviewed-pass/' "$PLAN_FILE"
 
   [[ -f "$INDEX" ]] || printf -- '---\nphase: PLANNING\n---\n\n# Directory Plan Index\n\n' > "$INDEX"
-  grep -qF "- [ ] $SLUG" "$INDEX" || grep -qF "- [x] $SLUG" "$INDEX" || echo "- [ ] $SLUG" >> "$INDEX"
+  grep -qF -- "- [ ] $SLUG" "$INDEX" || grep -qF -- "- [x] $SLUG" "$INDEX" || echo "- [ ] $SLUG" >> "$INDEX"
   rm -f "$FEEDBACK"
 
   if [[ -f "$STATE" ]]; then

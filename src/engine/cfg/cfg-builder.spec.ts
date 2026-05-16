@@ -10,7 +10,7 @@ import { OxcCFGBuilder } from './cfg-builder';
 import { EdgeType } from './cfg-types';
 
 const getFunctionBody = (fn: Node): NodeRecord => {
-  const body = fn.body;
+  const body = (fn as unknown as Record<string, unknown>)['body'];
 
   if (!isOxcNode(body) || body.type !== 'BlockStatement') {
     throw new Error('Expected BlockStatement');
@@ -138,6 +138,16 @@ const buildAdjacency = (edges: Int32Array, nodeCount: number): number[][] => {
   return adjacency;
 };
 
+const enqueueUnvisitedNeighbors = (adjacency: number[][], current: number, visited: Set<number>, queue: number[]): void => {
+  const neighbors = adjacency[current] ?? [];
+
+  for (const next of neighbors) {
+    if (!visited.has(next)) {
+      queue.push(next);
+    }
+  }
+};
+
 const isReachable = (adjacency: number[][], startNode: number, targetNode: number): boolean => {
   const visited = new Set<number>();
   const queue: number[] = [startNode];
@@ -158,14 +168,7 @@ const isReachable = (adjacency: number[][], startNode: number, targetNode: numbe
     }
 
     visited.add(current);
-
-    const neighbors = adjacency[current] ?? [];
-
-    for (const next of neighbors) {
-      if (!visited.has(next)) {
-        queue.push(next);
-      }
-    }
+    enqueueUnvisitedNeighbors(adjacency, current, visited, queue);
   }
 
   return false;

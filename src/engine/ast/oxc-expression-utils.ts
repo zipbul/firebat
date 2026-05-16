@@ -20,6 +20,48 @@ const unwrapExpression = (node: Node | null | undefined): Node | null => {
   return current;
 };
 
+const evalLiteralTruthiness = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+
+  if (typeof value === 'bigint') {
+    return value !== 0n;
+  }
+
+  if (typeof value === 'string') {
+    return value.length > 0;
+  }
+
+  if (value === null) {
+    return false;
+  }
+
+  return null;
+};
+
+const evalUnaryTruthiness = (unwrapped: Node): boolean | null => {
+  const r = unwrapped as unknown as Record<string, unknown>;
+  const operator = typeof r.operator === 'string' ? r.operator : '';
+  const argument = r.argument;
+
+  if (operator === 'void') {
+    return false;
+  }
+
+  if (operator === '!') {
+    const inner = evalStaticTruthiness(argument as Node | null);
+
+    return inner === null ? null : !inner;
+  }
+
+  return null;
+};
+
 const evalStaticTruthiness = (node: Node | null | undefined): boolean | null => {
   const unwrapped = unwrapExpression(node);
 
@@ -28,44 +70,11 @@ const evalStaticTruthiness = (node: Node | null | undefined): boolean | null => 
   }
 
   if (unwrapped.type === 'Literal') {
-    const value = unwrapped.value;
-
-    if (typeof value === 'boolean') {
-      return value;
-    }
-
-    if (typeof value === 'number') {
-      return value !== 0;
-    }
-
-    if (typeof value === 'bigint') {
-      return value !== 0n;
-    }
-
-    if (typeof value === 'string') {
-      return value.length > 0;
-    }
-
-    if (value === null) {
-      return false;
-    }
-
-    return null;
+    return evalLiteralTruthiness(unwrapped.value);
   }
 
   if (unwrapped.type === 'UnaryExpression') {
-    const operator = typeof unwrapped.operator === 'string' ? unwrapped.operator : '';
-    const argument = unwrapped.argument;
-
-    if (operator === 'void') {
-      return false;
-    }
-
-    if (operator === '!') {
-      const inner = evalStaticTruthiness(argument as Node | null);
-
-      return inner === null ? null : !inner;
-    }
+    return evalUnaryTruthiness(unwrapped);
   }
 
   return null;

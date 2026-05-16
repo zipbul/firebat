@@ -12,6 +12,22 @@ type FirebatArgvRoute = {
   readonly subcommandArgv: ReadonlyArray<string>;
 };
 
+const extractLogLevelFromFlag = (arg: string, nextArg: string | undefined): { value: string | undefined; skip: boolean } => {
+  if (arg === '--log-level') {
+    const value = typeof nextArg === 'string' && nextArg.length > 0 ? nextArg : undefined;
+
+    return { value, skip: true };
+  }
+
+  if (arg.startsWith('--log-level=')) {
+    const value = arg.slice('--log-level='.length);
+
+    return { value: value.length > 0 ? value : undefined, skip: false };
+  }
+
+  return { value: undefined, skip: false };
+};
+
 const parseGlobalLogOptions = (argv: readonly string[]): FirebatGlobalLogOptions => {
   let logLevel: string | undefined;
   let logStack = false;
@@ -25,24 +41,14 @@ const parseGlobalLogOptions = (argv: readonly string[]): FirebatGlobalLogOptions
       continue;
     }
 
-    if (arg === '--log-level') {
-      const value = argv[i + 1];
+    const { value, skip } = extractLogLevelFromFlag(arg, argv[i + 1]);
 
-      if (typeof value === 'string' && value.length > 0) {
-        logLevel = value;
-      }
-
-      i += 1;
-
-      continue;
+    if (value !== undefined) {
+      logLevel = value;
     }
 
-    if (arg.startsWith('--log-level=')) {
-      const value = arg.slice('--log-level='.length);
-
-      if (value.length > 0) {
-        logLevel = value;
-      }
+    if (skip) {
+      i += 1;
     }
   }
 
@@ -54,14 +60,7 @@ const parseGlobalLogOptions = (argv: readonly string[]): FirebatGlobalLogOptions
 };
 
 const isCommandToken = (token: string): token is Exclude<FirebatSubcommand, undefined> | 'i' | 'u' => {
-  return (
-    token === 'scan' ||
-    token === 'install' ||
-    token === 'i' ||
-    token === 'update' ||
-    token === 'u' ||
-    token === 'cache'
-  );
+  return token === 'scan' || token === 'install' || token === 'i' || token === 'update' || token === 'u' || token === 'cache';
 };
 
 const normalizeSubcommand = (token: string): FirebatSubcommand => {

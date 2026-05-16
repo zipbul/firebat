@@ -2,9 +2,27 @@ import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from './types';
 
-import { collectFunctionNodesWithParent } from './ast/oxc-ast-utils';
+import { collectFunctionNodesWithParent } from './ast';
 
 type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string, parent: Node | null) => TItem | null;
+
+const collectFunctionItemsFromFile = <TItem>(
+  file: ParsedFile,
+  analyzeFunctionNode: FunctionNodeAnalyzer<TItem>,
+  items: TItem[],
+): void => {
+  const functions = collectFunctionNodesWithParent(file.program);
+
+  for (const { node, parent } of functions) {
+    const item = analyzeFunctionNode(node, file.filePath, file.sourceText, parent);
+
+    if (item === null || item === undefined) {
+      continue;
+    }
+
+    items.push(item);
+  }
+};
 
 const collectFunctionItems = <TItem>(
   files: ReadonlyArray<ParsedFile>,
@@ -17,17 +35,7 @@ const collectFunctionItems = <TItem>(
       continue;
     }
 
-    const functions = collectFunctionNodesWithParent(file.program);
-
-    for (const { node, parent } of functions) {
-      const item = analyzeFunctionNode(node, file.filePath, file.sourceText, parent);
-
-      if (item === null || item === undefined) {
-        continue;
-      }
-
-      items.push(item);
-    }
+    collectFunctionItemsFromFile(file, analyzeFunctionNode, items);
   }
 
   return items;

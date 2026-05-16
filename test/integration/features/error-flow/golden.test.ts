@@ -1,6 +1,6 @@
-import { describe } from 'bun:test';
-
 import type { Gildash } from '@zipbul/gildash';
+
+import { describe } from 'bun:test';
 
 import { analyzeErrorFlow } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';

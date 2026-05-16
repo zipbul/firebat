@@ -48,7 +48,9 @@ describe('formatReport', () => {
 
   it('should populate findings from analyses via flattenToFindings', () => {
     const report = makeReport(['waste'], {
-      waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'unused x', message: '', file: testFile, span: span(10) } as any],
+      waste: [
+        { kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'unused x', message: '', file: testFile, span: span(10) } as any,
+      ],
     });
     const parsed = JSON.parse(formatReport(report));
 
@@ -99,7 +101,16 @@ describe('formatReport', () => {
 
   it('preserves required Finding fields through JSON round-trip', () => {
     const report = makeReport(['waste'], {
-      waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'unused result', message: 'm', file: testFile, span: span(42) } as any],
+      waste: [
+        {
+          kind: 'dead-store',
+          code: 'WASTE_DEAD_STORE',
+          label: 'unused result',
+          message: 'm',
+          file: testFile,
+          span: span(42),
+        } as any,
+      ],
     });
     const parsed = JSON.parse(formatReport(report));
     const finding = parsed.findings[0];

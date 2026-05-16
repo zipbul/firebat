@@ -106,51 +106,21 @@ const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> =
   return files;
 };
 
-const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolOutput> => {
-  const { logger } = input;
+interface CollectTraceGraphParams {
+  readonly symbol: string;
+  readonly entryFile: string;
+  readonly maxDepth: number | undefined;
+  readonly gildash: Awaited<ReturnType<typeof createGildash>>;
+}
 
-  logger.debug('trace-symbol: start', { entryFile: input.entryFile, symbol: input.symbol, maxDepth: input.maxDepth });
+interface CollectTraceGraphResult {
+  readonly nodes: TraceNode[];
+  readonly edges: TraceEdge[];
+  readonly evidence: TraceEvidenceSpan[];
+}
 
-  const ctx = await resolveRuntimeContextFromCwd();
-  const toolVersion = computeToolVersion();
-  const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
-  const db = await getDb({ rootAbs: ctx.rootAbs, logger });
-  const artifactRepository = createArtifactStore(db);
-  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true });
-  const relatedFiles = await resolveRelatedFiles(input);
-
-  logger.trace('trace-symbol: related files resolved', { count: relatedFiles.length });
-
-  const cacheNamespace = await computeCacheNamespace({ toolVersion });
-  const inputsDigest = await computeInputsDigest({
-    targets: relatedFiles,
-    gildash,
-    extraParts: [`ns:${cacheNamespace}`],
-  });
-  const artifactKey = computeTraceArtifactKey({
-    entryFile: relatedFiles[0] ?? input.entryFile,
-    symbol: input.symbol,
-    ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
-    ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
-  });
-  const cached = artifactRepository.get<TraceSymbolOutput>({
-    projectKey,
-    kind: 'gildash:traceSymbol',
-    artifactKey,
-    inputsDigest,
-  });
-
-  if (cached) {
-    logger.debug('trace-symbol: cache hit', { artifactKey });
-
-    await gildash.close({ cleanup: false });
-
-    return cached;
-  }
-
-  logger.debug('trace-symbol: cache miss — running gildash trace');
-
-  const entryFile = relatedFiles[0] ?? input.entryFile;
+const collectTraceGraph = async (params: CollectTraceGraphParams): Promise<CollectTraceGraphResult> => {
+  const { symbol, entryFile, maxDepth, gildash } = params;
   const nodes: TraceNode[] = [];
   const edges: TraceEdge[] = [];
   const evidence: TraceEvidenceSpan[] = [];
@@ -177,76 +147,99 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
     edges.push(edge);
   };
 
-  try {
-    const symbolNodeId = `symbol:${input.symbol}`;
+  const symbolNodeId = `symbol:${symbol}`;
 
-    addNode({ id: symbolNodeId, kind: 'symbol', label: input.symbol, filePath: entryFile });
+  addNode({ id: symbolNodeId, kind: 'symbol', label: symbol, filePath: entryFile });
+  addNode({ id: `file:${entryFile}`, kind: 'file', label: path.basename(entryFile), filePath: entryFile });
+  addEdge({ from: symbolNodeId, to: `file:${entryFile}`, kind: 'references' });
 
-    const entryFileNodeId = `file:${entryFile}`;
+  const refs = gildash.getSemanticReferences(symbol, entryFile);
+  const refsToUse = refs.slice(0, Math.max(1, maxDepth ?? 200));
 
-    addNode({ id: entryFileNodeId, kind: 'file', label: path.basename(entryFile), filePath: entryFile });
-    addEdge({ from: symbolNodeId, to: entryFileNodeId, kind: 'references' });
-
-    // Use gildash semantic references
-    const refs = gildash.getSemanticReferences(input.symbol, entryFile);
-    const maxRefs = Math.max(1, input.maxDepth ?? 200);
-    const refsToUse = refs.slice(0, maxRefs);
-
-    for (const ref of refsToUse) {
-      const filePath = ref.filePath;
-      const span: SourceSpan = {
-        start: { line: ref.line, column: ref.column + 1 },
-        end: { line: ref.line, column: ref.column + 1 },
-      };
-      const fileNodeId = `file:${filePath}`;
-
-      addNode({ id: fileNodeId, kind: 'file', label: path.basename(filePath), filePath });
-
-      const refNodeId = `ref:${filePath}:${ref.line}:${ref.column}`;
-      const label = ref.isDefinition
-        ? `definition:${path.basename(filePath)}:${ref.line}`
-        : `${path.basename(filePath)}:${ref.line}`;
-
-      addNode({ id: refNodeId, kind: 'reference', label, filePath, span });
-      addEdge({
-        from: symbolNodeId,
-        to: refNodeId,
-        kind: 'references',
-        ...(ref.isDefinition ? { label: 'definition' } : {}),
-      });
-      addEdge({ from: refNodeId, to: fileNodeId, kind: 'references' });
-
-      const text = await extractEvidenceText(filePath, span);
-
-      evidence.push({ filePath, span, ...(text !== undefined ? { text } : {}) });
-    }
-
-    // Heritage chain
-    const heritage = await gildash.getHeritageChain(input.symbol, entryFile);
-
-    if (heritage.children && heritage.children.length > 0) {
-      for (const base of heritage.children) {
-        const baseNodeId = `type:${base.symbolName}`;
-
-        addNode({ id: baseNodeId, kind: 'type', label: base.symbolName });
-        addEdge({ from: symbolNodeId, to: baseNodeId, kind: 'type-of', label: 'extends' });
-      }
-    }
-
-    const output: TraceSymbolOutput = {
-      ok: true,
-      tool: 'gildash',
-      graph: { nodes, edges },
-      evidence,
+  for (const ref of refsToUse) {
+    const { filePath } = ref;
+    const span: SourceSpan = {
+      start: { line: ref.line, column: ref.column + 1 },
+      end: { line: ref.line, column: ref.column + 1 },
     };
+    const refNodeId = `ref:${filePath}:${ref.line}:${ref.column}`;
+    const label = ref.isDefinition
+      ? `definition:${path.basename(filePath)}:${ref.line}`
+      : `${path.basename(filePath)}:${ref.line}`;
 
-    artifactRepository.set({
-      projectKey,
-      kind: 'gildash:traceSymbol',
-      artifactKey,
-      inputsDigest,
-      value: output,
+    addNode({ id: `file:${filePath}`, kind: 'file', label: path.basename(filePath), filePath });
+    addNode({ id: refNodeId, kind: 'reference', label, filePath, span });
+    addEdge({ from: symbolNodeId, to: refNodeId, kind: 'references', ...(ref.isDefinition ? { label: 'definition' } : {}) });
+    addEdge({ from: refNodeId, to: `file:${filePath}`, kind: 'references' });
+
+    const text = await extractEvidenceText(filePath, span);
+
+    evidence.push({ filePath, span, ...(text !== undefined ? { text } : {}) });
+  }
+
+  const heritage = await gildash.getHeritageChain(symbol, entryFile);
+
+  if (heritage.children && heritage.children.length > 0) {
+    for (const base of heritage.children) {
+      addNode({ id: `type:${base.symbolName}`, kind: 'type', label: base.symbolName });
+      addEdge({ from: symbolNodeId, to: `type:${base.symbolName}`, kind: 'type-of', label: 'extends' });
+    }
+  }
+
+  return { nodes, edges, evidence };
+};
+
+const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolOutput> => {
+  const { logger } = input;
+
+  logger.debug('trace-symbol: start', { entryFile: input.entryFile, symbol: input.symbol, maxDepth: input.maxDepth });
+
+  const ctx = await resolveRuntimeContextFromCwd();
+  const toolVersion = computeToolVersion();
+  const projectKey = computeProjectKey({ toolVersion, cwd: ctx.rootAbs });
+  const db = await getDb({ rootAbs: ctx.rootAbs, logger });
+  const gildash = await createGildash({ projectRoot: ctx.rootAbs, watchMode: false, semantic: true });
+  const relatedFiles = await resolveRelatedFiles(input);
+
+  logger.trace('trace-symbol: related files resolved', { count: relatedFiles.length });
+
+  const cacheNamespace = await computeCacheNamespace({ toolVersion });
+  const inputsDigest = await computeInputsDigest({ targets: relatedFiles, gildash, extraParts: [`ns:${cacheNamespace}`] });
+  const entryFile = relatedFiles[0] ?? input.entryFile;
+  const artifactKey = computeTraceArtifactKey({
+    entryFile,
+    symbol: input.symbol,
+    ...(input.tsconfigPath !== undefined ? { tsconfigPath: input.tsconfigPath } : {}),
+    ...(input.maxDepth !== undefined ? { maxDepth: input.maxDepth } : {}),
+  });
+  const artifactRepository = createArtifactStore(db);
+  const cached = artifactRepository.get<TraceSymbolOutput>({
+    projectKey,
+    kind: 'gildash:traceSymbol',
+    artifactKey,
+    inputsDigest,
+  });
+
+  if (cached) {
+    logger.debug('trace-symbol: cache hit', { artifactKey });
+
+    await gildash.close({ cleanup: false });
+
+    return cached;
+  }
+
+  logger.debug('trace-symbol: cache miss — running gildash trace');
+
+  try {
+    const { nodes, edges, evidence } = await collectTraceGraph({
+      symbol: input.symbol,
+      entryFile,
+      maxDepth: input.maxDepth,
+      gildash,
     });
+    const output: TraceSymbolOutput = { ok: true, tool: 'gildash', graph: { nodes, edges }, evidence };
+
+    artifactRepository.set({ projectKey, kind: 'gildash:traceSymbol', artifactKey, inputsDigest, value: output });
 
     return output;
   } catch (error) {

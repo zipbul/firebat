@@ -59,19 +59,20 @@ export const analyzeDuplicates = (
   options: DuplicatesAnalyzerOptions,
 ): ReadonlyArray<DuplicateGroup> => {
   const { minSize } = options;
-  const enableNearMiss = options.enableNearMiss ?? true;
-  const enableAntiUnification = options.enableAntiUnification ?? true;
   // ── Step 2-6: 파일 중복 입력 방어 ─────────────────────────────────────────
-  const seenPaths = new Set<string>();
-  const uniqueFiles = files.filter(f => {
-    if (seenPaths.has(f.filePath)) {
-      return false;
-    }
+  const uniqueFiles = (() => {
+    const seenPaths = new Set<string>();
 
-    seenPaths.add(f.filePath);
+    return files.filter(f => {
+      if (seenPaths.has(f.filePath)) {
+        return false;
+      }
 
-    return true;
-  });
+      seenPaths.add(f.filePath);
+
+      return true;
+    });
+  })();
   // ── Step 2-5: fingerprint 캐시 ─────────────────────────────────────────────
   const cachedExact = createCachedFingerprint(createOxcFingerprintExact);
   const cachedShape = createCachedFingerprint(createOxcFingerprintShape);
@@ -95,8 +96,8 @@ export const analyzeDuplicates = (
     return !exactHashes.has(cachedShape(g.items[0]!.node)) && !shapeHashes.has(hash);
   });
   let allGroups: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
-
   // ── Level 2+3: Near-miss clone detection ───────────────────────────────────
+  const enableNearMiss = options.enableNearMiss ?? true;
 
   if (enableNearMiss) {
     // Level 1에서 그룹핑된 모든 노드의 shape hash → excluded
@@ -135,7 +136,7 @@ export const analyzeDuplicates = (
   }
 
   // ── Level 4: Anti-unification ──────────────────────────────────────────────
-
+  const enableAntiUnification = options.enableAntiUnification ?? true;
   const result: DuplicateGroup[] = [];
 
   for (const group of allGroups) {

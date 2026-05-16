@@ -106,101 +106,134 @@ const isIdentPart = (ch: string): boolean => {
   return /[A-Za-z0-9_$]/.test(ch);
 };
 
-class Scanner {
-  public i = 0;
+interface ScannerApi {
+  readonly pos: () => number;
+  readonly advance: (n?: number) => void;
+  readonly slice: (start: number, end: number) => string;
+  readonly eof: () => boolean;
+  readonly peek: (offset?: number) => string;
+  readonly next: () => string;
+  readonly error: (message: string) => Error;
+  readonly skipWhitespaceAndComments: () => void;
+  readonly parseString: () => TokenRange;
+  readonly parseIdentifier: () => TokenRange;
+  readonly parseNumberLike: () => ValueNode;
+  readonly parseLiteral: () => ValueNode;
+  readonly parseArray: () => ValueNode;
+  readonly parseObject: () => ValueNode;
+  readonly parseValue: () => ValueNode;
+}
 
-  public constructor(public readonly text: string) {
-    void this.text;
-  }
+const createScanner = (text: string): ScannerApi => {
+  let i = 0;
 
-  public eof(): boolean {
-    return this.i >= this.text.length;
-  }
+  const pos = (): number => i;
 
-  public peek(offset: number = 0): string {
-    return this.text[this.i + offset] ?? '';
-  }
+  const advance = (n: number = 1): void => {
+    i += n;
+  };
 
-  public next(): string {
-    const ch = this.peek();
+  const slice = (start: number, end: number): string => text.slice(start, end);
 
-    this.i += 1;
+  const eof = (): boolean => i >= text.length;
+
+  const peek = (offset: number = 0): string => text[i + offset] ?? '';
+
+  const next = (): string => {
+    const ch = peek();
+
+    advance();
 
     return ch;
-  }
+  };
 
-  public error(message: string): Error {
-    return new Error(message);
-  }
+  const error = (message: string): Error => new Error(message);
 
-  public skipWhitespaceAndComments(): void {
-    if (this.eof()) {
-      return;
+  const fail = (message: string): never => {
+    throw error(message);
+  };
+
+  const skipWhitespace = (): boolean => {
+    const ch = peek();
+
+    if (ch !== ' ' && ch !== '\t' && ch !== '\r' && ch !== '\n') {
+      return false;
     }
 
-    while (!this.eof()) {
-      const ch = this.peek();
-      const next = this.peek(1);
+    advance();
 
-      // whitespace
-      if (ch === ' ' || ch === '\t' || ch === '\r' || ch === '\n') {
-        this.i += 1;
+    return true;
+  };
 
+  const skipLineComment = (): boolean => {
+    if (peek() !== '/' || peek(1) !== '/') {
+      return false;
+    }
+
+    advance(2);
+
+    while (!eof()) {
+      const c = peek();
+
+      if (c === '\n' || c === '\r') {
+        break;
+      }
+
+      advance();
+    }
+
+    return true;
+  };
+
+  const skipBlockComment = (): boolean => {
+    if (peek() !== '/' || peek(1) !== '*') {
+      return false;
+    }
+
+    advance(2);
+
+    while (!eof() && !(peek() === '*' && peek(1) === '/')) {
+      advance();
+    }
+
+    if (!eof()) {
+      advance(2);
+    }
+
+    return true;
+  };
+
+  const skipWhitespaceAndComments = (): void => {
+    while (!eof()) {
+      if (skipWhitespace()) {
         continue;
       }
 
-      // line comment
-      if (ch === '/' && next === '/') {
-        this.i += 2;
-
-        while (!this.eof()) {
-          const c = this.peek();
-
-          if (c === '\n' || c === '\r') {
-            break;
-          }
-
-          this.i += 1;
-        }
+      if (skipLineComment()) {
         continue;
       }
 
-      // block comment
-      if (ch === '/' && next === '*') {
-        this.i += 2;
-
-        while (!this.eof()) {
-          const c = this.peek();
-          const n = this.peek(1);
-
-          if (c === '*' && n === '/') {
-            this.i += 2;
-
-            break;
-          }
-
-          this.i += 1;
-        }
+      if (skipBlockComment()) {
         continue;
       }
 
       break;
     }
-  }
+  };
 
-  public parseString(): TokenRange {
-    const start = this.i;
-    const quote = this.next();
+  const parseString = (): TokenRange => {
+    const start = pos();
+    const quote = next();
 
     if (quote !== '"' && quote !== "'") {
-      return this.fail('Expected string');
+      return fail('Expected string');
     }
 
     let out = '';
     let escaping = false;
 
-    while (!this.eof()) {
-      const ch = this.next();
+    while (!eof()) {
+      const ch = next();
 
       if (escaping) {
         out += ch;
@@ -225,113 +258,158 @@ class Scanner {
       }
 
       // Keep raw escapes as part of value; key extraction uses raw content anyway.
-      const end = this.i;
-
-      return { value: out, start, end };
+      return { value: out, start, end: pos() };
     }
 
-    throw this.error('Unterminated string');
-  }
+    throw error('Unterminated string');
+  };
 
-  public parseIdentifier(): TokenRange {
-    const start = this.i;
-    const first = this.peek();
+  const parseIdentifier = (): TokenRange => {
+    const start = pos();
+    const first = peek();
 
     if (!isIdentStart(first)) {
-      return this.fail('Expected identifier');
+      return fail('Expected identifier');
     }
 
     let out = '';
 
-    out += this.next();
+    out += next();
 
-    while (!this.eof()) {
-      const ch = this.peek();
+    while (!eof()) {
+      const ch = peek();
 
       if (!isIdentPart(ch)) {
         break;
       }
 
-      out += this.next();
+      out += next();
     }
 
-    return { value: out, start, end: this.i };
-  }
+    return { value: out, start, end: pos() };
+  };
 
-  public parseNumberLike(): ValueNode {
-    const start = this.i;
+  const parseNumberLike = (): ValueNode => {
+    const start = pos();
 
-    if (this.eof()) {
-      return this.fail('Expected number');
+    if (eof()) {
+      return fail('Expected number');
     }
 
-    while (!this.eof()) {
-      const ch = this.peek();
+    while (!eof()) {
+      const ch = peek();
 
       if (!/[-+0-9.eE]/.test(ch)) {
         break;
       }
 
-      this.i += 1;
+      advance();
     }
 
-    return { kind: 'number', start, end: this.i };
-  }
+    return { kind: 'number', start, end: pos() };
+  };
 
-  public parseLiteral(): ValueNode {
-    const start = this.i;
-    const ch = this.peek();
+  const parseLiteral = (): ValueNode => {
+    const start = pos();
+    const ch = peek();
     let matched = false;
 
-    if (ch === 't' && this.text.slice(this.i, this.i + 4) === 'true') {
-      this.i += 4;
+    if (ch === 't' && slice(pos(), pos() + 4) === 'true') {
+      advance(4);
 
       matched = true;
-    } else if (ch === 'f' && this.text.slice(this.i, this.i + 5) === 'false') {
-      this.i += 5;
+    } else if (ch === 'f' && slice(pos(), pos() + 5) === 'false') {
+      advance(5);
 
       matched = true;
-    } else if (ch === 'n' && this.text.slice(this.i, this.i + 4) === 'null') {
-      this.i += 4;
+    } else if (ch === 'n' && slice(pos(), pos() + 4) === 'null') {
+      advance(4);
 
       matched = true;
     }
 
     if (!matched) {
-      return this.fail('Expected literal');
+      return fail('Expected literal');
     }
 
-    return { kind: 'literal', start, end: this.i };
-  }
+    return { kind: 'literal', start, end: pos() };
+  };
 
-  public parseArray(): ValueNode {
-    const start = this.i;
-    const open = this.next();
+  const parseObjectProp = (props: PropNode[]): void => {
+    const keyTok = parseObjectKey();
+
+    skipWhitespaceAndComments();
+
+    if (peek() !== ':') {
+      fail('Expected :');
+    }
+
+    advance();
+    skipWhitespaceAndComments();
+
+    const value = parseValue();
+
+    props.push({
+      key: keyTok.value,
+      keyStart: keyTok.start,
+      keyEnd: keyTok.end,
+      value,
+      start: keyTok.start,
+      end: value.end,
+    });
+
+    skipWhitespaceAndComments();
+
+    if (peek() === ',') {
+      advance();
+    }
+  };
+
+  const parseObjectKey = (): TokenRange => {
+    const ch = peek();
+
+    if (ch === '"' || ch === "'") {
+      return parseString();
+    }
+
+    if (isIdentStart(ch)) {
+      return parseIdentifier();
+    }
+
+    return fail('Expected object key');
+  };
+
+  // Forward declaration for mutual recursion.
+  let parseValue: () => ValueNode;
+
+  const parseArray = (): ValueNode => {
+    const start = pos();
+    const open = next();
 
     if (open !== '[') {
-      return this.fail('Expected [');
+      return fail('Expected [');
     }
 
-    while (!this.eof()) {
-      this.skipWhitespaceAndComments();
+    while (!eof()) {
+      skipWhitespaceAndComments();
 
-      const ch = this.peek();
+      const ch = peek();
 
       if (ch === ']') {
-        this.i += 1;
+        advance();
 
-        return { kind: 'array', start, end: this.i };
+        return { kind: 'array', start, end: pos() };
       }
 
       // Parse value but discard structure (we don't sync inside arrays).
-      this.parseValue();
+      parseValue();
 
-      this.skipWhitespaceAndComments();
+      skipWhitespaceAndComments();
 
-      const after = this.peek();
+      const after = peek();
 
       if (after === ',') {
-        this.i += 1;
+        advance();
 
         continue;
       }
@@ -343,130 +421,96 @@ class Scanner {
       // Allow trailing commas + comments; keep going.
     }
 
-    return this.fail('Unterminated array');
-  }
+    return fail('Unterminated array');
+  };
 
-  public parseObject(): ValueNode {
-    const start = this.i;
-    const openBrace = this.i;
-    const open = this.next();
+  const parseObject = (): ValueNode => {
+    const start = pos();
+    const openBrace = pos();
+    const open = next();
 
     if (open !== '{') {
-      this.fail('Expected {');
+      return fail('Expected {');
     }
 
     const props: PropNode[] = [];
-    let result: ValueNode | null = null;
 
-    while (!this.eof()) {
-      this.skipWhitespaceAndComments();
+    while (!eof()) {
+      skipWhitespaceAndComments();
 
-      const ch = this.peek();
+      const ch = peek();
 
       if (ch === '}') {
-        const closeBrace = this.i;
+        const closeBrace = pos();
 
-        this.i += 1;
+        advance();
 
-        result = { kind: 'object', start, end: this.i, openBrace, closeBrace, props };
-
-        break;
-      }
-
-      let keyTok: TokenRange;
-
-      if (ch === '"' || ch === "'") {
-        keyTok = this.parseString();
-      } else if (isIdentStart(ch)) {
-        keyTok = this.parseIdentifier();
+        return { kind: 'object', start, end: pos(), openBrace, closeBrace, props };
       } else {
-        this.fail('Expected object key');
+        parseObjectProp(props);
       }
-
-      this.skipWhitespaceAndComments();
-
-      if (this.peek() !== ':') {
-        this.fail('Expected :');
-      }
-
-      this.i += 1;
-
-      this.skipWhitespaceAndComments();
-
-      const value = this.parseValue();
-
-      props.push({
-        key: keyTok.value,
-        keyStart: keyTok.start,
-        keyEnd: keyTok.end,
-        value,
-        start: keyTok.start,
-        end: value.end,
-      });
-
-      this.skipWhitespaceAndComments();
-
-      const after = this.peek();
-
-      if (after === ',') {
-        this.i += 1;
-
-        continue;
-      }
-
-      // Allow trailing commas/comments; object end handled at top.
     }
 
-    if (!result) {
-      this.fail('Unterminated object');
-    }
+    return fail('Unterminated object');
+  };
 
-    return result;
-  }
+  parseValue = (): ValueNode => {
+    skipWhitespaceAndComments();
 
-  public parseValue(): ValueNode {
-    this.skipWhitespaceAndComments();
-
-    const start = this.i;
-    const ch = this.peek();
+    const start = pos();
+    const ch = peek();
     let value: ValueNode | null = null;
 
     if (ch === '{') {
-      value = this.parseObject();
+      value = parseObject();
     }
 
     if (ch === '[') {
-      value = this.parseArray();
+      value = parseArray();
     }
 
     if (ch === '"' || ch === "'") {
-      const s = this.parseString();
+      const s = parseString();
 
       value = { kind: 'string', start: s.start, end: s.end };
     }
 
     if (ch === '-' || ch === '+' || /[0-9]/.test(ch)) {
-      value = this.parseNumberLike();
+      value = parseNumberLike();
     }
 
     if (ch === 't' || ch === 'f' || ch === 'n') {
-      value = this.parseLiteral();
+      value = parseLiteral();
     }
 
     if (!value) {
-      return this.fail(`Unexpected token at ${start}`);
+      return fail(`Unexpected token at ${start}`);
     }
 
     return value;
-  }
+  };
 
-  private fail(message: string): never {
-    throw this.error(message);
-  }
-}
+  return {
+    pos,
+    advance,
+    slice,
+    eof,
+    peek,
+    next,
+    error,
+    skipWhitespaceAndComments,
+    parseString,
+    parseIdentifier,
+    parseNumberLike,
+    parseLiteral,
+    parseArray,
+    parseObject,
+    parseValue,
+  };
+};
 
 const parseRootObjectOrThrow = (text: string): Extract<ValueNode, ObjectKindSelector> => {
-  const s = new Scanner(text);
+  const s = createScanner(text);
   const node = s.parseValue();
 
   s.skipWhitespaceAndComments();
@@ -511,6 +555,61 @@ const renderInsertedProperty = (input: RenderInsertedPropertyInput): string => {
   return adjusted.join(input.newline);
 };
 
+interface InsertionContext {
+  readonly userText: string;
+  readonly userNode: Extract<ValueNode, ObjectKindSelector>;
+  readonly templateObject: JsonObject;
+  readonly missingKeys: readonly string[];
+  readonly keptProps: readonly PropNode[];
+  readonly newline: string;
+}
+
+const buildInsertionsBeforeFirstProp = (ctx: InsertionContext): Edit[] => {
+  const first = ctx.keptProps[0];
+
+  if (!first) {
+    return [];
+  }
+
+  const firstLineStart = lineStartAt(ctx.userText, first.keyStart);
+  const indent = ctx.userText.slice(firstLineStart, first.keyStart);
+  const blockLines = ctx.missingKeys.map(k => {
+    const v = ctx.templateObject[k] as JsonValue;
+
+    return renderInsertedProperty({ key: k, value: v, indent, newline: ctx.newline }) + ',';
+  });
+  const block = blockLines.join(ctx.newline) + ctx.newline;
+
+  return [{ start: firstLineStart, end: firstLineStart, text: block }];
+};
+
+const buildInsertionsIntoEmptyObject = (ctx: InsertionContext): Edit[] => {
+  const closeBrace = ctx.userNode.closeBrace;
+  const closeLineStart = lineStartAt(ctx.userText, closeBrace);
+  const baseIndent = ctx.userText.slice(closeLineStart, closeBrace);
+  const indent = baseIndent + '  ';
+  const blockLines = ctx.missingKeys.map(k => {
+    const v = ctx.templateObject[k] as JsonValue;
+
+    return renderInsertedProperty({ key: k, value: v, indent, newline: ctx.newline }) + ',';
+  });
+  const block = ctx.newline + blockLines.join(ctx.newline) + ctx.newline + baseIndent;
+
+  return [{ start: closeBrace, end: closeBrace, text: block }];
+};
+
+const buildInsertions = (ctx: InsertionContext): Edit[] => {
+  if (ctx.missingKeys.length === 0) {
+    return [];
+  }
+
+  if (ctx.keptProps.length > 0) {
+    return buildInsertionsBeforeFirstProp(ctx);
+  }
+
+  return buildInsertionsIntoEmptyObject(ctx);
+};
+
 const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
   const { userText, userNode, templateValue } = input;
 
@@ -545,51 +644,7 @@ const collectEditsForObjectSync = (input: CollectEditsInput): Edit[] => {
   // Determine anchor: first property that survives deletion.
   const keptProps = userProps.filter(p => templateKeySet.has(p.key)).sort((a, b) => a.keyStart - b.keyStart);
   const missingKeys = templateKeys.filter(k => !userPropsByKey.has(k));
-  const insertions: Edit[] = [];
-
-  if (missingKeys.length > 0) {
-    if (keptProps.length > 0) {
-      const first = keptProps[0];
-
-      if (!first) {
-        return [...deletions, ...insertions];
-      }
-
-      const firstLineStart = lineStartAt(userText, first.keyStart);
-      const indent = userText.slice(firstLineStart, first.keyStart);
-      const blockLines: string[] = [];
-
-      for (const k of missingKeys) {
-        const v = templateObject[k] as JsonValue;
-        const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
-
-        blockLines.push(rendered + ',');
-      }
-
-      const block = blockLines.join(newline) + newline;
-
-      insertions.push({ start: firstLineStart, end: firstLineStart, text: block });
-    } else {
-      // Object will be empty after deletions (or was empty).
-      const closeBrace = userNode.closeBrace;
-      const closeLineStart = lineStartAt(userText, closeBrace);
-      const baseIndent = userText.slice(closeLineStart, closeBrace);
-      const indent = baseIndent + '  ';
-      const blockLines: string[] = [];
-
-      for (const k of missingKeys) {
-        const v = templateObject[k] as JsonValue;
-        const rendered = renderInsertedProperty({ key: k, value: v, indent, newline });
-
-        blockLines.push(rendered + ',');
-      }
-
-      const block = newline + blockLines.join(newline) + newline + baseIndent;
-
-      insertions.push({ start: closeBrace, end: closeBrace, text: block });
-    }
-  }
-
+  const insertions = buildInsertions({ userText, userNode, templateObject, missingKeys, keptProps, newline });
   const nestedEdits: Edit[] = [];
 
   for (const k of templateKeys) {

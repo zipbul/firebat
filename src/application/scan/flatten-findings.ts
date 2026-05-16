@@ -264,12 +264,14 @@ const labelVariableLifetime: LabelFn = (f, fn) => {
       const max = f.maxLiveVariables;
 
       base = max !== undefined ? `liveness-pressure: ${max} live variables` : 'liveness-pressure';
+
       break;
     }
     case 'mutation-density': {
       const count = f.mutationCount;
 
       base = variable ? `mutation-density: \`${variable}\` (${count ?? '?'} mutations)` : 'mutation-density';
+
       break;
     }
     default:
@@ -338,9 +340,7 @@ const LABEL_BY_CATEGORY: Readonly<Record<string, LabelFn>> = {
   typecheck: labelTypecheck,
   format: labelFormat,
 };
-
 // ── Detail extractors ────────────────────────────────────────────────────────
-
 /**
  * detail: fixer 전용 가변 데이터.
  * span은 보존 (B1) — fixer가 정확한 위치 참조에 필요.
@@ -467,7 +467,6 @@ const flattenItemsFinding = (
   // duplicate 그룹을 구분. uniqueness 보장.
   const groupSeed = `${category}|${code}|${kind}|${JSON.stringify(finding)}`;
   const groupId = makeGroupId(category, groupSeed);
-
   const results: Finding[] = [];
 
   for (let i = 0; i < items.length; i++) {
@@ -477,13 +476,11 @@ const flattenItemsFinding = (
     const line = extractLine(item);
     const itemSeed = `${groupSeed}|${file}|${spanIdentity(item)}|i${i}`;
     const functionName = findEnclosingFunction(functionMap, file, line);
-
     // items에는 parent의 kind가 없으므로 주입
     const label =
       category === 'duplicates'
         ? labelDuplicateItem(item, kind)
         : labelFn({ ...item, kind }, functionName);
-
     const primaryDetail = isPrimary ? extractDetail(finding, category) : null;
 
     results.push({

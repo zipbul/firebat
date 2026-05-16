@@ -1,10 +1,9 @@
 import type { Node } from 'oxc-parser';
 
-import type { IntegerCFG } from './cfg/cfg';
-import type { NodeId } from './cfg/cfg-types';
+import type { IntegerCFG, NodeId } from '../cfg';
 
-export { EdgeType } from './cfg/cfg-types';
-export type { NodeId } from './cfg/cfg-types';
+export { EdgeType } from '../cfg';
+export type { NodeId } from '../cfg';
 
 export interface BitSet {
   add(index: number): void;

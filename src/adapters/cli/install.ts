@@ -454,6 +454,269 @@ const printAgentPromptGuide = (): void => {
   writeStdout(guideLines.join('\n'));
 };
 
+const printModeHelp = (mode: 'install' | 'update'): void => {
+  if (mode === 'install') {
+    printInstallHelp();
+  } else {
+    printUpdateHelp();
+  }
+};
+
+interface ModeContext {
+  readonly rootAbs: string;
+  readonly firebatDir: string;
+  readonly loadedTemplates: readonly LoadedTemplate[];
+  readonly logger: FirebatLogger;
+}
+
+interface ModeResult {
+  readonly assetResults: AssetInstallResult[];
+  readonly assetManifest: Record<string, AssetTemplateMeta>;
+  readonly baseSnapshots: Record<string, BaseSnapshot>;
+}
+
+interface PlanTemplateWriteInput {
+  readonly tpl: LoadedTemplate;
+  readonly bases: Record<string, unknown>;
+  readonly firebatDir: string;
+  readonly logger: FirebatLogger;
+}
+
+interface PlanTemplateWriteResult {
+  readonly plannedWrite: PlannedWrite | null;
+  readonly baseWrite: BaseWrite;
+  readonly exitCode?: number;
+}
+
+const planTemplateWrite = async (input: PlanTemplateWriteInput): Promise<PlanTemplateWriteResult | number> => {
+  const { tpl, bases, firebatDir, logger } = input;
+  const baseMeta = bases[tpl.asset] as BaseSnapshot | undefined;
+  const basePath = typeof baseMeta?.filePath === 'string' ? baseMeta.filePath : null;
+
+  if (!basePath) {
+    logger.error('update aborted: missing base snapshot. Run `firebat install` first.', { asset: tpl.asset });
+
+    return 1;
+  }
+
+  const baseFile = Bun.file(basePath);
+
+  if (!(await baseFile.exists())) {
+    logger.error('update aborted: base snapshot not found. Run `firebat install` first.', { asset: tpl.asset });
+
+    return 1;
+  }
+
+  const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
+  const destFile = Bun.file(tpl.destAbs);
+  const userText = (await destFile.exists()) ? await destFile.text() : null;
+  let plannedWrite: PlannedWrite | null = null;
+
+  if (userText === null) {
+    plannedWrite = { filePath: tpl.destAbs, text: tpl.templateText };
+  } else {
+    void parseJsoncOrThrow(tpl.destAbs, userText);
+
+    const synced = syncJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
+
+    if (!synced.ok) {
+      logger.error('update aborted: failed to patch JSONC', { filePath: tpl.destAbs, error: synced.error });
+
+      return 1;
+    }
+
+    void parseJsoncOrThrow(tpl.destAbs, synced.text);
+
+    if (synced.changed) {
+      plannedWrite = { filePath: tpl.destAbs, text: synced.text };
+    }
+  }
+
+  const nextNormalized = jsonText(nextParsed);
+  const nextSha = await sha256Hex(nextNormalized);
+  const nextBasePath = path.join(firebatDir, 'install-bases', `${tpl.asset}.${nextSha}.json`);
+
+  return {
+    plannedWrite,
+    baseWrite: { filePath: nextBasePath, text: nextNormalized, asset: tpl.asset, sha256: nextSha },
+  };
+};
+
+const runUpdateMode = async (ctx: ModeContext): Promise<ModeResult | number> => {
+  const { firebatDir, loadedTemplates, logger } = ctx;
+  const manifestPath = path.join(firebatDir, 'install-manifest.json');
+  const mf = Bun.file(manifestPath);
+
+  if (!(await mf.exists())) {
+    logger.error('update aborted: no install manifest found. Run `firebat install` first.');
+
+    return 1;
+  }
+
+  const manifest: unknown = await mf.json();
+  const manifestObject = isPlainObject(manifest) ? (manifest as Record<string, unknown>) : null;
+  const bases = manifestObject?.baseSnapshots;
+
+  if (!isPlainObject(bases)) {
+    logger.error('update aborted: no base snapshots found. Run `firebat install` first.');
+
+    return 1;
+  }
+
+  // Compute all merged results first (rollback policy).
+  const plannedWrites: PlannedWrite[] = [];
+  const nextBaseWrites: BaseWrite[] = [];
+
+  for (const tpl of loadedTemplates) {
+    const result = await planTemplateWrite({ tpl, bases: bases as Record<string, unknown>, firebatDir, logger });
+
+    if (typeof result === 'number') {
+      return result;
+    }
+
+    if (result.plannedWrite) {
+      plannedWrites.push(result.plannedWrite);
+    }
+
+    nextBaseWrites.push(result.baseWrite);
+  }
+
+  // Apply writes.
+  const assetResults: AssetInstallResult[] = [];
+
+  for (const w of plannedWrites) {
+    await writeFileAtomic(w.filePath, w.text);
+    assetResults.push({ kind: 'installed', filePath: w.filePath, desiredSha256: await sha256Hex(w.text) });
+  }
+
+  await mkdir(path.join(firebatDir, 'install-bases'), { recursive: true });
+
+  const baseSnapshots: Record<string, BaseSnapshot> = {};
+
+  for (const b of nextBaseWrites) {
+    const f = Bun.file(b.filePath);
+
+    if (!(await f.exists())) {
+      await Bun.write(b.filePath, b.text);
+    }
+
+    baseSnapshots[b.asset] = { sha256: b.sha256, filePath: b.filePath };
+  }
+
+  const assetManifest: Record<string, AssetTemplateMeta> = {};
+
+  for (const tpl of loadedTemplates) {
+    const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
+    const nextNormalized = jsonText(nextParsed);
+
+    assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(nextNormalized) };
+  }
+
+  return { assetResults, assetManifest, baseSnapshots };
+};
+
+const runInstallMode = async (ctx: ModeContext): Promise<ModeResult> => {
+  const { rootAbs, firebatDir, loadedTemplates } = ctx;
+  const assetResults: AssetInstallResult[] = [];
+  const assetManifest: Record<string, AssetTemplateMeta> = {};
+  const baseSnapshots: Record<string, BaseSnapshot> = {};
+
+  for (const tpl of loadedTemplates) {
+    const base = await ensureBaseSnapshot({ rootAbs, firebatDir, assetFileName: tpl.asset, templateText: tpl.templateText });
+
+    baseSnapshots[tpl.asset] = base;
+
+    const desiredParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
+    const desiredNormalized = jsonText(desiredParsed);
+    const desiredInstalled = tpl.templateText;
+
+    assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredNormalized) };
+
+    assetResults.push(await installTextFileNoOverwrite(tpl.destAbs, desiredInstalled));
+  }
+
+  return { assetResults, assetManifest, baseSnapshots };
+};
+
+interface LogInstallCompleteInput {
+  readonly mode: 'install' | 'update';
+  readonly rootAbs: string;
+  readonly firebatDir: string;
+  readonly gitignoreUpdated: boolean;
+  readonly assetResults: readonly AssetInstallResult[];
+  readonly installManifestPath: string;
+  readonly logger: FirebatLogger;
+}
+
+const logUpdateResults = (assetResults: readonly AssetInstallResult[], logger: FirebatLogger): void => {
+  if (assetResults.length === 0) {
+    logger.info('update: no changes');
+
+    return;
+  }
+
+  for (const r of assetResults) {
+    logger.info('updated', { filePath: r.filePath });
+  }
+};
+
+const logInstallModeResults = (
+  assetResults: readonly AssetInstallResult[],
+  installManifestPath: string,
+  logger: FirebatLogger,
+): void => {
+  const diffs = assetResults.filter(r => r.kind === 'skipped-exists-different');
+
+  for (const r of assetResults) {
+    if (r.kind === 'installed') {
+      logger.info('installed', { filePath: r.filePath });
+    } else if (r.kind === 'skipped-exists-same') {
+      logger.debug('kept existing (same)', { filePath: r.filePath });
+    } else {
+      logger.warn('kept existing (DIFFERENT)', { filePath: r.filePath });
+    }
+  }
+
+  if (diffs.length === 0) {
+    return;
+  }
+
+  logger.warn('Some files differ from the current templates. Per policy, install never overwrites.');
+  logger.info('See install manifest for template hashes and paths', { installManifestPath });
+};
+
+const logInstallResults = (
+  mode: 'install' | 'update',
+  assetResults: readonly AssetInstallResult[],
+  installManifestPath: string,
+  logger: FirebatLogger,
+): void => {
+  if (mode !== 'install') {
+    logUpdateResults(assetResults, logger);
+
+    return;
+  }
+
+  logInstallModeResults(assetResults, installManifestPath, logger);
+};
+
+const logInstallComplete = (input: LogInstallCompleteInput): void => {
+  const { mode, rootAbs, firebatDir, gitignoreUpdated, assetResults, installManifestPath, logger } = input;
+
+  logger.info('install: complete', { mode, rootAbs });
+  logger.debug('install: created/verified directory', { firebatDir });
+
+  if (gitignoreUpdated) {
+    logger.info('updated .gitignore: added .firebat/');
+  }
+
+  logInstallResults(mode, assetResults, installManifestPath, logger);
+
+  if (mode === 'install') {
+    printAgentPromptGuide();
+  }
+};
+
 const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[], logger: FirebatLogger): Promise<number> => {
   if (mode !== 'install' && mode !== 'update') {
     logger.error('Unknown install mode', { mode });
@@ -468,11 +731,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     logger.debug('install: starting', { mode, args: argv.join(' ') });
 
     if (help) {
-      if (mode === 'install') {
-        printInstallHelp();
-      } else {
-        printUpdateHelp();
-      }
+      printModeHelp(mode);
 
       return 0;
     }
@@ -485,9 +744,6 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     await mkdir(firebatDir, { recursive: true });
 
-    const assetResults: AssetInstallResult[] = [];
-    const assetManifest: Record<string, AssetTemplateMeta> = {};
-    const baseSnapshots: Record<string, BaseSnapshot> = {};
     const loadedTemplates: LoadedTemplate[] = [];
 
     for (const item of ASSETS) {
@@ -503,121 +759,14 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
       logger.trace('Template loaded', { asset: item.asset, filePath: loaded.filePath });
     }
 
-    if (mode === 'update') {
-      const manifestPath = path.join(firebatDir, 'install-manifest.json');
-      const mf = Bun.file(manifestPath);
+    const modeCtx: ModeContext = { rootAbs, firebatDir, loadedTemplates, logger };
+    const modeResult = mode === 'update' ? await runUpdateMode(modeCtx) : await runInstallMode(modeCtx);
 
-      if (!(await mf.exists())) {
-        logger.error('update aborted: no install manifest found. Run `firebat install` first.');
-
-        return 1;
-      }
-
-      const manifest: unknown = await mf.json();
-      const manifestObject = isPlainObject(manifest) ? (manifest as Record<string, unknown>) : null;
-      const bases = manifestObject?.baseSnapshots;
-
-      if (!isPlainObject(bases)) {
-        logger.error('update aborted: no base snapshots found. Run `firebat install` first.');
-
-        return 1;
-      }
-
-      // Compute all merged results first (rollback policy).
-      const plannedWrites: PlannedWrite[] = [];
-      const nextBaseWrites: BaseWrite[] = [];
-
-      for (const tpl of loadedTemplates) {
-        const baseMeta = (bases as Record<string, unknown>)[tpl.asset] as BaseSnapshot | undefined;
-        const basePath = typeof baseMeta?.filePath === 'string' ? baseMeta.filePath : null;
-
-        if (!basePath) {
-          logger.error('update aborted: missing base snapshot. Run `firebat install` first.', { asset: tpl.asset });
-
-          return 1;
-        }
-
-        const baseFile = Bun.file(basePath);
-
-        if (!(await baseFile.exists())) {
-          logger.error('update aborted: base snapshot not found. Run `firebat install` first.', { asset: tpl.asset });
-
-          return 1;
-        }
-
-        const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-        const destFile = Bun.file(tpl.destAbs);
-        const userText = (await destFile.exists()) ? await destFile.text() : null;
-
-        if (userText === null) {
-          plannedWrites.push({ filePath: tpl.destAbs, text: tpl.templateText });
-        } else {
-          // Validate current file first.
-          void parseJsoncOrThrow(tpl.destAbs, userText);
-
-          const synced = syncJsoncTextToTemplateKeys({ userText, templateJson: nextParsed });
-
-          if (!synced.ok) {
-            logger.error('update aborted: failed to patch JSONC', { filePath: tpl.destAbs, error: synced.error });
-
-            return 1;
-          }
-
-          // Validate patched result.
-          void parseJsoncOrThrow(tpl.destAbs, synced.text);
-
-          if (synced.changed) {
-            plannedWrites.push({ filePath: tpl.destAbs, text: synced.text });
-          }
-        }
-
-        const nextNormalized = jsonText(nextParsed);
-        const nextSha = await sha256Hex(nextNormalized);
-        const nextBasePath = path.join(firebatDir, 'install-bases', `${tpl.asset}.${nextSha}.json`);
-
-        nextBaseWrites.push({ filePath: nextBasePath, text: nextNormalized, asset: tpl.asset, sha256: nextSha });
-      }
-
-      // Apply writes.
-      for (const w of plannedWrites) {
-        await writeFileAtomic(w.filePath, w.text);
-        assetResults.push({ kind: 'installed', filePath: w.filePath, desiredSha256: await sha256Hex(w.text) });
-      }
-
-      await mkdir(path.join(firebatDir, 'install-bases'), { recursive: true });
-
-      for (const b of nextBaseWrites) {
-        const f = Bun.file(b.filePath);
-
-        if (!(await f.exists())) {
-          await Bun.write(b.filePath, b.text);
-        }
-
-        baseSnapshots[b.asset] = { sha256: b.sha256, filePath: b.filePath };
-      }
-
-      for (const tpl of loadedTemplates) {
-        const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-        const nextNormalized = jsonText(nextParsed);
-
-        assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(nextNormalized) };
-      }
-    } else {
-      for (const tpl of loadedTemplates) {
-        const base = await ensureBaseSnapshot({ rootAbs, firebatDir, assetFileName: tpl.asset, templateText: tpl.templateText });
-
-        baseSnapshots[tpl.asset] = base;
-
-        const desiredParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-        const desiredNormalized = jsonText(desiredParsed);
-        const desiredInstalled = tpl.templateText;
-
-        assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredNormalized) };
-
-        assetResults.push(await installTextFileNoOverwrite(tpl.destAbs, desiredInstalled));
-      }
+    if (typeof modeResult === 'number') {
+      return modeResult;
     }
 
+    const { assetResults, assetManifest, baseSnapshots } = modeResult;
     const gitignoreUpdated = await ensureGitignoreHasFirebat(rootAbs);
 
     // DB warm-up (creates .firebat/firebat.sqlite + runs migrations)
@@ -635,40 +784,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     await Bun.write(installManifestPath, JSON.stringify(manifestOut, null, 2) + '\n');
 
-    logger.info('install: complete', { mode, rootAbs });
-    logger.debug('install: created/verified directory', { firebatDir });
-
-    if (gitignoreUpdated) {
-      logger.info('updated .gitignore: added .firebat/');
-    }
-
-    if (mode === 'install') {
-      const diffs = assetResults.filter(r => r.kind === 'skipped-exists-different');
-
-      for (const r of assetResults) {
-        if (r.kind === 'installed') {
-          logger.info('installed', { filePath: r.filePath });
-        } else if (r.kind === 'skipped-exists-same') {
-          logger.debug('kept existing (same)', { filePath: r.filePath });
-        } else {
-          logger.warn('kept existing (DIFFERENT)', { filePath: r.filePath });
-        }
-      }
-      if (diffs.length > 0) {
-        logger.warn('Some files differ from the current templates. Per policy, install never overwrites.');
-        logger.info('See install manifest for template hashes and paths', { installManifestPath });
-      }
-    } else if (assetResults.length === 0) {
-      logger.info('update: no changes');
-    } else {
-      for (const r of assetResults) {
-        logger.info('updated', { filePath: r.filePath });
-      }
-    }
-
-    if (mode === 'install') {
-      printAgentPromptGuide();
-    }
+    logInstallComplete({ mode, rootAbs, firebatDir, gitignoreUpdated, assetResults, installManifestPath, logger });
 
     return 0;
   } catch (err) {

@@ -49,41 +49,37 @@ class IntegerCFG {
     const count = this.edgeCursor;
 
     for (let i = 0; i < count; i++) {
-      const offset = i * 3;
-      const from = this.edges[offset];
-      const to = this.edges[offset + 1];
-
-      if (from === undefined || to === undefined) {
-        continue;
-      }
-
-      if (from < 0 || from >= this.nodeCount) {
-        continue;
-      }
-
-      if (to < 0 || to >= this.nodeCount) {
-        continue;
-      }
-
-      if (direction === 'forward') {
-        const bucket = adj[from];
-
-        if (bucket !== undefined) {
-          bucket.push(to);
-        }
-      } else {
-        const bucket = adj[to];
-
-        if (bucket !== undefined) {
-          bucket.push(from);
-        }
-      }
+      this.addEdgeToAdjacency(adj, i, direction);
     }
 
     // Convert to TypedArrays for cache locality if needed, or return number[][]
     // number[][] is fine for iteration, but the prompt stressed "Ad-hoc Integer".
     // Let's return Int32Array[] for "Hyper-Strict".
     return adj.map(arr => new Int32Array(arr));
+  }
+
+  private addEdgeToAdjacency(adj: number[][], edgeIndex: number, direction: 'forward' | 'backward'): void {
+    const offset = edgeIndex * 3;
+    const from = this.edges[offset];
+    const to = this.edges[offset + 1];
+
+    if (from === undefined || to === undefined) {
+      return;
+    }
+
+    if (from < 0 || from >= this.nodeCount) {
+      return;
+    }
+
+    if (to < 0 || to >= this.nodeCount) {
+      return;
+    }
+
+    if (direction === 'forward') {
+      adj[from]?.push(to);
+    } else {
+      adj[to]?.push(from);
+    }
   }
 
   private grow(): void {

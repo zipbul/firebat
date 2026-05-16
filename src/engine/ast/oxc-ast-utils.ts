@@ -45,6 +45,14 @@ export const isFunctionNode = (node: Node): boolean => {
   return nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression' || nodeType === 'ArrowFunctionExpression';
 };
 
+const forEachNodeInArray = (arr: unknown[], cb: (child: Node) => void): void => {
+  for (const item of arr) {
+    if (isOxcNode(item)) {
+      cb(item);
+    }
+  }
+};
+
 /** Node의 자식 중 Node 타입인 것만 콜백에 전달. visitorKeys 기반. */
 export const forEachChildNode = (node: Node, cb: (child: Node) => void): void => {
   const keys = visitorKeys[node.type];
@@ -59,11 +67,7 @@ export const forEachChildNode = (node: Node, cb: (child: Node) => void): void =>
     if (isOxcNode(value)) {
       cb(value);
     } else if (Array.isArray(value)) {
-      for (const item of value) {
-        if (isOxcNode(item)) {
-          cb(item);
-        }
-      }
+      forEachNodeInArray(value, cb);
     }
   }
 };
@@ -137,6 +141,32 @@ export const collectFunctionNodesWithParent = (program: Node): FunctionNodeWithP
   return results;
 };
 
+const getNameFromKey = (key: Node): string | null => {
+  if (key.type === 'Identifier') {
+    return key.name;
+  }
+
+  const keyValue = getLiteralString(key as Node);
+
+  return typeof keyValue === 'string' && keyValue.length > 0 ? keyValue : null;
+};
+
+const getNameFromParentContext = (parent: Node): string | null => {
+  if (parent.type === 'VariableDeclarator') {
+    if (parent.id.type === 'Identifier') {
+      return parent.id.name;
+    }
+
+    return null;
+  }
+
+  if (parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition' || parent.type === 'Property') {
+    return getNameFromKey(parent.key);
+  }
+
+  return null;
+};
+
 export const getNodeHeader = (node: Node, parent?: Node | null): string => {
   // Extract name from node's own id (FunctionDeclaration, ClassDeclaration, etc.)
   if (
@@ -162,39 +192,19 @@ export const getNodeHeader = (node: Node, parent?: Node | null): string => {
 
   // Extract name from node's key (MethodDefinition, PropertyDefinition, Property)
   if (node.type === 'MethodDefinition' || node.type === 'PropertyDefinition' || node.type === 'Property') {
-    const key = node.key;
+    const name = getNameFromKey(node.key);
 
-    if (key.type === 'Identifier') {
-      return key.name;
-    }
-
-    const keyValue = getLiteralString(key as Node);
-
-    if (typeof keyValue === 'string' && keyValue.length > 0) {
-      return keyValue;
+    if (name !== null) {
+      return name;
     }
   }
 
   // Extract name from parent context
   if (parent !== undefined && parent !== null) {
-    if (parent.type === 'VariableDeclarator') {
-      if (parent.id.type === 'Identifier') {
-        return parent.id.name;
-      }
-    }
+    const parentName = getNameFromParentContext(parent);
 
-    if (parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition' || parent.type === 'Property') {
-      const key = parent.key;
-
-      if (key.type === 'Identifier') {
-        return key.name;
-      }
-
-      const keyValue = getLiteralString(key as Node);
-
-      if (typeof keyValue === 'string' && keyValue.length > 0) {
-        return keyValue;
-      }
+    if (parentName !== null) {
+      return parentName;
     }
   }
 

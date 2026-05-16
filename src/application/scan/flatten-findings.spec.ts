@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 
-import { parseSource } from '../../engine/ast/parse-source';
 import type { FirebatAnalyses } from '../../types';
 
+import { parseSource } from '../../engine/ast/parse-source';
 import { buildFunctionRangeMap, flattenToFindings, type FunctionRangeMap } from './flatten-findings';
 
 // ── Test helpers ────────────────────────────────────────────────────────────
@@ -89,9 +89,7 @@ describe('flattenToFindings: core schema', () => {
       waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', filePath: 'src/a.ts', span: span(1), label: 'x' } as any],
     });
     const withModule = firstFinding({
-      dependencies: [
-        { kind: 'unused-file', code: 'DEP_UNUSED_FILE', module: 'src/b.ts', span: ZERO_SPAN } as any,
-      ],
+      dependencies: [{ kind: 'unused-file', code: 'DEP_UNUSED_FILE', module: 'src/b.ts', span: ZERO_SPAN } as any],
     });
 
     expect(withFilePath.file).toBe('src/a.ts');
@@ -180,9 +178,7 @@ describe('flattenToFindings: detail extraction', () => {
 
   it('excludes kind, code, file, filePath, label, catalogCode from detail', () => {
     const detail = firstFinding({
-      lint: [
-        { severity: 'error', catalogCode: 'LINT', code: 'r1', msg: 'm', file: 'a.ts', span: span(1) } as any,
-      ],
+      lint: [{ severity: 'error', catalogCode: 'LINT', code: 'r1', msg: 'm', file: 'a.ts', span: span(1) } as any],
     }).detail!;
 
     expect(detail).not.toHaveProperty('kind');
@@ -194,9 +190,7 @@ describe('flattenToFindings: detail extraction', () => {
 
   it('renames code to ruleCode in detail for findings with catalogCode', () => {
     const detail = firstFinding({
-      lint: [
-        { severity: 'error', catalogCode: 'LINT', code: 'no-unused-vars', msg: 'm', file: 'a.ts', span: span(1) } as any,
-      ],
+      lint: [{ severity: 'error', catalogCode: 'LINT', code: 'no-unused-vars', msg: 'm', file: 'a.ts', span: span(1) } as any],
     }).detail!;
 
     expect(detail.ruleCode).toBe('no-unused-vars');
@@ -212,7 +206,15 @@ describe('flattenToFindings: detail extraction', () => {
           file: 'a.ts',
           header: 'processData',
           span: span(1),
-          metrics: { depth: 2, cognitiveComplexity: 25, callbackDepth: 0, quadraticTargets: [], density: 0, halsteadVolume: 0, halsteadDifficulty: 0 },
+          metrics: {
+            depth: 2,
+            cognitiveComplexity: 25,
+            callbackDepth: 0,
+            quadraticTargets: [],
+            density: 0,
+            halsteadVolume: 0,
+            halsteadDifficulty: 0,
+          },
           signals: ['high-cognitive-complexity'],
           score: 1,
         } as any,
@@ -408,7 +410,15 @@ describe('flattenToFindings: labels by category', () => {
   it('barrel label: uses .evidence field', () => {
     expect(
       firstFinding({
-        barrel: [{ kind: 'deep-import', code: 'BARREL_DEEP_IMPORT', file: 'a.ts', span: span(1), evidence: "import { x } from '../deep'" } as any],
+        barrel: [
+          {
+            kind: 'deep-import',
+            code: 'BARREL_DEEP_IMPORT',
+            file: 'a.ts',
+            span: span(1),
+            evidence: "import { x } from '../deep'",
+          } as any,
+        ],
       }).label,
     ).toBe("import { x } from '../deep'");
   });
@@ -422,7 +432,15 @@ describe('flattenToFindings: labels by category', () => {
           file: 'a.ts',
           header: 'processData',
           span: span(1),
-          metrics: { depth: 4, cognitiveComplexity: 25, callbackDepth: 0, quadraticTargets: [], density: 0, halsteadVolume: 0, halsteadDifficulty: 0 },
+          metrics: {
+            depth: 4,
+            cognitiveComplexity: 25,
+            callbackDepth: 0,
+            quadraticTargets: [],
+            density: 0,
+            halsteadVolume: 0,
+            halsteadDifficulty: 0,
+          },
           signals: ['high-cognitive-complexity'],
           score: 1,
         } as any,
@@ -500,7 +518,15 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         indirection: [
-          { kind: 'thin-wrapper', code: 'IND_THIN_WRAPPER', file: 'a.ts', span: span(1), header: 'fn1 → fn2', depth: 2, evidence: 'forwarding' } as any,
+          {
+            kind: 'thin-wrapper',
+            code: 'IND_THIN_WRAPPER',
+            file: 'a.ts',
+            span: span(1),
+            header: 'fn1 → fn2',
+            depth: 2,
+            evidence: 'forwarding',
+          } as any,
         ],
       }).label,
     ).toBe('fn1 → fn2 (depth: 2)');
@@ -566,7 +592,14 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         dependencies: [
-          { kind: 'unused-dependency', code: 'DEP_UNUSED_DEPENDENCY', file: '', span: ZERO_SPAN, packageName: 'lodash', files: [] } as any,
+          {
+            kind: 'unused-dependency',
+            code: 'DEP_UNUSED_DEPENDENCY',
+            file: '',
+            span: ZERO_SPAN,
+            packageName: 'lodash',
+            files: [],
+          } as any,
         ],
       }).label,
     ).toBe('unused-dependency: lodash');
@@ -576,7 +609,14 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         dependencies: [
-          { kind: 'unresolved-import', code: 'DEP_UNRESOLVED_IMPORT', file: 'a.ts', span: ZERO_SPAN, module: 'a.ts', specifier: './missing' } as any,
+          {
+            kind: 'unresolved-import',
+            code: 'DEP_UNRESOLVED_IMPORT',
+            file: 'a.ts',
+            span: ZERO_SPAN,
+            module: 'a.ts',
+            specifier: './missing',
+          } as any,
         ],
       }).label,
     ).toBe('unresolved: ./missing in a.ts');
@@ -586,7 +626,14 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         dependencies: [
-          { kind: 'duplicate-export', code: 'DEP_DUPLICATE_EXPORT', file: 'a.ts', span: ZERO_SPAN, name: 'fn', modules: ['a.ts', 'b.ts'] } as any,
+          {
+            kind: 'duplicate-export',
+            code: 'DEP_DUPLICATE_EXPORT',
+            file: 'a.ts',
+            span: ZERO_SPAN,
+            name: 'fn',
+            modules: ['a.ts', 'b.ts'],
+          } as any,
         ],
       }).label,
     ).toBe("duplicate export: 'fn'");
@@ -666,7 +713,15 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         'temporal-coupling': [
-          { kind: 'temporal-coupling', code: 'TEMPORAL_COUPLING', file: 'a.ts', span: span(1), state: 'connected', writers: 2, readers: 3 } as any,
+          {
+            kind: 'temporal-coupling',
+            code: 'TEMPORAL_COUPLING',
+            file: 'a.ts',
+            span: span(1),
+            state: 'connected',
+            writers: 2,
+            readers: 3,
+          } as any,
         ],
       }).label,
     ).toBe('temporal-coupling: connected');
@@ -676,7 +731,13 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         'giant-file': [
-          { kind: 'giant-file', code: 'GIANT_FILE', file: 'big.ts', span: span(1), metrics: { lineCount: 1234, maxLines: 1000 } } as any,
+          {
+            kind: 'giant-file',
+            code: 'GIANT_FILE',
+            file: 'big.ts',
+            span: span(1),
+            metrics: { lineCount: 1234, maxLines: 1000 },
+          } as any,
         ],
       }).label,
     ).toBe('1234 lines (max: 1000)');
@@ -686,7 +747,14 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         lint: [
-          { severity: 'error', catalogCode: 'LINT', code: 'no-unused-vars', msg: 'x is unused', file: 'a.ts', span: span(1) } as any,
+          {
+            severity: 'error',
+            catalogCode: 'LINT',
+            code: 'no-unused-vars',
+            msg: 'x is unused',
+            file: 'a.ts',
+            span: span(1),
+          } as any,
         ],
       }).label,
     ).toBe('[no-unused-vars] x is unused');
@@ -696,7 +764,15 @@ describe('flattenToFindings: labels by category', () => {
     expect(
       firstFinding({
         typecheck: [
-          { severity: 'error', catalogCode: 'TYPECHECK', code: 'TS2322', msg: 'Type not assignable', file: 'a.ts', span: span(1), codeFrame: '' } as any,
+          {
+            severity: 'error',
+            catalogCode: 'TYPECHECK',
+            code: 'TS2322',
+            msg: 'Type not assignable',
+            file: 'a.ts',
+            span: span(1),
+            codeFrame: '',
+          } as any,
         ],
       }).label,
     ).toBe('[TS2322] Type not assignable');
@@ -716,10 +792,13 @@ describe('flattenToFindings: labels by category', () => {
 describe('flattenToFindings: function name injection', () => {
   const fnMap: FunctionRangeMap = new Map([
     ['src/a.ts', [{ name: 'processData', startLine: 5, endLine: 20 }]],
-    ['src/b.ts', [
-      { name: 'outer', startLine: 1, endLine: 100 },
-      { name: 'inner', startLine: 50, endLine: 60 },
-    ]],
+    [
+      'src/b.ts',
+      [
+        { name: 'outer', startLine: 1, endLine: 100 },
+        { name: 'inner', startLine: 50, endLine: 60 },
+      ],
+    ],
   ]);
 
   it('injects function name into waste label', () => {
@@ -736,7 +815,13 @@ describe('flattenToFindings: function name injection', () => {
       firstFinding(
         {
           'error-flow': [
-            { kind: 'throw-non-error', code: 'EF_THROW_NON_ERROR', file: 'src/a.ts', span: span(10), evidence: "throw 'x'" } as any,
+            {
+              kind: 'throw-non-error',
+              code: 'EF_THROW_NON_ERROR',
+              file: 'src/a.ts',
+              span: span(10),
+              evidence: "throw 'x'",
+            } as any,
           ],
         },
         fnMap,
@@ -801,7 +886,14 @@ describe('flattenToFindings: function name injection', () => {
       firstFinding(
         {
           dependencies: [
-            { kind: 'dead-export', code: 'DEP_DEAD_EXPORT', file: 'src/a.ts', span: ZERO_SPAN, module: 'src/a.ts', name: 'foo' } as any,
+            {
+              kind: 'dead-export',
+              code: 'DEP_DEAD_EXPORT',
+              file: 'src/a.ts',
+              span: ZERO_SPAN,
+              module: 'src/a.ts',
+              name: 'foo',
+            } as any,
           ],
         },
         fnMap,
@@ -820,7 +912,15 @@ describe('flattenToFindings: function name injection', () => {
             file: 'src/a.ts',
             header: 'inline',
             span: span(10),
-            metrics: { depth: 5, cognitiveComplexity: 10, callbackDepth: 0, quadraticTargets: [], density: 0, halsteadVolume: 0, halsteadDifficulty: 0 },
+            metrics: {
+              depth: 5,
+              cognitiveComplexity: 10,
+              callbackDepth: 0,
+              quadraticTargets: [],
+              density: 0,
+              halsteadVolume: 0,
+              halsteadDifficulty: 0,
+            },
             signals: ['deep-nesting'],
             score: 1,
           } as any,
@@ -873,7 +973,6 @@ describe('buildFunctionRangeMap', () => {
   it('skips files with parse errors', () => {
     const badFile = parseSource('src/broken.ts', 'function {{{');
     const map = buildFunctionRangeMap([badFile], rel);
-
     // Either the file is skipped entirely, or it has no usable ranges
     const ranges = map.get('src/broken.ts');
 
@@ -1004,7 +1103,15 @@ describe('flattenToFindings: multi-category integration', () => {
           file: 'a.ts',
           header: 'f',
           span: span(5),
-          metrics: { depth: 1, cognitiveComplexity: 20, callbackDepth: 0, quadraticTargets: [], density: 0, halsteadVolume: 0, halsteadDifficulty: 0 },
+          metrics: {
+            depth: 1,
+            cognitiveComplexity: 20,
+            callbackDepth: 0,
+            quadraticTargets: [],
+            density: 0,
+            halsteadVolume: 0,
+            halsteadDifficulty: 0,
+          },
           signals: ['high-cognitive-complexity'],
           score: 1,
         } as any,

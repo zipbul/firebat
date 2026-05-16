@@ -12,7 +12,6 @@ import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { resolveTargets } from '../../shared/target-discovery';
 
-
 interface CliLoggerInput {
   readonly level: FirebatCliOptions['logLevel'];
   readonly logStack: FirebatCliOptions['logStack'];

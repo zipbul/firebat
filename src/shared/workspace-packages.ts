@@ -134,4 +134,4 @@ const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, s
   return map;
 };
 
-export { createWorkspacePackageMap };
+export { asRecord, createWorkspacePackageMap, readJsoncFile };

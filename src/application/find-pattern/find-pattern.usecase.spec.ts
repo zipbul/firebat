@@ -32,6 +32,10 @@ const MATCH_1: PatternMatch = {
   filePath: '/proj/src/a.ts',
   startLine: 3,
   endLine: 3,
+  startColumn: 0,
+  endColumn: 14,
+  startOffset: 0,
+  endOffset: 14,
   matchedText: 'console.log(x)',
 };
 

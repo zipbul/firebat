@@ -147,6 +147,7 @@ describe('toScanResult', () => {
       kind: 'dead-store',
       label: 'x',
     });
+
     const report = makeReport({}, {}, [f('a'), f('b'), f('c')]);
     const out = toScanResult(report);
 

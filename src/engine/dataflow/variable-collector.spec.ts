@@ -29,7 +29,8 @@ const getFunctionBodyStatement = (sourceText: string, statementIndex: number): N
     throw new Error('Expected function body');
   }
 
-  const statements = Array.isArray(functionBody.body) ? (functionBody.body as ReadonlyArray<Node>) : [];
+  const functionBodyRecord = functionBody as unknown as Record<string, unknown>;
+  const statements = Array.isArray(functionBodyRecord.body) ? (functionBodyRecord.body as ReadonlyArray<Node>) : [];
 
   if (statements.length === 0) {
     throw new Error('Expected function body statements');

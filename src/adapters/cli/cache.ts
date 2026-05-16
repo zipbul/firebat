@@ -56,6 +56,38 @@ const printCacheAndExit = (code: number): number => {
   return code;
 };
 
+interface CacheCleanResults {
+  readonly logger: FirebatLogger;
+  readonly removed: readonly string[];
+  readonly missing: readonly string[];
+  readonly failed: readonly string[];
+  readonly exitCode: number | null;
+}
+
+const logCacheCleanResults = ({ logger, removed, missing, failed, exitCode }: CacheCleanResults): number => {
+  if (failed.length > 0) {
+    logger.error('cache clean failed: could not remove some cache files (are they in use?)');
+
+    for (const item of failed) {
+      logger.error('cache clean failed: remove failed', { filePath: item });
+    }
+
+    return 1;
+  }
+
+  logger.info('cache clean done');
+
+  for (const item of removed) {
+    logger.info('cache removed', { filePath: item });
+  }
+
+  if (removed.length === 0 && missing.length > 0) {
+    logger.info('cache already clean');
+  }
+
+  return exitCode ?? 0;
+};
+
 const safeRemoveFile = async (filePath: string): Promise<'removed' | 'missing' | 'failed'> => {
   let result: 'removed' | 'missing' | 'failed' = 'missing';
   const hasPath = filePath.trim().length > 0;
@@ -124,25 +156,5 @@ export const runCache = async (argv: readonly string[], logger: FirebatLogger): 
     }
   }
 
-  if (failed.length > 0) {
-    logger.error('cache clean failed: could not remove some cache files (are they in use?)');
-
-    for (const item of failed) {
-      logger.error('cache clean failed: remove failed', { filePath: item });
-    }
-
-    exitCode = 1;
-  }
-
-  logger.info('cache clean done');
-
-  for (const item of removed) {
-    logger.info('cache removed', { filePath: item });
-  }
-
-  if (removed.length === 0 && missing.length > 0) {
-    logger.info('cache already clean');
-  }
-
-  return exitCode ?? 0;
+  return logCacheCleanResults({ logger, removed, missing, failed, exitCode });
 };
