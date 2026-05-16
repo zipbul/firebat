@@ -1917,6 +1917,42 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
+  it('should not report unobserved-variable when gildash is unavailable (conservative fallback)', async () => {
+    // Arrange — without gildash, detector cannot confirm Promise-ness of the call result.
+    // Fallback policy: register NO candidates (vs. the old behavior of registering ALL,
+    // which re-introduced the original broad-FP regression).
+    const filePath = '/virtual/src/features/no-gildash.ts';
+    const source = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
+    const program = [parseSource(filePath, source)];
+    // Act — no gildash passed
+    const analysis = await analyzeErrorFlow(program);
+    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unobserved-variable when gildash throws (conservative fallback)', async () => {
+    // Arrange — gildash present but its semantic methods throw.
+    // Same conservative policy: don't broadcast FP for every call result.
+    const filePath = '/virtual/src/features/gildash-throws.ts';
+    const source = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
+    const program = [parseSource(filePath, source)];
+    const throwingGildash = {
+      getResolvedTypesAtPositions: () => {
+        throw new Error('semantic layer offline');
+      },
+      isTypeAssignableToTypeAtPositions: () => new Map<number, boolean>(),
+      isTypeAssignableToType: () => null,
+    } as unknown as Gildash;
+    // Act
+    const analysis = await analyzeErrorFlow(program, { gildash: throwingGildash });
+    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
   it('should not report unobserved-variable when call result is awaited', async () => {
     // Arrange
     const filePath = '/virtual/src/features/observed-var.ts';

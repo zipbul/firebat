@@ -589,7 +589,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // Pre-compute which variable positions have Promise types (one batch call per file).
   // Uses id.start positions so gildash resolves the variable's type (= call result type).
   // Filters out `any` typed positions since `any` is assignable to everything.
-  let promisePositions: Set<number> | null = null;
+  //
+  // Default is an empty set: when gildash is unavailable or throws, register NO candidates
+  // rather than registering ALL (which produces broad FP for every sync call result).
+  const promisePositions = new Set<number>();
 
   if (gildash) {
     const allPositions = collectCallVarPositions(program);
@@ -605,8 +608,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         });
 
         // Step 2: Check PromiseLike assignability only for non-any positions.
-        promisePositions = new Set<number>();
-
         if (nonAnyPositions.length > 0) {
           const results = gildash.isTypeAssignableToTypeAtPositions(filePath, nonAnyPositions, 'PromiseLike<any>', {
             anyConstituent: true,
@@ -619,7 +620,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           }
         }
       } catch {
-        // Semantic layer error — promisePositions stays null, all candidates will be registered.
+        // Semantic layer error — promisePositions stays empty, conservative fallback.
       }
     }
   }
@@ -1259,10 +1260,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         init !== null &&
         (init.type === 'CallExpression' || init.type === 'NewExpression')
       ) {
-        // Only register as candidate if the call returns a Promise (or if we can't determine).
-        // promisePositions === null means gildash unavailable — register all (existing behavior).
-        // promisePositions !== null means gildash confirmed — only register Promise-returning calls.
-        if (promisePositions === null || promisePositions.has(id.start)) {
+        // Only register as candidate if gildash confirmed the call returns a Promise.
+        // When gildash is unavailable, promisePositions is empty → no candidates registered
+        // (conservative fallback; broadcasting unobserved-variable for every call result
+        // produced massive FP for sync function results).
+        if (promisePositions.has(id.start)) {
           addCandidate(id.name, node);
         }
       }
