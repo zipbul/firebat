@@ -308,10 +308,7 @@ const collectStateProperties = (bodyItems: ReadonlyArray<unknown>): Array<{ name
   return stateProps;
 };
 
-const classifyMethodAccess = (
-  methodBody: Node,
-  propName: string,
-): { hasWrite: boolean; hasRead: boolean } => {
+const classifyMethodAccess = (methodBody: Node, propName: string): { hasWrite: boolean; hasRead: boolean } => {
   let hasWrite = false;
   let hasRead = false;
 
@@ -320,12 +317,7 @@ const classifyMethodAccess = (
       const object = node.object;
       const property = node.property;
 
-      if (
-        isOxcNode(object) &&
-        object.type === 'ThisExpression' &&
-        isOxcNode(property) &&
-        getNodeName(property) === propName
-      ) {
+      if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && getNodeName(property) === propName) {
         hasRead = true;
       }
     }
@@ -336,6 +328,19 @@ const classifyMethodAccess = (
       if (isOxcNode(left) && left.type === 'MemberExpression') {
         const obj = left.object;
         const p = left.property;
+
+        if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
+          hasWrite = true;
+        }
+      }
+    }
+
+    if (node.type === 'UpdateExpression') {
+      const argument = node.argument;
+
+      if (isOxcNode(argument) && argument.type === 'MemberExpression') {
+        const obj = argument.object;
+        const p = argument.property;
 
         if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
           hasWrite = true;
@@ -1077,6 +1082,22 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
           if (isOxcNode(left) && left.type === 'MemberExpression') {
             const obj = left.object;
             const p = left.property;
+
+            if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === stateName) {
+              hasWrite = true;
+
+              return false;
+            }
+          }
+        }
+
+        // this.stateName++ / --this.stateName
+        if (n.type === 'UpdateExpression') {
+          const argument = n.argument;
+
+          if (isOxcNode(argument) && argument.type === 'MemberExpression') {
+            const obj = argument.object;
+            const p = argument.property;
 
             if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === stateName) {
               hasWrite = true;

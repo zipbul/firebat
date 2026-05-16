@@ -441,6 +441,49 @@ describe('temporal-coupling/analyzer', () => {
     expect(result.length).toBeGreaterThanOrEqual(1);
   });
 
+  // B-3: UpdateExpression (this.x++) treated as a write
+  it('analyzeTemporalCoupling - class method writes property via postfix ++ - reports finding', () => {
+    // Arrange — inc() writes this.count via UpdateExpression; read() reads it
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export class Counter {',
+          '  count = 0;',
+          '  inc() { this.count++; }',
+          '  read() { return this.count; }',
+          '}',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('analyzeTemporalCoupling - class method writes property via prefix -- - reports finding', () => {
+    // Arrange — dec() writes this.count via prefix decrement
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'export class Counter {',
+          '  count = 0;',
+          '  dec() { --this.count; }',
+          '  read() { return this.count; }',
+          '}',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+  });
+
   // --- gildash caller 공존 검사 ---
 
   const createMockGildash = (relations: CodeRelation[]) => ({
