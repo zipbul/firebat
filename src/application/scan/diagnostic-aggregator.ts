@@ -284,6 +284,15 @@ export const FIREBAT_CODE_CATALOG = {
       'If the cast is at a system boundary (FFI, serialization), isolate it in a typed wrapper function and document why the assertion is safe.',
     ],
   },
+  UNKNOWN_NON_NULL_ASSERTION: {
+    cause:
+      'A non-null assertion (`x!`) tells TypeScript the value is non-null/undefined without any runtime check. If the assertion is wrong, the code crashes with a TypeError at runtime instead of being caught by the compiler.',
+    think: [
+      'Read why the value might be nullish. If TypeScript inferred a `T | null` or `T | undefined`, the assertion is silencing a real possibility — narrow it with `if (x != null)` or `x ?? default` instead.',
+      'For Map/Array lookups (`map.get(k)!`, `arr[i]!`), prefer an explicit check or use a default-providing helper. The runtime error from a wrong assertion loses the context that a type guard would surface.',
+      'When the upstream type definition is wrong, fix that type rather than asserting at every call site — a single corrected type eliminates all the assertions.',
+    ],
+  },
 
   DEP_LAYER_VIOLATION: {
     cause: 'A module imports from a layer that the architecture rules prohibit, breaking the intended dependency direction.',
@@ -707,13 +716,7 @@ const asArray = <T>(v: unknown): ReadonlyArray<T> => {
   return Array.isArray(v) ? (v as ReadonlyArray<T>) : [];
 };
 
-export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): DiagnosticAggregatorOutput => {
-  const catalog: Partial<Record<FirebatCatalogCode, CatalogEntry>> = {};
-  const waste = asArray<any>(input.analyses['waste']);
-  const nesting = asArray<any>(input.analyses['nesting']);
-  const coupling = asArray<any>(input.analyses['coupling']);
-  const dependencies = input.analyses['dependencies'] as any;
-  // DIAG_GOD_FUNCTION: nesting(CC>=15) + waste co-occur in same file
+const countGodFunctionResolves = (waste: ReadonlyArray<any>, nesting: ReadonlyArray<any>): number => {
   const hasHighCcInFile = new Set(
     nesting
       .filter((n: any) => n?.kind === 'high-cognitive-complexity')
@@ -721,13 +724,24 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
       .filter(Boolean),
   );
   const hasWasteInFile = new Set(waste.map((w: any) => String(w?.file ?? w?.filePath ?? '')).filter(Boolean));
-  let godFunctionResolves = 0;
+  let count = 0;
 
   for (const f of hasHighCcInFile) {
     if (hasWasteInFile.has(f)) {
-      godFunctionResolves += waste.filter((w: any) => (w?.file ?? w?.filePath) === f).length;
+      count += waste.filter((w: any) => (w?.file ?? w?.filePath) === f).length;
     }
   }
+
+  return count;
+};
+
+export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): DiagnosticAggregatorOutput => {
+  const catalog: Partial<Record<FirebatCatalogCode, CatalogEntry>> = {};
+  // DIAG_GOD_FUNCTION: nesting(CC>=15) + waste co-occur in same file
+  const godFunctionResolves = countGodFunctionResolves(
+    asArray<any>(input.analyses['waste']),
+    asArray<any>(input.analyses['nesting']),
+  );
 
   if (godFunctionResolves > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_FUNCTION;
@@ -738,6 +752,7 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   }
 
   // DIAG_CIRCULAR_DEPENDENCY
+  const dependencies = input.analyses['dependencies'] as any;
   const cycles = Array.isArray(dependencies?.cycles) ? dependencies.cycles : [];
 
   if (cycles.length > 0) {
@@ -749,7 +764,7 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
   }
 
   // DIAG_GOD_MODULE
-  const godModules = coupling.filter((c: any) => c?.kind === 'god-module');
+  const godModules = asArray<any>(input.analyses['coupling']).filter((c: any) => c?.kind === 'god-module');
 
   if (godModules.length > 0) {
     const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_MODULE;

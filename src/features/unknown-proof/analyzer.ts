@@ -25,12 +25,16 @@ export const analyzeUnknownProof = (
 
   for (const [filePath, candidates] of exprCandidatesByFile) {
     for (const c of candidates) {
+      const message =
+        c.kind === 'double-cast'
+          ? 'Double assertion bypasses type safety (as unknown as T)'
+          : c.kind === 'non-null-assertion'
+            ? 'Non-null assertion (`x!`) bypasses null/undefined checks without runtime validation'
+            : 'Explicit `as any` cast removes type safety';
+
       exprFindings.push({
         kind: c.kind,
-        message:
-          c.kind === 'double-cast'
-            ? 'Double assertion bypasses type safety (as unknown as T)'
-            : 'Explicit `as any` cast removes type safety',
+        message,
         filePath,
         span: c.span,
         evidence: c.sourceSnippet,

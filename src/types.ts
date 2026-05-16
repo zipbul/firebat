@@ -79,6 +79,7 @@ export type FirebatCatalogCode =
   | 'UNKNOWN_ANY_INFERRED'
   | 'UNKNOWN_ANY_CAST'
   | 'UNKNOWN_DOUBLE_CAST'
+  | 'UNKNOWN_NON_NULL_ASSERTION'
   // indirection (5)
   | 'IND_THIN_WRAPPER'
   | 'IND_FORWARD_CHAIN'
@@ -552,7 +553,8 @@ export type UnknownProofFindingKind =
   | 'unknown-inferred'
   | 'any-inferred'
   | 'any-cast'
-  | 'double-cast';
+  | 'double-cast'
+  | 'non-null-assertion';
 
 export interface UnknownProofFinding {
   readonly kind: UnknownProofFindingKind;
@@ -711,9 +713,7 @@ export interface ScanJsonResult {
 export const toScanResult = (report: FirebatReport): ScanJsonResult => ({
   meta: {
     detectors: report.meta.detectors,
-    ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0
-      ? { errors: report.meta.errors }
-      : {}),
+    ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0 ? { errors: report.meta.errors } : {}),
   },
   total: report.findings.length,
   findings: report.findings,

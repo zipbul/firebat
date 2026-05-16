@@ -239,6 +239,35 @@ describe('features/unknown-proof/candidates — collectExpressionCandidates', ()
     expect(candidates[0]!.sourceSnippet).toContain('as unknown as');
   });
 
+  it('collectExpressionCandidates - non-null assertion (x!) - returns non-null-assertion candidate', () => {
+    const f = toFile('/non-null.ts', `function f(m: Map<string, number>) { return m.get('k')!; }`);
+    const result = collectExpressionCandidates({ program: [f] });
+    const candidates = result.get('/non-null.ts') ?? [];
+
+    expect(candidates.length).toBe(1);
+    expect(candidates[0]!.kind).toBe('non-null-assertion');
+    expect(candidates[0]!.sourceSnippet).toContain("m.get('k')!");
+  });
+
+  it('collectExpressionCandidates - multiple non-null assertions - returns one candidate per assertion', () => {
+    const f = toFile(
+      '/multi-non-null.ts',
+      `function f(m: Map<string, number>, n: Map<string, number>) { return m.get('k')! + n.get('j')!; }`,
+    );
+    const result = collectExpressionCandidates({ program: [f] });
+    const candidates = result.get('/multi-non-null.ts') ?? [];
+
+    expect(candidates.filter(c => c.kind === 'non-null-assertion').length).toBe(2);
+  });
+
+  it('collectExpressionCandidates - non-null assertion on plain identifier - returns candidate', () => {
+    const f = toFile('/x-bang.ts', `function f(x: string | null) { return x!.length; }`);
+    const result = collectExpressionCandidates({ program: [f] });
+    const candidates = result.get('/x-bang.ts') ?? [];
+
+    expect(candidates.some(c => c.kind === 'non-null-assertion')).toBe(true);
+  });
+
   it('collectExpressionCandidates - double cast as any as T - returns double-cast candidate', () => {
     const f = toFile('/double-cast-any.ts', `const x = data as any as User;`);
     const result = collectExpressionCandidates({ program: [f] });

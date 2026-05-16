@@ -25,7 +25,7 @@ interface BindingCandidate {
 }
 
 interface ExpressionCandidate {
-  readonly kind: 'any-cast' | 'double-cast';
+  readonly kind: 'any-cast' | 'double-cast' | 'non-null-assertion';
   readonly span: SourceSpan;
   readonly sourceSnippet: string;
 }
@@ -537,6 +537,21 @@ const collectExpressionCandidates = (
     const candidates: ExpressionCandidate[] = [];
 
     walkOxcTree(file.program, (node: Node) => {
+      // Non-null assertion (`x!`) bypasses the type-system in a similar way to `as` casts:
+      // it asserts a value is non-nullish without runtime check. Record each occurrence.
+      if (node.type === 'TSNonNullExpression') {
+        const startOffset = node.start;
+        const endOffset = node.end;
+
+        candidates.push({
+          kind: 'non-null-assertion',
+          span: toSpanFromOffsets(file.sourceText, startOffset, endOffset),
+          sourceSnippet: file.sourceText.slice(startOffset, Math.min(endOffset, startOffset + 80)),
+        });
+
+        return true;
+      }
+
       if (node.type !== 'TSAsExpression' && node.type !== 'TSTypeAssertion') {
         return true;
       }

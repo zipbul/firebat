@@ -223,6 +223,7 @@ const UNKNOWN_PROOF_KIND_TO_CODE: Record<Exclude<UnknownProofFindingKind, 'tool-
   'any-inferred': 'UNKNOWN_ANY_INFERRED',
   'any-cast': 'UNKNOWN_ANY_CAST',
   'double-cast': 'UNKNOWN_DOUBLE_CAST',
+  'non-null-assertion': 'UNKNOWN_NON_NULL_ASSERTION',
 };
 const INDIRECTION_KIND_TO_CODE: Readonly<Record<IndirectionFindingKind, FirebatCatalogCode>> = {
   'thin-wrapper': 'IND_THIN_WRAPPER',
