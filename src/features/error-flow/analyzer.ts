@@ -141,6 +141,11 @@ const chainHasCatch = (expr: Node): boolean => {
       return true;
     }
 
+    // .then(onFulfilled, onRejected) — second argument handles rejection just like .catch()
+    if (method === 'then' && Array.isArray(current.arguments) && current.arguments.length >= 2) {
+      return true;
+    }
+
     // Walk down the chain: expr.callee.object is the previous call
     if (callee.type === 'MemberExpression') {
       current = callee.object;

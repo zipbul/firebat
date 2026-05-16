@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'bun:test';
 import type { Gildash } from '@zipbul/gildash';
+
+import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
@@ -50,15 +51,17 @@ const analyzeWithSemantic = async (
 
       return result;
     },
-    isTypeAssignableToTypeAtPositions: mockBatchPositions ?? ((_f: string, positions: number[]) => {
-      const result = new Map<number, boolean>();
+    isTypeAssignableToTypeAtPositions:
+      mockBatchPositions ??
+      ((_f: string, positions: number[]) => {
+        const result = new Map<number, boolean>();
 
-      for (const pos of positions) {
-        result.set(pos, true);
-      }
+        for (const pos of positions) {
+          result.set(pos, true);
+        }
 
-      return result;
-    }),
+        return result;
+      }),
   } as unknown as Gildash;
 
   return analyzeErrorFlow(program, { gildash });
@@ -400,6 +403,46 @@ describe('error-flow/analyzer', () => {
     const source = [
       'export function f() {',
       '  doThing().then(() => 1).catch(() => 0);',
+      '}',
+      'function doThing() { return Promise.resolve(1); }',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report catch-or-return when then has a rejection handler (2-arg form)', async () => {
+    // Arrange — .then(onFulfilled, onRejected) handles rejection just like .catch()
+    const filePath = '/virtual/src/features/then-2arg.ts';
+    const source = [
+      'export function f() {',
+      '  doThing().then(',
+      '    (v) => v + 1,',
+      '    (e) => 0,',
+      '  );',
+      '}',
+      'function doThing() { return Promise.resolve(1); }',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'catch-or-return');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report catch-or-return when an earlier then in chain has rejection handler', async () => {
+    // Arrange — earlier .then(_, onRejected) handles rejection for subsequent chain
+    const filePath = '/virtual/src/features/then-2arg-chain.ts';
+    const source = [
+      'export function f() {',
+      '  doThing().then(',
+      '    (v) => v + 1,',
+      '    (e) => 0,',
+      '  ).then((v) => v * 2);',
       '}',
       'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
@@ -1812,15 +1855,20 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/sync-var.ts';
     const source = ['export function f() {', '  const x = getData();', '  console.log("done");', '}'].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => null, (_f, positions) => {
-      const m = new Map<number, boolean>();
+    const analysis = await analyzeWithSemantic(
+      filePath,
+      source,
+      () => null,
+      (_f, positions) => {
+        const m = new Map<number, boolean>();
 
-      for (const p of positions) {
-        m.set(p, false);
-      }
+        for (const p of positions) {
+          m.set(p, false);
+        }
 
-      return m;
-    });
+        return m;
+      },
+    );
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert

@@ -32,21 +32,6 @@
   {
     "evidence": "fetchData().then(",
     "file": "/virtual/promise-patterns.ts",
-    "kind": "catch-or-return",
-    "span": {
-      "end": {
-        "column": 4,
-        "line": 20
-      },
-      "start": {
-        "column": 2,
-        "line": 17
-      }
-    }
-  },
-  {
-    "evidence": "fetchData().then(",
-    "file": "/virtual/promise-patterns.ts",
     "kind": "prefer-catch",
     "span": {
       "end": {
