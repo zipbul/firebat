@@ -98,9 +98,9 @@ const countLogicalComplexity = (node: Node): number => {
       return;
     }
 
-    flatten(expr.left as Node);
+    flatten(expr.left);
     operators.push(String(expr.operator ?? ''));
-    flatten(expr.right as Node);
+    flatten(expr.right);
   };
 
   flatten(node);
@@ -145,8 +145,8 @@ const getMemberObjectIdentifier = (node: Node): string | null => {
     return null;
   }
 
-  const obj = node.object as Node;
-  const prop = node.property as Node;
+  const obj = node.object;
+  const prop = node.property;
 
   if (obj.type !== 'Identifier') {
     return null;
@@ -161,7 +161,7 @@ const getMemberObjectIdentifier = (node: Node): string | null => {
 
 const getIterationTarget = (node: Node): string | null => {
   if (node.type === 'ForOfStatement' || node.type === 'ForInStatement') {
-    const right = node.right as Node;
+    const right = node.right;
 
     if (right.type === 'Identifier') {
       return right.name;
@@ -171,26 +171,20 @@ const getIterationTarget = (node: Node): string | null => {
   }
 
   if (node.type === 'ForStatement') {
-    const test = node.test;
+    const testNode = node.test;
 
-    if (test === null || test === undefined) {
+    if (testNode === null || testNode.type !== 'BinaryExpression') {
       return null;
     }
 
-    const testNode = test as Node;
-
-    if (testNode.type !== 'BinaryExpression') {
-      return null;
-    }
-
-    const right = testNode.right as Node;
+    const right = testNode.right;
 
     if (right.type !== 'MemberExpression') {
       return null;
     }
 
     const objName = getMemberObjectIdentifier(right);
-    const prop = right.property as Node;
+    const prop = right.property;
     const propName = prop.type === 'Identifier' ? prop.name : null;
 
     if (objName && propName === 'length') {
@@ -201,13 +195,13 @@ const getIterationTarget = (node: Node): string | null => {
   }
 
   if (node.type === 'CallExpression') {
-    const callee = node.callee as Node;
+    const callee = node.callee;
 
     if (callee.type !== 'MemberExpression') {
       return null;
     }
 
-    const prop = callee.property as Node;
+    const prop = callee.property;
     const propName = prop.type === 'Identifier' ? prop.name : null;
 
     if (!propName || !isIterationMethod(propName)) {
@@ -233,7 +227,7 @@ const isTestRunnerCall = (callee: Node): boolean => {
 
   // Handle `describe.skip(...)`, `it.only(...)`, etc.
   if (callee.type === 'MemberExpression') {
-    const obj = callee.object as Node;
+    const obj = callee.object;
 
     if (obj.type === 'Identifier') {
       return TEST_RUNNER_FUNCTIONS.has(String(obj.name ?? ''));
@@ -261,9 +255,9 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
   }
 
   if (node.type === 'CallExpression') {
-    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
+    const args = node.arguments;
     let max = depth;
-    const callee = node.callee as Node;
+    const callee = node.callee;
     const isTestRunner = isTestRunnerCall(callee);
     const d = measureMaxCallbackDepth(callee, depth);
 
@@ -282,7 +276,7 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
         }
 
         const nextDepth = isTestRunner ? depth : depth + 1;
-        const d = measureMaxCallbackDepth(callbackBody as Node, nextDepth);
+        const d = measureMaxCallbackDepth(callbackBody, nextDepth);
 
         if (d > max) {
           max = d;
@@ -340,18 +334,18 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
   }
 
   if (node.type === 'CallExpression') {
-    const callee = node.callee as Node;
+    const callee = node.callee;
     let chainDepth = depth;
 
     // Check if callee is a MemberExpression with then/catch/finally
     if (callee.type === 'MemberExpression') {
-      const prop = callee.property as Node;
+      const prop = callee.property;
 
       if (prop.type === 'Identifier' && PROMISE_METHODS.has(prop.name)) {
         chainDepth = depth + 1;
 
         // Recurse into the object (the chained receiver) to count further chain links
-        const objDepth = measurePromiseChainDepth(callee.object as Node, chainDepth);
+        const objDepth = measurePromiseChainDepth(callee.object, chainDepth);
 
         if (objDepth > chainDepth) {
           chainDepth = objDepth;
@@ -360,7 +354,7 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
     }
 
     // Scan callback arguments for nested promise chains
-    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
+    const args = node.arguments;
     let max = chainDepth;
 
     for (const arg of args) {
@@ -372,7 +366,7 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
         }
 
         // Nested chains inside callbacks count from the current chain depth
-        const d = measurePromiseChainDepth(callbackBody as Node, chainDepth);
+        const d = measurePromiseChainDepth(callbackBody, chainDepth);
 
         if (d > max) {
           max = d;
@@ -466,7 +460,7 @@ const analyzeFunctionNode = (
       return;
     }
 
-    const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
+    const args = node.arguments;
     const callback = args[0];
 
     if (callback === undefined || !isFunctionNode(callback)) {
@@ -479,7 +473,7 @@ const analyzeFunctionNode = (
       return;
     }
 
-    if (hasNestedIterationOnTarget(callbackBody as Node, target)) {
+    if (hasNestedIterationOnTarget(callbackBody, target)) {
       accidentalQuadraticTargets.add(target);
     }
   };
@@ -493,8 +487,8 @@ const analyzeFunctionNode = (
     if (node.type === 'LogicalExpression') {
       // Halstead: count ALL logical operators in the chain (visit() only counts the top-level one)
       collectHalstead(node);
-      visitLogicalLeaves(node.left as Node, depth);
-      visitLogicalLeaves(node.right as Node, depth);
+      visitLogicalLeaves(node.left, depth);
+      visitLogicalLeaves(node.right, depth);
 
       return;
     }
@@ -517,25 +511,25 @@ const analyzeFunctionNode = (
     }
 
     // Visit the test expression at current depth (condition is evaluated before entering if body)
-    visit(node.test as Node, depth);
+    visit(node.test, depth);
 
     // Visit the consequent body
-    visit(node.consequent as Node, nextDepth);
+    visit(node.consequent, nextDepth);
 
     // Handle alternate
     const alt = node.alternate;
 
     if (alt !== null) {
-      if ((alt as Node).type === 'IfStatement') {
+      if (alt.type === 'IfStatement') {
         // else if: +1 only (no nesting bonus, no depth increase)
         // Halstead: count the else-if IfStatement operator (bypasses visit())
-        collectHalstead(alt as Node);
-        visitIfStatement(alt as Node, depth);
+        collectHalstead(alt);
+        visitIfStatement(alt, depth);
       } else {
         // standalone else: +1, then visit body at increased depth
         cognitiveComplexity += 1;
 
-        visit(alt as Node, nextDepth);
+        visit(alt, nextDepth);
       }
     }
   };
@@ -751,7 +745,7 @@ const analyzeFunctionNode = (
     }
   };
 
-  visit(bodyValue as Node, 0);
+  visit(bodyValue, 0);
 
   const header = getNodeHeader(functionNode, parent);
   const lineOffsets = buildLineOffsets(sourceText);
@@ -760,8 +754,8 @@ const analyzeFunctionNode = (
     end: getLineColumn(lineOffsets, functionNode.end),
   };
   const nestingScore = Math.max(0, cognitiveComplexity);
-  const callbackDepth = measureMaxCallbackDepth(bodyValue as Node);
-  const promiseChainDepth = measurePromiseChainDepth(bodyValue as Node);
+  const callbackDepth = measureMaxCallbackDepth(bodyValue);
+  const promiseChainDepth = measurePromiseChainDepth(bodyValue);
   const quadraticTargets = Array.from(accidentalQuadraticTargets).sort();
   // Complexity density: CC / LOC
   const loc = span.end.line - span.start.line + 1;
