@@ -1,3 +1,5 @@
+import type { Gildash } from '@zipbul/gildash';
+
 /**
  * Cross-feature integration test.
  *
@@ -6,8 +8,6 @@
  * result independently.
  */
 import { describe, expect, it } from 'bun:test';
-
-import type { Gildash } from '@zipbul/gildash';
 
 import type { ParsedFile } from '../../../src/test-api';
 
@@ -22,7 +22,6 @@ const noopGildash = {
   getResolvedTypesAtPositions: () => new Map(),
   isTypeAssignableToTypeAtPositions: () => new Map(),
 } as unknown as Gildash;
-
 const SOURCE = `
 import { readFileSync } from 'node:fs';
 
@@ -95,19 +94,22 @@ describe('cross-feature integration', () => {
     expect(Array.isArray(nesting)).toBe(true);
   });
 
-  it('should produce findings from multiple analyzers on the same file', async () => {
-    // Arrange
+  it('should produce findings from BOTH early-return and nesting on the same file', () => {
+    // Arrange — SOURCE has `loadConfig` (wrapping-if) and `deepNested` (depth-3 nesting),
+    // so both analyzers must independently report at least one finding. The previous
+    // assertion summed both lengths so a complete failure in one analyzer was hidden
+    // by the other.
     const program = buildProgram(SOURCE);
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
     const nesting = analyzeNesting(program);
-    // Assert — at least some analyzers find issues in this code
-    const totalFindings = earlyReturn.length + nesting.length;
 
-    expect(totalFindings).toBeGreaterThanOrEqual(1);
+    // Assert — each analyzer must find something on its own.
+    expect(earlyReturn.length).toBeGreaterThanOrEqual(1);
+    expect(nesting.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should produce consistent results on repeated runs', async () => {
+  it('should produce consistent results on repeated runs', () => {
     // Arrange
     const program = buildProgram(SOURCE);
     // Act — run twice
