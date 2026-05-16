@@ -768,12 +768,23 @@ const analyzeIndirection = async (
         return;
       }
 
-      // Decorator check: functions with decorators indicate intentional wrapping — skip
+      // Symbol-level filters: decorator (intentional wrapper), override modifier
+      // (explicit base-class method forward — semantic, not indirection).
+      // `decorators` is lifted onto FullSymbol; `modifiers` lives on the nested
+      // SymbolDetail (FullSymbol.detail).
       try {
-        const detail = gildash.getFullSymbol(header, file.filePath);
+        const symbol = gildash.getFullSymbol(header, file.filePath);
 
-        if (detail !== null && Array.isArray(detail.decorators) && detail.decorators.length > 0) {
-          return;
+        if (symbol !== null) {
+          if (Array.isArray(symbol.decorators) && symbol.decorators.length > 0) {
+            return;
+          }
+
+          const modifiers = symbol.detail.modifiers;
+
+          if (Array.isArray(modifiers) && modifiers.includes('override')) {
+            return;
+          }
         }
       } catch {
         // Semantic layer unavailable — keep existing thin-wrapper behavior
@@ -887,13 +898,20 @@ const analyzeIndirection = async (
 
           try {
             const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
+
+            if (fwd !== true) {
+              return;
+            }
+
             const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
 
-            if (fwd === true && bwd === true) {
-              const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
-
-              addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
+            if (bwd !== true) {
+              return;
             }
+
+            const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
+
+            addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
           } catch {
             // Semantic layer unavailable — skip this check
           }
@@ -948,9 +966,9 @@ const analyzeIndirection = async (
 
         // Skip cross-file declaration merging
         try {
-          const symbols = gildash.searchSymbols({ text: name, limit: 100 });
+          const symbols = gildash.searchSymbols({ text: name, exact: true });
           const otherFileHasSameName = symbols.some(
-            s => s.name === name && resolveAbs(rootAbs, s.filePath) !== normalizedFilePath,
+            s => resolveAbs(rootAbs, s.filePath) !== normalizedFilePath,
           );
 
           if (otherFileHasSameName) {
