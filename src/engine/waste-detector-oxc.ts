@@ -1,6 +1,6 @@
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+import { buildLineOffsets, getLineColumn, ScopeTracker, walk } from '@zipbul/gildash';
 
 import type { WasteFinding } from '..';
 import type { ParsedFile } from './types';
@@ -136,76 +136,52 @@ const buildVarHasAnyUsedDef = (
 };
 
 /**
- * Map each def to the start offset of the lexical scope that owns its binding.
- * The binding's scope is the innermost block (or the function body) that declares
- * the variable with `let`/`const` — an assignment writes to that binding regardless
- * of where the assignment textually appears. Two defs with different scope offsets
- * therefore refer to different bindings (i.e. one shadows the other).
+ * Map each def to the lexical-scope key that owns its binding (oxc-walker
+ * scope IDs like `""`, `"0"`, `"0-1-2"`). Two defs with different scope keys
+ * refer to different bindings (one shadows the other).
+ *
+ * Implementation: walk the function body with `ScopeTracker`, recording each
+ * Identifier's site → its declaration's scope. ScopeTracker handles every
+ * binding kind (let/const/var/param/catch/import/class) and every scope-
+ * creating construct (block / for / catch / function / class) automatically,
+ * which covers cases the hand-rolled BlockStatement-only logic missed
+ * (for-init scope, catch-param scope, class-body, IIFE).
+ *
+ * `PARAM_SCOPE = ""` is the sentinel for parameter bindings and any def
+ * whose location ScopeTracker doesn't resolve (e.g. seeded entry defs).
  */
+const PARAM_SCOPE = '';
+
 const buildScopeMapForFunctionBody = (
   body: Node | ReadonlyArray<Node>,
   defs: ReadonlyArray<{ name: string; location: number } | undefined>,
-): ReadonlyArray<number> => {
+  parameterNames: ReadonlySet<string>,
+): ReadonlyArray<string> => {
   const bodies: ReadonlyArray<Node> = Array.isArray(body) ? (body as ReadonlyArray<Node>) : [body as Node];
-
-  // Per name: list of [scopeStart, scopeEnd) ranges in which a `let`/`const` declares it.
-  const declScopesByName = new Map<string, Array<{ start: number; end: number }>>();
-
-  const recordDeclarationScope = (name: string, scope: { start: number; end: number }): void => {
-    let list = declScopesByName.get(name);
-
-    if (!list) {
-      list = [];
-      declScopesByName.set(name, list);
-    }
-
-    list.push(scope);
-  };
-
-  // Walk every block; for each VariableDeclaration directly inside the block whose kind
-  // is `let` or `const`, record the block as the binding scope of each declared name.
-  // For the outermost function body, it acts as the function-level scope.
-  const walkBlock = (block: Node): void => {
-    const scope = { start: block.start, end: block.end };
-    const blockBody = (block as unknown as Record<string, unknown>).body;
-
-    if (Array.isArray(blockBody)) {
-      for (const stmt of blockBody as ReadonlyArray<Node>) {
-        if (stmt.type === 'VariableDeclaration') {
-          const kind = (stmt as unknown as Record<string, unknown>).kind as string;
-          const declarations = (stmt as unknown as Record<string, unknown>).declarations;
-
-          if ((kind === 'let' || kind === 'const') && Array.isArray(declarations)) {
-            for (const decl of declarations as ReadonlyArray<Node>) {
-              const id = (decl as unknown as Record<string, unknown>).id as Node | undefined;
-
-              if (id) {
-                const names: Array<{ name: string }> = [];
-
-                extractDeclaredNames(id, names);
-
-                for (const { name } of names) {
-                  recordDeclarationScope(name, scope);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  };
+  const scopeByIdLocation = new Map<number, string>();
 
   for (const b of bodies) {
-    walkBlock(b);
+    const scopeTracker = new ScopeTracker();
 
-    const innerBlocks = collectOxcNodes(b, n => n.type === 'BlockStatement');
+    walk(b, {
+      scopeTracker,
+      enter(node: Node) {
+        if (node.type !== 'Identifier') {
+          return;
+        }
 
-    for (const blk of innerBlocks) {
-      walkBlock(blk);
-    }
+        const declaration = scopeTracker.getDeclaration(node.name);
+
+        if (declaration === null) {
+          return;
+        }
+
+        scopeByIdLocation.set(node.start, declaration.scope);
+      },
+    });
   }
 
-  const result: number[] = new Array(defs.length).fill(-1);
+  const result: string[] = new Array(defs.length).fill(PARAM_SCOPE);
 
   for (let defId = 0; defId < defs.length; defId += 1) {
     const meta = defs[defId];
@@ -214,105 +190,16 @@ const buildScopeMapForFunctionBody = (
       continue;
     }
 
-    const scopes = declScopesByName.get(meta.name);
-    let innermost = -1;
-    let innermostSize = Infinity;
+    if (parameterNames.has(meta.name)) {
+      result[defId] = PARAM_SCOPE;
 
-    if (scopes) {
-      for (const scope of scopes) {
-        if (scope.start <= meta.location && meta.location < scope.end) {
-          const size = scope.end - scope.start;
-
-          if (size < innermostSize) {
-            innermostSize = size;
-            innermost = scope.start;
-          }
-        }
-      }
+      continue;
     }
 
-    // Fall back to the outermost body (e.g. for parameter bindings whose `let/const`
-    // declaration doesn't exist in the body).
-    if (innermost === -1 && bodies.length > 0) {
-      const fallback = bodies[0]!;
-
-      innermost = fallback.start;
-    }
-
-    result[defId] = innermost;
+    result[defId] = scopeByIdLocation.get(meta.location) ?? PARAM_SCOPE;
   }
 
   return result;
-};
-
-const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void => {
-  if (pattern.type === 'Identifier') {
-    const name = (pattern as unknown as Record<string, unknown>).name;
-
-    if (typeof name === 'string') {
-      out.push({ name });
-    }
-
-    return;
-  }
-
-  if (pattern.type === 'ObjectPattern') {
-    const properties = (pattern as unknown as Record<string, unknown>).properties;
-
-    if (Array.isArray(properties)) {
-      for (const prop of properties as ReadonlyArray<Node>) {
-        const p = prop as unknown as Record<string, unknown>;
-
-        if (prop.type === 'Property') {
-          const value = p.value as Node | undefined;
-
-          if (value) {
-            extractDeclaredNames(value, out);
-          }
-        } else if (prop.type === 'RestElement') {
-          const arg = p.argument as Node | undefined;
-
-          if (arg) {
-            extractDeclaredNames(arg, out);
-          }
-        }
-      }
-    }
-
-    return;
-  }
-
-  if (pattern.type === 'ArrayPattern') {
-    const elements = (pattern as unknown as Record<string, unknown>).elements;
-
-    if (Array.isArray(elements)) {
-      for (const el of elements as ReadonlyArray<Node | null>) {
-        if (el !== null) {
-          extractDeclaredNames(el, out);
-        }
-      }
-    }
-
-    return;
-  }
-
-  if (pattern.type === 'AssignmentPattern') {
-    const left = (pattern as unknown as Record<string, unknown>).left as Node | undefined;
-
-    if (left) {
-      extractDeclaredNames(left, out);
-    }
-
-    return;
-  }
-
-  if (pattern.type === 'RestElement') {
-    const arg = (pattern as unknown as Record<string, unknown>).argument as Node | undefined;
-
-    if (arg) {
-      extractDeclaredNames(arg, out);
-    }
-  }
 };
 
 /**
@@ -323,7 +210,7 @@ const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void
 const buildVarScopeHasUsedDef = (
   defs: ReadonlyArray<{ varIndex: number } | undefined>,
   usedDefs: { has(n: number): boolean },
-  scopeOfDef: ReadonlyArray<number>,
+  scopeOfDef: ReadonlyArray<string>,
 ): Set<string> => {
   const set = new Set<string>();
 
@@ -338,7 +225,7 @@ const buildVarScopeHasUsedDef = (
       continue;
     }
 
-    set.add(`${meta.varIndex}@${scopeOfDef[defId] ?? -1}`);
+    set.add(`${meta.varIndex}@${scopeOfDef[defId] ?? PARAM_SCOPE}`);
   }
 
   return set;
@@ -422,7 +309,8 @@ const collectWasteFindingsForFunction = (
     closureReadNames,
   );
   const varHasAnyUsedDef = buildVarHasAnyUsedDef(defs, usedDefs, localIndexByName.size);
-  const scopeOfDef = buildScopeMapForFunctionBody(functionBodyNode, defs);
+  const parameterNameSet = new Set(parameterBindings.map(b => b.name));
+  const scopeOfDef = buildScopeMapForFunctionBody(functionBodyNode, defs, parameterNameSet);
   const varScopeHasUsedDef = buildVarScopeHasUsedDef(defs, usedDefs, scopeOfDef);
 
   // Deduplicate findings by (name, source location). The CFG may model the same
@@ -446,7 +334,7 @@ const collectWasteFindingsForFunction = (
       // Spare the declaration only if a USED def of the same variable exists in the
       // SAME lexical scope. Inner-block shadows live in a different scope and must
       // not save the outer declaration from being flagged.
-      const myScope = scopeOfDef[defId] ?? -1;
+      const myScope = scopeOfDef[defId] ?? PARAM_SCOPE;
 
       if (varScopeHasUsedDef.has(`${meta.varIndex}@${myScope}`)) {
         continue;
