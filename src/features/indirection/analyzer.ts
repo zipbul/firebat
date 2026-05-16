@@ -22,6 +22,70 @@ const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.is
 /*  AST utilities — thin-wrapper detection                             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Higher-order array/promise methods that pass extra arguments to their callback.
+ * Inlining `xs.map(x => f(x))` → `xs.map(f)` is unsafe because `.map` passes
+ * (item, index, array) — semantics differ when `f` has its own parameter handling
+ * (e.g. `parseInt`). Same risk applies to .forEach/.filter/.reduce/.find/.some/.every,
+ * Promise.{then,catch,finally}, etc.
+ */
+const ARITY_SENSITIVE_HIGH_ORDER_METHODS = new Set<string>([
+  'forEach',
+  'map',
+  'filter',
+  'reduce',
+  'reduceRight',
+  'find',
+  'findIndex',
+  'findLast',
+  'findLastIndex',
+  'some',
+  'every',
+  'flatMap',
+  'sort',
+  'then',
+  'catch',
+  'finally',
+]);
+
+/**
+ * Collect arrow function nodes that are direct arguments to a high-order method
+ * call (e.g. the arrow in `xs.map(x => f(x))`). These are arity-protective: inlining
+ * them changes call semantics, so they should NOT be flagged as thin wrappers.
+ */
+const collectArityProtectiveArrows = (program: Node): Set<number> => {
+  const arrowStarts = new Set<number>();
+
+  walkOxcTreeWithParent(program, (node, parent) => {
+    if (
+      node.type !== 'ArrowFunctionExpression' ||
+      parent === null ||
+      parent.type !== 'CallExpression' ||
+      !Array.isArray(parent.arguments) ||
+      !parent.arguments.includes(node)
+    ) {
+      return true;
+    }
+
+    const callee = parent.callee as Node;
+
+    if (callee.type !== 'MemberExpression') {
+      return true;
+    }
+
+    const property = callee.property as Node;
+    const methodName = property.type === 'Identifier' ? property.name : null;
+
+    if (methodName !== null && ARITY_SENSITIVE_HIGH_ORDER_METHODS.has(methodName)) {
+      arrowStarts.add(node.start);
+    }
+
+    return true;
+  });
+
+  return arrowStarts;
+};
+
 const createEmptyIndirection = (): ReadonlyArray<IndirectionFinding> => [];
 
 const getSpan = (node: Node, sourceText: string) => {
@@ -662,8 +726,15 @@ const analyzeIndirection = async (
     const wrapperNodeByName = new Map<string, Node>();
     const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
     const fileOverloads = overloadIdx.get(normalizedFilePath) ?? emptyOverloads;
+    const arityProtectiveArrowStarts = collectArityProtectiveArrows(file.program);
 
     const handleThinWrapper = (node: Node): void => {
+      // Skip arrow callbacks to .map/.filter/.then/etc. — inlining them is unsafe
+      // because the higher-order method passes extra arguments.
+      if (node.type === 'ArrowFunctionExpression' && arityProtectiveArrowStarts.has(node.start)) {
+        return;
+      }
+
       const wrapperCall = getWrapperCall(node);
 
       if (!wrapperCall) {

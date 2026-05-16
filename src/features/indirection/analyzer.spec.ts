@@ -289,6 +289,63 @@ describe('analyzer', () => {
     expect(thinWrappers.length).toBe(2);
   });
 
+  it('analyzeIndirection - arrow callback to .map - not flagged as thin-wrapper (arity-protective)', async () => {
+    // Arrange — `(x) => target(x)` is NOT equivalent to `target` when used as
+    // `.map` callback because .map passes (item, index, array). Inlining changes semantics.
+    const source = [
+      'function target(value: any) { return value + 1; }',
+      'function caller(items: any[]) { return items.map(x => target(x)); }',
+    ].join('\n');
+    const program = createProgram('/virtual/arity-map.ts', source);
+    const gildash = createMockGildash();
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — the arrow callback itself should NOT be a thin-wrapper finding.
+    // (The named function `caller` is not a wrapper either since it does .map(...).)
+    expect(thinWrappers.length).toBe(0);
+  });
+
+  it('analyzeIndirection - arrow callback to .forEach/.filter/.then - not flagged as thin-wrapper', async () => {
+    // Arrange — multiple high-order method callbacks
+    const source = [
+      'declare const items: any[];',
+      'declare const promise: Promise<any>;',
+      'function process(x: any) { return x; }',
+      'function run() {',
+      '  items.forEach(x => process(x));',
+      '  items.filter(x => process(x));',
+      '  promise.then(x => process(x));',
+      '}',
+    ].join('\n');
+    const program = createProgram('/virtual/high-order.ts', source);
+    const gildash = createMockGildash();
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert
+    expect(thinWrappers.length).toBe(0);
+  });
+
+  it('analyzeIndirection - standalone arrow wrapper (not in high-order callback) - still flagged as thin-wrapper', async () => {
+    // Arrange — control case: arrow assigned to const, not used as high-order callback
+    const source = [
+      'function target(value: any) { return value + 1; }',
+      'const wrapper = (x: any) => target(x);',
+      'export { wrapper };',
+    ].join('\n');
+    const program = createProgram('/virtual/standalone-arrow.ts', source);
+    const gildash = createMockGildash();
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — standalone arrow IS a real thin-wrapper opportunity
+    expect(thinWrappers.length).toBe(1);
+  });
+
   it('analyzeIndirection - arguments are transformed - skips wrapper', async () => {
     // Arrange
     const source = [
