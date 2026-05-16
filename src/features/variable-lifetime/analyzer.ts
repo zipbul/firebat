@@ -283,13 +283,12 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
     }
 
     if (stmt.type === 'TryStatement') {
-      const block = stmt.block;
-      const handler = stmt.handler !== null ? (stmt.handler) : null;
+      const { block, handler } = stmt;
       // finalizer is handled only for exclusion (see checkScopeNarrowing)
 
       blocks.push({ type: 'try-block', start: block.start, end: block.end });
 
-      if (handler !== null && handler.type === 'CatchClause') {
+      if (handler !== null) {
         const handlerBody = handler.body;
 
         blocks.push({ type: 'catch-block', start: handlerBody.start, end: handlerBody.end });
@@ -468,15 +467,13 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
       continue;
     }
 
-    const finalizer = stmt.finalizer !== null ? (stmt.finalizer) : null;
-    const block = stmt.block;
-    const handler = stmt.handler !== null ? (stmt.handler) : null;
+    const { block, handler, finalizer } = stmt;
 
     if (finalizer !== null) {
       finalizerRanges.push({ start: finalizer.start, end: finalizer.end });
     }
 
-    if (handler !== null && handler.type === 'CatchClause') {
+    if (handler !== null) {
       const handlerBody = handler.body;
 
       tryHandlerRanges.push({
