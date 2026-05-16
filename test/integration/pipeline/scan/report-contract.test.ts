@@ -241,16 +241,36 @@ describe('integration/scan/report-contract', () => {
       expect(Array.isArray(report.analyses.coupling)).toBe(true);
       expect((report.analyses.coupling ?? []).length).toBeGreaterThan(0);
 
-      const item = (report.analyses.coupling as unknown as any[])[0];
+      const couplingFindings = report.analyses.coupling as unknown as any[];
+      const allowedKinds = ['god-module', 'bidirectional-coupling', 'off-main-sequence', 'unstable-module', 'rigid-module'];
+      const allowedCodes = [
+        'COUPLING_GOD_MODULE',
+        'COUPLING_BIDIRECTIONAL',
+        'COUPLING_OFF_MAIN_SEQ',
+        'COUPLING_UNSTABLE',
+        'COUPLING_RIGID',
+      ];
 
-      expect(typeof item.kind).toBe('string');
-      expect(typeof item.code).toBe('string');
-      expect(typeof item.file).toBe('string');
-      expect(typeof item.span).toBe('object');
+      // Every finding shape must match the coupling contract (specific kind/code, not just typeof).
+      for (const item of couplingFindings) {
+        expect(allowedKinds).toContain(item.kind);
+        expect(allowedCodes).toContain(item.code);
+        expect(typeof item.file).toBe('string');
+        expect(item.span).toBeDefined();
+        expect(typeof item.span.start.line).toBe('number');
+        expect(typeof item.span.end.line).toBe('number');
+        expect(item.filePath).toBeUndefined();
+        expect(item.why).toBeUndefined();
+        expect(item.suggestedRefactor).toBeUndefined();
+      }
 
-      expect(item.filePath).toBeUndefined();
-      expect(item.why).toBeUndefined();
-      expect(item.suggestedRefactor).toBeUndefined();
+      // The fixture has a deliberate 2-node cycle (a.ts ↔ b.ts) so bidirectional-coupling
+      // must be among the findings; this anchors the contract to a real semantic outcome
+      // rather than only the shape of the response.
+      const bidirectional = couplingFindings.filter(f => f.kind === 'bidirectional-coupling');
+
+      expect(bidirectional.length).toBeGreaterThanOrEqual(1);
+      expect(bidirectional[0].code).toBe('COUPLING_BIDIRECTIONAL');
     } finally {
       await project.dispose();
     }
