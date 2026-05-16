@@ -212,6 +212,32 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  it('detectWasteOxc - outer let shadowed by inner block let - outer is dead', () => {
+    // Arrange — outer `x = 1` is never read; inner `x = 2` is read only inside its block.
+    // Previously the name-only var-index treated both as one variable, and the
+    // `varHasAnyUsedDef` filter spared the outer declaration because the inner shadow
+    // was "used".
+    const source = `function f() { let x = 1; { let x = 2; console.log(x); } }`;
+    const f = toFile('/shadow.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — outer `x = 1` should be flagged as dead
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(true);
+  });
+
+  it('detectWasteOxc - let declared and reassigned in same scope - not flagged', () => {
+    // Arrange — control: `let x; ... x = 1; ... console.log(x);` is the legit
+    // declaration-then-reassign pattern. The filter must still spare it.
+    const source = `function f() { let x; x = 1; console.log(x); }`;
+    const f = toFile('/declare-reassign.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — no dead-store on declaration
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
+  });
+
   it('detectWasteOxc - sequence expression with consecutive writes - earlier write is dead', () => {
     // Arrange — `(x=1, x=2)` writes x twice; the first is overwritten before any read.
     // Previously the CFG node held both writes in gen, so both propagated forward and

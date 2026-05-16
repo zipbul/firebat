@@ -135,6 +135,215 @@ const buildVarHasAnyUsedDef = (
   return varHasAnyUsedDef;
 };
 
+/**
+ * Map each def to the start offset of the lexical scope that owns its binding.
+ * The binding's scope is the innermost block (or the function body) that declares
+ * the variable with `let`/`const` — an assignment writes to that binding regardless
+ * of where the assignment textually appears. Two defs with different scope offsets
+ * therefore refer to different bindings (i.e. one shadows the other).
+ */
+const buildScopeMapForFunctionBody = (
+  body: Node | ReadonlyArray<Node>,
+  defs: ReadonlyArray<{ name: string; location: number } | undefined>,
+): ReadonlyArray<number> => {
+  const bodies: ReadonlyArray<Node> = Array.isArray(body) ? (body as ReadonlyArray<Node>) : [body as Node];
+
+  // Per name: list of [scopeStart, scopeEnd) ranges in which a `let`/`const` declares it.
+  const declScopesByName = new Map<string, Array<{ start: number; end: number }>>();
+
+  const recordDeclarationScope = (name: string, scope: { start: number; end: number }): void => {
+    let list = declScopesByName.get(name);
+
+    if (!list) {
+      list = [];
+      declScopesByName.set(name, list);
+    }
+
+    list.push(scope);
+  };
+
+  // Walk every block; for each VariableDeclaration directly inside the block whose kind
+  // is `let` or `const`, record the block as the binding scope of each declared name.
+  // For the outermost function body, it acts as the function-level scope.
+  const walkBlock = (block: Node): void => {
+    const scope = { start: block.start, end: block.end };
+    const blockBody = (block as unknown as Record<string, unknown>).body;
+
+    if (Array.isArray(blockBody)) {
+      for (const stmt of blockBody as ReadonlyArray<Node>) {
+        if (stmt.type === 'VariableDeclaration') {
+          const kind = (stmt as unknown as Record<string, unknown>).kind as string;
+          const declarations = (stmt as unknown as Record<string, unknown>).declarations;
+
+          if ((kind === 'let' || kind === 'const') && Array.isArray(declarations)) {
+            for (const decl of declarations as ReadonlyArray<Node>) {
+              const id = (decl as unknown as Record<string, unknown>).id as Node | undefined;
+
+              if (id) {
+                const names: Array<{ name: string }> = [];
+
+                extractDeclaredNames(id, names);
+
+                for (const { name } of names) {
+                  recordDeclarationScope(name, scope);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
+  for (const b of bodies) {
+    walkBlock(b);
+
+    const innerBlocks = collectOxcNodes(b, n => n.type === 'BlockStatement');
+
+    for (const blk of innerBlocks) {
+      walkBlock(blk);
+    }
+  }
+
+  const result: number[] = new Array(defs.length).fill(-1);
+
+  for (let defId = 0; defId < defs.length; defId += 1) {
+    const meta = defs[defId];
+
+    if (!meta) {
+      continue;
+    }
+
+    const scopes = declScopesByName.get(meta.name);
+    let innermost = -1;
+    let innermostSize = Infinity;
+
+    if (scopes) {
+      for (const scope of scopes) {
+        if (scope.start <= meta.location && meta.location < scope.end) {
+          const size = scope.end - scope.start;
+
+          if (size < innermostSize) {
+            innermostSize = size;
+            innermost = scope.start;
+          }
+        }
+      }
+    }
+
+    // Fall back to the outermost body (e.g. for parameter bindings whose `let/const`
+    // declaration doesn't exist in the body).
+    if (innermost === -1 && bodies.length > 0) {
+      const fallback = bodies[0]!;
+
+      innermost = fallback.start;
+    }
+
+    result[defId] = innermost;
+  }
+
+  return result;
+};
+
+const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void => {
+  if (pattern.type === 'Identifier') {
+    const name = (pattern as unknown as Record<string, unknown>).name;
+
+    if (typeof name === 'string') {
+      out.push({ name });
+    }
+
+    return;
+  }
+
+  if (pattern.type === 'ObjectPattern') {
+    const properties = (pattern as unknown as Record<string, unknown>).properties;
+
+    if (Array.isArray(properties)) {
+      for (const prop of properties as ReadonlyArray<Node>) {
+        const p = prop as unknown as Record<string, unknown>;
+
+        if (prop.type === 'Property') {
+          const value = p.value as Node | undefined;
+
+          if (value) {
+            extractDeclaredNames(value, out);
+          }
+        } else if (prop.type === 'RestElement') {
+          const arg = p.argument as Node | undefined;
+
+          if (arg) {
+            extractDeclaredNames(arg, out);
+          }
+        }
+      }
+    }
+
+    return;
+  }
+
+  if (pattern.type === 'ArrayPattern') {
+    const elements = (pattern as unknown as Record<string, unknown>).elements;
+
+    if (Array.isArray(elements)) {
+      for (const el of elements as ReadonlyArray<Node | null>) {
+        if (el !== null) {
+          extractDeclaredNames(el, out);
+        }
+      }
+    }
+
+    return;
+  }
+
+  if (pattern.type === 'AssignmentPattern') {
+    const left = (pattern as unknown as Record<string, unknown>).left as Node | undefined;
+
+    if (left) {
+      extractDeclaredNames(left, out);
+    }
+
+    return;
+  }
+
+  if (pattern.type === 'RestElement') {
+    const arg = (pattern as unknown as Record<string, unknown>).argument as Node | undefined;
+
+    if (arg) {
+      extractDeclaredNames(arg, out);
+    }
+  }
+};
+
+/**
+ * Per-(varIndex, scopeStart) flag: does ANY def of this variable at this exact lexical
+ * scope reach a use? Used to spare legit `let x; ... x = 1; ... use(x)` declarations
+ * without sparing outer declarations that are merely shadowed in a nested block.
+ */
+const buildVarScopeHasUsedDef = (
+  defs: ReadonlyArray<{ varIndex: number } | undefined>,
+  usedDefs: { has(n: number): boolean },
+  scopeOfDef: ReadonlyArray<number>,
+): Set<string> => {
+  const set = new Set<string>();
+
+  for (let defId = 0; defId < defs.length; defId += 1) {
+    if (!usedDefs.has(defId)) {
+      continue;
+    }
+
+    const meta = defs[defId];
+
+    if (!meta) {
+      continue;
+    }
+
+    set.add(`${meta.varIndex}@${scopeOfDef[defId] ?? -1}`);
+  }
+
+  return set;
+};
+
 const buildWasteFinding = (
   metaName: string,
   metaLocation: number,
@@ -213,6 +422,8 @@ const collectWasteFindingsForFunction = (
     closureReadNames,
   );
   const varHasAnyUsedDef = buildVarHasAnyUsedDef(defs, usedDefs, localIndexByName.size);
+  const scopeOfDef = buildScopeMapForFunctionBody(functionBodyNode, defs);
+  const varScopeHasUsedDef = buildVarScopeHasUsedDef(defs, usedDefs, scopeOfDef);
 
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
@@ -232,7 +443,14 @@ const collectWasteFindingsForFunction = (
     }
 
     if (meta.writeKind === 'declaration' && varHasAnyUsedDef[meta.varIndex] === true) {
-      continue;
+      // Spare the declaration only if a USED def of the same variable exists in the
+      // SAME lexical scope. Inner-block shadows live in a different scope and must
+      // not save the outer declaration from being flagged.
+      const myScope = scopeOfDef[defId] ?? -1;
+
+      if (varScopeHasUsedDef.has(`${meta.varIndex}@${myScope}`)) {
+        continue;
+      }
     }
 
     if (
