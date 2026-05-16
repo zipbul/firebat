@@ -212,6 +212,19 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  it('detectWasteOxc - sequence expression with consecutive writes - earlier write is dead', () => {
+    // Arrange — `(x=1, x=2)` writes x twice; the first is overwritten before any read.
+    // Previously the CFG node held both writes in gen, so both propagated forward and
+    // the read at `console.log(x)` "used" both, hiding the dead first write.
+    const source = `function f() { let x; (x = 1, x = 2); console.log(x); }`;
+    const f = toFile('/seq-write.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — x = 1 should be flagged as dead (overwritten by x = 2)
+    expect(result.some(r => r.kind === 'dead-store-overwrite' && r.label === 'x')).toBe(true);
+  });
+
   it('detectWasteOxc - parameter default expression references another param - no FP', () => {
     // Arrange — `b = a` reads `a`. Previously `a` was flagged as dead-store because
     // the default expression isn't part of the function body CFG.

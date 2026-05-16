@@ -144,6 +144,9 @@ interface DefUseState {
   writeVarIndexesByNode: number[][];
   defNodeIdByDefId: number[];
   nodePayloads: ReturnType<typeof OxcCFGBuilder.build>['nodePayloads'];
+  /** Defs that were demoted from gen because a later write to the same var
+   *  happens at the same CFG payload (e.g. sequence expressions). */
+  intraNodeOverwrittenDefIds: ReadonlyArray<number>;
 }
 
 type DefUseStateMut = Pick<
@@ -248,7 +251,57 @@ const buildDefUseState = (
     processNodeUsages(nodeId, payload, localIndexByName, state);
   }
 
-  return { ...state, nodePayloads };
+  // Resolve intra-node sequential writes to the same variable. When a single CFG
+  // payload contains multiple writes to the same var (e.g. `(x=1, x=2)` in a sequence
+  // expression), only the last write should reach forward; earlier ones are dead at
+  // the node. Filter gen to keep only the latest def per var and return the displaced
+  // defIds for caller to mark as overwritten.
+  const intraNodeOverwritten: number[] = [];
+
+  for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
+    const genIds = state.genDefIdsByNode[nodeId];
+
+    if (!genIds || genIds.length <= 1) {
+      continue;
+    }
+
+    const lastByVar = new Map<number, number>();
+
+    for (const defId of genIds) {
+      const meta = state.defMetaById[defId];
+
+      if (!meta) {
+        continue;
+      }
+
+      const existing = lastByVar.get(meta.varIndex);
+
+      if (existing === undefined) {
+        lastByVar.set(meta.varIndex, defId);
+
+        continue;
+      }
+
+      const existingMeta = state.defMetaById[existing]!;
+
+      if (meta.location > existingMeta.location) {
+        intraNodeOverwritten.push(existing);
+        lastByVar.set(meta.varIndex, defId);
+      } else {
+        intraNodeOverwritten.push(defId);
+      }
+    }
+
+    if (intraNodeOverwritten.length === 0) {
+      continue;
+    }
+
+    // Replace gen with the latest def per var. Earlier defs are removed from gen so
+    // the standard `kill = defsOfVar - gen` formula kills them at this node.
+    state.genDefIdsByNode[nodeId] = [...lastByVar.values()];
+  }
+
+  return { ...state, nodePayloads, intraNodeOverwrittenDefIds: intraNodeOverwritten };
 };
 
 interface GenKillSets {
@@ -462,6 +515,12 @@ export const analyzeFunctionBody = (
     defCount,
     nodeCount,
   );
+
+  // Defs displaced by a same-node later write are dead at the node — record them as
+  // overwritten so the waste detector emits `dead-store-overwrite` rather than nothing.
+  for (const defId of state.intraNodeOverwrittenDefIds) {
+    overwrittenDefIds[defId] = true;
+  }
 
   // Identifier reads inside parameter default expressions (`function f(a=1, b=a)`)
   // belong to the function's call-time evaluation, not its body, so the CFG over the
