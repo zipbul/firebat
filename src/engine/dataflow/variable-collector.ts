@@ -1,5 +1,7 @@
 import type { Node } from 'oxc-parser';
 
+import { isFunctionNode } from '@zipbul/gildash';
+
 import type { VariableCollectorOptions, VariableUsage } from '../types';
 
 import {
@@ -12,12 +14,6 @@ import {
 } from '../ast';
 
 const getNodeStart = (node: Node): number => node.start;
-
-const isFunctionNode = (node: Node): boolean => {
-  const nodeType = node.type;
-
-  return nodeType === 'ArrowFunctionExpression' || nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression';
-};
 
 const addPropertyKeyToSet = (key: Node, keys: Set<string>): void => {
   if (key.type === 'Identifier') {

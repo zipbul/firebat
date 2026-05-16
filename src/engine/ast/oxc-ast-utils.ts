@@ -1,8 +1,11 @@
 import type { Node } from 'oxc-parser';
 
+import { isFunctionNode } from '@zipbul/gildash';
 import { visitorKeys } from 'oxc-parser';
 
 import type { NodeRecord, NodeValue } from '../types';
+
+export { isFunctionNode };
 
 export const isOxcNode = (value: unknown): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -37,12 +40,6 @@ export const getLiteralString = (node: Node | null | undefined): string | null =
   }
 
   return null;
-};
-
-export const isFunctionNode = (node: Node): boolean => {
-  const nodeType = node.type;
-
-  return nodeType === 'FunctionDeclaration' || nodeType === 'FunctionExpression' || nodeType === 'ArrowFunctionExpression';
 };
 
 const forEachNodeInArray = (arr: unknown[], cb: (child: Node) => void): void => {
