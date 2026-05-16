@@ -704,7 +704,6 @@ export interface Finding {
 export interface ScanJsonResult {
   readonly meta: {
     readonly detectors: ReadonlyArray<FirebatDetector>;
-    readonly errors?: Readonly<Record<string, string>>;
   };
   readonly total: number;
   readonly findings: ReadonlyArray<Finding>;
@@ -713,7 +712,6 @@ export interface ScanJsonResult {
 export const toScanResult = (report: FirebatReport): ScanJsonResult => ({
   meta: {
     detectors: report.meta.detectors,
-    ...(report.meta.errors !== undefined && Object.keys(report.meta.errors).length > 0 ? { errors: report.meta.errors } : {}),
   },
   total: report.findings.length,
   findings: report.findings,

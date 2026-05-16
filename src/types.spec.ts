@@ -29,11 +29,11 @@ const makeReport = (
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('toScanResult', () => {
-  it('includes errors in meta when meta.errors is non-empty', () => {
-    const report = makeReport({ errors: { 'src/a.ts': 'parse error' } });
+  it('never includes errors in meta (errors stream to stderr, not stdout JSON)', () => {
+    const report = makeReport({ errors: { 'src/a.ts': 'parse error', typecheck: 'tsconfig missing' } });
     const out = toScanResult(report);
 
-    expect(out.meta.errors).toEqual({ 'src/a.ts': 'parse error' });
+    expect('errors' in out.meta).toBe(false);
   });
 
   it('omits errors in meta when meta.errors is not present', () => {
@@ -96,12 +96,11 @@ describe('toScanResult', () => {
     expect(out.findings).toEqual([]);
   });
 
-  it('includes errors in meta when meta.errors has exactly one key', () => {
+  it('does not include errors in meta when meta.errors has exactly one key', () => {
     const report = makeReport({ errors: { 'src/only.ts': 'error' } });
     const out = toScanResult(report);
 
-    expect(out.meta.errors).toBeDefined();
-    expect(Object.keys(out.meta.errors!).length).toBe(1);
+    expect('errors' in out.meta).toBe(false);
   });
 
   it('top-level keys are exactly meta, total, findings (no extras)', () => {

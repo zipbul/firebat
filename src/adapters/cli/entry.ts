@@ -417,6 +417,12 @@ const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof cre
     return 0;
   }
 
+  if (report.meta.errors !== undefined) {
+    for (const [key, message] of Object.entries(report.meta.errors)) {
+      logger.error('Detector error', { key, message });
+    }
+  }
+
   const output = formatReport(report);
 
   logger.trace('Report formatted', { length: output.length });
