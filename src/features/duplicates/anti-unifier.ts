@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 /**
  * Plotkin's Anti-unification 알고리즘 구현.
  *
@@ -165,7 +164,7 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
   ctx.sharedSize += 1;
 
   // Identifier.name 비교
-  if (is.Identifier(left) && is.Identifier(right)) {
+  if (left.type === 'Identifier' && right.type === 'Identifier') {
     const leftName = left.name;
     const rightName = right.name;
 
@@ -176,7 +175,7 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
   }
 
   // Literal.value 비교
-  if (is.Literal(left) && is.Literal(right)) {
+  if (left.type === 'Literal' && right.type === 'Literal') {
     const leftVal = left.value;
     const rightVal = right.value;
 
@@ -187,7 +186,7 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
   }
 
   // TSTypeReference 비교 (type annotation 차이)
-  if (is.TSTypeReference(left)) {
+  if (left.type === 'TSTypeReference') {
     const leftFp = createOxcFingerprintShape(left);
     const rightFp = createOxcFingerprintShape(right);
 
@@ -257,11 +256,11 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
       continue;
     } // 이미 처리한 노드 자식
 
-    if (key === 'name' && is.Identifier(left)) {
+    if (key === 'name' && left.type === 'Identifier') {
       continue;
     }
 
-    if ((key === 'value' || key === 'raw') && is.Literal(left)) {
+    if ((key === 'value' || key === 'raw') && left.type === 'Literal') {
       continue;
     }
 

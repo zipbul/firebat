@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Gildash } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node, Program } from 'oxc-parser';
 
@@ -38,17 +37,17 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
       const decl = node.declaration;
 
       if (decl !== null) {
-        if (is.FunctionDeclaration(decl)) {
+        if (decl.type === 'FunctionDeclaration') {
           const name = getNodeName(decl.id);
 
           if (typeof name === 'string' && name.length > 0) {
             names.add(name);
           }
-        } else if (is.VariableDeclaration(decl)) {
+        } else if (decl.type === 'VariableDeclaration') {
           for (const declarator of decl.declarations) {
             const init = declarator.init;
 
-            if (init === null || (!is.ArrowFunctionExpression(init) && !is.FunctionExpression(init))) {
+            if (init === null || (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression')) {
               continue;
             }
 
@@ -74,7 +73,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
     ExportDefaultDeclaration(node) {
       const decl = node.declaration;
 
-      if (!is.FunctionDeclaration(decl)) {
+      if (decl.type !== 'FunctionDeclaration') {
         return;
       }
 
@@ -132,7 +131,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
 
   walkOxcTree(program, node => {
     // FunctionDeclaration: export function foo() { ... }
-    if (is.FunctionDeclaration(node)) {
+    if (node.type === 'FunctionDeclaration') {
       const name = getNodeName(node.id);
 
       if (typeof name !== 'string' || !exportedNames.has(name)) {
@@ -147,7 +146,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
     }
 
     // VariableDeclarator: export const foo = () => { ... } or const foo = () => { ... } with re-export
-    if (is.VariableDeclarator(node)) {
+    if (node.type === 'VariableDeclarator') {
       const name = getNodeName(node.id);
 
       if (typeof name !== 'string' || !exportedNames.has(name)) {
@@ -156,7 +155,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
 
       const init = node.init;
 
-      if (!isOxcNode(init) || (!is.ArrowFunctionExpression(init) && !is.FunctionExpression(init))) {
+      if (!isOxcNode(init) || (init.type !== 'ArrowFunctionExpression' && init.type !== 'FunctionExpression')) {
         return true;
       }
 
@@ -177,7 +176,7 @@ const getEnclosingExportedFunction = (program: Node, targetOffset: number, expor
 const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset: number }> => {
   const vars: Array<{ name: string; offset: number }> = [];
 
-  if (!is.Program(program)) {
+  if (program.type !== 'Program') {
     return vars;
   }
 
@@ -192,7 +191,7 @@ const collectTopLevelMutableVars = (program: Node): Array<{ name: string; offset
       continue;
     }
 
-    if (is.VariableDeclaration(stmt)) {
+    if (stmt.type === 'VariableDeclaration') {
       const kind = stmt.kind;
 
       if (kind !== 'let' && kind !== 'var') {
@@ -232,29 +231,29 @@ interface WriterReaderResult {
 const targetBindsIdentifier = (target: Node, name: string): boolean => {
   const t = target as unknown as Record<string, unknown>;
 
-  if (is.Identifier(target)) {
+  if (target.type === 'Identifier') {
     return getNodeName(target) === name;
   }
 
-  if (is.AssignmentPattern(target)) {
+  if (target.type === 'AssignmentPattern') {
     return targetBindsIdentifier(t.left as Node, name);
   }
 
-  if (is.RestElement(target)) {
+  if (target.type === 'RestElement') {
     return targetBindsIdentifier(t.argument as Node, name);
   }
 
-  if (is.ObjectPattern(target)) {
+  if (target.type === 'ObjectPattern') {
     const properties = Array.isArray(t.properties) ? (t.properties as Node[]) : [];
 
     for (const prop of properties) {
       const pr = prop as unknown as Record<string, unknown>;
 
-      if (is.Property(prop)) {
+      if (prop.type === 'Property') {
         if (targetBindsIdentifier(pr.value as Node, name)) {
           return true;
         }
-      } else if (is.RestElement(prop)) {
+      } else if (prop.type === 'RestElement') {
         if (targetBindsIdentifier(pr.argument as Node, name)) {
           return true;
         }
@@ -264,7 +263,7 @@ const targetBindsIdentifier = (target: Node, name: string): boolean => {
     return false;
   }
 
-  if (is.ArrayPattern(target)) {
+  if (target.type === 'ArrayPattern') {
     const elements = Array.isArray(t.elements) ? (t.elements as Array<Node | null>) : [];
 
     for (const elem of elements) {
@@ -289,41 +288,41 @@ const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<
 
   const t = target as unknown as Record<string, unknown>;
 
-  if (is.Identifier(target)) {
+  if (target.type === 'Identifier') {
     keys.add(`${target.start}:${target.end}`);
 
     return;
   }
 
-  if (is.MemberExpression(target)) {
+  if (target.type === 'MemberExpression') {
     // e.g. `obj.prop = ...` — record the whole member expression's range.
     keys.add(`${target.start}:${target.end}`);
 
     return;
   }
 
-  if (is.AssignmentPattern(target)) {
+  if (target.type === 'AssignmentPattern') {
     // `({a = 1} = …)` — the binding target is on the left.
     collectTargetIdentifierKeys(t.left as Node, keys);
 
     return;
   }
 
-  if (is.RestElement(target)) {
+  if (target.type === 'RestElement') {
     collectTargetIdentifierKeys(t.argument as Node, keys);
 
     return;
   }
 
-  if (is.ObjectPattern(target)) {
+  if (target.type === 'ObjectPattern') {
     const properties = Array.isArray(t.properties) ? (t.properties as Node[]) : [];
 
     for (const prop of properties) {
       const pr = prop as unknown as Record<string, unknown>;
 
-      if (is.Property(prop)) {
+      if (prop.type === 'Property') {
         collectTargetIdentifierKeys(pr.value as Node, keys);
-      } else if (is.RestElement(prop)) {
+      } else if (prop.type === 'RestElement') {
         collectTargetIdentifierKeys(pr.argument as Node, keys);
       }
     }
@@ -331,7 +330,7 @@ const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<
     return;
   }
 
-  if (is.ArrayPattern(target)) {
+  if (target.type === 'ArrayPattern') {
     const elements = Array.isArray(t.elements) ? (t.elements as Array<Node | null>) : [];
 
     for (const elem of elements) {
@@ -408,7 +407,7 @@ const collectStateProperties = (bodyItems: ReadonlyArray<unknown>): Array<{ name
   const stateProps: Array<{ name: string; offset: number }> = [];
 
   for (const item of bodyItems) {
-    if (!isOxcNode(item) || !is.PropertyDefinition(item)) {
+    if (!isOxcNode(item) || item.type !== 'PropertyDefinition') {
       continue;
     }
 
@@ -429,36 +428,36 @@ const classifyMethodAccess = (methodBody: Node, propName: string): { hasWrite: b
   let hasRead = false;
 
   walkOxcTree(methodBody, node => {
-    if (is.MemberExpression(node)) {
+    if (node.type === 'MemberExpression') {
       const object = node.object;
       const property = node.property;
 
-      if (isOxcNode(object) && is.ThisExpression(object) && isOxcNode(property) && getNodeName(property) === propName) {
+      if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && getNodeName(property) === propName) {
         hasRead = true;
       }
     }
 
-    if (is.AssignmentExpression(node)) {
+    if (node.type === 'AssignmentExpression') {
       const left = node.left;
 
-      if (isOxcNode(left) && is.MemberExpression(left)) {
+      if (isOxcNode(left) && left.type === 'MemberExpression') {
         const obj = left.object;
         const p = left.property;
 
-        if (isOxcNode(obj) && is.ThisExpression(obj) && isOxcNode(p) && getNodeName(p) === propName) {
+        if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
           hasWrite = true;
         }
       }
     }
 
-    if (is.UpdateExpression(node)) {
+    if (node.type === 'UpdateExpression') {
       const argument = node.argument;
 
-      if (isOxcNode(argument) && is.MemberExpression(argument)) {
+      if (isOxcNode(argument) && argument.type === 'MemberExpression') {
         const obj = argument.object;
         const p = argument.property;
 
-        if (isOxcNode(obj) && is.ThisExpression(obj) && isOxcNode(p) && getNodeName(p) === propName) {
+        if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
           hasWrite = true;
         }
       }
@@ -478,7 +477,7 @@ const classifyMethods = (
   const readerMethods = new Set<string>();
 
   for (const item of bodyItems) {
-    if (!isOxcNode(item) || !is.MethodDefinition(item)) {
+    if (!isOxcNode(item) || item.type !== 'MethodDefinition') {
       continue;
     }
 
@@ -532,7 +531,7 @@ const analyzeClassTemporalCoupling = (
   }).visit(program as Program);
 
   for (const classNode of classes) {
-    if (!is.ClassDeclaration(classNode) && !is.ClassExpression(classNode)) {
+    if (classNode.type !== 'ClassDeclaration' && classNode.type !== 'ClassExpression') {
       continue;
     }
 
@@ -540,7 +539,7 @@ const analyzeClassTemporalCoupling = (
     const className = typeof getNodeName(classNode.id) === 'string' ? (getNodeName(classNode.id) as string) : null;
     const classBody = classNode.body;
 
-    if (!isOxcNode(classBody) || !is.ClassBody(classBody)) {
+    if (!isOxcNode(classBody) || classBody.type !== 'ClassBody') {
       continue;
     }
 
@@ -630,7 +629,7 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
     const callNodes: Node[] = [];
 
     walkOxcTree(payload as Node, n => {
-      if (is.CallExpression(n)) {
+      if (n.type === 'CallExpression') {
         callNodes.push(n);
       }
 
@@ -638,7 +637,7 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
     });
 
     for (const callNode of callNodes) {
-      if (!is.CallExpression(callNode)) {
+      if (callNode.type !== 'CallExpression') {
         continue;
       }
 
@@ -650,9 +649,9 @@ const findCallNodeIds = (nodePayloads: ReadonlyArray<CfgNodePayload | null>, tar
 
       let callName: string | null = null;
 
-      if (is.Identifier(callee)) {
+      if (callee.type === 'Identifier') {
         callName = getNodeName(callee);
-      } else if (is.MemberExpression(callee)) {
+      } else if (callee.type === 'MemberExpression') {
         callName = getNodeName(callee.property);
       }
 
@@ -809,7 +808,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
         return false;
       }
 
-      if (is.ClassDeclaration(node) || is.ClassExpression(node)) {
+      if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') {
         const name = getNodeName(node.id);
 
         if (name !== className) {
@@ -818,7 +817,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
 
         const classBody = node.body;
 
-        if (!isOxcNode(classBody) || !is.ClassBody(classBody)) {
+        if (!isOxcNode(classBody) || classBody.type !== 'ClassBody') {
           return false;
         }
 
@@ -829,7 +828,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
         }
 
         for (const item of bodyItems) {
-          if (!isOxcNode(item) || !is.MethodDefinition(item)) {
+          if (!isOxcNode(item) || item.type !== 'MethodDefinition') {
             continue;
           }
 
@@ -861,7 +860,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
       }
 
       // FunctionDeclaration: function foo() {}
-      if (is.FunctionDeclaration(node)) {
+      if (node.type === 'FunctionDeclaration') {
         if (getNodeName(node.id) === symbolName) {
           result = node as Node;
 
@@ -870,11 +869,11 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
       }
 
       // VariableDeclarator: const foo = () => {} or function() {}
-      if (is.VariableDeclarator(node)) {
+      if (node.type === 'VariableDeclarator') {
         if (getNodeName(node.id) === symbolName) {
           const init = node.init;
 
-          if (isOxcNode(init) && (is.ArrowFunctionExpression(init) || is.FunctionExpression(init))) {
+          if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
             result = init as Node;
 
             return false;
@@ -900,17 +899,17 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
 
     if (isClassProp) {
       // this.stateName — MemberExpression(ThisExpression, Identifier === stateName)
-      if (is.MemberExpression(n)) {
+      if (n.type === 'MemberExpression') {
         const object = n.object;
         const property = n.property;
 
-        if (isOxcNode(object) && is.ThisExpression(object) && isOxcNode(property) && getNodeName(property) === stateName) {
+        if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && getNodeName(property) === stateName) {
           found = true;
 
           return false;
         }
       }
-    } else if (is.Identifier(n) && getNodeName(n) === stateName) {
+    } else if (n.type === 'Identifier' && getNodeName(n) === stateName) {
       // module-scope: plain Identifier === stateName
       found = true;
 
@@ -927,12 +926,12 @@ const nodeReferencesState = (node: Node, stateName: string, isClassProp: boolean
  * Check if a guard IfStatement's consequent is an early-exit (ThrowStatement or ReturnStatement).
  */
 const isEarlyExit = (node: Node): boolean => {
-  if (is.ThrowStatement(node) || is.ReturnStatement(node)) {
+  if (node.type === 'ThrowStatement' || node.type === 'ReturnStatement') {
     return true;
   }
 
   // BlockStatement with single ThrowStatement/ReturnStatement
-  if (is.BlockStatement(node)) {
+  if (node.type === 'BlockStatement') {
     const body = node.body;
 
     if (!Array.isArray(body)) {
@@ -942,7 +941,7 @@ const isEarlyExit = (node: Node): boolean => {
     if (body.length === 1) {
       const first = body[0];
 
-      return first !== undefined && (is.ThrowStatement(first) || is.ReturnStatement(first));
+      return first !== undefined && (first.type === 'ThrowStatement' || first.type === 'ReturnStatement');
     }
   }
 
@@ -978,7 +977,7 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
   const guardConditionOffsets = new Set<number>();
 
   walkOxcTree(funcBodyRaw as Node, n => {
-    if (is.IfStatement(n)) {
+    if (n.type === 'IfStatement') {
       const testNode = n.test;
       const consequentNode = n.consequent;
 
@@ -1192,14 +1191,14 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
 
       if (isClassProp) {
         // this.stateName = ...
-        if (is.AssignmentExpression(n)) {
+        if (n.type === 'AssignmentExpression') {
           const left = n.left;
 
-          if (isOxcNode(left) && is.MemberExpression(left)) {
+          if (isOxcNode(left) && left.type === 'MemberExpression') {
             const obj = left.object;
             const p = left.property;
 
-            if (isOxcNode(obj) && is.ThisExpression(obj) && isOxcNode(p) && getNodeName(p) === stateName) {
+            if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === stateName) {
               hasWrite = true;
 
               return false;
@@ -1208,14 +1207,14 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
         }
 
         // this.stateName++ / --this.stateName
-        if (is.UpdateExpression(n)) {
+        if (n.type === 'UpdateExpression') {
           const argument = n.argument;
 
-          if (isOxcNode(argument) && is.MemberExpression(argument)) {
+          if (isOxcNode(argument) && argument.type === 'MemberExpression') {
             const obj = argument.object;
             const p = argument.property;
 
-            if (isOxcNode(obj) && is.ThisExpression(obj) && isOxcNode(p) && getNodeName(p) === stateName) {
+            if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === stateName) {
               hasWrite = true;
 
               return false;
@@ -1224,7 +1223,7 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
         }
       } else {
         // stateName = ... (also handles `({stateName} = …)` and `[stateName] = …`)
-        if (is.AssignmentExpression(n)) {
+        if (n.type === 'AssignmentExpression') {
           const left = n.left;
 
           if (isOxcNode(left) && targetBindsIdentifier(left, stateName)) {
@@ -1235,10 +1234,10 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
         }
 
         // stateName++ or ++stateName
-        if (is.UpdateExpression(n)) {
+        if (n.type === 'UpdateExpression') {
           const argument = n.argument;
 
-          if (isOxcNode(argument) && is.Identifier(argument) && getNodeName(argument) === stateName) {
+          if (isOxcNode(argument) && argument.type === 'Identifier' && getNodeName(argument) === stateName) {
             hasWrite = true;
 
             return false;

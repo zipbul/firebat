@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -64,27 +63,27 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Literals: number, string, boolean, null, undefined (as Identifier), regex
-  if (is.Literal(node)) {
+  if (node.type === 'Literal') {
     return true;
   }
 
   // Identifier reference (e.g. someVar, SomeType)
-  if (is.Identifier(node)) {
+  if (node.type === 'Identifier') {
     return true;
   }
 
   // Binary expression: a + b, a > b, etc. — pure if both operands are pure
-  if (is.BinaryExpression(node)) {
+  if (node.type === 'BinaryExpression') {
     return isPureInitializer(node.left as Node) && isPureInitializer(node.right as Node);
   }
 
   // Logical expression: a && b, a || b, a ?? b
-  if (is.LogicalExpression(node)) {
+  if (node.type === 'LogicalExpression') {
     return isPureInitializer(node.left as Node) && isPureInitializer(node.right as Node);
   }
 
   // Conditional expression: cond ? a : b
-  if (is.ConditionalExpression(node)) {
+  if (node.type === 'ConditionalExpression') {
     return (
       isPureInitializer(node.test as Node) &&
       isPureInitializer(node.consequent as Node) &&
@@ -93,7 +92,7 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Unary expression: typeof x, void 0, !, ~, +, -
-  if (is.UnaryExpression(node)) {
+  if (node.type === 'UnaryExpression') {
     if (node.operator === 'delete') {
       return false;
     }
@@ -102,7 +101,7 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Template literal (without tag): `hello ${name}`
-  if (is.TemplateLiteral(node)) {
+  if (node.type === 'TemplateLiteral') {
     for (const expr of node.expressions as ReadonlyArray<Node>) {
       if (!isPureInitializer(expr)) {
         return false;
@@ -113,18 +112,18 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Tagged template is impure
-  if (is.TaggedTemplateExpression(node)) {
+  if (node.type === 'TaggedTemplateExpression') {
     return false;
   }
 
   // Array expression: [1, 2] — pure if no SpreadElement inside
-  if (is.ArrayExpression(node)) {
+  if (node.type === 'ArrayExpression') {
     for (const el of node.elements as ReadonlyArray<Node | null>) {
       if (el === null) {
         continue;
       }
 
-      if (is.SpreadElement(el)) {
+      if (el.type === 'SpreadElement') {
         return false;
       }
 
@@ -137,13 +136,13 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Object expression: { a: 1 } — pure if no SpreadElement
-  if (is.ObjectExpression(node)) {
+  if (node.type === 'ObjectExpression') {
     for (const prop of node.properties as ReadonlyArray<Node>) {
-      if (is.SpreadElement(prop)) {
+      if (prop.type === 'SpreadElement') {
         return false;
       }
 
-      if (is.Property(prop)) {
+      if (prop.type === 'Property') {
         // Computed key: { [expr]: val } — the key expression must also be pure
         if (prop.computed === true) {
           if (!isPureInitializer(prop.key as Node)) {
@@ -161,40 +160,40 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
   }
 
   // Member expression: a.b, a.b.c — treat as pure (getter/proxy risk accepted per spec)
-  if (is.MemberExpression(node)) {
+  if (node.type === 'MemberExpression') {
     return isPureInitializer(node.object as Node);
   }
 
   // Chain expression: a?.b
-  if (is.ChainExpression(node)) {
+  if (node.type === 'ChainExpression') {
     return isPureInitializer(node.expression as Node);
   }
 
   // TypeScript type casts — pure (just a type annotation)
   if (
-    is.TSAsExpression(node) ||
-    is.TSSatisfiesExpression(node) ||
-    is.TSNonNullExpression(node) ||
-    is.TSTypeAssertion(node)
+    node.type === 'TSAsExpression' ||
+    node.type === 'TSSatisfiesExpression' ||
+    node.type === 'TSNonNullExpression' ||
+    node.type === 'TSTypeAssertion'
   ) {
     return isPureInitializer(node.expression as Node);
   }
 
   // Parenthesized expression
-  if (is.ParenthesizedExpression(node)) {
+  if (node.type === 'ParenthesizedExpression') {
     return isPureInitializer(node.expression as Node);
   }
 
   // Impure: function calls, new, await, yield, assignment, update, spread, sequence
   if (
-    is.CallExpression(node) ||
-    is.NewExpression(node) ||
-    is.AwaitExpression(node) ||
-    is.YieldExpression(node) ||
-    is.SpreadElement(node) ||
-    is.AssignmentExpression(node) ||
-    is.UpdateExpression(node) ||
-    is.SequenceExpression(node)
+    node.type === 'CallExpression' ||
+    node.type === 'NewExpression' ||
+    node.type === 'AwaitExpression' ||
+    node.type === 'YieldExpression' ||
+    node.type === 'SpreadElement' ||
+    node.type === 'AssignmentExpression' ||
+    node.type === 'UpdateExpression' ||
+    node.type === 'SequenceExpression'
   ) {
     return false;
   }
@@ -229,23 +228,23 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
   const blocks: ScopeBlock[] = [];
 
   for (const stmt of bodyStatements) {
-    if (is.IfStatement(stmt)) {
+    if (stmt.type === 'IfStatement') {
       const consequent = stmt.consequent as Node | null;
       const alternate = stmt.alternate !== null ? (stmt.alternate as Node) : null;
 
-      if (consequent !== null && is.BlockStatement(consequent)) {
+      if (consequent !== null && consequent.type === 'BlockStatement') {
         blocks.push({ type: 'if-consequent', start: consequent.start, end: consequent.end });
       }
 
       // alternate: only BlockStatement (not else-if chain)
-      if (alternate !== null && is.BlockStatement(alternate)) {
+      if (alternate !== null && alternate.type === 'BlockStatement') {
         blocks.push({ type: 'if-alternate', start: alternate.start, end: alternate.end });
       }
 
       continue;
     }
 
-    if (is.SwitchStatement(stmt)) {
+    if (stmt.type === 'SwitchStatement') {
       // Check for fall-through: every case must end with a terminal statement
       let hasFallThrough = false;
 
@@ -281,14 +280,14 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
       continue;
     }
 
-    if (is.TryStatement(stmt)) {
+    if (stmt.type === 'TryStatement') {
       const block = stmt.block as Node;
       const handler = stmt.handler !== null ? (stmt.handler as Node) : null;
       // finalizer is handled only for exclusion (see checkScopeNarrowing)
 
       blocks.push({ type: 'try-block', start: block.start, end: block.end });
 
-      if (handler !== null && is.CatchClause(handler)) {
+      if (handler !== null && handler.type === 'CatchClause') {
         const handlerBody = handler.body as Node;
 
         blocks.push({ type: 'catch-block', start: handlerBody.start, end: handlerBody.end });
@@ -316,7 +315,7 @@ const collectVarDeclInfo = (bodyStatements: ReadonlyArray<Node>): Map<number, Va
   const result = new Map<number, VarDeclInfo>();
 
   for (const stmt of bodyStatements) {
-    if (!is.VariableDeclaration(stmt)) {
+    if (stmt.type !== 'VariableDeclaration') {
       continue;
     }
 
@@ -328,7 +327,7 @@ const collectVarDeclInfo = (bodyStatements: ReadonlyArray<Node>): Map<number, Va
 
     for (const decl of stmt.declarations) {
       const id = decl.id;
-      const isDestructuring = is.ObjectPattern(id) || is.ArrayPattern(id);
+      const isDestructuring = id.type === 'ObjectPattern' || id.type === 'ArrayPattern';
 
       result.set(decl.start, { kind, isDestructuring });
     }
@@ -463,7 +462,7 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
   const tryHandlerRanges: TryCatchRange[] = [];
 
   for (const stmt of bodyStatements) {
-    if (!is.TryStatement(stmt)) {
+    if (stmt.type !== 'TryStatement') {
       continue;
     }
 
@@ -475,7 +474,7 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
       finalizerRanges.push({ start: finalizer.start, end: finalizer.end });
     }
 
-    if (handler !== null && is.CatchClause(handler)) {
+    if (handler !== null && handler.type === 'CatchClause') {
       const handlerBody = handler.body as Node;
 
       tryHandlerRanges.push({
@@ -541,7 +540,7 @@ const collectAllSiteOffsets = (analysis: FunctionBodyAnalysis, localIndexByName:
 
 const findInitNode = (bodyStatements: ReadonlyArray<Node>, defLocation: number): Node | null => {
   for (const stmt of bodyStatements) {
-    if (!is.VariableDeclaration(stmt)) {
+    if (stmt.type !== 'VariableDeclaration') {
       continue;
     }
 
@@ -718,14 +717,14 @@ const collectLoopBodyRanges = (stmts: ReadonlyArray<Node>): ReadonlyArray<LoopBo
   const ranges: LoopBodyRange[] = [];
 
   const visit = (node: Node): void => {
-    if (is.ForStatement(node)) {
+    if (node.type === 'ForStatement') {
       // ForStatement: use full statement range to cover init/test/update clauses
       ranges.push({ start: node.start, end: node.end });
     } else if (
-      is.WhileStatement(node) ||
-      is.DoWhileStatement(node) ||
-      is.ForInStatement(node) ||
-      is.ForOfStatement(node)
+      node.type === 'WhileStatement' ||
+      node.type === 'DoWhileStatement' ||
+      node.type === 'ForInStatement' ||
+      node.type === 'ForOfStatement'
     ) {
       ranges.push({ start: node.body.start, end: node.body.end });
     }
@@ -952,7 +951,7 @@ const analyzeVariableLifetime = (
       // Generate scope-narrowing findings
       const paramBindingNames = new Set(paramBindings.map(b => b.name));
       const bodyStatements =
-        bodyNode !== undefined && bodyNode !== null && is.BlockStatement(bodyNode)
+        bodyNode !== undefined && bodyNode !== null && bodyNode.type === 'BlockStatement'
           ? (bodyNode.body as ReadonlyArray<Node>)
           : [];
       const narrowingFindings = checkScopeNarrowing(

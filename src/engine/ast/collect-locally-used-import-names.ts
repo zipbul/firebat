@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { forEachChildNode } from './oxc-ast-utils';
@@ -43,7 +42,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
     for (const prop of properties) {
       const propNode = prop as Node & Record<string, unknown>;
 
-      if (is.RestElement(propNode)) {
+      if (propNode.type === 'RestElement') {
         collectBindingNames(propNode.argument as Node, target);
       } else {
         collectBindingNames(propNode.value as Node, target);
@@ -64,7 +63,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
       }
 
       const elNode = el as Node & Record<string, unknown>;
-      const childNode = is.RestElement(elNode) ? (elNode.argument as Node) : (el as Node);
+      const childNode = elNode.type === 'RestElement' ? (elNode.argument as Node) : (el as Node);
 
       collectBindingNames(childNode, target);
     }
@@ -74,7 +73,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
   const collectBindingNames = (pattern: Node, target: Set<string>): void => {
     const node = pattern as Node & Record<string, unknown>;
 
-    if (is.Identifier(node)) {
+    if (node.type === 'Identifier') {
       const name = node.name;
 
       if (typeof name === 'string') {
@@ -84,19 +83,19 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
       return;
     }
 
-    if (is.ObjectPattern(node)) {
+    if (node.type === 'ObjectPattern') {
       collectObjectPatternBindings(node, target);
 
       return;
     }
 
-    if (is.ArrayPattern(node)) {
+    if (node.type === 'ArrayPattern') {
       collectArrayPatternBindings(node, target);
 
       return;
     }
 
-    if (is.AssignmentPattern(node)) {
+    if (node.type === 'AssignmentPattern') {
       collectBindingNames(node.left as Node, target);
     }
   };
@@ -126,7 +125,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
   const collectVarDeclarationBindings = (node: Node): Set<string> => {
     const bindings = new Set<string>();
 
-    if (!is.VariableDeclaration(node)) {
+    if (node.type !== 'VariableDeclaration') {
       return bindings;
     }
 
@@ -159,7 +158,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
       const p = param as Node & Record<string, unknown>;
 
       // AssignmentPattern: left = right (default value)
-      if (!is.AssignmentPattern(p)) {
+      if (p.type !== 'AssignmentPattern') {
         continue;
       }
 
@@ -185,7 +184,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
   const visitExportDefaultDeclaration = (nodeRecord: Node & Record<string, unknown>): void => {
     const declaration = nodeRecord.declaration as Node;
 
-    if (!is.Identifier(declaration)) {
+    if (declaration.type !== 'Identifier') {
       visit(declaration, false);
     }
   };
@@ -214,7 +213,7 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
       return;
     }
 
-    if (!is.Identifier(idNode)) {
+    if (idNode.type !== 'Identifier') {
       return;
     }
 

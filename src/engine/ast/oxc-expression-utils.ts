@@ -1,17 +1,16 @@
-import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 const unwrapExpression = (node: Node | null | undefined): Node | null => {
   let current: Node | null = node ?? null;
 
   while (current !== null) {
-    if (is.ParenthesizedExpression(current)) {
+    if (current.type === 'ParenthesizedExpression') {
       current = current.expression as Node;
 
       continue;
     }
 
-    if (!is.ChainExpression(current)) {
+    if (current.type !== 'ChainExpression') {
       break;
     }
 
@@ -70,11 +69,11 @@ const evalStaticTruthiness = (node: Node | null | undefined): boolean | null => 
     return null;
   }
 
-  if (is.Literal(unwrapped)) {
+  if (unwrapped.type === 'Literal') {
     return evalLiteralTruthiness(unwrapped.value);
   }
 
-  if (is.UnaryExpression(unwrapped)) {
+  if (unwrapped.type === 'UnaryExpression') {
     return evalUnaryTruthiness(unwrapped);
   }
 
@@ -92,7 +91,7 @@ const evalStaticLiteralValue = (node: Node | null | undefined): string | number 
     return undefined;
   }
 
-  if (is.Literal(unwrapped)) {
+  if (unwrapped.type === 'Literal') {
     const value = unwrapped.value;
 
     if (
@@ -122,7 +121,7 @@ const evalStaticNullish = (node: Node | null | undefined): boolean | null => {
   }
 
   // `null` literal
-  if (is.Literal(unwrapped)) {
+  if (unwrapped.type === 'Literal') {
     const value = unwrapped.value;
 
     if (value === null) {
@@ -138,7 +137,7 @@ const evalStaticNullish = (node: Node | null | undefined): boolean | null => {
   }
 
   // `void <expr>` → undefined → nullish
-  if (is.UnaryExpression(unwrapped)) {
+  if (unwrapped.type === 'UnaryExpression') {
     const operator = typeof unwrapped.operator === 'string' ? unwrapped.operator : '';
 
     if (operator === 'void') {
@@ -148,10 +147,10 @@ const evalStaticNullish = (node: Node | null | undefined): boolean | null => {
 
   // Object/array/function expressions are always non-nullish
   if (
-    is.ObjectExpression(unwrapped) ||
-    is.ArrayExpression(unwrapped) ||
-    is.ArrowFunctionExpression(unwrapped) ||
-    is.FunctionExpression(unwrapped)
+    unwrapped.type === 'ObjectExpression' ||
+    unwrapped.type === 'ArrayExpression' ||
+    unwrapped.type === 'ArrowFunctionExpression' ||
+    unwrapped.type === 'FunctionExpression'
   ) {
     return false;
   }

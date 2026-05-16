@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { BitSet, DefMeta, FunctionBodyAnalysis } from '../types';
@@ -23,16 +22,14 @@ const extractObjectPatternBindings = (node: NodeLike, out: BindingName[]): void 
   }
 
   for (const prop of properties as NodeLike[]) {
-    const node = prop as unknown as Node;
-
-    if (is.Property(node)) {
-      extractBindingNames(node.value as Node, out);
+    if (prop.type === 'Property') {
+      extractBindingNames(prop.value as Node, out);
 
       continue;
     }
 
-    if (is.RestElement(node)) {
-      extractBindingNames(node.argument as Node, out);
+    if (prop.type === 'RestElement') {
+      extractBindingNames(prop.argument as Node, out);
     }
   }
 };
@@ -54,7 +51,7 @@ const extractArrayPatternBindings = (node: NodeLike, out: BindingName[]): void =
 };
 
 export const extractBindingNames = (node: Node, out: BindingName[]): void => {
-  if (is.Identifier(node)) {
+  if (node.type === 'Identifier') {
     const name = getNodeName(node);
 
     if (name !== null) {
@@ -64,25 +61,25 @@ export const extractBindingNames = (node: Node, out: BindingName[]): void => {
     return;
   }
 
-  if (is.ObjectPattern(node)) {
+  if (node.type === 'ObjectPattern') {
     extractObjectPatternBindings(node as unknown as NodeLike, out);
 
     return;
   }
 
-  if (is.ArrayPattern(node)) {
+  if (node.type === 'ArrayPattern') {
     extractArrayPatternBindings(node as unknown as NodeLike, out);
 
     return;
   }
 
-  if (is.AssignmentPattern(node)) {
+  if (node.type === 'AssignmentPattern') {
     extractBindingNames(node.left as Node, out);
 
     return;
   }
 
-  if (is.RestElement(node)) {
+  if (node.type === 'RestElement') {
     extractBindingNames(node.argument as Node, out);
   }
 };

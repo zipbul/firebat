@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type {
   ArrowFunctionExpression,
   AssignmentExpression,
@@ -78,7 +77,7 @@ const hasReturnStatement = (node: NodeValue): boolean => {
       return false;
     }
 
-    if (is.ReturnStatement(value)) {
+    if (value.type === 'ReturnStatement') {
       found = true;
 
       return false;
@@ -91,7 +90,7 @@ const hasReturnStatement = (node: NodeValue): boolean => {
 };
 
 const isIdentifierNamed = (node: NodeValue, name: string): boolean => {
-  if (!isOxcNode(node) || !is.Identifier(node)) {
+  if (!isOxcNode(node) || node.type !== 'Identifier') {
     return false;
   }
 
@@ -101,7 +100,7 @@ const isIdentifierNamed = (node: NodeValue, name: string): boolean => {
 };
 
 const isMemberNamed = (callee: NodeValue, name: string): { object: Node; computed: boolean } | null => {
-  if (!isOxcNode(callee) || !is.MemberExpression(callee)) {
+  if (!isOxcNode(callee) || callee.type !== 'MemberExpression') {
     return null;
   }
 
@@ -123,7 +122,7 @@ const toBlock = (value: NodeValue): Node | null => {
     return null;
   }
 
-  if (is.BlockStatement(value)) {
+  if (value.type === 'BlockStatement') {
     return value;
   }
 
@@ -131,7 +130,7 @@ const toBlock = (value: NodeValue): Node | null => {
 };
 
 const appendToBlockBody = (bodyNode: Node, statement: Node): Node => {
-  if (!isNodeRecord(bodyNode) || !is.BlockStatement(bodyNode)) {
+  if (!isNodeRecord(bodyNode) || bodyNode.type !== 'BlockStatement') {
     return block([bodyNode, statement]);
   }
 
@@ -184,7 +183,7 @@ const normalizeTemplateLiteralToConcat = (node: AnyNode): NodeValue => {
 };
 
 const normalizeOptionalChain = (node: AnyNode): NodeValue | null => {
-  if (!is.ChainExpression(node)) {
+  if (node.type !== 'ChainExpression') {
     return null;
   }
 
@@ -222,7 +221,7 @@ const normalizeOptionalChain = (node: AnyNode): NodeValue | null => {
 };
 
 const normalizeDeMorgan = (node: AnyNode): NodeValue | null => {
-  if (!is.UnaryExpression(node)) {
+  if (node.type !== 'UnaryExpression') {
     return null;
   }
 
@@ -274,7 +273,7 @@ const normalizeDeMorgan = (node: AnyNode): NodeValue | null => {
 };
 
 const normalizeTernaryInversion = (node: AnyNode): NodeValue | null => {
-  if (!is.ConditionalExpression(node)) {
+  if (node.type !== 'ConditionalExpression') {
     return null;
   }
 
@@ -317,7 +316,7 @@ const unwrapSingleStatement = (stmt: Node): Node | null => {
     return null;
   }
 
-  if (!is.BlockStatement(stmt)) {
+  if (stmt.type !== 'BlockStatement') {
     return stmt;
   }
 
@@ -337,7 +336,7 @@ interface ReturnPair {
 }
 
 const tryExtractReturnPair = (c: Node, a: Node): ReturnPair | null => {
-  if (!is.ReturnStatement(c) || !is.ReturnStatement(a)) {
+  if (c.type !== 'ReturnStatement' || a.type !== 'ReturnStatement') {
     return null;
   }
 
@@ -365,8 +364,8 @@ const tryExtractSameIdentifierAssignment = (cExpr: Node, aExpr: Node): Assignmen
   if (
     !isNodeRecord(cExpr) ||
     !isNodeRecord(aExpr) ||
-    !is.AssignmentExpression(cExpr) ||
-    !is.AssignmentExpression(aExpr)
+    cExpr.type !== 'AssignmentExpression' ||
+    aExpr.type !== 'AssignmentExpression'
   ) {
     return null;
   }
@@ -392,7 +391,7 @@ const tryExtractSameIdentifierAssignment = (cExpr: Node, aExpr: Node): Assignmen
     return null;
   }
 
-  if (!is.Identifier(leftC) || !is.Identifier(leftA)) {
+  if (leftC.type !== 'Identifier' || leftA.type !== 'Identifier') {
     return null;
   }
 
@@ -407,14 +406,14 @@ const tryExtractSameIdentifierAssignment = (cExpr: Node, aExpr: Node): Assignmen
 };
 
 const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
-  if (!is.IfStatement(node)) {
+  if (node.type !== 'IfStatement') {
     return null;
   }
 
-  const ifNode = node as IfStatement;
-  const test = ifNode.test;
-  const consequent = ifNode.consequent;
-  const alternate = ifNode.alternate;
+  const is = node as IfStatement;
+  const test = is.test;
+  const consequent = is.consequent;
+  const alternate = is.alternate;
 
   if (!isOxcNode(test as NodeValue) || !isOxcNode(consequent as NodeValue) || !isOxcNode(alternate as NodeValue)) {
     return null;
@@ -435,7 +434,7 @@ const normalizeIfElseToTernary = (node: AnyNode): NodeValue | null => {
   }
 
   // Only normalize expression statements.
-  if (!is.ExpressionStatement(c) || !is.ExpressionStatement(a)) {
+  if (c.type !== 'ExpressionStatement' || a.type !== 'ExpressionStatement') {
     return null;
   }
 
@@ -481,7 +480,7 @@ const bodyContainsLoopContinue = (body: Node): boolean => {
       return;
     }
 
-    if (is.ContinueStatement(n)) {
+    if (n.type === 'ContinueStatement') {
       found = true;
 
       return;
@@ -489,11 +488,11 @@ const bodyContainsLoopContinue = (body: Node): boolean => {
 
     // Continues in nested loops / functions target a different scope — ignore.
     if (
-      is.ForStatement(n) ||
-      is.WhileStatement(n) ||
-      is.DoWhileStatement(n) ||
-      is.ForInStatement(n) ||
-      is.ForOfStatement(n) ||
+      n.type === 'ForStatement' ||
+      n.type === 'WhileStatement' ||
+      n.type === 'DoWhileStatement' ||
+      n.type === 'ForInStatement' ||
+      n.type === 'ForOfStatement' ||
       isFunctionNode(n)
     ) {
       return;
@@ -508,7 +507,7 @@ const bodyContainsLoopContinue = (body: Node): boolean => {
 };
 
 const normalizeForToWhile = (node: AnyNode): NodeValue | null => {
-  if (!is.ForStatement(node)) {
+  if (node.type !== 'ForStatement') {
     return null;
   }
 
@@ -545,7 +544,7 @@ const normalizeForToWhile = (node: AnyNode): NodeValue | null => {
   }
 
   // If init is an expression, wrap as an ExpressionStatement.
-  if (!is.VariableDeclaration(initNode)) {
+  if (initNode.type !== 'VariableDeclaration') {
     return [expressionStatement(initNode), whileNode];
   }
 
@@ -553,7 +552,7 @@ const normalizeForToWhile = (node: AnyNode): NodeValue | null => {
 };
 
 const normalizeForEach = (node: AnyNode): NodeValue | null => {
-  if (!is.ExpressionStatement(node) || !isNodeRecord(node)) {
+  if (node.type !== 'ExpressionStatement' || !isNodeRecord(node)) {
     return null;
   }
 
@@ -618,7 +617,7 @@ const normalizeForEach = (node: AnyNode): NodeValue | null => {
 };
 
 const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
-  if (!is.CallExpression(node) || !isNodeRecord(node)) {
+  if (node.type !== 'CallExpression' || !isNodeRecord(node)) {
     return null;
   }
 
@@ -692,7 +691,7 @@ interface ForOfBodyPair {
 }
 
 const extractForOfBodyPair = (node: AnyNode): ForOfBodyPair | null => {
-  if (!is.ForOfStatement(node) || !isNodeRecord(node)) {
+  if (node.type !== 'ForOfStatement' || !isNodeRecord(node)) {
     return null;
   }
 
@@ -739,7 +738,7 @@ const extractInitFromVarDecl = (decl: Node): Node | null => {
 
   const declarator = declarations[0] as VariableDeclarator;
 
-  if (!is.VariableDeclarator(declarator)) {
+  if (declarator.type !== 'VariableDeclarator') {
     return null;
   }
 
@@ -787,7 +786,7 @@ const extractGuardCallArg = (guard: Node): GuardCallInfo | null => {
 
   const stmt = consequentBody[0] as Node;
 
-  if (!is.ExpressionStatement(stmt)) {
+  if (stmt.type !== 'ExpressionStatement') {
     return null;
   }
 
@@ -884,7 +883,7 @@ const applyLocalRewrites = (normalized: AnyNode, functionDepth: number): Normali
     return normalizeForFingerprintInternal(optional, functionDepth);
   }
 
-  if (is.TemplateLiteral(normalized)) {
+  if (normalized.type === 'TemplateLiteral') {
     return normalizeForFingerprintInternal(normalizeTemplateLiteralToConcat(normalized), functionDepth);
   }
 

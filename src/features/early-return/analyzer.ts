@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -24,16 +23,16 @@ const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 // ── Reused helpers ──────────────────────────────────────────────────
 
 const isExitStatement = (node: Node): boolean => {
-  return is.ReturnStatement(node) || is.ThrowStatement(node);
+  return node.type === 'ReturnStatement' || node.type === 'ThrowStatement';
 };
 
 /** Check if the last statement of a block (or a bare statement) is an exit (return/throw). Multi-statement blocks allowed. */
 const isExitBlock = (node: Node): boolean => {
-  if (is.ReturnStatement(node) || is.ThrowStatement(node)) {
+  if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
     return true;
   }
 
-  if (!is.BlockStatement(node)) {
+  if (node.type !== 'BlockStatement') {
     return false;
   }
 
@@ -51,15 +50,15 @@ const isExitBlock = (node: Node): boolean => {
 /** Check if the last statement of a block is a loop-control (continue/break) or exit (return/throw). */
 const isLoopGuardBlock = (node: Node): boolean => {
   if (
-    is.ContinueStatement(node) ||
-    is.BreakStatement(node) ||
-    is.ReturnStatement(node) ||
-    is.ThrowStatement(node)
+    node.type === 'ContinueStatement' ||
+    node.type === 'BreakStatement' ||
+    node.type === 'ReturnStatement' ||
+    node.type === 'ThrowStatement'
   ) {
     return true;
   }
 
-  if (!is.BlockStatement(node)) {
+  if (node.type !== 'BlockStatement') {
     return false;
   }
 
@@ -72,18 +71,18 @@ const isLoopGuardBlock = (node: Node): boolean => {
   const last = body[body.length - 1] as Node;
 
   return (
-    is.ContinueStatement(last) ||
-    is.BreakStatement(last) ||
-    is.ReturnStatement(last) ||
-    is.ThrowStatement(last)
+    last.type === 'ContinueStatement' ||
+    last.type === 'BreakStatement' ||
+    last.type === 'ReturnStatement' ||
+    last.type === 'ThrowStatement'
   );
 };
 
 const countStatements = (node: Node): number => {
-  if (!is.BlockStatement(node)) {
+  if (node.type !== 'BlockStatement') {
     // For else-if chains: when alternate is an IfStatement, recursively
     // count all statements across the entire chain to get a true total.
-    if (is.IfStatement(node)) {
+    if (node.type === 'IfStatement') {
       const consequentCount = countStatements(node.consequent as Node);
       const alternateCount = node.alternate !== null ? countStatements(node.alternate as Node) : 0;
 
@@ -99,11 +98,11 @@ const countStatements = (node: Node): number => {
 };
 
 const endsWithReturnOrThrow = (node: Node): boolean => {
-  if (is.ReturnStatement(node) || is.ThrowStatement(node)) {
+  if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
     return true;
   }
 
-  if (!is.BlockStatement(node)) {
+  if (node.type !== 'BlockStatement') {
     return false;
   }
 
@@ -120,11 +119,11 @@ const endsWithReturnOrThrow = (node: Node): boolean => {
 
 /** Check if the last statement of a block is a continue or break. */
 const endsWithLoopExit = (node: Node): boolean => {
-  if (is.ContinueStatement(node) || is.BreakStatement(node)) {
+  if (node.type === 'ContinueStatement' || node.type === 'BreakStatement') {
     return true;
   }
 
-  if (!is.BlockStatement(node)) {
+  if (node.type !== 'BlockStatement') {
     return false;
   }
 
@@ -136,7 +135,7 @@ const endsWithLoopExit = (node: Node): boolean => {
 
   const last = body[body.length - 1] as Node;
 
-  return is.ContinueStatement(last) || is.BreakStatement(last);
+  return last.type === 'ContinueStatement' || last.type === 'BreakStatement';
 };
 
 // ── New types ───────────────────────────────────────────────────────
@@ -174,7 +173,7 @@ const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<Node>): number => {
   for (let i = startIdx; i >= 0; i--) {
     const stmt = stmts[i]!;
 
-    if (is.IfStatement(stmt) && stmt.alternate == null) {
+    if (stmt.type === 'IfStatement' && stmt.alternate == null) {
       count += 1;
     } else {
       break;
@@ -188,7 +187,7 @@ const countConsecutiveTrailingIfs = (stmts: ReadonlyArray<Node>): number => {
 
 /** Count statements in the consequent block of an if statement */
 const countConsequentStatements = (ifNode: Node): number => {
-  if (!is.IfStatement(ifNode)) {
+  if (ifNode.type !== 'IfStatement') {
     return 0;
   }
 
@@ -206,7 +205,7 @@ const detectWrappingIf = (bodyStatements: ReadonlyArray<Node>, sourceText: strin
 
   const last = bodyStatements[bodyStatements.length - 1]!;
 
-  if (!is.IfStatement(last)) {
+  if (last.type !== 'IfStatement') {
     return null;
   }
 
@@ -252,7 +251,7 @@ const detectImplicitElse = (
   for (let i = 0; i < bodyStatements.length; i++) {
     const stmt = bodyStatements[i]!;
 
-    if (!is.IfStatement(stmt)) {
+    if (stmt.type !== 'IfStatement') {
       continue;
     }
 
@@ -313,7 +312,7 @@ const detectImplicitElse = (
  * so the chain can be flattened to sequential guards.
  */
 const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: string): Opportunity | null => {
-  if (!is.IfStatement(ifNode)) {
+  if (ifNode.type !== 'IfStatement') {
     return null;
   }
 
@@ -327,7 +326,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
   let current: Node = ifNode;
 
   // Walk the chain: each link must have consequent ending in exit
-  while (is.IfStatement(current)) {
+  while (current.type === 'IfStatement') {
     const consequent = current.consequent as Node;
     const alternate = current.alternate;
     // Check if consequent ends with exit (for loop context: also allow continue/break)
@@ -358,7 +357,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
 
   // Get the final branch's statement count
   // current is the last IfStatement in the chain — its alternate is the final branch
-  const finalBranch = is.IfStatement(current) ? (current.alternate as Node | null) : null;
+  const finalBranch = current.type === 'IfStatement' ? (current.alternate as Node | null) : null;
 
   if (finalBranch === null) {
     // Tail-less: all consequents in the chain already end with exit (verified by the while loop).
@@ -366,7 +365,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
     let totalConsequentCount = 0;
     let recount: Node = ifNode;
 
-    while (is.IfStatement(recount)) {
+    while (recount.type === 'IfStatement') {
       totalConsequentCount += countStatements(recount.consequent as Node);
 
       const alt = recount.alternate;
@@ -457,7 +456,7 @@ const analyzeFunctionNode = (
         {
           let chainNode: Node = node;
 
-          while (is.IfStatement(chainNode)) {
+          while (chainNode.type === 'IfStatement') {
             const alt = chainNode.alternate;
 
             if (alt === null || (alt as Node).type !== 'IfStatement') {
@@ -474,7 +473,7 @@ const analyzeFunctionNode = (
           // 2. Try invertible-if-else — skip when alternate is an else-if chain
           //    (countStatements would sum the entire chain, producing a false positive)
           const alternateNode = alternateValue as Node;
-          const isElseIfChain = is.IfStatement(alternateNode);
+          const isElseIfChain = alternateNode.type === 'IfStatement';
 
           if (!isElseIfChain) {
             const consequentValue = node.consequent as Node;

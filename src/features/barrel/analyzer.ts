@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
@@ -180,7 +179,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
   }
 
   for (const stmt of file.program.body as ReadonlyArray<Node>) {
-    if (is.ImportDeclaration(stmt)) {
+    if (stmt.type === 'ImportDeclaration') {
       const specifiers = stmt.specifiers as ReadonlyArray<Node>;
 
       if (specifiers.length === 0) {
@@ -193,7 +192,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
           ...(typeof source === 'string' ? { evidence: source } : {}),
         });
       }
-    } else if (is.ExportNamedDeclaration(stmt)) {
+    } else if (stmt.type === 'ExportNamedDeclaration') {
       const source = getLiteralString(stmt.source);
       const declaration = stmt.declaration;
 
@@ -204,7 +203,7 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
           span: toNodeSpan(file, stmt),
         });
       }
-    } else if (is.ExportAllDeclaration(stmt)) {
+    } else if (stmt.type === 'ExportAllDeclaration') {
       // ExportAllDeclaration is separately reported via export-star, but still invalid in barrel.
       findings.push({
         kind: 'invalid-index-statement',
@@ -300,7 +299,7 @@ const collectImportBindings = (file: ParsedFile): Map<string, ImportedBinding> =
   }
 
   for (const stmt of file.program.body as ReadonlyArray<Node>) {
-    if (!is.ImportDeclaration(stmt)) {
+    if (stmt.type !== 'ImportDeclaration') {
       continue;
     }
 
@@ -393,7 +392,7 @@ const checkCrossModuleReexport = async (
       for (const stmt of body) {
         const stmtNode = stmt as Node;
 
-        if (!is.ExportNamedDeclaration(stmtNode) && !is.ExportAllDeclaration(stmtNode)) {
+        if (stmtNode.type !== 'ExportNamedDeclaration' && stmtNode.type !== 'ExportAllDeclaration') {
           continue;
         }
 
@@ -441,7 +440,7 @@ const checkCrossModuleReexport = async (
       const stmtNode = stmt as Node;
 
       // 구문 B: ExportNamedDeclaration without source
-      if (is.ExportNamedDeclaration(stmtNode)) {
+      if (stmtNode.type === 'ExportNamedDeclaration') {
         if (stmtNode.source !== null) {
           continue;
         }
@@ -449,7 +448,7 @@ const checkCrossModuleReexport = async (
         for (const spec of stmtNode.specifiers) {
           const localNode = spec.local;
 
-          if (!is.Identifier(localNode)) {
+          if (localNode.type !== 'Identifier') {
             continue;
           }
 
@@ -498,10 +497,10 @@ const checkCrossModuleReexport = async (
       }
 
       // 구문 C: ExportDefaultDeclaration — declaration이 Identifier
-      if (is.ExportDefaultDeclaration(stmtNode)) {
+      if (stmtNode.type === 'ExportDefaultDeclaration') {
         const declaration = stmtNode.declaration;
 
-        if (!is.Identifier(declaration)) {
+        if (declaration.type !== 'Identifier') {
           continue;
         }
 

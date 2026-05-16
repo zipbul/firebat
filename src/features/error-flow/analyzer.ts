@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Gildash, HeritageNode } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
@@ -53,7 +52,7 @@ const getEvidenceLineAt = (sourceText: string, index: number): string => {
 };
 
 const isIdentifierName = (node: Node, name: string): boolean => {
-  if (!is.Identifier(node)) {
+  if (node.type !== 'Identifier') {
     return false;
   }
 
@@ -61,13 +60,13 @@ const isIdentifierName = (node: Node, name: string): boolean => {
 };
 
 const getMemberPropertyName = (callee: Node): string | null => {
-  if (!is.MemberExpression(callee)) {
+  if (callee.type !== 'MemberExpression') {
     return null;
   }
 
   const prop = callee.property;
 
-  if (is.Identifier(prop) && typeof prop.name === 'string') {
+  if (prop.type === 'Identifier' && typeof prop.name === 'string') {
     return prop.name;
   }
 
@@ -79,7 +78,7 @@ const knownPrimitiveWrappers = new Set(['String', 'Number', 'Boolean', 'Symbol',
 const isPrimitiveWrapperName = (name: string): boolean => knownPrimitiveWrappers.has(name);
 
 const isErrorConstructor = (callee: Node): boolean => {
-  if (!is.Identifier(callee)) {
+  if (callee.type !== 'Identifier') {
     return false;
   }
 
@@ -99,35 +98,35 @@ const isErrorConstructor = (callee: Node): boolean => {
 
 const isPromiseFactoryCall = (expr: Node): boolean => {
   // Dynamic import expression — always returns a Promise.
-  if (is.ImportExpression(expr)) {
+  if (expr.type === 'ImportExpression') {
     return true;
   }
 
   // `new Promise(...)`
-  if (is.NewExpression(expr)) {
+  if (expr.type === 'NewExpression') {
     const callee = expr.callee;
 
-    return is.Identifier(callee) && callee.name === 'Promise';
+    return callee.type === 'Identifier' && callee.name === 'Promise';
   }
 
-  if (!is.CallExpression(expr)) {
+  if (expr.type !== 'CallExpression') {
     return false;
   }
 
   const callee = expr.callee;
 
-  if (!is.MemberExpression(callee)) {
+  if (callee.type !== 'MemberExpression') {
     return false;
   }
 
   const obj = callee.object;
   const prop = callee.property;
 
-  if (!is.Identifier(obj) || obj.name !== 'Promise') {
+  if (obj.type !== 'Identifier' || obj.name !== 'Promise') {
     return false;
   }
 
-  if (!is.Identifier(prop)) {
+  if (prop.type !== 'Identifier') {
     return false;
   }
 
@@ -139,7 +138,7 @@ const isPromiseFactoryCall = (expr: Node): boolean => {
 const chainHasCatch = (expr: Node): boolean => {
   let current: Node = expr;
 
-  while (is.CallExpression(current)) {
+  while (current.type === 'CallExpression') {
     const callee = current.callee;
     const method = getMemberPropertyName(callee);
 
@@ -153,7 +152,7 @@ const chainHasCatch = (expr: Node): boolean => {
     }
 
     // Walk down the chain: expr.callee.object is the previous call
-    if (is.MemberExpression(callee)) {
+    if (callee.type === 'MemberExpression') {
       current = callee.object;
     } else {
       break;
@@ -167,14 +166,14 @@ const containsReturnStatement = (node: Node): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (is.ReturnStatement(inner)) {
+    if (inner.type === 'ReturnStatement') {
       found = true;
 
       return false;
     }
 
     // Don't cross function boundaries
-    if (is.FunctionDeclaration(inner) || is.FunctionExpression(inner) || is.ArrowFunctionExpression(inner)) {
+    if (inner.type === 'FunctionDeclaration' || inner.type === 'FunctionExpression' || inner.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -192,7 +191,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
 
   // Pre-collect all labels defined inside the finalizer
   walkOxcTree(finalizer, node => {
-    if (is.LabeledStatement(node)) {
+    if (node.type === 'LabeledStatement') {
       const label = node.label;
 
       if (typeof label.name === 'string') {
@@ -201,7 +200,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     // Don't cross function boundaries
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -214,23 +213,23 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     // Don't cross function boundaries
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return;
     }
 
-    if (is.ReturnStatement(node)) {
+    if (node.type === 'ReturnStatement') {
       result = 'return';
 
       return;
     }
 
-    if (is.ThrowStatement(node)) {
+    if (node.type === 'ThrowStatement') {
       result = 'throw';
 
       return;
     }
 
-    if (is.BreakStatement(node)) {
+    if (node.type === 'BreakStatement') {
       const label = node.label;
       const labelName = label !== null ? label.name : null;
 
@@ -249,7 +248,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
       }
     }
 
-    if (is.ContinueStatement(node)) {
+    if (node.type === 'ContinueStatement') {
       const label = node.label;
       const labelName = label !== null ? label.name : null;
 
@@ -267,12 +266,12 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     const isLoop =
-      is.ForStatement(node) ||
-      is.WhileStatement(node) ||
-      is.DoWhileStatement(node) ||
-      is.ForInStatement(node) ||
-      is.ForOfStatement(node);
-    const isSwitch = is.SwitchStatement(node);
+      node.type === 'ForStatement' ||
+      node.type === 'WhileStatement' ||
+      node.type === 'DoWhileStatement' ||
+      node.type === 'ForInStatement' ||
+      node.type === 'ForOfStatement';
+    const isSwitch = node.type === 'SwitchStatement';
     const nextLoop = isLoop ? loopDepth + 1 : loopDepth;
     const nextSwitch = isSwitch ? switchDepth + 1 : switchDepth;
 
@@ -290,14 +289,14 @@ const containsThrowInExecutor = (body: Node): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (is.ThrowStatement(node)) {
+    if (node.type === 'ThrowStatement') {
       found = true;
 
       return false;
     }
 
     // Don't cross function boundaries
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -311,7 +310,7 @@ const containsNonEmptyReturnInExecutor = (body: Node): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (is.ReturnStatement(node)) {
+    if (node.type === 'ReturnStatement') {
       const arg = node.argument;
 
       // return; (no argument) is fine
@@ -323,7 +322,7 @@ const containsNonEmptyReturnInExecutor = (body: Node): boolean => {
     }
 
     // Don't cross function boundaries
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -339,7 +338,7 @@ const containsCallbackApiCall = (body: Node): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (is.CallExpression(node)) {
+    if (node.type === 'CallExpression') {
       const method = getMemberPropertyName(node.callee);
 
       if (method !== null && callbackApiMethods.has(method)) {
@@ -356,13 +355,13 @@ const containsCallbackApiCall = (body: Node): boolean => {
 };
 
 const isPromiseWrapCall = (expr: Node): boolean => {
-  if (!is.CallExpression(expr)) {
+  if (expr.type !== 'CallExpression') {
     return false;
   }
 
   const callee = expr.callee;
 
-  if (!is.MemberExpression(callee)) {
+  if (callee.type !== 'MemberExpression') {
     return false;
   }
 
@@ -370,9 +369,9 @@ const isPromiseWrapCall = (expr: Node): boolean => {
   const prop = callee.property;
 
   return (
-    is.Identifier(obj) &&
+    obj.type === 'Identifier' &&
     obj.name === 'Promise' &&
-    is.Identifier(prop) &&
+    prop.type === 'Identifier' &&
     (prop.name === 'resolve' || prop.name === 'reject')
   );
 };
@@ -381,7 +380,7 @@ const containsPromiseWrapReturn = (body: Node): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (is.ReturnStatement(node)) {
+    if (node.type === 'ReturnStatement') {
       if (node.argument !== null && isPromiseWrapCall(node.argument)) {
         found = true;
 
@@ -389,7 +388,7 @@ const containsPromiseWrapReturn = (body: Node): boolean => {
       }
     }
 
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -419,14 +418,14 @@ const containsNodeStyleCallback = (body: Node): boolean => {
   let found = false;
 
   walkOxcTree(body, node => {
-    if (is.CallExpression(node)) {
+    if (node.type === 'CallExpression') {
       const method = getMemberPropertyName(node.callee);
 
       if (method !== null && nodeStyleCallbackMethods.has(method)) {
         const args = node.arguments;
         const last = args[args.length - 1];
         const isCallbackArg =
-          last !== undefined && (is.ArrowFunctionExpression(last) || is.FunctionExpression(last));
+          last !== undefined && (last.type === 'ArrowFunctionExpression' || last.type === 'FunctionExpression');
 
         if (isCallbackArg) {
           found = true;
@@ -436,7 +435,7 @@ const containsNodeStyleCallback = (body: Node): boolean => {
       }
     }
 
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       return false;
     }
 
@@ -454,7 +453,7 @@ const containsIdentifierUse = (node: Node, name: string): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (!(is.Identifier(inner) && inner.name === name)) {
+    if (!(inner.type === 'Identifier' && inner.name === name)) {
       return true;
     }
 
@@ -470,18 +469,18 @@ const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
   let found = false;
 
   walkOxcTree(node, inner => {
-    if (!is.ObjectExpression(inner)) {
+    if (inner.type !== 'ObjectExpression') {
       return true;
     }
 
     for (const prop of inner.properties) {
-      if (!is.Property(prop)) {
+      if (prop.type !== 'Property') {
         continue;
       }
 
       const key = prop.key;
       const value = prop.value;
-      const isCauseKey = (is.Identifier(key) && key.name === 'cause') || (is.Literal(key) && key.value === 'cause');
+      const isCauseKey = (key.type === 'Identifier' && key.name === 'cause') || (key.type === 'Literal' && key.value === 'cause');
 
       if (!isCauseKey) {
         continue;
@@ -505,10 +504,10 @@ const hasNonEmptyReturnInFinallyCallback = (arg: Node | undefined): boolean => {
     return false;
   }
 
-  if (is.ArrowFunctionExpression(arg)) {
+  if (arg.type === 'ArrowFunctionExpression') {
     const body = arg.body;
 
-    if (is.BlockStatement(body)) {
+    if (body.type === 'BlockStatement') {
       return containsReturnStatement(body);
     }
 
@@ -516,10 +515,10 @@ const hasNonEmptyReturnInFinallyCallback = (arg: Node | undefined): boolean => {
     return true;
   }
 
-  if (is.FunctionExpression(arg) || is.FunctionDeclaration(arg)) {
+  if (arg.type === 'FunctionExpression' || arg.type === 'FunctionDeclaration') {
     const body = arg.body;
 
-    if (body !== null && is.BlockStatement(body)) {
+    if (body !== null && body.type === 'BlockStatement') {
       return containsReturnStatement(body);
     }
   }
@@ -533,15 +532,15 @@ interface CollectFindingsResult {
 }
 
 const extractConstructorName = (callee: Node): string | null => {
-  if (is.Identifier(callee) && typeof callee.name === 'string') {
+  if (callee.type === 'Identifier' && typeof callee.name === 'string') {
     return callee.name;
   }
 
   // Namespaced: ns.ClassName
-  if (is.MemberExpression(callee)) {
+  if (callee.type === 'MemberExpression') {
     const prop = callee.property;
 
-    if (is.Identifier(prop) && typeof prop.name === 'string') {
+    if (prop.type === 'Identifier' && typeof prop.name === 'string') {
       return prop.name;
     }
   }
@@ -556,15 +555,15 @@ const collectCallVarPositions = (program: Node): number[] => {
   const positions: number[] = [];
 
   walkOxcTree(program, node => {
-    if (is.VariableDeclarator(node)) {
+    if (node.type === 'VariableDeclarator') {
       const id = node.id;
       const init = node.init;
 
       if (
-        is.Identifier(id) &&
+        id.type === 'Identifier' &&
         typeof id.name === 'string' &&
         init !== null &&
-        (is.CallExpression(init) || is.NewExpression(init))
+        (init.type === 'CallExpression' || init.type === 'NewExpression')
       ) {
         positions.push(id.start);
       }
@@ -682,7 +681,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   const reportCatchTransformHygieneIfNeeded = (catchClause: Node): void => {
-    if (!is.CatchClause(catchClause)) {
+    if (catchClause.type !== 'CatchClause') {
       return;
     }
 
@@ -692,13 +691,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     // Optional catch binding: catch { throw new Error('fail'); }
     if (param === null) {
       walkOxcTree(body, node => {
-        if (!is.ThrowStatement(node)) {
+        if (node.type !== 'ThrowStatement') {
           return true;
         }
 
         const arg = node.argument;
 
-        if (!is.NewExpression(arg)) {
+        if (arg.type !== 'NewExpression') {
           return true;
         }
 
@@ -721,7 +720,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // Non-identifier param (e.g., destructured): skip
-    if (!is.Identifier(param)) {
+    if (param.type !== 'Identifier') {
       return;
     }
 
@@ -730,7 +729,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     let hasReassignment = false;
 
     walkOxcTree(body, node => {
-      if (is.AssignmentExpression(node)) {
+      if (node.type === 'AssignmentExpression') {
         if (isIdentifierName(node.left, name)) {
           hasReassignment = true;
 
@@ -739,7 +738,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       // Don't cross function boundaries for reassignment check
-      if (is.FunctionExpression(node) || is.ArrowFunctionExpression(node) || is.FunctionDeclaration(node)) {
+      if (node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration') {
         return false;
       }
 
@@ -765,17 +764,17 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const localNewExpressions = new Map<string, Node>();
 
     walkOxcTree(body, node => {
-      if (is.VariableDeclarator(node)) {
+      if (node.type === 'VariableDeclarator') {
         const id = node.id;
         const init = node.init;
 
-        if (is.Identifier(id) && typeof id.name === 'string' && init !== null && is.NewExpression(init)) {
+        if (id.type === 'Identifier' && typeof id.name === 'string' && init !== null && init.type === 'NewExpression') {
           localNewExpressions.set(id.name, init);
         }
       }
 
       // Don't cross function boundaries
-      if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
         return false;
       }
 
@@ -788,18 +787,18 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     // visit() generic fallthrough re-visits catch body children for OTHER rules (throw-non-error,
     // unobserved-variable, etc.) — no duplicate findings because each path checks different kinds.
     walkOxcTree(body, node => {
-      if (!is.ThrowStatement(node)) {
+      if (node.type !== 'ThrowStatement') {
         return true;
       }
 
       const arg = node.argument;
 
       // Indirect throw: throw <identifier> where identifier was assigned a new Error(...)
-      if (is.Identifier(arg) && typeof arg.name === 'string') {
+      if (arg.type === 'Identifier' && typeof arg.name === 'string') {
         const varName = arg.name;
         const newExpr = localNewExpressions.get(varName);
 
-        if (newExpr !== undefined && is.NewExpression(newExpr)) {
+        if (newExpr !== undefined && newExpr.type === 'NewExpression') {
           if (isErrorConstructor(newExpr.callee)) {
             const hasCause = hasCausePropertyWithIdentifier(newExpr, name);
 
@@ -820,7 +819,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         return true;
       }
 
-      if (!is.NewExpression(arg)) {
+      if (arg.type !== 'NewExpression') {
         return true;
       }
 
@@ -911,14 +910,14 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   const isUselessRethrow = (catchClause: Node): boolean => {
-    if (!is.CatchClause(catchClause)) {
+    if (catchClause.type !== 'CatchClause') {
       return false;
     }
 
     const param = catchClause.param;
     const body = catchClause.body;
 
-    if (param === null || !is.Identifier(param)) {
+    if (param === null || param.type !== 'Identifier') {
       return false;
     }
 
@@ -931,7 +930,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     const only = stmts[0];
 
-    if (only === undefined || !is.ThrowStatement(only)) {
+    if (only === undefined || only.type !== 'ThrowStatement') {
       return false;
     }
 
@@ -959,7 +958,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   const visit = (node: Node): void => {
     // Function scope boundary: isolate try-catch depth for EF-06 return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
-    if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       const savedDepth = functionTryCatchDepth;
       const savedTryBlockDepth = inTryBlockDepth;
       const savedAsync = inAsyncFunction;
@@ -985,7 +984,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // Pre-order hooks
-    if (is.TryStatement(node)) {
+    if (node.type === 'TryStatement') {
       const hasCatch = node.handler !== null;
       const hasFinalizer = node.finalizer !== null;
 
@@ -1059,18 +1058,18 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // EF-06 return-await-in-try: return without await in try block misses rejection
-    if (is.ReturnStatement(node)) {
+    if (node.type === 'ReturnStatement') {
       const arg = node.argument;
 
       if (inTryBlockWithCatchDepth > 0 && inAsyncFunction) {
-        if (arg !== null && !is.AwaitExpression(arg)) {
+        if (arg !== null && arg.type !== 'AwaitExpression') {
           let shouldFlag = false;
 
           if (gildash) {
             // CallExpression/NewExpression: callee position → function type → match function returning PromiseLike
             // Other expressions: direct type → match PromiseLike, anyConstituent for union (e.g. Promise<T> | null)
             try {
-              const isCall = is.CallExpression(arg) || is.NewExpression(arg);
+              const isCall = arg.type === 'CallExpression' || arg.type === 'NewExpression';
               const assignable = isCall
                 ? gildash.isTypeAssignableToType(filePath, arg.start, '(...args: any[]) => PromiseLike<any>')
                 : gildash.isTypeAssignableToType(filePath, arg.start, 'PromiseLike<any>', { anyConstituent: true });
@@ -1078,14 +1077,14 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
               if (assignable !== null) {
                 shouldFlag = assignable;
               } else {
-                shouldFlag = is.CallExpression(arg) || is.NewExpression(arg) || is.ImportExpression(arg);
+                shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
               }
             } catch {
               // semantic layer 미활성 등 → AST 휴리스틱 fallback
-              shouldFlag = is.CallExpression(arg) || is.NewExpression(arg) || is.ImportExpression(arg);
+              shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
             }
           } else {
-            shouldFlag = is.CallExpression(arg) || is.NewExpression(arg) || is.ImportExpression(arg);
+            shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
           }
 
           if (shouldFlag) {
@@ -1103,24 +1102,24 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       // Mark returned identifier as observed for unobserved-variable
-      if (arg !== null && is.Identifier(arg)) {
+      if (arg !== null && arg.type === 'Identifier') {
         markObserved(arg.name);
       }
     }
 
     // P3-1 throw-non-error
-    if (is.ThrowStatement(node)) {
+    if (node.type === 'ThrowStatement') {
       const arg = node.argument;
       const isLikelyError =
-        is.NewExpression(arg) ||
-        is.Identifier(arg) ||
-        is.AwaitExpression(arg) ||
-        is.ChainExpression(arg);
+        arg.type === 'NewExpression' ||
+        arg.type === 'Identifier' ||
+        arg.type === 'AwaitExpression' ||
+        arg.type === 'ChainExpression';
       // CallExpression is allowed in general (e.g. createError()),
       // but reject known primitive wrappers that never produce Error instances.
       const isCallButPrimitiveWrapper =
-        is.CallExpression(arg) && arg.callee.type === 'Identifier' && isPrimitiveWrapperName(arg.callee.name);
-      const isAllowedCall = is.CallExpression(arg) && !isCallButPrimitiveWrapper;
+        arg.type === 'CallExpression' && arg.callee.type === 'Identifier' && isPrimitiveWrapperName(arg.callee.name);
+      const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
 
       if (!isLikelyError && !isAllowedCall) {
         pushFinding(findings, {
@@ -1136,12 +1135,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // P3-2 promise-constructor-hygiene
-    if (is.NewExpression(node)) {
+    if (node.type === 'NewExpression') {
       const callee = node.callee;
-      const isPromiseIdent = is.Identifier(callee) && callee.name === 'Promise';
+      const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise';
       const isPromiseMember =
         !isPromiseIdent &&
-        is.MemberExpression(callee) &&
+        callee.type === 'MemberExpression' &&
         callee.object.type === 'Identifier' &&
         (callee.object.name === 'globalThis' || callee.object.name === 'window' || callee.object.name === 'self') &&
         callee.property.type === 'Identifier' &&
@@ -1150,7 +1149,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       if (isPromiseIdent || isPromiseMember) {
         const executor = node.arguments[0];
         const isInlineExecutor =
-          executor !== undefined && (is.ArrowFunctionExpression(executor) || is.FunctionExpression(executor));
+          executor !== undefined && (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression');
 
         if (isInlineExecutor) {
           const isAsync = executor.async === true;
@@ -1172,7 +1171,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           if (!isAsync) {
             const executorBody = executor.body;
 
-            if (executorBody !== null && is.BlockStatement(executorBody)) {
+            if (executorBody !== null && executorBody.type === 'BlockStatement') {
               if (containsThrowInExecutor(executorBody)) {
                 pushFinding(findings, {
                   kind: 'promise-constructor-hygiene',
@@ -1191,7 +1190,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           if (!isAsync) {
             const executorBody = executor.body;
 
-            if (executorBody !== null && is.BlockStatement(executorBody)) {
+            if (executorBody !== null && executorBody.type === 'BlockStatement') {
               if (containsNonEmptyReturnInExecutor(executorBody)) {
                 pushFinding(findings, {
                   kind: 'promise-constructor-hygiene',
@@ -1209,7 +1208,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           // param order: first param should be resolve, not reject
           const firstParam = executor.params[0];
 
-          if (firstParam !== undefined && is.Identifier(firstParam) && firstParam.name === 'reject') {
+          if (firstParam !== undefined && firstParam.type === 'Identifier' && firstParam.name === 'reject') {
             pushFinding(findings, {
               kind: 'promise-constructor-hygiene',
               node,
@@ -1244,22 +1243,22 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
     }
 
-    if (is.CatchClause(node)) {
+    if (node.type === 'CatchClause') {
       reportUselessCatchIfNeeded(node);
       reportCatchTransformHygieneIfNeeded(node);
       // Keep visiting for other rules
     }
 
     // VariableDeclarator: track candidates for unobserved-variable
-    if (is.VariableDeclarator(node)) {
+    if (node.type === 'VariableDeclarator') {
       const id = node.id;
       const init = node.init;
 
       if (
-        is.Identifier(id) &&
+        id.type === 'Identifier' &&
         typeof id.name === 'string' &&
         init !== null &&
-        (is.CallExpression(init) || is.NewExpression(init))
+        (init.type === 'CallExpression' || init.type === 'NewExpression')
       ) {
         // Only register as candidate if gildash confirmed the call returns a Promise.
         // When gildash is unavailable, promisePositions is empty → no candidates registered
@@ -1272,10 +1271,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // AwaitExpression: mark awaited identifier as observed
-    if (is.AwaitExpression(node)) {
+    if (node.type === 'AwaitExpression') {
       const arg = node.argument;
 
-      if (is.Identifier(arg)) {
+      if (arg.type === 'Identifier') {
         markObserved(arg.name);
       }
     }
@@ -1283,16 +1282,16 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     // CallExpression: mark .then/.catch/.finally on identifier; mark args as observed
     // Also handle walkOxcTree rules: prefer-catch, prefer-await-to-then, no-return-wrap,
     // always-return, no-callback-in-promise, misused-promises, unsafe-finally(.finally())
-    if (is.CallExpression(node)) {
+    if (node.type === 'CallExpression') {
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
       // Unobserved-variable: x.then/catch/finally(...) marks x as observed
       if (method !== null && (method === 'then' || method === 'catch' || method === 'finally')) {
-        if (is.MemberExpression(callee)) {
+        if (callee.type === 'MemberExpression') {
           const obj = callee.object;
 
-          if (is.Identifier(obj)) {
+          if (obj.type === 'Identifier') {
             markObserved(obj.name);
           }
         }
@@ -1300,13 +1299,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       // Unobserved-variable: fn(p) or fn([p]) — passed as function argument marks p as observed
       for (const callArg of node.arguments) {
-        if (is.Identifier(callArg)) {
+        if (callArg.type === 'Identifier') {
           markObserved((callArg as unknown as { name: string }).name);
         }
 
-        if (is.ArrayExpression(callArg)) {
+        if (callArg.type === 'ArrayExpression') {
           for (const el of (callArg as unknown as { elements: Node[] }).elements) {
-            if (el !== null && el !== undefined && is.Identifier(el)) {
+            if (el !== null && el !== undefined && el.type === 'Identifier') {
               markObserved((el as unknown as { name: string }).name);
             }
           }
@@ -1349,12 +1348,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       // EF-07 prefer-await-to-then: long then chains with block callbacks
       if (method === 'then') {
-        const inner = is.MemberExpression(callee) ? callee.object : null;
-        const hasNestedThen = inner !== null && is.CallExpression(inner) && getMemberPropertyName(inner.callee) === 'then';
+        const inner = callee.type === 'MemberExpression' ? callee.object : null;
+        const hasNestedThen = inner !== null && inner.type === 'CallExpression' && getMemberPropertyName(inner.callee) === 'then';
 
         if (hasNestedThen) {
           const anyBlockCb = node.arguments.some(
-            arg => is.ArrowFunctionExpression(arg) && arg.body.type === 'BlockStatement',
+            arg => arg.type === 'ArrowFunctionExpression' && arg.body.type === 'BlockStatement',
           );
 
           if (anyBlockCb) {
@@ -1374,13 +1373,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // no-return-wrap: .then(() => Promise.resolve(x)) — unnecessary wrapping
       if (method === 'then') {
         for (const arg of node.arguments) {
-          if (!is.ArrowFunctionExpression(arg) && !is.FunctionExpression(arg)) {
+          if (arg.type !== 'ArrowFunctionExpression' && arg.type !== 'FunctionExpression') {
             continue;
           }
 
           const body = arg.body;
 
-          if (body !== null && !is.BlockStatement(body) && isPromiseWrapCall(body)) {
+          if (body !== null && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
             pushFinding(findings, {
               kind: 'no-return-wrap',
               node,
@@ -1392,7 +1391,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             });
           }
 
-          if (body !== null && is.BlockStatement(body) && containsPromiseWrapReturn(body)) {
+          if (body !== null && body.type === 'BlockStatement' && containsPromiseWrapReturn(body)) {
             pushFinding(findings, {
               kind: 'no-return-wrap',
               node,
@@ -1410,10 +1409,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       if (method === 'then') {
         const first = node.arguments[0];
 
-        if (first !== undefined && (is.ArrowFunctionExpression(first) || is.FunctionExpression(first))) {
+        if (first !== undefined && (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression')) {
           const body = first.body;
 
-          if (body !== null && is.BlockStatement(body) && !containsReturnStatement(body)) {
+          if (body !== null && body.type === 'BlockStatement' && !containsReturnStatement(body)) {
             pushFinding(findings, {
               kind: 'always-return',
               node,
@@ -1430,7 +1429,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // no-callback-in-promise: callback-style API inside then/catch/finally callback
       if (method === 'then' || method === 'catch') {
         for (const arg of node.arguments) {
-          if (is.ArrowFunctionExpression(arg) || is.FunctionExpression(arg)) {
+          if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
             const body = arg.body;
 
             if (body !== null && containsNodeStyleCallback(body)) {
@@ -1465,7 +1464,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         const first = node.arguments[0];
         const isAsyncFn =
           first !== undefined &&
-          (is.ArrowFunctionExpression(first) || is.FunctionExpression(first)) &&
+          (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
           first.async === true;
 
         if (isAsyncFn) {
@@ -1483,11 +1482,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // Expression-statement based rules.
-    if (is.ExpressionStatement(node)) {
+    if (node.type === 'ExpressionStatement') {
       const expr = node.expression;
 
       // ignore explicit void
-      if (!(is.UnaryExpression(expr) && expr.operator === 'void')) {
+      if (!(expr.type === 'UnaryExpression' && expr.operator === 'void')) {
         // EF-08 floating-promises: Promise.* / new Promise as expression statement
         if (isPromiseFactoryCall(expr)) {
           pushFinding(findings, {
@@ -1499,7 +1498,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             evidence: getEvidenceLineAt(sourceText, node.start),
             recipes: ['RCP-09', 'RCP-10', 'RCP-11'],
           });
-        } else if (is.CallExpression(expr)) {
+        } else if (expr.type === 'CallExpression') {
           // EF-08 catch-or-return: top-level then call without catch anywhere in chain
           const exprCallee = expr.callee;
           const exprMethod = getMemberPropertyName(exprCallee);

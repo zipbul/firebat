@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -59,19 +58,19 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
     return [];
   }
 
-  if (is.Identifier(patternNode as unknown as Node)) {
+  if (patternNode.type === 'Identifier') {
     return [patternNode];
   }
 
-  if (is.AssignmentPattern(patternNode as unknown as Node)) {
+  if (patternNode.type === 'AssignmentPattern') {
     return extractBindingIdentifiers(patternNode.left);
   }
 
-  if (is.RestElement(patternNode as unknown as Node)) {
+  if (patternNode.type === 'RestElement') {
     return extractBindingIdentifiers(patternNode.argument);
   }
 
-  if (is.ObjectPattern(patternNode as unknown as Node)) {
+  if (patternNode.type === 'ObjectPattern') {
     const properties = patternNode.properties;
 
     if (Array.isArray(properties)) {
@@ -84,7 +83,7 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
           continue;
         }
 
-        if (is.RestElement(propNode as unknown as Node)) {
+        if (propNode.type === 'RestElement') {
           results.push(...extractBindingIdentifiers(propNode.argument));
         } else {
           // Property node — value holds the binding pattern
@@ -96,7 +95,7 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
     }
   }
 
-  if (is.ArrayPattern(patternNode as unknown as Node)) {
+  if (patternNode.type === 'ArrayPattern') {
     const elements = patternNode.elements;
 
     if (Array.isArray(elements)) {
@@ -119,14 +118,14 @@ const extractBindingIdentifiers = (pattern: unknown): ReadonlyArray<NodeLike> =>
 
 const extractMemberObjectEnd = (node: NodeLike): number | undefined => {
   // MemberExpression: obj.prop or obj[key]
-  if (is.MemberExpression(node as unknown as Node)) {
+  if (node.type === 'MemberExpression') {
     const obj = asNodeLike(node.object);
 
     return obj && typeof obj.end === 'number' ? obj.end : undefined;
   }
 
   // CallExpression where callee is MemberExpression: obj.method(...)
-  if (is.CallExpression(node as unknown as Node)) {
+  if (node.type === 'CallExpression') {
     const callee = asNodeLike(node.callee);
 
     if (callee?.type === 'MemberExpression') {
@@ -147,7 +146,7 @@ const getInitObjectEndOffset = (init: unknown): number | undefined => {
   }
 
   // Unwrap AwaitExpression
-  const target = is.AwaitExpression(initNode as unknown as Node) ? asNodeLike(initNode.argument) : initNode;
+  const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
   if (!target) {
     return undefined;
@@ -160,7 +159,7 @@ const getInitObjectEndOffset = (init: unknown): number | undefined => {
   }
 
   // ConditionalExpression: cond ? a : b → check both branches
-  if (is.ConditionalExpression(target as unknown as Node)) {
+  if (target.type === 'ConditionalExpression') {
     const consequent = asNodeLike(target.consequent);
     const alternate = asNodeLike(target.alternate);
     const fromConsequent = consequent ? extractMemberObjectEnd(consequent) : undefined;
@@ -173,7 +172,7 @@ const getInitObjectEndOffset = (init: unknown): number | undefined => {
   }
 
   // LogicalExpression: a ?? b, a || b → check left side
-  if (is.LogicalExpression(target as unknown as Node)) {
+  if (target.type === 'LogicalExpression') {
     const left = asNodeLike(target.left);
 
     return left ? extractMemberObjectEnd(left) : undefined;
@@ -190,9 +189,9 @@ const hasExplicitAnyTypeArgument = (init: unknown): boolean => {
   }
 
   // Unwrap AwaitExpression
-  const target = is.AwaitExpression(initNode as unknown as Node) ? asNodeLike(initNode.argument) : initNode;
+  const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
-  if (!target || !is.CallExpression(target as unknown as Node)) {
+  if (!target || target.type !== 'CallExpression') {
     return false;
   }
 
@@ -222,7 +221,7 @@ const hasExplicitAnyTypeArgument = (init: unknown): boolean => {
 
 const containsAnyUnknownCast = (node: NodeLike): boolean => {
   // Direct: expr as any, expr as unknown
-  if (is.TSAsExpression(node as unknown as Node) || is.TSTypeAssertion(node as unknown as Node)) {
+  if (node.type === 'TSAsExpression' || node.type === 'TSTypeAssertion') {
     const typeAnno = asNodeLike(node.typeAnnotation);
 
     if (typeAnno?.type === 'TSAnyKeyword' || typeAnno?.type === 'TSUnknownKeyword') {
@@ -238,7 +237,7 @@ const containsAnyUnknownCast = (node: NodeLike): boolean => {
   }
 
   // ParenthesizedExpression: (expr) → unwrap
-  if (is.ParenthesizedExpression(node as unknown as Node)) {
+  if (node.type === 'ParenthesizedExpression') {
     const inner = asNodeLike(node.expression);
 
     if (inner) {
@@ -247,7 +246,7 @@ const containsAnyUnknownCast = (node: NodeLike): boolean => {
   }
 
   // MemberExpression: (x as unknown as T).prop → check object
-  if (is.MemberExpression(node as unknown as Node)) {
+  if (node.type === 'MemberExpression') {
     const obj = asNodeLike(node.object);
 
     if (obj) {
@@ -256,7 +255,7 @@ const containsAnyUnknownCast = (node: NodeLike): boolean => {
   }
 
   // CallExpression: (x as unknown as T).method() → check callee
-  if (is.CallExpression(node as unknown as Node)) {
+  if (node.type === 'CallExpression') {
     const callee = asNodeLike(node.callee);
 
     if (callee) {
@@ -275,7 +274,7 @@ const hasExplicitCastToAnyUnknown = (init: unknown): boolean => {
   }
 
   // Unwrap AwaitExpression
-  const target = is.AwaitExpression(initNode as unknown as Node) ? asNodeLike(initNode.argument) : initNode;
+  const target = initNode.type === 'AwaitExpression' ? asNodeLike(initNode.argument) : initNode;
 
   if (!target) {
     return false;
@@ -286,7 +285,7 @@ const hasExplicitCastToAnyUnknown = (init: unknown): boolean => {
   }
 
   // ConditionalExpression: cond ? (x as unknown) : y
-  if (is.ConditionalExpression(target as unknown as Node)) {
+  if (target.type === 'ConditionalExpression') {
     const consequent = asNodeLike(target.consequent);
     const alternate = asNodeLike(target.alternate);
 
@@ -305,7 +304,7 @@ const hasExplicitCastToAnyUnknown = (init: unknown): boolean => {
 const getCalleeEndOffset = (init: unknown): number | undefined => {
   const initNode = asNodeLike(init);
 
-  if (!initNode || !is.CallExpression(initNode as unknown as Node)) {
+  if (!initNode || initNode.type !== 'CallExpression') {
     return undefined;
   }
 
@@ -327,11 +326,11 @@ const getAwaitedCalleeEndOffset = (init: unknown): number | undefined => {
     return undefined;
   }
 
-  if (is.CallExpression(initNode as unknown as Node)) {
+  if (initNode.type === 'CallExpression') {
     return getCalleeEndOffset(init);
   }
 
-  if (is.AwaitExpression(initNode as unknown as Node)) {
+  if (initNode.type === 'AwaitExpression') {
     return getCalleeEndOffset(initNode.argument);
   }
 
@@ -540,7 +539,7 @@ const collectExpressionCandidates = (
     walkOxcTree(file.program, (node: Node) => {
       // Non-null assertion (`x!`) bypasses the type-system in a similar way to `as` casts:
       // it asserts a value is non-nullish without runtime check. Record each occurrence.
-      if (is.TSNonNullExpression(node as unknown as Node)) {
+      if (node.type === 'TSNonNullExpression') {
         const startOffset = node.start;
         const endOffset = node.end;
 
@@ -553,7 +552,7 @@ const collectExpressionCandidates = (
         return true;
       }
 
-      if (!is.TSAsExpression(node as unknown as Node) && !is.TSTypeAssertion(node as unknown as Node)) {
+      if (node.type !== 'TSAsExpression' && node.type !== 'TSTypeAssertion') {
         return true;
       }
 
@@ -562,7 +561,7 @@ const collectExpressionCandidates = (
       const innerExpr = asNodeLike(nodeRecord?.expression);
 
       // double-cast: outer(as T) -> inner(as unknown|any)
-      if (innerExpr && (is.TSAsExpression(innerExpr as unknown as Node) || is.TSTypeAssertion(innerExpr as unknown as Node))) {
+      if (innerExpr && (innerExpr.type === 'TSAsExpression' || innerExpr.type === 'TSTypeAssertion')) {
         const innerType = asNodeLike(innerExpr.typeAnnotation);
 
         if (innerType?.type === 'TSUnknownKeyword' || innerType?.type === 'TSAnyKeyword') {

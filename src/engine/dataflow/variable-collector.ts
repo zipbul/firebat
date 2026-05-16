@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { isFunctionNode } from '@zipbul/gildash';
@@ -17,7 +16,7 @@ import {
 const getNodeStart = (node: Node): number => node.start;
 
 const addPropertyKeyToSet = (key: Node, keys: Set<string>): void => {
-  if (is.Identifier(key)) {
+  if (key.type === 'Identifier') {
     const name = getNodeName(key);
 
     if (name !== null) {
@@ -27,7 +26,7 @@ const addPropertyKeyToSet = (key: Node, keys: Set<string>): void => {
     return;
   }
 
-  if (is.Literal(key)) {
+  if (key.type === 'Literal') {
     const value = getLiteralString(key);
 
     if (value !== null) {
@@ -47,7 +46,7 @@ const getStaticObjectExpressionKeys = (node: Node | null | undefined): Set<strin
   const properties = (n.properties ?? []) as ReadonlyArray<Node>;
 
   for (const prop of properties) {
-    if (!is.Property(prop)) {
+    if (prop.type !== 'Property') {
       continue;
     }
 
@@ -190,19 +189,19 @@ const visitObjectPatternProperties = (
   visit: VisitFn,
 ): void => {
   for (const prop of properties) {
-    if (is.RestElement(prop)) {
+    if (prop.type === 'RestElement') {
       visit(prop.argument as Node, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
       continue;
     }
 
-    if (!is.Property(prop)) {
+    if (prop.type !== 'Property') {
       continue;
     }
 
     const valueNode = prop.value as Node;
 
-    if (!is.AssignmentPattern(valueNode)) {
+    if (valueNode.type !== 'AssignmentPattern') {
       visit(valueNode, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
       continue;
@@ -226,13 +225,13 @@ const visitArrayPatternElements = (
       continue;
     }
 
-    if (is.RestElement(element)) {
+    if (element.type === 'RestElement') {
       visit(element.argument as Node, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
       continue;
     }
 
-    if (!is.AssignmentPattern(element)) {
+    if (element.type !== 'AssignmentPattern') {
       visit(element, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
       continue;
@@ -325,13 +324,13 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
   };
 
   const isLiteralNullishBase = (node: Node): boolean => {
-    if (is.Literal(node)) {
+    if (node.type === 'Literal') {
       const value = (node as unknown as Record<string, unknown>).value;
 
       return value === null;
     }
 
-    if (is.Identifier(node) && (node as unknown as { name?: string }).name === 'undefined') {
+    if (node.type === 'Identifier' && (node as unknown as { name?: string }).name === 'undefined') {
       return true;
     }
 
@@ -352,7 +351,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     const id = r.id as Node;
     const initKeys = getStaticObjectExpressionKeys(init);
 
-    if (is.ObjectPattern(id) && initKeys !== null) {
+    if (id.type === 'ObjectPattern' && initKeys !== null) {
       visitObjectDestructuringProps(id, initKeys, allowNestedFunctions, suppressDeclarations);
     } else {
       visit(id, allowNestedFunctions, true, 'declaration', suppressDeclarations); // Def
@@ -408,7 +407,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
     // Oxc Node Types
     // Observed in our environment: identifiers are represented as `Identifier`.
-    if (is.Identifier(current)) {
+    if (current.type === 'Identifier') {
       visitIdentifier(current, isWriteContext, writeKind, suppressDeclarations);
 
       return;
@@ -416,62 +415,62 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
     // IdentifierReference/BindingIdentifier/AssignmentTargetIdentifier are represented as Identifier nodes.
 
-    if (is.ChainExpression(current)) {
+    if (current.type === 'ChainExpression') {
       visit(current.expression, allowNestedFunctions, false, undefined, suppressDeclarations);
 
       return;
     }
 
-    if (is.MemberExpression(current)) {
+    if (current.type === 'MemberExpression') {
       visitMemberExpression(current, allowNestedFunctions, suppressDeclarations);
 
       return;
     }
 
     // Handle constructions
-    if (is.LogicalExpression(current)) {
+    if (current.type === 'LogicalExpression') {
       visitLogicalExpression(current, allowNestedFunctions, suppressDeclarations, visit);
 
       return;
     }
 
-    if (is.ConditionalExpression(current)) {
+    if (current.type === 'ConditionalExpression') {
       visitConditionalExpression(current, allowNestedFunctions, suppressDeclarations, visit);
 
       return;
     }
 
-    if (is.AssignmentExpression(current)) {
+    if (current.type === 'AssignmentExpression') {
       visitAssignmentExpression(current, allowNestedFunctions, suppressDeclarations, visit);
 
       return;
     }
 
-    if (is.UpdateExpression(current)) {
+    if (current.type === 'UpdateExpression') {
       visitUpdateExpression(current, allowNestedFunctions, suppressDeclarations);
 
       return;
     }
 
-    if (is.VariableDeclarator(current)) {
+    if (current.type === 'VariableDeclarator') {
       visitVariableDeclarator(current, allowNestedFunctions, suppressDeclarations);
 
       return;
     }
 
-    if (is.CatchClause(current)) {
+    if (current.type === 'CatchClause') {
       visitCatchClause(current, allowNestedFunctions, suppressDeclarations);
 
       return;
     }
 
-    if (is.ObjectPattern(current) || is.ArrayPattern(current)) {
+    if (current.type === 'ObjectPattern' || current.type === 'ArrayPattern') {
       visitPatternNode(current, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations);
 
       return;
     }
 
-    if (is.CallExpression(current)) {
+    if (current.type === 'CallExpression') {
       visitCallExpression(current, allowNestedFunctions, suppressDeclarations);
 
       return;
@@ -493,7 +492,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
   ): void => {
     const r = current as unknown as Record<string, unknown>;
 
-    if (is.ObjectPattern(current)) {
+    if (current.type === 'ObjectPattern') {
       const properties = Array.isArray(r.properties) ? (r.properties as ReadonlyArray<Node>) : [];
 
       visitObjectPatternProperties(properties, allowNestedFunctions, isWriteContext, writeKind, suppressDeclarations, visit);
@@ -527,7 +526,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
     const valueNode = propRecord.value as Node;
 
-    if (!is.AssignmentPattern(valueNode)) {
+    if (valueNode.type !== 'AssignmentPattern') {
       visit(valueNode, allowNestedFunctions, true, 'declaration', suppressDeclarations);
 
       return;
@@ -556,13 +555,13 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     const properties = Array.isArray(idRecord.properties) ? (idRecord.properties as ReadonlyArray<Node>) : [];
 
     for (const prop of properties) {
-      if (is.RestElement(prop)) {
+      if (prop.type === 'RestElement') {
         visit(prop.argument as Node, allowNestedFunctions, true, 'declaration', suppressDeclarations);
 
         continue;
       }
 
-      if (!is.Property(prop)) {
+      if (prop.type !== 'Property') {
         continue;
       }
 

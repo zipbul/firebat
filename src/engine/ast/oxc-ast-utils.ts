@@ -1,4 +1,3 @@
-import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { isFunctionNode } from '@zipbul/gildash';
@@ -32,7 +31,7 @@ export const getLiteralString = (node: Node | null | undefined): string | null =
     return null;
   }
 
-  if (!is.Literal(node)) {
+  if (node.type !== 'Literal') {
     return null;
   }
 
@@ -140,7 +139,7 @@ export const collectFunctionNodesWithParent = (program: Node): FunctionNodeWithP
 };
 
 const getNameFromKey = (key: Node): string | null => {
-  if (is.Identifier(key)) {
+  if (key.type === 'Identifier') {
     return key.name;
   }
 
@@ -150,7 +149,7 @@ const getNameFromKey = (key: Node): string | null => {
 };
 
 const getNameFromParentContext = (parent: Node): string | null => {
-  if (is.VariableDeclarator(parent)) {
+  if (parent.type === 'VariableDeclarator') {
     if (parent.id.type === 'Identifier') {
       return parent.id.name;
     }
@@ -158,7 +157,7 @@ const getNameFromParentContext = (parent: Node): string | null => {
     return null;
   }
 
-  if (is.MethodDefinition(parent) || is.PropertyDefinition(parent) || is.Property(parent)) {
+  if (parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition' || parent.type === 'Property') {
     return getNameFromKey(parent.key);
   }
 
@@ -168,13 +167,13 @@ const getNameFromParentContext = (parent: Node): string | null => {
 export const getNodeHeader = (node: Node, parent?: Node | null): string => {
   // Extract name from node's own id (FunctionDeclaration, ClassDeclaration, etc.)
   if (
-    is.FunctionDeclaration(node) ||
-    is.FunctionExpression(node) ||
-    is.ClassDeclaration(node) ||
-    is.ClassExpression(node) ||
-    is.TSTypeAliasDeclaration(node) ||
-    is.TSInterfaceDeclaration(node) ||
-    is.TSEnumDeclaration(node)
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ClassDeclaration' ||
+    node.type === 'ClassExpression' ||
+    node.type === 'TSTypeAliasDeclaration' ||
+    node.type === 'TSInterfaceDeclaration' ||
+    node.type === 'TSEnumDeclaration'
   ) {
     const name = node.id?.name;
 
@@ -184,12 +183,12 @@ export const getNodeHeader = (node: Node, parent?: Node | null): string => {
   }
 
   // VariableDeclarator: id is BindingPattern (Identifier, ObjectPattern, ArrayPattern)
-  if (is.VariableDeclarator(node) && node.id.type === 'Identifier') {
+  if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier') {
     return node.id.name;
   }
 
   // Extract name from node's key (MethodDefinition, PropertyDefinition, Property)
-  if (is.MethodDefinition(node) || is.PropertyDefinition(node) || is.Property(node)) {
+  if (node.type === 'MethodDefinition' || node.type === 'PropertyDefinition' || node.type === 'Property') {
     const name = getNameFromKey(node.key);
 
     if (name !== null) {
