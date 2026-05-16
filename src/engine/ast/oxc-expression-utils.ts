@@ -44,17 +44,15 @@ const evalLiteralTruthiness = (value: unknown): boolean | null => {
   return null;
 };
 
-const evalUnaryTruthiness = (unwrapped: Node): boolean | null => {
-  const r = unwrapped as unknown as Record<string, unknown>;
-  const operator = typeof r.operator === 'string' ? r.operator : '';
-  const argument = r.argument;
+const evalUnaryTruthiness = (unwrapped: Node & { type: 'UnaryExpression' }): boolean | null => {
+  const { operator, argument } = unwrapped;
 
   if (operator === 'void') {
     return false;
   }
 
   if (operator === '!') {
-    const inner = evalStaticTruthiness(argument as Node | null);
+    const inner = evalStaticTruthiness(argument);
 
     return inner === null ? null : !inner;
   }
@@ -137,12 +135,8 @@ const evalStaticNullish = (node: Node | null | undefined): boolean | null => {
   }
 
   // `void <expr>` → undefined → nullish
-  if (unwrapped.type === 'UnaryExpression') {
-    const operator = typeof unwrapped.operator === 'string' ? unwrapped.operator : '';
-
-    if (operator === 'void') {
-      return true;
-    }
+  if (unwrapped.type === 'UnaryExpression' && unwrapped.operator === 'void') {
+    return true;
   }
 
   // Object/array/function expressions are always non-nullish

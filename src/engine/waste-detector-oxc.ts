@@ -281,15 +281,9 @@ const collectWasteFindingsForFunction = (
   const fnParams = (node as OxcFunction).params;
   const parameterDefaults: Node[] = [];
 
-  if (Array.isArray(fnParams)) {
-    for (const param of fnParams as ReadonlyArray<Node>) {
-      if (param.type === 'AssignmentPattern') {
-        const right = (param as unknown as Record<string, unknown>).right as Node | undefined;
-
-        if (right) {
-          parameterDefaults.push(right);
-        }
-      }
+  for (const param of fnParams) {
+    if (param.type === 'AssignmentPattern') {
+      parameterDefaults.push(param.right);
     }
   }
 
