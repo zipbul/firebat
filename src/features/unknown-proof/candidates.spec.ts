@@ -14,26 +14,32 @@ describe('features/unknown-proof/candidates — collectBindingCandidates', () =>
     expect(result.size).toBe(0);
   });
 
-  it('collectBindingCandidates - variable with CallExpression init - records initCalleeEndOffset', () => {
-    const f = toFile('/call.ts', `const x = fetch("url");`);
+  it('collectBindingCandidates - variable with CallExpression init - records initCalleeEndOffset at end of callee', () => {
+    const source = `const x = fetch("url");`;
+    const f = toFile('/call.ts', source);
     const result = collectBindingCandidates({ program: [f] });
     const candidates = result.get('/call.ts') ?? [];
     const xCandidate = candidates.find(c => c.name === 'x');
 
     expect(xCandidate).toBeDefined();
     expect(xCandidate!.isCatchParam).toBe(false);
-    expect(xCandidate!.initCalleeEndOffset).toBeDefined();
-    expect(typeof xCandidate!.initCalleeEndOffset).toBe('number');
+    // `fetch` ends right before the `(` opening the argument list — that exact offset
+    // is what unknown-proof anchors its semantic checks to.
+    expect(xCandidate!.initCalleeEndOffset).toBe(source.indexOf('('));
   });
 
-  it('collectBindingCandidates - variable with await CallExpression init - records initCalleeEndOffset', () => {
-    const f = toFile('/await-call.ts', `async function run() { const x = await fetch("url"); }`);
+  it('collectBindingCandidates - variable with await CallExpression init - records initCalleeEndOffset at end of callee', () => {
+    const source = `async function run() { const x = await fetch("url"); }`;
+    const f = toFile('/await-call.ts', source);
     const result = collectBindingCandidates({ program: [f] });
     const candidates = result.get('/await-call.ts') ?? [];
     const xCandidate = candidates.find(c => c.name === 'x');
 
     expect(xCandidate).toBeDefined();
-    expect(xCandidate!.initCalleeEndOffset).toBeDefined();
+    // `fetch` ends right before `(` of the fetch call (not `run(` earlier in the source).
+    const fetchCallParen = source.indexOf('fetch(') + 'fetch'.length;
+
+    expect(xCandidate!.initCalleeEndOffset).toBe(fetchCallParen);
   });
 
   it('collectBindingCandidates - catch param - records isCatchParam true and catchBodyRange', () => {

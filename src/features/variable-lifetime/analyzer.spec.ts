@@ -978,8 +978,8 @@ describe('variable-lifetime/analyzer', () => {
 
     // ── Finding 형태 검증 ──
 
-    it('analyzeVariableLifetime - scope-narrowing finding - has all required fields', () => {
-      // Arrange
+    it('analyzeVariableLifetime - scope-narrowing finding - has all required fields with exact spans', () => {
+      // Arrange — single-line source so the spans pin to known line/column positions.
       const sourceText = 'function f(cond: boolean) { const target = 42; if (cond) { use(target); } }';
       const files = [file('src/a.ts', sourceText)];
       // Act
@@ -991,11 +991,25 @@ describe('variable-lifetime/analyzer', () => {
       expect(finding!.kind).toBe('scope-narrowing');
       expect(finding!.file).toBe('src/a.ts');
       expect(finding!.variable).toBe('target');
-      expect(finding!.span).toBeDefined();
-      expect(finding!.span.start.line).toBeGreaterThan(0);
-      expect((finding as any).targetBlock).toBeDefined();
-      expect((finding as any).targetBlock.type).toBe('if-consequent');
-      expect((finding as any).targetBlock.span).toBeDefined();
+
+      // Declaration span is the `target` identifier on line 1 (everything is on one line).
+      expect(finding!.span.start.line).toBe(1);
+      expect(finding!.span.end.line).toBe(1);
+      // `target` identifier in `const target = 42;` starts at column 34 (0-based).
+      expect(finding!.span.start.column).toBe(sourceText.indexOf('target'));
+      // End column is anchored to the declarator (zero-width span at the identifier).
+      expect(finding!.span.end.column).toBeGreaterThanOrEqual(finding!.span.start.column);
+
+      // targetBlock points at the if-consequent block whose body uses target.
+      const tb = (finding as any).targetBlock;
+
+      expect(tb).toBeDefined();
+      expect(tb.type).toBe('if-consequent');
+      expect(tb.span).toBeDefined();
+      expect(tb.span.start.line).toBe(1);
+      // Consequent block starts at the `{` after `if (cond) `.
+      expect(tb.span.start.column).toBe(sourceText.indexOf('{ use'));
+      expect(tb.span.end.column).toBe(sourceText.indexOf('} }') + 1);
     });
   });
 
