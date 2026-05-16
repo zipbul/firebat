@@ -42,7 +42,7 @@ const isExitBlock = (node: Node): boolean => {
     return false;
   }
 
-  const last = body[body.length - 1] as Node;
+  const last = body[body.length - 1]!;
 
   return isExitStatement(last);
 };
@@ -68,7 +68,7 @@ const isLoopGuardBlock = (node: Node): boolean => {
     return false;
   }
 
-  const last = body[body.length - 1] as Node;
+  const last = body[body.length - 1]!;
 
   return (
     last.type === 'ContinueStatement' ||
@@ -83,8 +83,8 @@ const countStatements = (node: Node): number => {
     // For else-if chains: when alternate is an IfStatement, recursively
     // count all statements across the entire chain to get a true total.
     if (node.type === 'IfStatement') {
-      const consequentCount = countStatements(node.consequent as Node);
-      const alternateCount = node.alternate !== null ? countStatements(node.alternate as Node) : 0;
+      const consequentCount = countStatements(node.consequent);
+      const alternateCount = node.alternate !== null ? countStatements(node.alternate) : 0;
 
       return consequentCount + alternateCount;
     }
@@ -112,7 +112,7 @@ const endsWithReturnOrThrow = (node: Node): boolean => {
     return false;
   }
 
-  const last = body[body.length - 1] as Node;
+  const last = body[body.length - 1]!;
 
   return isExitStatement(last);
 };
@@ -133,7 +133,7 @@ const endsWithLoopExit = (node: Node): boolean => {
     return false;
   }
 
-  const last = body[body.length - 1] as Node;
+  const last = body[body.length - 1]!;
 
   return last.type === 'ContinueStatement' || last.type === 'BreakStatement';
 };
@@ -191,7 +191,7 @@ const countConsequentStatements = (ifNode: Node): number => {
     return 0;
   }
 
-  return countStatements(ifNode.consequent as Node);
+  return countStatements(ifNode.consequent);
 };
 
 /**
@@ -260,7 +260,7 @@ const detectImplicitElse = (
       continue;
     }
 
-    const consequent = stmt.consequent as Node;
+    const consequent = stmt.consequent;
     // Consequent must end with exit (return/throw) or loop-exit (continue/break)
     const exits = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
 
@@ -327,8 +327,8 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
 
   // Walk the chain: each link must have consequent ending in exit
   while (current.type === 'IfStatement') {
-    const consequent = current.consequent as Node;
-    const alternate = current.alternate;
+    const consequent: Node = current.consequent;
+    const alternate: Node | null = current.alternate;
     // Check if consequent ends with exit (for loop context: also allow continue/break)
     const isGuard = insideLoop ? isLoopGuardBlock(consequent) : isExitBlock(consequent);
 
@@ -343,8 +343,8 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
     }
 
     // If alternate is another IfStatement, continue the chain
-    if (alternate !== null && (alternate as Node).type === 'IfStatement') {
-      current = alternate as Node;
+    if (alternate !== null && alternate.type === 'IfStatement') {
+      current = alternate;
     } else {
       // alternate is the final branch (could be BlockStatement or null)
       break;
@@ -357,7 +357,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
 
   // Get the final branch's statement count
   // current is the last IfStatement in the chain — its alternate is the final branch
-  const finalBranch = current.type === 'IfStatement' ? (current.alternate as Node | null) : null;
+  const finalBranch = current.type === 'IfStatement' ? current.alternate : null;
 
   if (finalBranch === null) {
     // Tail-less: all consequents in the chain already end with exit (verified by the while loop).
@@ -366,12 +366,12 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
     let recount: Node = ifNode;
 
     while (recount.type === 'IfStatement') {
-      totalConsequentCount += countStatements(recount.consequent as Node);
+      totalConsequentCount += countStatements(recount.consequent);
 
-      const alt = recount.alternate;
+      const alt: Node | null = recount.alternate;
 
-      if (alt !== null && (alt as Node).type === 'IfStatement') {
-        recount = alt as Node;
+      if (alt !== null && alt.type === 'IfStatement') {
+        recount = alt;
       } else {
         break;
       }
@@ -385,7 +385,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
     };
   }
 
-  const finalCount = countStatements(finalBranch as Node);
+  const finalCount = countStatements(finalBranch);
 
   if (finalCount === 0) {
     return null;
@@ -457,26 +457,26 @@ const analyzeFunctionNode = (
           let chainNode: Node = node;
 
           while (chainNode.type === 'IfStatement') {
-            const alt = chainNode.alternate;
+            const alt: Node | null = chainNode.alternate;
 
-            if (alt === null || (alt as Node).type !== 'IfStatement') {
+            if (alt === null || alt.type !== 'IfStatement') {
               break;
             }
 
             skipNodes.add(alt as object);
 
-            chainNode = alt as Node;
+            chainNode = alt;
           }
         }
 
         if (cascade === null) {
           // 2. Try invertible-if-else — skip when alternate is an else-if chain
           //    (countStatements would sum the entire chain, producing a false positive)
-          const alternateNode = alternateValue as Node;
+          const alternateNode = alternateValue;
           const isElseIfChain = alternateNode.type === 'IfStatement';
 
           if (!isElseIfChain) {
-            const consequentValue = node.consequent as Node;
+            const consequentValue = node.consequent;
             const consequentCount = countStatements(consequentValue);
             const alternateCount = countStatements(alternateNode);
 
@@ -545,7 +545,7 @@ const analyzeFunctionNode = (
     });
   };
 
-  visit(bodyValue as Node, 0, false, true);
+  visit(bodyValue, 0, false, true);
 
   if (opportunities.length === 0) {
     return null;
