@@ -256,4 +256,176 @@ describe('analyzeCoupling', () => {
     expect(sHotspot?.metrics.distance).toBe(1);
     expect(sHotspot?.score).toBe(100);
   });
+
+  // ─── Boundary tests for each signal threshold ────────────────────────────
+
+  it('[BD] unstable-module — instability == 0.8 → no finding (strict > 0.8 required)', () => {
+    // 5 deps gives fanOut=5; need fanOut > unstableFanOut(=5) so threshold isn't met.
+    // Force fanOut just at the boundary to verify the strict-greater-than guard.
+    const adjacency: Record<string, string[]> = { A: [] };
+
+    for (let i = 1; i <= 5; i++) {
+      adjacency.A!.push(`dep${i}`);
+      adjacency[`dep${i}`] = [];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const aHotspot = result.find(h => h.module === 'A');
+
+    expect(aHotspot?.signals ?? []).not.toContain('unstable-module');
+  });
+
+  it('[BD] unstable-module — fanOut == 6 + instability > 0.8 → finding (just over threshold)', () => {
+    const adjacency: Record<string, string[]> = { A: [] };
+
+    for (let i = 1; i <= 6; i++) {
+      adjacency.A!.push(`dep${i}`);
+      adjacency[`dep${i}`] = [];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const aHotspot = result.find(h => h.module === 'A');
+
+    expect(aHotspot?.signals).toContain('unstable-module');
+  });
+
+  it('[BD] god-module — fanIn and fanOut both exactly at threshold → no finding (strict >)', () => {
+    // totalModules = 21 → godModuleThreshold = max(10, ceil(21*0.1)) = max(10,3) = 10
+    // Set hub's fanIn = 10 and fanOut = 10 exactly. Strict-greater-than check should
+    // exclude god-module here.
+    const adjacency: Record<string, string[]> = { hub: [] };
+
+    for (let i = 1; i <= 10; i++) {
+      adjacency[`up${i}`] = ['hub'];
+      adjacency.hub!.push(`down${i}`);
+      adjacency[`down${i}`] = [];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const hubHotspot = result.find(h => h.module === 'hub');
+
+    expect(hubHotspot?.signals ?? []).not.toContain('god-module');
+  });
+
+  it('[BD] off-main-sequence — distance exactly at threshold → no finding (strict >)', () => {
+    // Default distanceThreshold = 0.7. Construct (A=0, I=0.3) → distance = |0+0.3-1| = 0.7.
+    // 3 modules import A (fanIn=3) and A imports nothing (fanOut=0)? Need instability=0.3.
+    // instability = fanOut/(fanIn+fanOut) = 0.3 → fanOut/fanIn+fanOut = 0.3.
+    // Use A imports 3, 7 modules import A: instability = 3/10 = 0.3.
+    const adjacency: Record<string, string[]> = { A: ['dep1', 'dep2', 'dep3'] };
+
+    for (let i = 1; i <= 7; i++) {
+      adjacency[`up${i}`] = ['A'];
+    }
+
+    for (let i = 1; i <= 3; i++) {
+      adjacency[`dep${i}`] = [];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const aHotspot = result.find(h => h.module === 'A');
+
+    expect(aHotspot?.signals ?? []).not.toContain('off-main-sequence');
+  });
+
+  it('[BD] rigid-module — instability exactly at 0.2 → no finding (strict <)', () => {
+    // instability = 0.2 → fanOut/(fanIn+fanOut) = 0.2. Use fanIn=12, fanOut=3.
+    // rigidThreshold for 16 modules = max(10, ceil(16*0.15)) = max(10,3) = 10. fanIn=12 > 10 ✓.
+    const adjacency: Record<string, string[]> = { hub: ['o1', 'o2', 'o3'] };
+
+    for (let i = 1; i <= 12; i++) {
+      adjacency[`importer${i}`] = ['hub'];
+    }
+
+    for (let i = 1; i <= 3; i++) {
+      adjacency[`o${i}`] = [];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const hubHotspot = result.find(h => h.module === 'hub');
+
+    // instability = 3 / (12 + 3) = 0.2 exactly — strict `< rigidInstability(0.2)` fails.
+    expect(hubHotspot?.signals ?? []).not.toContain('rigid-module');
+  });
+
+  it('[BD] cycle with 3 nodes (length-3 cycle) → no bidirectional-coupling (only 2-cycles count)', () => {
+    const deps: DependencyAnalysis = {
+      adjacency: { A: ['B'], B: ['C'], C: ['A'] },
+      exportStats: {},
+      cycles: [{ path: ['A', 'B', 'C', 'A'] }] as DependencyAnalysis['cycles'],
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+
+    expect(result.every(h => !h.signals.includes('bidirectional-coupling'))).toBe(true);
+  });
+
+  it('[BD] empty adjacency → returns empty result', () => {
+    const deps: DependencyAnalysis = {
+      adjacency: {},
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+
+    expect(analyzeCoupling(deps)).toEqual([]);
+  });
 });

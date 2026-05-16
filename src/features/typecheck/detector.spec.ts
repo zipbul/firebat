@@ -110,4 +110,78 @@ describe('features/typecheck/detector', () => {
     expect(fakeGetSemanticDiagnostics).toHaveBeenCalledWith('/root/src/a.ts', { preEmit: true });
     expect(fakeGetSemanticDiagnostics).toHaveBeenCalledWith('/root/src/b.ts', { preEmit: true });
   });
+
+  it('analyzeTypecheck - gildash returns multiple diagnostics across files - sorted by file then line', async () => {
+    const { analyzeTypecheck } = await import('./detector');
+    const diags: Record<string, SemanticDiagnostic[]> = {
+      '/root/src/b.ts': [
+        { filePath: '/root/src/b.ts', line: 7, column: 0, message: 'b line 7', code: 1, category: 'error' },
+        { filePath: '/root/src/b.ts', line: 2, column: 0, message: 'b line 2', code: 1, category: 'error' },
+      ],
+      '/root/src/a.ts': [{ filePath: '/root/src/a.ts', line: 5, column: 0, message: 'a line 5', code: 1, category: 'error' }],
+    };
+    const fakeGildash = {
+      getSemanticDiagnostics: mock((filePath: string) => diags[filePath] ?? []),
+    };
+    const program = [
+      { filePath: '/root/src/b.ts', sourceText: '' },
+      { filePath: '/root/src/a.ts', sourceText: '' },
+    ];
+    const result = await analyzeTypecheck(program as any, { rootAbs: '/root', gildash: fakeGildash as any });
+
+    expect(result).toHaveLength(3);
+    expect(result.map(r => `${r.file}:${r.span.start.line}`)).toEqual(['src/a.ts:5', 'src/b.ts:2', 'src/b.ts:7']);
+  });
+
+  it('analyzeTypecheck - gildash empty file list - returns []', async () => {
+    const { analyzeTypecheck } = await import('./detector');
+    const fakeGildash = {
+      getSemanticDiagnostics: mock(() => [] as SemanticDiagnostic[]),
+    };
+    const result = await analyzeTypecheck([], { rootAbs: '/root', gildash: fakeGildash as any });
+
+    expect(result).toEqual([]);
+  });
+
+  it('analyzeTypecheck - column offset conversion - 0-based input becomes 1-based output for both start and end', async () => {
+    const { analyzeTypecheck } = await import('./detector');
+    const fakeGildash = {
+      getSemanticDiagnostics: mock(
+        () =>
+          [{ filePath: '/root/src/a.ts', line: 10, column: 0, message: 'col0', code: 1, category: 'error' }] as SemanticDiagnostic[],
+      ),
+    };
+    const result = await analyzeTypecheck(
+      [{ filePath: '/root/src/a.ts', sourceText: 'const x = 1;' }] as any,
+      { rootAbs: '/root', gildash: fakeGildash as any },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.span.start.column).toBe(1);
+    expect(result[0]!.span.end.column).toBe(1);
+    expect(result[0]!.span.start.line).toBe(10);
+    expect(result[0]!.span.end.line).toBe(10);
+  });
+
+  it('analyzeTypecheck - error and warning diagnostics produced - both included with documented severity policy', async () => {
+    const { analyzeTypecheck } = await import('./detector');
+    const fakeGildash = {
+      getSemanticDiagnostics: mock(
+        () =>
+          [
+            { filePath: '/root/src/a.ts', line: 1, column: 0, message: 'err', code: 2322, category: 'error' },
+            { filePath: '/root/src/a.ts', line: 2, column: 0, message: 'warn', code: 6133, category: 'warning' },
+          ] as SemanticDiagnostic[],
+      ),
+    };
+    const result = await analyzeTypecheck(
+      [{ filePath: '/root/src/a.ts', sourceText: 'const a = 1;\nconst b = 2;' }] as any,
+      { rootAbs: '/root', gildash: fakeGildash as any },
+    );
+
+    expect(result).toHaveLength(2);
+    // Policy: warnings are upgraded to errors (see typecheck/detector.ts:47).
+    expect(result.every(r => r.severity === 'error')).toBe(true);
+    expect(result.map(r => r.code)).toEqual(['TS2322', 'TS6133']);
+  });
 });
