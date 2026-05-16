@@ -224,15 +224,130 @@ interface WriterReaderResult {
   readonly readers: ReadonlyArray<string>;
 }
 
+/**
+ * Returns true when `target` binds an Identifier named `name`, descending through
+ * destructuring patterns (object, array, rest, default value).
+ */
+const targetBindsIdentifier = (target: Node, name: string): boolean => {
+  const t = target as unknown as Record<string, unknown>;
+
+  if (target.type === 'Identifier') {
+    return getNodeName(target) === name;
+  }
+
+  if (target.type === 'AssignmentPattern') {
+    return targetBindsIdentifier(t.left as Node, name);
+  }
+
+  if (target.type === 'RestElement') {
+    return targetBindsIdentifier(t.argument as Node, name);
+  }
+
+  if (target.type === 'ObjectPattern') {
+    const properties = Array.isArray(t.properties) ? (t.properties as Node[]) : [];
+
+    for (const prop of properties) {
+      const pr = prop as unknown as Record<string, unknown>;
+
+      if (prop.type === 'Property') {
+        if (targetBindsIdentifier(pr.value as Node, name)) {
+          return true;
+        }
+      } else if (prop.type === 'RestElement') {
+        if (targetBindsIdentifier(pr.argument as Node, name)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  if (target.type === 'ArrayPattern') {
+    const elements = Array.isArray(t.elements) ? (t.elements as Array<Node | null>) : [];
+
+    for (const elem of elements) {
+      if (elem !== null && targetBindsIdentifier(elem, name)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Walk an assignment target and record `start:end` keys for each bound Identifier.
+ * Handles plain identifiers, object/array destructuring (with nesting, rest, and
+ * default values), and member expressions used as targets.
+ */
+const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<string>): void => {
+  if (!target || typeof target !== 'object') {
+    return;
+  }
+
+  const t = target as unknown as Record<string, unknown>;
+
+  if (target.type === 'Identifier') {
+    keys.add(`${target.start}:${target.end}`);
+
+    return;
+  }
+
+  if (target.type === 'MemberExpression') {
+    // e.g. `obj.prop = ...` — record the whole member expression's range.
+    keys.add(`${target.start}:${target.end}`);
+
+    return;
+  }
+
+  if (target.type === 'AssignmentPattern') {
+    // `({a = 1} = …)` — the binding target is on the left.
+    collectTargetIdentifierKeys(t.left as Node, keys);
+
+    return;
+  }
+
+  if (target.type === 'RestElement') {
+    collectTargetIdentifierKeys(t.argument as Node, keys);
+
+    return;
+  }
+
+  if (target.type === 'ObjectPattern') {
+    const properties = Array.isArray(t.properties) ? (t.properties as Node[]) : [];
+
+    for (const prop of properties) {
+      const pr = prop as unknown as Record<string, unknown>;
+
+      if (prop.type === 'Property') {
+        collectTargetIdentifierKeys(pr.value as Node, keys);
+      } else if (prop.type === 'RestElement') {
+        collectTargetIdentifierKeys(pr.argument as Node, keys);
+      }
+    }
+
+    return;
+  }
+
+  if (target.type === 'ArrayPattern') {
+    const elements = Array.isArray(t.elements) ? (t.elements as Array<Node | null>) : [];
+
+    for (const elem of elements) {
+      if (elem !== null) {
+        collectTargetIdentifierKeys(elem, keys);
+      }
+    }
+  }
+};
+
 /** Build a Set of "start:end" keys for all write-position identifiers in the program (O(n)). */
 const collectWritePositionKeys = (program: Node): Set<string> => {
   const keys = new Set<string>();
 
   new Visitor({
     AssignmentExpression(node) {
-      const left = node.left;
-
-      keys.add(`${left.start}:${left.end}`);
+      collectTargetIdentifierKeys(node.left as Node, keys);
     },
 
     UpdateExpression(node) {
@@ -1107,11 +1222,11 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
           }
         }
       } else {
-        // stateName = ...
+        // stateName = ... (also handles `({stateName} = …)` and `[stateName] = …`)
         if (n.type === 'AssignmentExpression') {
           const left = n.left;
 
-          if (isOxcNode(left) && left.type === 'Identifier' && getNodeName(left) === stateName) {
+          if (isOxcNode(left) && targetBindsIdentifier(left, stateName)) {
             hasWrite = true;
 
             return false;

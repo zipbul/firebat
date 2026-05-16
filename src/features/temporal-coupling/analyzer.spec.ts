@@ -74,6 +74,52 @@ describe('temporal-coupling/analyzer', () => {
     expect(result[0]?.readers).toBe(1);
   });
 
+  // --- [HP] should detect module-scope let written via object destructuring ---
+  it('should report temporal coupling when a module-scope variable is written via object destructuring', () => {
+    // Arrange — `({db} = create())` writes `db`; previously missed because the
+    // AssignmentExpression.left is an ObjectPattern, not an Identifier, so the
+    // identifier's start:end key never landed in writeKeys.
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let db: any = null;',
+          'export function initDb() { ({ db } = create()); }',
+          'export function queryUsers() { return db; }',
+          'declare function create(): { db: any };',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result[0]?.state).toBe('db');
+    expect(result[0]?.writers).toBe(1);
+  });
+
+  it('should report temporal coupling when a module-scope variable is written via array destructuring', () => {
+    // Arrange — `[db] = create()` writes `db`.
+    const files = [
+      file(
+        'src/a.ts',
+        [
+          'let db: any = null;',
+          'export function initDb() { [db] = create(); }',
+          'export function queryUsers() { return db; }',
+          'declare function create(): any[];',
+        ].join('\n'),
+      ),
+    ];
+    // Act
+    const result = analyzeTemporalCoupling(files as any);
+
+    // Assert
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result[0]?.state).toBe('db');
+  });
+
   // --- [HP] should detect module-scope let with += assignment as writer ---
   it('should detect += assignment as writer', () => {
     // Arrange
