@@ -32,6 +32,11 @@ fi
 mkdir -p "$BY_DIR" "$BY_DIR_SLIM"
 rm -f "$BY_DIR"/*.json "$BY_DIR_SLIM"/*.json 2>/dev/null || true
 
+# Detector errors (partial-failure signal). Propagated into every agent-consumed
+# projection so planner / global-reviewer can branch on (.scanErrors | length) > 0
+# without reading raw scan.json.
+SCAN_ERRORS=$(jq -c '.meta.errors // {}' "$SCAN")
+
 # 임시 파일 (findings 수가 많을 때 ARG_MAX 회피)
 ENRICHED_FILE=$(mktemp -t firebat-enriched.XXXXXX.json)
 trap 'rm -f "$ENRICHED_FILE"' EXIT
@@ -52,7 +57,8 @@ echo "scan-split: $TOTAL_FINDINGS findings"
 
 if [[ "$TOTAL_FINDINGS" == "0" ]]; then
   echo '[]' > "$TREE"
-  echo '{"primaryIds":[],"groups":{},"dirs":{}}' > "$INDEX"
+  jq -n --argjson scanErrors "$SCAN_ERRORS" \
+    '{primaryIds: [], groups: {}, dirs: {}, scanErrors: $scanErrors}' > "$INDEX"
   echo "scan-split: done (empty)"
   exit 0
 fi
@@ -125,7 +131,7 @@ jq '
 
 jq -c '.[]' "$SLIM_FILE" | while IFS= read -r line; do
   slug=$(echo "$line" | jq -r '.slug')
-  echo "$line" | jq '{
+  echo "$line" | jq --argjson scanErrors "$SCAN_ERRORS" '{
     slug,
     dir,
     primaryCount: (.primaryFindings | length),
@@ -133,7 +139,8 @@ jq -c '.[]' "$SLIM_FILE" | while IFS= read -r line; do
       [.primaryFindings[] | .category] | group_by(.) |
       map({key: .[0], value: length}) | from_entries
     ),
-    primaryFindings
+    primaryFindings,
+    scanErrors: $scanErrors
   }' > "$BY_DIR_SLIM/$slug.json"
 done
 
@@ -146,7 +153,7 @@ echo "scan-split: $SLIM_COUNT slim files"
 #   - primaryIds: 모든 primary finding ID
 #   - groups[groupId]: { primary: {id, dir, file}, secondaries: [{id, dir, file}] }
 #   - dirs[dir]: { findingCount, primaryIds[] }
-jq '
+jq --argjson scanErrors "$SCAN_ERRORS" '
   {
     primaryIds: [.[] | select(.primary) | .id],
     groups: (
@@ -166,7 +173,8 @@ jq '
           primaryIds: [.[] | select(.primary) | .id]
         }
       }) | from_entries
-    )
+    ),
+    scanErrors: $scanErrors
   }
 ' "$ENRICHED_FILE" > "$INDEX"
 

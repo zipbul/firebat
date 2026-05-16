@@ -89,7 +89,16 @@ rescan() {
   log "rescan: building firebat"
   bun run build >&2
   log "rescan: scan"
-  bun dist/firebat.js --log-level error > "$ROOT/scan.json" || true
+  local ec=0
+  bun dist/firebat.js --log-level error > "$ROOT/scan.json" || ec=$?
+  # firebat exit: 0 = no findings, 1 = findings, 2 = partial (one or more detectors failed)
+  if [[ $ec -eq 2 ]]; then
+    local errors_json
+    errors_json=$(jq -c '.meta.errors // {}' "$ROOT/scan.json" 2>/dev/null || echo '{}')
+    log "rescan: PARTIAL — detector errors: $errors_json"
+  elif [[ $ec -ne 0 && $ec -ne 1 ]]; then
+    log "rescan: firebat exited $ec (unexpected; continuing)"
+  fi
   log "rescan: split"
   bash "$SCRIPTS/scan-split.sh" >&2
 }
