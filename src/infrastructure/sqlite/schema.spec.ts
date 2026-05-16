@@ -1,67 +1,119 @@
 import { describe, expect, it } from 'bun:test';
-// schema.ts only exports Drizzle ORM table definitions (sqliteTable objects).
-// We verify that each table is exported and has the expected column shape
-// via the table's column descriptor — no actual DB connection needed.
 
 import { artifacts, files, memories, symbolFiles, symbols } from './schema';
 
-describe('infrastructure/sqlite/schema — table definitions', () => {
-  it('files table is exported and has column descriptors', () => {
-    expect(files).toBeDefined();
+// Helpers that pull schema metadata out of drizzle-orm sqliteTable columns.
+type ColumnLike = {
+  readonly name: string;
+  readonly dataType: string;
+  readonly columnType: string;
+  readonly notNull: boolean;
+  readonly primary?: boolean;
+  readonly autoIncrement?: boolean;
+  readonly default?: unknown;
+  readonly hasDefault?: boolean;
+};
 
-    const cols = Object.keys(files);
+const expectStringColumn = (col: ColumnLike, expectedName: string, notNull: boolean): void => {
+  expect(col.name).toBe(expectedName);
+  expect(col.dataType).toBe('string');
+  expect(col.columnType).toBe('SQLiteText');
+  expect(col.notNull).toBe(notNull);
+};
 
-    expect(cols.length).toBeGreaterThan(0);
+const expectIntegerColumn = (col: ColumnLike, expectedName: string, notNull: boolean): void => {
+  expect(col.name).toBe(expectedName);
+  expect(col.dataType).toBe('number');
+  expect(col.columnType).toBe('SQLiteInteger');
+  expect(col.notNull).toBe(notNull);
+};
+
+describe('infrastructure/sqlite/schema — files', () => {
+  it('declares projectKey, filePath, mtimeMs, size, contentHash, updatedAt with correct types and NOT NULL', () => {
+    expectStringColumn(files.projectKey, 'projectKey', true);
+    expectStringColumn(files.filePath, 'filePath', true);
+    expectIntegerColumn(files.mtimeMs, 'mtimeMs', true);
+    expectIntegerColumn(files.size, 'size', true);
+    expectStringColumn(files.contentHash, 'contentHash', true);
+    expectIntegerColumn(files.updatedAt, 'updatedAt', true);
   });
 
-  it('files table has projectKey and filePath columns', () => {
-    const colNames = Object.keys(files);
+  it('exposes exactly the documented columns (no accidental additions)', () => {
+    const cols = Object.keys(files).filter(k => !k.startsWith('_'));
 
-    expect(colNames).toContain('projectKey');
-    expect(colNames).toContain('filePath');
+    expect(cols.sort()).toEqual(['contentHash', 'filePath', 'mtimeMs', 'projectKey', 'size', 'updatedAt']);
+  });
+});
+
+describe('infrastructure/sqlite/schema — artifacts', () => {
+  it('declares the artifact columns with correct types and NOT NULL', () => {
+    expectStringColumn(artifacts.projectKey, 'projectKey', true);
+    expectStringColumn(artifacts.kind, 'kind', true);
+    expectStringColumn(artifacts.artifactKey, 'artifactKey', true);
+    expectStringColumn(artifacts.inputsDigest, 'inputsDigest', true);
+    expectIntegerColumn(artifacts.createdAt, 'createdAt', true);
+    expectStringColumn(artifacts.payloadJson, 'payloadJson', true);
   });
 
-  it('artifacts table is exported with kind and payloadJson columns', () => {
-    expect(artifacts).toBeDefined();
+  it('exposes exactly the documented columns', () => {
+    const cols = Object.keys(artifacts).filter(k => !k.startsWith('_'));
 
-    const colNames = Object.keys(artifacts);
+    expect(cols.sort()).toEqual(['artifactKey', 'createdAt', 'inputsDigest', 'kind', 'payloadJson', 'projectKey']);
+  });
+});
 
-    expect(colNames).toContain('kind');
-    expect(colNames).toContain('payloadJson');
+describe('infrastructure/sqlite/schema — memories', () => {
+  it('declares memory columns with correct types and NOT NULL', () => {
+    expectStringColumn(memories.projectKey, 'projectKey', true);
+    expectStringColumn(memories.memoryKey, 'memoryKey', true);
+    expectIntegerColumn(memories.createdAt, 'createdAt', true);
+    expectIntegerColumn(memories.updatedAt, 'updatedAt', true);
+    expectStringColumn(memories.payloadJson, 'payloadJson', true);
+  });
+});
+
+describe('infrastructure/sqlite/schema — symbolFiles', () => {
+  it('declares symbol-file columns with correct types and NOT NULL', () => {
+    expectStringColumn(symbolFiles.projectKey, 'projectKey', true);
+    expectStringColumn(symbolFiles.filePath, 'filePath', true);
+    expectStringColumn(symbolFiles.contentHash, 'contentHash', true);
+    expectIntegerColumn(symbolFiles.indexedAt, 'indexedAt', true);
+    expectIntegerColumn(symbolFiles.symbolCount, 'symbolCount', true);
+  });
+});
+
+describe('infrastructure/sqlite/schema — symbols', () => {
+  it('declares the symbol columns with correct types and NOT NULL', () => {
+    expect(symbols.id.name).toBe('id');
+    expect(symbols.id.dataType).toBe('number');
+    expect(symbols.id.primary).toBe(true);
+    // drizzle exposes autoIncrement on integer primary keys
+    expect((symbols.id as unknown as { autoIncrement: boolean }).autoIncrement).toBe(true);
+
+    expectStringColumn(symbols.projectKey, 'projectKey', true);
+    expectStringColumn(symbols.filePath, 'filePath', true);
+    expectStringColumn(symbols.kind, 'kind', true);
+    expectStringColumn(symbols.name, 'name', true);
+    expectIntegerColumn(symbols.startLine, 'startLine', true);
+    expectIntegerColumn(symbols.startColumn, 'startColumn', true);
+    expectIntegerColumn(symbols.endLine, 'endLine', true);
+    expectIntegerColumn(symbols.endColumn, 'endColumn', true);
+    expectIntegerColumn(symbols.indexedAt, 'indexedAt', true);
   });
 
-  it('memories table is exported with memoryKey column', () => {
-    expect(memories).toBeDefined();
-
-    const colNames = Object.keys(memories);
-
-    expect(colNames).toContain('memoryKey');
+  it('isExported is a boolean (sqlite integer with mode boolean) defaulting to false', () => {
+    expect(symbols.isExported.name).toBe('isExported');
+    expect(symbols.isExported.dataType).toBe('boolean');
+    expect(symbols.isExported.columnType).toBe('SQLiteBoolean');
+    expect(symbols.isExported.notNull).toBe(true);
+    expect(symbols.isExported.default).toBe(false);
   });
+});
 
-  it('symbolFiles table is exported with contentHash and symbolCount columns', () => {
-    expect(symbolFiles).toBeDefined();
-
-    const colNames = Object.keys(symbolFiles);
-
-    expect(colNames).toContain('contentHash');
-    expect(colNames).toContain('symbolCount');
-  });
-
-  it('symbols table is exported with name, kind, startLine, isExported columns', () => {
-    expect(symbols).toBeDefined();
-
-    const colNames = Object.keys(symbols);
-
-    expect(colNames).toContain('name');
-    expect(colNames).toContain('kind');
-    expect(colNames).toContain('startLine');
-    expect(colNames).toContain('isExported');
-  });
-
-  it('all 5 tables are distinct objects', () => {
+describe('infrastructure/sqlite/schema — table identities', () => {
+  it('exports five distinct sqliteTable objects', () => {
     const tables = [files, artifacts, memories, symbolFiles, symbols];
-    const set = new Set(tables);
 
-    expect(set.size).toBe(5);
+    expect(new Set(tables).size).toBe(5);
   });
 });
