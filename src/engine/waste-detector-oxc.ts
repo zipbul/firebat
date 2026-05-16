@@ -179,7 +179,25 @@ const collectWasteFindingsForFunction = (
     return;
   }
 
-  const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName, parameterBindings);
+  // Collect parameter default expressions (the right-hand side of `AssignmentPattern`).
+  // Identifier reads inside defaults are use-sites for earlier parameters and must be
+  // surfaced to the dataflow analysis so `function f(a=1, b=a)` doesn't flag `a` as dead.
+  const fnParams = (node as OxcFunction).params;
+  const parameterDefaults: Node[] = [];
+
+  if (Array.isArray(fnParams)) {
+    for (const param of fnParams as ReadonlyArray<Node>) {
+      if (param.type === 'AssignmentPattern') {
+        const right = (param as unknown as Record<string, unknown>).right as Node | undefined;
+
+        if (right) {
+          parameterDefaults.push(right);
+        }
+      }
+    }
+  }
+
+  const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName, parameterBindings, parameterDefaults);
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, nodePayloads } = analysis;
   const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
     ? (functionBodyNode as ReadonlyArray<Node>)

@@ -212,6 +212,29 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  it('detectWasteOxc - parameter default expression references another param - no FP', () => {
+    // Arrange — `b = a` reads `a`. Previously `a` was flagged as dead-store because
+    // the default expression isn't part of the function body CFG.
+    const source = `function f(a = 1, b = a) { console.log(b); }`;
+    const f = toFile('/param-default.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'a')).toBe(false);
+  });
+
+  it('detectWasteOxc - unused parameter with no default reads - still no FP', () => {
+    // Arrange — control: param without defaults, never read in body
+    const source = `function f(_unused) { return 1; }`;
+    const f = toFile('/param-unused.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — underscore-prefixed params are intentionally excluded by detector
+    expect(result.some(r => r.kind === 'dead-store' && r.label === '_unused')).toBe(false);
+  });
+
   it('detectWasteOxc - try{read} finally{write} - emits dead-store exactly once for finally write', () => {
     // Arrange — CFG models finally for both normal and abnormal completion paths,
     // which previously caused the finally `x=2` dead-store to be emitted twice.
