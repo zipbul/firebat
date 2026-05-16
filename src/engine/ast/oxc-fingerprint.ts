@@ -145,11 +145,7 @@ const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): s
     // Parenthesized expressions carry no semantic meaning; descend into the wrapped
     // expression without pushing the wrapper so `(a + b)` and `a + b` produce the same fingerprint.
     if (n.type === 'ParenthesizedExpression') {
-      const inner = (n as unknown as Record<string, unknown>).expression;
-
-      if (inner !== null && inner !== undefined && typeof inner === 'object') {
-        visit(inner as Node);
-      }
+      visit(n.expression);
 
       return;
     }
