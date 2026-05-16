@@ -229,32 +229,26 @@ interface WriterReaderResult {
  * destructuring patterns (object, array, rest, default value).
  */
 const targetBindsIdentifier = (target: Node, name: string): boolean => {
-  const t = target as unknown as Record<string, unknown>;
-
   if (target.type === 'Identifier') {
-    return getNodeName(target) === name;
+    return target.name === name;
   }
 
   if (target.type === 'AssignmentPattern') {
-    return targetBindsIdentifier(t.left as Node, name);
+    return targetBindsIdentifier(target.left, name);
   }
 
   if (target.type === 'RestElement') {
-    return targetBindsIdentifier(t.argument as Node, name);
+    return targetBindsIdentifier(target.argument, name);
   }
 
   if (target.type === 'ObjectPattern') {
-    const properties = Array.isArray(t.properties) ? (t.properties as Node[]) : [];
-
-    for (const prop of properties) {
-      const pr = prop as unknown as Record<string, unknown>;
-
+    for (const prop of target.properties) {
       if (prop.type === 'Property') {
-        if (targetBindsIdentifier(pr.value as Node, name)) {
+        if (targetBindsIdentifier(prop.value, name)) {
           return true;
         }
       } else if (prop.type === 'RestElement') {
-        if (targetBindsIdentifier(pr.argument as Node, name)) {
+        if (targetBindsIdentifier(prop.argument, name)) {
           return true;
         }
       }
@@ -264,9 +258,7 @@ const targetBindsIdentifier = (target: Node, name: string): boolean => {
   }
 
   if (target.type === 'ArrayPattern') {
-    const elements = Array.isArray(t.elements) ? (t.elements as Array<Node | null>) : [];
-
-    for (const elem of elements) {
+    for (const elem of target.elements) {
       if (elem !== null && targetBindsIdentifier(elem, name)) {
         return true;
       }
@@ -282,11 +274,9 @@ const targetBindsIdentifier = (target: Node, name: string): boolean => {
  * default values), and member expressions used as targets.
  */
 const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<string>): void => {
-  if (!target || typeof target !== 'object') {
+  if (target === null || target === undefined) {
     return;
   }
-
-  const t = target as unknown as Record<string, unknown>;
 
   if (target.type === 'Identifier') {
     keys.add(`${target.start}:${target.end}`);
@@ -303,27 +293,23 @@ const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<
 
   if (target.type === 'AssignmentPattern') {
     // `({a = 1} = …)` — the binding target is on the left.
-    collectTargetIdentifierKeys(t.left as Node, keys);
+    collectTargetIdentifierKeys(target.left, keys);
 
     return;
   }
 
   if (target.type === 'RestElement') {
-    collectTargetIdentifierKeys(t.argument as Node, keys);
+    collectTargetIdentifierKeys(target.argument, keys);
 
     return;
   }
 
   if (target.type === 'ObjectPattern') {
-    const properties = Array.isArray(t.properties) ? (t.properties as Node[]) : [];
-
-    for (const prop of properties) {
-      const pr = prop as unknown as Record<string, unknown>;
-
+    for (const prop of target.properties) {
       if (prop.type === 'Property') {
-        collectTargetIdentifierKeys(pr.value as Node, keys);
+        collectTargetIdentifierKeys(prop.value, keys);
       } else if (prop.type === 'RestElement') {
-        collectTargetIdentifierKeys(pr.argument as Node, keys);
+        collectTargetIdentifierKeys(prop.argument, keys);
       }
     }
 
@@ -331,9 +317,7 @@ const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<
   }
 
   if (target.type === 'ArrayPattern') {
-    const elements = Array.isArray(t.elements) ? (t.elements as Array<Node | null>) : [];
-
-    for (const elem of elements) {
+    for (const elem of target.elements) {
       if (elem !== null) {
         collectTargetIdentifierKeys(elem, keys);
       }
