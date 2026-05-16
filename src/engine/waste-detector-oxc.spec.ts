@@ -212,6 +212,24 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  it('detectWasteOxc - try{read} finally{write} - emits dead-store exactly once for finally write', () => {
+    // Arrange — CFG models finally for both normal and abnormal completion paths,
+    // which previously caused the finally `x=2` dead-store to be emitted twice.
+    const source = `function f() {
+      let x = 1;
+      try { console.log(x); }
+      finally { x = 2; }
+    }`;
+    const f = toFile('/try-finally-dup.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — exactly one dead-store finding for x
+    const xFindings = result.filter(r => r.kind === 'dead-store' && r.label === 'x');
+
+    expect(xFindings).toHaveLength(1);
+  });
+
   // optional chain on literal null — RHS computed property never evaluates at runtime
   it('detectWasteOxc - literal null?.[x] computed access - should report dead-store for x', () => {
     // Arrange — `null?.[x]` short-circuits, so x is never actually read.

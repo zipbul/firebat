@@ -2,12 +2,249 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
-import type { WasteFinding } from '../types';
+import type { WasteFinding } from '..';
 import type { ParsedFile } from './types';
 
-import { collectOxcNodes, forEachChildNode, getNodeName, isFunctionNode, isOxcNode } from './ast/oxc-ast-utils';
-import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from './dataflow/reaching-defs';
-import { collectVariables } from './dataflow/variable-collector';
+import { collectOxcNodes, forEachChildNode, getNodeName, isFunctionNode, isOxcNode } from './ast';
+import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
+
+interface NestedFunctionContext {
+  readonly entryNodeIds: number[];
+  readonly readNamesByEntryNodeId: Map<number, Set<string>>;
+}
+
+const addClosureReadsFromFunction = (nestedFunction: Node, closureReadNames: Set<string>, entryReadNames: Set<string>): void => {
+  const nestedReads = collectVariables(nestedFunction, { includeNestedFunctions: true }).filter(u => u.isRead);
+
+  for (const r of nestedReads) {
+    if (closureReadNames.has(r.name)) {
+      entryReadNames.add(r.name);
+    }
+  }
+};
+
+const isRelevantNestedFunction = (nestedFunction: Node, outerReadNames: Set<string>): boolean => {
+  if (nestedFunction.type !== 'FunctionDeclaration') {
+    return true;
+  }
+
+  const nestedFn = nestedFunction as OxcFunction;
+  const declName = getNodeName(nestedFn.id);
+
+  return declName === null || outerReadNames.has(declName);
+};
+
+const buildEntryContext = (
+  nested: Node[],
+  outerReadNames: Set<string>,
+  closureReadNames: Set<string>,
+): { hasRelevant: boolean; entryReadNames: Set<string> } => {
+  let hasRelevant = false;
+  const entryReadNames = new Set<string>();
+
+  for (const nestedFunction of nested) {
+    if (!isRelevantNestedFunction(nestedFunction, outerReadNames)) {
+      continue;
+    }
+
+    hasRelevant = true;
+
+    addClosureReadsFromFunction(nestedFunction, closureReadNames, entryReadNames);
+  }
+
+  return { hasRelevant, entryReadNames };
+};
+
+const buildNestedFunctionContext = (
+  nodePayloads: ReadonlyArray<Node | ReadonlyArray<Node> | undefined>,
+  outerReadNames: Set<string>,
+  closureReadNames: Set<string>,
+): NestedFunctionContext => {
+  const entryNodeIds: number[] = [];
+  const readNamesByEntryNodeId = new Map<number, Set<string>>();
+
+  for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
+    const payload = nodePayloads[nodeId];
+
+    if (!payload) {
+      continue;
+    }
+
+    const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+    const nested = payloadNodes.flatMap(pn => collectOxcNodes(pn, n => isFunctionNode(n)));
+
+    if (nested.length === 0) {
+      continue;
+    }
+
+    const { hasRelevant, entryReadNames } = buildEntryContext(nested, outerReadNames, closureReadNames);
+
+    if (!hasRelevant) {
+      continue;
+    }
+
+    entryNodeIds.push(nodeId);
+    readNamesByEntryNodeId.set(nodeId, entryReadNames);
+  }
+
+  return { entryNodeIds, readNamesByEntryNodeId };
+};
+
+const isDefClosureCaptured = (
+  defId: number,
+  metaName: string,
+  nestedCtx: NestedFunctionContext,
+  reachingInByNode: ReadonlyArray<ReadonlySet<number> | undefined>,
+): boolean => {
+  for (const entryNodeId of nestedCtx.entryNodeIds) {
+    const entryReadNames = nestedCtx.readNamesByEntryNodeId.get(entryNodeId);
+
+    if (!entryReadNames || !entryReadNames.has(metaName)) {
+      continue;
+    }
+
+    const reaching = reachingInByNode[entryNodeId];
+
+    if (reaching && reaching.has(defId)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const buildVarHasAnyUsedDef = (
+  defs: ReadonlyArray<{ varIndex: number } | undefined>,
+  usedDefs: { has(n: number): boolean },
+  varCount: number,
+): boolean[] => {
+  const varHasAnyUsedDef: boolean[] = Array.from({ length: varCount }, () => false);
+
+  for (let defId = 0; defId < defs.length; defId += 1) {
+    if (!usedDefs.has(defId)) {
+      continue;
+    }
+
+    const meta = defs[defId];
+
+    if (meta) {
+      varHasAnyUsedDef[meta.varIndex] = true;
+    }
+  }
+
+  return varHasAnyUsedDef;
+};
+
+const buildWasteFinding = (
+  metaName: string,
+  metaLocation: number,
+  isOverwritten: boolean,
+  writeKind: string | undefined,
+  filePath: string,
+  lineOffsets: number[],
+): WasteFinding => {
+  const loc = getLineColumn(lineOffsets, metaLocation);
+  const kind = isOverwritten && writeKind !== 'declaration' ? 'dead-store-overwrite' : 'dead-store';
+  const message =
+    kind === 'dead-store-overwrite'
+      ? `Variable '${metaName}' is assigned but overwritten before being read`
+      : `Variable '${metaName}' is assigned but never read`;
+
+  return {
+    kind,
+    label: metaName,
+    message,
+    filePath,
+    span: {
+      start: loc,
+      end: {
+        line: loc.line,
+        column: loc.column + metaName.length,
+      },
+    },
+  };
+};
+
+const collectWasteFindingsForFunction = (
+  node: Node,
+  functionBodyNode: Node | ReadonlyArray<Node>,
+  filePath: string,
+  lineOffsets: number[],
+  findings: WasteFinding[],
+): void => {
+  const localIndexByName = collectLocalVarIndexes(node);
+  const parameterBindings = collectParameterBindings(node);
+
+  if (localIndexByName.size === 0) {
+    return;
+  }
+
+  const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName, parameterBindings);
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, nodePayloads } = analysis;
+  const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
+    ? (functionBodyNode as ReadonlyArray<Node>)
+    : [functionBodyNode as Node];
+  const allReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: true })).filter(u => u.isRead);
+  const outerReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: false })).filter(u => u.isRead);
+  const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
+  const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
+  const outerReadNames = new Set(outerReads.map(u => u.name));
+  const nestedCtx = buildNestedFunctionContext(
+    nodePayloads as ReadonlyArray<Node | ReadonlyArray<Node> | undefined>,
+    outerReadNames,
+    closureReadNames,
+  );
+  const varHasAnyUsedDef = buildVarHasAnyUsedDef(defs, usedDefs, localIndexByName.size);
+
+  // Deduplicate findings by (name, source location). The CFG may model the same
+  // source-level write more than once (e.g. finally bodies are duplicated for the
+  // normal- and abnormal-completion paths), producing distinct defIds at the same
+  // offset. Without this guard the same dead-store is emitted multiple times.
+  const emittedKeys = new Set<string>();
+
+  for (let defId = 0; defId < defs.length; defId += 1) {
+    if (usedDefs.has(defId)) {
+      continue;
+    }
+
+    const meta = defs[defId];
+
+    if (!meta) {
+      continue;
+    }
+
+    if (meta.writeKind === 'declaration' && varHasAnyUsedDef[meta.varIndex] === true) {
+      continue;
+    }
+
+    if (
+      isDefClosureCaptured(
+        defId,
+        meta.name,
+        nestedCtx,
+        reachingInByNode as unknown as ReadonlyArray<ReadonlySet<number> | undefined>,
+      )
+    ) {
+      continue;
+    }
+
+    if (meta.name.startsWith('_')) {
+      continue;
+    }
+
+    const dedupeKey = `${meta.name}@${meta.location}`;
+
+    if (emittedKeys.has(dedupeKey)) {
+      continue;
+    }
+
+    emittedKeys.add(dedupeKey);
+
+    findings.push(
+      buildWasteFinding(meta.name, meta.location, overwrittenDefIds[defId] === true, meta.writeKind, filePath, lineOffsets),
+    );
+  }
+};
 
 export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
   const findings: WasteFinding[] = [];
@@ -25,9 +262,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
 
     const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
       if (Array.isArray(node)) {
-        const entries = node as ReadonlyArray<Node>;
-
-        for (const entry of entries) {
+        for (const entry of node as ReadonlyArray<Node>) {
           visit(entry);
         }
 
@@ -42,165 +277,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
       const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
 
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
-        const localIndexByName = collectLocalVarIndexes(node);
-        const parameterBindings = collectParameterBindings(node);
-
-        if (localIndexByName.size > 0) {
-          const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName, parameterBindings);
-          const defs = analysis.defs;
-          const usedDefs = analysis.usedDefs;
-          const overwrittenDefIds = analysis.overwrittenDefIds;
-          const reachingInByNode = analysis.reachingInByNode;
-          const nodePayloads = analysis.nodePayloads;
-          const varHasAnyUsedDef: boolean[] = Array.from({ length: localIndexByName.size }, () => false);
-          const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
-            ? (functionBodyNode as ReadonlyArray<Node>)
-            : [functionBodyNode as Node];
-          const allReads = functionBodyNodes
-            .flatMap(n => collectVariables(n, { includeNestedFunctions: true }))
-            .filter(u => u.isRead);
-          const outerReads = functionBodyNodes
-            .flatMap(n => collectVariables(n, { includeNestedFunctions: false }))
-            .filter(u => u.isRead);
-          const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
-          const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
-          const outerReadNames = new Set(outerReads.map(u => u.name));
-          const nestedFunctionEntryNodeIds: number[] = [];
-          const closureReadNamesByEntryNodeId = new Map<number, Set<string>>();
-
-          for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
-            const payload = nodePayloads[nodeId];
-
-            if (!payload) {
-              continue;
-            }
-
-            const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload)
-              ? (payload as ReadonlyArray<Node>)
-              : [payload as Node];
-            const nested = payloadNodes.flatMap(pn => collectOxcNodes(pn, n => isFunctionNode(n)));
-
-            if (nested.length === 0) {
-              continue;
-            }
-
-            let hasRelevantNested = false;
-            const entryReadNames = new Set<string>();
-
-            for (const nestedFunction of nested) {
-              const nestedType = nestedFunction.type;
-
-              // If a nested FunctionDeclaration is never referenced in the outer body,
-              // treat its closure reads as non-executed to enable dead-store detection.
-              if (nestedType === 'FunctionDeclaration') {
-                const nestedFn = nestedFunction as OxcFunction;
-                const declName = getNodeName(nestedFn.id);
-
-                if (declName !== null && !outerReadNames.has(declName)) {
-                  continue;
-                }
-              }
-
-              hasRelevantNested = true;
-
-              // Collect read names specific to this nested function for per-entry precision.
-              const nestedReads = collectVariables(nestedFunction, { includeNestedFunctions: true }).filter(u => u.isRead);
-
-              for (const r of nestedReads) {
-                if (closureReadNames.has(r.name)) {
-                  entryReadNames.add(r.name);
-                }
-              }
-            }
-
-            if (!hasRelevantNested) {
-              continue;
-            }
-
-            nestedFunctionEntryNodeIds.push(nodeId);
-            closureReadNamesByEntryNodeId.set(nodeId, entryReadNames);
-          }
-
-          for (let defId = 0; defId < defs.length; defId += 1) {
-            if (!usedDefs.has(defId)) {
-              continue;
-            }
-
-            const meta = defs[defId];
-
-            if (meta) {
-              varHasAnyUsedDef[meta.varIndex] = true;
-            }
-          }
-
-          for (let defId = 0; defId < defs.length; defId += 1) {
-            if (usedDefs.has(defId)) {
-              continue;
-            }
-
-            const meta = defs[defId];
-
-            if (!meta) {
-              continue;
-            }
-
-            // If the variable is used via some other definition, suppress unused
-            // declaration initializers to avoid noisy reports on common patterns.
-            if (meta.writeKind === 'declaration' && varHasAnyUsedDef[meta.varIndex] === true) {
-              continue;
-            }
-
-            // P2-4: suppress dead-store if this def reaches a nested function and the variable is read in a closure.
-            let isClosureCaptured = false;
-
-            for (const entryNodeId of nestedFunctionEntryNodeIds) {
-              const entryReadNames = closureReadNamesByEntryNodeId.get(entryNodeId);
-
-              if (!entryReadNames || !entryReadNames.has(meta.name)) {
-                continue;
-              }
-
-              const reaching = reachingInByNode[entryNodeId];
-
-              if (reaching && reaching.has(defId)) {
-                isClosureCaptured = true;
-
-                break;
-              }
-            }
-
-            if (isClosureCaptured) {
-              continue;
-            }
-
-            // Skip variables with '_' prefix (intentionally ignored by convention).
-            if (meta.name.startsWith('_')) {
-              continue;
-            }
-
-            const loc = getLineColumn(lineOffsets, meta.location);
-            const isOverwritten = overwrittenDefIds[defId] === true;
-            const kind = isOverwritten && meta.writeKind !== 'declaration' ? 'dead-store-overwrite' : 'dead-store';
-            const message =
-              kind === 'dead-store-overwrite'
-                ? `Variable '${meta.name}' is assigned but overwritten before being read`
-                : `Variable '${meta.name}' is assigned but never read`;
-
-            findings.push({
-              kind,
-              label: meta.name,
-              message,
-              filePath: file.filePath,
-              span: {
-                start: loc,
-                end: {
-                  line: loc.line,
-                  column: loc.column + meta.name.length,
-                },
-              },
-            });
-          }
-        } // end if (localIndexByName.size > 0)
+        collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, lineOffsets, findings);
       }
 
       forEachChildNode(node, child => visit(child));
