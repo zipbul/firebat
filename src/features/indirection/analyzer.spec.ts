@@ -346,6 +346,41 @@ describe('analyzer', () => {
     expect(thinWrappers.length).toBe(1);
   });
 
+  it('analyzeIndirection - wrapper calling target via optional call - reports thin-wrapper', async () => {
+    // Arrange — `wrapper(x) { return target?.(x); }` is a thin wrapper:
+    // inlining is safe (or at least the wrapper is detectable). Previously skipped
+    // because `core?.(x)` is wrapped in ChainExpression, not a bare CallExpression.
+    const source = [
+      'function target(value: any) { return value + 1; }',
+      'function wrapper(value: any) { return target?.(value); }',
+    ].join('\n');
+    const program = createProgram('/virtual/optional-call.ts', source);
+    const gildash = createMockGildash();
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert — wrapper function should be flagged
+    expect(thinWrappers.length).toBeGreaterThanOrEqual(1);
+    expect(thinWrappers.some(t => t.header === 'wrapper')).toBe(true);
+  });
+
+  it('analyzeIndirection - wrapper calling target via awaited optional call - reports thin-wrapper', async () => {
+    // Arrange — `async wrapper(x) { return await target?.(x); }`
+    const source = [
+      'async function target(value: any) { return value + 1; }',
+      'async function wrapper(value: any) { return await target?.(value); }',
+    ].join('\n');
+    const program = createProgram('/virtual/awaited-optional.ts', source);
+    const gildash = createMockGildash();
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert
+    expect(thinWrappers.some(t => t.header === 'wrapper')).toBe(true);
+  });
+
   it('analyzeIndirection - arguments are transformed - skips wrapper', async () => {
     // Arrange
     const source = [
