@@ -401,4 +401,20 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     // Assert
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'current')).toBe(false);
   });
+
+  it('detectWasteOxc - parameter x and unused inner let x shadow - inner is dead-store', () => {
+    // Regression catch: a prior `parameterNames.has(name)` hack collapsed any
+    // def whose name matched a parameter (including inner `let x`) into
+    // PARAM_SCOPE, defeating the shadow key and hiding the inner dead-store.
+    const source = `function f(x: number) {
+      {
+        let x = 1;
+      }
+      return x;
+    }`;
+    const f = toFile('/param-inner-shadow.ts', source);
+    const result = detectWasteOxc([f]);
+
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(true);
+  });
 });

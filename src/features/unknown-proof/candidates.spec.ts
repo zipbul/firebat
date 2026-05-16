@@ -96,6 +96,54 @@ describe('features/unknown-proof/candidates — collectBindingCandidates', () =>
     expect(barCandidate!.hasExplicitAnnotation).toBeUndefined();
   });
 
+  it('collectBindingCandidates - destructured param without annotation - hasExplicitAnnotation is undefined', () => {
+    // Regression catch: previously `param.type !== 'Identifier'` was wrongly
+    // aliased to "annotated", which flagged every ObjectPattern/ArrayPattern
+    // param as annotated regardless of actual typeAnnotation.
+    const f = toFile('/destruct-param.ts', `function foo({ x, y }) {}`);
+    const result = collectBindingCandidates({ program: [f] });
+    const candidates = result.get('/destruct-param.ts') ?? [];
+    const xCandidate = candidates.find(c => c.name === 'x');
+    const yCandidate = candidates.find(c => c.name === 'y');
+
+    expect(xCandidate).toBeDefined();
+    expect(yCandidate).toBeDefined();
+    expect(xCandidate!.hasExplicitAnnotation).toBeUndefined();
+    expect(yCandidate!.hasExplicitAnnotation).toBeUndefined();
+  });
+
+  it('collectBindingCandidates - array-pattern param without annotation - hasExplicitAnnotation is undefined', () => {
+    const f = toFile('/array-param.ts', `function foo([a, b]) {}`);
+    const result = collectBindingCandidates({ program: [f] });
+    const candidates = result.get('/array-param.ts') ?? [];
+    const aCandidate = candidates.find(c => c.name === 'a');
+
+    expect(aCandidate).toBeDefined();
+    expect(aCandidate!.hasExplicitAnnotation).toBeUndefined();
+  });
+
+  it('collectBindingCandidates - destructured declarator without annotation - hasExplicitAnnotation is undefined', () => {
+    // Regression catch for VariableDeclarator handler — same `type !== 'Identifier'`
+    // mistake was present at handleVariableDeclarator.
+    const f = toFile('/destruct-decl.ts', `const { a, b } = obj;`);
+    const result = collectBindingCandidates({ program: [f] });
+    const candidates = result.get('/destruct-decl.ts') ?? [];
+    const aCandidate = candidates.find(c => c.name === 'a');
+
+    expect(aCandidate).toBeDefined();
+    expect(aCandidate!.hasExplicitAnnotation).toBeUndefined();
+  });
+
+  it('collectBindingCandidates - destructured param WITH annotation - hasExplicitAnnotation is true', () => {
+    const f = toFile('/annotated-destruct-param.ts', `function foo({ x }: { x: string }) {}`);
+    const result = collectBindingCandidates({ program: [f] });
+    const candidates = result.get('/annotated-destruct-param.ts') ?? [];
+    const xCandidate = candidates.find(c => c.name === 'x');
+
+    expect(xCandidate).toBeDefined();
+    expect(xCandidate!.hasExplicitAnnotation).toBe(true);
+  });
+
   it('collectBindingCandidates - function param - records no initCalleeEndOffset', () => {
     const f = toFile('/param.ts', `function foo(bar: string) {}`);
     const result = collectBindingCandidates({ program: [f] });

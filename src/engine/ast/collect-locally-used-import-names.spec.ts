@@ -173,4 +173,68 @@ export { X };`,
 
     expect(result.has('X')).toBe(true);
   });
+
+  it('export { X as Y } — Y not counted as local usage even when in importedNames', () => {
+    // export-specifier alias: spec.exported has its own Identifier node, must
+    // also be excluded from the use-count walk.
+    const file = parseSource(
+      'test.ts',
+      `import { X, Y } from '../other';
+export { X as Y };`,
+    );
+    const result = collectLocallyUsedImportNames(file.program, new Set(['X', 'Y']));
+
+    expect(result.has('X')).toBe(false);
+    expect(result.has('Y')).toBe(false);
+  });
+
+  it('function-scope TSTypeAliasDeclaration shadows import — usage in body not counted', () => {
+    // ScopeTracker does not track TS-only declarations; firebat's parallel
+    // shadow stack must catch this.
+    const file = parseSource(
+      'test.ts',
+      `import { Foo } from '../other';
+function f() {
+  type Foo = string;
+  const v: Foo = 'a';
+  return v;
+}
+export { Foo };`,
+    );
+    const result = collectLocallyUsedImportNames(file.program, new Set(['Foo']));
+
+    expect(result.has('Foo')).toBe(false);
+  });
+
+  it('function-scope TSInterfaceDeclaration shadows import — usage in body not counted', () => {
+    const file = parseSource(
+      'test.ts',
+      `import { Foo } from '../other';
+function f() {
+  interface Foo { x: number; }
+  const v: Foo = { x: 1 };
+  return v;
+}
+export { Foo };`,
+    );
+    const result = collectLocallyUsedImportNames(file.program, new Set(['Foo']));
+
+    expect(result.has('Foo')).toBe(false);
+  });
+
+  it('TS type alias shadow then usage after function — usage outside counts as import', () => {
+    const file = parseSource(
+      'test.ts',
+      `import { Foo } from '../other';
+function f() {
+  type Foo = string;
+  return undefined;
+}
+const v: Foo = {};
+export { Foo };`,
+    );
+    const result = collectLocallyUsedImportNames(file.program, new Set(['Foo']));
+
+    expect(result.has('Foo')).toBe(true);
+  });
 });
