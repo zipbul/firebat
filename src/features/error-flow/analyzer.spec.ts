@@ -579,6 +579,28 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).toContain('floating-promises');
   });
 
+  it('should report floating-promises for unobserved dynamic import()', async () => {
+    // Arrange — `import('./mod')` returns a Promise; bare expression statement leaks rejection
+    const filePath = '/virtual/src/features/dynamic-import-floating.ts';
+    const source = 'export function f() { import("./mod"); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not report floating-promises when dynamic import is voided', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/dynamic-import-voided.ts';
+    const source = 'export function f() { void import("./mod"); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert — control: voided import should NOT report floating-promises
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
+  });
+
   it('should not report floating-promises when promise is voided', async () => {
     // Arrange
     const filePath = '/virtual/src/features/floating-void.ts';

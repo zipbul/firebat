@@ -97,6 +97,11 @@ const isErrorConstructor = (callee: Node): boolean => {
 };
 
 const isPromiseFactoryCall = (expr: Node): boolean => {
+  // Dynamic import expression — always returns a Promise.
+  if (expr.type === 'ImportExpression') {
+    return true;
+  }
+
   // `new Promise(...)`
   if (expr.type === 'NewExpression') {
     const callee = expr.callee;
