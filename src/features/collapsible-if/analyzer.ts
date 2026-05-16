@@ -72,10 +72,10 @@ const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | nu
     return null;
   }
 
-  const innerStmt = outerBody[0] as Node;
+  const innerStmt = outerBody[0];
 
   // Inner statement must be an IfStatement with no else
-  if (innerStmt.type !== 'IfStatement') {
+  if (innerStmt === undefined || innerStmt.type !== 'IfStatement') {
     return null;
   }
 
@@ -84,7 +84,7 @@ const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | nu
   }
 
   // Inner consequent must have 3+ statements
-  const innerCount = countBlockStatements(innerStmt.consequent as Node);
+  const innerCount = countBlockStatements(innerStmt.consequent);
 
   if (innerCount < MIN_INNER_STMTS) {
     return null;
@@ -127,18 +127,18 @@ const detectCollapsibleElseIf = (ifNode: Node, sourceText: string): Opportunity 
     return null;
   }
 
-  const innerStmt = elseBody[0] as Node;
+  const innerStmt = elseBody[0];
 
   // That statement must be an IfStatement (inner if may have else — matches Clippy behavior)
-  if (innerStmt.type !== 'IfStatement') {
+  if (innerStmt === undefined || innerStmt.type !== 'IfStatement') {
     return null;
   }
 
   // Count total statements across inner if's branches (consequent + alternate if present)
-  let innerTotal = countBlockStatements(innerStmt.consequent as Node);
+  let innerTotal = countBlockStatements(innerStmt.consequent);
 
   if (innerStmt.alternate !== null) {
-    innerTotal += countBlockStatements(innerStmt.alternate as Node);
+    innerTotal += countBlockStatements(innerStmt.alternate);
   }
 
   // Empty inner if (e.g. `if(b) {}`) has no statements to benefit from collapsing
@@ -200,7 +200,7 @@ const analyzeFunctionNode = (
     });
   };
 
-  visit(bodyValue as Node, 0);
+  visit(bodyValue, 0);
 
   if (opportunities.length === 0) {
     return null;
