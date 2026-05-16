@@ -12,7 +12,6 @@
 
 import type { Node } from 'oxc-parser';
 
-import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -57,30 +56,24 @@ export const extractStatementFingerprintBag = (functionNode: Node): ReadonlyArra
 const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
   // MethodDefinition → value는 FunctionExpression
   if (node.type === 'MethodDefinition') {
-    const value = node.value as Node | null | undefined;
-
-    if (isOxcNode(value)) {
-      return getBodyStatements(value);
-    }
-
-    return [];
+    return getBodyStatements(node.value);
   }
 
   // FunctionDeclaration, FunctionExpression, ArrowFunctionExpression
   if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
     const body = node.body;
 
-    if (body === null || body === undefined) {
+    if (body === null) {
       return [];
     }
 
     // BlockStatement → .body 배열
     if (body.type === 'BlockStatement') {
-      return body.body as ReadonlyArray<Node>;
+      return body.body;
     }
 
     // ArrowFunction expression body → 단일 statement
-    return [body as Node];
+    return [body];
   }
 
   return [];

@@ -67,13 +67,13 @@ const collectArityProtectiveArrows = (program: Node): Set<number> => {
       return true;
     }
 
-    const callee = parent.callee as Node;
+    const callee = parent.callee;
 
     if (callee.type !== 'MemberExpression') {
       return true;
     }
 
-    const property = callee.property as Node;
+    const property = callee.property;
     const methodName = property.type === 'Identifier' ? property.name : null;
 
     if (methodName !== null && ARITY_SENSITIVE_HIGH_ORDER_METHODS.has(methodName)) {
@@ -207,7 +207,7 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
         }
 
         if (prop.type === 'RestElement') {
-          const argument = prop.argument as Node;
+          const argument = prop.argument;
 
           if (argument.type !== 'Identifier') {
             return null;
@@ -254,7 +254,7 @@ const isPassthroughArgs = (callExpression: Node, params: readonly string[], rest
     return false;
   }
 
-  const args = callExpression.arguments as ReadonlyArray<Node>;
+  const args = callExpression.arguments;
 
   if (params.length === 0) {
     return args.length === 0;
@@ -303,9 +303,9 @@ const getWrapperCall = (node: Node): Node | null => {
   }
 
   const fn = node as OxcFunction;
-  const body = fn.body as Node | null | undefined;
+  const body: Node | null = fn.body;
 
-  if (!isOxcNode(body)) {
+  if (body === null) {
     return null;
   }
 
@@ -344,15 +344,15 @@ const resolveCalleeName = (callExpression: Node): string | null => {
     return null;
   }
 
-  const callee = callExpression.callee as Node;
+  const callee = callExpression.callee;
 
   if (callee.type === 'Identifier') {
     return callee.name;
   }
 
   if (callee.type === 'MemberExpression') {
-    const object = callee.object as Node;
-    const property = callee.property as Node;
+    const object = callee.object;
+    const property = callee.property;
 
     if (object.type === 'ThisExpression' && property.type === 'Identifier') {
       return property.name;
@@ -381,15 +381,15 @@ const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
     return null;
   }
 
-  const callee = callExpression.callee as Node;
+  const callee = callExpression.callee;
 
   if (callee.type === 'Identifier') {
     return { kind: 'local', name: callee.name };
   }
 
   if (callee.type === 'MemberExpression') {
-    const object = callee.object as Node;
-    const property = callee.property as Node;
+    const object = callee.object;
+    const property = callee.property;
 
     if (object.type === 'Identifier' && property.type === 'Identifier') {
       return { kind: 'namespace', ns: object.name, name: property.name };
@@ -408,7 +408,7 @@ interface CollectedFunctionNames {
   readonly methodNodes: Set<Node>;
 }
 
-const collectFunctionNames = (program: Node): CollectedFunctionNames => {
+const collectFunctionNames = (program: Program): CollectedFunctionNames => {
   const namesByNode = new Map<Node, string>();
   const methodNodes = new Set<Node>();
 
@@ -457,7 +457,7 @@ const collectFunctionNames = (program: Node): CollectedFunctionNames => {
       namesByNode.set(valueNode, header);
       methodNodes.add(valueNode);
     },
-  }).visit(program as Program);
+  }).visit(program);
 
   return { namesByNode, methodNodes };
 };

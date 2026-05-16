@@ -331,7 +331,7 @@ const collectWritePositionKeys = (program: Node): Set<string> => {
 
   new Visitor({
     AssignmentExpression(node) {
-      collectTargetIdentifierKeys(node.left as Node, keys);
+      collectTargetIdentifierKeys(node.left, keys);
     },
 
     UpdateExpression(node) {
@@ -481,7 +481,7 @@ const classifyMethods = (
       continue;
     }
 
-    const { hasWrite, hasRead } = classifyMethodAccess(methodBody as Node, propName);
+    const { hasWrite, hasRead } = classifyMethodAccess(methodBody, propName);
 
     if (hasWrite) {
       writerMethods.add(methodName);
@@ -825,7 +825,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
           const methodValue = item.value;
 
           if (isOxcNode(methodValue)) {
-            result = methodValue as Node;
+            result = methodValue;
           }
 
           return false;
@@ -858,7 +858,7 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
           const init = node.init;
 
           if (isOxcNode(init) && (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression')) {
-            result = init as Node;
+            result = init;
 
             return false;
           }
@@ -950,7 +950,7 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
     return false;
   }
 
-  const built = OxcCFGBuilder.build(funcBodyRaw as Node);
+  const built = OxcCFGBuilder.build(funcBodyRaw);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find guard condition node IDs:
@@ -960,7 +960,7 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
   // Then match those offsets against nodePayloads.
   const guardConditionOffsets = new Set<number>();
 
-  walkOxcTree(funcBodyRaw as Node, n => {
+  walkOxcTree(funcBodyRaw, n => {
     if (n.type === 'IfStatement') {
       const testNode = n.test;
       const consequentNode = n.consequent;
@@ -970,12 +970,12 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
       }
 
       // Check: test references stateName
-      if (!nodeReferencesState(testNode as Node, stateName, isClassProp)) {
+      if (!nodeReferencesState(testNode, stateName, isClassProp)) {
         return true;
       }
 
       // Check: consequent is early exit
-      if (!isEarlyExit(consequentNode as Node)) {
+      if (!isEarlyExit(consequentNode)) {
         return true;
       }
 
@@ -1106,7 +1106,7 @@ const verifyCallerOrderByCfg = (
       return false;
     }
 
-    const built = OxcCFGBuilder.build(funcBodyRaw as Node);
+    const built = OxcCFGBuilder.build(funcBodyRaw);
     const { cfg, entryId, nodePayloads } = built;
     const writerNodeIds = findCallNodeIds(nodePayloads, writerBareNames);
     const readerNodeIds = findCallNodeIds(nodePayloads, readerBareNames);
@@ -1152,7 +1152,7 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
     return false;
   }
 
-  const built = OxcCFGBuilder.build(funcBodyRaw as Node);
+  const built = OxcCFGBuilder.build(funcBodyRaw);
   const { cfg, entryId, nodePayloads } = built;
   const adj = cfg.buildAdjacency('forward');
   // Find CFG node IDs that contain a write to stateName

@@ -143,7 +143,7 @@ const getNameFromKey = (key: Node): string | null => {
     return key.name;
   }
 
-  const keyValue = getLiteralString(key as Node);
+  const keyValue = getLiteralString(key);
 
   return typeof keyValue === 'string' && keyValue.length > 0 ? keyValue : null;
 };
