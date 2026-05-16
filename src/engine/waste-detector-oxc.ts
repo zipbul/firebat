@@ -3,7 +3,7 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 import { buildLineOffsets, getLineColumn, ScopeTracker, walk } from '@zipbul/gildash';
 
 import type { WasteFinding } from '..';
-import type { ParsedFile } from './types';
+import type { BitSet, ParsedFile } from './types';
 
 import { collectOxcNodes, forEachChildNode, getNodeName, isFunctionNode, isOxcNode } from './ast';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
@@ -94,7 +94,7 @@ const isDefClosureCaptured = (
   defId: number,
   metaName: string,
   nestedCtx: NestedFunctionContext,
-  reachingInByNode: ReadonlyArray<ReadonlySet<number> | undefined>,
+  reachingInByNode: ReadonlyArray<BitSet>,
 ): boolean => {
   for (const entryNodeId of nestedCtx.entryNodeIds) {
     const entryReadNames = nestedCtx.readNamesByEntryNodeId.get(entryNodeId);
@@ -329,14 +329,7 @@ const collectWasteFindingsForFunction = (
       }
     }
 
-    if (
-      isDefClosureCaptured(
-        defId,
-        meta.name,
-        nestedCtx,
-        reachingInByNode as unknown as ReadonlyArray<ReadonlySet<number> | undefined>,
-      )
-    ) {
+    if (isDefClosureCaptured(defId, meta.name, nestedCtx, reachingInByNode)) {
       continue;
     }
 
