@@ -84,10 +84,76 @@ const escapeFingerprintToken = (token: string): string => {
   return token.replace(/\x00/g, '\\0');
 };
 
+const visitArrayItems = (arr: unknown[], visit: (n: Node) => void): void => {
+  for (const item of arr) {
+    if (isOxcNode(item)) {
+      visit(item);
+    }
+  }
+};
+
+const visitChildValue = (value: unknown, visit: (n: Node) => void): void => {
+  if (isOxcNode(value)) {
+    visit(value);
+
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    visitArrayItems(value, visit);
+  }
+};
+
+const pushIdentifierToken = (rec: Record<string, unknown>, diffs: string[], includeIdentifierNames: boolean): void => {
+  if (includeIdentifierNames) {
+    const nameValue = rec.name;
+    const resolved = typeof nameValue === 'string' ? nameValue : '';
+
+    diffs.push(`id:${resolved}`);
+  } else {
+    diffs.push('$ID');
+  }
+};
+
+const visitNodeChildren = (
+  n: Node,
+  rec: Record<string, unknown>,
+  options: OxcFingerprintOptions,
+  visit: (n: Node) => void,
+): void => {
+  const keys = visitorKeys[n.type];
+
+  if (keys === undefined) {
+    return;
+  }
+
+  const sortedKeys = [...keys].sort();
+
+  for (const key of sortedKeys) {
+    if (options.ignoredKeys?.has(key)) {
+      continue;
+    }
+
+    visitChildValue(rec[key], visit);
+  }
+};
+
 const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): string => {
   const diffs: string[] = [];
 
   const visit = (n: Node) => {
+    // Parenthesized expressions carry no semantic meaning; descend into the wrapped
+    // expression without pushing the wrapper so `(a + b)` and `a + b` produce the same fingerprint.
+    if (n.type === 'ParenthesizedExpression') {
+      const inner = (n as unknown as Record<string, unknown>).expression;
+
+      if (inner !== null && inner !== undefined && typeof inner === 'object') {
+        visit(inner as Node);
+      }
+
+      return;
+    }
+
     // push Type
     if (n.type.length > 0) {
       diffs.push(n.type);
@@ -105,42 +171,11 @@ const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): s
 
     // Identifier name handling
     if (n.type === 'Identifier') {
-      if (options.includeIdentifierNames) {
-        const nameValue = rec.name;
-        const resolved = typeof nameValue === 'string' ? nameValue : '';
-
-        diffs.push(`id:${resolved}`);
-      } else {
-        diffs.push('$ID');
-      }
+      pushIdentifierToken(rec, diffs, options.includeIdentifierNames);
     }
 
     // Visit child nodes via visitorKeys (sorted for deterministic fingerprints)
-    const keys = visitorKeys[n.type];
-
-    if (keys === undefined) {
-      return;
-    }
-
-    const sortedKeys = [...keys].sort();
-
-    for (const key of sortedKeys) {
-      if (options.ignoredKeys?.has(key)) {
-        continue;
-      }
-
-      const value = rec[key];
-
-      if (isOxcNode(value)) {
-        visit(value);
-      } else if (Array.isArray(value)) {
-        for (const item of value) {
-          if (isOxcNode(item)) {
-            visit(item);
-          }
-        }
-      }
-    }
+    visitNodeChildren(n, rec, options, visit);
   };
 
   visit(node);
