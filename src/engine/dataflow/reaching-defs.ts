@@ -2,7 +2,6 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import type { BitSet, DefMeta, FunctionBodyAnalysis } from '../types';
 
-import { getNodeName } from '../ast';
 import { OxcCFGBuilder } from '../cfg';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
 import { collectVariables } from './variable-collector';
@@ -12,84 +11,58 @@ export interface BindingName {
   readonly location: number;
 }
 
-type NodeLike = Record<string, unknown>;
-
-const extractObjectPatternBindings = (node: NodeLike, out: BindingName[]): void => {
-  const properties = node.properties;
-
-  if (!Array.isArray(properties)) {
-    return;
-  }
-
-  for (const prop of properties as NodeLike[]) {
-    if (prop.type === 'Property') {
-      extractBindingNames(prop.value as Node, out);
-
-      continue;
-    }
-
-    if (prop.type === 'RestElement') {
-      extractBindingNames(prop.argument as Node, out);
-    }
-  }
-};
-
-const extractArrayPatternBindings = (node: NodeLike, out: BindingName[]): void => {
-  const elements = node.elements;
-
-  if (!Array.isArray(elements)) {
-    return;
-  }
-
-  for (const element of elements as (Node | null | undefined)[]) {
-    if (element === null || element === undefined) {
-      continue;
-    }
-
-    extractBindingNames(element, out);
-  }
-};
-
+/**
+ * Walk a binding-pattern subtree and record each declared identifier.
+ * `node` is one of: Identifier (binding form), ObjectPattern, ArrayPattern,
+ * AssignmentPattern, or RestElement — all narrowed by oxc-parser's union.
+ */
 export const extractBindingNames = (node: Node, out: BindingName[]): void => {
   if (node.type === 'Identifier') {
-    const name = getNodeName(node);
-
-    if (name !== null) {
-      out.push({ name, location: node.start });
-    }
+    out.push({ name: node.name, location: node.start });
 
     return;
   }
 
   if (node.type === 'ObjectPattern') {
-    extractObjectPatternBindings(node as unknown as NodeLike, out);
+    for (const prop of node.properties) {
+      if (prop.type === 'Property') {
+        extractBindingNames(prop.value, out);
+      } else {
+        extractBindingNames(prop.argument, out);
+      }
+    }
 
     return;
   }
 
   if (node.type === 'ArrayPattern') {
-    extractArrayPatternBindings(node as unknown as NodeLike, out);
+    for (const element of node.elements) {
+      if (element === null) {
+        continue;
+      }
+
+      extractBindingNames(element, out);
+    }
 
     return;
   }
 
   if (node.type === 'AssignmentPattern') {
-    extractBindingNames(node.left as Node, out);
+    extractBindingNames(node.left, out);
 
     return;
   }
 
   if (node.type === 'RestElement') {
-    extractBindingNames(node.argument as Node, out);
+    extractBindingNames(node.argument, out);
   }
 };
 
 export const collectParameterBindings = (functionNode: Node): ReadonlyArray<BindingName> => {
   const bindings: BindingName[] = [];
   const fn = functionNode as OxcFunction;
-  const params = fn.params as ReadonlyArray<Node>;
 
-  for (const param of params) {
+  for (const param of fn.params) {
     extractBindingNames(param, bindings);
   }
 
