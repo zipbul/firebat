@@ -224,4 +224,29 @@ describe('findLshCandidates', () => {
     // 낮은 threshold에서 후보가 더 많거나 같아야 함
     expect(lowCandidates.length).toBeGreaterThanOrEqual(highCandidates.length);
   });
+
+  it('bands > k → crash 없이 안전하게 동작 (effectiveBands를 k로 clamp)', () => {
+    const hasher = createMinHasher(4); // k=4
+    const sigA = hasher.computeSignature(['a', 'b', 'c']);
+    const sigB = hasher.computeSignature(['a', 'b', 'd']);
+    // bands=8 > k=4: clamp 없이는 signature 배열 범위 밖을 읽어 BigInt XOR crash
+    expect(() => findLshCandidates([sigA, sigB], 0.5, 8)).not.toThrow();
+
+    const result = findLshCandidates([sigA, sigB], 0.5, 8);
+
+    expect(Array.isArray(result)).toBe(true);
+    // 각 후보 쌍은 입력 인덱스 범위 안이어야 함
+    for (const c of result) {
+      expect(c.i).toBeGreaterThanOrEqual(0);
+      expect(c.j).toBeLessThan(2);
+      expect(c.i).toBeLessThan(c.j);
+    }
+  });
+
+  it('bands == k → 동작 (boundary)', () => {
+    const hasher = createMinHasher(4);
+    const sig = hasher.computeSignature(['a', 'b', 'c', 'd']);
+
+    expect(() => findLshCandidates([sig, sig], 0.5, 4)).not.toThrow();
+  });
 });

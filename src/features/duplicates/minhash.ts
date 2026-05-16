@@ -83,8 +83,7 @@ export const findLshCandidates = (
   }
 
   const k = signatures[0]!.length;
-  const config =
-    bands !== DEFAULT_BANDS ? { bands, rowsPerBand: Math.max(1, Math.floor(k / bands)) } : computeOptimalBandConfig(k, threshold);
+  const config = bands !== DEFAULT_BANDS ? resolveExplicitBandConfig(k, bands) : computeOptimalBandConfig(k, threshold);
   const rowsPerBand = config.rowsPerBand;
   const effectiveBands = config.bands;
   const candidateSet = new Set<number>();
@@ -142,6 +141,17 @@ export const estimateJaccard = (sigA: ReadonlyArray<bigint>, sigB: ReadonlyArray
 };
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/**
+ * caller가 명시한 bands를 시그니처 길이 k 안에 맞도록 clamp한다.
+ * bands > k이면 effectiveBands를 floor(k / rowsPerBand)로 줄여 signature out-of-range 접근을 막는다.
+ */
+const resolveExplicitBandConfig = (k: number, bands: number): { bands: number; rowsPerBand: number } => {
+  const rowsPerBand = Math.max(1, Math.floor(k / bands));
+  const effectiveBands = Math.min(bands, Math.floor(k / rowsPerBand));
+
+  return { bands: effectiveBands, rowsPerBand };
+};
 
 /**
  * threshold를 기준으로 LSH S-curve가 0.5 확률에 가장 가까운 bands/rows 설정을 찾는다.
