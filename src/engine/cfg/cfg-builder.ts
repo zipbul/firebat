@@ -6,10 +6,7 @@ import type {
   ForInStatement,
   ForOfStatement,
   ForStatement,
-  ForStatementInit,
-  ForStatementLeft,
   IfStatement,
-  LabeledStatement,
   Node,
   ReturnStatement,
   SwitchStatement,
@@ -287,7 +284,7 @@ export class OxcCFGBuilder {
     let tails: NodeId[] = [...incoming];
 
     if (forNode.init !== null) {
-      const initNode = this.addNode(forNode.init as Node as ForStatementInit);
+      const initNode = this.addNode(forNode.init);
 
       this.connect(tails, initNode, EdgeType.Normal);
       this.addExceptionEdgeIfInTry(initNode);
@@ -399,7 +396,7 @@ export class OxcCFGBuilder {
     loopStack: readonly LoopTargets[],
     currentLabel: string | null,
   ): NodeId[] {
-    const headerPayload: Node[] = [forOfInNode.left as Node as ForStatementLeft, forOfInNode.right];
+    const headerPayload: Node[] = [forOfInNode.left, forOfInNode.right];
     const headerNode = this.addNode(headerPayload);
     const bodyEntry = this.addNode(null);
     const afterLoop = this.addNode(null);
@@ -447,7 +444,7 @@ export class OxcCFGBuilder {
     if (Array.isArray(node)) {
       let tails: NodeId[] = [...incoming];
 
-      for (const entry of node as ReadonlyArray<Node>) {
+      for (const entry of node) {
         tails = this.visitStatement(entry, tails, loopStack, null);
       }
 
@@ -460,58 +457,56 @@ export class OxcCFGBuilder {
 
     switch (node.type) {
       case 'BlockStatement': {
-        return this.visitBlockStatement(node as BlockStatement, incoming, loopStack);
+        return this.visitBlockStatement(node, incoming, loopStack);
       }
 
       case 'LabeledStatement': {
-        const labeledNode = node as LabeledStatement;
-
-        return this.visitStatement(labeledNode.body, incoming, loopStack, labeledNode.label.name);
+        return this.visitStatement(node.body, incoming, loopStack, node.label.name);
       }
 
       case 'IfStatement': {
-        return this.visitIfStatement(node as IfStatement, incoming, loopStack);
+        return this.visitIfStatement(node, incoming, loopStack);
       }
 
       case 'WhileStatement': {
-        return this.visitWhileStatement(node as WhileStatement, incoming, loopStack, currentLabel);
+        return this.visitWhileStatement(node, incoming, loopStack, currentLabel);
       }
 
       case 'DoWhileStatement': {
-        return this.visitDoWhileStatement(node as DoWhileStatement, incoming, loopStack, currentLabel);
+        return this.visitDoWhileStatement(node, incoming, loopStack, currentLabel);
       }
 
       case 'ForOfStatement':
       case 'ForInStatement': {
-        return this.visitForOfInStatement(node as ForOfStatement | ForInStatement, incoming, loopStack, currentLabel);
+        return this.visitForOfInStatement(node, incoming, loopStack, currentLabel);
       }
 
       case 'ForStatement': {
-        return this.visitForStatement(node as ForStatement, incoming, loopStack, currentLabel);
+        return this.visitForStatement(node, incoming, loopStack, currentLabel);
       }
 
       case 'SwitchStatement': {
-        return this.visitSwitchStatement(node as SwitchStatement, incoming, loopStack, currentLabel);
+        return this.visitSwitchStatement(node, incoming, loopStack, currentLabel);
       }
 
       case 'BreakStatement': {
-        return this.visitJumpStatement(node as BreakStatement, incoming, loopStack, true);
+        return this.visitJumpStatement(node, incoming, loopStack, true);
       }
 
       case 'ContinueStatement': {
-        return this.visitJumpStatement(node as ContinueStatement, incoming, loopStack, false);
+        return this.visitJumpStatement(node, incoming, loopStack, false);
       }
 
       case 'ReturnStatement': {
-        return this.visitReturnStatement(node as ReturnStatement, incoming);
+        return this.visitReturnStatement(node, incoming);
       }
 
       case 'ThrowStatement': {
-        return this.visitThrowStatement(node as ThrowStatement, incoming);
+        return this.visitThrowStatement(node, incoming);
       }
 
       case 'TryStatement': {
-        return this.visitTryStatement(node as TryStatement, incoming, loopStack);
+        return this.visitTryStatement(node, incoming, loopStack);
       }
 
       default: {

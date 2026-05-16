@@ -1300,13 +1300,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // Unobserved-variable: fn(p) or fn([p]) — passed as function argument marks p as observed
       for (const callArg of node.arguments) {
         if (callArg.type === 'Identifier') {
-          markObserved((callArg as unknown as { name: string }).name);
-        }
-
-        if (callArg.type === 'ArrayExpression') {
-          for (const el of (callArg as unknown as { elements: Node[] }).elements) {
-            if (el !== null && el !== undefined && el.type === 'Identifier') {
-              markObserved((el as unknown as { name: string }).name);
+          markObserved(callArg.name);
+        } else if (callArg.type === 'ArrayExpression') {
+          for (const el of callArg.elements) {
+            if (el !== null && el.type === 'Identifier') {
+              markObserved(el.name);
             }
           }
         }

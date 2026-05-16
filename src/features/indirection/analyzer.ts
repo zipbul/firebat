@@ -110,9 +110,9 @@ const getAwaitedCallExpression = (node: Node): Node | null => {
 
   // `await fn?.(args)` — unwrap ChainExpression to expose the optional CallExpression.
   if (argument.type === 'ChainExpression') {
-    const inner = (argument as unknown as Record<string, unknown>).expression as Node | undefined;
+    const inner = argument.expression;
 
-    if (inner && inner.type === 'CallExpression') {
+    if (inner.type === 'CallExpression') {
       return inner;
     }
   }
@@ -128,9 +128,9 @@ const getCallExpression = (node: Node): Node | null => {
   // Optional calls (`fn?.(args)`) are wrapped in a ChainExpression. Unwrap to expose
   // the inner CallExpression so optional-call wrappers are detected like plain ones.
   if (node.type === 'ChainExpression') {
-    const inner = (node as unknown as Record<string, unknown>).expression as Node | undefined;
+    const inner = node.expression;
 
-    if (inner && inner.type === 'CallExpression') {
+    if (inner.type === 'CallExpression') {
       return inner;
     }
   }
