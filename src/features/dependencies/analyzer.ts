@@ -935,20 +935,21 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       const externalPackages = new Map<string, Set<string>>();
 
       for (const rel of imports) {
+        // gildash 0.28 contract: `specifier` is always present on 'imports' relations.
         // Unresolved internal import
-        if (rel.isExternal === false && rel.dstFilePath === null && rel.specifier) {
+        if (rel.isExternal === false && rel.dstFilePath === null) {
           unresolvedImports.push({
             kind: 'unresolved-import',
             module: toRelativePath(rootAbs, rel.srcFilePath),
-            specifier: rel.specifier,
+            specifier: rel.specifier!,
           });
 
           continue;
         }
 
         // External package import
-        if (rel.isExternal === true && rel.specifier) {
-          const pkgName = extractPackageName(rel.specifier);
+        if (rel.isExternal === true) {
+          const pkgName = extractPackageName(rel.specifier!);
 
           if (pkgName && !isBuiltinModule(pkgName)) {
             const files = externalPackages.get(pkgName) ?? new Set<string>();
