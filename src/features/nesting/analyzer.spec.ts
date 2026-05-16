@@ -51,7 +51,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
     const items = analyzeNesting([f]);
 
-    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items.length).toBe(1);
 
     const item = items[0]!;
 
@@ -92,7 +92,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     // flat function should NOT be a finding
     expect(flatItems.length).toBe(0);
     // deep function SHOULD be a finding
-    expect(deepItems.length).toBeGreaterThanOrEqual(1);
+    expect(deepItems.length).toBe(1);
     expect(deepItems[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 
@@ -115,7 +115,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
     const items = analyzeNesting([f]);
 
-    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items.length).toBe(1);
 
     const item = items[0]!;
 
@@ -163,7 +163,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
     const items = analyzeNesting([f]);
 
-    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items.length).toBe(1);
     expect(typeof items[0]!.score).toBe('number');
   });
 
@@ -186,7 +186,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
     const items = analyzeNesting([f]);
 
-    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items.length).toBe(1);
     expect(items[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 

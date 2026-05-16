@@ -105,7 +105,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lt = lifetimeOnly(result);
 
-    expect(lt.length).toBeGreaterThanOrEqual(1);
+    expect(lt.length).toBe(1);
     expect(lt[0]?.lifetimeLines).toBeGreaterThan(2);
   });
 
@@ -128,7 +128,7 @@ describe('variable-lifetime/analyzer', () => {
     const result = analyzeVariableLifetime(files as any, { maxLifetimeLines: -1 });
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // ── 경계값 ──
@@ -1303,7 +1303,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - short function with many live vars - no liveness-pressure (below minFunctionLines)', () => {
@@ -1359,7 +1359,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert — >= means it should fire when equal
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - liveness-pressure finding has correct maxLiveVariables and functionLineCount', () => {
@@ -1384,7 +1384,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
     expect(lp[0]?.functionLineCount).toBeGreaterThanOrEqual(40);
     expect(typeof lp[0]?.hotSpotLine).toBe('number');
@@ -1407,7 +1407,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - maxLiveVariables zero - fires for any function with variables', () => {
@@ -1419,7 +1419,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - minFunctionLines zero - fires even for short functions', () => {
@@ -1437,7 +1437,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - arrow function with many live vars - emits liveness-pressure', () => {
@@ -1462,7 +1462,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - nested function variables - inner vars do not inflate outer liveness', () => {
@@ -1512,7 +1512,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
   });
 
@@ -1540,7 +1540,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - try-catch inner vars above threshold - emits liveness-pressure', () => {
@@ -1568,7 +1568,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
   });
 
   it('analyzeVariableLifetime - if-branch declares all vars at top - all 8 live at entry block', () => {
@@ -1598,7 +1598,7 @@ describe('variable-lifetime/analyzer', () => {
     // Assert
     const lp = livenessOnly(result);
 
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
   });
 
@@ -1681,7 +1681,7 @@ describe('variable-lifetime/analyzer', () => {
     const lp = livenessOnly(result);
 
     // Assert
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
     expect(lp[0]!.hotSpotLine).toBeGreaterThan(0);
     expect(lp[0]!.hotSpotLine).toBeLessThanOrEqual(functionLastLine);
   });
@@ -1734,7 +1734,7 @@ describe('variable-lifetime/analyzer', () => {
     const lp = livenessOnly(result);
 
     // Assert
-    expect(lp.length).toBeGreaterThanOrEqual(1);
+    expect(lp.length).toBe(1);
     expect(lp[0]!.maxLiveVariables).toBeGreaterThanOrEqual(7);
   });
 

@@ -67,7 +67,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.kind).toBe('temporal-coupling');
     expect(result[0]?.state).toBe('db');
     expect(result[0]?.writers).toBe(1);
@@ -94,7 +94,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('db');
     expect(result[0]?.writers).toBe(1);
   });
@@ -116,7 +116,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('db');
   });
 
@@ -135,7 +135,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('total');
   });
 
@@ -152,7 +152,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('count');
   });
 
@@ -199,7 +199,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('initialized');
   });
 
@@ -388,7 +388,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('x');
   });
 
@@ -405,7 +405,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('x');
   });
 
@@ -422,7 +422,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]?.state).toBe('x');
   });
 
@@ -439,7 +439,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // B-2: class constructor as only writer
@@ -484,7 +484,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // B-3: UpdateExpression (this.x++) treated as a write
@@ -506,7 +506,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - class method writes property via prefix -- - reports finding', () => {
@@ -527,7 +527,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // --- gildash caller 공존 검사 ---
@@ -582,7 +582,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — gildash provides exported names, temporal coupling detected
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - gildash getSymbolsByFile empty result - falls back to AST walk', () => {
@@ -601,7 +601,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — AST fallback still detects temporal coupling
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - gildash getSymbolsByFile with export { } specifiers - detects coupling', () => {
@@ -634,7 +634,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — gildash correctly marks specifiers as exported
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - all callers of reader also call writer via gildash - suppresses finding', () => {
@@ -671,7 +671,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - reader has no callers via gildash - keeps finding', () => {
@@ -687,7 +687,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - gildash searchRelations throws - falls back to AST-only', () => {
@@ -708,7 +708,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: throwingGildash as any });
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - class method all callers call writer - suppresses finding', () => {
@@ -747,7 +747,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - anonymous class method - skips gildash suppression', () => {
@@ -769,7 +769,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — anonymous class cannot be suppressed, finding must remain
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // --- Phase 3: caller AST 순서 검사 ---
@@ -839,7 +839,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — reader before writer → finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - caller calls writer inside if branch - keeps finding conservatively', () => {
@@ -865,7 +865,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — writer inside branch → conservative, finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - class method caller correct order via getParsedAst - suppresses finding', () => {
@@ -928,7 +928,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — AST unavailable → conservative, finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // --- Phase 4: CFG dominator 기반 검사 ---
@@ -982,7 +982,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — 단측 분기 → CFG dominate 안 함 → finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - try writer catch then reader via CFG - keeps finding', () => {
@@ -1007,7 +1007,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — exception edge로 초기화 없이 query 실행 가능 → finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - try writer and reader same block via CFG - suppresses finding', () => {
@@ -1089,7 +1089,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert — no guard → finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - class reader has this.x guard - suppresses finding', () => {
@@ -1129,7 +1129,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert — guard comes after state access → does not dominate → finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - loop writer via CFG - keeps finding', () => {
@@ -1155,7 +1155,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — 루프 0회 가능 → CFG dominate 안 함 → finding kept
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // --- Phase 6: dead writer 제외 ---
@@ -1212,7 +1212,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert — if 분기 내 write는 reachable → writer 유지 → finding 있음
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - reachable writer - keeps as writer', () => {
@@ -1227,7 +1227,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert — 정상 write는 reachable → writer 유지 → finding 있음
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // --- High 누락 6건 ---
@@ -1284,7 +1284,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert — var 선언도 mutable var로 감지 → finding 있음
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - named class gildash suppression with getParsedAst - suppresses finding', () => {
@@ -1346,7 +1346,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: throwingGildash as any });
 
     // Assert — searchRelations throws → AST-only fallback → finding 있음
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - function that writes and reads same var - not counted as pure reader', () => {
@@ -1412,8 +1412,9 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
-    // Assert — queryB의 caller 없음 → 보수적으로 finding 유지
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    // Assert — both readers (queryA, queryB) report independent findings; queryB
+    // having no callers is handled conservatively (kept).
+    expect(result.length).toBe(2);
   });
 
   it('analyzeTemporalCoupling - multiple writers for same variable - reports finding', () => {
@@ -1433,7 +1434,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any);
 
     // Assert — writers=2, reader=1 → finding 있음
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - writer inside switch case via CFG - keeps finding', () => {
@@ -1487,7 +1488,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — 중첩 조건 → init이 dominate 안 함 → finding 유지
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - intra-file caller suppresses finding', () => {
@@ -1553,6 +1554,6 @@ describe('temporal-coupling/analyzer', () => {
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
     // Assert — null srcSymbolName caller로는 writer 연결 불가 → finding 유지
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 });

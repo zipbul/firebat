@@ -148,7 +148,7 @@ describe('detectNearMissClones', () => {
     const opts = { ...defaultOptions, similarityThreshold: 0.5, minSize: 2 };
     const result = detectNearMissClones(files, opts);
 
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
 
     const group = result[0]!;
 
@@ -365,7 +365,7 @@ describe('detectNearMissClones', () => {
     const result = detectNearMissClones([fileA, fileB, fileC], opts);
 
     // 3개 함수가 하나의 그룹으로 묶여야 함
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
 
     const group = result.find(g => g.items.length === 3);
 
@@ -411,7 +411,7 @@ describe('detectNearMissClones', () => {
     const result = detectNearMissClones([fileSmall, fileLarge], opts);
 
     // Assert: small×large 교차 비교로 그룹 형성
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
 
     const group = result[0]!;
 

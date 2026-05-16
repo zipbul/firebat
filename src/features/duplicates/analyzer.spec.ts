@@ -187,7 +187,7 @@ describe('analyzeDuplicates', () => {
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const exact = result.filter(g => g.cloneType === 'exact');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
     expect(exact[0]!.items.length).toBeGreaterThanOrEqual(2);
     expect(exact[0]!.items[0]!.filePath).toBe('dup.ts');
     expect(exact[0]!.findingKind).toBe('exact-clone');
@@ -201,7 +201,7 @@ describe('analyzeDuplicates', () => {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const shape = result.filter(g => g.cloneType === 'shape');
 
-    expect(shape.length).toBeGreaterThanOrEqual(1);
+    expect(shape.length).toBe(1);
     expect(shape[0]!.findingKind).toBe('structural-clone');
 
     // exact에 없어야 함
@@ -220,7 +220,7 @@ describe('analyzeDuplicates', () => {
     // shape fingerprint strips both identifiers and literals → same shape
     const shape = result.filter(g => g.cloneType === 'shape');
 
-    expect(shape.length).toBeGreaterThanOrEqual(1);
+    expect(shape.length).toBe(1);
   });
 
   // ── [HP] 4. shape 그룹이 exact에서 이미 잡힌 해시 → 필터링 ───────────
@@ -232,7 +232,7 @@ describe('analyzeDuplicates', () => {
     const exact = result.filter(g => g.cloneType === 'exact');
     const shape = result.filter(g => g.cloneType === 'shape');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
 
     // shape에 같은 함수가 잡히면 안 됨
     for (const g2 of shape) {
@@ -328,9 +328,9 @@ describe('analyzeDuplicates', () => {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
     const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    expect(withParams.length).toBeGreaterThanOrEqual(1);
+    expect(withParams.length).toBe(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('identifier');
-    expect(withParams[0]!.suggestedParams!.pairs.length).toBeGreaterThanOrEqual(1);
+    expect(withParams[0]!.suggestedParams!.pairs.length).toBe(1);
   });
 
   // ── [HP] 9. anti-unification literal-variant → suggestedParams literal ──
@@ -350,7 +350,7 @@ describe('analyzeDuplicates', () => {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
     const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    expect(withParams.length).toBeGreaterThanOrEqual(1);
+    expect(withParams.length).toBe(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('literal');
     expect(withParams[0]!.findingKind).toBe('literal-variant');
   });
@@ -374,7 +374,7 @@ describe('analyzeDuplicates', () => {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
     const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    expect(withParams.length).toBeGreaterThanOrEqual(1);
+    expect(withParams.length).toBe(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe('type');
   });
 
@@ -428,7 +428,7 @@ describe('analyzeDuplicates', () => {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const exact = result.filter(g => g.cloneType === 'exact');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
     expect(exact[0]!.items[0]!.kind).toBe('function');
   });
 
@@ -530,7 +530,7 @@ class Beta {
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const exact = result.filter(g => g.cloneType === 'exact');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
     expect(exact[0]!.items.length).toBe(3);
   });
 
@@ -600,7 +600,7 @@ class Beta {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 0, enableNearMiss: false, enableAntiUnification: false });
 
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // ── [ED] 26. 정확히 2개 함수 → 최소 그룹 크기 ──────────────────────────
@@ -611,7 +611,7 @@ class Beta {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const exact = result.filter(g => g.cloneType === 'exact');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
     expect(exact[0]!.items).toHaveLength(2);
   });
 
@@ -642,7 +642,7 @@ class Beta {
     const file = makeFile('single.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
 
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
     expect(result[0]!.items.every(i => i.filePath === 'single.ts')).toBe(true);
   });
 
@@ -658,7 +658,7 @@ class Beta {
       enableAntiUnification: false,
     });
 
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
 
     const allFilePaths = result.flatMap(g => g.items.map(i => i.filePath));
 
@@ -673,7 +673,7 @@ class Beta {
 
     expect(detectNearMissClonesMock).not.toHaveBeenCalled();
     expect(antiUnifyMock).not.toHaveBeenCalled();
-    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.length).toBe(1);
   });
 
   // ── [CO] 31. exact excludedHashes가 near-miss에서 정확 제외 ────────────
@@ -716,7 +716,7 @@ class Beta {
     // type 그룹(ClassDeclaration)이 존재해야 함
     const classGroups = result.filter(g => g.items.some(i => i.kind === 'type'));
 
-    expect(classGroups.length).toBeGreaterThanOrEqual(1);
+    expect(classGroups.length).toBe(1);
 
     // method 그룹이 있다면, class 그룹에 내포된 method 그룹은 없어야 함
     // 즉, class 그룹의 span 안에 완전히 포함되는 method 그룹은 결과에서 제거됨
@@ -858,7 +858,7 @@ class Beta {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: true });
     const withParams = result.filter(g => g.suggestedParams !== undefined);
 
-    expect(withParams.length).toBeGreaterThanOrEqual(1);
+    expect(withParams.length).toBe(1);
     // rename-only → findingKind는 cloneType 기반 기본값 (structural-clone), literal-variant 아님
     expect(withParams[0]!.findingKind).not.toBe('literal-variant');
   });
@@ -918,8 +918,8 @@ function compute(x: number, y: number): number {
     // Assert: outlier 그룹이 생성되어야 함
     const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
 
-    expect(outlierGroups.length).toBeGreaterThanOrEqual(1);
-    expect(outlierGroups[0]!.items.length).toBeGreaterThanOrEqual(1);
+    expect(outlierGroups.length).toBe(1);
+    expect(outlierGroups[0]!.items.length).toBe(1);
   });
 
   // ── [C-2] 41. 2멤버 → outlier 판별 안함 ────────────────────────────────
@@ -1020,7 +1020,7 @@ export const MyClass = class {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const exact = result.filter(g => g.cloneType === 'exact');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
   });
 
   // ── [HP] 44. FunctionExpression exact 탐지 ────────────────────────────
@@ -1037,7 +1037,7 @@ export const compute = function(x: number): number {
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableNearMiss: false, enableAntiUnification: false });
     const exact = result.filter(g => g.cloneType === 'exact');
 
-    expect(exact.length).toBeGreaterThanOrEqual(1);
+    expect(exact.length).toBe(1);
   });
 
   // ── [HP] 37. 모든 그룹에 findingKind 존재 확인 ─────────────────────────

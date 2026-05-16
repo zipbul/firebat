@@ -64,7 +64,7 @@ describe('analyzer', () => {
       const result = await analyzeBarrel([f], { rootAbs: tmpDir });
       const starFindings = result.filter(r => r.kind === 'export-star');
 
-      expect(starFindings.length).toBeGreaterThanOrEqual(1);
+      expect(starFindings.length).toBe(1);
     });
 
     it('BarrelFinding has required shape: kind, file, span', async () => {
@@ -142,7 +142,7 @@ describe('analyzer', () => {
       const result = await analyzeBarrel([f], { rootAbs: tmpDir, ignoreGlobs: ['generated/**'] });
       const starFindings = result.filter(r => r.kind === 'export-star');
 
-      expect(starFindings.length).toBeGreaterThanOrEqual(1);
+      expect(starFindings.length).toBe(1);
     });
   });
 
@@ -159,7 +159,7 @@ describe('analyzer', () => {
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
       expect(findings[0]?.file).toContain('src/index.ts');
     });
 
@@ -173,7 +173,7 @@ describe('analyzer', () => {
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('export * from "../other" — cross-module — detects finding', async () => {
@@ -186,7 +186,7 @@ describe('analyzer', () => {
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('export { X } from "./child" — child path — allowed, no finding', async () => {
@@ -212,7 +212,7 @@ describe('analyzer', () => {
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('export { X } from "lodash" — bare specifier — allowed, no finding', async () => {
@@ -246,7 +246,7 @@ export { X };`,
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('import { X } from "../other"; export { X } — X used locally — allowed', async () => {
@@ -308,7 +308,7 @@ export type { X };`,
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('import { X, Y } from "../other"; export { X } — X unused, Y used — detects X only', async () => {
@@ -367,7 +367,7 @@ export { X };`,
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
   });
 
@@ -389,7 +389,7 @@ export default X;`,
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('import X from "../other"; export default X — X used locally — allowed', async () => {
@@ -466,7 +466,7 @@ export default X;`,
       const result = await analyzeBarrel([indexFile, otherFile], { rootAbs: tmpDir, gildash });
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
 
     it('syntax A — gildash says no cross-module — skips pattern A', async () => {
@@ -505,7 +505,7 @@ export default X;`,
       const findings = result.filter(r => r.kind === 'cross-module-reexport');
 
       // gildash error → null → fallback to AST → should detect
-      expect(findings.length).toBeGreaterThanOrEqual(1);
+      expect(findings.length).toBe(1);
     });
   });
 });

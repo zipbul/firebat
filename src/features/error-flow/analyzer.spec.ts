@@ -95,7 +95,7 @@ describe('error-flow/analyzer', () => {
     const findings = await analyzeSingle(filePath, source);
 
     // Assert
-    expect(findings.length).toBeGreaterThanOrEqual(1);
+    expect(findings.length).toBe(1);
 
     const first = findings[0]!;
 
@@ -122,7 +122,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report useless-catch when catch rethrows the same error with a different name', async () => {
@@ -136,7 +136,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report useless-catch when catch logs and rethrows', async () => {
@@ -217,7 +217,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report unsafe-finally when finally throws and masks a return', async () => {
@@ -237,7 +237,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report unsafe-finally when nested return exists inside finally', async () => {
@@ -259,7 +259,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report unsafe-finally when finally only performs cleanup', async () => {
@@ -295,7 +295,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report unsafe-finally when finally callback has expression body', async () => {
@@ -307,7 +307,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report unsafe-finally when finally callback returns undefined explicitly', async () => {
@@ -325,7 +325,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report unsafe-finally (.finally() variant) when finally callback has no return', async () => {
@@ -360,7 +360,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'catch-or-return');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report catch-or-return when then-chain is returned', async () => {
@@ -463,7 +463,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report prefer-catch even when a catch is also chained', async () => {
@@ -481,7 +481,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report prefer-catch when catch is used', async () => {
@@ -516,7 +516,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report prefer-await-to-then when then-chain contains side effects', async () => {
@@ -537,7 +537,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report prefer-await-to-then when then is a short value mapping', async () => {
@@ -587,7 +587,7 @@ describe('error-flow/analyzer', () => {
     const analysis = await analyzeSingle(filePath, source);
 
     // Assert
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBeGreaterThanOrEqual(1);
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(1);
   });
 
   it('should not report floating-promises when dynamic import is voided', async () => {
@@ -668,7 +668,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report missing-error-cause (catch-transform variant) when cause is preserved', async () => {
@@ -711,8 +711,10 @@ describe('error-flow/analyzer', () => {
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
-    // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    // Assert — analyzer flags every useless rethrow site (the throw inside `try`,
+    // the inner `catch (e) { throw e }`, and the outer `catch (outer) { throw outer }`).
+    expect(hits.length).toBe(3);
+    expect(hits.map(h => h.span.start.line).sort((a, b) => a - b)).toEqual([3, 5, 8]);
   });
 
   it('should not report useless-catch (nested variant) when there is no outer catch', async () => {
@@ -758,7 +760,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', async () => {
@@ -858,7 +860,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report unsafe-finally when finally contains continue targeting outer loop', async () => {
@@ -880,7 +882,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unsafe-finally');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report unsafe-finally when break is inside a loop within finally', async () => {
@@ -988,7 +990,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report missing-error-cause for optional catch binding', async () => {
@@ -1008,7 +1010,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report missing-error-cause for catch param reassignment', async () => {
@@ -1029,7 +1031,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report missing-error-cause for AggregateError without cause', async () => {
@@ -1049,7 +1051,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report missing-error-cause for AggregateError with cause', async () => {
@@ -1089,7 +1091,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report missing-error-cause for vibe pattern with template literal', async () => {
@@ -1109,7 +1111,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report missing-error-cause when catch returns without throwing', async () => {
@@ -1208,7 +1210,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report return-await-in-try when returning import() without await in try block with catch', async () => {
@@ -1228,7 +1230,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report return-await-in-try when return uses await', async () => {
@@ -1730,7 +1732,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report no-return-wrap for Promise.resolve in then callback block body', async () => {
@@ -1742,7 +1744,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report no-return-wrap for direct value return in then callback', async () => {
@@ -1768,7 +1770,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'always-return');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report always-return when then callback returns a value', async () => {
@@ -1809,7 +1811,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'always-return');
 
     // Assert — inner function's return doesn't count as callback return
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   // --- no-return-wrap: additional ---
@@ -1823,7 +1825,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   // --- catch-or-return: additional ---
@@ -1863,7 +1865,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report no-callback-in-promise when no callback API is used', async () => {
@@ -1889,7 +1891,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report unobserved-variable when non-Promise call result (gildash confirms)', async () => {
@@ -1995,7 +1997,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report missing-error-cause when error variable has cause and is thrown', async () => {
@@ -2035,6 +2037,6 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 });
