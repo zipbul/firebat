@@ -3,13 +3,13 @@
     "file": "large.ts",
     "kind": "giant-file",
     "metrics": {
-      "lineCount": 17,
+      "lineCount": 16,
       "maxLines": 10
     },
     "span": {
       "end": {
         "column": 0,
-        "line": 17
+        "line": 16
       },
       "start": {
         "column": 0,

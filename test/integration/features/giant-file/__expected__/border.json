@@ -3,13 +3,13 @@
     "file": "border.ts",
     "kind": "giant-file",
     "metrics": {
-      "lineCount": 12,
+      "lineCount": 11,
       "maxLines": 10
     },
     "span": {
       "end": {
         "column": 0,
-        "line": 12
+        "line": 11
       },
       "start": {
         "column": 0,

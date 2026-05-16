@@ -3,13 +3,13 @@
     "file": "medium.ts",
     "kind": "giant-file",
     "metrics": {
-      "lineCount": 15,
+      "lineCount": 14,
       "maxLines": 10
     },
     "span": {
       "end": {
         "column": 0,
-        "line": 15
+        "line": 14
       },
       "start": {
         "column": 0,

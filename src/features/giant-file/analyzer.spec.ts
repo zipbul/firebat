@@ -67,4 +67,42 @@ describe('giant-file/analyzer', () => {
     expect(result.length).toBe(1);
     expect(result[0]?.metrics.maxLines).toBe(0);
   });
+
+  it('should not count trailing LF as an extra line (LF)', () => {
+    // Arrange — 3 lines of content + trailing LF (commonly produced by editors)
+    const sourceText = 'a\nb\nc\n';
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0 });
+
+    // Assert
+    expect(result.length).toBe(1);
+    expect(result[0]?.metrics.lineCount).toBe(3);
+  });
+
+  it('should not count trailing CRLF as an extra line', () => {
+    // Arrange — 3 lines of content + trailing CRLF
+    const sourceText = 'a\r\nb\r\nc\r\n';
+    const files = [file('src/a.ts', sourceText)];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0 });
+
+    // Assert
+    expect(result.length).toBe(1);
+    expect(result[0]?.metrics.lineCount).toBe(3);
+  });
+
+  it('should produce identical lineCount whether or not file ends with trailing newline', () => {
+    // Arrange
+    const withTrailing = 'a\nb\nc\n';
+    const withoutTrailing = 'a\nb\nc';
+    // Act
+    const r1 = analyzeGiantFile([file('src/a.ts', withTrailing)] as any, { maxLines: 0 });
+    const r2 = analyzeGiantFile([file('src/b.ts', withoutTrailing)] as any, { maxLines: 0 });
+
+    // Assert
+    expect(r1[0]?.metrics.lineCount).toBe(3);
+    expect(r2[0]?.metrics.lineCount).toBe(3);
+    expect(r1[0]?.metrics.lineCount).toBe(r2[0]?.metrics.lineCount);
+  });
 });
