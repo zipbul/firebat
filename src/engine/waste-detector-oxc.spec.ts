@@ -212,6 +212,35 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  // optional chain on literal null — RHS computed property never evaluates at runtime
+  it('detectWasteOxc - literal null?.[x] computed access - should report dead-store for x', () => {
+    // Arrange — `null?.[x]` short-circuits, so x is never actually read.
+    const source = `function f() {
+      const x = 1;
+      null?.[x];
+    }`;
+    const f = toFile('/null-optional.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(true);
+  });
+
+  it('detectWasteOxc - obj?.[x] (non-null base) - should NOT report dead-store for x', () => {
+    // Arrange — base is a real variable; x is genuinely read.
+    const source = `function f(obj: any) {
+      const x = 1;
+      return obj?.[x];
+    }`;
+    const f = toFile('/obj-optional.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert — control case
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
+  });
+
   // Bug 7: for-of 기존 변수 대입 write 추적
   // Bug 8: IIFE 내부 변수가 외부 함수 locals로 잘못 등록되어 false dead-store 발생
   it('detectWasteOxc - IIFE with inner variable - should not report IIFE-internal variable as dead-store', () => {
