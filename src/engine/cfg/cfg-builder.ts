@@ -559,6 +559,10 @@ export class OxcCFGBuilder {
     const hasFinalizer = tryNode.finalizer !== null;
     const finallyEntryNormal = hasFinalizer ? this.addNode(null) : null;
     const finallyEntryReturn = hasFinalizer ? this.addNode(null) : null;
+    // Exception-path entry into the finalizer. When the try has no catch but does
+    // have a finalizer, throws inside the try body must run the finalizer before
+    // propagating, so the finalizer body has to be reachable along the exception edge.
+    const finallyEntryException = hasFinalizer && tryNode.handler === null ? this.addNode(null) : null;
 
     if (finallyEntryReturn !== null) {
       this.finallyReturnEntryStack.push(finallyEntryReturn);
@@ -572,10 +576,18 @@ export class OxcCFGBuilder {
 
     this.cfg.addEdge(tryEntry, tryBlockEntry, EdgeType.Normal);
 
-    const { tryTails, catchTails } = this.visitTryBlock(tryNode, tryBlockEntry, loopStack);
+    const { tryTails, catchTails } = this.visitTryBlock(tryNode, tryBlockEntry, loopStack, finallyEntryException);
 
     if (tryNode.finalizer !== null && finallyEntryNormal !== null && finallyEntryReturn !== null) {
-      return this.visitFinalizer(tryNode.finalizer, tryTails, catchTails, finallyEntryNormal, finallyEntryReturn, loopStack);
+      return this.visitFinalizer(
+        tryNode.finalizer,
+        tryTails,
+        catchTails,
+        finallyEntryNormal,
+        finallyEntryReturn,
+        finallyEntryException,
+        loopStack,
+      );
     }
 
     if (finallyEntryReturn !== null) {
@@ -589,9 +601,20 @@ export class OxcCFGBuilder {
     tryNode: TryStatement,
     tryBlockEntry: NodeId,
     loopStack: readonly LoopTargets[],
+    finallyEntryException: NodeId | null,
   ): { tryTails: NodeId[]; catchTails: NodeId[] } {
     if (tryNode.handler === null) {
+      // No catch: finally (if present) acts as the exception handler so throws in the
+      // try body still run finally before the exception propagates outward.
+      if (finallyEntryException !== null) {
+        this.activeCatchEntryStack.push(finallyEntryException);
+      }
+
       const tryTails = this.visitStatement(tryNode.block, [tryBlockEntry], loopStack, null);
+
+      if (finallyEntryException !== null) {
+        this.activeCatchEntryStack.pop();
+      }
 
       return { tryTails, catchTails: [] };
     }
@@ -615,6 +638,7 @@ export class OxcCFGBuilder {
     catchTails: NodeId[],
     finallyEntryNormal: NodeId,
     finallyEntryReturn: NodeId,
+    finallyEntryException: NodeId | null,
     loopStack: readonly LoopTargets[],
   ): NodeId[] {
     // Normal completion path.
@@ -627,6 +651,18 @@ export class OxcCFGBuilder {
 
     for (const tail of finallyReturnTails) {
       this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
+    }
+
+    // Exception completion path (try without catch): run the finalizer, then re-raise
+    // the exception toward the next outer handler or the function exit.
+    if (finallyEntryException !== null) {
+      const finallyExceptionTails = this.visitStatement(finalizer, [finallyEntryException], loopStack, null);
+      const outerExceptionTarget =
+        this.activeCatchEntryStack.length > 0 ? this.activeCatchEntryStack[this.activeCatchEntryStack.length - 1]! : this.exitId;
+
+      for (const tail of finallyExceptionTails) {
+        this.cfg.addEdge(tail, outerExceptionTarget, EdgeType.Exception);
+      }
     }
 
     this.finallyReturnEntryStack.pop();

@@ -212,6 +212,23 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'fallback')).toBe(false);
   });
 
+  it('detectWasteOxc - try { throw } finally { read x } - no FP on x', () => {
+    // Arrange — `x` is read inside finally. Even when the try block throws (and there
+    // is no catch), finally must run, so the read is reachable. Previously the CFG
+    // sent throws directly to exit, bypassing finally.
+    const source = `function f() {
+      let x = 1;
+      try { throw new Error('boom'); }
+      finally { console.log(x); }
+    }`;
+    const f = toFile('/try-finally-read.ts', source);
+    // Act
+    const result = detectWasteOxc([f]);
+
+    // Assert
+    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
+  });
+
   it('detectWasteOxc - try { throw } catch(e) { read x } - no FP on x', () => {
     // Arrange — `x` is read inside catch. Previously the CFG sent every throw straight
     // to function exit (ignoring the active catch entry), so catch-body reads were
