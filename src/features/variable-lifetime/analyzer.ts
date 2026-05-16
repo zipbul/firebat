@@ -35,6 +35,8 @@ const payloadOffset = (payload: Node | ReadonlyArray<Node> | null): number => {
     return -1;
   }
 
+  // `Array.isArray` does not narrow ReadonlyArray<T> reliably; cast back to
+  // the element form in each branch.
   if (Array.isArray(payload)) {
     const first = (payload as ReadonlyArray<Node>)[0];
 
@@ -74,20 +76,20 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
 
   // Binary expression: a + b, a > b, etc. — pure if both operands are pure
   if (node.type === 'BinaryExpression') {
-    return isPureInitializer(node.left as Node) && isPureInitializer(node.right as Node);
+    return isPureInitializer(node.left) && isPureInitializer(node.right);
   }
 
   // Logical expression: a && b, a || b, a ?? b
   if (node.type === 'LogicalExpression') {
-    return isPureInitializer(node.left as Node) && isPureInitializer(node.right as Node);
+    return isPureInitializer(node.left) && isPureInitializer(node.right);
   }
 
   // Conditional expression: cond ? a : b
   if (node.type === 'ConditionalExpression') {
     return (
-      isPureInitializer(node.test as Node) &&
-      isPureInitializer(node.consequent as Node) &&
-      isPureInitializer(node.alternate as Node)
+      isPureInitializer(node.test) &&
+      isPureInitializer(node.consequent) &&
+      isPureInitializer(node.alternate)
     );
   }
 
@@ -97,7 +99,7 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
       return false;
     }
 
-    return isPureInitializer(node.argument as Node);
+    return isPureInitializer(node.argument);
   }
 
   // Template literal (without tag): `hello ${name}`
@@ -145,12 +147,12 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
       if (prop.type === 'Property') {
         // Computed key: { [expr]: val } — the key expression must also be pure
         if (prop.computed === true) {
-          if (!isPureInitializer(prop.key as Node)) {
+          if (!isPureInitializer(prop.key)) {
             return false;
           }
         }
 
-        if (!isPureInitializer(prop.value as Node)) {
+        if (!isPureInitializer(prop.value)) {
           return false;
         }
       }
@@ -161,12 +163,12 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
 
   // Member expression: a.b, a.b.c — treat as pure (getter/proxy risk accepted per spec)
   if (node.type === 'MemberExpression') {
-    return isPureInitializer(node.object as Node);
+    return isPureInitializer(node.object);
   }
 
   // Chain expression: a?.b
   if (node.type === 'ChainExpression') {
-    return isPureInitializer(node.expression as Node);
+    return isPureInitializer(node.expression);
   }
 
   // TypeScript type casts — pure (just a type annotation)
@@ -176,12 +178,12 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
     node.type === 'TSNonNullExpression' ||
     node.type === 'TSTypeAssertion'
   ) {
-    return isPureInitializer(node.expression as Node);
+    return isPureInitializer(node.expression);
   }
 
   // Parenthesized expression
   if (node.type === 'ParenthesizedExpression') {
-    return isPureInitializer(node.expression as Node);
+    return isPureInitializer(node.expression);
   }
 
   // Impure: function calls, new, await, yield, assignment, update, spread, sequence
@@ -229,10 +231,10 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
 
   for (const stmt of bodyStatements) {
     if (stmt.type === 'IfStatement') {
-      const consequent = stmt.consequent as Node | null;
-      const alternate = stmt.alternate !== null ? (stmt.alternate as Node) : null;
+      const consequent = stmt.consequent;
+      const alternate = stmt.alternate;
 
-      if (consequent !== null && consequent.type === 'BlockStatement') {
+      if (consequent.type === 'BlockStatement') {
         blocks.push({ type: 'if-consequent', start: consequent.start, end: consequent.end });
       }
 
@@ -281,14 +283,14 @@ const collectScopeBlocks = (bodyStatements: ReadonlyArray<Node>): ReadonlyArray<
     }
 
     if (stmt.type === 'TryStatement') {
-      const block = stmt.block as Node;
-      const handler = stmt.handler !== null ? (stmt.handler as Node) : null;
+      const block = stmt.block;
+      const handler = stmt.handler !== null ? (stmt.handler) : null;
       // finalizer is handled only for exclusion (see checkScopeNarrowing)
 
       blocks.push({ type: 'try-block', start: block.start, end: block.end });
 
       if (handler !== null && handler.type === 'CatchClause') {
-        const handlerBody = handler.body as Node;
+        const handlerBody = handler.body;
 
         blocks.push({ type: 'catch-block', start: handlerBody.start, end: handlerBody.end });
       }
@@ -466,16 +468,16 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
       continue;
     }
 
-    const finalizer = stmt.finalizer !== null ? (stmt.finalizer as Node) : null;
-    const block = stmt.block as Node;
-    const handler = stmt.handler !== null ? (stmt.handler as Node) : null;
+    const finalizer = stmt.finalizer !== null ? (stmt.finalizer) : null;
+    const block = stmt.block;
+    const handler = stmt.handler !== null ? (stmt.handler) : null;
 
     if (finalizer !== null) {
       finalizerRanges.push({ start: finalizer.start, end: finalizer.end });
     }
 
     if (handler !== null && handler.type === 'CatchClause') {
-      const handlerBody = handler.body as Node;
+      const handlerBody = handler.body;
 
       tryHandlerRanges.push({
         tryStart: block.start,
@@ -841,10 +843,10 @@ const analyzeVariableLifetime = (
       // Each entry: { startOffset, capturedNames } — used to check if moving a declaration
       // past a closure definition would break capture semantics.
       const nestedFunctions: Array<{ readonly startOffset: number; readonly capturedNames: Set<string> }> = [];
-      const outerUsages = collectVariables(bodyNode as Node, { includeNestedFunctions: false });
+      const outerUsages = collectVariables(bodyNode, { includeNestedFunctions: false });
       const outerReadKeys = new Set(outerUsages.filter(u => u.isRead).map(u => `${u.name}@${u.location}`));
       const outerWriteKeys = new Set(outerUsages.filter(u => u.isWrite).map(u => `${u.name}@${u.location}`));
-      const nestedFnNodes = collectOxcNodes(bodyNode as Node, n => isFunctionNode(n));
+      const nestedFnNodes = collectOxcNodes(bodyNode, n => isFunctionNode(n));
 
       for (const nfn of nestedFnNodes) {
         const nestedUsages = collectVariables(nfn, { includeNestedFunctions: true });
