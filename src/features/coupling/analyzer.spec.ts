@@ -207,6 +207,35 @@ describe('analyzeCoupling', () => {
     expect(aHotspot?.score).toBe(0);
   });
 
+  it('[HP] fan-in-only sink module (target only, no adjacency key) is evaluated for hotspot', () => {
+    // hub is imported by many but never imports anything — appears only as target,
+    // never as adjacency key. Previously skipped because `modules` came from Object.keys(adjacency).
+    const adjacency: Record<string, string[]> = {};
+
+    for (let i = 1; i <= 16; i++) {
+      adjacency[`importer${i}`] = ['hub'];
+    }
+
+    const deps: DependencyAnalysis = {
+      adjacency,
+      exportStats: {},
+      cycles: noCycles,
+      fanIn: [],
+      fanOut: [],
+      cuts: [],
+      layerViolations: [],
+      deadExports: [],
+    };
+    const result = analyzeCoupling(deps);
+    const hubHotspot = result.find(h => h.module === 'hub');
+
+    expect(hubHotspot).toBeDefined();
+    // hub has fanIn=16, fanOut=0 → instability=0, abstractness=0
+    // distance = |0 + 0 - 1| = 1 → off-main-sequence; also rigid candidate
+    expect(hubHotspot?.metrics.fanIn).toBe(16);
+    expect(hubHotspot?.metrics.fanOut).toBe(0);
+  });
+
   it('[SC] off-main-sequence score reflects distance metric', () => {
     // Isolated S: fanIn=0, fanOut=0, instability=0, abstractness=0
     // distance = |0 + 0 - 1| = 1 → score = 100

@@ -49,7 +49,17 @@ const resolveThresholds = (config?: FirebatCouplingConfig): CouplingThresholds =
 const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCouplingConfig): ReadonlyArray<CouplingHotspot> => {
   const adjacency = dependencies.adjacency ?? {};
   const exportStats = dependencies.exportStats ?? {};
-  const modules = Object.keys(adjacency).sort((a, b) => a.localeCompare(b));
+  // Include modules that appear only as import targets (pure sinks).
+  // Object.keys(adjacency) alone misses fan-in-only modules.
+  const moduleSet = new Set<string>(Object.keys(adjacency));
+
+  for (const targets of Object.values(adjacency)) {
+    for (const target of targets) {
+      moduleSet.add(target);
+    }
+  }
+
+  const modules = [...moduleSet].sort((a, b) => a.localeCompare(b));
 
   if (modules.length === 0) {
     return createEmptyCoupling();
