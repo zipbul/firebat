@@ -1,3 +1,4 @@
+import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { visitorKeys } from 'oxc-parser';
@@ -7,7 +8,7 @@ import { normalizeForFingerprint } from './ast-normalizer';
 import { isOxcNode } from './oxc-ast-utils';
 
 const pushLiteralValue = (node: Node, diffs: string[], includeLiteralValues: boolean): void => {
-  if (node.type !== 'Literal') {
+  if (!is.Literal(node)) {
     return;
   }
 
@@ -144,7 +145,7 @@ const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): s
   const visit = (n: Node) => {
     // Parenthesized expressions carry no semantic meaning; descend into the wrapped
     // expression without pushing the wrapper so `(a + b)` and `a + b` produce the same fingerprint.
-    if (n.type === 'ParenthesizedExpression') {
+    if (is.ParenthesizedExpression(n)) {
       const inner = (n as unknown as Record<string, unknown>).expression;
 
       if (inner !== null && inner !== undefined && typeof inner === 'object') {
@@ -170,7 +171,7 @@ const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): s
     }
 
     // Identifier name handling
-    if (n.type === 'Identifier') {
+    if (is.Identifier(n)) {
       pushIdentifierToken(rec, diffs, options.includeIdentifierNames);
     }
 

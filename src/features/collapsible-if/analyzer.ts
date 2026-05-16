@@ -1,3 +1,4 @@
+import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -24,7 +25,7 @@ const createEmptyCollapsibleIf = (): ReadonlyArray<CollapsibleIfItem> => [];
 
 /** Count statements in a block or treat a single statement as 1. */
 const countBlockStatements = (node: Node): number => {
-  if (node.type !== 'BlockStatement') {
+  if (!is.BlockStatement(node)) {
     return 1;
   }
 
@@ -50,7 +51,7 @@ const MIN_INNER_STMTS = 3;
  * and inner if has no else with 3+ statements in its consequent.
  */
 const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | null => {
-  if (ifNode.type !== 'IfStatement') {
+  if (!is.IfStatement(ifNode)) {
     return null;
   }
 
@@ -62,7 +63,7 @@ const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | nu
   const outerConsequent = ifNode.consequent;
 
   // Outer consequent must be a block with exactly 1 statement
-  if (outerConsequent.type !== 'BlockStatement') {
+  if (!is.BlockStatement(outerConsequent)) {
     return null;
   }
 
@@ -75,7 +76,7 @@ const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | nu
   const innerStmt = outerBody[0] as Node;
 
   // Inner statement must be an IfStatement with no else
-  if (innerStmt.type !== 'IfStatement') {
+  if (!is.IfStatement(innerStmt)) {
     return null;
   }
 
@@ -104,7 +105,7 @@ const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | nu
  * Can be simplified to `if(a) { ... } else if(b) { ... }`.
  */
 const detectCollapsibleElseIf = (ifNode: Node, sourceText: string): Opportunity | null => {
-  if (ifNode.type !== 'IfStatement') {
+  if (!is.IfStatement(ifNode)) {
     return null;
   }
 
@@ -116,7 +117,7 @@ const detectCollapsibleElseIf = (ifNode: Node, sourceText: string): Opportunity 
   }
 
   // Alternate must be a BlockStatement
-  if (alternate.type !== 'BlockStatement') {
+  if (!is.BlockStatement(alternate)) {
     return null;
   }
 
@@ -130,7 +131,7 @@ const detectCollapsibleElseIf = (ifNode: Node, sourceText: string): Opportunity 
   const innerStmt = elseBody[0] as Node;
 
   // That statement must be an IfStatement (inner if may have else — matches Clippy behavior)
-  if (innerStmt.type !== 'IfStatement') {
+  if (!is.IfStatement(innerStmt)) {
     return null;
   }
 

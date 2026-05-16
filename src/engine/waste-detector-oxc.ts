@@ -1,3 +1,4 @@
+import { is } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -24,7 +25,7 @@ const addClosureReadsFromFunction = (nestedFunction: Node, closureReadNames: Set
 };
 
 const isRelevantNestedFunction = (nestedFunction: Node, outerReadNames: Set<string>): boolean => {
-  if (nestedFunction.type !== 'FunctionDeclaration') {
+  if (!is.FunctionDeclaration(nestedFunction)) {
     return true;
   }
 
@@ -171,7 +172,7 @@ const buildScopeMapForFunctionBody = (
 
     if (Array.isArray(blockBody)) {
       for (const stmt of blockBody as ReadonlyArray<Node>) {
-        if (stmt.type === 'VariableDeclaration') {
+        if (is.VariableDeclaration(stmt)) {
           const kind = (stmt as unknown as Record<string, unknown>).kind as string;
           const declarations = (stmt as unknown as Record<string, unknown>).declarations;
 
@@ -198,7 +199,7 @@ const buildScopeMapForFunctionBody = (
   for (const b of bodies) {
     walkBlock(b);
 
-    const innerBlocks = collectOxcNodes(b, n => n.type === 'BlockStatement');
+    const innerBlocks = collectOxcNodes(b, n => is.BlockStatement(n));
 
     for (const blk of innerBlocks) {
       walkBlock(blk);
@@ -246,7 +247,7 @@ const buildScopeMapForFunctionBody = (
 };
 
 const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void => {
-  if (pattern.type === 'Identifier') {
+  if (is.Identifier(pattern)) {
     const name = (pattern as unknown as Record<string, unknown>).name;
 
     if (typeof name === 'string') {
@@ -256,20 +257,20 @@ const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void
     return;
   }
 
-  if (pattern.type === 'ObjectPattern') {
+  if (is.ObjectPattern(pattern)) {
     const properties = (pattern as unknown as Record<string, unknown>).properties;
 
     if (Array.isArray(properties)) {
       for (const prop of properties as ReadonlyArray<Node>) {
         const p = prop as unknown as Record<string, unknown>;
 
-        if (prop.type === 'Property') {
+        if (is.Property(prop)) {
           const value = p.value as Node | undefined;
 
           if (value) {
             extractDeclaredNames(value, out);
           }
-        } else if (prop.type === 'RestElement') {
+        } else if (is.RestElement(prop)) {
           const arg = p.argument as Node | undefined;
 
           if (arg) {
@@ -282,7 +283,7 @@ const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void
     return;
   }
 
-  if (pattern.type === 'ArrayPattern') {
+  if (is.ArrayPattern(pattern)) {
     const elements = (pattern as unknown as Record<string, unknown>).elements;
 
     if (Array.isArray(elements)) {
@@ -296,7 +297,7 @@ const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void
     return;
   }
 
-  if (pattern.type === 'AssignmentPattern') {
+  if (is.AssignmentPattern(pattern)) {
     const left = (pattern as unknown as Record<string, unknown>).left as Node | undefined;
 
     if (left) {
@@ -306,7 +307,7 @@ const extractDeclaredNames = (pattern: Node, out: Array<{ name: string }>): void
     return;
   }
 
-  if (pattern.type === 'RestElement') {
+  if (is.RestElement(pattern)) {
     const arg = (pattern as unknown as Record<string, unknown>).argument as Node | undefined;
 
     if (arg) {
@@ -396,7 +397,7 @@ const collectWasteFindingsForFunction = (
 
   if (Array.isArray(fnParams)) {
     for (const param of fnParams as ReadonlyArray<Node>) {
-      if (param.type === 'AssignmentPattern') {
+      if (is.AssignmentPattern(param)) {
         const right = (param as unknown as Record<string, unknown>).right as Node | undefined;
 
         if (right) {

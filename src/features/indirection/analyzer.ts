@@ -1,3 +1,4 @@
+import { is } from '@zipbul/gildash';
 import type { Gildash } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node, Program } from 'oxc-parser';
 
@@ -58,9 +59,9 @@ const collectArityProtectiveArrows = (program: Node): Set<number> => {
 
   walkOxcTreeWithParent(program, (node, parent) => {
     if (
-      node.type !== 'ArrowFunctionExpression' ||
+      !is.ArrowFunctionExpression(node) ||
       parent === null ||
-      parent.type !== 'CallExpression' ||
+      !is.CallExpression(parent) ||
       !Array.isArray(parent.arguments) ||
       !parent.arguments.includes(node)
     ) {
@@ -69,12 +70,12 @@ const collectArityProtectiveArrows = (program: Node): Set<number> => {
 
     const callee = parent.callee as Node;
 
-    if (callee.type !== 'MemberExpression') {
+    if (!is.MemberExpression(callee)) {
       return true;
     }
 
     const property = callee.property as Node;
-    const methodName = property.type === 'Identifier' ? property.name : null;
+    const methodName = is.Identifier(property) ? property.name : null;
 
     if (methodName !== null && ARITY_SENSITIVE_HIGH_ORDER_METHODS.has(methodName)) {
       arrowStarts.add(node.start);
@@ -98,21 +99,21 @@ const getSpan = (node: Node, sourceText: string) => {
 };
 
 const getAwaitedCallExpression = (node: Node): Node | null => {
-  if (node.type !== 'AwaitExpression') {
+  if (!is.AwaitExpression(node)) {
     return null;
   }
 
   const argument = node.argument;
 
-  if (argument.type === 'CallExpression') {
+  if (is.CallExpression(argument)) {
     return argument;
   }
 
   // `await fn?.(args)` — unwrap ChainExpression to expose the optional CallExpression.
-  if (argument.type === 'ChainExpression') {
+  if (is.ChainExpression(argument)) {
     const inner = (argument as unknown as Record<string, unknown>).expression as Node | undefined;
 
-    if (inner && inner.type === 'CallExpression') {
+    if (inner && is.CallExpression(inner)) {
       return inner;
     }
   }
@@ -121,16 +122,16 @@ const getAwaitedCallExpression = (node: Node): Node | null => {
 };
 
 const getCallExpression = (node: Node): Node | null => {
-  if (node.type === 'CallExpression') {
+  if (is.CallExpression(node)) {
     return node;
   }
 
   // Optional calls (`fn?.(args)`) are wrapped in a ChainExpression. Unwrap to expose
   // the inner CallExpression so optional-call wrappers are detected like plain ones.
-  if (node.type === 'ChainExpression') {
+  if (is.ChainExpression(node)) {
     const inner = (node as unknown as Record<string, unknown>).expression as Node | undefined;
 
-    if (inner && inner.type === 'CallExpression') {
+    if (inner && is.CallExpression(inner)) {
       return inner;
     }
   }
@@ -147,7 +148,7 @@ const getCallFromExpression = (expression: Node | null): Node | null => {
 };
 
 const getCallFromStatement = (statement: Node): Node | null => {
-  if (statement.type === 'ReturnStatement') {
+  if (is.ReturnStatement(statement)) {
     const argument = statement.argument;
 
     if (!argument) {
@@ -157,7 +158,7 @@ const getCallFromStatement = (statement: Node): Node | null => {
     return getCallFromExpression(argument);
   }
 
-  if (statement.type === 'ExpressionStatement') {
+  if (is.ExpressionStatement(statement)) {
     return getCallFromExpression(statement.expression);
   }
 
@@ -186,17 +187,17 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
   let restParam: string | null = null;
 
   for (const paramNode of paramsValue) {
-    if (paramNode.type === 'Identifier' && 'name' in paramNode && typeof paramNode.name === 'string') {
+    if (is.Identifier(paramNode) && 'name' in paramNode && typeof paramNode.name === 'string') {
       params.push(paramNode.name);
 
       continue;
     }
 
-    if (paramNode.type === 'ObjectPattern') {
+    if (is.ObjectPattern(paramNode)) {
       const properties = paramNode.properties;
 
       for (const prop of properties) {
-        if (prop.type === 'Property') {
+        if (is.Property(prop)) {
           if (prop.value.type !== 'Identifier') {
             return null;
           }
@@ -206,10 +207,10 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
           continue;
         }
 
-        if (prop.type === 'RestElement') {
+        if (is.RestElement(prop)) {
           const argument = prop.argument as Node;
 
-          if (argument.type !== 'Identifier') {
+          if (!is.Identifier(argument)) {
             return null;
           }
 
@@ -226,10 +227,10 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
       continue;
     }
 
-    if (paramNode.type === 'RestElement') {
+    if (is.RestElement(paramNode)) {
       const argument = paramNode.argument;
 
-      if (argument.type !== 'Identifier') {
+      if (!is.Identifier(argument)) {
         return null;
       }
 
@@ -250,7 +251,7 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
 };
 
 const isPassthroughArgs = (callExpression: Node, params: readonly string[], restParam: string | null): boolean => {
-  if (callExpression.type !== 'CallExpression') {
+  if (!is.CallExpression(callExpression)) {
     return false;
   }
 
@@ -274,20 +275,20 @@ const isPassthroughArgs = (callExpression: Node, params: readonly string[], rest
     }
 
     if (isRest) {
-      if (arg.type !== 'SpreadElement') {
+      if (!is.SpreadElement(arg)) {
         return false;
       }
 
       const spreadArg = arg.argument;
 
-      if (spreadArg.type !== 'Identifier' || spreadArg.name !== restParam) {
+      if (!is.Identifier(spreadArg) || spreadArg.name !== restParam) {
         return false;
       }
 
       continue;
     }
 
-    if (arg.type !== 'Identifier' || arg.name !== name) {
+    if (!is.Identifier(arg) || arg.name !== name) {
       return false;
     }
   }
@@ -310,7 +311,7 @@ const getWrapperCall = (node: Node): Node | null => {
   }
 
   const maybeCall =
-    body.type === 'BlockStatement'
+    is.BlockStatement(body)
       ? (() => {
           const statements = body.body;
 
@@ -340,21 +341,21 @@ const getWrapperCall = (node: Node): Node | null => {
 };
 
 const resolveCalleeName = (callExpression: Node): string | null => {
-  if (callExpression.type !== 'CallExpression') {
+  if (!is.CallExpression(callExpression)) {
     return null;
   }
 
   const callee = callExpression.callee as Node;
 
-  if (callee.type === 'Identifier') {
+  if (is.Identifier(callee)) {
     return callee.name;
   }
 
-  if (callee.type === 'MemberExpression') {
+  if (is.MemberExpression(callee)) {
     const object = callee.object as Node;
     const property = callee.property as Node;
 
-    if (object.type === 'ThisExpression' && property.type === 'Identifier') {
+    if (is.ThisExpression(object) && is.Identifier(property)) {
       return property.name;
     }
   }
@@ -377,21 +378,21 @@ interface NamespaceCalleeRef {
 type SimpleCalleeRef = LocalCalleeRef | NamespaceCalleeRef;
 
 const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
-  if (callExpression.type !== 'CallExpression') {
+  if (!is.CallExpression(callExpression)) {
     return null;
   }
 
   const callee = callExpression.callee as Node;
 
-  if (callee.type === 'Identifier') {
+  if (is.Identifier(callee)) {
     return { kind: 'local', name: callee.name };
   }
 
-  if (callee.type === 'MemberExpression') {
+  if (is.MemberExpression(callee)) {
     const object = callee.object as Node;
     const property = callee.property as Node;
 
-    if (object.type === 'Identifier' && property.type === 'Identifier') {
+    if (is.Identifier(object) && is.Identifier(property)) {
       return { kind: 'namespace', ns: object.name, name: property.name };
     }
   }
@@ -425,7 +426,7 @@ const collectFunctionNames = (program: Node): CollectedFunctionNames => {
       const idNode = node.id;
       const initNode = node.init;
 
-      if (idNode.type !== 'Identifier' || initNode === null || !isFunctionNode(initNode)) {
+      if (!is.Identifier(idNode) || initNode === null || !isFunctionNode(initNode)) {
         return;
       }
 
@@ -750,7 +751,7 @@ const analyzeIndirection = async (
     const handleThinWrapper = (node: Node): void => {
       // Skip arrow callbacks to .map/.filter/.then/etc. — inlining them is unsafe
       // because the higher-order method passes extra arguments.
-      if (node.type === 'ArrowFunctionExpression' && arityProtectiveArrowStarts.has(node.start)) {
+      if (is.ArrowFunctionExpression(node) && arityProtectiveArrowStarts.has(node.start)) {
         return;
       }
 
@@ -845,7 +846,7 @@ const analyzeIndirection = async (
 
         const typeAnnotation = node.typeAnnotation;
 
-        if (typeAnnotation.type !== 'TSTypeReference') {
+        if (!is.TSTypeReference(typeAnnotation)) {
           return;
         }
 
@@ -859,9 +860,9 @@ const analyzeIndirection = async (
           const typeName = typeAnnotation.typeName;
           let targetName = 'unknown';
 
-          if (typeName.type === 'Identifier') {
+          if (is.Identifier(typeName)) {
             targetName = typeName.name;
-          } else if (typeName.type === 'TSQualifiedName') {
+          } else if (is.TSQualifiedName(typeName)) {
             targetName = getNodeHeader(typeName);
           }
 
@@ -875,9 +876,9 @@ const analyzeIndirection = async (
           const typeName = typeAnnotation.typeName;
           let targetTypeName: string | null = null;
 
-          if (typeName.type === 'Identifier') {
+          if (is.Identifier(typeName)) {
             targetTypeName = typeName.name;
-          } else if (typeName.type === 'TSQualifiedName') {
+          } else if (is.TSQualifiedName(typeName)) {
             targetTypeName = getNodeHeader(typeName);
           }
 
@@ -921,7 +922,7 @@ const analyzeIndirection = async (
     }).visit(file.program);
 
     walkOxcTreeWithParent(file.program, (node, parent) => {
-      if (node.type === 'TSInterfaceDeclaration' && node.declare !== true) {
+      if (is.TSInterfaceDeclaration(node) && node.declare !== true) {
         const extendsArr = node.extends;
 
         if (extendsArr.length === 0) {
@@ -935,7 +936,7 @@ const analyzeIndirection = async (
         }
 
         // Skip module augmentation (parent is TSModuleBlock)
-        if (parent !== null && parent.type === 'TSModuleBlock') {
+        if (parent !== null && is.TSModuleBlock(parent)) {
           return true;
         }
 

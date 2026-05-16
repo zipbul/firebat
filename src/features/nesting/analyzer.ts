@@ -1,3 +1,4 @@
+import { is } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -86,7 +87,7 @@ const shouldIncreaseNestingDepth = (nodeType: string): boolean => {
  *   a && b || c && d  → +2 (two && sequences separated by ||)
  */
 const countLogicalComplexity = (node: Node): number => {
-  if (node.type !== 'LogicalExpression') {
+  if (!is.LogicalExpression(node)) {
     return 0;
   }
 
@@ -94,7 +95,7 @@ const countLogicalComplexity = (node: Node): number => {
   const operators: string[] = [];
 
   const flatten = (expr: Node): void => {
-    if (expr.type !== 'LogicalExpression') {
+    if (!is.LogicalExpression(expr)) {
       return;
     }
 
@@ -141,18 +142,18 @@ const isIterationMethod = (name: string): boolean => {
 };
 
 const getMemberObjectIdentifier = (node: Node): string | null => {
-  if (node.type !== 'MemberExpression') {
+  if (!is.MemberExpression(node)) {
     return null;
   }
 
   const obj = node.object as Node;
   const prop = node.property as Node;
 
-  if (obj.type !== 'Identifier') {
+  if (!is.Identifier(obj)) {
     return null;
   }
 
-  if (prop.type !== 'Identifier') {
+  if (!is.Identifier(prop)) {
     return null;
   }
 
@@ -160,17 +161,17 @@ const getMemberObjectIdentifier = (node: Node): string | null => {
 };
 
 const getIterationTarget = (node: Node): string | null => {
-  if (node.type === 'ForOfStatement' || node.type === 'ForInStatement') {
+  if (is.ForOfStatement(node) || is.ForInStatement(node)) {
     const right = node.right as Node;
 
-    if (right.type === 'Identifier') {
+    if (is.Identifier(right)) {
       return right.name;
     }
 
     return null;
   }
 
-  if (node.type === 'ForStatement') {
+  if (is.ForStatement(node)) {
     const test = node.test;
 
     if (test === null || test === undefined) {
@@ -179,19 +180,19 @@ const getIterationTarget = (node: Node): string | null => {
 
     const testNode = test as Node;
 
-    if (testNode.type !== 'BinaryExpression') {
+    if (!is.BinaryExpression(testNode)) {
       return null;
     }
 
     const right = testNode.right as Node;
 
-    if (right.type !== 'MemberExpression') {
+    if (!is.MemberExpression(right)) {
       return null;
     }
 
     const objName = getMemberObjectIdentifier(right);
     const prop = right.property as Node;
-    const propName = prop.type === 'Identifier' ? prop.name : null;
+    const propName = is.Identifier(prop) ? prop.name : null;
 
     if (objName && propName === 'length') {
       return objName;
@@ -200,15 +201,15 @@ const getIterationTarget = (node: Node): string | null => {
     return null;
   }
 
-  if (node.type === 'CallExpression') {
+  if (is.CallExpression(node)) {
     const callee = node.callee as Node;
 
-    if (callee.type !== 'MemberExpression') {
+    if (!is.MemberExpression(callee)) {
       return null;
     }
 
     const prop = callee.property as Node;
-    const propName = prop.type === 'Identifier' ? prop.name : null;
+    const propName = is.Identifier(prop) ? prop.name : null;
 
     if (!propName || !isIterationMethod(propName)) {
       return null;
@@ -227,15 +228,15 @@ const getIterationTarget = (node: Node): string | null => {
 const TEST_RUNNER_FUNCTIONS = new Set(['describe', 'it', 'test', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll']);
 
 const isTestRunnerCall = (callee: Node): boolean => {
-  if (callee.type === 'Identifier') {
+  if (is.Identifier(callee)) {
     return TEST_RUNNER_FUNCTIONS.has(String(callee.name ?? ''));
   }
 
   // Handle `describe.skip(...)`, `it.only(...)`, etc.
-  if (callee.type === 'MemberExpression') {
+  if (is.MemberExpression(callee)) {
     const obj = callee.object as Node;
 
-    if (obj.type === 'Identifier') {
+    if (is.Identifier(obj)) {
       return TEST_RUNNER_FUNCTIONS.has(String(obj.name ?? ''));
     }
   }
@@ -260,7 +261,7 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
     return max;
   }
 
-  if (node.type === 'CallExpression') {
+  if (is.CallExpression(node)) {
     const args = Array.isArray(node.arguments) ? (node.arguments as ReadonlyArray<Node>) : [];
     let max = depth;
     const callee = node.callee as Node;
@@ -339,15 +340,15 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
     return max;
   }
 
-  if (node.type === 'CallExpression') {
+  if (is.CallExpression(node)) {
     const callee = node.callee as Node;
     let chainDepth = depth;
 
     // Check if callee is a MemberExpression with then/catch/finally
-    if (callee.type === 'MemberExpression') {
+    if (is.MemberExpression(callee)) {
       const prop = callee.property as Node;
 
-      if (prop.type === 'Identifier' && PROMISE_METHODS.has(prop.name)) {
+      if (is.Identifier(prop) && PROMISE_METHODS.has(prop.name)) {
         chainDepth = depth + 1;
 
         // Recurse into the object (the chained receiver) to count further chain links
@@ -462,7 +463,7 @@ const analyzeFunctionNode = (
   };
 
   const maybeReportCallbackQuadratic = (node: Node, target: string): void => {
-    if (node.type !== 'CallExpression') {
+    if (!is.CallExpression(node)) {
       return;
     }
 
@@ -490,7 +491,7 @@ const analyzeFunctionNode = (
    * we still need to descend into non-logical operands (e.g. ternary inside &&).
    */
   const visitLogicalLeaves = (node: Node, depth: number): void => {
-    if (node.type === 'LogicalExpression') {
+    if (is.LogicalExpression(node)) {
       // Halstead: count ALL logical operators in the chain (visit() only counts the top-level one)
       collectHalstead(node);
       visitLogicalLeaves(node.left as Node, depth);
@@ -503,7 +504,7 @@ const analyzeFunctionNode = (
   };
 
   const visitIfStatement = (node: Node, depth: number): void => {
-    if (node.type !== 'IfStatement') {
+    if (!is.IfStatement(node)) {
       return;
     }
 
@@ -567,11 +568,11 @@ const analyzeFunctionNode = (
 
     // Binary/Logical/Assignment/Unary/Update operators
     if (
-      node.type === 'BinaryExpression' ||
-      node.type === 'LogicalExpression' ||
-      node.type === 'AssignmentExpression' ||
-      node.type === 'UnaryExpression' ||
-      node.type === 'UpdateExpression'
+      is.BinaryExpression(node) ||
+      is.LogicalExpression(node) ||
+      is.AssignmentExpression(node) ||
+      is.UnaryExpression(node) ||
+      is.UpdateExpression(node)
     ) {
       const op = String(node.operator);
 
@@ -583,42 +584,42 @@ const analyzeFunctionNode = (
     }
 
     // ConditionalExpression (ternary)
-    if (node.type === 'ConditionalExpression') {
+    if (is.ConditionalExpression(node)) {
       totalOperators++;
 
       uniqueOperators.add('?:');
     }
 
     // Function call operator
-    if (node.type === 'CallExpression') {
+    if (is.CallExpression(node)) {
       totalOperators++;
 
       uniqueOperators.add('()');
     }
 
     // Object creation operator
-    if (node.type === 'NewExpression') {
+    if (is.NewExpression(node)) {
       totalOperators++;
 
       uniqueOperators.add('new');
     }
 
     // Await operator
-    if (node.type === 'AwaitExpression') {
+    if (is.AwaitExpression(node)) {
       totalOperators++;
 
       uniqueOperators.add('await');
     }
 
     // Yield operator
-    if (node.type === 'YieldExpression') {
+    if (is.YieldExpression(node)) {
       totalOperators++;
 
       uniqueOperators.add('yield');
     }
 
     // Property access operator
-    if (node.type === 'MemberExpression') {
+    if (is.MemberExpression(node)) {
       const optional = node.optional;
       const computed = node.computed;
       const op = optional ? '?.' : computed ? '[]' : '.';
@@ -629,7 +630,7 @@ const analyzeFunctionNode = (
     }
 
     // Operands: Identifier
-    if (node.type === 'Identifier') {
+    if (is.Identifier(node)) {
       const name = node.name;
 
       if (name.length > 0) {
@@ -640,7 +641,7 @@ const analyzeFunctionNode = (
     }
 
     // Operands: Literals
-    if (node.type === 'Literal') {
+    if (is.Literal(node)) {
       const raw = String(node.raw ?? node.value ?? 'Literal');
 
       totalOperands++;
@@ -649,13 +650,13 @@ const analyzeFunctionNode = (
     }
 
     // Operands: this, super
-    if (node.type === 'ThisExpression') {
+    if (is.ThisExpression(node)) {
       totalOperands++;
 
       uniqueOperands.add('this');
     }
 
-    if (node.type === 'Super') {
+    if (is.Super(node)) {
       totalOperands++;
 
       uniqueOperands.add('super');

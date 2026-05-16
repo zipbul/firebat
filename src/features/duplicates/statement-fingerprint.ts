@@ -1,3 +1,4 @@
+import { is } from '@zipbul/gildash';
 /**
  * 함수 AST 노드에서 statement 단위 fingerprint를 추출한다.
  *
@@ -56,7 +57,7 @@ export const extractStatementFingerprintBag = (functionNode: Node): ReadonlyArra
  */
 const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
   // MethodDefinition → value는 FunctionExpression
-  if (node.type === 'MethodDefinition') {
+  if (is.MethodDefinition(node)) {
     const value = node.value as Node | null | undefined;
 
     if (isOxcNode(value)) {
@@ -67,7 +68,7 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
   }
 
   // FunctionDeclaration, FunctionExpression, ArrowFunctionExpression
-  if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+  if (is.FunctionDeclaration(node) || is.FunctionExpression(node) || is.ArrowFunctionExpression(node)) {
     const body = node.body;
 
     if (body === null || body === undefined) {
@@ -75,7 +76,7 @@ const getBodyStatements = (node: Node): ReadonlyArray<Node> => {
     }
 
     // BlockStatement → .body 배열
-    if (body.type === 'BlockStatement') {
+    if (is.BlockStatement(body)) {
       return body.body as ReadonlyArray<Node>;
     }
 
