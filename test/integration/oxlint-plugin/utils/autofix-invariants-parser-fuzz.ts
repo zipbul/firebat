@@ -527,8 +527,4 @@ const runParserAutofixInvariantsFuzz = (): void => {
   }
 };
 
-const canRunParserAutofixInvariantsFuzz = (): boolean => {
-  return typeof parseSync === 'function';
-};
-
-export { runParserAutofixInvariantsFuzz, canRunParserAutofixInvariantsFuzz };
+export { runParserAutofixInvariantsFuzz };
