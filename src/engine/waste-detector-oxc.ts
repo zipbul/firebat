@@ -1,6 +1,6 @@
 import type { Function as OxcFunction, Node } from 'oxc-parser';
 
-import { buildLineOffsets, getLineColumn, ScopeTracker, walk } from '@zipbul/gildash';
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import type { WasteFinding } from '..';
 import type { BitSet, ParsedFile } from './types';
@@ -113,119 +113,6 @@ const isDefClosureCaptured = (
   return false;
 };
 
-const buildVarHasAnyUsedDef = (
-  defs: ReadonlyArray<{ varIndex: number } | undefined>,
-  usedDefs: { has(n: number): boolean },
-  varCount: number,
-): boolean[] => {
-  const varHasAnyUsedDef: boolean[] = Array.from({ length: varCount }, () => false);
-
-  for (let defId = 0; defId < defs.length; defId += 1) {
-    if (!usedDefs.has(defId)) {
-      continue;
-    }
-
-    const meta = defs[defId];
-
-    if (meta) {
-      varHasAnyUsedDef[meta.varIndex] = true;
-    }
-  }
-
-  return varHasAnyUsedDef;
-};
-
-/**
- * Map each def to the lexical-scope key that owns its binding (oxc-walker
- * scope IDs like `""`, `"0"`, `"0-1-2"`). Two defs with different scope keys
- * refer to different bindings (one shadows the other).
- *
- * Implementation: walk the function body with `ScopeTracker`, recording each
- * Identifier's location → its declaration's scope. ScopeTracker handles every
- * binding kind (let/const/var/catch/import/class) and every scope-creating
- * construct (block / for / catch / function / class) automatically.
- *
- * Defs whose location ScopeTracker doesn't resolve fall back to PARAM_SCOPE.
- * This covers function-parameter bindings (their identifiers live outside the
- * body that the walk traverses) and any seed defs introduced by the CFG
- * builder. Inner shadows (`function f(x) { { let x = 1; ... } }`) keep their
- * distinct inner scope key — parameter-name lookup is NOT used to coalesce
- * them.
- */
-const PARAM_SCOPE = '';
-
-const buildScopeMapForFunctionBody = (
-  body: Node | ReadonlyArray<Node>,
-  defs: ReadonlyArray<{ name: string; location: number } | undefined>,
-): ReadonlyArray<string> => {
-  const bodies: ReadonlyArray<Node> = Array.isArray(body) ? (body as ReadonlyArray<Node>) : [body as Node];
-  const scopeByIdLocation = new Map<number, string>();
-
-  for (const b of bodies) {
-    const scopeTracker = new ScopeTracker();
-
-    walk(b, {
-      scopeTracker,
-      enter(node: Node) {
-        if (node.type !== 'Identifier') {
-          return;
-        }
-
-        const declaration = scopeTracker.getDeclaration(node.name);
-
-        if (declaration === null) {
-          return;
-        }
-
-        scopeByIdLocation.set(node.start, declaration.scope);
-      },
-    });
-  }
-
-  const result: string[] = new Array(defs.length).fill(PARAM_SCOPE);
-
-  for (let defId = 0; defId < defs.length; defId += 1) {
-    const meta = defs[defId];
-
-    if (!meta) {
-      continue;
-    }
-
-    result[defId] = scopeByIdLocation.get(meta.location) ?? PARAM_SCOPE;
-  }
-
-  return result;
-};
-
-/**
- * Per-(varIndex, scopeStart) flag: does ANY def of this variable at this exact lexical
- * scope reach a use? Used to spare legit `let x; ... x = 1; ... use(x)` declarations
- * without sparing outer declarations that are merely shadowed in a nested block.
- */
-const buildVarScopeHasUsedDef = (
-  defs: ReadonlyArray<{ varIndex: number } | undefined>,
-  usedDefs: { has(n: number): boolean },
-  scopeOfDef: ReadonlyArray<string>,
-): Set<string> => {
-  const set = new Set<string>();
-
-  for (let defId = 0; defId < defs.length; defId += 1) {
-    if (!usedDefs.has(defId)) {
-      continue;
-    }
-
-    const meta = defs[defId];
-
-    if (!meta) {
-      continue;
-    }
-
-    set.add(`${meta.varIndex}@${scopeOfDef[defId] ?? PARAM_SCOPE}`);
-  }
-
-  return set;
-};
-
 const buildWasteFinding = (
   metaName: string,
   metaLocation: number,
@@ -297,10 +184,6 @@ const collectWasteFindingsForFunction = (
     outerReadNames,
     closureReadNames,
   );
-  const varHasAnyUsedDef = buildVarHasAnyUsedDef(defs, usedDefs, localIndexByName.size);
-  const scopeOfDef = buildScopeMapForFunctionBody(functionBodyNode, defs);
-  const varScopeHasUsedDef = buildVarScopeHasUsedDef(defs, usedDefs, scopeOfDef);
-
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
   // normal- and abnormal-completion paths), producing distinct defIds at the same
@@ -318,22 +201,20 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
-    if (meta.writeKind === 'declaration' && varHasAnyUsedDef[meta.varIndex] === true) {
-      // Spare the declaration only if a USED def of the same variable exists in the
-      // SAME lexical scope. Inner-block shadows live in a different scope and must
-      // not save the outer declaration from being flagged.
-      const myScope = scopeOfDef[defId] ?? PARAM_SCOPE;
-
-      if (varScopeHasUsedDef.has(`${meta.varIndex}@${myScope}`)) {
-        continue;
-      }
-    }
-
     if (isDefClosureCaptured(defId, meta.name, nestedCtx, reachingInByNode)) {
       continue;
     }
 
-    if (meta.name.startsWith('_')) {
+    // Binding-only declarations (`let x;`) create a binding but do not write a value.
+    // reaching-defs registers them for other detectors (e.g. variable-lifetime), but
+    // waste must not flag them as dead — there is no value to be dead in the first place.
+    if (meta.writeKind === 'declaration' && meta.hasInit === false) {
+      continue;
+    }
+
+    // `using` / `await using` declarations bind a resource whose disposal at scope exit
+    // is the observable behavior (CLAUDE.md K example: "자원 핸들 lifetime").
+    if (meta.declarationKind === 'using' || meta.declarationKind === 'await using') {
       continue;
     }
 

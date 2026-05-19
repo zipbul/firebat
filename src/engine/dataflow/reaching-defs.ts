@@ -127,19 +127,42 @@ type DefUseStateMut = Pick<
   'defMetaById' | 'defsByVarIndex' | 'genDefIdsByNode' | 'useVarIndexesByNode' | 'writeVarIndexesByNode' | 'defNodeIdByDefId'
 >;
 
+const buildDefMeta = (
+  usage: { name: string; location: number; writeKind?: DefMeta['writeKind']; hasInit?: boolean; declarationKind?: DefMeta['declarationKind'] },
+  varIndex: number,
+): DefMeta => {
+  const meta: { -readonly [K in keyof DefMeta]: DefMeta[K] } = {
+    name: usage.name,
+    varIndex,
+    location: usage.location,
+  };
+
+  if (usage.writeKind) {
+    meta.writeKind = usage.writeKind;
+  }
+
+  if (usage.hasInit === false) {
+    meta.hasInit = false;
+  }
+
+  if (usage.declarationKind) {
+    meta.declarationKind = usage.declarationKind;
+  }
+
+  return meta;
+};
+
 const registerWriteUsage = (
   nodeId: number,
   varIndex: number,
-  usage: { name: string; location: number; writeKind?: DefMeta['writeKind'] },
+  usage: { name: string; location: number; writeKind?: DefMeta['writeKind']; hasInit?: boolean; declarationKind?: DefMeta['declarationKind'] },
   writeIndexes: Set<number>,
   state: DefUseStateMut,
 ): void => {
   writeIndexes.add(varIndex);
 
   const defId = state.defMetaById.length;
-  const meta: DefMeta = usage.writeKind
-    ? { name: usage.name, varIndex, location: usage.location, writeKind: usage.writeKind }
-    : { name: usage.name, varIndex, location: usage.location };
+  const meta: DefMeta = buildDefMeta(usage, varIndex);
 
   state.defMetaById.push(meta);
 
@@ -480,14 +503,7 @@ export const analyzeFunctionBody = (
   const pred = built.cfg.buildAdjacency('backward');
   const { inByNode } = computeReachingDefs(pred, nodeCount, genByNode, killByNode);
   const defCount = state.defMetaById.length;
-  let { usedDefs, overwrittenDefIds } = collectUsedAndOverwrittenDefs(
-    state,
-    genByNode,
-    inByNode,
-    defsOfVar,
-    defCount,
-    nodeCount,
-  );
+  let { usedDefs, overwrittenDefIds } = collectUsedAndOverwrittenDefs(state, genByNode, inByNode, defsOfVar, defCount, nodeCount);
 
   // Defs displaced by a same-node later write are dead at the node — record them as
   // overwritten so the waste detector emits `dead-store-overwrite` rather than nothing.

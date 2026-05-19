@@ -239,6 +239,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     name: string,
     isWriteContext: boolean,
     writeKind: VariableUsage['writeKind'] | undefined,
+    declarationKind: VariableUsage['declarationKind'] | undefined,
   ): void => {
     const usage: VariableUsage = {
       name,
@@ -249,6 +250,10 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
     if (isWriteContext && writeKind) {
       usage.writeKind = writeKind;
+    }
+
+    if (writeKind === 'declaration' && declarationKind) {
+      usage.declarationKind = declarationKind;
     }
 
     usages.push(usage);
@@ -262,6 +267,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     isWriteContext?: boolean,
     writeKind?: VariableUsage['writeKind'],
     suppressDeclarations?: boolean,
+    declarationKind?: VariableUsage['declarationKind'],
   ) => void;
 
   const visitIdentifier = (
@@ -269,6 +275,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     isWriteContext: boolean,
     writeKind: VariableUsage['writeKind'] | undefined,
     suppressDeclarations: boolean,
+    declarationKind: VariableUsage['declarationKind'] | undefined,
   ): void => {
     // When suppressDeclarations is active (e.g. visiting inside an IIFE body),
     // skip declaration writes — they belong to the nested scope, not the outer scope.
@@ -276,7 +283,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       return;
     }
 
-    pushIdentifierUsage(current, current.name, isWriteContext, writeKind);
+    pushIdentifierUsage(current, current.name, isWriteContext, writeKind, declarationKind);
   };
 
   const isLiteralNullishBase = (node: Expression): boolean => {
@@ -329,14 +336,34 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     current: VariableDeclarator,
     allowNestedFunctions: boolean,
     suppressDeclarations: boolean,
+    declarationKind: VariableUsage['declarationKind'] | undefined,
   ): void => {
     const { id, init } = current;
     const initKeys = getStaticObjectExpressionKeys(init);
 
     if (id.type === 'ObjectPattern' && initKeys !== null) {
       visitObjectDestructuringProps(id, initKeys, allowNestedFunctions, suppressDeclarations);
+    } else if (id.type === 'Identifier' && init === null) {
+      // `let x;` — binding-only declaration. Carries hasInit=false so detectors can
+      // distinguish the binding from an actual value write.
+      if (!suppressDeclarations) {
+        const usage: VariableUsage = {
+          name: id.name,
+          isRead: false,
+          isWrite: true,
+          location: id.start,
+          writeKind: 'declaration',
+          hasInit: false,
+        };
+
+        if (declarationKind) {
+          usage.declarationKind = declarationKind;
+        }
+
+        usages.push(usage);
+      }
     } else {
-      visit(id, allowNestedFunctions, true, 'declaration', suppressDeclarations); // Def
+      visit(id, allowNestedFunctions, true, 'declaration', suppressDeclarations, declarationKind);
     }
 
     if (init !== null) {
@@ -378,13 +405,25 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     isWriteContext: boolean = false,
     writeKind?: VariableUsage['writeKind'],
     suppressDeclarations: boolean = false,
+    declarationKind?: VariableUsage['declarationKind'],
   ) => {
     if (!allowNestedFunctions && isFunctionNode(current)) {
       return;
     }
 
+    if (current.type === 'VariableDeclaration') {
+      // Container node — propagate the declaration keyword (`let`/`const`/`var`/`using`/
+      // `await using`) to each declarator so detector layers (e.g. waste) can apply
+      // keyword-specific policy (e.g. exempt `using` from waste reporting).
+      for (const declarator of current.declarations) {
+        visit(declarator, allowNestedFunctions, false, undefined, suppressDeclarations, current.kind);
+      }
+
+      return;
+    }
+
     if (current.type === 'Identifier') {
-      visitIdentifier(current, isWriteContext, writeKind, suppressDeclarations);
+      visitIdentifier(current, isWriteContext, writeKind, suppressDeclarations, declarationKind);
 
       return;
     }
@@ -426,7 +465,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     }
 
     if (current.type === 'VariableDeclarator') {
-      visitVariableDeclarator(current, allowNestedFunctions, suppressDeclarations);
+      visitVariableDeclarator(current, allowNestedFunctions, suppressDeclarations, declarationKind);
 
       return;
     }

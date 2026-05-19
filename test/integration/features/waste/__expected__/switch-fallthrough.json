@@ -1,0 +1,34 @@
+[
+  {
+    "filePath": "/virtual/switch-fallthrough.ts",
+    "kind": "dead-store",
+    "label": "label",
+    "message": "Variable 'label' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 7
+      },
+      "start": {
+        "column": 6,
+        "line": 7
+      }
+    }
+  },
+  {
+    "filePath": "/virtual/switch-fallthrough.ts",
+    "kind": "dead-store-overwrite",
+    "label": "label",
+    "message": "Variable 'label' is assigned but overwritten before being read",
+    "span": {
+      "end": {
+        "column": 11,
+        "line": 11
+      },
+      "start": {
+        "column": 6,
+        "line": 11
+      }
+    }
+  }
+]

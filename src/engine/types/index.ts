@@ -24,6 +24,16 @@ export interface VariableUsage {
   isRead: boolean;
   location: number;
   writeKind?: 'declaration' | 'assignment' | 'compound-assignment' | 'logical-assignment' | 'update';
+  /**
+   * For `writeKind === 'declaration'` only. False for binding-only declarations (`let x;`)
+   * that create a binding but do not write a value. Undefined otherwise.
+   */
+  hasInit?: boolean;
+  /**
+   * For `writeKind === 'declaration'` only. The keyword used by the enclosing
+   * `VariableDeclaration` (`let` / `const` / `var` / `using` / `await using`).
+   */
+  declarationKind?: 'let' | 'const' | 'var' | 'using' | 'await using';
 }
 
 export interface VariableCollectorOptions {
@@ -35,6 +45,15 @@ export interface DefMeta {
   readonly varIndex: number;
   readonly location: number;
   readonly writeKind?: VariableUsage['writeKind'];
+  /**
+   * For `writeKind === 'declaration'` only. False for binding-only declarations (`let x;`)
+   * that declare a binding but do not write a value. Other defs leave this undefined.
+   */
+  readonly hasInit?: boolean;
+  /**
+   * For `writeKind === 'declaration'` only. The declaration keyword used.
+   */
+  readonly declarationKind?: VariableUsage['declarationKind'];
 }
 
 export interface FunctionBodyAnalysis {

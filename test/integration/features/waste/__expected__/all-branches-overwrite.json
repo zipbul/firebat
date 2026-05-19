@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/all-branches-overwrite.ts",
+    "kind": "dead-store",
+    "label": "status",
+    "message": "Variable 'status' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 5
+      },
+      "start": {
+        "column": 6,
+        "line": 5
+      }
+    }
+  }
+]
