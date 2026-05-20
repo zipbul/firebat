@@ -353,6 +353,34 @@ const buildIdentifierContextByLocation = (functionBodyNodes: ReadonlyArray<Node>
 // the constructor call is itself impure (handled by `containsImpureExpression`).
 const FRESH_ALLOCATION_TYPES = new Set<string>(['ArrayExpression', 'ObjectExpression', 'ClassExpression']);
 
+// TS/paren wrappers that preserve the underlying value identity. `[] as T`,
+// `([])`, `[] satisfies T`, `[]!`, `<T>[]` all still hold a fresh literal —
+// peel them off before checking against `FRESH_ALLOCATION_TYPES`.
+const unwrapValueWrappers = (node: Node): Node => {
+  let current = node;
+
+  while (true) {
+    if (
+      current.type === 'TSAsExpression' ||
+      current.type === 'TSSatisfiesExpression' ||
+      current.type === 'TSNonNullExpression' ||
+      current.type === 'TSTypeAssertion' ||
+      current.type === 'ParenthesizedExpression'
+    ) {
+      const inner = (current as { expression?: Node }).expression;
+
+      if (inner === undefined) {
+        return current;
+      }
+
+      current = inner;
+      continue;
+    }
+
+    return current;
+  }
+};
+
 const findDefRhs = (ctx: IdentifierContext): Node | null => {
   const { node, parent } = ctx;
 
@@ -484,7 +512,7 @@ const isDeclarationFreshAllocation = (ctx: IdentifierContext): boolean => {
     return false;
   }
 
-  return FRESH_ALLOCATION_TYPES.has(init.type);
+  return FRESH_ALLOCATION_TYPES.has(unwrapValueWrappers(init).type);
 };
 
 const buildVarHasMeaningfulUse = (
@@ -692,13 +720,15 @@ const collectWasteFindingsForFunction = (
       }
     }
 
-    // Case 6/7: declaration whose binding is never *meaningfully* used — all uses are
-    // mutation method calls or property writes, with no real read or escape, and not
-    // captured by any nested function. Additionally, the declaration's init must be a
-    // fresh allocation: `const c = []` / `const s = {}` — otherwise the variable
-    // aliases an outer reference and the mutations are externally observable.
+    // Case 6/7: a binding whose entire lifetime is local mutation only — every use is
+    // a mutation method call or property write with no real read, no escape, and no
+    // closure capture. Applies to both declarations and assignments whose RHS is a
+    // fresh allocation (`const c = []`, `c = {}`), so `let c; c = []; c.push(1);`
+    // is caught alongside `const c = []; c.push(1);`. Outside the fresh-allocation
+    // gate the binding aliases an outer reference and the mutations are externally
+    // observable.
     const isCase67 =
-      meta.writeKind === 'declaration' &&
+      (meta.writeKind === 'declaration' || meta.writeKind === 'assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&

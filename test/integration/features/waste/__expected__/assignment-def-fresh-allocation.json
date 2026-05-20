@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/assignment-def-fresh-allocation.ts",
+    "kind": "dead-store",
+    "label": "c",
+    "message": "Variable 'c' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 9
+      },
+      "start": {
+        "column": 2,
+        "line": 9
+      }
+    }
+  }
+]

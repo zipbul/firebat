@@ -77,6 +77,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'computed-key-impure-keep', program => detectWaste([...program]));
   // case 6/7 fresh allocation 전제 — alias from outer reference는 case 6/7 비적용 → KEEP
   runGolden(import.meta.dir, 'alias-outer-reference-keep', program => detectWaste([...program]));
+  // TS 값 wrapper (`as`, `satisfies`, `!`, `<T>`, paren)는 fresh allocation 유지 → DEAD
+  runGolden(import.meta.dir, 'fresh-allocation-ts-wrapper', program => detectWaste([...program]));
+  // assignment def도 fresh allocation이면 case 6/7 적용 → DEAD
+  runGolden(import.meta.dir, 'assignment-def-fresh-allocation', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD
