@@ -91,6 +91,14 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'logical-assignment-fresh', program => detectWaste([...program]));
   // built-in target-mutation API (Object.assign 등) 첫 인자 = mutation receiver → DEAD
   runGolden(import.meta.dir, 'builtin-target-mutation-api', program => detectWaste([...program]));
+  // compound assignment on an object may invoke coercion side-effects → KEEP
+  runGolden(import.meta.dir, 'compound-assignment-object-keep', program => detectWaste([...program]));
+  // array length property write is not a whitelisted local mutation call → KEEP
+  runGolden(import.meta.dir, 'array-length-property-write-keep', program => detectWaste([...program]));
+  // user-defined method that shadows a built-in mutation name → KEEP
+  runGolden(import.meta.dir, 'user-defined-mutation-method-keep', program => detectWaste([...program]));
+  // user-defined setter is invoked by property write → KEEP
+  runGolden(import.meta.dir, 'user-defined-setter-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

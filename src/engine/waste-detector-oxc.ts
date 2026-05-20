@@ -3,7 +3,7 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 import { buildLineOffsets, getLineColumn, walk } from '@zipbul/gildash';
 
 import type { WasteFinding } from '..';
-import type { BitSet, ParsedFile } from './types';
+import type { BitSet, DefMeta, ParsedFile } from './types';
 
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode } from './ast';
 import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
@@ -331,6 +331,15 @@ const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node 
         grandparent.type === 'AssignmentExpression' &&
         (grandparent as { left: Node }).left === parent
       ) {
+        const property = (parent as { computed?: boolean; property: Node }).property;
+
+        if (
+          (property.type === 'Identifier' && (property as { name: string }).name === 'length') ||
+          (property.type === 'Literal' && (property as { value?: unknown }).value === 'length')
+        ) {
+          return 'real';
+        }
+
         // `v.p = RHS` — local mutation only when RHS is pure. If RHS evaluation has
         // any side-effect (call/await/new/assignment/update), removing the property
         // write would also drop that side-effect → fall back to 'real'.
@@ -600,6 +609,40 @@ const defRhsCarriesSideEffect = (rhs: Node): boolean => {
  * — `const c = []; c.push(1);` is dead, but `const c = arg; c.push(1);` mutates
  * the caller's array through a shared reference.
  */
+/**
+ * Whether the declaration init contains any user-defined method, getter, or setter
+ * that could shadow a built-in mutation method or trigger side-effects on property
+ * write. When such a definition exists, case 6/7 must not fire on the variable —
+ * the matching `MUTATION_METHODS` name on this receiver actually invokes the user's
+ * code, and the matching property-write name actually invokes the user's setter.
+ */
+const objectInitDefinesMethodOrAccessor = (init: Node): boolean => {
+  if (init.type !== 'ObjectExpression') {
+    return false;
+  }
+
+  const properties = (init as { properties?: ReadonlyArray<Node> }).properties;
+
+  if (!Array.isArray(properties)) {
+    return false;
+  }
+
+  for (const prop of properties) {
+    if (prop.type !== 'Property') {
+      continue;
+    }
+
+    const kind = (prop as { kind?: string }).kind;
+    const isMethod = (prop as { method?: boolean }).method === true;
+
+    if (kind === 'get' || kind === 'set' || isMethod) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const isDeclarationFreshAllocation = (ctx: IdentifierContext): boolean => {
   const init = resolveDeclarationInit(ctx);
 
@@ -613,6 +656,72 @@ const isDeclarationFreshAllocation = (ctx: IdentifierContext): boolean => {
     FRESH_ALLOCATION_TYPES.has(unwrapped.type) ||
     (unwrapped.type === 'Literal' && (unwrapped as { regex?: unknown }).regex !== undefined)
   );
+};
+
+const isKnownPrimitiveExpression = (node: Node | null): boolean => {
+  if (node === null) {
+    return false;
+  }
+
+  const unwrapped = unwrapValueWrappers(node);
+
+  if (unwrapped.type === 'Literal') {
+    return (unwrapped as { regex?: unknown }).regex === undefined;
+  }
+
+  if (unwrapped.type === 'TemplateLiteral') {
+    return ((unwrapped as { expressions?: ReadonlyArray<Node> }).expressions ?? []).length === 0;
+  }
+
+  if (unwrapped.type === 'Identifier' && (unwrapped as { name: string }).name === 'undefined') {
+    return true;
+  }
+
+  return false;
+};
+
+const compoundAssignmentMayCoerceObject = (
+  defId: number,
+  meta: DefMeta,
+  defs: ReadonlyArray<DefMeta | undefined>,
+  reachingInByNode: ReadonlyArray<BitSet>,
+  defNodeIdByDefId: ReadonlyArray<number>,
+  defCtxByLocation: ReadonlyMap<number, IdentifierContext>,
+): boolean => {
+  if (meta.writeKind !== 'compound-assignment') {
+    return false;
+  }
+
+  const nodeId = defNodeIdByDefId[defId];
+  const reaching = nodeId === undefined ? undefined : reachingInByNode[nodeId];
+
+  if (reaching === undefined) {
+    return true;
+  }
+
+  let sawPriorDef = false;
+
+  for (const priorDefId of reaching.array()) {
+    const prior = defs[priorDefId];
+
+    if (prior === undefined || prior.varIndex !== meta.varIndex) {
+      continue;
+    }
+
+    sawPriorDef = true;
+
+    if (prior.writeKind === 'declaration' && prior.hasInit === false) {
+      return true;
+    }
+
+    const priorCtx = defCtxByLocation.get(prior.location);
+
+    if (priorCtx === undefined || !isKnownPrimitiveExpression(resolveDeclarationInit(priorCtx))) {
+      return true;
+    }
+  }
+
+  return !sawPriorDef;
 };
 
 const buildVarHasMeaningfulUse = (
@@ -722,7 +831,7 @@ const collectWasteFindingsForFunction = (
     parameterDefaults,
     declScopeByIdLocation,
   );
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, nodePayloads } = analysis;
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   // CLAUDE.md 비대상: function parameter. The reaching-defs seed for parameter bindings
   // is still needed so reads inside the body resolve to a definition, but the detector
   // must never report parameters themselves as waste.
@@ -795,6 +904,11 @@ const collectWasteFindingsForFunction = (
     seenVarIndexes.add(def.varIndex);
   }
 
+  // A variable whose init defines a user method/getter/setter shadows the built-in
+  // mutation receiver — same name match would invoke the user's code with arbitrary
+  // side-effects. Disable case 6/7 entirely for these variables.
+  const varHasUserDefinedAccessor = new Set<number>();
+
   for (const varIndex of seenVarIndexes) {
     let allFresh = true;
 
@@ -822,6 +936,12 @@ const collectWasteFindingsForFunction = (
       if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
         allFresh = false;
         break;
+      }
+
+      const init = resolveDeclarationInit(ctx);
+
+      if (init !== null && objectInitDefinesMethodOrAccessor(unwrapValueWrappers(init))) {
+        varHasUserDefinedAccessor.add(varIndex);
       }
     }
 
@@ -879,6 +999,10 @@ const collectWasteFindingsForFunction = (
       }
     }
 
+    if (compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)) {
+      continue;
+    }
+
     // Case 6/7: a binding whose entire lifetime is local mutation only — every use is
     // a mutation method call or property write with no real read, no escape, and no
     // closure capture. Applies to both declarations and assignments whose RHS is a
@@ -894,7 +1018,8 @@ const collectWasteFindingsForFunction = (
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
-      varHasOnlyFreshDefs.has(meta.varIndex);
+      varHasOnlyFreshDefs.has(meta.varIndex) &&
+      !varHasUserDefinedAccessor.has(meta.varIndex);
 
     if (!isCase67) {
       // Cases 1–4: per-def reaching-defs analysis. A def used elsewhere or captured by
@@ -1047,7 +1172,7 @@ const collectWasteFindingsForModule = (
 
   const exportExemption = collectExportExemption(programBody);
   const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation);
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, nodePayloads } = analysis;
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   const syntacticReads = programBody
     .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
     .filter(u => u.isRead);
@@ -1089,6 +1214,11 @@ const collectWasteFindingsForModule = (
     seenVarIndexes.add(def.varIndex);
   }
 
+  // A variable whose init defines a user method/getter/setter shadows the built-in
+  // mutation receiver — same name match would invoke the user's code with arbitrary
+  // side-effects. Disable case 6/7 entirely for these variables.
+  const varHasUserDefinedAccessor = new Set<number>();
+
   for (const varIndex of seenVarIndexes) {
     let allFresh = true;
 
@@ -1116,6 +1246,12 @@ const collectWasteFindingsForModule = (
       if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
         allFresh = false;
         break;
+      }
+
+      const init = resolveDeclarationInit(ctx);
+
+      if (init !== null && objectInitDefinesMethodOrAccessor(unwrapValueWrappers(init))) {
+        varHasUserDefinedAccessor.add(varIndex);
       }
     }
 
@@ -1164,6 +1300,10 @@ const collectWasteFindingsForModule = (
       }
     }
 
+    if (compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)) {
+      continue;
+    }
+
     const isCase67 =
       (meta.writeKind === 'declaration' ||
         meta.writeKind === 'assignment' ||
@@ -1172,7 +1312,8 @@ const collectWasteFindingsForModule = (
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
-      varHasOnlyFreshDefs.has(meta.varIndex);
+      varHasOnlyFreshDefs.has(meta.varIndex) &&
+      !varHasUserDefinedAccessor.has(meta.varIndex);
 
     if (!isCase67) {
       if (usedDefs.has(defId)) {
