@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/module-scope-overwrite.ts",
+    "kind": "dead-store",
+    "label": "value",
+    "message": "Variable 'value' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 4
+      },
+      "start": {
+        "column": 4,
+        "line": 4
+      }
+    }
+  }
+]

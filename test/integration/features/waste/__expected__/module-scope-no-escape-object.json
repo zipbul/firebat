@@ -1,17 +1,17 @@
 [
   {
-    "filePath": "/virtual/no-escape-object.ts",
+    "filePath": "/virtual/module-scope-no-escape-object.ts",
     "kind": "dead-store",
     "label": "state",
     "message": "Variable 'state' is assigned but never read",
     "span": {
       "end": {
-        "column": 13,
-        "line": 7
+        "column": 11,
+        "line": 3
       },
       "start": {
-        "column": 8,
-        "line": 7
+        "column": 6,
+        "line": 3
       }
     }
   }

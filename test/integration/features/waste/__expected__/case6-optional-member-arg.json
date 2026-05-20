@@ -1,12 +1,12 @@
 [
   {
-    "filePath": "/virtual/no-escape-object.ts",
+    "filePath": "/virtual/case6-optional-member-arg.ts",
     "kind": "dead-store",
-    "label": "state",
-    "message": "Variable 'state' is assigned but never read",
+    "label": "c",
+    "message": "Variable 'c' is assigned but never read",
     "span": {
       "end": {
-        "column": 13,
+        "column": 9,
         "line": 7
       },
       "start": {

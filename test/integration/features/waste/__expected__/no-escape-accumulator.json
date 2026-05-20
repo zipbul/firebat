@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "filePath": "/virtual/no-escape-accumulator.ts",
+    "kind": "dead-store",
+    "label": "collected",
+    "message": "Variable 'collected' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 17,
+        "line": 7
+      },
+      "start": {
+        "column": 8,
+        "line": 7
+      }
+    }
+  }
+]

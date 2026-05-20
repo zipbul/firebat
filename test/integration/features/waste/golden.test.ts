@@ -51,4 +51,28 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'nested-function-inner-shadow', program => detectWaste([...program]));
   // IIFE의 outer capture가 정확히 use로 인정되는지 KEEP boundary
   runGolden(import.meta.dir, 'iife-outer-capture', program => detectWaste([...program]));
+
+  // ── 회귀 잠금 (case 6/7 impure side-effect 정공법) ──────────────────────
+  // mutation argument에 side-effect가 있으면 KEEP — push 제거 시 호출도 사라짐
+  runGolden(import.meta.dir, 'case6-impure-arg', program => detectWaste([...program]));
+  // property-write RHS에 side-effect가 있으면 KEEP
+  runGolden(import.meta.dir, 'case7-impure-rhs', program => detectWaste([...program]));
+  // spread → iterator protocol side-effect → KEEP
+  runGolden(import.meta.dir, 'case6-spread-arg', program => detectWaste([...program]));
+  // optional member access (call 없음) → pure → DEAD (ChainExpression 좁힘 검증)
+  runGolden(import.meta.dir, 'case6-optional-member-arg', program => detectWaste([...program]));
+  // delete UnaryExpression → mutation effect → KEEP
+  runGolden(import.meta.dir, 'case6-delete-arg', program => detectWaste([...program]));
+  // function literal as argument → body is value-time, not push-time → DEAD
+  runGolden(import.meta.dir, 'case6-function-literal-arg', program => detectWaste([...program]));
+
+  // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
+  // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD
+  runGolden(import.meta.dir, 'module-scope-overwrite', program => detectWaste([...program]));
+  // module-scope case 7 (property write only) — DEAD
+  runGolden(import.meta.dir, 'module-scope-no-escape-object', program => detectWaste([...program]));
+  // export된 binding은 비대상 — module-scope analysis가 export 면제 룰 적용 → KEEP
+  runGolden(import.meta.dir, 'module-scope-export-binding-keep', program => detectWaste([...program]));
+  // `export { foo }` specifier path도 export 면제 (name-based matching) → KEEP
+  runGolden(import.meta.dir, 'module-scope-export-specifier-keep', program => detectWaste([...program]));
 });
