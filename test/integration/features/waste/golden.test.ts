@@ -85,6 +85,12 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'regexp-literal-fresh', program => detectWaste([...program]));
   // 같은 변수에 fresh def + alias def 공존 — case 6/7 비적용 → KEEP
   runGolden(import.meta.dir, 'mixed-fresh-and-alias-defs-keep', program => detectWaste([...program]));
+  // Array mutator 확장 (pop 외 splice/sort/...) — push와 동등 처리 → DEAD
+  runGolden(import.meta.dir, 'mutation-method-pop', program => detectWaste([...program]));
+  // logical assignment (??=/||=/&&=)의 LHS read는 condition-check → case 6/7 적용 → DEAD
+  runGolden(import.meta.dir, 'logical-assignment-fresh', program => detectWaste([...program]));
+  // built-in target-mutation API (Object.assign 등) 첫 인자 = mutation receiver → DEAD
+  runGolden(import.meta.dir, 'builtin-target-mutation-api', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

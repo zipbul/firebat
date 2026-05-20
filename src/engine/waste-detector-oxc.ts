@@ -132,9 +132,32 @@ const isDefClosureCaptured = (
 // Closure capture is handled separately by `isDefClosureCaptured` (def-level), so this
 // pass only inspects the outer function body and skips nested function bodies entirely.
 //
-// Mutation method whitelist: conservative — start with `push` only because it is the
-// only mutation method exercised by the fixtures. Expand when a new fixture demands it.
-const MUTATION_METHODS = new Set(['push']);
+// Method names that perform an in-place mutation on the receiver and whose return
+// value (if any) is local. Matching is by name only — same-named methods on other
+// built-ins are tolerated because case 6/7 also requires the variable to be a fresh
+// allocation, so an `ArrayExpression` value will not actually carry `Date.setHours`
+// etc.
+//
+// - Array.prototype mutators
+// - Map / Set / WeakMap / WeakSet mutators
+// - TypedArray mutators (share names with Array)
+const MUTATION_METHODS = new Set([
+  // Array
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'sort',
+  'reverse',
+  'fill',
+  'copyWithin',
+  // Map / Set / WeakMap / WeakSet
+  'set',
+  'add',
+  'delete',
+  'clear',
+]);
 
 // Expression kinds whose evaluation has observable side-effects (call/await/yield/new
 // /assignment/update/tagged template/spread/delete). If any of these appear inside a
@@ -196,6 +219,41 @@ const containsImpureExpression = (node: Node | null | undefined): boolean => {
   return found;
 };
 
+// Well-known built-in functions that mutate their first argument and treat the
+// remaining arguments as read-only sources. Same safety rule as a method call on
+// a mutation whitelist: the first argument is the local-mutation receiver, the
+// rest must be pure or the call's side-effects survive.
+const BUILTIN_TARGET_MUTATION_APIS = new Set<string>([
+  'Object.assign',
+  'Object.defineProperty',
+  'Object.defineProperties',
+  'Object.setPrototypeOf',
+  'Reflect.set',
+  'Reflect.defineProperty',
+  'Reflect.deleteProperty',
+  'Reflect.setPrototypeOf',
+]);
+
+const callExpressionTargetMutationApi = (callee: Node): string | null => {
+  if (callee.type !== 'MemberExpression') {
+    return null;
+  }
+
+  const me = callee as { object: Node; property: Node; computed?: boolean };
+
+  if (me.computed === true) {
+    return null;
+  }
+
+  if (me.object.type !== 'Identifier' || me.property.type !== 'Identifier') {
+    return null;
+  }
+
+  const name = `${(me.object as { name: string }).name}.${(me.property as { name: string }).name}`;
+
+  return BUILTIN_TARGET_MUTATION_APIS.has(name) ? name : null;
+};
+
 type UseKind = 'real' | 'mutation' | 'property-write' | 'escape';
 
 const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node | null): UseKind => {
@@ -208,12 +266,49 @@ const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node 
     return 'escape';
   }
 
+  // `v ??= ...` / `v ||= ...` / `v &&= ...` — the LHS read is the condition check
+  // that decides whether the RHS is evaluated; the value itself is never consumed
+  // elsewhere through this site. Classify as 'mutation' (locally observable, no
+  // external value flow) so case 6/7 stays applicable when the RHS is fresh.
+  if (parent.type === 'AssignmentExpression' && (parent as { left: Node }).left === usage) {
+    const operator = (parent as { operator: string }).operator;
+
+    if (operator === '??=' || operator === '||=' || operator === '&&=') {
+      return 'mutation';
+    }
+  }
+
   // `f(v)` — argument position. Note: this is the direct argument case only; member
   // expressions inside arguments are handled by the MemberExpression branch below.
   if (parent.type === 'CallExpression') {
     const args = (parent as unknown as { arguments: ReadonlyArray<Node> }).arguments;
+    const argIndex = args.indexOf(usage);
 
-    if (args.includes(usage)) {
+    if (argIndex >= 0) {
+      // Well-known built-in target-mutation APIs (Object.assign, Reflect.set, ...).
+      // `v` as the first argument is a mutation receiver; later arguments are pure
+      // sources. If any non-target argument has side-effects, the whole call has
+      // side-effects beyond the mutation and we must fall back to 'real'.
+      const callee = (parent as { callee: Node }).callee;
+
+      if (callExpressionTargetMutationApi(callee) !== null) {
+        if (argIndex === 0) {
+          for (let i = 1; i < args.length; i += 1) {
+            const other = args[i];
+
+            if (other !== undefined && containsImpureExpression(other)) {
+              return 'real';
+            }
+          }
+
+          return 'mutation';
+        }
+
+        // Non-target argument of a target-mutation API is a regular escape: the
+        // function reads the value to merge/copy from. Same as a normal call arg.
+        return 'escape';
+      }
+
       return 'escape';
     }
   }
@@ -689,7 +784,11 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
-    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+    if (
+      def.writeKind !== 'declaration' &&
+      def.writeKind !== 'assignment' &&
+      def.writeKind !== 'logical-assignment'
+    ) {
       continue;
     }
 
@@ -704,7 +803,11 @@ const collectWasteFindingsForFunction = (
         continue;
       }
 
-      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+      if (
+        def.writeKind !== 'declaration' &&
+        def.writeKind !== 'assignment' &&
+        def.writeKind !== 'logical-assignment'
+      ) {
         continue;
       }
 
@@ -784,7 +887,9 @@ const collectWasteFindingsForFunction = (
     // gate the binding aliases an outer reference and the mutations are externally
     // observable.
     const isCase67 =
-      (meta.writeKind === 'declaration' || meta.writeKind === 'assignment') &&
+      (meta.writeKind === 'declaration' ||
+        meta.writeKind === 'assignment' ||
+        meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
@@ -973,7 +1078,11 @@ const collectWasteFindingsForModule = (
       continue;
     }
 
-    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+    if (
+      def.writeKind !== 'declaration' &&
+      def.writeKind !== 'assignment' &&
+      def.writeKind !== 'logical-assignment'
+    ) {
       continue;
     }
 
@@ -988,7 +1097,11 @@ const collectWasteFindingsForModule = (
         continue;
       }
 
-      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+      if (
+        def.writeKind !== 'declaration' &&
+        def.writeKind !== 'assignment' &&
+        def.writeKind !== 'logical-assignment'
+      ) {
         continue;
       }
 
@@ -1052,7 +1165,9 @@ const collectWasteFindingsForModule = (
     }
 
     const isCase67 =
-      (meta.writeKind === 'declaration' || meta.writeKind === 'assignment') &&
+      (meta.writeKind === 'declaration' ||
+        meta.writeKind === 'assignment' ||
+        meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
