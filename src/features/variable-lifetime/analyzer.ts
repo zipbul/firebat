@@ -14,8 +14,13 @@ import { normalizeFile } from '../../engine/ast/normalize-file';
 import { collectFunctionNodes, collectOxcNodes, forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
-import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings } from '../../engine/dataflow/reaching-defs';
-import { collectVariables } from '../../engine/dataflow/variable-collector';
+import {
+  analyzeFunctionBody,
+  bindingKey,
+  collectLocalVarIndexes,
+  collectParameterBindings,
+} from '../../engine/dataflow/reaching-defs';
+import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
 
@@ -86,11 +91,7 @@ const isPureInitializer = (node: Node | null | undefined): boolean => {
 
   // Conditional expression: cond ? a : b
   if (node.type === 'ConditionalExpression') {
-    return (
-      isPureInitializer(node.test) &&
-      isPureInitializer(node.consequent) &&
-      isPureInitializer(node.alternate)
-    );
+    return isPureInitializer(node.test) && isPureInitializer(node.consequent) && isPureInitializer(node.alternate);
   }
 
   // Unary expression: typeof x, void 0, !, ~, +, -
@@ -337,28 +338,50 @@ const collectVarDeclInfo = (bodyStatements: ReadonlyArray<Node>): Map<number, Va
   return result;
 };
 
-// ── Referenced variable name collection ──────────────────────────────────────
+// ── Referenced variable collection ──────────────────────────────────────
 
 /**
- * Collects all Identifier names referenced by the initializer expression
- * (excluding MemberExpression non-computed property names).
+ * A read site identified by the binding it resolves to, not by name alone.
+ * Same-named bindings in different lexical scopes carry different `declScope`
+ * values, so downstream lookups distinguish outer/inner shadows.
  */
-const collectReferencedVarNames = (initNode: Node | null | undefined): ReadonlySet<string> => {
-  const names = new Set<string>();
+interface ReferencedBinding {
+  readonly name: string;
+  readonly declScope: string | undefined;
+}
 
+/**
+ * Collects all Identifier reads in `initNode`, deduplicated by (name, declScope)
+ * so each distinct binding appears once.
+ */
+const collectReferencedBindings = (
+  initNode: Node | null | undefined,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
+): ReadonlyArray<ReferencedBinding> => {
   if (initNode === null || initNode === undefined) {
-    return names;
+    return [];
   }
 
-  const usages = collectVariables(initNode, { includeNestedFunctions: false });
+  const usages = collectVariables(initNode, { includeNestedFunctions: false, declScopeByIdLocation });
+  const seen = new Set<string>();
+  const out: ReferencedBinding[] = [];
 
   for (const usage of usages) {
-    if (usage.isRead) {
-      names.add(usage.name);
+    if (!usage.isRead) {
+      continue;
     }
+
+    const key = bindingKey(usage.name, usage.declScope);
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    out.push({ name: usage.name, declScope: usage.declScope });
   }
 
-  return names;
+  return out;
 };
 
 // ── Intervening write check ───────────────────────────────────────────────────
@@ -385,27 +408,27 @@ interface TryCatchRangeCollection {
  * in CFG nodes whose payload offset falls in [declOffset, blockStart).
  */
 const hasInterveningWrites = (
-  referencedVarNames: ReadonlySet<string>,
+  referencedBindings: ReadonlyArray<ReferencedBinding>,
   declOffset: number,
   blockStartOffset: number,
   analysis: FunctionBodyAnalysis,
   localIndexByName: Map<string, number>,
 ): boolean => {
-  if (referencedVarNames.size === 0) {
+  if (referencedBindings.length === 0) {
     return false;
   }
 
-  // Separate referenced names into local vs non-local
+  // Separate referenced bindings into local vs non-local
   const localVarIndexes = new Set<number>();
   const nonLocalNames = new Set<string>();
 
-  for (const name of referencedVarNames) {
-    const idx = localIndexByName.get(name);
+  for (const ref of referencedBindings) {
+    const idx = localIndexByName.get(bindingKey(ref.name, ref.declScope));
 
     if (typeof idx === 'number') {
       localVarIndexes.add(idx);
     } else {
-      nonLocalNames.add(name);
+      nonLocalNames.add(ref.name);
     }
   }
 
@@ -488,7 +511,11 @@ const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>):
   return { finalizerRanges, tryHandlerRanges };
 };
 
-const collectAllSiteOffsets = (analysis: FunctionBodyAnalysis, localIndexByName: Map<string, number>): Map<number, number[]> => {
+const collectAllSiteOffsets = (
+  analysis: FunctionBodyAnalysis,
+  localIndexByName: Map<string, number>,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
+): Map<number, number[]> => {
   const allSiteOffsetsByVarIndex = new Map<number, number[]>();
 
   for (let cfgNodeId = 0; cfgNodeId < analysis.nodePayloads.length; cfgNodeId += 1) {
@@ -507,10 +534,10 @@ const collectAllSiteOffsets = (analysis: FunctionBodyAnalysis, localIndexByName:
     const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
 
     for (const payloadNode of payloadNodes) {
-      const usages = collectVariables(payloadNode, { includeNestedFunctions: false });
+      const usages = collectVariables(payloadNode, { includeNestedFunctions: false, declScopeByIdLocation });
 
       for (const usage of usages) {
-        const varIndex = localIndexByName.get(usage.name);
+        const varIndex = localIndexByName.get(bindingKey(usage.name, usage.declScope));
 
         if (typeof varIndex !== 'number') {
           continue;
@@ -564,6 +591,7 @@ const checkScopeNarrowing = (
   paramBindings: ReadonlySet<string>,
   file: string,
   sourceText: string,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
 ): ReadonlyArray<ScopeNarrowingFinding> => {
   const findings: ScopeNarrowingFinding[] = [];
   const scopeBlocks = collectScopeBlocks(bodyStatements);
@@ -574,7 +602,7 @@ const checkScopeNarrowing = (
 
   const varDeclInfo = collectVarDeclInfo(bodyStatements);
   const { finalizerRanges, tryHandlerRanges } = collectFinalizerAndTryCatchRanges(bodyStatements);
-  const allSiteOffsetsByVarIndex = collectAllSiteOffsets(analysis, localIndexByName);
+  const allSiteOffsetsByVarIndex = collectAllSiteOffsets(analysis, localIndexByName, declScopeByIdLocation);
 
   const isInFinalizer = (offset: number): boolean => finalizerRanges.some(r => offset >= r.start && offset < r.end);
 
@@ -618,8 +646,8 @@ const checkScopeNarrowing = (
       continue;
     }
 
-    // Get the variable index
-    const varIndex = localIndexByName.get(defMeta.name);
+    // Get the variable index using the def's binding scope.
+    const varIndex = localIndexByName.get(bindingKey(defMeta.name, defMeta.declScope));
 
     if (typeof varIndex !== 'number') {
       continue;
@@ -673,9 +701,9 @@ const checkScopeNarrowing = (
     }
 
     // intervening write check
-    const referencedVarNames = collectReferencedVarNames(initNode);
+    const referencedBindings = collectReferencedBindings(initNode, declScopeByIdLocation);
 
-    if (hasInterveningWrites(referencedVarNames, defMeta.location, matchingBlock.start, analysis, localIndexByName)) {
+    if (hasInterveningWrites(referencedBindings, defMeta.location, matchingBlock.start, analysis, localIndexByName)) {
       continue;
     }
 
@@ -782,7 +810,8 @@ const analyzeVariableLifetime = (
         continue;
       }
 
-      const analysis = analyzeFunctionBody(bodyNode, localIndexByName, paramBindings);
+      const declScopeByIdLocation = buildDeclScopeMap(functionNode);
+      const analysis = analyzeFunctionBody(bodyNode, localIndexByName, paramBindings, [], declScopeByIdLocation);
       const { defs, reachingInByNode, useVarIndexesByNode, nodePayloads, defsOfVar } = analysis;
       // Compute first/last use offset for each defId via reaching definitions.
       const lastUseOffsetByDefId = new Map<number, number>();
@@ -840,23 +869,23 @@ const analyzeVariableLifetime = (
       // Each entry: { startOffset, capturedNames } — used to check if moving a declaration
       // past a closure definition would break capture semantics.
       const nestedFunctions: Array<{ readonly startOffset: number; readonly capturedNames: Set<string> }> = [];
-      const outerUsages = collectVariables(bodyNode, { includeNestedFunctions: false });
+      const outerUsages = collectVariables(bodyNode, { includeNestedFunctions: false, declScopeByIdLocation });
       const outerReadKeys = new Set(outerUsages.filter(u => u.isRead).map(u => `${u.name}@${u.location}`));
       const outerWriteKeys = new Set(outerUsages.filter(u => u.isWrite).map(u => `${u.name}@${u.location}`));
       const nestedFnNodes = collectOxcNodes(bodyNode, n => isFunctionNode(n));
 
       for (const nfn of nestedFnNodes) {
-        const nestedUsages = collectVariables(nfn, { includeNestedFunctions: true });
+        const nestedUsages = collectVariables(nfn, { includeNestedFunctions: true, declScopeByIdLocation });
         const captured = new Set<string>();
 
         for (const u of nestedUsages) {
-          // A usage is "captured" if it references a local variable and the same name@location
+          // A usage is "captured" if it references a local binding and the same name@location
           // is NOT present in the outer (non-nested) usages — meaning it's only accessed inside the closure.
-          const key = `${u.name}@${u.location}`;
+          const siteKey = `${u.name}@${u.location}`;
 
           if (
-            localIndexByName.has(u.name) &&
-            ((u.isRead && !outerReadKeys.has(key)) || (u.isWrite && !outerWriteKeys.has(key)))
+            localIndexByName.has(bindingKey(u.name, u.declScope)) &&
+            ((u.isRead && !outerReadKeys.has(siteKey)) || (u.isWrite && !outerWriteKeys.has(siteKey)))
           ) {
             captured.add(u.name);
           }
@@ -960,6 +989,7 @@ const analyzeVariableLifetime = (
         paramBindingNames,
         rel,
         file.sourceText,
+        declScopeByIdLocation,
       );
 
       findings.push(...narrowingFindings);

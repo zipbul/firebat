@@ -34,10 +34,26 @@ export interface VariableUsage {
    * `VariableDeclaration` (`let` / `const` / `var` / `using` / `await using`).
    */
   declarationKind?: 'let' | 'const' | 'var' | 'using' | 'await using';
+  /**
+   * The lexical-scope key of the declaration this usage resolves to. Same-named
+   * bindings in different scopes (e.g. outer `x` shadowed by inner `let x`) have
+   * different `declScope` values, so dataflow can keep them as separate variables.
+   * `undefined` when the usage refers to a binding not visible in the function
+   * being analyzed (e.g. globals, closure captures, or unresolved names).
+   */
+  declScope?: string;
 }
 
 export interface VariableCollectorOptions {
   includeNestedFunctions?: boolean;
+  /**
+   * Pre-computed `Map<identifierStart, declarationScopeKey>` covering the function
+   * (or other) enclosing scope. When supplied, usages of bindings declared outside
+   * the traversed node (e.g. function parameters when traversing only the body)
+   * still receive a `declScope`, letting `bindingKey(name, declScope)` resolve to
+   * the correct variable index even across scope boundaries.
+   */
+  declScopeByIdLocation?: ReadonlyMap<number, string>;
 }
 
 export interface DefMeta {
@@ -54,6 +70,10 @@ export interface DefMeta {
    * For `writeKind === 'declaration'` only. The declaration keyword used.
    */
   readonly declarationKind?: VariableUsage['declarationKind'];
+  /**
+   * The lexical scope of the declaration this def binds (see `VariableUsage.declScope`).
+   */
+  readonly declScope?: string;
 }
 
 export interface FunctionBodyAnalysis {

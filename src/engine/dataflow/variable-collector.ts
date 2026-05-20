@@ -16,11 +16,42 @@ import type {
   VariableDeclarator,
 } from 'oxc-parser';
 
-import { isFunctionNode } from '@zipbul/gildash';
+import { isFunctionNode, ScopeTracker, walk } from '@zipbul/gildash';
 
 import type { VariableCollectorOptions, VariableUsage } from '../types';
 
 import { evalStaticNullish, evalStaticTruthiness, forEachChildNode, unwrapExpression } from '../ast';
+
+/**
+ * Walk `root` with a `ScopeTracker` and return a map from each identifier's start
+ * offset to the lexical scope key of its declaration. Pass the resulting map to
+ * `collectVariables` (via `declScopeByIdLocation`) when traversing only part of
+ * the enclosing scope, so usages of declarations outside the traversed subtree
+ * (e.g. function parameters when traversing the function body) still resolve.
+ */
+export const buildDeclScopeMap = (root: Node): ReadonlyMap<number, string> => {
+  const declScopeByIdLocation = new Map<number, string>();
+  const scopeTracker = new ScopeTracker();
+
+  walk(root, {
+    scopeTracker,
+    enter(n: Node) {
+      if (n.type !== 'Identifier') {
+        return;
+      }
+
+      const decl = scopeTracker.getDeclaration(n.name);
+
+      if (decl === null) {
+        return;
+      }
+
+      declScopeByIdLocation.set(n.start, decl.scope);
+    },
+  });
+
+  return declScopeByIdLocation;
+};
 
 const addPropertyKeyToSet = (key: PropertyKey, keys: Set<string>): void => {
   if (key.type === 'Identifier') {
@@ -234,6 +265,16 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     suppressDeclarations: boolean,
   ) => void;
 
+  // Pre-pass: walk with ScopeTracker so every identifier's declaration scope is known.
+  // This lets `declScope` distinguish same-name bindings in different lexical scopes
+  // (outer `let x` vs inner `let x`) without relying on name alone.
+  //
+  // When the caller provides `declScopeByIdLocation`, use it directly — it is expected
+  // to cover the enclosing function (including parameters), which an in-body walk
+  // alone cannot see.
+  const declScopeByIdLocation: ReadonlyMap<number, string> =
+    options.declScopeByIdLocation ?? buildDeclScopeMap(node);
+
   const pushIdentifierUsage = (
     current: Node,
     name: string,
@@ -254,6 +295,12 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
     if (writeKind === 'declaration' && declarationKind) {
       usage.declarationKind = declarationKind;
+    }
+
+    const declScope = declScopeByIdLocation.get(current.start);
+
+    if (declScope !== undefined) {
+      usage.declScope = declScope;
     }
 
     usages.push(usage);
@@ -358,6 +405,12 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
 
         if (declarationKind) {
           usage.declarationKind = declarationKind;
+        }
+
+        const declScope = declScopeByIdLocation.get(id.start);
+
+        if (declScope !== undefined) {
+          usage.declScope = declScope;
         }
 
         usages.push(usage);

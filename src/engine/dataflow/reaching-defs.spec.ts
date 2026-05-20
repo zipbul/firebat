@@ -4,7 +4,14 @@ import { parseSync } from 'oxc-parser';
 import type { BindingName } from './reaching-defs';
 
 import { collectFunctionNodes } from '../ast/oxc-ast-utils';
-import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, extractBindingNames } from './reaching-defs';
+import {
+  analyzeFunctionBody,
+  bindingKey,
+  collectLocalVarIndexes,
+  collectParameterBindings,
+  extractBindingNames,
+} from './reaching-defs';
+import { buildDeclScopeMap } from './variable-collector';
 
 const parseFunctions = (code: string) => {
   const parsed = parseSync('test.ts', code);
@@ -26,7 +33,7 @@ const analyzeFirstFunction = (code: string) => {
   const paramBindings = collectParameterBindings(fn);
   const body = (fn as any).body;
 
-  return analyzeFunctionBody(body, localIndexByName, paramBindings);
+  return analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn));
 };
 
 describe('engine/dataflow/reaching-defs', () => {
@@ -181,10 +188,10 @@ describe('engine/dataflow/reaching-defs', () => {
       // Act
       const indexes = collectLocalVarIndexes(fn);
 
-      // Assert
+      // Assert — parameters live in scope '', body locals in the function-body block scope '0'
       expect(indexes.size).toBe(2);
-      expect(indexes.has('a')).toBe(true);
-      expect(indexes.has('b')).toBe(true);
+      expect(indexes.has(bindingKey('a', ''))).toBe(true);
+      expect(indexes.has(bindingKey('b', '0'))).toBe(true);
     });
 
     it('collectLocalVarIndexes - only locals no params - includes locals', () => {
@@ -195,8 +202,8 @@ describe('engine/dataflow/reaching-defs', () => {
 
       // Assert
       expect(indexes.size).toBe(2);
-      expect(indexes.has('a')).toBe(true);
-      expect(indexes.has('b')).toBe(true);
+      expect(indexes.has(bindingKey('a', '0'))).toBe(true);
+      expect(indexes.has(bindingKey('b', '0'))).toBe(true);
     });
 
     it('collectLocalVarIndexes - destructuring declaration - includes each binding', () => {
@@ -206,8 +213,8 @@ describe('engine/dataflow/reaching-defs', () => {
       const indexes = collectLocalVarIndexes(fn);
 
       // Assert
-      expect(indexes.has('a')).toBe(true);
-      expect(indexes.has('b')).toBe(true);
+      expect(indexes.has(bindingKey('a', '0'))).toBe(true);
+      expect(indexes.has(bindingKey('b', '0'))).toBe(true);
     });
 
     it('collectLocalVarIndexes - assigns unique index to each variable', () => {
@@ -229,7 +236,9 @@ describe('engine/dataflow/reaching-defs', () => {
       const indexes = collectLocalVarIndexes(fn);
 
       // Assert — outer has no locals of its own; x is IIFE-internal
-      expect(indexes.has('x')).toBe(false);
+      for (const key of indexes.keys()) {
+        expect(key.startsWith('x@')).toBe(false);
+      }
     });
 
     it('collectLocalVarIndexes - async arrow IIFE inside async arrow - does not include IIFE-internal declarations', () => {
@@ -240,9 +249,28 @@ describe('engine/dataflow/reaching-defs', () => {
       // Act
       const indexes = collectLocalVarIndexes(fn);
 
-      // Assert — x belongs to async IIFE scope; created belongs to outer
-      expect(indexes.has('x')).toBe(false);
-      expect(indexes.has('created')).toBe(true);
+      // Assert — x belongs to async IIFE scope; created belongs to outer body block
+      for (const key of indexes.keys()) {
+        expect(key.startsWith('x@')).toBe(false);
+      }
+
+      expect(indexes.has(bindingKey('created', '0'))).toBe(true);
+    });
+
+    it('collectLocalVarIndexes - same name in outer and inner block - distinct indexes (no shadow collision)', () => {
+      // Arrange — outer param x and inner block `let x` are separate bindings
+      const fn = firstFunction('function f(x: number) { { let x = 1; return x; } }');
+      // Act
+      const indexes = collectLocalVarIndexes(fn);
+
+      // Assert — both bindings tracked, with different varIndexes
+      const xKeys = [...indexes.keys()].filter(k => k.startsWith('x@'));
+
+      expect(xKeys.length).toBe(2);
+
+      const xIndexes = new Set(xKeys.map(k => indexes.get(k)));
+
+      expect(xIndexes.size).toBe(2);
     });
   });
 
@@ -279,12 +307,12 @@ describe('engine/dataflow/reaching-defs', () => {
       const paramBindings = collectParameterBindings(fn);
       const body = (fn as any).body;
       // Act
-      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings);
+      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn));
 
       // Assert
       expect(analysis.defsOfVar.length).toBe(localIndexByName.size);
 
-      const bIndex = localIndexByName.get('b');
+      const bIndex = localIndexByName.get(bindingKey('b', '0'));
 
       expect(typeof bIndex).toBe('number');
 

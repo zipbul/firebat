@@ -4,7 +4,7 @@ import type { BitSet, DefMeta, FunctionBodyAnalysis } from '../types';
 
 import { OxcCFGBuilder } from '../cfg';
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
-import { collectVariables } from './variable-collector';
+import { buildDeclScopeMap, collectVariables } from './variable-collector';
 
 export interface BindingName {
   readonly name: string;
@@ -69,29 +69,52 @@ export const collectParameterBindings = (functionNode: Node): ReadonlyArray<Bind
   return bindings;
 };
 
+/**
+ * Build the unique key used to identify a binding inside one function's dataflow.
+ *
+ * Two same-named declarations in different lexical scopes (outer `let x` vs inner
+ * `let x`) produce different keys so they get distinct varIndexes. Parameter
+ * bindings, whose declaration scope lives outside the body walk, use the empty
+ * scope key — matching whatever scope key the `ScopeTracker` reports for
+ * identifier usages of those parameters.
+ */
+const PARAMETER_SCOPE = '';
+
+export const bindingKey = (name: string, declScope: string | undefined): string =>
+  `${name}@${declScope ?? PARAMETER_SCOPE}`;
+
 export const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
-  const names = new Set<string>();
+  const keys = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
 
   for (const binding of parameterBindings) {
-    names.add(binding.name);
+    keys.add(bindingKey(binding.name, PARAMETER_SCOPE));
   }
 
   const fn2 = functionNode as OxcFunction;
   const bodyNode = fn2.body as Node | null;
-  const bodyUsages = bodyNode !== null ? collectVariables(bodyNode, { includeNestedFunctions: false }) : [];
+  // Build the decl-scope map from the function root so parameters are registered.
+  // Without this, body-only walks miss the parameter declarations and any usage of
+  // a parameter inside the body would resolve to a different (wrong) scope key.
+  const bodyUsages =
+    bodyNode !== null
+      ? collectVariables(bodyNode, {
+          includeNestedFunctions: false,
+          declScopeByIdLocation: buildDeclScopeMap(functionNode),
+        })
+      : [];
 
   for (const usage of bodyUsages) {
     if (usage.isWrite && usage.writeKind === 'declaration') {
-      names.add(usage.name);
+      keys.add(bindingKey(usage.name, usage.declScope));
     }
   }
 
   const out = new Map<string, number>();
   let index = 0;
 
-  for (const name of names) {
-    out.set(name, index);
+  for (const key of keys) {
+    out.set(key, index);
 
     index += 1;
   }
@@ -128,7 +151,14 @@ type DefUseStateMut = Pick<
 >;
 
 const buildDefMeta = (
-  usage: { name: string; location: number; writeKind?: DefMeta['writeKind']; hasInit?: boolean; declarationKind?: DefMeta['declarationKind'] },
+  usage: {
+    name: string;
+    location: number;
+    writeKind?: DefMeta['writeKind'];
+    hasInit?: boolean;
+    declarationKind?: DefMeta['declarationKind'];
+    declScope?: string;
+  },
   varIndex: number,
 ): DefMeta => {
   const meta: { -readonly [K in keyof DefMeta]: DefMeta[K] } = {
@@ -147,6 +177,10 @@ const buildDefMeta = (
 
   if (usage.declarationKind) {
     meta.declarationKind = usage.declarationKind;
+  }
+
+  if (usage.declScope !== undefined) {
+    meta.declScope = usage.declScope;
   }
 
   return meta;
@@ -177,15 +211,24 @@ const processNodeUsages = (
   payload: ReturnType<typeof OxcCFGBuilder.build>['nodePayloads'][number],
   localIndexByName: Map<string, number>,
   state: DefUseStateMut,
+  declScopeByIdLocation: ReadonlyMap<number, string> | undefined,
 ): void => {
+  const collectorOptions: { includeNestedFunctions: false; declScopeByIdLocation?: ReadonlyMap<number, string> } = {
+    includeNestedFunctions: false,
+  };
+
+  if (declScopeByIdLocation !== undefined) {
+    collectorOptions.declScopeByIdLocation = declScopeByIdLocation;
+  }
+
   const usages = Array.isArray(payload)
-    ? (payload as Node[]).flatMap(p => collectVariables(p, { includeNestedFunctions: false }))
-    : collectVariables(payload as Node, { includeNestedFunctions: false });
+    ? (payload as Node[]).flatMap(p => collectVariables(p, collectorOptions))
+    : collectVariables(payload as Node, collectorOptions);
   const useIndexes = new Set<number>();
   const writeIndexes = new Set<number>();
 
   for (const usage of usages) {
-    const varIndex = localIndexByName.get(usage.name);
+    const varIndex = localIndexByName.get(bindingKey(usage.name, usage.declScope));
 
     if (typeof varIndex !== 'number') {
       continue;
@@ -208,6 +251,7 @@ const buildDefUseState = (
   built: ReturnType<typeof OxcCFGBuilder.build>,
   localIndexByName: Map<string, number>,
   parameterBindings: ReadonlyArray<BindingName>,
+  declScopeByIdLocation: ReadonlyMap<number, string> | undefined,
 ): DefUseState => {
   const nodeCount = built.cfg.nodeCount;
   const nodePayloads = built.nodePayloads;
@@ -222,7 +266,7 @@ const buildDefUseState = (
 
   // Seed parameter bindings as definitions at CFG entry so unused params can be detected.
   for (const binding of parameterBindings) {
-    const varIndex = localIndexByName.get(binding.name);
+    const varIndex = localIndexByName.get(bindingKey(binding.name, PARAMETER_SCOPE));
 
     if (typeof varIndex !== 'number') {
       continue;
@@ -230,7 +274,13 @@ const buildDefUseState = (
 
     const defId = defMetaById.length;
 
-    defMetaById.push({ name: binding.name, varIndex, location: binding.location, writeKind: 'declaration' });
+    defMetaById.push({
+      name: binding.name,
+      varIndex,
+      location: binding.location,
+      writeKind: 'declaration',
+      declScope: PARAMETER_SCOPE,
+    });
     defsByVarIndex[varIndex]?.push(defId);
     genDefIdsByNode[entryId]?.push(defId);
 
@@ -244,7 +294,7 @@ const buildDefUseState = (
       continue;
     }
 
-    processNodeUsages(nodeId, payload, localIndexByName, state);
+    processNodeUsages(nodeId, payload, localIndexByName, state, declScopeByIdLocation);
   }
 
   // Resolve intra-node sequential writes to the same variable. When a single CFG
@@ -495,10 +545,11 @@ export const analyzeFunctionBody = (
   localIndexByName: Map<string, number>,
   parameterBindings: ReadonlyArray<BindingName>,
   parameterDefaults: ReadonlyArray<Node> = [],
+  declScopeByIdLocation?: ReadonlyMap<number, string>,
 ): FunctionBodyAnalysis => {
   const built = OxcCFGBuilder.build(bodyNode);
   const nodeCount = built.cfg.nodeCount;
-  const state = buildDefUseState(built, localIndexByName, parameterBindings);
+  const state = buildDefUseState(built, localIndexByName, parameterBindings, declScopeByIdLocation);
   const { genByNode, killByNode, defsOfVar } = buildGenKillSets(state, nodeCount, localIndexByName.size);
   const pred = built.cfg.buildAdjacency('backward');
   const { inByNode } = computeReachingDefs(pred, nodeCount, genByNode, killByNode);

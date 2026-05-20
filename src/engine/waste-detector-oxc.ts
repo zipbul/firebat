@@ -7,6 +7,7 @@ import type { BitSet, ParsedFile } from './types';
 
 import { collectOxcNodes, forEachChildNode, getNodeName, isFunctionNode, isOxcNode } from './ast';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
+import { buildDeclScopeMap } from './dataflow/variable-collector';
 
 interface NestedFunctionContext {
   readonly entryNodeIds: number[];
@@ -169,13 +170,35 @@ const collectWasteFindingsForFunction = (
     }
   }
 
-  const analysis = analyzeFunctionBody(functionBodyNode, localIndexByName, parameterBindings, parameterDefaults);
+  // Build the decl-scope map from the function root so parameter declarations are
+  // visible to the in-body walks (`ScopeTracker.getDeclaration` cannot resolve
+  // parameters when the walk starts at the body).
+  const declScopeByIdLocation = buildDeclScopeMap(node);
+  const analysis = analyzeFunctionBody(
+    functionBodyNode,
+    localIndexByName,
+    parameterBindings,
+    parameterDefaults,
+    declScopeByIdLocation,
+  );
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, nodePayloads } = analysis;
+  // CLAUDE.md 비대상: function parameter. The reaching-defs seed for parameter bindings
+  // is still needed so reads inside the body resolve to a definition, but the detector
+  // must never report parameters themselves as waste.
+  const parameterLocations = new Set<number>();
+
+  for (const binding of parameterBindings) {
+    parameterLocations.add(binding.location);
+  }
   const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
     ? (functionBodyNode as ReadonlyArray<Node>)
     : [functionBodyNode as Node];
-  const allReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: true })).filter(u => u.isRead);
-  const outerReads = functionBodyNodes.flatMap(n => collectVariables(n, { includeNestedFunctions: false })).filter(u => u.isRead);
+  const allReads = functionBodyNodes
+    .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation }))
+    .filter(u => u.isRead);
+  const outerReads = functionBodyNodes
+    .flatMap(n => collectVariables(n, { includeNestedFunctions: false, declScopeByIdLocation }))
+    .filter(u => u.isRead);
   const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
   const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
   const outerReadNames = new Set(outerReads.map(u => u.name));
@@ -198,6 +221,11 @@ const collectWasteFindingsForFunction = (
     const meta = defs[defId];
 
     if (!meta) {
+      continue;
+    }
+
+    // CLAUDE.md "함수 파라미터" 비대상.
+    if (parameterLocations.has(meta.location)) {
       continue;
     }
 
