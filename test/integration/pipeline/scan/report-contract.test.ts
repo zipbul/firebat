@@ -427,10 +427,10 @@ exit 1
   });
 
   it('should enrich waste findings with file+code and expose them as a bare array', async () => {
-    // Arrange
+    // Arrange — case 1 dead-store-overwrite: initializer is overwritten before read.
     const project = await createScanProjectFixture(
       'firebat-report-contract-waste-enrich',
-      ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
+      ['export function deadStore() {', '  let value = 1;', '  value = 2;', '  return value;', '}'].join('\n'),
     );
 
     try {
@@ -747,7 +747,7 @@ exit 7
   it('should only include seen codes in catalog and exclude codes for detectors not run', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-catalog-seen-codes', {
-      'src/a.ts': ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
+      'src/a.ts': ['export function deadStore() {', '  let value = 1;', '  value = 2;', '  return value;', '}'].join('\n'),
       'src/b.ts': ['export const b = 1;'].join('\n'),
       'src/index.ts': "export * from './b';\n",
       'src/c.ts': ['export function badThrow() {', "  throw 'nope';", '}'].join('\n'),
@@ -783,7 +783,7 @@ exit 7
     // Arrange
     const project = await createScanProjectFixture(
       'firebat-report-contract-catalog-shape',
-      ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
+      ['export function deadStore() {', '  let value = 1;', '  value = 2;', '  return value;', '}'].join('\n'),
     );
 
     try {

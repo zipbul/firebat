@@ -46,7 +46,10 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result).toEqual([]);
   });
 
-  it('detects unused variable (declared but never read)', () => {
+  it('does NOT report use-zero variable (CLAUDE.md: no-unused-vars 영역 비대상)', () => {
+    // A binding with zero syntactic reads belongs to no-unused-vars (tsc noUnusedLocals
+    // already flags it), not waste. Waste only reports dead writes of bindings that are
+    // actually read somewhere.
     const f = toFile(
       '/unused.ts',
       `
@@ -58,7 +61,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     );
     const result = detectWasteOxc([f]);
 
-    expect(result.some(r => r.kind === 'dead-store' && r.label === 'unused')).toBe(true);
+    expect(result.some(r => r.label === 'unused')).toBe(false);
   });
 
   it('detects dead write (variable written then immediately overwritten)', () => {
@@ -130,12 +133,16 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
   });
 
   // Bug 2: localIndexByName.size===0 early return이 중첩 함수 방문을 차단
-  it('detectWasteOxc - outer function with no locals - should detect dead-store in nested function', () => {
-    // Arrange
+  it('detectWasteOxc - outer function with no locals - nested function still analyzed', () => {
+    // The outer function having no locals must not short-circuit nested-function analysis.
+    // `dead` is use=0 → no-unused-vars 영역, but the nested function must still be visited
+    // so that real dead writes (case 1) would surface. Here we assert no FP escapes from
+    // a use=0 binding inside the nested function.
     const source = `function outer() {
       function inner() {
-        const dead = 1;
-        return 2;
+        let v = 1;
+        v = 2;
+        return v;
       }
       return inner();
     }`;
@@ -143,8 +150,8 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     // Act
     const result = detectWasteOxc([f]);
 
-    // Assert
-    expect(result.some(r => r.kind === 'dead-store' && r.label === 'dead')).toBe(true);
+    // Assert — the dead `v = 1` initializer (overwritten before read) is detected in the nested fn
+    expect(result.some(r => r.label === 'v' && (r.kind === 'dead-store' || r.kind === 'dead-store-overwrite'))).toBe(true);
   });
 
   // Bug 3: ObjectPattern RestElement write 누락
@@ -246,18 +253,19 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
   });
 
-  it('detectWasteOxc - outer let shadowed by inner block let - outer is dead', () => {
-    // Arrange — outer `x = 1` is never read; inner `x = 2` is read only inside its block.
-    // Previously the name-only var-index treated both as one variable, and the
-    // `varHasAnyUsedDef` filter spared the outer declaration because the inner shadow
-    // was "used".
+  it('detectWasteOxc - outer let shadowed by inner block let - outer is use=0 (no-unused-vars 영역)', () => {
+    // Outer `let x = 1` is never syntactically read (the inner block declares its own
+    // `x` that shadows it). Use=0 belongs to no-unused-vars per CLAUDE.md, not waste.
+    // tsc's `noUnusedLocals` already reports this.
     const source = `function f() { let x = 1; { let x = 2; console.log(x); } }`;
     const f = toFile('/shadow.ts', source);
     // Act
     const result = detectWasteOxc([f]);
 
-    // Assert — outer `x = 1` should be flagged as dead
-    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(true);
+    // Assert — waste does not flag the outer `x` (it's use=0, no-unused-vars territory)
+    const outerXFindings = result.filter(r => r.label === 'x');
+    // Inner `x = 2` is read inside the block, so the inner binding is not waste either.
+    expect(outerXFindings.length).toBe(0);
   });
 
   it('detectWasteOxc - let declared and reassigned in same scope - not flagged', () => {
@@ -297,15 +305,20 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'a')).toBe(false);
   });
 
-  it('detectWasteOxc - unused parameter with no default reads - still no FP', () => {
-    // Arrange — control: param without defaults, never read in body
-    const source = `function f(_unused) { return 1; }`;
-    const f = toFile('/param-unused.ts', source);
+  it('detectWasteOxc - unused parameter - no FP (function parameter is out of scope per CLAUDE.md)', () => {
+    // Arrange — function parameters are explicitly excluded by CLAUDE.md ("비대상: 함수 파라미터"),
+    // so the detector must not report them regardless of underscore prefix.
+    const sourceWithUnderscore = `function f(_unused) { return 1; }`;
+    const sourceWithoutUnderscore = `function g(unused) { return 1; }`;
+    const f1 = toFile('/param-unused-1.ts', sourceWithUnderscore);
+    const f2 = toFile('/param-unused-2.ts', sourceWithoutUnderscore);
     // Act
-    const result = detectWasteOxc([f]);
+    const r1 = detectWasteOxc([f1]);
+    const r2 = detectWasteOxc([f2]);
 
-    // Assert — underscore-prefixed params are intentionally excluded by detector
-    expect(result.some(r => r.kind === 'dead-store' && r.label === '_unused')).toBe(false);
+    // Assert
+    expect(r1.some(r => r.kind === 'dead-store' && r.label === '_unused')).toBe(false);
+    expect(r2.some(r => r.kind === 'dead-store' && r.label === 'unused')).toBe(false);
   });
 
   it('detectWasteOxc - try{read} finally{write} - emits dead-store exactly once for finally write', () => {
@@ -319,7 +332,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const f = toFile('/try-finally-dup.ts', source);
     // Act
     const result = detectWasteOxc([f]);
-
     // Assert — exactly one dead-store finding for x
     const xFindings = result.filter(r => r.kind === 'dead-store' && r.label === 'x');
 
@@ -402,10 +414,11 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'current')).toBe(false);
   });
 
-  it('detectWasteOxc - parameter x and unused inner let x shadow - inner is dead-store', () => {
-    // Regression catch: a prior `parameterNames.has(name)` hack collapsed any
-    // def whose name matched a parameter (including inner `let x`) into
-    // PARAM_SCOPE, defeating the shadow key and hiding the inner dead-store.
+  it('detectWasteOxc - parameter x and inner block shadow let x - distinct bindings, neither falsely flagged', () => {
+    // Regression catch for the prior name-only varIndex bug: outer param `x` and inner
+    // `let x = 1` must be tracked as distinct bindings. The inner `x` has use=0 →
+    // no-unused-vars 영역 (waste does not report). The outer `x` is read at return.
+    // Neither belongs to waste.
     const source = `function f(x: number) {
       {
         let x = 1;
@@ -415,6 +428,6 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const f = toFile('/param-inner-shadow.ts', source);
     const result = detectWasteOxc([f]);
 
-    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(true);
+    expect(result.length).toBe(0);
   });
 });

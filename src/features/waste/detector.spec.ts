@@ -7,8 +7,8 @@ import { parseSource } from '../../engine/ast/parse-source';
 import { detectWaste } from './detector';
 
 describe('detector', () => {
-  it('should report a dead-store finding when a write is never read', () => {
-    // Arrange
+  it('should NOT report use=0 variable (CLAUDE.md: 사용처 0회 변수 no-unused-vars 영역)', () => {
+    // `unused` is never read → no-unused-vars detector domain (tsc noUnusedLocals).
     let fileName = '/virtual/waste.ts';
     let source = ['function deadStore() {', '  let unused = 1;', '  return 0;', '}'].join('\n');
     let program = createProgram(fileName, source);
@@ -16,7 +16,7 @@ describe('detector', () => {
     let findings = detectWaste(program);
 
     // Assert
-    expect(hasFinding(findings, 'dead-store', 'unused')).toBe(true);
+    expect(hasFinding(findings, 'dead-store', 'unused')).toBe(false);
   });
 
   it('should not report a dead-store finding when a value is read before return', () => {
@@ -85,8 +85,11 @@ describe('detector', () => {
     expect(hasFinding(findings, 'dead-store-overwrite', 'value')).toBe(false);
   });
 
-  it('should report a dead-store finding when a value is read only inside a non-invoked closure', () => {
-    // Arrange
+  it('should NOT report dead-store when value is captured by a closure (use is syntactic and dataflow respects closure capture)', () => {
+    // value is read inside a nested function (closure capture). Whether the closure is
+    // ever invoked is beyond intra-procedural reach; waste conservatively treats the
+    // closure read as a real use. The nested function not being called is the
+    // unused-import/unused-function detector's domain, not waste.
     let fileName = '/virtual/closure-unused.ts';
     let source = [
       'function closureUnused() {',
@@ -102,7 +105,7 @@ describe('detector', () => {
     let findings = detectWaste(program);
 
     // Assert
-    expect(hasFinding(findings, 'dead-store', 'value')).toBe(true);
+    expect(hasFinding(findings, 'dead-store', 'value')).toBe(false);
   });
 
   it('should not report a dead-store finding when a value is read by an immediately-invoked function', () => {
@@ -117,8 +120,7 @@ describe('detector', () => {
     expect(hasFinding(findings, 'dead-store', 'value')).toBe(false);
   });
 
-  it('should report a dead-store finding when inside a class method', () => {
-    // Arrange
+  it('should NOT report use=0 inside a class method (no-unused-vars 영역)', () => {
     let fileName = '/virtual/class-method.ts';
     let source = ['class Foo {', '  method() {', '    let unused = 1;', '    return 0;', '  }', '}'].join('\n');
     let program = createProgram(fileName, source);
@@ -126,7 +128,7 @@ describe('detector', () => {
     let findings = detectWaste(program);
 
     // Assert
-    expect(hasFinding(findings, 'dead-store', 'unused')).toBe(true);
+    expect(hasFinding(findings, 'dead-store', 'unused')).toBe(false);
   });
 
   it('should not report dead-store or overwrite findings when a compound assignment is used', () => {
@@ -248,8 +250,11 @@ describe('detector', () => {
     expect(hasFinding(findings, 'dead-store-overwrite', 'value')).toBe(true);
   });
 
-  it('should report a dead-store finding when a value is only referenced in a destructuring default that is statically not evaluated', () => {
-    // Arrange
+  it('should NOT report dead-store when value is referenced only in an unevaluated destructure default (syntactic read present)', () => {
+    // `value` appears syntactically in the destructure default. CLAUDE.md classifies
+    // use=0 (purely no-unused-vars territory) only when there is zero syntactic read;
+    // a read in a never-evaluated branch still counts as syntactic and falls outside
+    // waste's intra-procedural reachability analysis.
     let fileName = '/virtual/destructure-default-not-evaluated.ts';
     let source = [
       'function destructureDefaultNotEvaluated() {',
@@ -263,7 +268,7 @@ describe('detector', () => {
     let findings = detectWaste(program);
 
     // Assert
-    expect(hasFinding(findings, 'dead-store', 'value')).toBe(true);
+    expect(hasFinding(findings, 'dead-store', 'value')).toBe(false);
   });
 
   it('should not report a dead-store finding when a value is referenced in a destructuring default that is statically evaluated', () => {
@@ -284,8 +289,10 @@ describe('detector', () => {
     expect(hasFinding(findings, 'dead-store', 'value')).toBe(false);
   });
 
-  it('should not report a dead-store finding when a loop exits via break and the value is read after the loop', () => {
-    // Arrange
+  it('should report a dead-store finding when an initializer is overwritten in a loop that always runs (per CLAUDE.md case 1)', () => {
+    // `value = 0` initializer is never read: `while(true)` with `break` runs
+    // exactly once, so `value = 1` overwrites the initializer before the return.
+    // By CLAUDE.md the initializer is removable → dead-store.
     let fileName = '/virtual/break.ts';
     let source = [
       'function breakLoop() {',
@@ -302,7 +309,7 @@ describe('detector', () => {
     let findings = detectWaste(program);
 
     // Assert
-    expect(hasFinding(findings, 'dead-store', 'value')).toBe(false);
+    expect(hasFinding(findings, 'dead-store', 'value')).toBe(true);
   });
 
   it('should report a dead-store finding when a value is read only inside a statically-unreachable loop body', () => {

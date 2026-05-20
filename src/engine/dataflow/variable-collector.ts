@@ -274,6 +274,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
   // alone cannot see.
   const declScopeByIdLocation: ReadonlyMap<number, string> =
     options.declScopeByIdLocation ?? buildDeclScopeMap(node);
+  const evaluateAllBranches = options.evaluateAllBranches === true;
 
   const pushIdentifierUsage = (
     current: Node,
@@ -353,8 +354,9 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     const { object } = current;
 
     // Optional access on a literal `null` / `undefined` base short-circuits at runtime,
-    // so the computed property is never actually read.
-    if (current.optional === true && isLiteralNullishBase(object)) {
+    // so the computed property is never actually read. (Skipped in syntactic mode so
+    // tools like waste's no-unused-vars classification still count the read.)
+    if (current.optional === true && isLiteralNullishBase(object) && !evaluateAllBranches) {
       return;
     }
 
@@ -494,13 +496,25 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     }
 
     if (current.type === 'LogicalExpression') {
-      visitLogicalExpression(current, allowNestedFunctions, suppressDeclarations, visit);
+      if (evaluateAllBranches) {
+        // Syntactic mode — traverse both sides regardless of static reachability.
+        visit(current.left, allowNestedFunctions, false, undefined, suppressDeclarations);
+        visit(current.right, allowNestedFunctions, false, undefined, suppressDeclarations);
+      } else {
+        visitLogicalExpression(current, allowNestedFunctions, suppressDeclarations, visit);
+      }
 
       return;
     }
 
     if (current.type === 'ConditionalExpression') {
-      visitConditionalExpression(current, allowNestedFunctions, suppressDeclarations, visit);
+      if (evaluateAllBranches) {
+        visit(current.test, allowNestedFunctions, false, undefined, suppressDeclarations);
+        visit(current.consequent, allowNestedFunctions, false, undefined, suppressDeclarations);
+        visit(current.alternate, allowNestedFunctions, false, undefined, suppressDeclarations);
+      } else {
+        visitConditionalExpression(current, allowNestedFunctions, suppressDeclarations, visit);
+      }
 
       return;
     }

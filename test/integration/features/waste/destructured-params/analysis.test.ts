@@ -4,8 +4,10 @@ import { detectWaste } from '../../../../../src/test-api';
 import { createProgramFromMap } from '../../../shared/test-kit';
 
 describe('integration/waste/destructured-params', () => {
-  it('should report dead-store when destructured parameter binding is never read', () => {
-    // Arrange
+  it('should NOT report dead-store for destructured parameter binding (CLAUDE.md: 함수 파라미터 비대상)', () => {
+    // Function parameters — including bindings inside a destructured parameter pattern —
+    // are explicitly excluded from waste by CLAUDE.md. Unused parameter names belong to
+    // the no-unused-vars detector domain, not waste.
     const sources = new Map<string, string>();
 
     sources.set(
@@ -19,7 +21,6 @@ describe('integration/waste/destructured-params', () => {
     // Assert
     const unusedFindings = findings.filter(f => f.label === 'unused');
 
-    expect(unusedFindings.length).toBe(1);
-    expect(unusedFindings[0]?.kind).toBe('dead-store');
+    expect(unusedFindings.length).toBe(0);
   });
 });

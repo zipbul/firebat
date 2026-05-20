@@ -54,6 +54,13 @@ export interface VariableCollectorOptions {
    * the correct variable index even across scope boundaries.
    */
   declScopeByIdLocation?: ReadonlyMap<number, string>;
+  /**
+   * If true, traverse every branch of logical and conditional expressions even when
+   * static analysis shows one side is dead (e.g. `1 ?? fallback` — `fallback` would
+   * never be evaluated). Used for purely *syntactic* read counting that ignores
+   * reachability. Default false (semantic traversal, matches reaching-defs).
+   */
+  evaluateAllBranches?: boolean;
 }
 
 export interface DefMeta {

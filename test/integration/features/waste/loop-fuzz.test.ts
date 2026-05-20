@@ -41,8 +41,12 @@ const getLoopGenerator = (shouldRead: boolean) => {
 };
 
 describe('waste (integration fuzz)', () => {
-  it('should report dead-store only when a loop breaks without reading the value (seeded)', () => {
-    // Arrange
+  it('should report dead-store on the initializer iff the loop value is read after the loop (seeded)', () => {
+    // CLAUDE.md case 1: `while(true) { value = ?; break; }` always runs once, so
+    // `let value = 0` initializer is overwritten before the loop exit.
+    //   - shouldRead=true  → `return value`: value is used, initializer is dead → dead-store
+    //   - shouldRead=false → `return 0`: value is never read at all, falling under
+    //     "사용처 0회 변수 (no-unused-vars 영역)" 비대상 → waste must NOT report it
     const seed = getFuzzSeed();
     const prng = createPrng(seed);
     const iterations = getFuzzIterations(140);
@@ -62,7 +66,7 @@ describe('waste (integration fuzz)', () => {
       const hasDeadStore = signatures.some(signature => signature.includes(`${filePath}|dead-store|value`));
 
       // Assert
-      expect(hasDeadStore).toBe(!shouldRead);
+      expect(hasDeadStore).toBe(shouldRead);
 
       const signaturesAgain = toWasteSignatures(detectWaste(program));
 

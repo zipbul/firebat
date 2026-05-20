@@ -8,7 +8,8 @@ interface WasteKindFinding {
 }
 
 function createDeadStoreSource(): string {
-  return ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n');
+  // case 1: declaration initializer overwritten before read.
+  return ['export function deadStore() {', '  let value = 1;', '  value = 2;', '  return value;', '}'].join('\n');
 }
 
 function createOverwriteSource(): string {

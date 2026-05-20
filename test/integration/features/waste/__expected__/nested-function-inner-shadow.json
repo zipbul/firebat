@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/nested-function-inner-shadow.ts",
+    "kind": "dead-store",
+    "label": "x",
+    "message": "Variable 'x' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 7
+      },
+      "start": {
+        "column": 6,
+        "line": 7
+      }
+    }
+  }
+]

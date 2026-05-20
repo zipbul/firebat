@@ -66,7 +66,10 @@ const hasValueDeadStore = (signatures: readonly string[]): boolean => {
 };
 
 const shouldHaveDeadStore = (kind: number): boolean => {
-  return kind === 0 || kind === 3;
+  // CLAUDE.md 비대상: kind 0 (use=0) belongs to no-unused-vars 영역, not waste.
+  // kind 3 (syntactic read in statically unreachable branch) is waste — the read
+  // is textually present but never reached, so the init is dead by reaching-defs.
+  return kind === 3;
 };
 
 const createReachableReadSource = (): string => {

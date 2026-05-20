@@ -5,64 +5,62 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import type { WasteFinding } from '..';
 import type { BitSet, ParsedFile } from './types';
 
-import { collectOxcNodes, forEachChildNode, getNodeName, isFunctionNode, isOxcNode } from './ast';
-import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
+import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode } from './ast';
+import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
 import { buildDeclScopeMap } from './dataflow/variable-collector';
 
 interface NestedFunctionContext {
+  /**
+   * CFG node ids whose payload includes one or more nested functions. The CFG
+   * delivers a nested function's body as a single payload reachable from its
+   * declaration site, so each entryNodeId stands for "control reached a closure
+   * that can fire at any time after this point."
+   */
   readonly entryNodeIds: number[];
-  readonly readNamesByEntryNodeId: Map<number, Set<string>>;
+  /**
+   * For each entry, the *outer* binding `varIndex`es that the nested function (or
+   * its own nested functions, transitively) reads. A def whose `varIndex` is in
+   * this set and whose `defId` reaches the entry is closure-captured.
+   */
+  readonly capturedVarIndexesByEntry: Map<number, Set<number>>;
 }
 
-const addClosureReadsFromFunction = (nestedFunction: Node, closureReadNames: Set<string>, entryReadNames: Set<string>): void => {
-  const nestedReads = collectVariables(nestedFunction, { includeNestedFunctions: true }).filter(u => u.isRead);
+/**
+ * Collect outer-binding varIndexes that this nested function captures by reading.
+ *
+ * "Outer" is decided by varIndex membership in `localIndexByName`, which is keyed
+ * by `bindingKey(name, declScope)` — same-named inner shadows resolve to a
+ * different scope and therefore are never registered as outer bindings. This is
+ * why the closure check is bindingKey-driven rather than name-driven.
+ */
+const collectCapturedVarIndexesFromFunction = (
+  nestedFunction: Node,
+  localIndexByName: Map<string, number>,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
+  out: Set<number>,
+): void => {
+  const nestedUsages = collectVariables(nestedFunction, { includeNestedFunctions: true, declScopeByIdLocation });
 
-  for (const r of nestedReads) {
-    if (closureReadNames.has(r.name)) {
-      entryReadNames.add(r.name);
-    }
-  }
-};
-
-const isRelevantNestedFunction = (nestedFunction: Node, outerReadNames: Set<string>): boolean => {
-  if (nestedFunction.type !== 'FunctionDeclaration') {
-    return true;
-  }
-
-  const nestedFn = nestedFunction as OxcFunction;
-  const declName = getNodeName(nestedFn.id);
-
-  return declName === null || outerReadNames.has(declName);
-};
-
-const buildEntryContext = (
-  nested: Node[],
-  outerReadNames: Set<string>,
-  closureReadNames: Set<string>,
-): { hasRelevant: boolean; entryReadNames: Set<string> } => {
-  let hasRelevant = false;
-  const entryReadNames = new Set<string>();
-
-  for (const nestedFunction of nested) {
-    if (!isRelevantNestedFunction(nestedFunction, outerReadNames)) {
+  for (const u of nestedUsages) {
+    if (!u.isRead) {
       continue;
     }
 
-    hasRelevant = true;
+    const idx = localIndexByName.get(bindingKey(u.name, u.declScope));
 
-    addClosureReadsFromFunction(nestedFunction, closureReadNames, entryReadNames);
+    if (typeof idx === 'number') {
+      out.add(idx);
+    }
   }
-
-  return { hasRelevant, entryReadNames };
 };
 
 const buildNestedFunctionContext = (
   nodePayloads: ReadonlyArray<Node | ReadonlyArray<Node> | undefined>,
-  outerReadNames: Set<string>,
-  closureReadNames: Set<string>,
+  localIndexByName: Map<string, number>,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
 ): NestedFunctionContext => {
   const entryNodeIds: number[] = [];
-  const readNamesByEntryNodeId = new Map<number, Set<string>>();
+  const capturedVarIndexesByEntry = new Map<number, Set<number>>();
 
   for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
     const payload = nodePayloads[nodeId];
@@ -78,29 +76,33 @@ const buildNestedFunctionContext = (
       continue;
     }
 
-    const { hasRelevant, entryReadNames } = buildEntryContext(nested, outerReadNames, closureReadNames);
+    const captured = new Set<number>();
 
-    if (!hasRelevant) {
+    for (const nestedFunction of nested) {
+      collectCapturedVarIndexesFromFunction(nestedFunction, localIndexByName, declScopeByIdLocation, captured);
+    }
+
+    if (captured.size === 0) {
       continue;
     }
 
     entryNodeIds.push(nodeId);
-    readNamesByEntryNodeId.set(nodeId, entryReadNames);
+    capturedVarIndexesByEntry.set(nodeId, captured);
   }
 
-  return { entryNodeIds, readNamesByEntryNodeId };
+  return { entryNodeIds, capturedVarIndexesByEntry };
 };
 
 const isDefClosureCaptured = (
   defId: number,
-  metaName: string,
+  varIndex: number,
   nestedCtx: NestedFunctionContext,
   reachingInByNode: ReadonlyArray<BitSet>,
 ): boolean => {
   for (const entryNodeId of nestedCtx.entryNodeIds) {
-    const entryReadNames = nestedCtx.readNamesByEntryNodeId.get(entryNodeId);
+    const capturedSet = nestedCtx.capturedVarIndexesByEntry.get(entryNodeId);
 
-    if (!entryReadNames || !entryReadNames.has(metaName)) {
+    if (!capturedSet || !capturedSet.has(varIndex)) {
       continue;
     }
 
@@ -193,20 +195,35 @@ const collectWasteFindingsForFunction = (
   const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
     ? (functionBodyNode as ReadonlyArray<Node>)
     : [functionBodyNode as Node];
-  const allReads = functionBodyNodes
-    .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation }))
+  // Syntactic read counting (ignores static dead-branch pruning) to classify
+  // "사용처 0회 변수 (no-unused-vars 영역)" correctly. Includes reads inside nested
+  // functions so closure captures count as syntactic uses of the outer binding.
+  const syntacticReads = functionBodyNodes
+    .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
     .filter(u => u.isRead);
-  const outerReads = functionBodyNodes
-    .flatMap(n => collectVariables(n, { includeNestedFunctions: false, declScopeByIdLocation }))
-    .filter(u => u.isRead);
-  const outerReadKeys = new Set(outerReads.map(u => `${u.name}@${u.location}`));
-  const closureReadNames = new Set(allReads.filter(u => !outerReadKeys.has(`${u.name}@${u.location}`)).map(u => u.name));
-  const outerReadNames = new Set(outerReads.map(u => u.name));
+  // Closure-capture analysis is varIndex-driven: a read inside a nested function only
+  // counts as capturing an *outer* binding if `bindingKey(name, declScope)` resolves
+  // to an entry in `localIndexByName` — inner same-name shadows resolve to a different
+  // scope key and are filtered out automatically.
   const nestedCtx = buildNestedFunctionContext(
     nodePayloads as ReadonlyArray<Node | ReadonlyArray<Node> | undefined>,
-    outerReadNames,
-    closureReadNames,
+    localIndexByName,
+    declScopeByIdLocation,
   );
+  // CLAUDE.md 비대상: 사용처 0회 변수 (no-unused-vars 영역).
+  // A binding with zero syntactic reads belongs to no-unused-vars, not waste.
+  // `syntacticReads` ignores static dead-branch pruning, matching how tsc's
+  // `noUnusedLocals` classifies variables — a read in `1 ?? fallback` still counts.
+  const varHasAnyRead = new Set<number>();
+
+  for (const usage of syntacticReads) {
+    const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+
+    if (typeof idx === 'number') {
+      varHasAnyRead.add(idx);
+    }
+  }
+
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
   // normal- and abnormal-completion paths), producing distinct defIds at the same
@@ -229,7 +246,12 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
-    if (isDefClosureCaptured(defId, meta.name, nestedCtx, reachingInByNode)) {
+    // CLAUDE.md "사용처 0회 변수 (no-unused-vars 영역)" 비대상.
+    if (!varHasAnyRead.has(meta.varIndex)) {
+      continue;
+    }
+
+    if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode)) {
       continue;
     }
 

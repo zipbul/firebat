@@ -45,4 +45,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'class-field-out-of-scope', program => detectWaste([...program]));
   // 분석 대상 외: export const module-scope (CLAUDE.md 비대상)
   runGolden(import.meta.dir, 'no-findings', program => detectWaste([...program]));
+
+  // ── 회귀 잠금 (closure-capture 정공법 검증) ─────────────────────────────
+  // outer x는 dead-store-overwrite, inner shadow는 별개 binding (varIndex로 분리)
+  runGolden(import.meta.dir, 'nested-function-inner-shadow', program => detectWaste([...program]));
+  // IIFE의 outer capture가 정확히 use로 인정되는지 KEEP boundary
+  runGolden(import.meta.dir, 'iife-outer-capture', program => detectWaste([...program]));
 });
