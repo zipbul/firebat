@@ -141,8 +141,14 @@ const isDefClosureCaptured = (
 // - Array.prototype mutators
 // - Map / Set / WeakMap / WeakSet mutators
 // - TypedArray mutators (share names with Array)
-const MUTATION_METHODS = new Set([
-  // Array
+//
+// Splitting by receiver shape: matching a name from the wrong bucket on a
+// known-shape fresh allocation does NOT call that method — it throws a
+// TypeError, which is an observable side-effect we must keep. So:
+//   - `arr.set(...)` on an `ArrayExpression` is NOT a local mutation (throw)
+//   - `o.push(...)` on an `ObjectExpression` is NOT a local mutation (throw)
+// Cross-receiver compatibility is enforced at the use site via `mutationMethodCategory`.
+const ARRAY_MUTATION_METHODS = new Set<string>([
   'push',
   'pop',
   'shift',
@@ -152,12 +158,76 @@ const MUTATION_METHODS = new Set([
   'reverse',
   'fill',
   'copyWithin',
-  // Map / Set / WeakMap / WeakSet
+]);
+
+const MAPSET_MUTATION_METHODS = new Set<string>([
   'set',
   'add',
   'delete',
   'clear',
 ]);
+
+type MutationMethodCategory = 'array' | 'mapset';
+
+const mutationMethodCategory = (name: string): MutationMethodCategory | null => {
+  if (ARRAY_MUTATION_METHODS.has(name)) {
+    return 'array';
+  }
+
+  if (MAPSET_MUTATION_METHODS.has(name)) {
+    return 'mapset';
+  }
+
+  return null;
+};
+
+type FreshAllocationKind = 'array' | 'object' | 'class' | 'regex';
+
+const freshAllocationKindOf = (init: Node): FreshAllocationKind | null => {
+  const unwrapped = unwrapValueWrappers(init);
+
+  if (unwrapped.type === 'ArrayExpression') {
+    return 'array';
+  }
+
+  if (unwrapped.type === 'ObjectExpression') {
+    return 'object';
+  }
+
+  if (unwrapped.type === 'ClassExpression') {
+    return 'class';
+  }
+
+  if (unwrapped.type === 'Literal' && (unwrapped as { regex?: unknown }).regex !== undefined) {
+    return 'regex';
+  }
+
+  return null;
+};
+
+// Whether the mutation method category is reachable on a value of the given
+// fresh-allocation kind. `{}.push(...)` and `[].set(...)` both throw TypeError,
+// so they are NOT local mutations.
+const mutationCompatibleWithInit = (
+  category: MutationMethodCategory,
+  initKind: FreshAllocationKind | undefined,
+): boolean => {
+  if (initKind === undefined) {
+    // Unknown receiver kind (mixed defs, no fresh-allocation gate). Be safe:
+    // any other condition will disqualify case 6/7 elsewhere.
+    return true;
+  }
+
+  if (initKind === 'array') {
+    return category === 'array';
+  }
+
+  // ObjectExpression literal carries no prototype mutator name. RegExp/Class
+  // values are not standard mutation receivers — any whitelisted call on them
+  // is either a TypeError or a user-defined override (already gated by
+  // varHasUserDefinedAccessor for ObjectExpression with own methods).
+  return false;
+};
 
 // Expression kinds whose evaluation has observable side-effects (call/await/yield/new
 // /assignment/update/tagged template/spread/delete). If any of these appear inside a
@@ -256,7 +326,43 @@ const callExpressionTargetMutationApi = (callee: Node): string | null => {
 
 type UseKind = 'real' | 'mutation' | 'property-write' | 'escape';
 
-const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node | null): UseKind => {
+// Whether an ObjectExpression literal contains a getter or setter property.
+// Source arguments to `Object.assign(target, source)` are enumerated and each
+// own property is *read* — a getter on `source` fires at copy time. Detecting
+// the getter syntactically is enough; `containsImpureExpression` skips
+// function bodies, so the getter would otherwise look pure.
+const objectLiteralHasAccessor = (node: Node): boolean => {
+  if (node.type !== 'ObjectExpression') {
+    return false;
+  }
+
+  const properties = (node as { properties?: ReadonlyArray<Node> }).properties;
+
+  if (!Array.isArray(properties)) {
+    return false;
+  }
+
+  for (const prop of properties) {
+    if (prop.type !== 'Property') {
+      continue;
+    }
+
+    const kind = (prop as { kind?: string }).kind;
+
+    if (kind === 'get' || kind === 'set') {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const classifyUseInWaste = (
+  usage: Node,
+  parent: Node | null,
+  grandparent: Node | null,
+  receiverInitKind?: FreshAllocationKind,
+): UseKind => {
   if (parent === null) {
     return 'real';
   }
@@ -296,7 +402,19 @@ const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node 
           for (let i = 1; i < args.length; i += 1) {
             const other = args[i];
 
-            if (other !== undefined && containsImpureExpression(other)) {
+            if (other === undefined) {
+              continue;
+            }
+
+            if (containsImpureExpression(other)) {
+              return 'real';
+            }
+
+            // `Object.assign(target, { get x() { sideeffect } })` enumerates the
+            // source and invokes its getter at copy time. The getter body looks
+            // pure to `containsImpureExpression` (function-literal bodies are
+            // skipped at value time) but it WILL run during the assign call.
+            if (objectLiteralHasAccessor(other)) {
               return 'real';
             }
           }
@@ -358,17 +476,30 @@ const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node 
       ) {
         const property = (parent as { property: Node }).property;
 
-        if (property.type === 'Identifier' && MUTATION_METHODS.has((property as { name: string }).name)) {
-          // `v.METHOD(args...)` — local mutation only when every argument is pure.
-          const args = (grandparent as unknown as { arguments: ReadonlyArray<Node> }).arguments;
+        if (property.type === 'Identifier') {
+          const methodName = (property as { name: string }).name;
+          const category = mutationMethodCategory(methodName);
 
-          for (const arg of args) {
-            if (containsImpureExpression(arg)) {
+          if (category !== null) {
+            // Cross-receiver check: `[].set(...)` / `{}.push(...)` throw TypeError
+            // at runtime — observable side-effect we must keep. Only treat as a
+            // local mutation when the method category matches the known receiver
+            // init kind.
+            if (!mutationCompatibleWithInit(category, receiverInitKind)) {
               return 'real';
             }
-          }
 
-          return 'mutation';
+            // `v.METHOD(args...)` — local mutation only when every argument is pure.
+            const args = (grandparent as unknown as { arguments: ReadonlyArray<Node> }).arguments;
+
+            for (const arg of args) {
+              if (containsImpureExpression(arg)) {
+                return 'real';
+              }
+            }
+
+            return 'mutation';
+          }
         }
       }
     }
@@ -638,6 +769,38 @@ const objectInitDefinesMethodOrAccessor = (init: Node): boolean => {
     if (kind === 'get' || kind === 'set' || isMethod) {
       return true;
     }
+
+    // `{ __proto__: parent }` installs a prototype at literal time. Property
+    // writes/reads on the resulting object can fire inherited setters/getters
+    // or throw against inherited frozen slots — the receiver is no longer a
+    // clean own-property-only fresh allocation.
+    const key = (prop as { key?: Node; computed?: boolean }).key;
+    const computed = (prop as { computed?: boolean }).computed === true;
+
+    if (!computed && key !== undefined) {
+      const keyName =
+        key.type === 'Identifier'
+          ? (key as { name: string }).name
+          : key.type === 'Literal' && typeof (key as { value?: unknown }).value === 'string'
+            ? ((key as { value: string }).value)
+            : null;
+
+      if (keyName === '__proto__') {
+        return true;
+      }
+    }
+
+    // Computed key whose value is a function literal — semantically a method
+    // (e.g. `{ [Symbol.toPrimitive]: () => ... }`). Object coercion / spread /
+    // certain built-ins look up these well-known symbol methods and invoke
+    // them, so the property's value is reachable as a method.
+    if (computed) {
+      const value = (prop as { value?: Node }).value;
+
+      if (value !== undefined && isFunctionNode(value)) {
+        return true;
+      }
+    }
   }
 
   return false;
@@ -724,10 +887,53 @@ const compoundAssignmentMayCoerceObject = (
   return !sawPriorDef;
 };
 
+// A direct call to `eval(...)` inside a scope can dynamically read any binding
+// by name — the string argument is opaque to static analysis. Any def whose
+// next syntactic write looks like an overwrite could still be observed via
+// eval. Disable case 1–4/6/7 for the whole scope when direct eval is present.
+const scopeUsesDirectEval = (bodyNodes: ReadonlyArray<Node>): boolean => {
+  let found = false;
+  const visit = (node: Node): void => {
+    if (found) {
+      return;
+    }
+
+    // Skip nested function bodies — direct eval inside a nested function only
+    // captures *that* function's scope, not the outer one. Each nested function
+    // is analyzed in its own pass.
+    if (isFunctionNode(node)) {
+      return;
+    }
+
+    if (
+      node.type === 'CallExpression' &&
+      (node as { callee: Node }).callee.type === 'Identifier' &&
+      ((node as { callee: { name: string } }).callee.name === 'eval')
+    ) {
+      found = true;
+
+      return;
+    }
+
+    forEachChildNode(node, visit);
+  };
+
+  for (const n of bodyNodes) {
+    visit(n);
+
+    if (found) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const buildVarHasMeaningfulUse = (
   functionBodyNodes: ReadonlyArray<Node>,
   localIndexByName: Map<string, number>,
   declScopeByIdLocation: ReadonlyMap<number, string>,
+  varInitKind: ReadonlyMap<number, FreshAllocationKind> = new Map(),
 ): Set<number> => {
   const meaningful = new Set<number>();
   const ctxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
@@ -754,7 +960,7 @@ const buildVarHasMeaningfulUse = (
       continue;
     }
 
-    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent);
+    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, varInitKind.get(idx));
 
     if (kind === 'real' || kind === 'escape') {
       meaningful.add(idx);
@@ -876,9 +1082,71 @@ const collectWasteFindingsForFunction = (
   // write (`v.p = ...`), with no real read or escape, is dead. We track by `varIndex`,
   // not `defId`, because the question is whether the *variable* is ever observed; a
   // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
-  const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation);
   // Identifier context map for the body — reused by the per-def purity check below.
   const defCtxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
+
+  // Direct eval barrier: a function body that contains `eval(...)` may read any
+  // local binding dynamically. Skip waste analysis entirely.
+  if (scopeUsesDirectEval(functionBodyNodes)) {
+    return;
+  }
+
+  // Pre-compute each variable's init kind so use-site classification can reject
+  // cross-receiver mutation method calls (`[].set(...)`, `{}.push(...)` throw
+  // TypeError — not a local mutation).
+  const varInitKind = new Map<number, FreshAllocationKind>();
+  const varHasMixedFreshKinds = new Set<number>();
+
+  for (const def of defs) {
+    if (def === undefined) {
+      continue;
+    }
+
+    if (
+      def.writeKind !== 'declaration' &&
+      def.writeKind !== 'assignment' &&
+      def.writeKind !== 'logical-assignment'
+    ) {
+      continue;
+    }
+
+    if (def.writeKind === 'declaration' && def.hasInit === false) {
+      continue;
+    }
+
+    const ctx = defCtxByLocation.get(def.location);
+
+    if (ctx === undefined) {
+      continue;
+    }
+
+    const init = resolveDeclarationInit(ctx);
+
+    if (init === null) {
+      continue;
+    }
+
+    const kind = freshAllocationKindOf(init);
+
+    if (kind === null) {
+      continue;
+    }
+
+    const existing = varInitKind.get(def.varIndex);
+
+    if (existing === undefined) {
+      varInitKind.set(def.varIndex, kind);
+    } else if (existing !== kind) {
+      varHasMixedFreshKinds.add(def.varIndex);
+      varInitKind.delete(def.varIndex);
+    }
+  }
+
+  // Case 6/7: a binding whose only uses are local mutation (`v.push(...)`) or property
+  // write (`v.p = ...`), with no real read or escape, is dead. We track by `varIndex`,
+  // not `defId`, because the question is whether the *variable* is ever observed; a
+  // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
+  const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation, varInitKind);
 
   // Case 6/7's safety claim ("mutation is local-only") requires that *every* def of
   // the variable is a fresh allocation. If one branch assigns a fresh `[]` and another
@@ -1019,7 +1287,8 @@ const collectWasteFindingsForFunction = (
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
-      !varHasUserDefinedAccessor.has(meta.varIndex);
+      !varHasUserDefinedAccessor.has(meta.varIndex) &&
+      !varHasMixedFreshKinds.has(meta.varIndex);
 
     if (!isCase67) {
       // Cases 1–4: per-def reaching-defs analysis. A def used elsewhere or captured by
@@ -1191,8 +1460,62 @@ const collectWasteFindingsForModule = (
     }
   }
 
-  const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation);
   const defCtxByLocation = buildIdentifierContextByLocation(programBody);
+
+  // Direct eval at module scope — same dynamic-read barrier as function path.
+  if (scopeUsesDirectEval(programBody)) {
+    return;
+  }
+
+  const varInitKind = new Map<number, FreshAllocationKind>();
+  const varHasMixedFreshKinds = new Set<number>();
+
+  for (const def of defs) {
+    if (def === undefined) {
+      continue;
+    }
+
+    if (
+      def.writeKind !== 'declaration' &&
+      def.writeKind !== 'assignment' &&
+      def.writeKind !== 'logical-assignment'
+    ) {
+      continue;
+    }
+
+    if (def.writeKind === 'declaration' && def.hasInit === false) {
+      continue;
+    }
+
+    const ctx = defCtxByLocation.get(def.location);
+
+    if (ctx === undefined) {
+      continue;
+    }
+
+    const init = resolveDeclarationInit(ctx);
+
+    if (init === null) {
+      continue;
+    }
+
+    const kind = freshAllocationKindOf(init);
+
+    if (kind === null) {
+      continue;
+    }
+
+    const existing = varInitKind.get(def.varIndex);
+
+    if (existing === undefined) {
+      varInitKind.set(def.varIndex, kind);
+    } else if (existing !== kind) {
+      varHasMixedFreshKinds.add(def.varIndex);
+      varInitKind.delete(def.varIndex);
+    }
+  }
+
+  const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation, varInitKind);
   // Same "all defs fresh" gate as the function path — required so module-scope
   // `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the fresh def.
   const varHasOnlyFreshDefs = new Set<number>();
@@ -1313,7 +1636,8 @@ const collectWasteFindingsForModule = (
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
-      !varHasUserDefinedAccessor.has(meta.varIndex);
+      !varHasUserDefinedAccessor.has(meta.varIndex) &&
+      !varHasMixedFreshKinds.has(meta.varIndex);
 
     if (!isCase67) {
       if (usedDefs.has(defId)) {

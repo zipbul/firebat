@@ -99,6 +99,16 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'user-defined-mutation-method-keep', program => detectWaste([...program]));
   // user-defined setter is invoked by property write → KEEP
   runGolden(import.meta.dir, 'user-defined-setter-keep', program => detectWaste([...program]));
+  // mutation method name matches but receiver init kind doesn't (`[].set`, `{}.push` throw) → KEEP
+  runGolden(import.meta.dir, 'cross-receiver-mutation-method-keep', program => detectWaste([...program]));
+  // `{ __proto__: parent }` installs a prototype → inherited accessors/frozen guards → KEEP
+  runGolden(import.meta.dir, 'proto-key-inherited-accessor-keep', program => detectWaste([...program]));
+  // `Object.assign(target, { get x(){} })` fires source getter at copy time → KEEP
+  runGolden(import.meta.dir, 'object-assign-source-getter-keep', program => detectWaste([...program]));
+  // computed-key with function-literal value is method-like (`[Symbol.toPrimitive]`) → KEEP
+  runGolden(import.meta.dir, 'computed-symbol-method-keep', program => detectWaste([...program]));
+  // direct `eval(...)` in scope = opaque dynamic-read barrier → skip scope → KEEP
+  runGolden(import.meta.dir, 'direct-eval-scope-barrier-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD
