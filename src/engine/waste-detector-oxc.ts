@@ -222,6 +222,15 @@ const classifyUseInWaste = (usage: Node, parent: Node | null, grandparent: Node 
   // Only the object position counts as a use of v — `obj[v]` (v as computed property)
   // does NOT match this branch (parent.object !== usage), so it falls through to 'real'.
   if (parent.type === 'MemberExpression' && (parent as { object: Node }).object === usage) {
+    // Computed-key purity: `v[g()]` evaluates `g()` whenever the access executes. If
+    // that key expression has side-effects, removing the surrounding write would erase
+    // the call too — treat as real to keep it.
+    const memberParent = parent as { computed?: boolean; property: Node };
+
+    if (memberParent.computed === true && containsImpureExpression(memberParent.property)) {
+      return 'real';
+    }
+
     if (grandparent !== null) {
       if (
         grandparent.type === 'AssignmentExpression' &&
@@ -337,6 +346,13 @@ const buildIdentifierContextByLocation = (functionBodyNodes: ReadonlyArray<Node>
  *                                              caller treats the def as inherently
  *                                              impure-sensitive at its own site)
  */
+// Expression kinds that produce a brand-new value with no pre-existing identity.
+// Case 6/7 ("local mutation only") is only safe when the binding holds a freshly
+// allocated value — otherwise the mutations observed externally through whatever
+// outer reference also points at the same object. `new Foo()` is excluded because
+// the constructor call is itself impure (handled by `containsImpureExpression`).
+const FRESH_ALLOCATION_TYPES = new Set<string>(['ArrayExpression', 'ObjectExpression', 'ClassExpression']);
+
 const findDefRhs = (ctx: IdentifierContext): Node | null => {
   const { node, parent } = ctx;
 
@@ -361,14 +377,16 @@ const findDefRhs = (ctx: IdentifierContext): Node | null => {
 
   // Destructure binding (`let { a } = obj;`, `let [first] = arr;`, `let { a: x } = obj;`,
   // `let [...rest] = arr;`, nested patterns, defaults like `let { a = g() } = obj`, etc.).
+  // Also destructure *assignment* (`[a] = g();`, `({ a } = g());`) — same RHS purity
+  // requirement, but the enclosing node is an AssignmentExpression rather than a
+  // VariableDeclarator.
   //
   // Two side-effect sources need to survive when the binding is dropped:
-  //   - the enclosing `init` expression (`g()` in `let { a } = g()`)
+  //   - the enclosing init / RHS expression (`g()`)
   //   - any default inside the pattern (`g()` in `let { a = g() } = obj`)
   //
-  // Returning the *VariableDeclarator itself* makes `containsImpureExpression` walk
-  // both subtrees (`id` for the pattern with defaults, `init` for the source),
-  // catching either kind of impure dependency.
+  // Returning the *enclosing declarator/assignment itself* makes
+  // `containsImpureExpression` walk both subtrees (pattern with defaults + source).
   if (
     parent.type === 'ObjectPattern' ||
     parent.type === 'ArrayPattern' ||
@@ -379,8 +397,21 @@ const findDefRhs = (ctx: IdentifierContext): Node | null => {
     for (let i = ctx.ancestors.length - 1; i >= 0; i -= 1) {
       const ancestor = ctx.ancestors[i];
 
-      if (ancestor !== undefined && ancestor.type === 'VariableDeclarator') {
+      if (ancestor === undefined) {
+        continue;
+      }
+
+      if (ancestor.type === 'VariableDeclarator') {
         return ancestor;
+      }
+
+      // Destructure assignment: `[a] = g();`, `({ a } = g());`
+      if (ancestor.type === 'AssignmentExpression') {
+        const left = (ancestor as { left: Node }).left;
+
+        if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+          return ancestor;
+        }
       }
     }
 
@@ -388,6 +419,72 @@ const findDefRhs = (ctx: IdentifierContext): Node | null => {
   }
 
   return null;
+};
+
+/**
+ * Resolve the value expression that flows into `ctx`'s declaration, unwrapping
+ * a `VariableDeclarator` or `AssignmentExpression` wrapper when `findDefRhs`
+ * returns one (destructure patterns). Returns `null` when there is no source
+ * expression (`let x;`, `x++`).
+ */
+const resolveDeclarationInit = (ctx: IdentifierContext): Node | null => {
+  const rhs = findDefRhs(ctx);
+
+  if (rhs === null) {
+    return null;
+  }
+
+  if (rhs.type === 'VariableDeclarator') {
+    return (rhs as { init: Node | null }).init;
+  }
+
+  if (rhs.type === 'AssignmentExpression') {
+    return (rhs as { right: Node }).right;
+  }
+
+  return rhs;
+};
+
+/**
+ * Whether the def's source expression — including any destructure pattern that
+ * wraps it — carries an observable side-effect. Unwraps the declarator /
+ * assignment node returned by `findDefRhs` so the wrapper's own node type
+ * (`AssignmentExpression`, which is in `IMPURE_NODE_TYPES`) doesn't falsely
+ * classify every destructure assignment as impure.
+ */
+const defRhsCarriesSideEffect = (rhs: Node): boolean => {
+  if (rhs.type === 'VariableDeclarator') {
+    const init = (rhs as { init: Node | null }).init;
+    const id = (rhs as { id: Node }).id;
+
+    return containsImpureExpression(init) || containsImpureExpression(id);
+  }
+
+  if (rhs.type === 'AssignmentExpression') {
+    const right = (rhs as { right: Node }).right;
+    const left = (rhs as { left: Node }).left;
+
+    return containsImpureExpression(right) || containsImpureExpression(left);
+  }
+
+  return containsImpureExpression(rhs);
+};
+
+/**
+ * Whether the declaration init at this context is a fresh allocation (a brand-new
+ * object/array/class instance the binding owns exclusively at declaration time).
+ * Case 6/7's safety claim ("local mutation only") only holds for fresh allocations
+ * — `const c = []; c.push(1);` is dead, but `const c = arg; c.push(1);` mutates
+ * the caller's array through a shared reference.
+ */
+const isDeclarationFreshAllocation = (ctx: IdentifierContext): boolean => {
+  const init = resolveDeclarationInit(ctx);
+
+  if (init === null) {
+    return false;
+  }
+
+  return FRESH_ALLOCATION_TYPES.has(init.type);
 };
 
 const buildVarHasMeaningfulUse = (
@@ -590,18 +687,22 @@ const collectWasteFindingsForFunction = (
     if (defCtx !== undefined) {
       const rhs = findDefRhs(defCtx);
 
-      if (rhs !== null && containsImpureExpression(rhs)) {
+      if (rhs !== null && defRhsCarriesSideEffect(rhs)) {
         continue;
       }
     }
 
     // Case 6/7: declaration whose binding is never *meaningfully* used — all uses are
     // mutation method calls or property writes, with no real read or escape, and not
-    // captured by any nested function. Emit on the declaration site.
+    // captured by any nested function. Additionally, the declaration's init must be a
+    // fresh allocation: `const c = []` / `const s = {}` — otherwise the variable
+    // aliases an outer reference and the mutations are externally observable.
     const isCase67 =
       meta.writeKind === 'declaration' &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode);
+      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
+      defCtx !== undefined &&
+      isDeclarationFreshAllocation(defCtx);
 
     if (!isCase67) {
       // Cases 1–4: per-def reaching-defs analysis. A def used elsewhere or captured by
@@ -811,7 +912,7 @@ const collectWasteFindingsForModule = (
     if (defCtx !== undefined) {
       const rhs = findDefRhs(defCtx);
 
-      if (rhs !== null && containsImpureExpression(rhs)) {
+      if (rhs !== null && defRhsCarriesSideEffect(rhs)) {
         continue;
       }
     }
@@ -819,7 +920,9 @@ const collectWasteFindingsForModule = (
     const isCase67 =
       meta.writeKind === 'declaration' &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode);
+      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
+      defCtx !== undefined &&
+      isDeclarationFreshAllocation(defCtx);
 
     if (!isCase67) {
       if (usedDefs.has(defId)) {

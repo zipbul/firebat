@@ -71,6 +71,12 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'destructure-impure-init-keep', program => detectWaste([...program]));
   // destructure default expression에 side-effect → KEEP
   runGolden(import.meta.dir, 'destructure-default-side-effect-keep', program => detectWaste([...program]));
+  // destructure assignment (`[a] = g()`) — assignment 경로도 purity guard 적용 → KEEP
+  runGolden(import.meta.dir, 'destructure-assignment-impure-keep', program => detectWaste([...program]));
+  // computed property key의 impure expression → KEEP (`obj[g()] = 1`)
+  runGolden(import.meta.dir, 'computed-key-impure-keep', program => detectWaste([...program]));
+  // case 6/7 fresh allocation 전제 — alias from outer reference는 case 6/7 비적용 → KEEP
+  runGolden(import.meta.dir, 'alias-outer-reference-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD
