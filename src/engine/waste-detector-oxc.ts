@@ -317,6 +317,59 @@ const buildIdentifierContextByLocation = (functionBodyNodes: ReadonlyArray<Node>
   return ctxByLocation;
 };
 
+/**
+ * Return the RHS expression whose evaluation is what *this* def writes, or `null`
+ * if there is no separate RHS (the def itself is the side-effect, e.g. `x++`).
+ *
+ * Maps each `writeKind` to its expression source:
+ *   - declaration   : `let x = RHS;`        → VariableDeclarator.init
+ *   - assignment    : `x = RHS;`            → AssignmentExpression.right
+ *   - compound/log. : `x += RHS;` / `x ??= RHS;` → AssignmentExpression.right
+ *   - update        : `x++` / `++x`         → null (UnaryExpression-like, no RHS;
+ *                                              caller treats the def as inherently
+ *                                              impure-sensitive at its own site)
+ */
+const findDefRhs = (ctx: IdentifierContext): Node | null => {
+  const { node, parent, grandparent } = ctx;
+
+  if (parent === null) {
+    return null;
+  }
+
+  // `let x = RHS;` (or `const`/`var`/destructure root)
+  if (parent.type === 'VariableDeclarator' && (parent as { id: Node }).id === node) {
+    return (parent as { init: Node | null }).init;
+  }
+
+  // `x = RHS;` / `x += RHS;` / `x ??= RHS;` etc. — node is the LHS reference
+  if (parent.type === 'AssignmentExpression' && (parent as { left: Node }).left === node) {
+    return (parent as { right: Node }).right;
+  }
+
+  // `++x` / `x++` — no separate RHS. The update itself is the write.
+  if (parent.type === 'UpdateExpression') {
+    return null;
+  }
+
+  // Destructure binding: `let { a } = obj;` or `let [a] = arr;`
+  // For these patterns, the def write is bound by structural extraction. The source
+  // expression is the enclosing VariableDeclarator's init — but extraction itself
+  // (iterator protocol for arrays, key access for objects) is implicit and treated
+  // as part of the binding, not as a per-def RHS. Return null so the purity guard
+  // does not falsely block reasonable destructure dead-stores; the existing case 6/7
+  // logic and reaching-defs catch the actual dead-store cases.
+  if (parent.type === 'ObjectPattern' || parent.type === 'ArrayPattern' || parent.type === 'AssignmentPattern' || parent.type === 'RestElement') {
+    return null;
+  }
+
+  // Property destructure: parent is `Property`, grandparent is `ObjectPattern`.
+  if (grandparent !== null && (grandparent.type === 'ObjectPattern' || grandparent.type === 'ArrayPattern')) {
+    return null;
+  }
+
+  return null;
+};
+
 const buildVarHasMeaningfulUse = (
   functionBodyNodes: ReadonlyArray<Node>,
   localIndexByName: Map<string, number>,
@@ -470,6 +523,8 @@ const collectWasteFindingsForFunction = (
   // not `defId`, because the question is whether the *variable* is ever observed; a
   // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
   const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation);
+  // Identifier context map for the body — reused by the per-def purity check below.
+  const defCtxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
 
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
@@ -505,6 +560,19 @@ const collectWasteFindingsForFunction = (
     // is the observable behavior (CLAUDE.md K example: "자원 핸들 lifetime").
     if (meta.declarationKind === 'using' || meta.declarationKind === 'await using') {
       continue;
+    }
+
+    // Purity guard: if the def's RHS has any side-effect (call/await/new/yield/spread/
+    // assignment/update/delete/tagged template), removing the def would erase that
+    // side-effect too — CLAUDE.md "side-effect 횟수·순서 보존" violation.
+    const defCtx = defCtxByLocation.get(meta.location);
+
+    if (defCtx !== undefined) {
+      const rhs = findDefRhs(defCtx);
+
+      if (rhs !== null && containsImpureExpression(rhs)) {
+        continue;
+      }
     }
 
     // Case 6/7: declaration whose binding is never *meaningfully* used — all uses are
@@ -686,6 +754,7 @@ const collectWasteFindingsForModule = (
   }
 
   const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation);
+  const defCtxByLocation = buildIdentifierContextByLocation(programBody);
   const emittedKeys = new Set<string>();
 
   for (let defId = 0; defId < defs.length; defId += 1) {
@@ -714,6 +783,17 @@ const collectWasteFindingsForModule = (
 
     if (meta.declarationKind === 'using' || meta.declarationKind === 'await using') {
       continue;
+    }
+
+    // Purity guard (same as function path).
+    const defCtx = defCtxByLocation.get(meta.location);
+
+    if (defCtx !== undefined) {
+      const rhs = findDefRhs(defCtx);
+
+      if (rhs !== null && containsImpureExpression(rhs)) {
+        continue;
+      }
     }
 
     const isCase67 =
