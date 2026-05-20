@@ -67,6 +67,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'mutation-arg-function-literal-pure', program => detectWaste([...program]));
   // declaration/assignment RHS에 side-effect가 있으면 case 1~4도 KEEP (per-def purity guard)
   runGolden(import.meta.dir, 'impure-initializer-side-effect-keep', program => detectWaste([...program]));
+  // destructure binding의 enclosing init이 impure → 전체 declarator KEEP
+  runGolden(import.meta.dir, 'destructure-impure-init-keep', program => detectWaste([...program]));
+  // destructure default expression에 side-effect → KEEP
+  runGolden(import.meta.dir, 'destructure-default-side-effect-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

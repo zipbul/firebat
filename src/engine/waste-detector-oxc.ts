@@ -273,6 +273,13 @@ interface IdentifierContext {
   readonly node: Node;
   readonly parent: Node | null;
   readonly grandparent: Node | null;
+  /**
+   * Ancestor chain from the function/module root down to (but not including) the
+   * Identifier itself. `ancestors[ancestors.length - 1]` is the parent. Used by
+   * `findDefRhs` to walk up through destructure patterns to the enclosing
+   * VariableDeclarator and recover its `init`.
+   */
+  readonly ancestors: ReadonlyArray<Node>;
 }
 
 const buildIdentifierContextByLocation = (functionBodyNodes: ReadonlyArray<Node>): Map<number, IdentifierContext> => {
@@ -298,8 +305,9 @@ const buildIdentifierContextByLocation = (functionBodyNodes: ReadonlyArray<Node>
 
         if (node.type === 'Identifier') {
           const grandparent = ancestorStack.length >= 2 ? (ancestorStack[ancestorStack.length - 2] ?? null) : null;
+          const ancestors = ancestorStack.slice();
 
-          ctxByLocation.set(node.start, { node, parent, grandparent });
+          ctxByLocation.set(node.start, { node, parent, grandparent, ancestors });
         }
 
         ancestorStack.push(node);
@@ -330,7 +338,7 @@ const buildIdentifierContextByLocation = (functionBodyNodes: ReadonlyArray<Node>
  *                                              impure-sensitive at its own site)
  */
 const findDefRhs = (ctx: IdentifierContext): Node | null => {
-  const { node, parent, grandparent } = ctx;
+  const { node, parent } = ctx;
 
   if (parent === null) {
     return null;
@@ -351,19 +359,31 @@ const findDefRhs = (ctx: IdentifierContext): Node | null => {
     return null;
   }
 
-  // Destructure binding: `let { a } = obj;` or `let [a] = arr;`
-  // For these patterns, the def write is bound by structural extraction. The source
-  // expression is the enclosing VariableDeclarator's init — but extraction itself
-  // (iterator protocol for arrays, key access for objects) is implicit and treated
-  // as part of the binding, not as a per-def RHS. Return null so the purity guard
-  // does not falsely block reasonable destructure dead-stores; the existing case 6/7
-  // logic and reaching-defs catch the actual dead-store cases.
-  if (parent.type === 'ObjectPattern' || parent.type === 'ArrayPattern' || parent.type === 'AssignmentPattern' || parent.type === 'RestElement') {
-    return null;
-  }
+  // Destructure binding (`let { a } = obj;`, `let [first] = arr;`, `let { a: x } = obj;`,
+  // `let [...rest] = arr;`, nested patterns, defaults like `let { a = g() } = obj`, etc.).
+  //
+  // Two side-effect sources need to survive when the binding is dropped:
+  //   - the enclosing `init` expression (`g()` in `let { a } = g()`)
+  //   - any default inside the pattern (`g()` in `let { a = g() } = obj`)
+  //
+  // Returning the *VariableDeclarator itself* makes `containsImpureExpression` walk
+  // both subtrees (`id` for the pattern with defaults, `init` for the source),
+  // catching either kind of impure dependency.
+  if (
+    parent.type === 'ObjectPattern' ||
+    parent.type === 'ArrayPattern' ||
+    parent.type === 'AssignmentPattern' ||
+    parent.type === 'RestElement' ||
+    parent.type === 'Property'
+  ) {
+    for (let i = ctx.ancestors.length - 1; i >= 0; i -= 1) {
+      const ancestor = ctx.ancestors[i];
 
-  // Property destructure: parent is `Property`, grandparent is `ObjectPattern`.
-  if (grandparent !== null && (grandparent.type === 'ObjectPattern' || grandparent.type === 'ArrayPattern')) {
+      if (ancestor !== undefined && ancestor.type === 'VariableDeclarator') {
+        return ancestor;
+      }
+    }
+
     return null;
   }
 
