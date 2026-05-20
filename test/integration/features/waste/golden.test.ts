@@ -81,6 +81,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'fresh-allocation-ts-wrapper', program => detectWaste([...program]));
   // assignment def도 fresh allocation이면 case 6/7 적용 → DEAD
   runGolden(import.meta.dir, 'assignment-def-fresh-allocation', program => detectWaste([...program]));
+  // RegExp literal도 fresh allocation으로 인정 → DEAD
+  runGolden(import.meta.dir, 'regexp-literal-fresh', program => detectWaste([...program]));
+  // 같은 변수에 fresh def + alias def 공존 — case 6/7 비적용 → KEEP
+  runGolden(import.meta.dir, 'mixed-fresh-and-alias-defs-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

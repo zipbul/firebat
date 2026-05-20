@@ -512,7 +512,12 @@ const isDeclarationFreshAllocation = (ctx: IdentifierContext): boolean => {
     return false;
   }
 
-  return FRESH_ALLOCATION_TYPES.has(unwrapValueWrappers(init).type);
+  const unwrapped = unwrapValueWrappers(init);
+
+  return (
+    FRESH_ALLOCATION_TYPES.has(unwrapped.type) ||
+    (unwrapped.type === 'Literal' && (unwrapped as { regex?: unknown }).regex !== undefined)
+  );
 };
 
 const buildVarHasMeaningfulUse = (
@@ -671,6 +676,57 @@ const collectWasteFindingsForFunction = (
   // Identifier context map for the body — reused by the per-def purity check below.
   const defCtxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
 
+  // Case 6/7's safety claim ("mutation is local-only") requires that *every* def of
+  // the variable is a fresh allocation. If one branch assigns a fresh `[]` and another
+  // aliases an outer reference, the mutation site (`c.push(...)`) reaches both, so
+  // dropping the fresh-allocation def would not actually eliminate the observable
+  // mutation on the aliased path. Compute the "all defs fresh" predicate per varIndex.
+  const varHasOnlyFreshDefs = new Set<number>();
+  const seenVarIndexes = new Set<number>();
+
+  for (const def of defs) {
+    if (def === undefined) {
+      continue;
+    }
+
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+      continue;
+    }
+
+    seenVarIndexes.add(def.varIndex);
+  }
+
+  for (const varIndex of seenVarIndexes) {
+    let allFresh = true;
+
+    for (const def of defs) {
+      if (def === undefined || def.varIndex !== varIndex) {
+        continue;
+      }
+
+      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+        continue;
+      }
+
+      // Binding-only declarations (`let c;`) write no value, so they don't introduce
+      // a non-fresh alias — ignore them for the "all defs fresh" check.
+      if (def.writeKind === 'declaration' && def.hasInit === false) {
+        continue;
+      }
+
+      const ctx = defCtxByLocation.get(def.location);
+
+      if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
+        allFresh = false;
+        break;
+      }
+    }
+
+    if (allFresh) {
+      varHasOnlyFreshDefs.add(varIndex);
+    }
+  }
+
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
   // normal- and abnormal-completion paths), producing distinct defIds at the same
@@ -732,7 +788,8 @@ const collectWasteFindingsForFunction = (
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
-      isDeclarationFreshAllocation(defCtx);
+      isDeclarationFreshAllocation(defCtx) &&
+      varHasOnlyFreshDefs.has(meta.varIndex);
 
     if (!isCase67) {
       // Cases 1–4: per-def reaching-defs analysis. A def used elsewhere or captured by
@@ -906,6 +963,53 @@ const collectWasteFindingsForModule = (
 
   const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation);
   const defCtxByLocation = buildIdentifierContextByLocation(programBody);
+  // Same "all defs fresh" gate as the function path — required so module-scope
+  // `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the fresh def.
+  const varHasOnlyFreshDefs = new Set<number>();
+  const seenVarIndexes = new Set<number>();
+
+  for (const def of defs) {
+    if (def === undefined) {
+      continue;
+    }
+
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+      continue;
+    }
+
+    seenVarIndexes.add(def.varIndex);
+  }
+
+  for (const varIndex of seenVarIndexes) {
+    let allFresh = true;
+
+    for (const def of defs) {
+      if (def === undefined || def.varIndex !== varIndex) {
+        continue;
+      }
+
+      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment') {
+        continue;
+      }
+
+      // Binding-only declarations (`let c;`) write no value, so they don't introduce
+      // a non-fresh alias — ignore them for the "all defs fresh" check.
+      if (def.writeKind === 'declaration' && def.hasInit === false) {
+        continue;
+      }
+
+      const ctx = defCtxByLocation.get(def.location);
+
+      if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
+        allFresh = false;
+        break;
+      }
+    }
+
+    if (allFresh) {
+      varHasOnlyFreshDefs.add(varIndex);
+    }
+  }
   const emittedKeys = new Set<string>();
 
   for (let defId = 0; defId < defs.length; defId += 1) {
@@ -948,11 +1052,12 @@ const collectWasteFindingsForModule = (
     }
 
     const isCase67 =
-      meta.writeKind === 'declaration' &&
+      (meta.writeKind === 'declaration' || meta.writeKind === 'assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
-      isDeclarationFreshAllocation(defCtx);
+      isDeclarationFreshAllocation(defCtx) &&
+      varHasOnlyFreshDefs.has(meta.varIndex);
 
     if (!isCase67) {
       if (usedDefs.has(defId)) {
