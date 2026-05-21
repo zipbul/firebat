@@ -449,18 +449,13 @@ const classifyUseInWaste = (
         grandparent.type === 'AssignmentExpression' &&
         (grandparent as { left: Node }).left === parent
       ) {
-        const property = (parent as { computed?: boolean; property: Node }).property;
-
-        if (
-          (property.type === 'Identifier' && (property as { name: string }).name === 'length') ||
-          (property.type === 'Literal' && (property as { value?: unknown }).value === 'length')
-        ) {
-          return 'real';
-        }
-
         // `v.p = RHS` — local mutation only when RHS is pure. If RHS evaluation has
         // any side-effect (call/await/new/assignment/update), removing the property
         // write would also drop that side-effect → fall back to 'real'.
+        // Note: `v.length = N` on a fresh array literal is also local-only when v
+        // does not escape — it just deletes excess own-indices. The earlier guard
+        // that forced length writes to 'real' was over-conservative versus CLAUDE.md
+        // "외부로 노출되는 reference identity" boundary.
         const rhs = (grandparent as { right: Node }).right;
 
         if (containsImpureExpression(rhs)) {

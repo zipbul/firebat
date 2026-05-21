@@ -93,8 +93,9 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'builtin-target-mutation-api', program => detectWaste([...program]));
   // compound assignment on an object may invoke coercion side-effects → KEEP
   runGolden(import.meta.dir, 'compound-assignment-object-keep', program => detectWaste([...program]));
-  // array length property write is not a whitelisted local mutation call → KEEP
-  runGolden(import.meta.dir, 'array-length-property-write-keep', program => detectWaste([...program]));
+  // array length property write on a non-escaping fresh array → case 7 DEAD
+  // (length write only deletes own-indices; local-only mutation per CLAUDE.md)
+  runGolden(import.meta.dir, 'array-length-property-write-dead', program => detectWaste([...program]));
   // user-defined method that shadows a built-in mutation name → KEEP
   runGolden(import.meta.dir, 'user-defined-mutation-method-keep', program => detectWaste([...program]));
   // user-defined setter is invoked by property write → KEEP
