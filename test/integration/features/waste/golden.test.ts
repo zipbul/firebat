@@ -110,6 +110,14 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'computed-symbol-method-keep', program => detectWaste([...program]));
   // direct `eval(...)` in scope = opaque dynamic-read barrier → skip scope → KEEP
   runGolden(import.meta.dir, 'direct-eval-scope-barrier-keep', program => detectWaste([...program]));
+  // `delete c.p` on a fresh non-escaping object is local-only mutation → DEAD
+  runGolden(import.meta.dir, 'delete-property-no-escape-dead', program => detectWaste([...program]));
+  // discarded read contexts (typeof/void/sequence-non-last/instanceof-stmt) → DEAD
+  runGolden(import.meta.dir, 'discard-only-reads-dead', program => detectWaste([...program]));
+  // class static block references outer binding → evaluation-time mutation → KEEP
+  runGolden(import.meta.dir, 'static-block-outer-mutation-keep', program => detectWaste([...program]));
+  // syntactic same-value reassign for NaN is suppressed (NaN !== NaN at runtime) → KEEP
+  runGolden(import.meta.dir, 'nan-reassign-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

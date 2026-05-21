@@ -367,6 +367,34 @@ const classifyUseInWaste = (
     return 'real';
   }
 
+  // Discard-only reads of a fresh local value are not meaningful observations.
+  // Case 6/7 will still require an all-fresh definition set before reporting.
+  if (parent.type === 'UnaryExpression' && (parent as { argument: Node }).argument === usage) {
+    const operator = (parent as { operator: string }).operator;
+
+    if (operator === 'typeof' || operator === 'void') {
+      return 'mutation';
+    }
+  }
+
+  if (parent.type === 'SequenceExpression') {
+    const expressions = (parent as { expressions?: ReadonlyArray<Node> }).expressions ?? [];
+    const index = expressions.indexOf(usage);
+
+    if (index >= 0 && index < expressions.length - 1) {
+      return 'mutation';
+    }
+  }
+
+  if (
+    parent.type === 'BinaryExpression' &&
+    (parent as { operator?: string }).operator === 'instanceof' &&
+    (parent as { left?: Node }).left === usage &&
+    grandparent?.type === 'ExpressionStatement'
+  ) {
+    return 'mutation';
+  }
+
   // `return v;`
   if (parent.type === 'ReturnStatement' && (parent as { argument: Node | null }).argument === usage) {
     return 'escape';
@@ -445,6 +473,14 @@ const classifyUseInWaste = (
     }
 
     if (grandparent !== null) {
+      if (
+        grandparent.type === 'UnaryExpression' &&
+        (grandparent as { operator: string; argument: Node }).operator === 'delete' &&
+        (grandparent as { argument: Node }).argument === parent
+      ) {
+        return 'property-write';
+      }
+
       if (
         grandparent.type === 'AssignmentExpression' &&
         (grandparent as { left: Node }).left === parent
@@ -838,6 +874,43 @@ const isKnownPrimitiveExpression = (node: Node | null): boolean => {
   return false;
 };
 
+const isNaNIdentifierExpression = (node: Node | null): boolean => {
+  const unwrapped = node === null ? null : unwrapValueWrappers(node);
+
+  return unwrapped?.type === 'Identifier' && (unwrapped as { name: string }).name === 'NaN';
+};
+
+const hasLaterNaNReassign = (
+  meta: DefMeta,
+  defs: ReadonlyArray<DefMeta | undefined>,
+  defCtxByLocation: ReadonlyMap<number, IdentifierContext>,
+): boolean => {
+  const currentCtx = defCtxByLocation.get(meta.location);
+
+  if (currentCtx === undefined || !isNaNIdentifierExpression(resolveDeclarationInit(currentCtx))) {
+    return false;
+  }
+
+  for (const other of defs) {
+    if (
+      other === undefined ||
+      other.varIndex !== meta.varIndex ||
+      other.location <= meta.location ||
+      (other.writeKind !== 'assignment' && other.writeKind !== 'logical-assignment')
+    ) {
+      continue;
+    }
+
+    const otherCtx = defCtxByLocation.get(other.location);
+
+    if (otherCtx !== undefined && isNaNIdentifierExpression(resolveDeclarationInit(otherCtx))) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const compoundAssignmentMayCoerceObject = (
   defId: number,
   meta: DefMeta,
@@ -951,6 +1024,14 @@ const buildVarHasMeaningfulUse = (
     if (ctx === undefined) {
       // No syntactic context found (defensive — variable-collector's evaluated branches
       // should always have a corresponding walk visit). Conservatively treat as real.
+      meaningful.add(idx);
+      continue;
+    }
+
+    // Class static blocks execute while evaluating the class definition. Treat outer
+    // binding references there as meaningful so case 6/7 does not erase evaluation-time
+    // mutations hidden inside the class body.
+    if (ctx.ancestors.some(ancestor => ancestor.type === 'StaticBlock')) {
       meaningful.add(idx);
       continue;
     }
@@ -1263,6 +1344,10 @@ const collectWasteFindingsForFunction = (
     }
 
     if (compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)) {
+      continue;
+    }
+
+    if (hasLaterNaNReassign(meta, defs, defCtxByLocation)) {
       continue;
     }
 
@@ -1619,6 +1704,10 @@ const collectWasteFindingsForModule = (
     }
 
     if (compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)) {
+      continue;
+    }
+
+    if (hasLaterNaNReassign(meta, defs, defCtxByLocation)) {
       continue;
     }
 

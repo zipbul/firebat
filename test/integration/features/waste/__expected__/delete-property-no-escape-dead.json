@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/delete-property-no-escape-dead.ts",
+    "kind": "dead-store",
+    "label": "c",
+    "message": "Variable 'c' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 7
+      },
+      "start": {
+        "column": 8,
+        "line": 7
+      }
+    }
+  }
+]
