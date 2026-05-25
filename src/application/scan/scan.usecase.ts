@@ -710,10 +710,17 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   logger.trace('Repositories created');
 
+  // Semantic layer is required for binding identity resolution used by
+  // dataflow detectors (waste / variable-lifetime) as well as type-aware
+  // detectors. variable-collector's buildDeclScopeMap routes through
+  // gildash's getFileBindings (tsc-authoritative), which requires the
+  // semantic layer to be active.
   const needsSemantic =
     options.detectors.includes('unknown-proof') ||
     options.detectors.includes('error-flow') ||
-    options.detectors.includes('typecheck');
+    options.detectors.includes('typecheck') ||
+    options.detectors.includes('waste') ||
+    options.detectors.includes('variable-lifetime');
   const tIndex0 = nowMs();
   const { gildash, semanticAvailable } = await createGildashInstance({
     rootAbs: ctx.rootAbs,

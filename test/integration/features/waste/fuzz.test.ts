@@ -102,7 +102,10 @@ describe('integration/waste (fuzz)', () => {
       const sources = new Map<string, string>();
       const literal = prng.nextInt(10) + 1;
       const kind = prng.nextInt(5);
-      const filePath = `/virtual/fuzz/waste-${seed}-${iteration}.ts`;
+      // Reuse a single virtual path across iterations so the gildash
+      // semantic layer replaces the in-memory file rather than accumulating
+      // one entry per iteration (linear growth → quadratic batch cost).
+      const filePath = `/virtual/fuzz/waste.ts`;
       const name = createFuzzName(kind, iteration);
 
       sources.set(filePath, createFuzzSource(kind, name, literal));

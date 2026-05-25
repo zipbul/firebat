@@ -1,26 +1,23 @@
 /**
- * Singleton holder + adapter for the gildash Semantic Layer's binding-identity
- * resolution (`getFileBindings`). When a Gildash instance is registered via
- * {@link setGildashSemanticContext}, callers that have a real on-disk filePath
- * can route through {@link tryGildashDeclScopeMap} to obtain a binding-scope
- * map that is tsc-authoritative (correct var hoisting, shadowing, ambient
- * detection, cross-file binding identity).
+ * Adapter over the gildash Semantic Layer's binding-identity resolution
+ * (`getFileBindings` / `getFileBindingsBatch`). Production scan and the test
+ * preload (`global-setup.ts`) register a single {@link Gildash} instance via
+ * {@link setGildashSemanticContext}; thereafter all dataflow callers route
+ * binding resolution through {@link tryGildashDeclScopeMap}, which is
+ * tsc-authoritative (correct var hoisting, shadowing, declaration merging,
+ * ambient detection, cross-file identity).
  *
- * When the singleton is unset, or the filePath is not indexed (e.g. virtual
- * test paths), callers fall back to the oxc-walker `ScopeTracker` path in
- * `buildDeclScopeMap`. Both paths produce the same shape: `Map<offset, string>`
- * where the value is a synthetic binding-identity key. The gildash path keys by
- * `tsc:<declaration.position>`; the fallback keys by ScopeTracker scope or
- * `var:<funcOffset>:<name>` for hoisted vars.
+ * In-memory test sources (no on-disk backing) are registered with the
+ * semantic layer through {@link registerVirtualSourcesBatch} — one tsc
+ * Program rebuild per batch instead of per file.
+ *
+ * Result map shape: `Map<offset, string>` where the value is
+ * `tsc:<declaration.position>`, uniquely identifying the binding by its
+ * tsc-resolved declaration site (used downstream by `bindingKey`).
  */
-import type { FileBinding } from '@zipbul/gildash';
+import type { FileBinding, Gildash } from '@zipbul/gildash';
 
-interface GildashLike {
-  readonly projectRoot: string;
-  getFileBindings(filePath: string): FileBinding[];
-}
-
-let _gildash: GildashLike | null = null;
+let _gildash: Gildash | null = null;
 
 /**
  * Virtual → real-disk path mapping used by the test runner so that
@@ -44,11 +41,11 @@ export const resetBindingSourceTelemetry = (): void => {
   _gildashMissCount = 0;
 };
 
-export const setGildashSemanticContext = (gildash: GildashLike | null): void => {
+export const setGildashSemanticContext = (gildash: Gildash | null): void => {
   _gildash = gildash;
 };
 
-export const getGildashSemanticContext = (): GildashLike | null => {
+export const getGildashSemanticContext = (): Gildash | null => {
   return _gildash;
 };
 
@@ -58,6 +55,71 @@ export const registerFixtureRealPath = (virtualPath: string, realPath: string): 
 
 export const clearFixtureRealPaths = (): void => {
   _virtualToReal.clear();
+};
+
+/**
+ * Batch-register a set of in-memory sources with the active Gildash semantic
+ * layer and pre-compute every file's binding map in a single tsc Program
+ * rebuild. Pass this list once per "logical analysis unit" (a test case, a
+ * detector call across N files) instead of interleaving per-file
+ * notify/query pairs, which forces a rebuild per file (10× slower per
+ * gildash 0.31 release notes).
+ *
+ * Registers the virtual → target mapping so tryGildashDeclScopeMap can
+ * resolve queries keyed on the virtual path. Returns the
+ * Map<virtualPath, FileBinding[]> for callers that want to inspect bindings
+ * directly without going through tryGildashDeclScopeMap.
+ *
+ * Throws when no Gildash semantic context is registered.
+ */
+export const registerVirtualSourcesBatch = (
+  entries: ReadonlyArray<{ virtualPath: string; targetPath: string; content: string }>,
+): Map<string, FileBinding[]> => {
+  if (_gildash === null) {
+    throw new Error(
+      'registerVirtualSourcesBatch: no Gildash semantic context registered. ' +
+        'Tests must load test/integration/shared/global-setup.ts via bunfig preload.',
+    );
+  }
+
+  if (entries.length === 0) {
+    return new Map();
+  }
+
+  const batch = entries.map(e => ({ filePath: e.targetPath, content: e.content }));
+  const byTarget = _gildash.getFileBindingsBatch(batch);
+  const byVirtual = new Map<string, FileBinding[]>();
+
+  for (const e of entries) {
+    _virtualToReal.set(e.virtualPath, e.targetPath);
+
+    const bindings = byTarget.get(e.targetPath) ?? [];
+
+    byVirtual.set(e.virtualPath, bindings);
+  }
+
+  return byVirtual;
+};
+
+/**
+ * Remove an in-memory source from the semantic layer and drop the
+ * virtual→real mapping. Use in test cleanup hooks (`afterEach`) to keep the
+ * tsc Program bounded — fuzz / property tests that generate hundreds of
+ * ad-hoc sources per case should call this for each one to avoid linear
+ * growth in batch cost.
+ */
+export const unregisterVirtualSource = (virtualPath: string): void => {
+  const targetPath = _virtualToReal.get(virtualPath);
+
+  if (targetPath === undefined) {
+    return;
+  }
+
+  if (_gildash !== null) {
+    _gildash.notifyFileDeleted(targetPath);
+  }
+
+  _virtualToReal.delete(virtualPath);
 };
 
 /**

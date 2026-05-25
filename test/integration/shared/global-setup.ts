@@ -14,11 +14,40 @@
 import { Gildash } from '@zipbul/gildash';
 import * as path from 'node:path';
 
-import { setGildashSemanticContext } from '../../../src/engine/dataflow/gildash-binding-source';
+import { setParseSourceHook } from '../../../src/engine/ast/parse-source';
+import {
+  registerVirtualSourcesBatch,
+  setGildashSemanticContext,
+} from '../../../src/engine/dataflow/gildash-binding-source';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const AD_HOC_DIR = path.join(PROJECT_ROOT, '.firebat-test-tmp');
 
 let _instance: Gildash | null = null;
+
+// Deterministic virtual → real-disk path mapping used by the auto-register
+// hook. Same virtual path always maps to the same target so repeated parses
+// (e.g. fuzz iterations that reuse a path with different content) replace
+// the in-memory file in tsc Program rather than accumulating new entries.
+const adHocPathFor = (virtualPath: string): string => {
+  const safe = virtualPath.replace(/[^A-Za-z0-9._-]+/g, '_');
+
+  return path.join(AD_HOC_DIR, safe);
+};
+
+const parseSourceHook = (filePath: string, sourceText: string): void => {
+  // Skip real disk files under the project root — gildash's initial scan
+  // already indexed them. Everything else (virtual paths, ad-hoc test
+  // identifiers like `/clean.ts`, relative paths) is registered with the
+  // semantic layer so subsequent binding queries resolve.
+  if (filePath.startsWith(PROJECT_ROOT + '/')) {
+    return;
+  }
+
+  registerVirtualSourcesBatch([
+    { virtualPath: filePath, targetPath: adHocPathFor(filePath), content: sourceText },
+  ]);
+};
 
 const open = async (): Promise<void> => {
   _instance = await Gildash.open({
@@ -27,6 +56,7 @@ const open = async (): Promise<void> => {
     watchMode: false,
   });
   setGildashSemanticContext(_instance);
+  setParseSourceHook(parseSourceHook);
 };
 
 // Top-level await is supported in module init; tests start only after this
@@ -37,6 +67,7 @@ await open();
 // after-all hook for preload modules; rely on the OS to release tsc resources.
 const cleanup = (): void => {
   if (_instance !== null) {
+    setParseSourceHook(null);
     setGildashSemanticContext(null);
     _instance.close({ cleanup: false }).catch(() => {
       /* best-effort */

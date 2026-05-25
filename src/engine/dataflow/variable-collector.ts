@@ -16,7 +16,7 @@ import type {
   VariableDeclarator,
 } from 'oxc-parser';
 
-import { isFunctionNode, ScopeTracker, walk } from '@zipbul/gildash';
+import { isFunctionNode } from '@zipbul/gildash';
 
 import type { VariableCollectorOptions, VariableUsage } from '../types';
 
@@ -42,170 +42,22 @@ import { tryGildashDeclScopeMap } from './gildash-binding-source';
  * context once and register it for the lifetime of the process.
  */
 export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<number, string> => {
-  // Primary path: tsc-authoritative binding identity via gildash. Used by
-  // production scan and integration tests whose fixtures live on disk and
-  // are registered through `registerFixtureRealPath`.
+  void root;
+
   const fromGildash = tryGildashDeclScopeMap(filePath);
 
   if (fromGildash !== null) {
     return fromGildash;
   }
 
-  // Fallback path: oxc-walker `ScopeTracker` with a var-hoisting overlay. Used
-  // only by unit tests that construct in-memory ParsedFile inputs without a
-  // disk-backed file (e.g. variable-collector / waste / variable-lifetime
-  // unit specs). The var-hoist overlay normalizes ScopeTracker's lexical-only
-  // scope to JS-spec function-scope hoisting; results are scope-key-stable
-  // across the declaration site and every reference within the same function.
-  const declScopeByIdLocation = new Map<number, string>();
-  const scopeTracker = new ScopeTracker();
-  const varNamesByFunction = collectVarHoistInfo(root);
-  const ancestors: Node[] = [];
-
-  walk(root, {
-    scopeTracker,
-    enter(n: Node) {
-      if (n.type === 'Identifier') {
-        const decl = scopeTracker.getDeclaration(n.name);
-        const declaredByVar = decl !== null && decl.type === 'Variable' &&
-          (decl as { variableNode: { kind: string } }).variableNode.kind === 'var';
-
-        let scopeKey: string | null = decl !== null ? decl.scope : null;
-
-        if (decl === null || declaredByVar) {
-          const hoisted = findVarHoistScopeKey(ancestors, n.name, varNamesByFunction);
-
-          if (hoisted !== null) {
-            scopeKey = hoisted;
-          }
-        }
-
-        if (scopeKey !== null) {
-          declScopeByIdLocation.set(n.start, scopeKey);
-        }
-      }
-
-      ancestors.push(n);
-    },
-    leave() {
-      ancestors.pop();
-    },
-  });
-
-  return declScopeByIdLocation;
-};
-
-const collectVarHoistInfo = (root: Node): Map<number, Set<string>> => {
-  const result = new Map<number, Set<string>>();
-  const fnStack: number[] = [0];
-
-  const ensureSet = (key: number): Set<string> => {
-    let s = result.get(key);
-
-    if (s === undefined) {
-      s = new Set<string>();
-      result.set(key, s);
-    }
-
-    return s;
-  };
-
-  const visit = (node: Node): void => {
-    const enteredFn = isFunctionNode(node);
-
-    if (enteredFn) {
-      fnStack.push(node.start);
-    }
-
-    if (node.type === 'VariableDeclaration' &&
-        (node as { kind?: string }).kind === 'var') {
-      const target = ensureSet(fnStack[fnStack.length - 1] ?? 0);
-
-      for (const declarator of (node as { declarations: ReadonlyArray<{ id: Node }> }).declarations) {
-        collectPatternBindingNames(declarator.id, name => target.add(name));
-      }
-    }
-
-    forEachChildNode(node, visit);
-
-    if (enteredFn) {
-      fnStack.pop();
-    }
-  };
-
-  visit(root);
-
-  return result;
-};
-
-const collectPatternBindingNames = (pattern: Node, emit: (name: string) => void): void => {
-  if (pattern.type === 'Identifier') {
-    emit((pattern as { name: string }).name);
-
-    return;
-  }
-
-  if (pattern.type === 'ArrayPattern') {
-    for (const el of (pattern as { elements: ReadonlyArray<Node | null> }).elements) {
-      if (el !== null) {
-        collectPatternBindingNames(el, emit);
-      }
-    }
-
-    return;
-  }
-
-  if (pattern.type === 'ObjectPattern') {
-    for (const prop of (pattern as { properties: ReadonlyArray<Node> }).properties) {
-      if (prop.type === 'Property') {
-        const value = (prop as { value: Node }).value;
-
-        collectPatternBindingNames(value, emit);
-      } else if (prop.type === 'RestElement') {
-        const arg = (prop as { argument: Node }).argument;
-
-        collectPatternBindingNames(arg, emit);
-      }
-    }
-
-    return;
-  }
-
-  if (pattern.type === 'RestElement') {
-    collectPatternBindingNames((pattern as { argument: Node }).argument, emit);
-
-    return;
-  }
-
-  if (pattern.type === 'AssignmentPattern') {
-    collectPatternBindingNames((pattern as { left: Node }).left, emit);
-  }
-};
-
-const findVarHoistScopeKey = (
-  ancestors: ReadonlyArray<Node>,
-  name: string,
-  varNamesByFunction: ReadonlyMap<number, Set<string>>,
-): string | null => {
-  for (let i = ancestors.length - 1; i >= 0; i -= 1) {
-    const a = ancestors[i];
-
-    if (a !== undefined && isFunctionNode(a)) {
-      const set = varNamesByFunction.get(a.start);
-
-      if (set !== undefined && set.has(name)) {
-        return `var:${a.start}:${name}`;
-      }
-    }
-  }
-
-  const moduleSet = varNamesByFunction.get(0);
-
-  if (moduleSet !== undefined && moduleSet.has(name)) {
-    return `var:0:${name}`;
-  }
-
-  return null;
+  throw new Error(
+    `buildDeclScopeMap: gildash binding source did not resolve for filePath=${filePath ?? 'undefined'}. ` +
+      `Either no Gildash semantic context is registered, or the file was not ` +
+      `notified to the semantic layer. Production scan must open Gildash with ` +
+      `{ semantic: true }; tests must load test/integration/shared/global-setup.ts ` +
+      `via bunfig preload (the preload installs a parseSource hook that ` +
+      `auto-registers virtual paths with the semantic layer).`,
+  );
 };
 
 const addPropertyKeyToSet = (key: PropertyKey, keys: Set<string>): void => {
@@ -427,8 +279,13 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
   // When the caller provides `declScopeByIdLocation`, use it directly — it is expected
   // to cover the enclosing function (including parameters), which an in-body walk
   // alone cannot see.
+  // When the caller does not supply a scope map, fall back to an empty map.
+  // Sub-walks (e.g. parameter defaults, decorator expressions) only need
+  // local identifier kinds, not cross-reference resolution against an outer
+  // function scope; callers that need full scope resolution must thread
+  // their own declScopeByIdLocation from a top-level buildDeclScopeMap.
   const declScopeByIdLocation: ReadonlyMap<number, string> =
-    options.declScopeByIdLocation ?? buildDeclScopeMap(node);
+    options.declScopeByIdLocation ?? new Map<number, string>();
   const evaluateAllBranches = options.evaluateAllBranches === true;
 
   const pushIdentifierUsage = (

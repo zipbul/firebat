@@ -32,7 +32,9 @@ describe('waste (integration fuzz)', () => {
         literals.push(prng.nextInt(100) + 1);
       }
 
-      const filePath = `/virtual/fuzz/overwrite-${seed}-${iteration}.ts`;
+      // Reuse one virtual path so the gildash semantic layer replaces the
+      // in-memory file each iteration (constant tsc Program size).
+      const filePath = `/virtual/fuzz/overwrite.ts`;
       const sources = new Map<string, string>();
 
       sources.set(filePath, createOverwriteChain(`overwrite_${iteration}`, literals));

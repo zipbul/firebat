@@ -1,20 +1,25 @@
 import { describe, expect, it } from 'bun:test';
-import { parseSync } from 'oxc-parser';
+import { parseSource } from '../ast/parse-source';
 
 import type { BindingName } from './reaching-defs';
 
 import { collectFunctionNodes } from '../ast/oxc-ast-utils';
 import {
   analyzeFunctionBody,
-  bindingKey,
   collectLocalVarIndexes,
   collectParameterBindings,
   extractBindingNames,
 } from './reaching-defs';
 import { buildDeclScopeMap } from './variable-collector';
 
+// Use a single virtual filePath across all spec cases so the gildash
+// semantic layer (auto-registered by the parseSource hook in
+// test/integration/shared/global-setup.ts) replaces the in-memory file
+// each parse rather than accumulating one entry per parse.
+const TEST_FILE_PATH = '/virtual/reaching-defs-spec.ts';
+
 const parseFunctions = (code: string) => {
-  const parsed = parseSync('test.ts', code);
+  const parsed = parseSource(TEST_FILE_PATH, code);
 
   return collectFunctionNodes(parsed.program);
 };
@@ -29,11 +34,11 @@ const firstFunction = (code: string) => {
 
 const analyzeFirstFunction = (code: string) => {
   const fn = firstFunction(code);
-  const localIndexByName = collectLocalVarIndexes(fn);
+  const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH);
   const paramBindings = collectParameterBindings(fn);
   const body = (fn as any).body;
 
-  return analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn));
+  return analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH));
 };
 
 describe('engine/dataflow/reaching-defs', () => {
@@ -182,46 +187,50 @@ describe('engine/dataflow/reaching-defs', () => {
   // ── collectLocalVarIndexes ──
 
   describe('collectLocalVarIndexes', () => {
+    // Helper: extract just the names from bindingKey strings (`name@scope`).
+    // Used so assertions don't depend on the scope-key format, which is now
+    // sourced from gildash's tsc-resolved declaration positions instead of
+    // ScopeTracker's lexical-scope strings (`''`, `'0'`, ...).
+    const namesOf = (indexes: Map<string, number>): string[] =>
+      [...indexes.keys()].map(k => k.split('@')[0] ?? '').sort();
+
     it('collectLocalVarIndexes - params and locals - includes both', () => {
       // Arrange
       const fn = firstFunction('function f(a: number) { const b = 1; return a + b; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
 
-      // Assert — parameters live in scope '', body locals in the function-body block scope '0'
+      // Assert — both parameter and body local are tracked
       expect(indexes.size).toBe(2);
-      expect(indexes.has(bindingKey('a', ''))).toBe(true);
-      expect(indexes.has(bindingKey('b', '0'))).toBe(true);
+      expect(namesOf(indexes)).toEqual(['a', 'b']);
     });
 
     it('collectLocalVarIndexes - only locals no params - includes locals', () => {
       // Arrange
       const fn = firstFunction('function f() { const a = 1; let b = 2; return a + b; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
 
       // Assert
       expect(indexes.size).toBe(2);
-      expect(indexes.has(bindingKey('a', '0'))).toBe(true);
-      expect(indexes.has(bindingKey('b', '0'))).toBe(true);
+      expect(namesOf(indexes)).toEqual(['a', 'b']);
     });
 
     it('collectLocalVarIndexes - destructuring declaration - includes each binding', () => {
       // Arrange
       const fn = firstFunction('function f() { const { a, b } = { a: 1, b: 2 }; return a + b; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
 
       // Assert
-      expect(indexes.has(bindingKey('a', '0'))).toBe(true);
-      expect(indexes.has(bindingKey('b', '0'))).toBe(true);
+      expect(namesOf(indexes)).toEqual(['a', 'b']);
     });
 
     it('collectLocalVarIndexes - assigns unique index to each variable', () => {
       // Arrange
       const fn = firstFunction('function f(x: number) { const y = 1; const z = 2; return x + y + z; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
       // Assert
       const values = [...indexes.values()];
       const uniqueValues = new Set(values);
@@ -233,7 +242,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange — x inside the IIFE belongs to the IIFE scope, not outer
       const fn = firstFunction('function outer() { (function inner() { const x = getX(); console.log(x); })(); }');
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
 
       // Assert — outer has no locals of its own; x is IIFE-internal
       for (const key of indexes.keys()) {
@@ -247,21 +256,21 @@ describe('engine/dataflow/reaching-defs', () => {
         'const getOrmDb = async () => { const created = (async () => { const x = getX(); return x; })(); return created; };',
       );
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
 
       // Assert — x belongs to async IIFE scope; created belongs to outer body block
       for (const key of indexes.keys()) {
         expect(key.startsWith('x@')).toBe(false);
       }
 
-      expect(indexes.has(bindingKey('created', '0'))).toBe(true);
+      expect(namesOf(indexes)).toContain('created');
     });
 
     it('collectLocalVarIndexes - same name in outer and inner block - distinct indexes (no shadow collision)', () => {
       // Arrange — outer param x and inner block `let x` are separate bindings
       const fn = firstFunction('function f(x: number) { { let x = 1; return x; } }');
       // Act
-      const indexes = collectLocalVarIndexes(fn);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
 
       // Assert — both bindings tracked, with different varIndexes
       const xKeys = [...indexes.keys()].filter(k => k.startsWith('x@'));
@@ -303,16 +312,19 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange
       const code = 'function f() { const a = 1; let b = 2; b = 3; return a + b; }';
       const fn = firstFunction(code);
-      const localIndexByName = collectLocalVarIndexes(fn);
+      const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH);
       const paramBindings = collectParameterBindings(fn);
       const body = (fn as any).body;
       // Act
-      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn));
+      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH));
 
       // Assert
       expect(analysis.defsOfVar.length).toBe(localIndexByName.size);
 
-      const bIndex = localIndexByName.get(bindingKey('b', '0'));
+      const bKey = [...localIndexByName.keys()].find(k => k.startsWith('b@'));
+
+      expect(bKey).toBeDefined();
+      const bIndex = localIndexByName.get(bKey!);
 
       expect(typeof bIndex).toBe('number');
 

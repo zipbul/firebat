@@ -39,14 +39,17 @@ describe('gildash binding source telemetry', () => {
     expect(telemetry.gildashHits).toBeGreaterThan(0);
   });
 
-  it('records a miss when no virtual→real mapping is registered for an in-memory path', () => {
+  it('parseSource hook auto-registers in-memory virtual paths so gildash resolves them', () => {
+    // With the preload-installed parseSource hook, even an in-memory virtual
+    // path (no prior `registerFixtureRealPath`) is notified to the semantic
+    // layer and resolves via gildash — no ScopeTracker fallback path exists.
     const src = 'export function f(): number { let x = 1; return x; }';
-    const virtualPath = '/virtual/_unregistered_inmemory.ts';
+    const virtualPath = '/virtual/_inmemory_autoreg.ts';
 
     detectWaste([parseSource(virtualPath, src)]);
 
     const telemetry = getBindingSourceTelemetry();
 
-    expect(telemetry.gildashMisses).toBeGreaterThan(0);
+    expect(telemetry.gildashHits).toBeGreaterThan(0);
   });
 });

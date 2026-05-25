@@ -13,7 +13,9 @@ describe('integration/indirection/cross-file (fuzz)', () => {
     for (let round = 0; round < iterations; round += 1) {
       const chainLength = 3 + rng.nextInt(7); // 3..9
       const sources = new Map<string, string>();
-      const baseDir = `/virtual/indirection-cross-fuzz/${round}`;
+      // Reuse one baseDir across rounds so the gildash semantic layer
+      // replaces in-memory files instead of accumulating per-round trees.
+      const baseDir = `/virtual/indirection-cross-fuzz`;
 
       for (let index = 0; index < chainLength; index += 1) {
         const filePath = `${baseDir}/m${index}.ts`;

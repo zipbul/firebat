@@ -55,7 +55,9 @@ describe('waste (integration fuzz)', () => {
     for (let iteration = 0; iteration < iterations; iteration += 1) {
       const literal = prng.nextInt(10) + 1;
       const shouldRead = prng.nextBool();
-      const filePath = `/virtual/fuzz/loop-${seed}-${iteration}.ts`;
+      // Reuse a single virtual path so the gildash semantic layer replaces
+      // the in-memory file each iteration instead of accumulating entries.
+      const filePath = `/virtual/fuzz/loop.ts`;
       const sources = new Map<string, string>();
       const generator = getLoopGenerator(shouldRead);
 

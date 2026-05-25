@@ -1,7 +1,23 @@
+import * as path from 'node:path';
+
 import type { ParsedFile } from '../../../src/test-api';
 import type { DuplicateGroup, WasteFinding } from '../../../src/test-api';
 
 import { parseSource } from '../../../src/test-api';
+import { registerVirtualSourcesBatch } from '../../../src/engine/dataflow/gildash-binding-source';
+
+const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const AD_HOC_DIR = path.join(PROJECT_ROOT, '.firebat-test-tmp');
+
+// Deterministic mapping virtualPath → adHoc disk path. Same virtualPath
+// always maps to the same target so repeated calls (e.g. fuzz iterations
+// that reuse a path with different content) replace the in-memory file in
+// tsc Program rather than accumulating new ones.
+const adHocPathFor = (virtualPath: string): string => {
+  const safe = virtualPath.replace(/[^A-Za-z0-9._-]+/g, '_');
+
+  return path.join(AD_HOC_DIR, safe);
+};
 
 export const getFuzzSeed = (): number => {
   const envSeed = process.env.FUZZ_SEED;
@@ -84,6 +100,17 @@ export const createPrng = (seed: number) => {
 };
 
 export const createProgramFromMap = (sources: Map<string, string>): ParsedFile[] => {
+  // Batch-register all entries with the gildash semantic layer in one tsc
+  // Program rebuild (per gildash 0.31 release notes: 10× faster than
+  // per-file notify+query interleaving).
+  const entries: Array<{ virtualPath: string; targetPath: string; content: string }> = [];
+
+  for (const [virtualPath, content] of sources.entries()) {
+    entries.push({ virtualPath, targetPath: adHocPathFor(virtualPath), content });
+  }
+
+  registerVirtualSourcesBatch(entries);
+
   const files: ParsedFile[] = [];
 
   for (const [filePath, sourceText] of sources.entries()) {
