@@ -1,6 +1,7 @@
 [test]
 onlyFailures = true
 coverage = true
+preload = ["./test/integration/shared/global-setup.ts"]
 coverageReporter = ["text", "lcov"]
 # Branch coverage: Bun 1.x 미지원 (line/function만). https://github.com/oven-sh/bun/issues/6672
 # coverageThreshold는 per-file 강제됨. 폴더 제외 없이 전체 적용.

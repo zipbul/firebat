@@ -22,12 +22,42 @@ interface GildashLike {
 
 let _gildash: GildashLike | null = null;
 
+/**
+ * Virtual → real-disk path mapping used by the test runner so that
+ * `tryGildashDeclScopeMap` can query gildash with a real path while keeping
+ * ParsedFile.filePath in its historical `/virtual/...` form. Production code
+ * passes real disk paths directly and never registers entries here.
+ */
+const _virtualToReal = new Map<string, string>();
+
+// Telemetry counters — used by tests to assert the gildash path was actually
+// taken vs the ScopeTracker fallback.
+let _gildashHitCount = 0;
+let _gildashMissCount = 0;
+
+export const getBindingSourceTelemetry = (): { gildashHits: number; gildashMisses: number } => {
+  return { gildashHits: _gildashHitCount, gildashMisses: _gildashMissCount };
+};
+
+export const resetBindingSourceTelemetry = (): void => {
+  _gildashHitCount = 0;
+  _gildashMissCount = 0;
+};
+
 export const setGildashSemanticContext = (gildash: GildashLike | null): void => {
   _gildash = gildash;
 };
 
 export const getGildashSemanticContext = (): GildashLike | null => {
   return _gildash;
+};
+
+export const registerFixtureRealPath = (virtualPath: string, realPath: string): void => {
+  _virtualToReal.set(virtualPath, realPath);
+};
+
+export const clearFixtureRealPaths = (): void => {
+  _virtualToReal.clear();
 };
 
 /**
@@ -43,28 +73,41 @@ export const tryGildashDeclScopeMap = (
   filePath: string | undefined,
 ): ReadonlyMap<number, string> | null => {
   if (_gildash === null || filePath === undefined) {
+    _gildashMissCount += 1;
+
     return null;
   }
 
-  if (!filePath.startsWith('/')) {
+  // Resolve through the virtual→real-disk mapping first; production code
+  // passes real paths and skips this step.
+  const realDiskPath = _virtualToReal.get(filePath) ?? filePath;
+
+  if (!realDiskPath.startsWith('/')) {
+    _gildashMissCount += 1;
+
     return null;
   }
 
-  // Convert absolute path to project-relative for the gildash query.
   const root = _gildash.projectRoot;
-  const rel = filePath.startsWith(root + '/') ? filePath.slice(root.length + 1) : filePath;
+  const rel = realDiskPath.startsWith(root + '/') ? realDiskPath.slice(root.length + 1) : realDiskPath;
 
   let bindings: FileBinding[];
 
   try {
     bindings = _gildash.getFileBindings(rel);
   } catch {
+    _gildashMissCount += 1;
+
     return null;
   }
 
   if (bindings.length === 0) {
+    _gildashMissCount += 1;
+
     return null;
   }
+
+  _gildashHitCount += 1;
 
   const map = new Map<number, string>();
 

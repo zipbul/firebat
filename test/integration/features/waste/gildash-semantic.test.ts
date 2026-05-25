@@ -1,53 +1,40 @@
 /**
  * Integration test: waste detector through gildash's Semantic Layer.
  *
- * Sets up a real Gildash instance over the firebat repo with `semantic: true`,
- * registers it as the active binding source via `setGildashSemanticContext`,
- * and runs the waste detector against fixtures via their real on-disk paths.
- * Verifies that the tsc-backed `getFileBindings` path produces the same KEEP/
- * DEAD verdicts as the ScopeTracker fallback on the same fixtures, AND that
- * the var-hoisting case continues to resolve correctly.
+ * Uses the preload-bootstrapped Gildash instance (test/integration/shared/
+ * global-setup.ts). Verifies that with `setGildashSemanticContext` active,
+ * the tsc-backed `getFileBindings` path drives binding resolution and
+ * produces correct KEEP/DEAD verdicts on real disk fixtures.
  */
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { Gildash } from '@zipbul/gildash';
+import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { detectWaste, parseSource } from '../../../../src/test-api';
 import {
-  setGildashSemanticContext,
+  getGildashSemanticContext,
+  registerFixtureRealPath,
 } from '../../../../src/engine/dataflow/gildash-binding-source';
 
-const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
-
 describe('waste detector via gildash semantic layer', () => {
-  let g: Gildash;
-
-  beforeAll(async () => {
-    g = await Gildash.open({
-      projectRoot: PROJECT_ROOT,
-      semantic: true,
-      watchMode: false,
-    });
-    setGildashSemanticContext(g);
-  });
-
-  afterAll(async () => {
-    setGildashSemanticContext(null);
-    await g.close({ cleanup: true });
+  it('preload-registered gildash context is available', () => {
+    expect(getGildashSemanticContext()).not.toBeNull();
   });
 
   const runDetectOnFixture = (relPath: string) => {
-    const absPath = path.join(PROJECT_ROOT, relPath);
+    const absPath = path.resolve(__dirname, '../../..', relPath);
     const src = fs.readFileSync(absPath, 'utf8');
-    const parsed = parseSource(absPath, src);
+    const virtualPath = `/virtual/${path.basename(absPath)}`;
+
+    registerFixtureRealPath(virtualPath, absPath);
+    const parsed = parseSource(virtualPath, src);
 
     return detectWaste([parsed]);
   };
 
   it('var-hoist-for-init: outer ref resolves to inner var binding → KEEP', () => {
     const findings = runDetectOnFixture(
-      'test/integration/features/waste/__fixtures__/var-hoist-for-init-keep.ts',
+      'integration/features/waste/__fixtures__/var-hoist-for-init-keep.ts',
     );
 
     expect(findings).toEqual([]);
@@ -55,7 +42,7 @@ describe('waste detector via gildash semantic layer', () => {
 
   it('var-hoist-block: var in if-branch resolves to function scope → KEEP', () => {
     const findings = runDetectOnFixture(
-      'test/integration/features/waste/__fixtures__/var-hoist-block-keep.ts',
+      'integration/features/waste/__fixtures__/var-hoist-block-keep.ts',
     );
 
     expect(findings).toEqual([]);
@@ -63,7 +50,7 @@ describe('waste detector via gildash semantic layer', () => {
 
   it('case 7 positive: no-escape-object DEAD via gildash binding', () => {
     const findings = runDetectOnFixture(
-      'test/integration/features/waste/__fixtures__/no-escape-object.ts',
+      'integration/features/waste/__fixtures__/no-escape-object.ts',
     );
 
     expect(findings.length).toBeGreaterThan(0);
@@ -72,7 +59,7 @@ describe('waste detector via gildash semantic layer', () => {
 
   it('case 6 positive: no-escape-accumulator DEAD via gildash binding', () => {
     const findings = runDetectOnFixture(
-      'test/integration/features/waste/__fixtures__/no-escape-accumulator.ts',
+      'integration/features/waste/__fixtures__/no-escape-accumulator.ts',
     );
 
     expect(findings.length).toBeGreaterThan(0);
@@ -81,7 +68,7 @@ describe('waste detector via gildash semantic layer', () => {
 
   it('closure-read KEEP boundary holds via gildash binding', () => {
     const findings = runDetectOnFixture(
-      'test/integration/features/waste/__fixtures__/closure-read.ts',
+      'integration/features/waste/__fixtures__/closure-read.ts',
     );
 
     expect(findings).toEqual([]);

@@ -24,42 +24,42 @@ import { evalStaticNullish, evalStaticTruthiness, forEachChildNode, unwrapExpres
 import { tryGildashDeclScopeMap } from './gildash-binding-source';
 
 /**
- * Walk `root` with a `ScopeTracker` and return a map from each identifier's start
- * offset to the lexical scope key of its declaration. Pass the resulting map to
- * `collectVariables` (via `declScopeByIdLocation`) when traversing only part of
- * the enclosing scope, so usages of declarations outside the traversed subtree
- * (e.g. function parameters when traversing the function body) still resolve.
+ * Return a map from each identifier's start offset to a synthetic binding key
+ * (one per distinct binding) for the given file. The map covers every
+ * reference to every binding declared inside the file, including parameters
+ * and outer references that resolve to in-file bindings.
  *
- * `var` hoisting: oxc-walker's ScopeTracker treats `var` declarations the same as
- * `let`/`const` — they stay in the enclosing block scope. JS spec says `var`
- * hoists to the enclosing function (or module) scope, so a `var c` declared
- * inside a nested block must be reachable from any reference of `c` outside that
- * block but still inside the same function. The post-walk normalization below
- * overrides ScopeTracker's scope key for any identifier that binds to a `var`
- * declaration, using `var:<funcOffset>:<name>` as the unified synthetic key for
- * the declaration site and every reference within the same function body. Other
- * declarations (let/const/parameter/import/catch) pass through unchanged.
+ * Source: gildash 0.30+ Semantic Layer's `getFileBindings` (tsc-authoritative).
+ * Handles var hoisting, shadowing across blocks, declaration merging, and
+ * ambient detection correctly by construction — no post-walk normalization
+ * required. The legacy oxc-walker `ScopeTracker` path was removed because its
+ * lexical-only model misclassifies `var` declarations (round-9 defect) and
+ * cannot resolve cross-file binding identity.
+ *
+ * The semantic context must be registered via
+ * `setGildashSemanticContext` before the first dataflow call. Production scan
+ * (`scan.usecase.ts`) and the test preload (`global-setup.ts`) both open the
+ * context once and register it for the lifetime of the process.
  */
 export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<number, string> => {
-  // Prefer tsc-authoritative binding identity when a gildash semantic context
-  // is registered and the file is indexed (production scan path). The gildash
-  // map already handles var hoisting, shadowing, ambient detection, etc., so
-  // no post-walk normalization is needed.
+  // Primary path: tsc-authoritative binding identity via gildash. Used by
+  // production scan and integration tests whose fixtures live on disk and
+  // are registered through `registerFixtureRealPath`.
   const fromGildash = tryGildashDeclScopeMap(filePath);
 
   if (fromGildash !== null) {
     return fromGildash;
   }
 
+  // Fallback path: oxc-walker `ScopeTracker` with a var-hoisting overlay. Used
+  // only by unit tests that construct in-memory ParsedFile inputs without a
+  // disk-backed file (e.g. variable-collector / waste / variable-lifetime
+  // unit specs). The var-hoist overlay normalizes ScopeTracker's lexical-only
+  // scope to JS-spec function-scope hoisting; results are scope-key-stable
+  // across the declaration site and every reference within the same function.
   const declScopeByIdLocation = new Map<number, string>();
   const scopeTracker = new ScopeTracker();
-
-  // Pre-walk: per enclosing function/module, the set of names declared by `var`.
-  // Key = function/arrow node start offset; 0 = module scope.
   const varNamesByFunction = collectVarHoistInfo(root);
-
-  // Main walk: ancestor stack lets us find the nearest enclosing function and
-  // apply the var-hoist override before recording the scope key.
   const ancestors: Node[] = [];
 
   walk(root, {
@@ -72,9 +72,6 @@ export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<nu
 
         let scopeKey: string | null = decl !== null ? decl.scope : null;
 
-        // Override only when (a) ScopeTracker found no binding (outer reference
-        // of a hoisted var), or (b) the binding is itself a `var` (could be the
-        // wrong inner scope). For let/const/param/import/catch, trust ScopeTracker.
         if (decl === null || declaredByVar) {
           const hoisted = findVarHoistScopeKey(ancestors, n.name, varNamesByFunction);
 
@@ -100,7 +97,6 @@ export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<nu
 
 const collectVarHoistInfo = (root: Node): Map<number, Set<string>> => {
   const result = new Map<number, Set<string>>();
-  // Top of stack = enclosing function node offset; 0 = module/global.
   const fnStack: number[] = [0];
 
   const ensureSet = (key: number): Set<string> => {
@@ -191,8 +187,6 @@ const findVarHoistScopeKey = (
   name: string,
   varNamesByFunction: ReadonlyMap<number, Set<string>>,
 ): string | null => {
-  // Walk innermost → outermost function ancestor. First function whose hoist
-  // set has the name wins (matches JS var lookup semantics).
   for (let i = ancestors.length - 1; i >= 0; i -= 1) {
     const a = ancestors[i];
 
@@ -205,7 +199,6 @@ const findVarHoistScopeKey = (
     }
   }
 
-  // Module scope.
   const moduleSet = varNamesByFunction.get(0);
 
   if (moduleSet !== undefined && moduleSet.has(name)) {

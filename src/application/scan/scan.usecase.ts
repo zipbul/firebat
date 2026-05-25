@@ -42,7 +42,7 @@ import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../feat
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createFirebatProgram, loadFirebatConfigFile, computeToolVersion, resolveRuntimeContextFromCwd } from '../../shared';
-import { setGildashSemanticContext } from '../../engine/dataflow/gildash-binding-source';
+import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow/gildash-binding-source';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
@@ -735,6 +735,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   // Register the semantic-enabled Gildash as the authoritative binding source
   // for dataflow detectors (waste / variable-lifetime). When unavailable,
   // detectors fall back to oxc-walker ScopeTracker with our var-hoisting fix.
+  // Save any pre-existing context so test preloads / nested scans can
+  // restore on close instead of being clobbered.
+  const previousBindingContext = getGildashSemanticContext();
+
   if (semanticAvailable) {
     setGildashSemanticContext(gildash);
   }
@@ -1295,7 +1299,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     findings,
   };
 
-  setGildashSemanticContext(null);
+  setGildashSemanticContext(previousBindingContext);
   await gildash.close({ cleanup: false });
 
   if (allowCache) {
