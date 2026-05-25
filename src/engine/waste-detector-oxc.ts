@@ -1083,7 +1083,7 @@ const collectWasteFindingsForFunction = (
   lineOffsets: number[],
   findings: WasteFinding[],
 ): void => {
-  const localIndexByName = collectLocalVarIndexes(node);
+  const localIndexByName = collectLocalVarIndexes(node, filePath);
   const parameterBindings = collectParameterBindings(node);
 
   if (localIndexByName.size === 0) {
@@ -1105,7 +1105,7 @@ const collectWasteFindingsForFunction = (
   // Build the decl-scope map from the function root so parameter declarations are
   // visible to the in-body walks (`ScopeTracker.getDeclaration` cannot resolve
   // parameters when the walk starts at the body).
-  const declScopeByIdLocation = buildDeclScopeMap(node);
+  const declScopeByIdLocation = buildDeclScopeMap(node, filePath);
   const analysis = analyzeFunctionBody(
     functionBodyNode,
     localIndexByName,
@@ -1512,7 +1512,7 @@ const collectWasteFindingsForModule = (
     return;
   }
 
-  const declScopeByIdLocation = buildDeclScopeMap(program);
+  const declScopeByIdLocation = buildDeclScopeMap(program, filePath);
   const localIndexByName = collectModuleLocalVarIndexes(programBody, declScopeByIdLocation);
 
   if (localIndexByName.size === 0) {

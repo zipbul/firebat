@@ -83,7 +83,7 @@ const PARAMETER_SCOPE = '';
 export const bindingKey = (name: string, declScope: string | undefined): string =>
   `${name}@${declScope ?? PARAMETER_SCOPE}`;
 
-export const collectLocalVarIndexes = (functionNode: Node): Map<string, number> => {
+export const collectLocalVarIndexes = (functionNode: Node, filePath?: string): Map<string, number> => {
   const keys = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
 
@@ -100,7 +100,7 @@ export const collectLocalVarIndexes = (functionNode: Node): Map<string, number> 
     bodyNode !== null
       ? collectVariables(bodyNode, {
           includeNestedFunctions: false,
-          declScopeByIdLocation: buildDeclScopeMap(functionNode),
+          declScopeByIdLocation: buildDeclScopeMap(functionNode, filePath),
         })
       : [];
 

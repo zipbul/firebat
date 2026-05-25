@@ -796,7 +796,7 @@ const analyzeVariableLifetime = (
     const functionNodes = collectFunctionNodes(file.program);
 
     for (const functionNode of functionNodes) {
-      const localIndexByName = collectLocalVarIndexes(functionNode);
+      const localIndexByName = collectLocalVarIndexes(functionNode, file.filePath);
 
       if (localIndexByName.size === 0) {
         continue;
@@ -810,7 +810,7 @@ const analyzeVariableLifetime = (
         continue;
       }
 
-      const declScopeByIdLocation = buildDeclScopeMap(functionNode);
+      const declScopeByIdLocation = buildDeclScopeMap(functionNode, file.filePath);
       const analysis = analyzeFunctionBody(bodyNode, localIndexByName, paramBindings, [], declScopeByIdLocation);
       const { defs, reachingInByNode, useVarIndexesByNode, nodePayloads, defsOfVar } = analysis;
       // Compute first/last use offset for each defId via reaching definitions.

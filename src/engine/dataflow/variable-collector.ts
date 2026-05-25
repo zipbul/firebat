@@ -21,6 +21,7 @@ import { isFunctionNode, ScopeTracker, walk } from '@zipbul/gildash';
 import type { VariableCollectorOptions, VariableUsage } from '../types';
 
 import { evalStaticNullish, evalStaticTruthiness, forEachChildNode, unwrapExpression } from '../ast';
+import { tryGildashDeclScopeMap } from './gildash-binding-source';
 
 /**
  * Walk `root` with a `ScopeTracker` and return a map from each identifier's start
@@ -39,7 +40,17 @@ import { evalStaticNullish, evalStaticTruthiness, forEachChildNode, unwrapExpres
  * the declaration site and every reference within the same function body. Other
  * declarations (let/const/parameter/import/catch) pass through unchanged.
  */
-export const buildDeclScopeMap = (root: Node): ReadonlyMap<number, string> => {
+export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<number, string> => {
+  // Prefer tsc-authoritative binding identity when a gildash semantic context
+  // is registered and the file is indexed (production scan path). The gildash
+  // map already handles var hoisting, shadowing, ambient detection, etc., so
+  // no post-walk normalization is needed.
+  const fromGildash = tryGildashDeclScopeMap(filePath);
+
+  if (fromGildash !== null) {
+    return fromGildash;
+  }
+
   const declScopeByIdLocation = new Map<number, string>();
   const scopeTracker = new ScopeTracker();
 
