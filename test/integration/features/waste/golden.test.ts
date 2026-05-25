@@ -118,6 +118,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'static-block-outer-mutation-keep', program => detectWaste([...program]));
   // syntactic same-value reassign for NaN is suppressed (NaN !== NaN at runtime) → KEEP
   runGolden(import.meta.dir, 'nan-reassign-keep', program => detectWaste([...program]));
+  // `var` hoisting: outer reference of var declared in for-init binds same binding → KEEP
+  runGolden(import.meta.dir, 'var-hoist-for-init-keep', program => detectWaste([...program]));
+  // `var` hoisting: var inside if-block binds same binding as outer reference → KEEP
+  runGolden(import.meta.dir, 'var-hoist-block-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

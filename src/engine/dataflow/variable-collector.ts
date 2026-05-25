@@ -28,29 +28,180 @@ import { evalStaticNullish, evalStaticTruthiness, forEachChildNode, unwrapExpres
  * `collectVariables` (via `declScopeByIdLocation`) when traversing only part of
  * the enclosing scope, so usages of declarations outside the traversed subtree
  * (e.g. function parameters when traversing the function body) still resolve.
+ *
+ * `var` hoisting: oxc-walker's ScopeTracker treats `var` declarations the same as
+ * `let`/`const` — they stay in the enclosing block scope. JS spec says `var`
+ * hoists to the enclosing function (or module) scope, so a `var c` declared
+ * inside a nested block must be reachable from any reference of `c` outside that
+ * block but still inside the same function. The post-walk normalization below
+ * overrides ScopeTracker's scope key for any identifier that binds to a `var`
+ * declaration, using `var:<funcOffset>:<name>` as the unified synthetic key for
+ * the declaration site and every reference within the same function body. Other
+ * declarations (let/const/parameter/import/catch) pass through unchanged.
  */
 export const buildDeclScopeMap = (root: Node): ReadonlyMap<number, string> => {
   const declScopeByIdLocation = new Map<number, string>();
   const scopeTracker = new ScopeTracker();
 
+  // Pre-walk: per enclosing function/module, the set of names declared by `var`.
+  // Key = function/arrow node start offset; 0 = module scope.
+  const varNamesByFunction = collectVarHoistInfo(root);
+
+  // Main walk: ancestor stack lets us find the nearest enclosing function and
+  // apply the var-hoist override before recording the scope key.
+  const ancestors: Node[] = [];
+
   walk(root, {
     scopeTracker,
     enter(n: Node) {
-      if (n.type !== 'Identifier') {
-        return;
+      if (n.type === 'Identifier') {
+        const decl = scopeTracker.getDeclaration(n.name);
+        const declaredByVar = decl !== null && decl.type === 'Variable' &&
+          (decl as { variableNode: { kind: string } }).variableNode.kind === 'var';
+
+        let scopeKey: string | null = decl !== null ? decl.scope : null;
+
+        // Override only when (a) ScopeTracker found no binding (outer reference
+        // of a hoisted var), or (b) the binding is itself a `var` (could be the
+        // wrong inner scope). For let/const/param/import/catch, trust ScopeTracker.
+        if (decl === null || declaredByVar) {
+          const hoisted = findVarHoistScopeKey(ancestors, n.name, varNamesByFunction);
+
+          if (hoisted !== null) {
+            scopeKey = hoisted;
+          }
+        }
+
+        if (scopeKey !== null) {
+          declScopeByIdLocation.set(n.start, scopeKey);
+        }
       }
 
-      const decl = scopeTracker.getDeclaration(n.name);
-
-      if (decl === null) {
-        return;
-      }
-
-      declScopeByIdLocation.set(n.start, decl.scope);
+      ancestors.push(n);
+    },
+    leave() {
+      ancestors.pop();
     },
   });
 
   return declScopeByIdLocation;
+};
+
+const collectVarHoistInfo = (root: Node): Map<number, Set<string>> => {
+  const result = new Map<number, Set<string>>();
+  // Top of stack = enclosing function node offset; 0 = module/global.
+  const fnStack: number[] = [0];
+
+  const ensureSet = (key: number): Set<string> => {
+    let s = result.get(key);
+
+    if (s === undefined) {
+      s = new Set<string>();
+      result.set(key, s);
+    }
+
+    return s;
+  };
+
+  const visit = (node: Node): void => {
+    const enteredFn = isFunctionNode(node);
+
+    if (enteredFn) {
+      fnStack.push(node.start);
+    }
+
+    if (node.type === 'VariableDeclaration' &&
+        (node as { kind?: string }).kind === 'var') {
+      const target = ensureSet(fnStack[fnStack.length - 1] ?? 0);
+
+      for (const declarator of (node as { declarations: ReadonlyArray<{ id: Node }> }).declarations) {
+        collectPatternBindingNames(declarator.id, name => target.add(name));
+      }
+    }
+
+    forEachChildNode(node, visit);
+
+    if (enteredFn) {
+      fnStack.pop();
+    }
+  };
+
+  visit(root);
+
+  return result;
+};
+
+const collectPatternBindingNames = (pattern: Node, emit: (name: string) => void): void => {
+  if (pattern.type === 'Identifier') {
+    emit((pattern as { name: string }).name);
+
+    return;
+  }
+
+  if (pattern.type === 'ArrayPattern') {
+    for (const el of (pattern as { elements: ReadonlyArray<Node | null> }).elements) {
+      if (el !== null) {
+        collectPatternBindingNames(el, emit);
+      }
+    }
+
+    return;
+  }
+
+  if (pattern.type === 'ObjectPattern') {
+    for (const prop of (pattern as { properties: ReadonlyArray<Node> }).properties) {
+      if (prop.type === 'Property') {
+        const value = (prop as { value: Node }).value;
+
+        collectPatternBindingNames(value, emit);
+      } else if (prop.type === 'RestElement') {
+        const arg = (prop as { argument: Node }).argument;
+
+        collectPatternBindingNames(arg, emit);
+      }
+    }
+
+    return;
+  }
+
+  if (pattern.type === 'RestElement') {
+    collectPatternBindingNames((pattern as { argument: Node }).argument, emit);
+
+    return;
+  }
+
+  if (pattern.type === 'AssignmentPattern') {
+    collectPatternBindingNames((pattern as { left: Node }).left, emit);
+  }
+};
+
+const findVarHoistScopeKey = (
+  ancestors: ReadonlyArray<Node>,
+  name: string,
+  varNamesByFunction: ReadonlyMap<number, Set<string>>,
+): string | null => {
+  // Walk innermost → outermost function ancestor. First function whose hoist
+  // set has the name wins (matches JS var lookup semantics).
+  for (let i = ancestors.length - 1; i >= 0; i -= 1) {
+    const a = ancestors[i];
+
+    if (a !== undefined && isFunctionNode(a)) {
+      const set = varNamesByFunction.get(a.start);
+
+      if (set !== undefined && set.has(name)) {
+        return `var:${a.start}:${name}`;
+      }
+    }
+  }
+
+  // Module scope.
+  const moduleSet = varNamesByFunction.get(0);
+
+  if (moduleSet !== undefined && moduleSet.has(name)) {
+    return `var:0:${name}`;
+  }
+
+  return null;
 };
 
 const addPropertyKeyToSet = (key: PropertyKey, keys: Set<string>): void => {

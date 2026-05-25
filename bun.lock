@@ -5,7 +5,7 @@
     "": {
       "name": "firebat",
       "dependencies": {
-        "@zipbul/gildash": "0.28.0",
+        "@zipbul/gildash": "0.30.0",
         "drizzle-orm": "^0.45.1",
         "fastbitset": "^0.4.1",
         "oxc-parser": "0.127.0",
@@ -329,7 +329,7 @@
 
     "@types/node": ["@types/node@25.2.3", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-m0jEgYlYz+mDJZ2+F4v8D1AyQb+QzsNqRuI7xg1VQX/KlKS0qT9r1Mo16yo5F/MtifXFgaofIFsdFMox2SxIbQ=="],
 
-    "@zipbul/gildash": ["@zipbul/gildash@0.28.0", "", { "dependencies": { "@ast-grep/napi": "^0.41.0", "@parcel/watcher": "^2.5.6", "@zipbul/result": "^0.1.4", "comment-parser": "1.4.5", "drizzle-orm": "^0.45.1", "oxc-parser": "0.127.0", "oxc-walker": "^0.7.0" }, "peerDependencies": { "typescript": ">=5.0.0" }, "optionalPeers": ["typescript"] }, "sha512-4BWP0B+JicBcfihbQzvkChSHZYyiVRYIEisyILN3xjUtFFB/Rf7mHizr90XsUB2KRh3q37jlBKqqdF4IHkxEkQ=="],
+    "@zipbul/gildash": ["@zipbul/gildash@0.30.0", "", { "dependencies": { "@ast-grep/napi": "^0.41.0", "@parcel/watcher": "^2.5.6", "@zipbul/result": "^0.1.4", "comment-parser": "1.4.5", "drizzle-orm": "^0.45.1", "oxc-parser": "0.127.0", "oxc-walker": "^0.7.0" }, "peerDependencies": { "typescript": ">=5.0.0" }, "optionalPeers": ["typescript"] }, "sha512-rzq8s0oNd/rfkrkh1D2dVbU9VqK4eG3FO4+VdO4GbPFIvdH53eLATJx22aaIr+81OyZldA8HdAa0gf1VWvqUYQ=="],
 
     "@zipbul/result": ["@zipbul/result@0.1.4", "", {}, "sha512-pko2pKrKJy0BJ46LnKOkjdiCkLxO0KJ6FKk6YmxIvQr52j8ieIrSFYFt4CCNrFbzaKc7BRHWwPviso1scCurYA=="],
 
