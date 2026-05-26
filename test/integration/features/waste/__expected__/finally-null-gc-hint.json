@@ -6,28 +6,12 @@
     "message": "Variable 'resource' is assigned but never read",
     "span": {
       "end": {
-        "column": 14,
-        "line": 6
-      },
-      "start": {
-        "column": 6,
-        "line": 6
-      }
-    }
-  },
-  {
-    "filePath": "/virtual/finally-null-gc-hint.ts",
-    "kind": "dead-store",
-    "label": "resource",
-    "message": "Variable 'resource' is assigned but never read",
-    "span": {
-      "end": {
         "column": 12,
-        "line": 17
+        "line": 23
       },
       "start": {
         "column": 4,
-        "line": 17
+        "line": 23
       }
     }
   }

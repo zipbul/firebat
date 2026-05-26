@@ -126,6 +126,12 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'local-shadows-import-dead', program => detectWaste([...program]));
   // `const c = importedName; c.push(1)` aliases an import (not fresh) → KEEP
   runGolden(import.meta.dir, 'import-alias-receiver-keep', program => detectWaste([...program]));
+  // fallback init read on the exception path of a try/catch → KEEP
+  runGolden(import.meta.dir, 'try-catch-fallback-init-keep', program => detectWaste([...program]));
+  // module helper called by an earlier-declared function (forward-ref capture) → KEEP
+  runGolden(import.meta.dir, 'forward-ref-closure-capture-keep', program => detectWaste([...program]));
+  // return-self mutator (sort) whose result is consumed → receiver escapes → KEEP
+  runGolden(import.meta.dir, 'return-self-mutator-escape-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

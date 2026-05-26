@@ -602,6 +602,10 @@ export class OxcCFGBuilder {
       // No catch: finally (if present) acts as the exception handler so throws in the
       // try body still run finally before the exception propagates outward.
       if (finallyEntryException !== null) {
+        // Exception before any try statement completes: pre-try state reaches the
+        // finalizer's exception entry (so a `let x = init` before the try is live
+        // along the throw path, not killed by an assignment that may not run).
+        this.cfg.addEdge(tryBlockEntry, finallyEntryException, EdgeType.Exception);
         this.activeCatchEntryStack.push(finallyEntryException);
       }
 
@@ -615,6 +619,14 @@ export class OxcCFGBuilder {
     }
 
     const catchEntry = this.addNode(null);
+
+    // Exception before any try statement completes: the state entering the try
+    // body (e.g. a fallback `let x = init` declared before the try) reaches the
+    // catch entry. Without this edge, a try-body assignment `x = compute()` would
+    // be treated as if it always executes, killing the init's reach to post-try
+    // uses and falsely flagging `let x = init` as a dead store — even though on
+    // the throw path the init survives and is read after the try/catch.
+    this.cfg.addEdge(tryBlockEntry, catchEntry, EdgeType.Exception);
 
     this.activeCatchEntryStack.push(catchEntry);
 

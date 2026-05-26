@@ -93,11 +93,22 @@ const buildNestedFunctionContext = (
   return { entryNodeIds, capturedVarIndexesByEntry };
 };
 
+const isVarCapturedByAnyNested = (varIndex: number, nestedCtx: NestedFunctionContext): boolean => {
+  for (const set of nestedCtx.capturedVarIndexesByEntry.values()) {
+    if (set.has(varIndex)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const isDefClosureCaptured = (
   defId: number,
   varIndex: number,
   nestedCtx: NestedFunctionContext,
   reachingInByNode: ReadonlyArray<BitSet>,
+  exitNodeId: number,
 ): boolean => {
   for (const entryNodeId of nestedCtx.entryNodeIds) {
     const capturedSet = nestedCtx.capturedVarIndexesByEntry.get(entryNodeId);
@@ -109,6 +120,21 @@ const isDefClosureCaptured = (
     const reaching = reachingInByNode[entryNodeId];
 
     if (reaching && reaching.has(defId)) {
+      return true;
+    }
+  }
+
+  // Forward-reference capture: a closure declared BEFORE the variable it reads
+  // (e.g. a top-of-file function calling a helper const defined lower down)
+  // has its entry node ordered before this def, so the def does not reach the
+  // entry. But closures escape and run after the enclosing scope finishes
+  // initializing — at invocation they observe whatever def is live at scope
+  // exit. So if the variable is captured by any nested function and this def
+  // is live at the scope exit, the closure observes it: not dead.
+  if (isVarCapturedByAnyNested(varIndex, nestedCtx)) {
+    const reachingAtExit = reachingInByNode[exitNodeId];
+
+    if (reachingAtExit && reachingAtExit.has(defId)) {
       return true;
     }
   }
@@ -166,6 +192,15 @@ const MAPSET_MUTATION_METHODS = new Set<string>([
   'delete',
   'clear',
 ]);
+
+// Mutation methods that RETURN THE RECEIVER itself: Array sort/reverse/fill/
+// copyWithin return the array; Map.set returns the map; Set.add returns the
+// set. When such a call's result is consumed (not a discarded statement), the
+// receiver's reference/content escapes through the return value — e.g.
+// `arr.sort().join()` reads the sorted array, `return c.set(k,v)` leaks the
+// map. push/pop/shift/unshift/splice/delete/clear return a length/element/
+// boolean/new-array, so consuming their result does NOT leak the receiver.
+const RETURN_SELF_MUTATORS = new Set<string>(['sort', 'reverse', 'fill', 'copyWithin', 'set', 'add']);
 
 type MutationMethodCategory = 'array' | 'mapset';
 
@@ -362,6 +397,7 @@ const classifyUseInWaste = (
   parent: Node | null,
   grandparent: Node | null,
   receiverInitKind?: FreshAllocationKind,
+  greatGrandparent?: Node | null,
 ): UseKind => {
   if (parent === null) {
     return 'real';
@@ -526,6 +562,22 @@ const classifyUseInWaste = (
             for (const arg of args) {
               if (containsImpureExpression(arg)) {
                 return 'real';
+              }
+            }
+
+            // Return-self mutators (sort/reverse/fill/copyWithin/set/add) return
+            // the receiver. If the call's result is consumed (its parent — our
+            // great-grandparent — is anything other than a discarded
+            // ExpressionStatement), the receiver escapes through that value:
+            // `arr.sort().join()`, `return c.set(k, v)`, `f(arr.reverse())`.
+            if (RETURN_SELF_MUTATORS.has(methodName)) {
+              const resultConsumed =
+                greatGrandparent !== null &&
+                greatGrandparent !== undefined &&
+                greatGrandparent.type !== 'ExpressionStatement';
+
+              if (resultConsumed) {
+                return 'escape';
               }
             }
 
@@ -1036,7 +1088,8 @@ const buildVarHasMeaningfulUse = (
       continue;
     }
 
-    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, varInitKind.get(idx));
+    const greatGrandparent = ctx.ancestors.length >= 3 ? ctx.ancestors[ctx.ancestors.length - 3] : null;
+    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, varInitKind.get(idx), greatGrandparent);
 
     if (kind === 'real' || kind === 'escape') {
       meaningful.add(idx);
@@ -1114,7 +1167,7 @@ const collectWasteFindingsForFunction = (
     parameterDefaults,
     declScopeByIdLocation,
   );
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId } = analysis;
   // CLAUDE.md 비대상: function parameter. The reaching-defs seed for parameter bindings
   // is still needed so reads inside the body resolve to a definition, but the detector
   // must never report parameters themselves as waste.
@@ -1364,7 +1417,7 @@ const collectWasteFindingsForFunction = (
         meta.writeKind === 'assignment' ||
         meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
+      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
@@ -1378,7 +1431,7 @@ const collectWasteFindingsForFunction = (
         continue;
       }
 
-      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode)) {
+      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId)) {
         continue;
       }
     }
@@ -1523,7 +1576,7 @@ const collectWasteFindingsForModule = (
 
   const exportExemption = collectExportExemption(programBody);
   const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation);
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId } = analysis;
   const syntacticReads = programBody
     .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
     .filter(u => u.isRead);
@@ -1718,7 +1771,7 @@ const collectWasteFindingsForModule = (
         meta.writeKind === 'assignment' ||
         meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode) &&
+      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
@@ -1730,7 +1783,7 @@ const collectWasteFindingsForModule = (
         continue;
       }
 
-      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode)) {
+      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId)) {
         continue;
       }
     }
