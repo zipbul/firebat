@@ -1617,6 +1617,58 @@ const collectExportExemption = (programBody: ReadonlyArray<Node>): ExportExempti
   return { locations, names };
 };
 
+/**
+ * Declaration-name offsets of variables that are *direct members* of a TS
+ * namespace (`namespace N { const x = ... }`). CLAUDE.md lists "namespace" as a
+ * non-target: a namespace member is cross-namespace-visible surface (like an
+ * export), so removing it requires cross-reference analysis outside waste's
+ * scope. Bindings inside a function nested within a namespace are NOT members —
+ * they are ordinary function locals and remain analyzable, so the walk resets
+ * at every function boundary.
+ */
+const collectNamespaceMemberLocations = (programBody: ReadonlyArray<Node>): Set<number> => {
+  const out = new Set<number>();
+
+  const recordBindingIds = (idNode: Node): void => {
+    if (idNode.type === 'Identifier') {
+      out.add(idNode.start);
+
+      return;
+    }
+
+    forEachChildNode(idNode, child => recordBindingIds(child));
+  };
+
+  const visit = (node: Node, inNamespaceDirect: boolean): void => {
+    if (isFunctionNode(node)) {
+      // Function boundary: its locals are not namespace members.
+      forEachChildNode(node, child => visit(child, false));
+
+      return;
+    }
+
+    if (node.type === 'TSModuleBlock') {
+      forEachChildNode(node, child => visit(child, true));
+
+      return;
+    }
+
+    if (inNamespaceDirect && node.type === 'VariableDeclaration') {
+      for (const declarator of (node as { declarations: ReadonlyArray<{ id: Node }> }).declarations) {
+        recordBindingIds(declarator.id);
+      }
+    }
+
+    forEachChildNode(node, child => visit(child, inNamespaceDirect));
+  };
+
+  for (const stmt of programBody) {
+    visit(stmt, false);
+  }
+
+  return out;
+};
+
 const collectWasteFindingsForModule = (
   program: Node,
   filePath: string,
@@ -1638,6 +1690,7 @@ const collectWasteFindingsForModule = (
   }
 
   const exportExemption = collectExportExemption(programBody);
+  const namespaceMemberLocations = collectNamespaceMemberLocations(programBody);
   const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation);
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId, cfg } = analysis;
   const forwardReachable = makeForwardReachable(cfg.buildAdjacency('forward'));
@@ -1796,6 +1849,12 @@ const collectWasteFindingsForModule = (
     //   - specifier: `let foo = 1; export { foo };`  → match by name (specifier's local
     //                                                  is a reference, not declaration)
     if (exportExemption.locations.has(meta.location) || exportExemption.names.has(meta.name)) {
+      continue;
+    }
+
+    // CLAUDE.md "namespace 비대상": direct members of a TS namespace are
+    // cross-namespace surface, out of waste's scope.
+    if (namespaceMemberLocations.has(meta.location)) {
       continue;
     }
 

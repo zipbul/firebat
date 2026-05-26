@@ -132,6 +132,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'forward-ref-closure-capture-keep', program => detectWaste([...program]));
   // return-self mutator (sort) whose result is consumed → receiver escapes → KEEP
   runGolden(import.meta.dir, 'return-self-mutator-escape-keep', program => detectWaste([...program]));
+  // direct members of a TS namespace are non-target (CLAUDE.md namespace 비대상) → KEEP
+  runGolden(import.meta.dir, 'namespace-member-keep', program => detectWaste([...program]));
+  // a function local inside a namespace is still analyzed → dead-store DEAD
+  runGolden(import.meta.dir, 'namespace-function-local-dead', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/namespace-function-local-dead.ts",
+    "kind": "dead-store",
+    "label": "x",
+    "message": "Variable 'x' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 6
+      },
+      "start": {
+        "column": 8,
+        "line": 6
+      }
+    }
+  }
+]
