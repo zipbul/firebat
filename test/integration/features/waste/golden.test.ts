@@ -122,6 +122,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'var-hoist-for-init-keep', program => detectWaste([...program]));
   // `var` hoisting: var inside if-block binds same binding as outer reference → KEEP
   runGolden(import.meta.dir, 'var-hoist-block-keep', program => detectWaste([...program]));
+  // local binding shadowing an imported name is a distinct binding → dead-store DEAD
+  runGolden(import.meta.dir, 'local-shadows-import-dead', program => detectWaste([...program]));
+  // `const c = importedName; c.push(1)` aliases an import (not fresh) → KEEP
+  runGolden(import.meta.dir, 'import-alias-receiver-keep', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD
