@@ -21,7 +21,6 @@ import type { ParsedFile } from '../../../src/test-api';
 
 import { parseSource } from '../../../src/test-api';
 import { PartialResultError } from '../../../src/test-api';
-import { registerFixtureRealPath } from '../../../src/engine/dataflow/gildash-binding-source';
 import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -52,18 +51,15 @@ const readFixture = (fixturesDir: string, name: string): FixtureSources => {
   const source = fs.readFileSync(fixturePath, 'utf8');
   const virtualPath = `/virtual/${name}.ts`;
 
-  // Register the virtual → real-disk mapping so gildash's Semantic Layer can
-  // resolve bindings even though ParsedFile.filePath stays virtual (detector
-  // path conventions depend on virtual prefixes).
-  registerFixtureRealPath(virtualPath, fixturePath);
-
+  // Binding resolution flows the source content directly to gildash's
+  // getStandaloneFileBindings via ParsedFile.sourceText — no path registration
+  // needed. ParsedFile.filePath stays virtual (detector path conventions).
   return { [virtualPath]: source };
 };
 
 /**
  * Read a multi-file fixture from a directory named <name>.dir/
- * Each .ts file inside becomes a virtual path entry; the runner also
- * registers the virtual → real-disk mapping so gildash queries succeed.
+ * Each .ts file inside becomes a virtual path entry.
  */
 const readDirFixture = (fixturesDir: string, name: string): FixtureSources => {
   const dirPath = path.join(fixturesDir, `${name}.dir`);
@@ -83,7 +79,6 @@ const readDirFixture = (fixturesDir: string, name: string): FixtureSources => {
         collect(fullPath, virtualPath);
       } else if (entry.name.endsWith('.ts')) {
         sources[virtualPath] = fs.readFileSync(fullPath, 'utf8');
-        registerFixtureRealPath(virtualPath, fullPath);
       }
     }
   };

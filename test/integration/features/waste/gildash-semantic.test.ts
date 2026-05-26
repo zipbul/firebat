@@ -11,10 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { detectWaste, parseSource } from '../../../../src/test-api';
-import {
-  getGildashSemanticContext,
-  registerFixtureRealPath,
-} from '../../../../src/engine/dataflow/gildash-binding-source';
+import { getGildashSemanticContext } from '../../../../src/engine/dataflow/gildash-binding-source';
 
 describe('waste detector via gildash semantic layer', () => {
   it('preload-registered gildash context is available', () => {
@@ -25,8 +22,6 @@ describe('waste detector via gildash semantic layer', () => {
     const absPath = path.resolve(__dirname, '../../..', relPath);
     const src = fs.readFileSync(absPath, 'utf8');
     const virtualPath = `/virtual/${path.basename(absPath)}`;
-
-    registerFixtureRealPath(virtualPath, absPath);
     const parsed = parseSource(virtualPath, src);
 
     return detectWaste([parsed]);

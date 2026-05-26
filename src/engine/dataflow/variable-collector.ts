@@ -29,22 +29,27 @@ import { tryGildashDeclScopeMap } from './gildash-binding-source';
  * reference to every binding declared inside the file, including parameters
  * and outer references that resolve to in-file bindings.
  *
- * Source: gildash 0.30+ Semantic Layer's `getFileBindings` (tsc-authoritative).
- * Handles var hoisting, shadowing across blocks, declaration merging, and
- * ambient detection correctly by construction — no post-walk normalization
- * required. The legacy oxc-walker `ScopeTracker` path was removed because its
- * lexical-only model misclassifies `var` declarations (round-9 defect) and
- * cannot resolve cross-file binding identity.
+ * Source: gildash 0.32 `getStandaloneFileBindings(filePath, sourceText)` —
+ * tsc-authoritative binding identity resolved in an isolated single-file
+ * program (~1ms, repo-size independent). Handles var hoisting, shadowing
+ * across blocks, destructuring, and writeKind correctly by construction. The
+ * legacy oxc-walker `ScopeTracker` path was removed because its lexical-only
+ * model misclassifies `var` declarations (round-9 defect).
  *
- * The semantic context must be registered via
- * `setGildashSemanticContext` before the first dataflow call. Production scan
- * (`scan.usecase.ts`) and the test preload (`global-setup.ts`) both open the
- * context once and register it for the lifetime of the process.
+ * The semantic context must be registered via `setGildashSemanticContext`
+ * before the first dataflow call. Production scan (`scan.usecase.ts`) and the
+ * test preload (`global-setup.ts`) open the context once for the process.
+ * `sourceText` is the full file source backing `root`; callers thread it from
+ * the ParsedFile.
  */
-export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<number, string> => {
+export const buildDeclScopeMap = (
+  root: Node,
+  filePath?: string,
+  sourceText?: string,
+): ReadonlyMap<number, string> => {
   void root;
 
-  const fromGildash = tryGildashDeclScopeMap(filePath);
+  const fromGildash = tryGildashDeclScopeMap(filePath, sourceText);
 
   if (fromGildash !== null) {
     return fromGildash;
@@ -52,11 +57,10 @@ export const buildDeclScopeMap = (root: Node, filePath?: string): ReadonlyMap<nu
 
   throw new Error(
     `buildDeclScopeMap: gildash binding source did not resolve for filePath=${filePath ?? 'undefined'}. ` +
-      `Either no Gildash semantic context is registered, or the file was not ` +
-      `notified to the semantic layer. Production scan must open Gildash with ` +
-      `{ semantic: true }; tests must load test/integration/shared/global-setup.ts ` +
-      `via bunfig preload (the preload installs a parseSource hook that ` +
-      `auto-registers virtual paths with the semantic layer).`,
+      `No Gildash semantic context is registered, or sourceText was not provided. ` +
+      `Production scan must open Gildash with { semantic: true }; tests must load ` +
+      `test/integration/shared/global-setup.ts via bunfig preload, and callers must ` +
+      `thread the file's sourceText.`,
   );
 };
 

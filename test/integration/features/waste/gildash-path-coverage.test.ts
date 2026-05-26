@@ -1,10 +1,9 @@
 /**
- * Sanity test: golden waste fixtures actually route through the gildash
- * `getFileBindings` path (not the ScopeTracker fallback).
+ * Sanity test: waste detection routes binding resolution through gildash's
+ * standalone binding path (getStandaloneFileBindings), not any fallback.
  *
- * Uses telemetry counters maintained by gildash-binding-source. Resets the
- * counter before invoking detectWaste over a disk-backed fixture, asserts
- * the gildash hit count incremented.
+ * Uses telemetry counters maintained by gildash-binding-source: resets before
+ * invoking detectWaste, asserts the gildash hit count incremented.
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
@@ -13,7 +12,6 @@ import * as path from 'node:path';
 import { detectWaste, parseSource } from '../../../../src/test-api';
 import {
   getBindingSourceTelemetry,
-  registerFixtureRealPath,
   resetBindingSourceTelemetry,
 } from '../../../../src/engine/dataflow/gildash-binding-source';
 
@@ -24,13 +22,10 @@ describe('gildash binding source telemetry', () => {
     resetBindingSourceTelemetry();
   });
 
-  it('routes a single-file waste fixture through gildash getFileBindings', () => {
+  it('routes a disk-backed waste fixture through gildash standalone bindings', () => {
     const fixturePath = path.join(FIXTURES_DIR, 'no-escape-object.ts');
     const src = fs.readFileSync(fixturePath, 'utf8');
-    const virtualPath = '/virtual/no-escape-object.ts';
-
-    registerFixtureRealPath(virtualPath, fixturePath);
-    const findings = detectWaste([parseSource(virtualPath, src)]);
+    const findings = detectWaste([parseSource('/virtual/no-escape-object.ts', src)]);
 
     expect(findings.length).toBeGreaterThan(0);
 
@@ -39,14 +34,10 @@ describe('gildash binding source telemetry', () => {
     expect(telemetry.gildashHits).toBeGreaterThan(0);
   });
 
-  it('parseSource hook auto-registers in-memory virtual paths so gildash resolves them', () => {
-    // With the preload-installed parseSource hook, even an in-memory virtual
-    // path (no prior `registerFixtureRealPath`) is notified to the semantic
-    // layer and resolves via gildash — no ScopeTracker fallback path exists.
+  it('resolves an in-memory virtual source via standalone bindings (sourceText flows directly)', () => {
     const src = 'export function f(): number { let x = 1; return x; }';
-    const virtualPath = '/virtual/_inmemory_autoreg.ts';
 
-    detectWaste([parseSource(virtualPath, src)]);
+    detectWaste([parseSource('/virtual/_inmemory.ts', src)]);
 
     const telemetry = getBindingSourceTelemetry();
 

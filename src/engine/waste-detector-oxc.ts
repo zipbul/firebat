@@ -1080,10 +1080,11 @@ const collectWasteFindingsForFunction = (
   node: Node,
   functionBodyNode: Node | ReadonlyArray<Node>,
   filePath: string,
+  sourceText: string,
   lineOffsets: number[],
   findings: WasteFinding[],
 ): void => {
-  const localIndexByName = collectLocalVarIndexes(node, filePath);
+  const localIndexByName = collectLocalVarIndexes(node, filePath, sourceText);
   const parameterBindings = collectParameterBindings(node);
 
   if (localIndexByName.size === 0) {
@@ -1105,7 +1106,7 @@ const collectWasteFindingsForFunction = (
   // Build the decl-scope map from the function root so parameter declarations are
   // visible to the in-body walks (`ScopeTracker.getDeclaration` cannot resolve
   // parameters when the walk starts at the body).
-  const declScopeByIdLocation = buildDeclScopeMap(node, filePath);
+  const declScopeByIdLocation = buildDeclScopeMap(node, filePath, sourceText);
   const analysis = analyzeFunctionBody(
     functionBodyNode,
     localIndexByName,
@@ -1503,6 +1504,7 @@ const collectExportExemption = (programBody: ReadonlyArray<Node>): ExportExempti
 const collectWasteFindingsForModule = (
   program: Node,
   filePath: string,
+  sourceText: string,
   lineOffsets: number[],
   findings: WasteFinding[],
 ): void => {
@@ -1512,7 +1514,7 @@ const collectWasteFindingsForModule = (
     return;
   }
 
-  const declScopeByIdLocation = buildDeclScopeMap(program, filePath);
+  const declScopeByIdLocation = buildDeclScopeMap(program, filePath, sourceText);
   const localIndexByName = collectModuleLocalVarIndexes(programBody, declScopeByIdLocation);
 
   if (localIndexByName.size === 0) {
@@ -1765,7 +1767,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
     // in scope. Without this pass, top-level `let v=1; v=2; ...`, top-level blocks,
     // and module-scope case 6/7 all escape detection. Function-internal blocks are
     // already covered by the function-scope pass below.
-    collectWasteFindingsForModule(file.program, file.filePath, lineOffsets, findings);
+    collectWasteFindingsForModule(file.program, file.filePath, file.sourceText, lineOffsets, findings);
 
     const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
       if (Array.isArray(node)) {
@@ -1784,7 +1786,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
       const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
 
       if (isFunctionNode(node) && functionBodyNode !== undefined) {
-        collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, lineOffsets, findings);
+        collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, file.sourceText, lineOffsets, findings);
       }
 
       forEachChildNode(node, child => visit(child));

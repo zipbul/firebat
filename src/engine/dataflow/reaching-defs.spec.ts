@@ -12,13 +12,17 @@ import {
 } from './reaching-defs';
 import { buildDeclScopeMap } from './variable-collector';
 
-// Use a single virtual filePath across all spec cases so the gildash
-// semantic layer (auto-registered by the parseSource hook in
-// test/integration/shared/global-setup.ts) replaces the in-memory file
-// each parse rather than accumulating one entry per parse.
+// Virtual filePath for spec cases. The gildash standalone binding resolver
+// (getStandaloneFileBindings) takes filePath + source content directly, so the
+// path is just an identifier and `_lastSource` carries the content.
 const TEST_FILE_PATH = '/virtual/reaching-defs-spec.ts';
 
+// Tracks the source backing the most recent firstFunction()/parseFunctions()
+// call so the gildash standalone binding resolver receives the file content.
+let _lastSource = '';
+
 const parseFunctions = (code: string) => {
+  _lastSource = code;
   const parsed = parseSource(TEST_FILE_PATH, code);
 
   return collectFunctionNodes(parsed.program);
@@ -34,11 +38,11 @@ const firstFunction = (code: string) => {
 
 const analyzeFirstFunction = (code: string) => {
   const fn = firstFunction(code);
-  const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+  const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
   const paramBindings = collectParameterBindings(fn);
   const body = (fn as any).body;
 
-  return analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH));
+  return analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH, _lastSource));
 };
 
 describe('engine/dataflow/reaching-defs', () => {
@@ -198,7 +202,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange
       const fn = firstFunction('function f(a: number) { const b = 1; return a + b; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
 
       // Assert — both parameter and body local are tracked
       expect(indexes.size).toBe(2);
@@ -209,7 +213,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange
       const fn = firstFunction('function f() { const a = 1; let b = 2; return a + b; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
 
       // Assert
       expect(indexes.size).toBe(2);
@@ -220,7 +224,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange
       const fn = firstFunction('function f() { const { a, b } = { a: 1, b: 2 }; return a + b; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
 
       // Assert
       expect(namesOf(indexes)).toEqual(['a', 'b']);
@@ -230,7 +234,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange
       const fn = firstFunction('function f(x: number) { const y = 1; const z = 2; return x + y + z; }');
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
       // Assert
       const values = [...indexes.values()];
       const uniqueValues = new Set(values);
@@ -242,7 +246,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange — x inside the IIFE belongs to the IIFE scope, not outer
       const fn = firstFunction('function outer() { (function inner() { const x = getX(); console.log(x); })(); }');
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
 
       // Assert — outer has no locals of its own; x is IIFE-internal
       for (const key of indexes.keys()) {
@@ -256,7 +260,7 @@ describe('engine/dataflow/reaching-defs', () => {
         'const getOrmDb = async () => { const created = (async () => { const x = getX(); return x; })(); return created; };',
       );
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
 
       // Assert — x belongs to async IIFE scope; created belongs to outer body block
       for (const key of indexes.keys()) {
@@ -270,7 +274,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange — outer param x and inner block `let x` are separate bindings
       const fn = firstFunction('function f(x: number) { { let x = 1; return x; } }');
       // Act
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
 
       // Assert — both bindings tracked, with different varIndexes
       const xKeys = [...indexes.keys()].filter(k => k.startsWith('x@'));
@@ -312,11 +316,11 @@ describe('engine/dataflow/reaching-defs', () => {
       // Arrange
       const code = 'function f() { const a = 1; let b = 2; b = 3; return a + b; }';
       const fn = firstFunction(code);
-      const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH);
+      const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
       const paramBindings = collectParameterBindings(fn);
       const body = (fn as any).body;
       // Act
-      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH));
+      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH, _lastSource));
 
       // Assert
       expect(analysis.defsOfVar.length).toBe(localIndexByName.size);

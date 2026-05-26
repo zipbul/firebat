@@ -97,14 +97,14 @@ export const parameterScopeKey = (
   declScopeByIdLocation: ReadonlyMap<number, string>,
 ): string => declScopeByIdLocation.get(binding.location) ?? PARAMETER_SCOPE;
 
-export const collectLocalVarIndexes = (functionNode: Node, filePath?: string): Map<string, number> => {
+export const collectLocalVarIndexes = (functionNode: Node, filePath?: string, sourceText?: string): Map<string, number> => {
   const keys = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
 
   // Build the decl-scope map from the function root so parameters are registered.
   // Without this, body-only walks miss the parameter declarations and any usage of
   // a parameter inside the body would resolve to a different (wrong) scope key.
-  const declScopeByIdLocation = buildDeclScopeMap(functionNode, filePath);
+  const declScopeByIdLocation = buildDeclScopeMap(functionNode, filePath, sourceText);
 
   for (const binding of parameterBindings) {
     keys.add(bindingKey(binding.name, parameterScopeKey(binding, declScopeByIdLocation)));
