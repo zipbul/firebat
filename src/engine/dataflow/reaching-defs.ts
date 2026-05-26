@@ -79,28 +79,44 @@ export const collectParameterBindings = (functionNode: Node): ReadonlyArray<Bind
  * identifier usages of those parameters.
  */
 const PARAMETER_SCOPE = '';
+const EMPTY_SCOPE_MAP: ReadonlyMap<number, string> = new Map();
 
 export const bindingKey = (name: string, declScope: string | undefined): string =>
   `${name}@${declScope ?? PARAMETER_SCOPE}`;
+
+/**
+ * Scope key for a parameter binding. gildash assigns every identifier — including
+ * a parameter's declaration site and its in-body references — the same
+ * `tsc:<declPos>` key, so a parameter must be keyed by that gildash scope (looked
+ * up via its declaration-name offset) for its body references to resolve to the
+ * same varIndex. Falls back to PARAMETER_SCOPE only when the offset is absent
+ * from the map (defensive; should not happen once the file is registered).
+ */
+export const parameterScopeKey = (
+  binding: BindingName,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
+): string => declScopeByIdLocation.get(binding.location) ?? PARAMETER_SCOPE;
 
 export const collectLocalVarIndexes = (functionNode: Node, filePath?: string): Map<string, number> => {
   const keys = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
 
+  // Build the decl-scope map from the function root so parameters are registered.
+  // Without this, body-only walks miss the parameter declarations and any usage of
+  // a parameter inside the body would resolve to a different (wrong) scope key.
+  const declScopeByIdLocation = buildDeclScopeMap(functionNode, filePath);
+
   for (const binding of parameterBindings) {
-    keys.add(bindingKey(binding.name, PARAMETER_SCOPE));
+    keys.add(bindingKey(binding.name, parameterScopeKey(binding, declScopeByIdLocation)));
   }
 
   const fn2 = functionNode as OxcFunction;
   const bodyNode = fn2.body as Node | null;
-  // Build the decl-scope map from the function root so parameters are registered.
-  // Without this, body-only walks miss the parameter declarations and any usage of
-  // a parameter inside the body would resolve to a different (wrong) scope key.
   const bodyUsages =
     bodyNode !== null
       ? collectVariables(bodyNode, {
           includeNestedFunctions: false,
-          declScopeByIdLocation: buildDeclScopeMap(functionNode, filePath),
+          declScopeByIdLocation,
         })
       : [];
 
@@ -266,7 +282,8 @@ const buildDefUseState = (
 
   // Seed parameter bindings as definitions at CFG entry so unused params can be detected.
   for (const binding of parameterBindings) {
-    const varIndex = localIndexByName.get(bindingKey(binding.name, PARAMETER_SCOPE));
+    const scope = parameterScopeKey(binding, declScopeByIdLocation ?? EMPTY_SCOPE_MAP);
+    const varIndex = localIndexByName.get(bindingKey(binding.name, scope));
 
     if (typeof varIndex !== 'number') {
       continue;
@@ -279,7 +296,7 @@ const buildDefUseState = (
       varIndex,
       location: binding.location,
       writeKind: 'declaration',
-      declScope: PARAMETER_SCOPE,
+      declScope: scope,
     });
     defsByVarIndex[varIndex]?.push(defId);
     genDefIdsByNode[entryId]?.push(defId);

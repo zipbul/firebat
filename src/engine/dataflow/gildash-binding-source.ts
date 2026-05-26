@@ -163,12 +163,13 @@ export const tryGildashDeclScopeMap = (
     return null;
   }
 
-  if (bindings.length === 0) {
-    _gildashMissCount += 1;
-
-    return null;
-  }
-
+  // An empty result is a VALID answer: the file has no local variable
+  // bindings (e.g. a re-export-only module like `export * from './b'`).
+  // Returning an empty map lets the detector run and report nothing, which
+  // is correct — distinct from a `null` "could not resolve" signal that
+  // forces the caller to throw. With the parseSource hook + scan semantic
+  // bootstrap, every analyzed file is registered, so reaching this point
+  // means the file IS known to the semantic layer.
   _gildashHitCount += 1;
 
   const map = new Map<number, string>();
