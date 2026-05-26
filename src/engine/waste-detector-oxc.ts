@@ -23,6 +23,16 @@ interface NestedFunctionContext {
    * this set and whose `defId` reaches the entry is closure-captured.
    */
   readonly capturedVarIndexesByEntry: Map<number, Set<number>>;
+  /**
+   * Outer binding `varIndex`es captured by a **hoisted function declaration**
+   * (`function f() { ... }`), as opposed to a function/arrow expression. A
+   * hoisted declaration is callable from anywhere in its enclosing scope, so a
+   * captured variable may be observed at any point regardless of where the
+   * declaration appears (even after an early `return`, where its lexical CFG
+   * node is unreachable). Such captures are treated order-independently: every
+   * def of the variable is kept.
+   */
+  readonly hoistCapturedVarIndexes: Set<number>;
 }
 
 /**
@@ -61,6 +71,7 @@ const buildNestedFunctionContext = (
 ): NestedFunctionContext => {
   const entryNodeIds: number[] = [];
   const capturedVarIndexesByEntry = new Map<number, Set<number>>();
+  const hoistCapturedVarIndexes = new Set<number>();
 
   for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
     const payload = nodePayloads[nodeId];
@@ -79,7 +90,9 @@ const buildNestedFunctionContext = (
     const captured = new Set<number>();
 
     for (const nestedFunction of nested) {
-      collectCapturedVarIndexesFromFunction(nestedFunction, localIndexByName, declScopeByIdLocation, captured);
+      const captureSink = nestedFunction.type === 'FunctionDeclaration' ? hoistCapturedVarIndexes : captured;
+
+      collectCapturedVarIndexesFromFunction(nestedFunction, localIndexByName, declScopeByIdLocation, captureSink);
     }
 
     if (captured.size === 0) {
@@ -90,17 +103,52 @@ const buildNestedFunctionContext = (
     capturedVarIndexesByEntry.set(nodeId, captured);
   }
 
-  return { entryNodeIds, capturedVarIndexesByEntry };
+  return { entryNodeIds, capturedVarIndexesByEntry, hoistCapturedVarIndexes };
 };
 
-const isVarCapturedByAnyNested = (varIndex: number, nestedCtx: NestedFunctionContext): boolean => {
-  for (const set of nestedCtx.capturedVarIndexesByEntry.values()) {
-    if (set.has(varIndex)) {
-      return true;
-    }
-  }
+/**
+ * Forward-reachability memo: nodes reachable from a given CFG node via successor
+ * edges. Built lazily per start node from the forward adjacency. Used to decide
+ * whether a capturing closure (created at its entry node) exists *before* a def
+ * executes — i.e. the closure's entry can reach the def node.
+ */
+type ForwardReachable = (startNodeId: number) => ReadonlySet<number>;
 
-  return false;
+const makeForwardReachable = (forwardAdj: ReadonlyArray<ArrayLike<number>>): ForwardReachable => {
+  const memo = new Map<number, ReadonlySet<number>>();
+
+  return (startNodeId: number): ReadonlySet<number> => {
+    const cached = memo.get(startNodeId);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const seen = new Set<number>();
+    const stack = [startNodeId];
+
+    while (stack.length > 0) {
+      const n = stack.pop() as number;
+      const succ = forwardAdj[n];
+
+      if (succ === undefined) {
+        continue;
+      }
+
+      for (let i = 0; i < succ.length; i += 1) {
+        const m = succ[i] as number;
+
+        if (!seen.has(m)) {
+          seen.add(m);
+          stack.push(m);
+        }
+      }
+    }
+
+    memo.set(startNodeId, seen);
+
+    return seen;
+  };
 };
 
 const isDefClosureCaptured = (
@@ -109,7 +157,21 @@ const isDefClosureCaptured = (
   nestedCtx: NestedFunctionContext,
   reachingInByNode: ReadonlyArray<BitSet>,
   exitNodeId: number,
+  defNodeIdByDefId: ReadonlyArray<number>,
+  forwardReachable: ForwardReachable,
 ): boolean => {
+  void exitNodeId;
+
+  // Hoisted function declaration capture: callable throughout the enclosing
+  // scope, so any def of the captured variable may be observed — order-
+  // independent, regardless of CFG reachability of the declaration's lexical
+  // position (which can be unreachable after an early return).
+  if (nestedCtx.hoistCapturedVarIndexes.has(varIndex)) {
+    return true;
+  }
+
+  const defNodeId = defNodeIdByDefId[defId];
+
   for (const entryNodeId of nestedCtx.entryNodeIds) {
     const capturedSet = nestedCtx.capturedVarIndexesByEntry.get(entryNodeId);
 
@@ -117,24 +179,24 @@ const isDefClosureCaptured = (
       continue;
     }
 
+    // (a) Observed at creation: this def reaches the closure's entry node, so
+    //     the closure created there captures this def's value.
     const reaching = reachingInByNode[entryNodeId];
 
     if (reaching && reaching.has(defId)) {
       return true;
     }
-  }
 
-  // Forward-reference capture: a closure declared BEFORE the variable it reads
-  // (e.g. a top-of-file function calling a helper const defined lower down)
-  // has its entry node ordered before this def, so the def does not reach the
-  // entry. But closures escape and run after the enclosing scope finishes
-  // initializing — at invocation they observe whatever def is live at scope
-  // exit. So if the variable is captured by any nested function and this def
-  // is live at the scope exit, the closure observes it: not dead.
-  if (isVarCapturedByAnyNested(varIndex, nestedCtx)) {
-    const reachingAtExit = reachingInByNode[exitNodeId];
-
-    if (reachingAtExit && reachingAtExit.has(defId)) {
+    // (b) Observed at later invocation: the closure's entry node executes BEFORE
+    //     this def (entry reaches def in the CFG), so the closure already exists
+    //     when the def runs. A subsequent invocation — including via an opaque
+    //     intervening call we cannot track (`update()`, async callbacks) — reads
+    //     the def's value. Covers both forward-referenced module helpers
+    //     (`const a = () => helper(); const helper = ...`) and captured variables
+    //     reassigned between invocations (`m = 3; update(); m = 4`). NOT the
+    //     closure-created-after-def case (`let x=1; x=2; return () => x`), where
+    //     the entry cannot reach the earlier def, so x=1 stays a true dead store.
+    if (defNodeId !== undefined && forwardReachable(entryNodeId).has(defNodeId)) {
       return true;
     }
   }
@@ -1167,7 +1229,8 @@ const collectWasteFindingsForFunction = (
     parameterDefaults,
     declScopeByIdLocation,
   );
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId } = analysis;
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId, cfg } = analysis;
+  const forwardReachable = makeForwardReachable(cfg.buildAdjacency('forward'));
   // CLAUDE.md 비대상: function parameter. The reaching-defs seed for parameter bindings
   // is still needed so reads inside the body resolve to a definition, but the detector
   // must never report parameters themselves as waste.
@@ -1417,7 +1480,7 @@ const collectWasteFindingsForFunction = (
         meta.writeKind === 'assignment' ||
         meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId) &&
+      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
@@ -1431,7 +1494,7 @@ const collectWasteFindingsForFunction = (
         continue;
       }
 
-      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId)) {
+      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable)) {
         continue;
       }
     }
@@ -1576,7 +1639,8 @@ const collectWasteFindingsForModule = (
 
   const exportExemption = collectExportExemption(programBody);
   const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation);
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId } = analysis;
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId, cfg } = analysis;
+  const forwardReachable = makeForwardReachable(cfg.buildAdjacency('forward'));
   const syntacticReads = programBody
     .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
     .filter(u => u.isRead);
@@ -1771,7 +1835,7 @@ const collectWasteFindingsForModule = (
         meta.writeKind === 'assignment' ||
         meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId) &&
+      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
@@ -1783,7 +1847,7 @@ const collectWasteFindingsForModule = (
         continue;
       }
 
-      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId)) {
+      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable)) {
         continue;
       }
     }

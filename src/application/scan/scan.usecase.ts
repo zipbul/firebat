@@ -750,14 +750,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     setGildashSemanticContext(gildash);
   }
 
+  // Inline try/finally (not a wrapping nested function): early `return`s inside
+  // the body still run the finally, and no closure is created that would capture
+  // outer locals like `metaErrors`.
   try {
-    return await runScanPipeline();
-  } finally {
-    setGildashSemanticContext(previousBindingContext);
-    await gildash.close({ cleanup: false });
-  }
-
-  async function runScanPipeline(): Promise<FirebatReport> {
   const tNamespace0 = nowMs();
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
 
@@ -1329,6 +1325,9 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 
   return report;
+  } finally {
+    setGildashSemanticContext(previousBindingContext);
+    await gildash.close({ cleanup: false });
   }
 };
 
