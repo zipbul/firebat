@@ -54,10 +54,6 @@ export const registerFixtureRealPath = (virtualPath: string, realPath: string): 
   _virtualToReal.set(virtualPath, realPath);
 };
 
-export const clearFixtureRealPaths = (): void => {
-  _virtualToReal.clear();
-};
-
 /**
  * Notify the semantic layer of an in-memory source WITHOUT querying its
  * bindings, and register the virtual → target mapping. This is the cheap
@@ -81,26 +77,6 @@ export const notifyVirtualSource = (virtualPath: string, targetPath: string, con
   return true;
 };
 
-/**
- * Remove an in-memory source from the semantic layer and drop the
- * virtual→real mapping. Use in test cleanup hooks (`afterEach`) to keep the
- * tsc Program bounded — fuzz / property tests that generate hundreds of
- * ad-hoc sources per case should call this for each one to avoid linear
- * growth in batch cost.
- */
-export const unregisterVirtualSource = (virtualPath: string): void => {
-  const targetPath = _virtualToReal.get(virtualPath);
-
-  if (targetPath === undefined) {
-    return;
-  }
-
-  if (_gildash !== null) {
-    _gildash.notifyFileDeleted(targetPath);
-  }
-
-  _virtualToReal.delete(virtualPath);
-};
 
 /**
  * Attempt to build a declaration-scope map via gildash for the given filePath.

@@ -740,16 +740,24 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   });
 
   // Register the semantic-enabled Gildash as the authoritative binding source
-  // for dataflow detectors (waste / variable-lifetime). When unavailable,
-  // detectors fall back to oxc-walker ScopeTracker with our var-hoisting fix.
-  // Save any pre-existing context so test preloads / nested scans can
-  // restore on close instead of being clobbered.
+  // for dataflow detectors (waste / variable-lifetime). Save any pre-existing
+  // context (e.g. a test preload's instance) so it is restored — and this
+  // scan's Gildash closed — on EVERY exit path, including the cache-hit early
+  // return and any thrown error. The try/finally below guarantees that.
   const previousBindingContext = getGildashSemanticContext();
 
   if (semanticAvailable) {
     setGildashSemanticContext(gildash);
   }
 
+  try {
+    return await runScanPipeline();
+  } finally {
+    setGildashSemanticContext(previousBindingContext);
+    await gildash.close({ cleanup: false });
+  }
+
+  async function runScanPipeline(): Promise<FirebatReport> {
   const tNamespace0 = nowMs();
   const cacheNamespace = await computeCacheNamespace({ toolVersion });
 
@@ -1306,9 +1314,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     findings,
   };
 
-  setGildashSemanticContext(previousBindingContext);
-  await gildash.close({ cleanup: false });
-
   if (allowCache) {
     const tSave0 = nowMs();
 
@@ -1324,6 +1329,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 
   return report;
+  }
 };
 
 export { resolveToolRcPath, scanUseCase };
