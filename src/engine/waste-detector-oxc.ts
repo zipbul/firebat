@@ -76,6 +76,30 @@ const collectCapturedVarIndexesFromFunction = (
   }
 };
 
+/**
+ * varIndexes read inside ANY nested function within `bodyNodes` (closure
+ * captures). Computed directly from the AST (independent of the CFG), so it is
+ * available BEFORE analyzeFunctionBody — used to gate the dead-use fixpoint
+ * (FIX D): a closure-captured variable has useCount 0 in the enclosing
+ * straight-line flow even though a closure observes it, so the fixpoint must
+ * NOT treat it as a dead store nor eliminate the reads its definition performs.
+ */
+const collectClosureCapturedVarIndexes = (
+  bodyNodes: ReadonlyArray<Node>,
+  localIndexByName: Map<string, number>,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
+): Set<number> => {
+  const captured = new Set<number>();
+
+  for (const body of bodyNodes) {
+    for (const nested of collectOxcNodes(body, n => isFunctionNode(n))) {
+      collectCapturedVarIndexesFromFunction(nested, localIndexByName, declScopeByIdLocation, captured);
+    }
+  }
+
+  return captured;
+};
+
 const buildNestedFunctionContext = (
   nodePayloads: ReadonlyArray<Node | ReadonlyArray<Node> | undefined>,
   localIndexByName: Map<string, number>,
@@ -231,12 +255,7 @@ const ARRAY_MUTATION_METHODS = new Set<string>([
   'copyWithin',
 ]);
 
-const MAPSET_MUTATION_METHODS = new Set<string>([
-  'set',
-  'add',
-  'delete',
-  'clear',
-]);
+const MAPSET_MUTATION_METHODS = new Set<string>(['set', 'add', 'delete', 'clear']);
 
 // Mutation methods that RETURN THE RECEIVER itself: Array sort/reverse/fill/
 // copyWithin return the array; Map.set returns the map; Set.add returns the
@@ -288,10 +307,7 @@ const freshAllocationKindOf = (init: Node): FreshAllocationKind | null => {
 // Whether the mutation method category is reachable on a value of the given
 // fresh-allocation kind. `{}.push(...)` and `[].set(...)` both throw TypeError,
 // so they are NOT local mutations.
-const mutationCompatibleWithInit = (
-  category: MutationMethodCategory,
-  initKind: FreshAllocationKind | undefined,
-): boolean => {
+const mutationCompatibleWithInit = (category: MutationMethodCategory, initKind: FreshAllocationKind | undefined): boolean => {
   if (initKind === undefined) {
     // Unknown receiver kind (mixed defs, no fresh-allocation gate). Be safe:
     // any other condition will disqualify case 6/7 elsewhere.
@@ -562,10 +578,7 @@ const classifyUseInWaste = (
         return 'property-write';
       }
 
-      if (
-        grandparent.type === 'AssignmentExpression' &&
-        (grandparent as { left: Node }).left === parent
-      ) {
+      if (grandparent.type === 'AssignmentExpression' && (grandparent as { left: Node }).left === parent) {
         // `v.p = RHS` — local mutation only when RHS is pure. If RHS evaluation has
         // any side-effect (call/await/new/assignment/update), removing the property
         // write would also drop that side-effect → fall back to 'real'.
@@ -582,10 +595,7 @@ const classifyUseInWaste = (
         return 'property-write';
       }
 
-      if (
-        grandparent.type === 'CallExpression' &&
-        (grandparent as { callee: Node }).callee === parent
-      ) {
+      if (grandparent.type === 'CallExpression' && (grandparent as { callee: Node }).callee === parent) {
         const property = (parent as { property: Node }).property;
 
         if (property.type === 'Identifier') {
@@ -617,9 +627,7 @@ const classifyUseInWaste = (
             // `arr.sort().join()`, `return c.set(k, v)`, `f(arr.reverse())`.
             if (RETURN_SELF_MUTATORS.has(methodName)) {
               const resultConsumed =
-                greatGrandparent !== null &&
-                greatGrandparent !== undefined &&
-                greatGrandparent.type !== 'ExpressionStatement';
+                greatGrandparent !== null && greatGrandparent !== undefined && greatGrandparent.type !== 'ExpressionStatement';
 
               if (resultConsumed) {
                 return 'escape';
@@ -861,6 +869,58 @@ const defRhsCarriesSideEffect = (rhs: Node): boolean => {
   return containsImpureExpression(rhs);
 };
 
+const containsMemberExpression = (node: Node | null | undefined): boolean => {
+  if (node === null || node === undefined) {
+    return false;
+  }
+
+  if (node.type === 'MemberExpression') {
+    return true;
+  }
+
+  if (isFunctionNode(node)) {
+    return false;
+  }
+
+  let found = false;
+
+  forEachChildNode(node, child => {
+    if (!found && containsMemberExpression(child)) {
+      found = true;
+    }
+  });
+
+  return found;
+};
+
+const containsClosureOrEvalReference = (node: Node | null | undefined): boolean => {
+  if (node === null || node === undefined) {
+    return false;
+  }
+
+  if (isFunctionNode(node)) {
+    return true;
+  }
+
+  if (
+    node.type === 'CallExpression' &&
+    (node as { callee?: Node }).callee?.type === 'Identifier' &&
+    ((node as { callee: Node }).callee as { name?: string }).name === 'eval'
+  ) {
+    return true;
+  }
+
+  let found = false;
+
+  forEachChildNode(node, child => {
+    if (!found && containsClosureOrEvalReference(child)) {
+      found = true;
+    }
+  });
+
+  return found;
+};
+
 /**
  * Whether the declaration init at this context is a fresh allocation (a brand-new
  * object/array/class instance the binding owns exclusively at declaration time).
@@ -910,7 +970,7 @@ const objectInitDefinesMethodOrAccessor = (init: Node): boolean => {
         key.type === 'Identifier'
           ? (key as { name: string }).name
           : key.type === 'Literal' && typeof (key as { value?: unknown }).value === 'string'
-            ? ((key as { value: string }).value)
+            ? (key as { value: string }).value
             : null;
 
       if (keyName === '__proto__') {
@@ -1073,7 +1133,7 @@ const scopeUsesDirectEval = (bodyNodes: ReadonlyArray<Node>): boolean => {
     if (
       node.type === 'CallExpression' &&
       (node as { callee: Node }).callee.type === 'Identifier' &&
-      ((node as { callee: { name: string } }).callee.name === 'eval')
+      (node as { callee: { name: string } }).callee.name === 'eval'
     ) {
       found = true;
 
@@ -1205,12 +1265,52 @@ const collectWasteFindingsForFunction = (
   // visible to the in-body walks (`ScopeTracker.getDeclaration` cannot resolve
   // parameters when the walk starts at the body).
   const declScopeByIdLocation = buildDeclScopeMap(node, filePath, sourceText);
+  const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
+    ? (functionBodyNode as ReadonlyArray<Node>)
+    : [functionBodyNode as Node];
+  const defCtxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
+  const closureCapturedVarIndexes = collectClosureCapturedVarIndexes(functionBodyNodes, localIndexByName, declScopeByIdLocation);
   const analysis = analyzeFunctionBody(
     functionBodyNode,
     localIndexByName,
     parameterBindings,
     parameterDefaults,
     declScopeByIdLocation,
+    {
+      inlineSyncIifes: true,
+      canEliminateDeadDefReads: ({ defId, meta, defs, reachingInByNode, defNodeIdByDefId }) => {
+        // Only propagate dead-ness through a REASSIGNMENT whose value is dead
+        // (an overwrite chain like `x = 1; x += 2; x = 5`). A `declaration`
+        // binding that is "dead" is use-zero — that is no-unused-vars territory
+        // (비대상), so its reads (e.g. a destructuring default `{ a = value }`
+        // that is observably evaluated, and matters for TS definite-assignment)
+        // must NOT be eliminated. Restricting to non-declaration reassignments
+        // also keeps the eliminated read in the same scope as a real dead store.
+        if (meta.writeKind === 'declaration' || meta.writeKind === undefined) {
+          return false;
+        }
+
+        // A closure-captured variable has useCount 0 in the enclosing
+        // straight-line flow even though a nested function observes it. The
+        // fixpoint must not treat such a def as dead nor eliminate its reads
+        // (e.g. `const LABELS = { a: helper }` read only inside a function →
+        // `helper`'s read must stay live).
+        if (closureCapturedVarIndexes.has(meta.varIndex)) {
+          return false;
+        }
+
+        const defCtx = defCtxByLocation.get(meta.location);
+        const rhs = defCtx === undefined ? null : findDefRhs(defCtx);
+
+        return (
+          rhs !== null &&
+          !defRhsCarriesSideEffect(rhs) &&
+          !containsMemberExpression(rhs) &&
+          !containsClosureOrEvalReference(rhs) &&
+          !compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)
+        );
+      },
+    },
   );
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   // CLAUDE.md 비대상: function parameter. The reaching-defs seed for parameter bindings
@@ -1221,9 +1321,6 @@ const collectWasteFindingsForFunction = (
   for (const binding of parameterBindings) {
     parameterLocations.add(binding.location);
   }
-  const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
-    ? (functionBodyNode as ReadonlyArray<Node>)
-    : [functionBodyNode as Node];
   // Syntactic read counting (ignores static dead-branch pruning) to classify
   // "사용처 0회 변수 (no-unused-vars 영역)" correctly. Includes reads inside nested
   // functions so closure captures count as syntactic uses of the outer binding.
@@ -1258,8 +1355,6 @@ const collectWasteFindingsForFunction = (
   // not `defId`, because the question is whether the *variable* is ever observed; a
   // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
   // Identifier context map for the body — reused by the per-def purity check below.
-  const defCtxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
-
   // Direct eval barrier: a function body that contains `eval(...)` may read any
   // local binding dynamically. Skip waste analysis entirely.
   if (scopeUsesDirectEval(functionBodyNodes)) {
@@ -1277,11 +1372,7 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
-    if (
-      def.writeKind !== 'declaration' &&
-      def.writeKind !== 'assignment' &&
-      def.writeKind !== 'logical-assignment'
-    ) {
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
       continue;
     }
 
@@ -1336,11 +1427,7 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
-    if (
-      def.writeKind !== 'declaration' &&
-      def.writeKind !== 'assignment' &&
-      def.writeKind !== 'logical-assignment'
-    ) {
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
       continue;
     }
 
@@ -1360,11 +1447,7 @@ const collectWasteFindingsForFunction = (
         continue;
       }
 
-      if (
-        def.writeKind !== 'declaration' &&
-        def.writeKind !== 'assignment' &&
-        def.writeKind !== 'logical-assignment'
-      ) {
+      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
         continue;
       }
 
@@ -1423,6 +1506,10 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
+    if (meta.writeKind === 'compound-assignment' || meta.writeKind === 'update') {
+      continue;
+    }
+
     // `using` / `await using` declarations bind a resource whose disposal at scope exit
     // is the observable behavior (CLAUDE.md K example: "자원 핸들 lifetime").
     if (meta.declarationKind === 'using' || meta.declarationKind === 'await using') {
@@ -1458,9 +1545,7 @@ const collectWasteFindingsForFunction = (
     // gate the binding aliases an outer reference and the mutations are externally
     // observable.
     const isCase67 =
-      (meta.writeKind === 'declaration' ||
-        meta.writeKind === 'assignment' ||
-        meta.writeKind === 'logical-assignment') &&
+      (meta.writeKind === 'declaration' || meta.writeKind === 'assignment' || meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, meta.location, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
@@ -1673,7 +1758,35 @@ const collectWasteFindingsForModule = (
 
   const exportExemption = collectExportExemption(programBody);
   const namespaceMemberLocations = collectNamespaceMemberLocations(programBody);
-  const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation);
+  const defCtxByLocation = buildIdentifierContextByLocation(programBody);
+  const closureCapturedVarIndexes = collectClosureCapturedVarIndexes(programBody, localIndexByName, declScopeByIdLocation);
+  const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation, {
+    inlineSyncIifes: true,
+    canEliminateDeadDefReads: ({ defId, meta, defs, reachingInByNode, defNodeIdByDefId }) => {
+      // Same guards as the function path: only propagate through dead
+      // REASSIGNMENTS (not declarations / use-zero), and never through a
+      // closure-captured variable (useCount 0 in module flow but observed by a
+      // nested function — e.g. a label table read only inside a function).
+      if (meta.writeKind === 'declaration' || meta.writeKind === undefined) {
+        return false;
+      }
+
+      if (closureCapturedVarIndexes.has(meta.varIndex)) {
+        return false;
+      }
+
+      const defCtx = defCtxByLocation.get(meta.location);
+      const rhs = defCtx === undefined ? null : findDefRhs(defCtx);
+
+      return (
+        rhs !== null &&
+        !defRhsCarriesSideEffect(rhs) &&
+        !containsMemberExpression(rhs) &&
+        !containsClosureOrEvalReference(rhs) &&
+        !compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)
+      );
+    },
+  });
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   const syntacticReads = programBody
     .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
@@ -1693,8 +1806,6 @@ const collectWasteFindingsForModule = (
     }
   }
 
-  const defCtxByLocation = buildIdentifierContextByLocation(programBody);
-
   // Direct eval at module scope — same dynamic-read barrier as function path.
   if (scopeUsesDirectEval(programBody)) {
     return;
@@ -1708,11 +1819,7 @@ const collectWasteFindingsForModule = (
       continue;
     }
 
-    if (
-      def.writeKind !== 'declaration' &&
-      def.writeKind !== 'assignment' &&
-      def.writeKind !== 'logical-assignment'
-    ) {
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
       continue;
     }
 
@@ -1759,11 +1866,7 @@ const collectWasteFindingsForModule = (
       continue;
     }
 
-    if (
-      def.writeKind !== 'declaration' &&
-      def.writeKind !== 'assignment' &&
-      def.writeKind !== 'logical-assignment'
-    ) {
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
       continue;
     }
 
@@ -1783,11 +1886,7 @@ const collectWasteFindingsForModule = (
         continue;
       }
 
-      if (
-        def.writeKind !== 'declaration' &&
-        def.writeKind !== 'assignment' &&
-        def.writeKind !== 'logical-assignment'
-      ) {
+      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
         continue;
       }
 
@@ -1847,6 +1946,10 @@ const collectWasteFindingsForModule = (
       continue;
     }
 
+    if (meta.writeKind === 'compound-assignment' || meta.writeKind === 'update') {
+      continue;
+    }
+
     if (meta.declarationKind === 'using' || meta.declarationKind === 'await using') {
       continue;
     }
@@ -1871,9 +1974,7 @@ const collectWasteFindingsForModule = (
     }
 
     const isCase67 =
-      (meta.writeKind === 'declaration' ||
-        meta.writeKind === 'assignment' ||
-        meta.writeKind === 'logical-assignment') &&
+      (meta.writeKind === 'declaration' || meta.writeKind === 'assignment' || meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
       !isDefClosureCaptured(defId, meta.varIndex, meta.location, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&

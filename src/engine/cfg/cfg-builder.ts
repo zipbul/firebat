@@ -1,8 +1,10 @@
 import type {
   BlockStatement,
   BreakStatement,
+  CallExpression,
   ContinueStatement,
   DoWhileStatement,
+  ExpressionStatement,
   ForInStatement,
   ForOfStatement,
   ForStatement,
@@ -15,16 +17,27 @@ import type {
   WhileStatement,
 } from 'oxc-parser';
 
-import { evalStaticLiteralValue, evalStaticTruthiness, isOxcNode } from '../ast';
+import { evalStaticLiteralValue, evalStaticTruthiness, isFunctionNode, isOxcNode, unwrapExpression } from '../ast';
 import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg } from '../types';
 import { IntegerCFG } from './cfg';
+
+export interface OxcCFGBuilderOptions {
+  readonly inlineSyncIifes?: boolean;
+}
 
 export class OxcCFGBuilder {
   private cfg: IntegerCFG;
   private nodePayloads: Array<CfgNodePayload | null>;
   private exitId: NodeId;
-  private finallyReturnEntryStack: NodeId[];
+  // Unified return-redirection stack. A `return` edges to the INNERMOST active
+  // target: an inlined-IIFE's after-call node OR a try's finalizer-return
+  // entry, whichever was pushed last (correct relative nesting). Merging the
+  // two stacks fixes the bug where an inlined IIFE's `return`, when the IIFE
+  // sat inside an outer try/finally, wrongly routed to the outer finalizer
+  // instead of the IIFE's after-call node.
+  private returnTargetStack: NodeId[];
   private activeCatchEntryStack: NodeId[];
+  private readonly options: OxcCFGBuilderOptions;
 
   /**
    * Build a CFG for a function body.
@@ -33,17 +46,18 @@ export class OxcCFGBuilder {
    * passed into the builder — readers can never observe a partially-written
    * builder from a previous call (temporal-coupling eliminated).
    */
-  public static build(bodyNode: Node | ReadonlyArray<Node> | undefined): OxcBuiltFunctionCfg {
-    return new OxcCFGBuilder(bodyNode).result;
+  public static build(bodyNode: Node | ReadonlyArray<Node> | undefined, options: OxcCFGBuilderOptions = {}): OxcBuiltFunctionCfg {
+    return new OxcCFGBuilder(bodyNode, options).result;
   }
 
   private readonly result: OxcBuiltFunctionCfg;
 
-  private constructor(bodyNode: Node | ReadonlyArray<Node> | undefined) {
+  private constructor(bodyNode: Node | ReadonlyArray<Node> | undefined, options: OxcCFGBuilderOptions) {
     this.cfg = new IntegerCFG();
     this.nodePayloads = [];
-    this.finallyReturnEntryStack = [];
+    this.returnTargetStack = [];
     this.activeCatchEntryStack = [];
+    this.options = options;
 
     const entryId = this.addNode(null);
 
@@ -437,15 +451,122 @@ export class OxcCFGBuilder {
 
     this.connect(incoming, returnNode, EdgeType.Normal);
 
-    const finallyReturnEntry = this.finallyReturnEntryStack[this.finallyReturnEntryStack.length - 1] ?? null;
+    // Innermost active redirection wins: an inlined IIFE's after-call node or a
+    // try's finalizer-return entry, whichever is on top. Falls back to the
+    // function exit.
+    const target = this.returnTargetStack[this.returnTargetStack.length - 1] ?? this.exitId;
 
-    if (finallyReturnEntry !== null) {
-      this.cfg.addEdge(returnNode, finallyReturnEntry, EdgeType.Normal);
-    } else {
-      this.cfg.addEdge(returnNode, this.exitId, EdgeType.Normal);
-    }
+    this.cfg.addEdge(returnNode, target, EdgeType.Normal);
 
     return [];
+  }
+
+  private getInlineableSyncIifeBody(callNode: CallExpression): Node | ReadonlyArray<Node> | null {
+    if (this.options.inlineSyncIifes !== true || callNode.optional === true || callNode.arguments.length > 0) {
+      return null;
+    }
+
+    const callee = unwrapExpression(callNode.callee);
+
+    if (callee === null || !isFunctionNode(callee)) {
+      return null;
+    }
+
+    const fn = callee as Node & {
+      async?: boolean;
+      generator?: boolean;
+      params?: ReadonlyArray<Node>;
+      body?: Node | null;
+    };
+
+    if (fn.async === true || fn.generator === true || (fn.params?.length ?? 0) > 0 || fn.body === null || fn.body === undefined) {
+      return null;
+    }
+
+    // Binding identity is resolved later by getStandaloneFileBindings. IIFE-local
+    // declarations have distinct declScope keys and are absent from the enclosing
+    // localIndexByName, so processNodeUsages ignores them; outer references keep
+    // their original declScope and still resolve to the enclosing variable.
+
+    return fn.body.type === 'BlockStatement' ? (fn.body as BlockStatement).body : fn.body;
+  }
+
+  private visitExpressionStatement(
+    expressionNode: ExpressionStatement,
+    incoming: readonly NodeId[],
+    loopStack: readonly LoopTargets[],
+  ): NodeId[] | null {
+    const expression = unwrapExpression(expressionNode.expression);
+
+    if (expression === null) {
+      return null;
+    }
+
+    if (expression.type === 'CallExpression') {
+      return this.visitInlineableIifeCall(expression, incoming, loopStack, null);
+    }
+
+    if (
+      expression.type === 'AssignmentExpression' &&
+      expression.operator === '=' &&
+      expression.left.type === 'Identifier' &&
+      expression.right.type === 'CallExpression'
+    ) {
+      return this.visitInlineableIifeCall(expression.right, incoming, loopStack, expressionNode);
+    }
+
+    return null;
+  }
+
+  private visitVariableDeclarationWithInlineableIife(
+    node: Node,
+    incoming: readonly NodeId[],
+    loopStack: readonly LoopTargets[],
+  ): NodeId[] | null {
+    if (node.type !== 'VariableDeclaration' || node.declarations.length !== 1) {
+      return null;
+    }
+
+    const declarator = node.declarations[0];
+
+    if (declarator === undefined || declarator.id.type !== 'Identifier' || declarator.init?.type !== 'CallExpression') {
+      return null;
+    }
+
+    return this.visitInlineableIifeCall(declarator.init, incoming, loopStack, node);
+  }
+
+  private visitInlineableIifeCall(
+    callNode: CallExpression,
+    incoming: readonly NodeId[],
+    loopStack: readonly LoopTargets[],
+    afterPayload: CfgNodePayload | null,
+  ): NodeId[] | null {
+    const body = this.getInlineableSyncIifeBody(callNode);
+
+    if (body === null) {
+      return null;
+    }
+
+    const afterCall = this.addNode(null);
+
+    this.returnTargetStack.push(afterCall);
+
+    const tails = this.visitStatement(body, incoming, loopStack, null);
+
+    this.returnTargetStack.pop();
+    this.connect(tails, afterCall, EdgeType.Normal);
+
+    if (afterPayload === null) {
+      return [afterCall];
+    }
+
+    const afterPayloadNode = this.addNode(afterPayload);
+
+    this.cfg.addEdge(afterCall, afterPayloadNode, EdgeType.Normal);
+    this.addExceptionEdgeIfInTry(afterPayloadNode);
+
+    return [afterPayloadNode];
   }
 
   private visitStatement(
@@ -522,15 +643,37 @@ export class OxcCFGBuilder {
         return this.visitTryStatement(node, incoming, loopStack);
       }
 
+      case 'ExpressionStatement': {
+        const iifeTails = this.visitExpressionStatement(node, incoming, loopStack);
+
+        if (iifeTails !== null) {
+          return iifeTails;
+        }
+
+        break;
+      }
+
+      case 'VariableDeclaration': {
+        const iifeTails = this.visitVariableDeclarationWithInlineableIife(node, incoming, loopStack);
+
+        if (iifeTails !== null) {
+          return iifeTails;
+        }
+
+        break;
+      }
+
       default: {
-        const statementNode = this.addNode(node);
-
-        this.connect(incoming, statementNode, EdgeType.Normal);
-        this.addExceptionEdgeIfInTry(statementNode);
-
-        return [statementNode];
+        break;
       }
     }
+
+    const statementNode = this.addNode(node);
+
+    this.connect(incoming, statementNode, EdgeType.Normal);
+    this.addExceptionEdgeIfInTry(statementNode);
+
+    return [statementNode];
   }
 
   private visitBlockStatement(
@@ -573,7 +716,7 @@ export class OxcCFGBuilder {
     const finallyEntryException = hasFinalizer && tryNode.handler === null ? this.addNode(null) : null;
 
     if (finallyEntryReturn !== null) {
-      this.finallyReturnEntryStack.push(finallyEntryReturn);
+      this.returnTargetStack.push(finallyEntryReturn);
     }
 
     const tryEntry = this.addNode(null);
@@ -599,7 +742,7 @@ export class OxcCFGBuilder {
     }
 
     if (finallyEntryReturn !== null) {
-      this.finallyReturnEntryStack.pop();
+      this.returnTargetStack.pop();
     }
 
     return [...tryTails, ...catchTails];
@@ -661,16 +804,24 @@ export class OxcCFGBuilder {
     finallyEntryException: NodeId | null,
     loopStack: readonly LoopTargets[],
   ): NodeId[] {
+    // Pop THIS try's return entry before visiting the finalizer bodies: once we
+    // are inside the finalizer, this try's return handling is done, so the
+    // finalizer's own statements (and the return-completion target) must route
+    // to the NEXT OUTER target, not back to this try's own entry.
+    this.returnTargetStack.pop();
+
     // Normal completion path.
     this.connect(tryTails, finallyEntryNormal, EdgeType.Normal);
     this.connect(catchTails, finallyEntryNormal, EdgeType.Normal);
 
     const finallyTails = this.visitStatement(finalizer, [finallyEntryNormal], loopStack, null);
-    // Return completion path: run finalizer and then exit.
+    // Return completion path: run finalizer and then complete the return to the
+    // next outer target (function exit, an outer finally, or an enclosing IIFE).
     const finallyReturnTails = this.visitStatement(finalizer, [finallyEntryReturn], loopStack, null);
+    const outerReturnTarget = this.returnTargetStack[this.returnTargetStack.length - 1] ?? this.exitId;
 
     for (const tail of finallyReturnTails) {
-      this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
+      this.cfg.addEdge(tail, outerReturnTarget, EdgeType.Normal);
     }
 
     // Exception completion path (try without catch): run the finalizer, then re-raise
@@ -685,8 +836,7 @@ export class OxcCFGBuilder {
       }
     }
 
-    this.finallyReturnEntryStack.pop();
-
+    // (Return entry already popped at the top of this method.)
     return finallyTails;
   }
 }

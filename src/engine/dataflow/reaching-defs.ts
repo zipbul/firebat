@@ -82,8 +82,7 @@ export const collectParameterBindings = (functionNode: Node): ReadonlyArray<Bind
  */
 const PARAMETER_SCOPE = '';
 
-export const bindingKey = (name: string, declScope: string | undefined): string =>
-  `${name}@${declScope ?? PARAMETER_SCOPE}`;
+export const bindingKey = (name: string, declScope: string | undefined): string => `${name}@${declScope ?? PARAMETER_SCOPE}`;
 
 /**
  * Scope key for a parameter binding. gildash assigns every identifier — including
@@ -93,10 +92,8 @@ export const bindingKey = (name: string, declScope: string | undefined): string 
  * same varIndex. Falls back to PARAMETER_SCOPE only when the offset is absent
  * from the map (defensive; should not happen once the file is registered).
  */
-export const parameterScopeKey = (
-  binding: BindingName,
-  declScopeByIdLocation: ReadonlyMap<number, string>,
-): string => declScopeByIdLocation.get(binding.location) ?? PARAMETER_SCOPE;
+export const parameterScopeKey = (binding: BindingName, declScopeByIdLocation: ReadonlyMap<number, string>): string =>
+  declScopeByIdLocation.get(binding.location) ?? PARAMETER_SCOPE;
 
 export const collectLocalVarIndexes = (functionNode: Node, filePath?: string, sourceText?: string): Map<string, number> => {
   const keys = new Set<string>();
@@ -157,6 +154,7 @@ interface DefUseState {
   writeVarIndexesByNode: number[][];
   defNodeIdByDefId: number[];
   nodePayloads: ReturnType<typeof OxcCFGBuilder.build>['nodePayloads'];
+  readProvenanceByDefId: Map<number, Map<string, Set<number>>>;
   /** Defs that were demoted from gen because a later write to the same var
    *  happens at the same CFG payload (e.g. sequence expressions). */
   intraNodeOverwrittenDefIds: ReadonlyArray<number>;
@@ -166,6 +164,18 @@ type DefUseStateMut = Pick<
   DefUseState,
   'defMetaById' | 'defsByVarIndex' | 'genDefIdsByNode' | 'useVarIndexesByNode' | 'writeVarIndexesByNode' | 'defNodeIdByDefId'
 >;
+
+export interface AnalyzeFunctionBodyOptions {
+  readonly inlineSyncIifes?: boolean;
+  readonly canEliminateDeadDefReads?: (args: {
+    readonly defId: number;
+    readonly meta: DefMeta;
+    readonly defs: ReadonlyArray<DefMeta | undefined>;
+    readonly reachingInByNode: ReadonlyArray<BitSet>;
+    readonly defNodeIdByDefId: ReadonlyArray<number>;
+    readonly nodePayloads: ReturnType<typeof OxcCFGBuilder.build>['nodePayloads'];
+  }) => boolean;
+}
 
 const buildDefMeta = (
   usage: {
@@ -206,7 +216,13 @@ const buildDefMeta = (
 const registerWriteUsage = (
   nodeId: number,
   varIndex: number,
-  usage: { name: string; location: number; writeKind?: DefMeta['writeKind']; hasInit?: boolean; declarationKind?: DefMeta['declarationKind'] },
+  usage: {
+    name: string;
+    location: number;
+    writeKind?: DefMeta['writeKind'];
+    hasInit?: boolean;
+    declarationKind?: DefMeta['declarationKind'];
+  },
   writeIndexes: Set<number>,
   state: DefUseStateMut,
 ): void => {
@@ -276,6 +292,7 @@ const buildDefUseState = (
   const useVarIndexesByNode: number[][] = Array.from({ length: nodeCount }, () => []);
   const writeVarIndexesByNode: number[][] = Array.from({ length: nodeCount }, () => []);
   const defNodeIdByDefId: number[] = [];
+  const readProvenanceByDefId = new Map<number, Map<string, Set<number>>>();
   const state = { defsByVarIndex, defMetaById, genDefIdsByNode, useVarIndexesByNode, writeVarIndexesByNode, defNodeIdByDefId };
 
   // Seed parameter bindings as definitions at CFG entry so unused params can be detected.
@@ -362,7 +379,7 @@ const buildDefUseState = (
     state.genDefIdsByNode[nodeId] = [...lastByVar.values()];
   }
 
-  return { ...state, nodePayloads, intraNodeOverwrittenDefIds: intraNodeOverwritten };
+  return { ...state, nodePayloads, readProvenanceByDefId, intraNodeOverwrittenDefIds: intraNodeOverwritten };
 };
 
 interface GenKillSets {
@@ -489,6 +506,7 @@ const collectUsedDefsForNode = (
   reachingIn: BitSet,
   defsOfVar: BitSet[],
   usedDefs: BitSet,
+  useCountByDefId: number[],
 ): BitSet => {
   let result = usedDefs;
 
@@ -496,11 +514,73 @@ const collectUsedDefsForNode = (
     const defs = defsOfVar[varIndex];
 
     if (defs) {
-      result = unionBitSet(result, intersectBitSet(reachingIn, defs));
+      const reachedDefs = intersectBitSet(reachingIn, defs);
+
+      for (const defId of reachedDefs.array()) {
+        useCountByDefId[defId] = (useCountByDefId[defId] ?? 0) + 1;
+      }
+
+      result = unionBitSet(result, reachedDefs);
     }
   }
 
   return result;
+};
+
+const recordReadProvenanceForNode = (
+  genIds: ReadonlyArray<number>,
+  uses: ReadonlyArray<number>,
+  reachingIn: BitSet,
+  defsOfVar: BitSet[],
+  defMetaById: ReadonlyArray<DefMeta | undefined>,
+  readProvenanceByDefId: Map<number, Map<string, Set<number>>>,
+): void => {
+  if (genIds.length === 0 || uses.length === 0) {
+    return;
+  }
+
+  for (const defId of genIds) {
+    let byVarName = readProvenanceByDefId.get(defId);
+
+    if (byVarName === undefined) {
+      byVarName = new Map<string, Set<number>>();
+      readProvenanceByDefId.set(defId, byVarName);
+    }
+
+    for (const varIndex of uses) {
+      const defs = defsOfVar[varIndex];
+
+      if (!defs) {
+        continue;
+      }
+
+      const reachedDefs = intersectBitSet(reachingIn, defs);
+
+      if (reachedDefs.size() === 0) {
+        continue;
+      }
+
+      const varName = reachedDefs
+        .array()
+        .map(priorDefId => defMetaById[priorDefId]?.name)
+        .find(name => name !== undefined);
+
+      if (varName === undefined) {
+        continue;
+      }
+
+      let priorDefs = byVarName.get(varName);
+
+      if (priorDefs === undefined) {
+        priorDefs = new Set<number>();
+        byVarName.set(varName, priorDefs);
+      }
+
+      for (const priorDefId of reachedDefs.array()) {
+        priorDefs.add(priorDefId);
+      }
+    }
+  }
 };
 
 const markOverwrittenDefsForNode = (
@@ -532,15 +612,24 @@ const collectUsedAndOverwrittenDefs = (
   defsOfVar: BitSet[],
   defCount: number,
   nodeCount: number,
-): { usedDefs: BitSet; overwrittenDefIds: boolean[] } => {
-  const { useVarIndexesByNode, writeVarIndexesByNode } = state;
+): { usedDefs: BitSet; overwrittenDefIds: boolean[]; useCountByDefId: number[] } => {
+  const { genDefIdsByNode, readProvenanceByDefId, useVarIndexesByNode, writeVarIndexesByNode } = state;
   let usedDefs = createBitSet();
+  const useCountByDefId: number[] = Array.from({ length: defCount }, () => 0);
 
   for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
     const uses = useVarIndexesByNode[nodeId] ?? [];
     const reachingIn = inByNode[nodeId] ?? createBitSet();
 
-    usedDefs = collectUsedDefsForNode(uses, reachingIn, defsOfVar, usedDefs);
+    usedDefs = collectUsedDefsForNode(uses, reachingIn, defsOfVar, usedDefs, useCountByDefId);
+    recordReadProvenanceForNode(
+      genDefIdsByNode[nodeId] ?? [],
+      uses,
+      reachingIn,
+      defsOfVar,
+      state.defMetaById,
+      readProvenanceByDefId,
+    );
   }
 
   const overwrittenDefIds: boolean[] = Array.from({ length: defCount }, () => false);
@@ -552,7 +641,79 @@ const collectUsedAndOverwrittenDefs = (
     markOverwrittenDefsForNode(writtenVars, reachingIn, defsOfVar, genByNode[nodeId] ?? createBitSet(), overwrittenDefIds);
   }
 
-  return { usedDefs, overwrittenDefIds };
+  return { usedDefs, overwrittenDefIds, useCountByDefId };
+};
+
+const buildUsedDefsFromCounts = (useCountByDefId: ReadonlyArray<number>): BitSet => {
+  const usedDefs = createBitSet();
+
+  for (let defId = 0; defId < useCountByDefId.length; defId += 1) {
+    if ((useCountByDefId[defId] ?? 0) > 0) {
+      usedDefs.add(defId);
+    }
+  }
+
+  return usedDefs;
+};
+
+const eliminateDeadDefProvenanceReads = (
+  initialUseCountByDefId: ReadonlyArray<number>,
+  state: DefUseState,
+  inByNode: BitSet[],
+  canEliminateDeadDefReads: NonNullable<AnalyzeFunctionBodyOptions['canEliminateDeadDefReads']>,
+): BitSet => {
+  const useCountByDefId = [...initialUseCountByDefId];
+  const eliminated = new Set<number>();
+  const maxIterations = state.defMetaById.length + 1;
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    let removedAny = false;
+
+    for (let defId = 0; defId < state.defMetaById.length; defId += 1) {
+      if (eliminated.has(defId) || (useCountByDefId[defId] ?? 0) > 0) {
+        continue;
+      }
+
+      const meta = state.defMetaById[defId];
+
+      if (
+        meta === undefined ||
+        !canEliminateDeadDefReads({
+          defId,
+          meta,
+          defs: state.defMetaById,
+          reachingInByNode: inByNode,
+          defNodeIdByDefId: state.defNodeIdByDefId,
+          nodePayloads: state.nodePayloads,
+        })
+      ) {
+        continue;
+      }
+
+      eliminated.add(defId);
+
+      const provenance = state.readProvenanceByDefId.get(defId);
+
+      if (provenance === undefined) {
+        continue;
+      }
+
+      for (const priorDefs of provenance.values()) {
+        for (const priorDefId of priorDefs) {
+          if ((useCountByDefId[priorDefId] ?? 0) > 0) {
+            useCountByDefId[priorDefId] = (useCountByDefId[priorDefId] ?? 0) - 1;
+            removedAny = true;
+          }
+        }
+      }
+    }
+
+    if (!removedAny) {
+      break;
+    }
+  }
+
+  return buildUsedDefsFromCounts(useCountByDefId);
 };
 
 export const analyzeFunctionBody = (
@@ -565,15 +726,30 @@ export const analyzeFunctionBody = (
   // under PARAMETER_SCOPE '' while their body references key under
   // `tsc:<declPos>`, silently de-linking them. All callers thread the map.
   declScopeByIdLocation: ReadonlyMap<number, string>,
+  options: AnalyzeFunctionBodyOptions = {},
 ): FunctionBodyAnalysis => {
-  const built = OxcCFGBuilder.build(bodyNode);
+  const built = OxcCFGBuilder.build(
+    bodyNode,
+    options.inlineSyncIifes === undefined ? {} : { inlineSyncIifes: options.inlineSyncIifes },
+  );
   const nodeCount = built.cfg.nodeCount;
   const state = buildDefUseState(built, localIndexByName, parameterBindings, declScopeByIdLocation);
   const { genByNode, killByNode, defsOfVar } = buildGenKillSets(state, nodeCount, localIndexByName.size);
   const pred = built.cfg.buildAdjacency('backward');
   const { inByNode } = computeReachingDefs(pred, nodeCount, genByNode, killByNode);
   const defCount = state.defMetaById.length;
-  let { usedDefs, overwrittenDefIds } = collectUsedAndOverwrittenDefs(state, genByNode, inByNode, defsOfVar, defCount, nodeCount);
+  let { usedDefs, overwrittenDefIds, useCountByDefId } = collectUsedAndOverwrittenDefs(
+    state,
+    genByNode,
+    inByNode,
+    defsOfVar,
+    defCount,
+    nodeCount,
+  );
+
+  if (options.canEliminateDeadDefReads !== undefined) {
+    usedDefs = eliminateDeadDefProvenanceReads(useCountByDefId, state, inByNode, options.canEliminateDeadDefReads);
+  }
 
   // Defs displaced by a same-node later write are dead at the node — record them as
   // overwritten so the waste detector emits `dead-store-overwrite` rather than nothing.

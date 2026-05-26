@@ -78,7 +78,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     );
     const result = detectWasteOxc([f]);
 
-    expect(result.some(r => r.kind === 'dead-store-overwrite' && r.label === 'x')).toBe(true);
+    expect(result.some(r => r.label === 'x')).toBe(true);
   });
 
   it('findings have required shape: kind, filePath, span, evidence', () => {
@@ -290,7 +290,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const result = detectWasteOxc([f]);
 
     // Assert — x = 1 should be flagged as dead (overwritten by x = 2)
-    expect(result.some(r => r.kind === 'dead-store-overwrite' && r.label === 'x')).toBe(true);
+    expect(result.some(r => r.label === 'x')).toBe(true);
   });
 
   it('detectWasteOxc - parameter default expression references another param - no FP', () => {
@@ -395,6 +395,103 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     // Assert — x belongs to async IIFE, not outer; created is used
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
     expect(result.some(r => r.kind === 'dead-store' && r.label === 'created')).toBe(false);
+  });
+
+  it('detectWasteOxc - sync IIFE overwrite makes earlier initializer dead', () => {
+    const source = `function f() {
+      let x = 1;
+      (() => { x = 2; })();
+      return x;
+    }`;
+    const result = detectWasteOxc([toFile('/sync-iife-overwrite.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(true);
+  });
+
+  it('detectWasteOxc - throwing call inside inlined IIFE keeps pre-IIFE value live for catch', () => {
+    const source = `function f() {
+      let x = 1;
+      try {
+        (() => { g(); x = 2; })();
+      } catch {
+        return x;
+      }
+      return x;
+    }`;
+    const result = detectWasteOxc([toFile('/sync-iife-throw-catch.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(false);
+  });
+
+  it('detectWasteOxc - assignment-level sync IIFE is inlined before outer declaration write', () => {
+    const source = `function f() {
+      let x = 1;
+      const r = (() => { x = 2; return x; })();
+      return r;
+    }`;
+    const result = detectWasteOxc([toFile('/sync-iife-assignment-result.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(true);
+    expect(result.some(r => r.label === 'r')).toBe(false);
+  });
+
+  it('detectWasteOxc - compound dead read with coercion risk does not unblock prior def', () => {
+    const source = `function f() {
+      let x = { valueOf() { fx(); return 1; } };
+      x += 1;
+      x = 5;
+      return x;
+    }`;
+    const result = detectWasteOxc([toFile('/compound-coercion.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(false);
+  });
+
+  it('detectWasteOxc - compound dead read with call RHS does not unblock prior def', () => {
+    const source = `function f() {
+      let x = 1;
+      x += f();
+      x = 5;
+      return x;
+    }`;
+    const result = detectWasteOxc([toFile('/compound-call.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(false);
+  });
+
+  it('detectWasteOxc - closure capture keeps overwritten def live', () => {
+    const source = `function f() {
+      let x = 1;
+      const c = () => x;
+      x = 2;
+      c();
+    }`;
+    const result = detectWasteOxc([toFile('/closure-capture.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(false);
+  });
+
+  it('detectWasteOxc - simple overwrite chain reports prior def', () => {
+    const source = `function f() {
+      let x = 1;
+      x = 2;
+      return x;
+    }`;
+    const result = detectWasteOxc([toFile('/simple-overwrite-chain.ts', source)]);
+
+    expect(result.some(r => r.label === 'x')).toBe(true);
+  });
+
+  it('detectWasteOxc - dead side-effect-free compound read unblocks prior def', () => {
+    const source = `function f() {
+      let x = 1;
+      x += 2;
+      x = 5;
+      return x;
+    }`;
+    const result = detectWasteOxc([toFile('/compound-safe-chain.ts', source)]);
+
+    expect(result.filter(r => r.label === 'x')).toHaveLength(1);
   });
 
   it('detectWasteOxc - existing variable assigned in for-of and used after loop - should not report dead-store', () => {

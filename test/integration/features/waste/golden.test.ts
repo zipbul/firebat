@@ -140,6 +140,14 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'iife-captured-write-keep', program => detectWaste([...program]));
   // genuine dead store inside an IIFE body is still reported → DEAD
   runGolden(import.meta.dir, 'iife-internal-dead', program => detectWaste([...program]));
+  // sync IIFE overwrites outer var read after the call → init DEAD (FN G)
+  runGolden(import.meta.dir, 'sync-iife-overwrites-outer-dead', program => detectWaste([...program]));
+  // conditional write inside IIFE → init survives no-write path → KEEP
+  runGolden(import.meta.dir, 'sync-iife-conditional-write-keep', program => detectWaste([...program]));
+  // dead-store chain: x+=2 dead → its read eliminated → init x=1 DEAD too (FN D)
+  runGolden(import.meta.dir, 'dead-store-chain-init-dead', program => detectWaste([...program]));
+  // closure-captured table member: fixpoint must not eliminate the table's read → KEEP
+  runGolden(import.meta.dir, 'closure-captured-table-member-keep', program => detectWaste([...program]));
   // flag captured by a closure created before a finally write → observable → KEEP
   runGolden(import.meta.dir, 'closure-captured-finally-write-keep', program => detectWaste([...program]));
   // default-less switch: init survives the no-match path → KEEP
