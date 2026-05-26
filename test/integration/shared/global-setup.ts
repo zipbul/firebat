@@ -16,7 +16,7 @@ import * as path from 'node:path';
 
 import { setParseSourceHook } from '../../../src/engine/ast/parse-source';
 import {
-  registerVirtualSourcesBatch,
+  notifyVirtualSource,
   setGildashSemanticContext,
 } from '../../../src/engine/dataflow/gildash-binding-source';
 
@@ -44,9 +44,10 @@ const parseSourceHook = (filePath: string, sourceText: string): void => {
     return;
   }
 
-  registerVirtualSourcesBatch([
-    { virtualPath: filePath, targetPath: adHocPathFor(filePath), content: sourceText },
-  ]);
+  // Notify only — defer the binding query (and its tsc Program rebuild) to
+  // the first buildDeclScopeMap call. Querying here would force a second
+  // rebuild per parsed file.
+  notifyVirtualSource(filePath, adHocPathFor(filePath), sourceText);
 };
 
 const open = async (): Promise<void> => {

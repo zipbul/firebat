@@ -7,9 +7,10 @@
  * tsc-authoritative (correct var hoisting, shadowing, declaration merging,
  * ambient detection, cross-file identity).
  *
- * In-memory test sources (no on-disk backing) are registered with the
- * semantic layer through {@link registerVirtualSourcesBatch} — one tsc
- * Program rebuild per batch instead of per file.
+ * In-memory test sources (no on-disk backing) are notified to the semantic
+ * layer through {@link notifyVirtualSource} (notify-only); the binding query
+ * and its tsc Program rebuild are deferred to the first
+ * {@link tryGildashDeclScopeMap} call.
  *
  * Result map shape: `Map<offset, string>` where the value is
  * `tsc:<declaration.position>`, uniquely identifying the binding by its
@@ -58,47 +59,26 @@ export const clearFixtureRealPaths = (): void => {
 };
 
 /**
- * Batch-register a set of in-memory sources with the active Gildash semantic
- * layer and pre-compute every file's binding map in a single tsc Program
- * rebuild. Pass this list once per "logical analysis unit" (a test case, a
- * detector call across N files) instead of interleaving per-file
- * notify/query pairs, which forces a rebuild per file (10× slower per
- * gildash 0.31 release notes).
+ * Notify the semantic layer of an in-memory source WITHOUT querying its
+ * bindings, and register the virtual → target mapping. This is the cheap
+ * path for the parseSource hook: `notifyFileChanged` only bumps the file's
+ * version (no tsc Program rebuild). The rebuild happens lazily on the first
+ * `getFileBindings` query inside `buildDeclScopeMap`. Notifying and querying
+ * separately (rather than via `getFileBindingsBatch`) avoids a redundant
+ * second query+rebuild per parsed file.
  *
- * Registers the virtual → target mapping so tryGildashDeclScopeMap can
- * resolve queries keyed on the virtual path. Returns the
- * Map<virtualPath, FileBinding[]> for callers that want to inspect bindings
- * directly without going through tryGildashDeclScopeMap.
- *
- * Throws when no Gildash semantic context is registered.
+ * No-op (returns false) when no semantic context is registered, so the
+ * production parser — which never sets the hook — is unaffected.
  */
-export const registerVirtualSourcesBatch = (
-  entries: ReadonlyArray<{ virtualPath: string; targetPath: string; content: string }>,
-): Map<string, FileBinding[]> => {
+export const notifyVirtualSource = (virtualPath: string, targetPath: string, content: string): boolean => {
   if (_gildash === null) {
-    throw new Error(
-      'registerVirtualSourcesBatch: no Gildash semantic context registered. ' +
-        'Tests must load test/integration/shared/global-setup.ts via bunfig preload.',
-    );
+    return false;
   }
 
-  if (entries.length === 0) {
-    return new Map();
-  }
+  _gildash.notifyFileChanged(targetPath, content);
+  _virtualToReal.set(virtualPath, targetPath);
 
-  const batch = entries.map(e => ({ filePath: e.targetPath, content: e.content }));
-  const byTarget = _gildash.getFileBindingsBatch(batch);
-  const byVirtual = new Map<string, FileBinding[]>();
-
-  for (const e of entries) {
-    _virtualToReal.set(e.virtualPath, e.targetPath);
-
-    const bindings = byTarget.get(e.targetPath) ?? [];
-
-    byVirtual.set(e.virtualPath, bindings);
-  }
-
-  return byVirtual;
+  return true;
 };
 
 /**
