@@ -229,12 +229,14 @@ describe('findLshCandidates', () => {
     const hasher = createMinHasher(4); // k=4
     const sigA = hasher.computeSignature(['a', 'b', 'c']);
     const sigB = hasher.computeSignature(['a', 'b', 'd']);
+
     // bands=8 > k=4: clamp 없이는 signature 배열 범위 밖을 읽어 BigInt XOR crash
     expect(() => findLshCandidates([sigA, sigB], 0.5, 8)).not.toThrow();
 
     const result = findLshCandidates([sigA, sigB], 0.5, 8);
 
     expect(Array.isArray(result)).toBe(true);
+
     // 각 후보 쌍은 입력 인덱스 범위 안이어야 함
     for (const c of result) {
       expect(c.i).toBeGreaterThanOrEqual(0);

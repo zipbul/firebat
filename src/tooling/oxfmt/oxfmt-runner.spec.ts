@@ -127,9 +127,7 @@ describe('runOxfmt', () => {
 
   it('should return ok:true when exit code is non-zero but stdout lists files (check mode with diffs)', async () => {
     // Normal check-mode failure path: exit 1 means files need formatting, stdout lists them.
-    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(
-      makeProc('src/a.ts\nsrc/b.ts\n', '', 1) as ReturnType<typeof Bun.spawn>,
-    );
+    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc('src/a.ts\nsrc/b.ts\n', '', 1) as ReturnType<typeof Bun.spawn>);
 
     const result = await runOxfmt({ targets: ['/f.ts'], mode: 'check', logger });
 

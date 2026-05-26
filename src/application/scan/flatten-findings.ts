@@ -10,13 +10,15 @@
  *   6. enclosing function name 주입 (header 없는 카테고리용)
  */
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
+
+import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import { createHash } from 'node:crypto';
 
-import { collectFunctionNodesWithParent, getNodeHeader } from '../../engine/ast';
 import type { ParsedFile } from '../../engine/types';
 import type { Finding, FirebatAnalyses } from '../../types';
+
+import { collectFunctionNodesWithParent, getNodeHeader } from '../../engine/ast';
 
 // ── Function range map (file → enclosing function lookup) ────────────────────
 
@@ -72,11 +74,7 @@ export const buildFunctionRangeMap = (
  * file의 line에 포함되는 가장 작은 (innermost) enclosing function name을 반환.
  * 없으면 null.
  */
-const findEnclosingFunction = (
-  map: FunctionRangeMap | undefined,
-  file: string,
-  line: number,
-): string | null => {
+const findEnclosingFunction = (map: FunctionRangeMap | undefined, file: string, line: number): string | null => {
   if (!map || line <= 0) {
     return null;
   }
@@ -146,8 +144,7 @@ const spanIdentity = (finding: Record<string, unknown>): string => {
 
 type LabelFn = (f: Record<string, unknown>, functionName: string | null) => string;
 
-const withFunc = (core: string, functionName: string | null): string =>
-  functionName ? `${core} in ${functionName}()` : core;
+const withFunc = (core: string, functionName: string | null): string => (functionName ? `${core} in ${functionName}()` : core);
 
 const labelWaste: LabelFn = (f, fn) => {
   const base = String(f.label ?? f.kind ?? 'dead-store');
@@ -347,10 +344,7 @@ const LABEL_BY_CATEGORY: Readonly<Record<string, LabelFn>> = {
  */
 const COMMON_KEYS = new Set(['kind', 'code', 'file', 'filePath', 'label', 'catalogCode']);
 
-const extractDetail = (
-  finding: Record<string, unknown>,
-  category: string,
-): Readonly<Record<string, unknown>> | null => {
+const extractDetail = (finding: Record<string, unknown>, category: string): Readonly<Record<string, unknown>> | null => {
   const detail: Record<string, unknown> = {};
   let hasContent = false;
   const hasCatalogCode = Boolean(finding.catalogCode);
@@ -413,13 +407,8 @@ const normalizeFile = (finding: Record<string, unknown>): string =>
  * enricher 코드가 변경되면 hash도 변경되지만, 이는 단일 firebat 세션 내에서는
  * 발생하지 않으므로 Phase 1↔Phase 2 간 ID 비교에는 영향 없음.
  */
-const makeFindingSeed = (
-  category: string,
-  code: string,
-  file: string,
-  finding: Record<string, unknown>,
-  kind: string,
-): string => `${category}|${code}|${file}|${kind}|${JSON.stringify(finding)}`;
+const makeFindingSeed = (category: string, code: string, file: string, finding: Record<string, unknown>, kind: string): string =>
+  `${category}|${code}|${file}|${kind}|${JSON.stringify(finding)}`;
 
 const flattenFileFinding = (
   category: string,
@@ -477,10 +466,7 @@ const flattenItemsFinding = (
     const itemSeed = `${groupSeed}|${file}|${spanIdentity(item)}|i${i}`;
     const functionName = findEnclosingFunction(functionMap, file, line);
     // items에는 parent의 kind가 없으므로 주입
-    const label =
-      category === 'duplicates'
-        ? labelDuplicateItem(item, kind)
-        : labelFn({ ...item, kind }, functionName);
+    const label = category === 'duplicates' ? labelDuplicateItem(item, kind) : labelFn({ ...item, kind }, functionName);
     const primaryDetail = isPrimary ? extractDetail(finding, category) : null;
 
     results.push({
@@ -505,10 +491,7 @@ const isItemsFinding = (finding: Record<string, unknown>): boolean =>
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-export const flattenToFindings = (
-  analyses: Partial<FirebatAnalyses>,
-  functionMap?: FunctionRangeMap,
-): Finding[] => {
+export const flattenToFindings = (analyses: Partial<FirebatAnalyses>, functionMap?: FunctionRangeMap): Finding[] => {
   const findings: Finding[] = [];
   const seenIds = new Set<string>();
 
@@ -517,8 +500,7 @@ export const flattenToFindings = (
       continue;
     }
 
-    const labelFn: LabelFn =
-      LABEL_BY_CATEGORY[category] ?? ((f: Record<string, unknown>) => String(f.kind ?? category));
+    const labelFn: LabelFn = LABEL_BY_CATEGORY[category] ?? ((f: Record<string, unknown>) => String(f.kind ?? category));
 
     for (const rawFinding of items) {
       const finding = rawFinding as Record<string, unknown>;

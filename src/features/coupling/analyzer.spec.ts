@@ -316,6 +316,7 @@ describe('analyzeCoupling', () => {
 
     for (let i = 1; i <= 5; i++) {
       adjacency.A!.push(`dep${i}`);
+
       adjacency[`dep${i}`] = [];
     }
 
@@ -345,6 +346,7 @@ describe('analyzeCoupling', () => {
 
     for (let i = 1; i <= 6; i++) {
       adjacency.A!.push(`dep${i}`);
+
       adjacency[`dep${i}`] = [];
     }
 
@@ -377,7 +379,9 @@ describe('analyzeCoupling', () => {
 
     for (let i = 1; i <= 10; i++) {
       adjacency[`up${i}`] = ['hub'];
+
       adjacency.hub!.push(`down${i}`);
+
       adjacency[`down${i}`] = [];
     }
 

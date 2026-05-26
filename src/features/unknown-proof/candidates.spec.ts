@@ -36,6 +36,7 @@ describe('features/unknown-proof/candidates — collectBindingCandidates', () =>
     const xCandidate = candidates.find(c => c.name === 'x');
 
     expect(xCandidate).toBeDefined();
+
     // `fetch` ends right before `(` of the fetch call (not `run(` earlier in the source).
     const fetchCallParen = source.indexOf('fetch(') + 'fetch'.length;
 

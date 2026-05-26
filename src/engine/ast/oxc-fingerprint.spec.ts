@@ -18,14 +18,8 @@ describe('engine/ast/oxc-fingerprint', () => {
 
   it('should produce the same fingerprint regardless of parenthesization', () => {
     // Arrange — parens carry no semantic meaning; `(a + b)` and `a + b` are equivalent
-    const a = parseSource(
-      '/virtual/fingerprint/paren-a.ts',
-      ['export function f() {', '  return (a + b);', '}'].join('\n'),
-    );
-    const b = parseSource(
-      '/virtual/fingerprint/paren-b.ts',
-      ['export function f() {', '  return a + b;', '}'].join('\n'),
-    );
+    const a = parseSource('/virtual/fingerprint/paren-a.ts', ['export function f() {', '  return (a + b);', '}'].join('\n'));
+    const b = parseSource('/virtual/fingerprint/paren-b.ts', ['export function f() {', '  return a + b;', '}'].join('\n'));
     // Act
     const fa = createOxcFingerprintExact(a.program);
     const fb = createOxcFingerprintExact(b.program);

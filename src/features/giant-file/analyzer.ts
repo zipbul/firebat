@@ -26,9 +26,7 @@ const analyzeGiantFile = (
     }
 
     const lineCount =
-      file.sourceText.length === 0
-        ? 0
-        : file.sourceText.split(/\r?\n/).length - (file.sourceText.endsWith('\n') ? 1 : 0);
+      file.sourceText.length === 0 ? 0 : file.sourceText.split(/\r?\n/).length - (file.sourceText.endsWith('\n') ? 1 : 0);
 
     if (lineCount <= maxLines) {
       continue;

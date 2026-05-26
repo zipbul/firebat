@@ -36,7 +36,9 @@ export const collectLocallyUsedImportNames = (program: Node, importedNames: Read
   // and popped on leave so nested-scope-local type aliases shadow imports
   // only within their lexical scope.
   const tsShadowStack: Array<Set<string>> = [new Set<string>()];
+
   const tsShadowed = (name: string): boolean => tsShadowStack.some(s => s.has(name));
+
   const SCOPE_NODE_TYPES: ReadonlySet<string> = new Set([
     'BlockStatement',
     'ForStatement',

@@ -326,8 +326,7 @@ const collectBindingCandidates = (input: CollectBindingCandidatesInput): Readonl
         scopes.push({ start: body.start, end: body.end });
       }
 
-      const funcBodyRange =
-        body !== null && body !== undefined ? { start: body.start, end: body.end } : undefined;
+      const funcBodyRange = body !== null && body !== undefined ? { start: body.start, end: body.end } : undefined;
 
       for (const param of node.params) {
         if (param.type === 'TSParameterProperty') {

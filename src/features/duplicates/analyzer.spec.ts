@@ -1,6 +1,7 @@
+import type { Node } from 'oxc-parser';
+
 import { mock, afterAll, describe, it, expect, beforeEach } from 'bun:test';
 import path from 'node:path';
-import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';

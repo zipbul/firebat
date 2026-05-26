@@ -967,9 +967,7 @@ const analyzeIndirection = async (
         // Skip cross-file declaration merging
         try {
           const symbols = gildash.searchSymbols({ text: name, exact: true });
-          const otherFileHasSameName = symbols.some(
-            s => resolveAbs(rootAbs, s.filePath) !== normalizedFilePath,
-          );
+          const otherFileHasSameName = symbols.some(s => resolveAbs(rootAbs, s.filePath) !== normalizedFilePath);
 
           if (otherFileHasSameName) {
             return true;
