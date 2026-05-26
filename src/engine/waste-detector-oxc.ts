@@ -33,6 +33,18 @@ interface NestedFunctionContext {
    * def of the variable is kept.
    */
   readonly hoistCapturedVarIndexes: Set<number>;
+  /**
+   * For each captured `varIndex`, the minimum source start offset among the
+   * (non-hoisted) closures that capture it. A def located at or after this
+   * offset means a capturing closure already existed when the def ran, so a
+   * later (possibly async / opaque) invocation of that closure can observe the
+   * def's value — the def is not dead. Source offset is robust to finally-block
+   * CFG duplication and nested-function payload nodes (forward CFG reachability
+   * was not). The reverse case — closure created AFTER the def, e.g.
+   * `let x=1; x=2; return () => x` — is handled by the reaching-defs check: the
+   * def reaches the later closure's entry only if it survives to it.
+   */
+  readonly captureMinStartByVar: Map<number, number>;
 }
 
 /**
@@ -72,6 +84,7 @@ const buildNestedFunctionContext = (
   const entryNodeIds: number[] = [];
   const capturedVarIndexesByEntry = new Map<number, Set<number>>();
   const hoistCapturedVarIndexes = new Set<number>();
+  const captureMinStartByVar = new Map<number, number>();
 
   for (let nodeId = 0; nodeId < nodePayloads.length; nodeId += 1) {
     const payload = nodePayloads[nodeId];
@@ -90,9 +103,27 @@ const buildNestedFunctionContext = (
     const captured = new Set<number>();
 
     for (const nestedFunction of nested) {
-      const captureSink = nestedFunction.type === 'FunctionDeclaration' ? hoistCapturedVarIndexes : captured;
+      const isHoisted = nestedFunction.type === 'FunctionDeclaration';
+      const captureSink = isHoisted ? hoistCapturedVarIndexes : captured;
+      const before = isHoisted ? new Set<number>() : captured;
+      const sizeBefore = before.size;
 
       collectCapturedVarIndexesFromFunction(nestedFunction, localIndexByName, declScopeByIdLocation, captureSink);
+
+      // Record the source start of each non-hoisted capturing closure against
+      // the vars it captures (min over closures), for the offset-based
+      // "closure existed before the def" observability check.
+      if (!isHoisted && captured.size >= sizeBefore) {
+        const start = nestedFunction.start;
+
+        for (const idx of captured) {
+          const prev = captureMinStartByVar.get(idx);
+
+          if (prev === undefined || start < prev) {
+            captureMinStartByVar.set(idx, start);
+          }
+        }
+      }
     }
 
     if (captured.size === 0) {
@@ -103,75 +134,42 @@ const buildNestedFunctionContext = (
     capturedVarIndexesByEntry.set(nodeId, captured);
   }
 
-  return { entryNodeIds, capturedVarIndexesByEntry, hoistCapturedVarIndexes };
-};
-
-/**
- * Forward-reachability memo: nodes reachable from a given CFG node via successor
- * edges. Built lazily per start node from the forward adjacency. Used to decide
- * whether a capturing closure (created at its entry node) exists *before* a def
- * executes — i.e. the closure's entry can reach the def node.
- */
-type ForwardReachable = (startNodeId: number) => ReadonlySet<number>;
-
-const makeForwardReachable = (forwardAdj: ReadonlyArray<ArrayLike<number>>): ForwardReachable => {
-  const memo = new Map<number, ReadonlySet<number>>();
-
-  return (startNodeId: number): ReadonlySet<number> => {
-    const cached = memo.get(startNodeId);
-
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    const seen = new Set<number>();
-    const stack = [startNodeId];
-
-    while (stack.length > 0) {
-      const n = stack.pop() as number;
-      const succ = forwardAdj[n];
-
-      if (succ === undefined) {
-        continue;
-      }
-
-      for (let i = 0; i < succ.length; i += 1) {
-        const m = succ[i] as number;
-
-        if (!seen.has(m)) {
-          seen.add(m);
-          stack.push(m);
-        }
-      }
-    }
-
-    memo.set(startNodeId, seen);
-
-    return seen;
-  };
+  return { entryNodeIds, capturedVarIndexesByEntry, hoistCapturedVarIndexes, captureMinStartByVar };
 };
 
 const isDefClosureCaptured = (
   defId: number,
   varIndex: number,
+  defLocation: number,
   nestedCtx: NestedFunctionContext,
   reachingInByNode: ReadonlyArray<BitSet>,
-  exitNodeId: number,
-  defNodeIdByDefId: ReadonlyArray<number>,
-  forwardReachable: ForwardReachable,
 ): boolean => {
-  void exitNodeId;
-
   // Hoisted function declaration capture: callable throughout the enclosing
   // scope, so any def of the captured variable may be observed — order-
-  // independent, regardless of CFG reachability of the declaration's lexical
-  // position (which can be unreachable after an early return).
+  // independent, regardless of where the declaration appears (even after an
+  // early return, where its lexical CFG node is unreachable).
   if (nestedCtx.hoistCapturedVarIndexes.has(varIndex)) {
     return true;
   }
 
-  const defNodeId = defNodeIdByDefId[defId];
+  // (b) Closure created BEFORE this def (its source start ≤ def location): it
+  //     already exists when the def runs, so a later — possibly async / opaque
+  //     — invocation observes the def's value. Covers forward-referenced module
+  //     helpers and captured variables reassigned/finalized between invocations
+  //     (`m = 3; update(); m = 4`, `try {...} finally { flag = false }` where a
+  //     callback reads flag). Source-offset based: robust to finally-block CFG
+  //     duplication and nested-function payload nodes. The reverse case —
+  //     closure created AFTER the def, `let x=1; x=2; return () => x` — has its
+  //     min start > x=1's location, so x=1 is NOT kept here.
+  const minStart = nestedCtx.captureMinStartByVar.get(varIndex);
 
+  if (minStart !== undefined && minStart <= defLocation) {
+    return true;
+  }
+
+  // (a) Closure created AFTER this def but the def reaches the closure's entry
+  //     (survives to it) → observed at creation. Handles `x=2` in
+  //     `let x=1; x=2; return () => x` (x=2 reaches the closure; x=1 does not).
   for (const entryNodeId of nestedCtx.entryNodeIds) {
     const capturedSet = nestedCtx.capturedVarIndexesByEntry.get(entryNodeId);
 
@@ -179,24 +177,9 @@ const isDefClosureCaptured = (
       continue;
     }
 
-    // (a) Observed at creation: this def reaches the closure's entry node, so
-    //     the closure created there captures this def's value.
     const reaching = reachingInByNode[entryNodeId];
 
     if (reaching && reaching.has(defId)) {
-      return true;
-    }
-
-    // (b) Observed at later invocation: the closure's entry node executes BEFORE
-    //     this def (entry reaches def in the CFG), so the closure already exists
-    //     when the def runs. A subsequent invocation — including via an opaque
-    //     intervening call we cannot track (`update()`, async callbacks) — reads
-    //     the def's value. Covers both forward-referenced module helpers
-    //     (`const a = () => helper(); const helper = ...`) and captured variables
-    //     reassigned between invocations (`m = 3; update(); m = 4`). NOT the
-    //     closure-created-after-def case (`let x=1; x=2; return () => x`), where
-    //     the entry cannot reach the earlier def, so x=1 stays a true dead store.
-    if (defNodeId !== undefined && forwardReachable(entryNodeId).has(defNodeId)) {
       return true;
     }
   }
@@ -1229,8 +1212,7 @@ const collectWasteFindingsForFunction = (
     parameterDefaults,
     declScopeByIdLocation,
   );
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId, cfg } = analysis;
-  const forwardReachable = makeForwardReachable(cfg.buildAdjacency('forward'));
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   // CLAUDE.md 비대상: function parameter. The reaching-defs seed for parameter bindings
   // is still needed so reads inside the body resolve to a definition, but the detector
   // must never report parameters themselves as waste.
@@ -1480,7 +1462,7 @@ const collectWasteFindingsForFunction = (
         meta.writeKind === 'assignment' ||
         meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable) &&
+      !isDefClosureCaptured(defId, meta.varIndex, meta.location, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
@@ -1494,7 +1476,7 @@ const collectWasteFindingsForFunction = (
         continue;
       }
 
-      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable)) {
+      if (isDefClosureCaptured(defId, meta.varIndex, meta.location, nestedCtx, reachingInByNode)) {
         continue;
       }
     }
@@ -1692,8 +1674,7 @@ const collectWasteFindingsForModule = (
   const exportExemption = collectExportExemption(programBody);
   const namespaceMemberLocations = collectNamespaceMemberLocations(programBody);
   const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation);
-  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads, exitId, cfg } = analysis;
-  const forwardReachable = makeForwardReachable(cfg.buildAdjacency('forward'));
+  const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   const syntacticReads = programBody
     .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
     .filter(u => u.isRead);
@@ -1894,7 +1875,7 @@ const collectWasteFindingsForModule = (
         meta.writeKind === 'assignment' ||
         meta.writeKind === 'logical-assignment') &&
       !varHasMeaningfulUse.has(meta.varIndex) &&
-      !isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable) &&
+      !isDefClosureCaptured(defId, meta.varIndex, meta.location, nestedCtx, reachingInByNode) &&
       defCtx !== undefined &&
       isDeclarationFreshAllocation(defCtx) &&
       varHasOnlyFreshDefs.has(meta.varIndex) &&
@@ -1906,7 +1887,7 @@ const collectWasteFindingsForModule = (
         continue;
       }
 
-      if (isDefClosureCaptured(defId, meta.varIndex, nestedCtx, reachingInByNode, exitId, defNodeIdByDefId, forwardReachable)) {
+      if (isDefClosureCaptured(defId, meta.varIndex, meta.location, nestedCtx, reachingInByNode)) {
         continue;
       }
     }

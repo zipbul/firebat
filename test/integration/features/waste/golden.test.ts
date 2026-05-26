@@ -140,6 +140,12 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'iife-captured-write-keep', program => detectWaste([...program]));
   // genuine dead store inside an IIFE body is still reported → DEAD
   runGolden(import.meta.dir, 'iife-internal-dead', program => detectWaste([...program]));
+  // flag captured by a closure created before a finally write → observable → KEEP
+  runGolden(import.meta.dir, 'closure-captured-finally-write-keep', program => detectWaste([...program]));
+  // default-less switch: init survives the no-match path → KEEP
+  runGolden(import.meta.dir, 'switch-no-default-init-keep', program => detectWaste([...program]));
+  // switch WITH default is total: init overwritten on every path → DEAD
+  runGolden(import.meta.dir, 'switch-with-default-init-dead', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

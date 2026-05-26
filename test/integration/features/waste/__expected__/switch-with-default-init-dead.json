@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/switch-with-default-init-dead.ts",
+    "kind": "dead-store",
+    "label": "i",
+    "message": "Variable 'i' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 7,
+        "line": 4
+      },
+      "start": {
+        "column": 6,
+        "line": 4
+      }
+    }
+  }
+]

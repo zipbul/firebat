@@ -249,6 +249,19 @@ export class OxcCFGBuilder {
       this.cfg.addEdge(discriminantNode, entry, EdgeType.Normal);
     }
 
+    // No `default` clause: a discriminant matching no case falls straight through
+    // to after the switch. Without this edge the CFG models the switch as if some
+    // case always matches, so a pre-switch def (`let i = 0`) that every case
+    // reassigns looks dead even though the no-match path leaves it live and read
+    // after the switch (and dropping its initializer would also break TS
+    // definite-assignment). A `default` clause makes the switch total, so the
+    // edge is only added when absent.
+    const hasDefault = switchNode.cases.some(caseNode => caseNode.test === null);
+
+    if (!hasDefault) {
+      this.cfg.addEdge(discriminantNode, afterSwitch, EdgeType.Normal);
+    }
+
     const nextLoopStack: LoopTargets[] = [
       ...loopStack,
       { breakTarget: afterSwitch, continueTarget: afterSwitch, label: currentLabel },

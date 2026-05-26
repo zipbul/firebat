@@ -493,13 +493,9 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'export class Counter {',
-          '  count = 0;',
-          '  inc() { this.count++; }',
-          '  read() { return this.count; }',
-          '}',
-        ].join('\n'),
+        ['export class Counter {', '  count = 0;', '  inc() { this.count++; }', '  read() { return this.count; }', '}'].join(
+          '\n',
+        ),
       ),
     ];
     // Act
@@ -514,13 +510,9 @@ describe('temporal-coupling/analyzer', () => {
     const files = [
       file(
         'src/a.ts',
-        [
-          'export class Counter {',
-          '  count = 0;',
-          '  dec() { --this.count; }',
-          '  read() { return this.count; }',
-          '}',
-        ].join('\n'),
+        ['export class Counter {', '  count = 0;', '  dec() { --this.count; }', '  read() { return this.count; }', '}'].join(
+          '\n',
+        ),
       ),
     ];
     // Act
@@ -1459,9 +1451,13 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
-    // Assert — switch case 안 writer → CFG 분기 처리에 따라 finding이 억제됨 (현재 구현 동작 확인)
-    // OxcCFGBuilder가 switch case를 dominating으로 처리하므로 finding이 없음
-    expect(result.length).toBe(0);
+    // Assert — `init()` sits in a `case 'a'` of a default-less switch, so it is
+    // conditional: the CFG now models the no-match fall-through, so init() does
+    // NOT dominate the unconditional `query()`. A conditional writer before an
+    // unconditional reader is the temporal-coupling smell, so the finding is
+    // kept. (Previously asserted 0, encoding a CFG bug where a default-less
+    // switch was modeled as if some case always matched.)
+    expect(result.length).toBe(1);
   });
 
   it('analyzeTemporalCoupling - writer inside nested if via CFG - keeps finding', () => {
