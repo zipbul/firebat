@@ -136,6 +136,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'namespace-member-keep', program => detectWaste([...program]));
   // a function local inside a namespace is still analyzed → dead-store DEAD
   runGolden(import.meta.dir, 'namespace-function-local-dead', program => detectWaste([...program]));
+  // enclosing variable written inside an IIFE → IIFE-scope write, not enclosing def → KEEP
+  runGolden(import.meta.dir, 'iife-captured-write-keep', program => detectWaste([...program]));
+  // genuine dead store inside an IIFE body is still reported → DEAD
+  runGolden(import.meta.dir, 'iife-internal-dead', program => detectWaste([...program]));
 
   // ── 회귀 잠금 (module/block scope 정공법) ────────────────────────────────
   // module-scope let overwrite (CLAUDE.md "모든 scope") — DEAD

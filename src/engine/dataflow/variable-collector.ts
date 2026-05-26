@@ -336,9 +336,14 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     suppressDeclarations: boolean,
     declarationKind: VariableUsage['declarationKind'] | undefined,
   ): void => {
-    // When suppressDeclarations is active (e.g. visiting inside an IIFE body),
-    // skip declaration writes — they belong to the nested scope, not the outer scope.
-    if (suppressDeclarations && isWriteContext && writeKind === 'declaration') {
+    // suppressDeclarations marks "inside an IIFE body" (see visitCallExpression).
+    // Suppress ALL writes there — declarations AND assignments/compound/update —
+    // because any write inside the IIFE belongs to the IIFE's own scope/CFG and
+    // is analyzed in its own pass. Recording it as an enclosing-scope def would
+    // pollute reaching-defs (no enclosing CFG node for it → never reaches its
+    // own read → false dead-store). Reads are still recorded: the IIFE runs
+    // immediately, so a read of an enclosing variable is a real use.
+    if (suppressDeclarations && isWriteContext) {
       return;
     }
 
@@ -452,9 +457,15 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     const unwrappedCallee = unwrapExpression(callee);
 
     if (unwrappedCallee !== null && isFunctionNode(unwrappedCallee)) {
-      // IIFE: enter the function body with allowNestedFunctions=true so we can collect
-      // outer-variable captures (reads). However, suppress declaration writes because
-      // those variables belong to the IIFE's own scope, not the enclosing function scope.
+      // IIFE: descend with allowNestedFunctions=true so reads of enclosing
+      // variables are counted (the IIFE runs immediately, in the enclosing
+      // scope's execution). suppressDeclarations=true marks "inside an IIFE
+      // body" — which suppresses ALL writes (declarations AND assignments/
+      // compound/update), not just declarations: a write inside the IIFE
+      // belongs to the IIFE's own scope/CFG and is analyzed in its own pass.
+      // Recording it as an enclosing-scope def pollutes reaching-defs (the
+      // write has no node in the enclosing CFG, so it never reaches its
+      // also-inside-IIFE read → misreported as a dead store).
       visit(unwrappedCallee, true, false, undefined, true);
     } else {
       visit(callee, allowNestedFunctions, false, undefined, suppressDeclarations);
