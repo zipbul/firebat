@@ -276,18 +276,13 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     suppressDeclarations: boolean,
   ) => void;
 
-  // Pre-pass: walk with ScopeTracker so every identifier's declaration scope is known.
-  // This lets `declScope` distinguish same-name bindings in different lexical scopes
-  // (outer `let x` vs inner `let x`) without relying on name alone.
-  //
-  // When the caller provides `declScopeByIdLocation`, use it directly — it is expected
-  // to cover the enclosing function (including parameters), which an in-body walk
-  // alone cannot see.
-  // When the caller does not supply a scope map, fall back to an empty map.
-  // Sub-walks (e.g. parameter defaults, decorator expressions) only need
-  // local identifier kinds, not cross-reference resolution against an outer
-  // function scope; callers that need full scope resolution must thread
-  // their own declScopeByIdLocation from a top-level buildDeclScopeMap.
+  // `declScopeByIdLocation` maps each identifier offset to its binding scope
+  // key, letting `declScope` distinguish same-name bindings across scopes
+  // (outer `let x` vs inner `let x`). Callers that need full scope resolution
+  // thread the gildash-derived map (covering the enclosing function +
+  // parameters). When omitted, sub-walks (parameter defaults, decorator
+  // expressions) fall back to an empty map — they only need local identifier
+  // kinds, not cross-reference resolution against an outer scope.
   const declScopeByIdLocation: ReadonlyMap<number, string> =
     options.declScopeByIdLocation ?? new Map<number, string>();
   const evaluateAllBranches = options.evaluateAllBranches === true;

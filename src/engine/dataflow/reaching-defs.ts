@@ -73,13 +73,14 @@ export const collectParameterBindings = (functionNode: Node): ReadonlyArray<Bind
  * Build the unique key used to identify a binding inside one function's dataflow.
  *
  * Two same-named declarations in different lexical scopes (outer `let x` vs inner
- * `let x`) produce different keys so they get distinct varIndexes. Parameter
- * bindings, whose declaration scope lives outside the body walk, use the empty
- * scope key — matching whatever scope key the `ScopeTracker` reports for
- * identifier usages of those parameters.
+ * `let x`) produce different keys so they get distinct varIndexes. The scope
+ * component comes from gildash's binding identity (`tsc:<declPos>`); parameters
+ * are keyed via {@link parameterScopeKey}. PARAMETER_SCOPE is the empty-string
+ * sentinel used only as a defensive fallback when an offset is absent from the
+ * scope map (unreachable in normal use — gildash always returns a parameter's
+ * declaration as a binding).
  */
 const PARAMETER_SCOPE = '';
-const EMPTY_SCOPE_MAP: ReadonlyMap<number, string> = new Map();
 
 export const bindingKey = (name: string, declScope: string | undefined): string =>
   `${name}@${declScope ?? PARAMETER_SCOPE}`;
@@ -227,15 +228,12 @@ const processNodeUsages = (
   payload: ReturnType<typeof OxcCFGBuilder.build>['nodePayloads'][number],
   localIndexByName: Map<string, number>,
   state: DefUseStateMut,
-  declScopeByIdLocation: ReadonlyMap<number, string> | undefined,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
 ): void => {
-  const collectorOptions: { includeNestedFunctions: false; declScopeByIdLocation?: ReadonlyMap<number, string> } = {
-    includeNestedFunctions: false,
+  const collectorOptions = {
+    includeNestedFunctions: false as const,
+    declScopeByIdLocation,
   };
-
-  if (declScopeByIdLocation !== undefined) {
-    collectorOptions.declScopeByIdLocation = declScopeByIdLocation;
-  }
 
   const usages = Array.isArray(payload)
     ? (payload as Node[]).flatMap(p => collectVariables(p, collectorOptions))
@@ -267,7 +265,7 @@ const buildDefUseState = (
   built: ReturnType<typeof OxcCFGBuilder.build>,
   localIndexByName: Map<string, number>,
   parameterBindings: ReadonlyArray<BindingName>,
-  declScopeByIdLocation: ReadonlyMap<number, string> | undefined,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
 ): DefUseState => {
   const nodeCount = built.cfg.nodeCount;
   const nodePayloads = built.nodePayloads;
@@ -282,7 +280,7 @@ const buildDefUseState = (
 
   // Seed parameter bindings as definitions at CFG entry so unused params can be detected.
   for (const binding of parameterBindings) {
-    const scope = parameterScopeKey(binding, declScopeByIdLocation ?? EMPTY_SCOPE_MAP);
+    const scope = parameterScopeKey(binding, declScopeByIdLocation);
     const varIndex = localIndexByName.get(bindingKey(binding.name, scope));
 
     if (typeof varIndex !== 'number') {
@@ -561,8 +559,12 @@ export const analyzeFunctionBody = (
   bodyNode: Node | ReadonlyArray<Node> | undefined,
   localIndexByName: Map<string, number>,
   parameterBindings: ReadonlyArray<BindingName>,
-  parameterDefaults: ReadonlyArray<Node> = [],
-  declScopeByIdLocation?: ReadonlyMap<number, string>,
+  parameterDefaults: ReadonlyArray<Node>,
+  // Required: the gildash-derived scope map. Parameters are keyed by their
+  // gildash scope (via parameterScopeKey); omitting the map would key params
+  // under PARAMETER_SCOPE '' while their body references key under
+  // `tsc:<declPos>`, silently de-linking them. All callers thread the map.
+  declScopeByIdLocation: ReadonlyMap<number, string>,
 ): FunctionBodyAnalysis => {
   const built = OxcCFGBuilder.build(bodyNode);
   const nodeCount = built.cfg.nodeCount;
