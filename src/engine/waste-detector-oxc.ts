@@ -1600,6 +1600,30 @@ const sourceGuardedBetween = (bodyNodes: ReadonlyArray<Node>, names: ReadonlySet
             }
           }
         }
+
+        // A narrowing-style test on the source captured into a derived variable
+        // (`const ok = x !== undefined; if (ok) use(y)`): the guard tests `ok`, not the
+        // source, so the branch checks above miss it. Treat the source appearing in a
+        // type-test expression (`=== !== == != instanceof in`, `typeof`) between the
+        // declaration and the use as a narrowing signal.
+        if (node.type === 'BinaryExpression') {
+          const op = (node as { operator: string }).operator;
+
+          if (
+            (op === '===' || op === '!==' || op === '==' || op === '!=' || op === 'instanceof' || op === 'in') &&
+            node.start > lo &&
+            node.start < hi &&
+            identifierAppearsIn(node, names)
+          ) {
+            found = true;
+
+            return;
+          }
+        } else if (node.type === 'UnaryExpression' && (node as { operator: string }).operator === 'typeof') {
+          if (node.start > lo && node.start < hi && identifierAppearsIn(node, names)) {
+            found = true;
+          }
+        }
       },
     });
   }
@@ -1768,7 +1792,7 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     // TS narrowing: a source identifier is flow-narrowed (guard or assertion) between the
     // declaration and the use, which the separate binding does not carry — inlining would
     // change the type-check result.
-    if (sourceGuardedBetween(bodyNodes, names, declMeta.location, useCtx.node.start) || useInNarrowedBranch(useCtx, names)) {
+    if (sourceGuardedBetween(bodyNodes, names, rhs.end, useCtx.node.start) || useInNarrowedBranch(useCtx, names)) {
       continue;
     }
 
