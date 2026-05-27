@@ -1234,6 +1234,263 @@ const buildWasteFinding = (
   };
 };
 
+// ── Phase 2: redundant single-use bindings (`const y = <pure expr>; … y …`) ──────
+//
+// A const binding whose initializer is read exactly once and can be substituted at
+// that single use with no change to observable behavior or the TS type-check result
+// (CLAUDE.md: removal via RHS substitution preserves behavior; readability of the
+// name is explicitly not observable). Increment 1 covers the substitution-safe
+// non-member, non-closure cases: identifier aliases and pure arithmetic / logical /
+// unary / conditional expressions over identifier or literal operands (incl. `as` /
+// `satisfies` casts, which travel with the value). Member reads, destructuring, and
+// closure-captured bindings are out of this increment.
+const REDUNDANT_BINDING_RHS_TYPES = new Set<string>([
+  'Identifier',
+  'BinaryExpression',
+  'LogicalExpression',
+  'UnaryExpression',
+  'ConditionalExpression',
+]);
+
+const isInlinablePureRhs = (rhs: Node): boolean => {
+  const unwrapped = unwrapValueWrappers(rhs);
+
+  // A bare literal is excluded — naming a literal constant is a readability choice,
+  // deferred to a later phase. Identifier aliases and arithmetic survive.
+  if (!REDUNDANT_BINDING_RHS_TYPES.has(unwrapped.type)) {
+    return false;
+  }
+
+  // Member access carries getter / receiver-mutation sensitivity (handled separately).
+  if (containsMemberExpression(unwrapped)) {
+    return false;
+  }
+
+  // call / await / new / spread / tagged-template / update side-effects.
+  if (defRhsCarriesSideEffect(unwrapped)) {
+    return false;
+  }
+
+  // A closure / eval reference defers or hides evaluation.
+  return !containsClosureOrEvalReference(unwrapped);
+};
+
+const declarationHasTypeAnnotation = (ctx: IdentifierContext): boolean =>
+  (ctx.node as { typeAnnotation?: unknown }).typeAnnotation != null;
+
+// The `kind` of the enclosing `VariableDeclaration` (`const`/`let`/`var`), read from
+// the AST ancestor chain (reaching-defs does not propagate it for non-`using` kinds).
+const enclosingDeclarationKind = (ctx: IdentifierContext): string | null => {
+  for (let i = ctx.ancestors.length - 1; i >= 0; i -= 1) {
+    const ancestor = ctx.ancestors[i];
+
+    if (ancestor !== undefined && ancestor.type === 'VariableDeclaration') {
+      return (ancestor as { kind: string }).kind;
+    }
+  }
+
+  return null;
+};
+
+const collectRhsIdentifierNames = (rhs: Node): Set<string> => {
+  const names = new Set<string>();
+
+  walk(rhs, {
+    enter(node: Node) {
+      if (node.type === 'Identifier') {
+        names.add((node as { name: string }).name);
+      }
+    },
+  });
+
+  return names;
+};
+
+// Whether any of `names` is reassigned (`name = …`, `name++`, `name += …`) anywhere in
+// the scope. A pure RHS over `names` is only a stable substitute for its single use when
+// none of its source identifiers is ever reassigned: a same-scope reassignment after the
+// use, or one observed at a deferred call of a capturing closure, would change the value.
+// (A plain call cannot reassign a caller's binding, so only explicit writes matter.)
+const hasReassignmentOfNames = (bodyNodes: ReadonlyArray<Node>, names: ReadonlySet<string>): boolean => {
+  let found = false;
+
+  for (const body of bodyNodes) {
+    walk(body, {
+      enter(node: Node) {
+        if (found) {
+          this.skip();
+
+          return;
+        }
+
+        if (node.type === 'AssignmentExpression') {
+          const left = (node as { left: Node }).left;
+
+          if (left.type === 'Identifier' && names.has((left as { name: string }).name)) {
+            found = true;
+          }
+        } else if (node.type === 'UpdateExpression') {
+          const arg = (node as { argument: Node }).argument;
+
+          if (arg.type === 'Identifier' && names.has((arg as { name: string }).name)) {
+            found = true;
+          }
+        }
+      },
+    });
+  }
+
+  return found;
+};
+
+const buildRedundantBindingFinding = (name: string, location: number, filePath: string, lineOffsets: number[]): WasteFinding => {
+  const loc = getLineColumn(lineOffsets, location);
+
+  return {
+    kind: 'redundant-binding',
+    label: name,
+    message: `Variable '${name}' is a redundant binding; its initializer is used only once and can be inlined`,
+    filePath,
+    span: {
+      start: loc,
+      end: {
+        line: loc.line,
+        column: loc.column + name.length,
+      },
+    },
+  };
+};
+
+interface RedundantBindingInput {
+  readonly bodyNodes: ReadonlyArray<Node>;
+  readonly defs: ReadonlyArray<DefMeta | undefined>;
+  readonly defCtxByLocation: ReadonlyMap<number, IdentifierContext>;
+  readonly syntacticReads: ReadonlyArray<{ readonly name: string; readonly declScope?: string; readonly location: number }>;
+  readonly localIndexByName: Map<string, number>;
+  readonly varInitKind: ReadonlyMap<number, FreshAllocationKind>;
+  readonly skipLocations: ReadonlySet<string> | ReadonlySet<number>;
+  readonly skipNames?: ReadonlySet<string>;
+  readonly filePath: string;
+  readonly lineOffsets: number[];
+  readonly findings: WasteFinding[];
+}
+
+const collectRedundantBindingFindings = (input: RedundantBindingInput): void => {
+  const { bodyNodes, defs, defCtxByLocation, syntacticReads, localIndexByName, varInitKind, filePath, lineOffsets, findings } = input;
+
+  // Per-variable use summary, restricted to reads in the same scope (a read inside a
+  // nested function has no entry in defCtxByLocation → recorded as a closure read,
+  // which disqualifies the binding in this increment).
+  const usesByVar = new Map<number, { real: IdentifierContext[]; closureRead: boolean; otherKind: boolean }>();
+
+  for (const usage of syntacticReads) {
+    const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+
+    if (typeof idx !== 'number') {
+      continue;
+    }
+
+    let entry = usesByVar.get(idx);
+
+    if (entry === undefined) {
+      entry = { real: [], closureRead: false, otherKind: false };
+      usesByVar.set(idx, entry);
+    }
+
+    const ctx = defCtxByLocation.get(usage.location);
+
+    if (ctx === undefined) {
+      entry.closureRead = true;
+      continue;
+    }
+
+    const greatGrandparent = ctx.ancestors.length >= 3 ? (ctx.ancestors[ctx.ancestors.length - 3] ?? null) : null;
+    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, varInitKind.get(idx), greatGrandparent);
+
+    if (kind === 'real' || kind === 'escape') {
+      entry.real.push(ctx);
+    } else {
+      entry.otherKind = true;
+    }
+  }
+
+  const seenVar = new Set<number>();
+
+  for (let defId = 0; defId < defs.length; defId += 1) {
+    const meta = defs[defId];
+
+    if (!meta || seenVar.has(meta.varIndex)) {
+      continue;
+    }
+
+    seenVar.add(meta.varIndex);
+
+    // The variable must have exactly one def — a single `const` declaration with an
+    // initializer (no reassignment anywhere).
+    let defCount = 0;
+    let declMeta: DefMeta | null = null;
+
+    for (const def of defs) {
+      if (def === undefined || def.varIndex !== meta.varIndex) {
+        continue;
+      }
+
+      defCount += 1;
+
+      if (def.writeKind === 'declaration' && def.hasInit !== false) {
+        declMeta = def;
+      }
+    }
+
+    if (defCount !== 1 || declMeta === null) {
+      continue;
+    }
+
+    if ((input.skipLocations as ReadonlySet<unknown>).has(declMeta.location) || input.skipNames?.has(meta.name) === true) {
+      continue;
+    }
+
+    const entry = usesByVar.get(meta.varIndex);
+
+    if (entry === undefined || entry.closureRead || entry.otherKind || entry.real.length !== 1) {
+      continue;
+    }
+
+    const useCtx = entry.real[0];
+
+    if (useCtx === undefined || useCtx.node.start <= declMeta.location) {
+      continue;
+    }
+
+    const declCtx = defCtxByLocation.get(declMeta.location);
+
+    if (declCtx === undefined || enclosingDeclarationKind(declCtx) !== 'const' || declarationHasTypeAnnotation(declCtx)) {
+      continue;
+    }
+
+    // Simple binding only (`const x = …`). Destructuring (`const { a } = obj`) accesses
+    // `obj.a` and carries the same getter / receiver-mutation sensitivity as a member
+    // read — out of this increment.
+    if (declCtx.parent === null || declCtx.parent.type !== 'VariableDeclarator' || (declCtx.parent as { id: Node }).id !== declCtx.node) {
+      continue;
+    }
+
+    const rhs = resolveDeclarationInit(declCtx);
+
+    if (rhs === null || !isInlinablePureRhs(rhs)) {
+      continue;
+    }
+
+    const names = collectRhsIdentifierNames(unwrapValueWrappers(rhs));
+
+    if (hasReassignmentOfNames(bodyNodes, names)) {
+      continue;
+    }
+
+    findings.push(buildRedundantBindingFinding(meta.name, declMeta.location, filePath, lineOffsets));
+  }
+};
+
 // FP-A: a dead reassignment storing an empty value (`x = null` / `x = undefined` /
 // `x = void …`) is a reference-release / lifetime-management idiom (CLAUDE.md K
 // "자원 핸들 lifetime"). Whether the released reference is observed externally (e.g. a
@@ -1649,6 +1906,21 @@ const collectWasteFindingsForFunction = (
       buildWasteFinding(meta.name, meta.location, overwrittenDefIds[defId] === true, meta.writeKind, filePath, lineOffsets),
     );
   }
+
+  // Phase 2: redundant single-use bindings (separate from the dead-store loop above —
+  // these bindings ARE read, so reaching-defs marks them used).
+  collectRedundantBindingFindings({
+    bodyNodes: functionBodyNodes,
+    defs,
+    defCtxByLocation,
+    syntacticReads,
+    localIndexByName,
+    varInitKind,
+    skipLocations: parameterLocations,
+    filePath,
+    lineOffsets,
+    findings,
+  });
 };
 
 // ── Module-scope analysis (CLAUDE.md: "모든 scope" = module + function + block) ──
@@ -2085,6 +2357,21 @@ const collectWasteFindingsForModule = (
       buildWasteFinding(meta.name, meta.location, overwrittenDefIds[defId] === true, meta.writeKind, filePath, lineOffsets),
     );
   }
+
+  // Phase 2: module-scope redundant single-use bindings (CLAUDE.md "모든 scope").
+  collectRedundantBindingFindings({
+    bodyNodes: programBody,
+    defs,
+    defCtxByLocation,
+    syntacticReads,
+    localIndexByName,
+    varInitKind,
+    skipLocations: new Set<number>([...exportExemption.locations, ...namespaceMemberLocations]),
+    skipNames: exportExemption.names,
+    filePath,
+    lineOffsets,
+    findings,
+  });
 };
 
 export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {

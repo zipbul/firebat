@@ -34,6 +34,7 @@ export type FirebatCatalogCode =
   // waste (2)
   | 'WASTE_DEAD_STORE'
   | 'WASTE_DEAD_STORE_OVERWRITE'
+  | 'WASTE_REDUNDANT_BINDING'
   // barrel (7)
   | 'BARREL_EXPORT_STAR'
   | 'BARREL_DEEP_IMPORT'
@@ -132,7 +133,7 @@ export type FirebatCatalogCode =
 
 export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'node';
 
-export type WasteKind = 'dead-store' | 'dead-store-overwrite';
+export type WasteKind = 'dead-store' | 'dead-store-overwrite' | 'redundant-binding';
 
 export interface SourcePosition {
   readonly line: number;

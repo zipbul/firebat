@@ -173,6 +173,7 @@ type ToProjectRelative = (filePath: string) => string;
 const WASTE_KIND_TO_CODE: Readonly<Record<WasteKind, FirebatCatalogCode>> = {
   'dead-store': 'WASTE_DEAD_STORE',
   'dead-store-overwrite': 'WASTE_DEAD_STORE_OVERWRITE',
+  'redundant-binding': 'WASTE_REDUNDANT_BINDING',
 } as const;
 const BARREL_KIND_TO_CODE: Readonly<Record<BarrelFindingKind, FirebatCatalogCode>> = {
   'export-star': 'BARREL_EXPORT_STAR',

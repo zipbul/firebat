@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/redundant-arith-single-use-dead.ts",
+    "kind": "redundant-binding",
+    "label": "y",
+    "message": "Variable 'y' is a redundant binding; its initializer is used only once and can be inlined",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 4
+      },
+      "start": {
+        "column": 8,
+        "line": 4
+      }
+    }
+  }
+]

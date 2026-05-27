@@ -179,22 +179,27 @@ describe('golden/waste', () => {
   // FP-B1: `@ts-expect-error` 인접 선언 → directive load-bearing → KEEP
   runGolden(import.meta.dir, 'ts-directive-keep', program => detectWaste([...program]));
 
-  // ── Phase 2: 단일사용 inline 보강 (redundant-binding DEAD) ───────────────────
-  // 구현 예정 (Phase 2). fixture/expected 계약은 작성·삼자리뷰 완료, gate6 인프라 구현 후
-  // 아래 등록을 활성화한다. (RED 계약: redundant-arith/arith-member/member-index/alias/
-  // member-prop/nested-member/rhs-cast/condition-test/closure-pure/destructure/module-scope
-  // single-use-dead — kind 'redundant-binding'.)
-  // runGolden(import.meta.dir, 'redundant-arith-single-use-dead', program => detectWaste([...program]));
+  // ── Phase 2 (증분 1): 비-member·비-closure-impure 단일사용 inline → redundant-binding DEAD ──
+  // 단일사용 순수 산술 → 치환 보존 → DEAD
+  runGolden(import.meta.dir, 'redundant-arith-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 순수 식별자 alias → DEAD
+  runGolden(import.meta.dir, 'redundant-alias-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 `as` cast (cast가 값과 함께 이동, 타입검사 보존) → DEAD
+  runGolden(import.meta.dir, 'redundant-rhs-cast-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 boolean을 조건식에서 1회 사용 → DEAD
+  runGolden(import.meta.dir, 'redundant-condition-test-single-use-dead', program => detectWaste([...program]));
+  // closure 캡처지만 RHS 순수 + source(param) 재할당 없음 → 같은 값 → DEAD
+  runGolden(import.meta.dir, 'redundant-closure-captured-pure-dead', program => detectWaste([...program]));
+  // module scope 단일사용 (CLAUDE.md "모든 scope") → DEAD
+  runGolden(import.meta.dir, 'redundant-module-scope-single-use-dead', program => detectWaste([...program]));
+
+  // ── Phase 2 (증분 2 구현 예정): member 접근 / destructuring ────────────────────
+  // member RHS는 getter·receiver-mutation 가드(사이 call/write skip)가 필요 — 증분 2.
   // runGolden(import.meta.dir, 'redundant-arith-member-single-use-dead', program => detectWaste([...program]));
   // runGolden(import.meta.dir, 'redundant-member-index-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-alias-single-use-dead', program => detectWaste([...program]));
   // runGolden(import.meta.dir, 'redundant-member-prop-single-use-dead', program => detectWaste([...program]));
   // runGolden(import.meta.dir, 'redundant-nested-member-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-rhs-cast-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-condition-test-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-closure-captured-pure-dead', program => detectWaste([...program]));
   // runGolden(import.meta.dir, 'redundant-destructure-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-module-scope-single-use-dead', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)

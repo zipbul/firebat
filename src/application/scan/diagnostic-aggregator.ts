@@ -25,6 +25,14 @@ export const FIREBAT_CODE_CATALOG = {
       'If the same pattern repeats for multiple variables in this function, the function is accumulating unrelated setup steps — consider splitting it.',
     ],
   },
+  WASTE_REDUNDANT_BINDING: {
+    cause: "A const binding's initializer is read exactly once; the binding is needless indirection and the initializer can be inlined at its single use.",
+    think: [
+      'Read the declaration and its single use. If the initializer is evaluated anywhere else, or the variable is read more than once, this is a false positive — stop, no action needed.',
+      'Confirm nothing between the declaration and the use reassigns the source or mutates a receiver the initializer reads (snapshot-before-mutation), and the use is not inside a closure that runs more than once — if any holds, the binding is load-bearing, stop.',
+      'Inline the initializer at the use site and delete the declaration. Keep the binding if its name documents a non-obvious value and removing it would hurt readability more than the indirection costs.',
+    ],
+  },
 
   IND_THIN_WRAPPER: {
     cause:
