@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/redundant-unreachable-use-not-redundant-keep.ts",
+    "kind": "dead-store",
+    "label": "n",
+    "message": "Variable 'n' is assigned but never read",
+    "span": {
+      "end": {
+        "column": 9,
+        "line": 5
+      },
+      "start": {
+        "column": 8,
+        "line": 5
+      }
+    }
+  }
+]

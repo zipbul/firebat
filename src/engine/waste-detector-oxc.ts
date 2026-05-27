@@ -1652,6 +1652,8 @@ const buildRedundantBindingFinding = (name: string, location: number, filePath: 
 interface RedundantBindingInput {
   readonly bodyNodes: ReadonlyArray<Node>;
   readonly defs: ReadonlyArray<DefMeta | undefined>;
+  readonly usedDefs: { has: (defId: number) => boolean };
+  readonly closureCapturedVarIndexes: ReadonlySet<number>;
   readonly defCtxByLocation: ReadonlyMap<number, IdentifierContext>;
   readonly syntacticReads: ReadonlyArray<{ readonly name: string; readonly declScope?: string; readonly location: number }>;
   readonly localIndexByName: Map<string, number>;
@@ -1731,6 +1733,16 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     }
 
     if (defCount !== 1 || declMeta === null) {
+      continue;
+    }
+
+    // The single use must be reachable. When it is not (`const n = a.x; return 1;
+    // return n;`), reaching-defs leaves the declaration def unused and it is already
+    // reported as a dead-store — skip to avoid a double report on dead code. A
+    // closure-captured binding is also "unused" in straight-line flow but is genuinely
+    // used when the closure runs, so it must not be skipped. (defCount === 1 ⇒ this def
+    // is the declaration ⇒ `defId` is its index.)
+    if (!input.usedDefs.has(defId) && !input.closureCapturedVarIndexes.has(meta.varIndex)) {
       continue;
     }
 
@@ -2248,6 +2260,8 @@ const collectWasteFindingsForFunction = (
   collectRedundantBindingFindings({
     bodyNodes: functionBodyNodes,
     defs,
+    usedDefs,
+    closureCapturedVarIndexes,
     defCtxByLocation,
     syntacticReads,
     localIndexByName,
@@ -2698,6 +2712,8 @@ const collectWasteFindingsForModule = (
   collectRedundantBindingFindings({
     bodyNodes: programBody,
     defs,
+    usedDefs,
+    closureCapturedVarIndexes,
     defCtxByLocation,
     syntacticReads,
     localIndexByName,

@@ -230,6 +230,8 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-member-getter-observer-keep', program => detectWaste([...program]));
   // narrowing이 파생 불린 변수로 전파 (source가 비교식에 등장) → TS 결과 변경 → KEEP
   runGolden(import.meta.dir, 'redundant-connected-var-narrowing-keep', program => detectWaste([...program]));
+  // 단일 use가 도달 불가능(이미 dead-store) → redundant로 이중 보고 안 함 → dead-store만
+  runGolden(import.meta.dir, 'redundant-unreachable-use-not-redundant-keep', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)
