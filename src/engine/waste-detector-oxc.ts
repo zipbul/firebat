@@ -1310,6 +1310,10 @@ const MEMBER_GAP_EFFECT_TYPES = new Set<string>([
   'TaggedTemplateExpression',
   'SpreadElement',
   'MemberExpression',
+  // A plain identifier read between a member-read RHS and its use can OBSERVE the
+  // member's getter side-effect, so moving the getter evaluation past it changes the
+  // observable order. Conservatively treat any intervening identifier as a barrier.
+  'Identifier',
 ]);
 
 const hasSideEffectBetween = (bodyNodes: ReadonlyArray<Node>, lo: number, hi: number): boolean => {
@@ -1778,6 +1782,19 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
       }
 
       if (hasSideEffectBetween(bodyNodes, rhs.end, useCtx.node.start)) {
+        continue;
+      }
+
+      // this-callee: inlining a member read into call/tag position changes the call
+      // receiver (`m()` has this=undefined; `obj.m()` has this=obj). Skip when the use
+      // is the callee of a call or the tag of a tagged template.
+      const useParent = useCtx.parent;
+
+      if (
+        useParent !== null &&
+        ((useParent.type === 'CallExpression' && (useParent as { callee: Node }).callee === useCtx.node) ||
+          (useParent.type === 'TaggedTemplateExpression' && (useParent as { tag: Node }).tag === useCtx.node))
+      ) {
         continue;
       }
     }

@@ -224,6 +224,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-early-exit-narrowing-keep', program => detectWaste([...program]));
   // assertion 함수 호출이 source 좁힘 → TS 결과 변경 → KEEP
   runGolden(import.meta.dir, 'redundant-assertion-narrowing-keep', program => detectWaste([...program]));
+  // member alias가 호출 callee → this 바뀜 → KEEP
+  runGolden(import.meta.dir, 'redundant-member-callee-this-keep', program => detectWaste([...program]));
+  // member read 사이에 관찰자 문장 → getter side-effect 순서 변경 → KEEP
+  runGolden(import.meta.dir, 'redundant-member-getter-observer-keep', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)
