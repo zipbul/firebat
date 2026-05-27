@@ -220,6 +220,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-alias-destructure-reassign-keep', program => detectWaste([...program]));
   // 별칭 사용처가 do-while 본문, 가드가 source 좁힘 → TS narrowing 변경 → KEEP
   runGolden(import.meta.dir, 'redundant-narrowed-do-while-keep', program => detectWaste([...program]));
+  // early-exit 가드(형제 문장)가 source 좁힘 + 오버로드 → TS 결과 변경 → KEEP
+  runGolden(import.meta.dir, 'redundant-early-exit-narrowing-keep', program => detectWaste([...program]));
+  // assertion 함수 호출이 source 좁힘 → TS 결과 변경 → KEEP
+  runGolden(import.meta.dir, 'redundant-assertion-narrowing-keep', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)

@@ -1503,11 +1503,11 @@ const identifierAppearsIn = (node: Node | null | undefined, names: ReadonlySet<s
   return found;
 };
 
-// Whether the single use sits inside a control-flow branch whose guard narrows one of
-// the RHS source identifiers. TS narrows the source within the guarded branch, but the
-// separate binding keeps its declared (unnarrowed) type — so inlining the source would
-// change the TS type-check result (CLAUDE.md K "타입 narrowing"). Covers if/else,
-// ternary arms, `&&` / `||` right operand, while body, and switch cases.
+// Whether the single use sits inside a control-flow branch/loop body whose guard
+// narrows a source identifier — including a do-while/while body, where the guard test is
+// positionally *after* the use but flow-narrows it on the looping path. (Offset-based
+// `sourceGuardedBetween` cannot see a guard that follows the use, so this ancestor check
+// complements it.)
 const useInNarrowedBranch = (useCtx: IdentifierContext, names: ReadonlySet<string>): boolean => {
   const chain = [...useCtx.ancestors, useCtx.node];
 
@@ -1519,14 +1519,8 @@ const useInNarrowedBranch = (useCtx: IdentifierContext, names: ReadonlySet<strin
       continue;
     }
 
-    if (ancestor.type === 'IfStatement') {
+    if (ancestor.type === 'IfStatement' || ancestor.type === 'ConditionalExpression') {
       const node = ancestor as { test: Node; consequent: Node; alternate?: Node | null };
-
-      if ((child === node.consequent || child === node.alternate) && identifierAppearsIn(node.test, names)) {
-        return true;
-      }
-    } else if (ancestor.type === 'ConditionalExpression') {
-      const node = ancestor as { test: Node; consequent: Node; alternate: Node };
 
       if ((child === node.consequent || child === node.alternate) && identifierAppearsIn(node.test, names)) {
         return true;
@@ -1544,15 +1538,69 @@ const useInNarrowedBranch = (useCtx: IdentifierContext, names: ReadonlySet<strin
         return true;
       }
     } else if (ancestor.type === 'SwitchStatement') {
-      const node = ancestor as { discriminant: Node };
-
-      if (child.type === 'SwitchCase' && identifierAppearsIn(node.discriminant, names)) {
+      if (child.type === 'SwitchCase' && identifierAppearsIn((ancestor as { discriminant: Node }).discriminant, names)) {
         return true;
       }
     }
   }
 
   return false;
+};
+
+// Whether, between `lo` and `hi`, a source identifier is flow-narrowed for the use:
+// referenced in a narrowing guard (`if`/`while`/`do-while`/ternary/`&&`·`||`/`switch`
+// test) or passed as a call argument (a potential `asserts v is T` assertion). TS
+// narrows the source past the guard, but the separate binding keeps its declared type,
+// so inlining the source would change the TS type-check result (CLAUDE.md K "타입
+// narrowing"). Offset-based, so it covers both branch-nested uses and earlier-sibling
+// guards (early-`return`/`throw`, assertion calls) that ancestor inspection misses.
+const sourceGuardedBetween = (bodyNodes: ReadonlyArray<Node>, names: ReadonlySet<string>, lo: number, hi: number): boolean => {
+  let found = false;
+
+  for (const body of bodyNodes) {
+    walk(body, {
+      enter(node: Node) {
+        if (found) {
+          this.skip();
+
+          return;
+        }
+
+        let test: Node | null = null;
+
+        if (
+          node.type === 'IfStatement' ||
+          node.type === 'WhileStatement' ||
+          node.type === 'DoWhileStatement' ||
+          node.type === 'ConditionalExpression'
+        ) {
+          test = (node as { test: Node }).test;
+        } else if (node.type === 'LogicalExpression') {
+          test = (node as { left: Node }).left;
+        } else if (node.type === 'SwitchStatement') {
+          test = (node as { discriminant: Node }).discriminant;
+        }
+
+        if (test !== null && test.start > lo && test.start < hi && identifierAppearsIn(test, names)) {
+          found = true;
+
+          return;
+        }
+
+        if (node.type === 'CallExpression') {
+          for (const arg of (node as { arguments: ReadonlyArray<Node> }).arguments) {
+            if (arg.type === 'Identifier' && names.has((arg as { name: string }).name) && arg.start > lo && arg.start < hi) {
+              found = true;
+
+              return;
+            }
+          }
+        }
+      },
+    });
+  }
+
+  return found;
 };
 
 const buildRedundantBindingFinding = (name: string, location: number, filePath: string, lineOffsets: number[]): WasteFinding => {
@@ -1713,9 +1761,10 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
       continue;
     }
 
-    // TS narrowing: the use sits in a branch that narrows a source identifier, which the
-    // separate binding does not carry — inlining would change the type-check result.
-    if (useInNarrowedBranch(useCtx, names)) {
+    // TS narrowing: a source identifier is flow-narrowed (guard or assertion) between the
+    // declaration and the use, which the separate binding does not carry — inlining would
+    // change the type-check result.
+    if (sourceGuardedBetween(bodyNodes, names, declMeta.location, useCtx.node.start) || useInNarrowedBranch(useCtx, names)) {
       continue;
     }
 
