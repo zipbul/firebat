@@ -1250,19 +1250,37 @@ const REDUNDANT_BINDING_RHS_TYPES = new Set<string>([
   'LogicalExpression',
   'UnaryExpression',
   'ConditionalExpression',
+  'MemberExpression',
 ]);
 
-const isInlinablePureRhs = (rhs: Node): boolean => {
+// Whether the expression contains an optional chain (`a?.b`, `a?.[k]`, `a?.()`). The
+// short-circuit semantics make a member read branch-dependent — out of scope.
+const containsOptionalChain = (node: Node): boolean => {
+  let found = false;
+
+  walk(node, {
+    enter(child: Node) {
+      if (found) {
+        this.skip();
+
+        return;
+      }
+
+      if (child.type === 'ChainExpression' || (child as { optional?: boolean }).optional === true) {
+        found = true;
+      }
+    },
+  });
+
+  return found;
+};
+
+const isInlinableRhs = (rhs: Node): boolean => {
   const unwrapped = unwrapValueWrappers(rhs);
 
   // A bare literal is excluded — naming a literal constant is a readability choice,
-  // deferred to a later phase. Identifier aliases and arithmetic survive.
+  // deferred to a later phase. Identifier aliases, arithmetic, and member reads survive.
   if (!REDUNDANT_BINDING_RHS_TYPES.has(unwrapped.type)) {
-    return false;
-  }
-
-  // Member access carries getter / receiver-mutation sensitivity (handled separately).
-  if (containsMemberExpression(unwrapped)) {
     return false;
   }
 
@@ -1271,12 +1289,78 @@ const isInlinablePureRhs = (rhs: Node): boolean => {
     return false;
   }
 
-  // A closure / eval reference defers or hides evaluation.
-  return !containsClosureOrEvalReference(unwrapped);
+  // A closure / eval reference defers or hides evaluation; an optional chain is
+  // branch-dependent.
+  return !containsClosureOrEvalReference(unwrapped) && !containsOptionalChain(unwrapped);
+};
+
+// Whether any side-effect expression (call / new / await / yield / assignment / update)
+// has a source offset strictly between `lo` and `hi`. When the RHS reads a member, such
+// an intervening side-effect could mutate the receiver or fire a getter at a different
+// point — so a member-reading binding is only inlinable across a side-effect-free gap.
+const hasSideEffectBetween = (bodyNodes: ReadonlyArray<Node>, lo: number, hi: number): boolean => {
+  let found = false;
+
+  for (const body of bodyNodes) {
+    walk(body, {
+      enter(node: Node) {
+        if (found) {
+          this.skip();
+
+          return;
+        }
+
+        if (
+          (node.type === 'CallExpression' ||
+            node.type === 'NewExpression' ||
+            node.type === 'AwaitExpression' ||
+            node.type === 'YieldExpression' ||
+            node.type === 'AssignmentExpression' ||
+            node.type === 'UpdateExpression') &&
+          node.start > lo &&
+          node.start < hi
+        ) {
+          found = true;
+        }
+      },
+    });
+  }
+
+  return found;
 };
 
 const declarationHasTypeAnnotation = (ctx: IdentifierContext): boolean =>
   (ctx.node as { typeAnnotation?: unknown }).typeAnnotation != null;
+
+// A destructuring binding is a plain field/index extraction (`const { a } = obj`,
+// `const [first] = arr`) only when its path to the declarator contains no default
+// (`AssignmentPattern`), rest (`RestElement`), or computed key — each of which adds
+// evaluation that inlining `obj.<key>` would lose.
+const isPlainDestructurePath = (ctx: IdentifierContext): boolean => {
+  for (let i = ctx.ancestors.length - 1; i >= 0; i -= 1) {
+    const ancestor = ctx.ancestors[i];
+
+    if (ancestor === undefined) {
+      return false;
+    }
+
+    if (ancestor.type === 'VariableDeclarator') {
+      return true;
+    }
+
+    if (ancestor.type === 'ObjectPattern' || ancestor.type === 'ArrayPattern') {
+      continue;
+    }
+
+    if (ancestor.type === 'Property' && (ancestor as { computed?: boolean }).computed !== true) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return false;
+};
 
 // The `kind` of the enclosing `VariableDeclaration` (`const`/`let`/`var`), read from
 // the AST ancestor chain (reaching-defs does not propagate it for non-`using` kinds).
@@ -1468,22 +1552,42 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
       continue;
     }
 
-    // Simple binding only (`const x = …`). Destructuring (`const { a } = obj`) accesses
-    // `obj.a` and carries the same getter / receiver-mutation sensitivity as a member
-    // read — out of this increment.
-    if (declCtx.parent === null || declCtx.parent.type !== 'VariableDeclarator' || (declCtx.parent as { id: Node }).id !== declCtx.node) {
-      continue;
-    }
+    // A simple binding (`const x = …`) substitutes its initializer. A destructuring
+    // binding (`const { a } = obj`) substitutes `obj.a` — a member read of the declarator
+    // init — so it is treated like a member-reading RHS below.
+    const isSimpleBinding =
+      declCtx.parent !== null && declCtx.parent.type === 'VariableDeclarator' && (declCtx.parent as { id: Node }).id === declCtx.node;
 
     const rhs = resolveDeclarationInit(declCtx);
 
-    if (rhs === null || !isInlinablePureRhs(rhs)) {
+    if (rhs === null) {
       continue;
     }
 
-    const names = collectRhsIdentifierNames(unwrapValueWrappers(rhs));
+    // The substituted expression and whether it reads a member. For a destructuring
+    // binding the init is the receiver (`obj`), and the substitution is `obj.<key>` — a
+    // member read regardless of the init's own shape.
+    const substituted = unwrapValueWrappers(rhs);
+    const readsMember = !isSimpleBinding || containsMemberExpression(substituted);
+
+    if (!isInlinableRhs(rhs)) {
+      continue;
+    }
+
+    // Destructuring: only a plain field/index extraction (no default / rest / computed).
+    if (!isSimpleBinding && !isPlainDestructurePath(declCtx)) {
+      continue;
+    }
+
+    const names = collectRhsIdentifierNames(substituted);
 
     if (hasReassignmentOfNames(bodyNodes, names)) {
+      continue;
+    }
+
+    // A member read is only a stable substitute across a side-effect-free gap to its use
+    // (an intervening call / assignment could mutate the receiver or move a getter).
+    if (readsMember && hasSideEffectBetween(bodyNodes, declMeta.location, useCtx.node.start)) {
       continue;
     }
 

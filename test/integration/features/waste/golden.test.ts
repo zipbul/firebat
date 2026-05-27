@@ -193,13 +193,17 @@ describe('golden/waste', () => {
   // module scope 단일사용 (CLAUDE.md "모든 scope") → DEAD
   runGolden(import.meta.dir, 'redundant-module-scope-single-use-dead', program => detectWaste([...program]));
 
-  // ── Phase 2 (증분 2 구현 예정): member 접근 / destructuring ────────────────────
-  // member RHS는 getter·receiver-mutation 가드(사이 call/write skip)가 필요 — 증분 2.
-  // runGolden(import.meta.dir, 'redundant-arith-member-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-member-index-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-member-prop-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-nested-member-single-use-dead', program => detectWaste([...program]));
-  // runGolden(import.meta.dir, 'redundant-destructure-single-use-dead', program => detectWaste([...program]));
+  // ── Phase 2 (증분 2): member 접근 / destructuring (사이 call/write 없으면 inline) ──
+  // 단일사용 member 피연산자 산술 (getter도 같은 지점 1회 평가) → DEAD
+  runGolden(import.meta.dir, 'redundant-arith-member-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 computed 리터럴키 index read → DEAD
+  runGolden(import.meta.dir, 'redundant-member-index-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 `.prop` (사이 call/write 없음) → DEAD
+  runGolden(import.meta.dir, 'redundant-member-prop-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 중첩 member `a.b.c` → DEAD
+  runGolden(import.meta.dir, 'redundant-nested-member-single-use-dead', program => detectWaste([...program]));
+  // 단일사용 plain destructuring binding (`const { a } = obj` → `obj.a`) → DEAD
+  runGolden(import.meta.dir, 'redundant-destructure-single-use-dead', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)

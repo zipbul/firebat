@@ -1,0 +1,18 @@
+[
+  {
+    "filePath": "/virtual/redundant-member-index-single-use-dead.ts",
+    "kind": "redundant-binding",
+    "label": "second",
+    "message": "Variable 'second' is a redundant binding; its initializer is used only once and can be inlined",
+    "span": {
+      "end": {
+        "column": 14,
+        "line": 4
+      },
+      "start": {
+        "column": 8,
+        "line": 4
+      }
+    }
+  }
+]
