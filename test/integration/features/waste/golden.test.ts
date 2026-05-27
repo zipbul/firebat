@@ -21,7 +21,7 @@ describe('golden/waste', () => {
   // ── Positive: case 1 흐름 변형 ────────────────────────────────────────
   // switch fallthrough overwrite (case 1)
   runGolden(import.meta.dir, 'switch-fallthrough', program => detectWaste([...program]));
-  // scope-exit dead write — 변수는 use≥1이지만 마지막 write가 read 없이 종료 (case 1)
+  // finally의 `resource = null` 참조 해제 (FP-A) — lifetime 관리 → KEEP
   runGolden(import.meta.dir, 'finally-null-gc-hint', program => detectWaste([...program]));
 
   // ── Negative: boundary KEEP ───────────────────────────────────────────
@@ -164,4 +164,63 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'module-scope-export-binding-keep', program => detectWaste([...program]));
   // specifier-only `let foo = 1; foo = 2; export { foo };` — name-based 면제 → KEEP
   runGolden(import.meta.dir, 'module-scope-export-specifier-keep', program => detectWaste([...program]));
+
+  // ════════════════════════════════════════════════════════════════════════
+  // RED (미구현): Phase 1 FP 차단 + Phase 2 recall 보강. 구현 전이라 실패해야 정상.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── Phase 1: FP 차단 (현재 dead-store로 오탐 → KEEP 되어야 함) ──────────────
+  // FP-A: `x = undefined` 참조 해제 (값이 escape) → lifetime 관리 → KEEP
+  runGolden(import.meta.dir, 'ref-release-undefined-keep', program => detectWaste([...program]));
+  // FP-A: jotai memoryleak — `unsub()` 호출 후 `unsub = undefined` 해제 → KEEP
+  runGolden(import.meta.dir, 'ref-release-callee-keep', program => detectWaste([...program]));
+  // FP-A: `x = null` 참조 해제 (trpc dataLoader 패턴) → KEEP
+  runGolden(import.meta.dir, 'ref-release-null-keep', program => detectWaste([...program]));
+  // FP-B1: `@ts-expect-error` 인접 선언 → directive load-bearing → KEEP
+  runGolden(import.meta.dir, 'ts-directive-keep', program => detectWaste([...program]));
+
+  // ── Phase 2: 단일사용 inline 보강 (redundant-binding DEAD) ───────────────────
+  // 구현 예정 (Phase 2). fixture/expected 계약은 작성·삼자리뷰 완료, gate6 인프라 구현 후
+  // 아래 등록을 활성화한다. (RED 계약: redundant-arith/arith-member/member-index/alias/
+  // member-prop/nested-member/rhs-cast/condition-test/closure-pure/destructure/module-scope
+  // single-use-dead — kind 'redundant-binding'.)
+  // runGolden(import.meta.dir, 'redundant-arith-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-arith-member-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-member-index-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-alias-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-member-prop-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-nested-member-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-rhs-cast-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-condition-test-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-closure-captured-pure-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-destructure-single-use-dead', program => detectWaste([...program]));
+  // runGolden(import.meta.dir, 'redundant-module-scope-single-use-dead', program => detectWaste([...program]));
+
+  // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
+  // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)
+  runGolden(import.meta.dir, 'redundant-alias-intra-node-reassign-keep', program => detectWaste([...program]));
+  // index read와 use 사이 call (receiver mutation 가능) → KEEP
+  runGolden(import.meta.dir, 'redundant-member-index-call-between-keep', program => detectWaste([...program]));
+  // prop read와 use 사이 call → KEEP
+  runGolden(import.meta.dir, 'redundant-member-prop-call-between-keep', program => detectWaste([...program]));
+  // prop read 후 receiver의 프로퍼티 write → snapshot-before-mutation → KEEP
+  runGolden(import.meta.dir, 'redundant-member-prop-receiver-write-between-keep', program => detectWaste([...program]));
+  // closure 캡처 + RHS가 call → 호출당 재평가 → side-effect 횟수 변동 → KEEP (trpc httpLink)
+  runGolden(import.meta.dir, 'redundant-closure-captured-call-keep', program => detectWaste([...program]));
+  // closure 캡처 + source가 이후 재할당 → 호출 시점 새 값 → KEEP
+  runGolden(import.meta.dir, 'redundant-closure-captured-reassigned-source-keep', program => detectWaste([...program]));
+  // closure가 member read를 캡처 + receiver 프로퍼티 monkey-patch → KEEP (freezeAtom 패턴)
+  runGolden(import.meta.dir, 'redundant-closure-captured-member-keep', program => detectWaste([...program]));
+  // fresh allocation을 closure가 캡처 → reference identity 고정 → KEEP
+  runGolden(import.meta.dir, 'redundant-fresh-alloc-closure-identity-keep', program => detectWaste([...program]));
+  // computed 변수 키가 read와 use 사이 재할당 → 다른 슬롯 → KEEP
+  runGolden(import.meta.dir, 'redundant-computed-var-key-reassigned-keep', program => detectWaste([...program]));
+  // RHS가 await (impure, suspension) → Phase2 제외 → KEEP
+  runGolden(import.meta.dir, 'redundant-await-rhs-keep', program => detectWaste([...program]));
+
+  // ── Phase 2: scope 한계 (spec-W이나 설계상 제외 — NOT spec-K) ─────────────────
+  // call-RHS 단일사용은 spec상 W이나 흔한 idiom 폭주 방지 위해 제외 (사용자 결정) → KEEP
+  runGolden(import.meta.dir, 'redundant-call-result-scope-limit-keep', program => detectWaste([...program]));
+  // 다중사용 순수식은 spec상 W이나 식 중복이라 v1 제외 (multi-use=Phase2.1) → KEEP
+  runGolden(import.meta.dir, 'redundant-multi-use-scope-limit-keep', program => detectWaste([...program]));
 });

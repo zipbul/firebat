@@ -1234,6 +1234,66 @@ const buildWasteFinding = (
   };
 };
 
+// FP-A: a dead reassignment storing an empty value (`x = null` / `x = undefined` /
+// `x = void …`) is a reference-release / lifetime-management idiom (CLAUDE.md K
+// "자원 핸들 lifetime"). Whether the released reference is observed externally (e.g. a
+// leak detector holding the same object) cannot be decided statically, so clearing a
+// binding to an empty value is never reported as waste.
+const isReferenceReleaseStore = (meta: DefMeta, defCtx: IdentifierContext | undefined): boolean => {
+  if (meta.writeKind !== 'assignment' || defCtx === undefined) {
+    return false;
+  }
+
+  const rhs = findDefRhs(defCtx);
+
+  if (rhs === null) {
+    return false;
+  }
+
+  const unwrapped = unwrapValueWrappers(rhs);
+
+  if (unwrapped.type === 'Identifier') {
+    return (unwrapped as { name: string }).name === 'undefined';
+  }
+
+  if (unwrapped.type === 'Literal') {
+    return (unwrapped as { value: unknown }).value === null;
+  }
+
+  return unwrapped.type === 'UnaryExpression' && (unwrapped as { operator: string }).operator === 'void';
+};
+
+// FP-B1: a declaration immediately preceded by a `@ts-expect-error` / `@ts-ignore`
+// directive carries a load-bearing type-check assertion — removing the binding would
+// orphan the directive (a new "unused directive" error), changing the TS type-check
+// result (CLAUDE.md K "TS 타입검사 결과 보존").
+const TS_DIRECTIVE_RE = /@ts-(?:expect-error|ignore)\b/;
+
+const declarationPrecededByTsDirective = (location: number, sourceText: string, lineOffsets: number[]): boolean => {
+  const idLine = getLineColumn(lineOffsets, location).line; // 1-based
+
+  // Walk upward from the line directly above the declaration, skipping blank lines,
+  // and test the first non-blank line for the directive (TS binds it to the next code line).
+  for (let line = idLine - 1; line >= 1; line -= 1) {
+    const start = lineOffsets[line - 1];
+    const end = lineOffsets[line] ?? sourceText.length;
+
+    if (start === undefined) {
+      return false;
+    }
+
+    const text = sourceText.slice(start, end);
+
+    if (text.trim() === '') {
+      continue;
+    }
+
+    return TS_DIRECTIVE_RE.test(text);
+  }
+
+  return false;
+};
+
 const collectWasteFindingsForFunction = (
   node: Node,
   functionBodyNode: Node | ReadonlyArray<Node>,
@@ -1527,6 +1587,17 @@ const collectWasteFindingsForFunction = (
       if (rhs !== null && defRhsCarriesSideEffect(rhs)) {
         continue;
       }
+    }
+
+    // FP-A: `x = null/undefined/void …` reference-release reassignment — lifetime
+    // management, not waste (CLAUDE.md K "자원 핸들 lifetime").
+    if (isReferenceReleaseStore(meta, defCtx)) {
+      continue;
+    }
+
+    // FP-B1: declaration guarded by an adjacent `@ts-expect-error`/`@ts-ignore` directive.
+    if (declarationPrecededByTsDirective(meta.location, sourceText, lineOffsets)) {
+      continue;
     }
 
     if (compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)) {
@@ -1963,6 +2034,15 @@ const collectWasteFindingsForModule = (
       if (rhs !== null && defRhsCarriesSideEffect(rhs)) {
         continue;
       }
+    }
+
+    // FP-A / FP-B1 (same as function path).
+    if (isReferenceReleaseStore(meta, defCtx)) {
+      continue;
+    }
+
+    if (declarationPrecededByTsDirective(meta.location, sourceText, lineOffsets)) {
+      continue;
     }
 
     if (compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)) {
