@@ -214,6 +214,8 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-member-receiver-prop-write-loop-keep', program => detectWaste([...program]));
   // array destructuring → 이터레이터 소비 → KEEP
   runGolden(import.meta.dir, 'redundant-array-destructure-keep', program => detectWaste([...program]));
+  // 별칭 사용처가 source를 좁히는 분기 안 → TS narrowing 결과 변경 → KEEP
+  runGolden(import.meta.dir, 'redundant-narrowed-branch-alias-keep', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)

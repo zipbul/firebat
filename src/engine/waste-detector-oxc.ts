@@ -1456,6 +1456,83 @@ const hasReassignmentOfNames = (bodyNodes: ReadonlyArray<Node>, names: ReadonlyS
   return found;
 };
 
+// Whether `name` appears as an identifier anywhere in `node` (e.g. a guard test).
+const identifierAppearsIn = (node: Node | null | undefined, names: ReadonlySet<string>): boolean => {
+  if (node === null || node === undefined) {
+    return false;
+  }
+
+  let found = false;
+
+  walk(node, {
+    enter(child: Node) {
+      if (found) {
+        this.skip();
+
+        return;
+      }
+
+      if (child.type === 'Identifier' && names.has((child as { name: string }).name)) {
+        found = true;
+      }
+    },
+  });
+
+  return found;
+};
+
+// Whether the single use sits inside a control-flow branch whose guard narrows one of
+// the RHS source identifiers. TS narrows the source within the guarded branch, but the
+// separate binding keeps its declared (unnarrowed) type — so inlining the source would
+// change the TS type-check result (CLAUDE.md K "타입 narrowing"). Covers if/else,
+// ternary arms, `&&` / `||` right operand, while body, and switch cases.
+const useInNarrowedBranch = (useCtx: IdentifierContext, names: ReadonlySet<string>): boolean => {
+  const chain = [...useCtx.ancestors, useCtx.node];
+
+  for (let i = 0; i < chain.length - 1; i += 1) {
+    const ancestor = chain[i];
+    const child = chain[i + 1];
+
+    if (ancestor === undefined || child === undefined) {
+      continue;
+    }
+
+    if (ancestor.type === 'IfStatement') {
+      const node = ancestor as { test: Node; consequent: Node; alternate?: Node | null };
+
+      if ((child === node.consequent || child === node.alternate) && identifierAppearsIn(node.test, names)) {
+        return true;
+      }
+    } else if (ancestor.type === 'ConditionalExpression') {
+      const node = ancestor as { test: Node; consequent: Node; alternate: Node };
+
+      if ((child === node.consequent || child === node.alternate) && identifierAppearsIn(node.test, names)) {
+        return true;
+      }
+    } else if (ancestor.type === 'LogicalExpression') {
+      const node = ancestor as { left: Node; right: Node };
+
+      if (child === node.right && identifierAppearsIn(node.left, names)) {
+        return true;
+      }
+    } else if (ancestor.type === 'WhileStatement') {
+      const node = ancestor as { test: Node; body: Node };
+
+      if (child === node.body && identifierAppearsIn(node.test, names)) {
+        return true;
+      }
+    } else if (ancestor.type === 'SwitchStatement') {
+      const node = ancestor as { discriminant: Node };
+
+      if (child.type === 'SwitchCase' && identifierAppearsIn(node.discriminant, names)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 const buildRedundantBindingFinding = (name: string, location: number, filePath: string, lineOffsets: number[]): WasteFinding => {
   const loc = getLineColumn(lineOffsets, location);
 
@@ -1611,6 +1688,12 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     const names = collectRhsIdentifierNames(substituted);
 
     if (hasReassignmentOfNames(bodyNodes, names)) {
+      continue;
+    }
+
+    // TS narrowing: the use sits in a branch that narrows a source identifier, which the
+    // separate binding does not carry — inlining would change the type-check result.
+    if (useInNarrowedBranch(useCtx, names)) {
       continue;
     }
 
