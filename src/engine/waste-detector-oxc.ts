@@ -1294,10 +1294,24 @@ const isInlinableRhs = (rhs: Node): boolean => {
   return !containsClosureOrEvalReference(unwrapped) && !containsOptionalChain(unwrapped);
 };
 
-// Whether any side-effect expression (call / new / await / yield / assignment / update)
-// has a source offset strictly between `lo` and `hi`. When the RHS reads a member, such
-// an intervening side-effect could mutate the receiver or fire a getter at a different
-// point — so a member-reading binding is only inlinable across a side-effect-free gap.
+// Node kinds that, between the RHS and its single use, can change a member-reading
+// binding's observable result: a call / new / await / yield / assignment / update /
+// tagged-template / spread / `delete` may mutate the receiver or run a getter, and an
+// intervening *member read* (another getter / Proxy trap) reorders side-effects. `lo`
+// must be the RHS's end offset so the RHS's own member reads are not counted, and the
+// single use's own member sits at `hi` (excluded by the strict `< hi`).
+const MEMBER_GAP_EFFECT_TYPES = new Set<string>([
+  'CallExpression',
+  'NewExpression',
+  'AwaitExpression',
+  'YieldExpression',
+  'AssignmentExpression',
+  'UpdateExpression',
+  'TaggedTemplateExpression',
+  'SpreadElement',
+  'MemberExpression',
+]);
+
 const hasSideEffectBetween = (bodyNodes: ReadonlyArray<Node>, lo: number, hi: number): boolean => {
   let found = false;
 
@@ -1310,16 +1324,9 @@ const hasSideEffectBetween = (bodyNodes: ReadonlyArray<Node>, lo: number, hi: nu
           return;
         }
 
-        if (
-          (node.type === 'CallExpression' ||
-            node.type === 'NewExpression' ||
-            node.type === 'AwaitExpression' ||
-            node.type === 'YieldExpression' ||
-            node.type === 'AssignmentExpression' ||
-            node.type === 'UpdateExpression') &&
-          node.start > lo &&
-          node.start < hi
-        ) {
+        const isDelete = node.type === 'UnaryExpression' && (node as { operator: string }).operator === 'delete';
+
+        if ((MEMBER_GAP_EFFECT_TYPES.has(node.type) || isDelete) && node.start > lo && node.start < hi) {
           found = true;
         }
       },
@@ -1327,6 +1334,26 @@ const hasSideEffectBetween = (bodyNodes: ReadonlyArray<Node>, lo: number, hi: nu
   }
 
   return found;
+};
+
+// Whether the single use sits inside a loop or a nested function that does NOT contain
+// the declaration — in which case the member read is re-evaluated per iteration or
+// deferred to a later call, diverging from the binding's single eager evaluation.
+const LOOP_NODE_TYPES = new Set<string>(['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement']);
+
+const useInLoopOrForeignClosure = (useCtx: IdentifierContext, declLoc: number): boolean => {
+  for (const ancestor of useCtx.ancestors) {
+    if (!LOOP_NODE_TYPES.has(ancestor.type) && !isFunctionNode(ancestor)) {
+      continue;
+    }
+
+    // The declaration is outside this loop/function → the use is re-evaluated or deferred.
+    if (declLoc < ancestor.start || declLoc >= ancestor.end) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const declarationHasTypeAnnotation = (ctx: IdentifierContext): boolean =>
@@ -1348,7 +1375,9 @@ const isPlainDestructurePath = (ctx: IdentifierContext): boolean => {
       return true;
     }
 
-    if (ancestor.type === 'ObjectPattern' || ancestor.type === 'ArrayPattern') {
+    // Object destructuring only. Array destructuring (`const [x] = it`) consumes the
+    // iterator protocol at declaration time — not equivalent to an index read on inline.
+    if (ancestor.type === 'ObjectPattern') {
       continue;
     }
 
@@ -1585,10 +1614,18 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
       continue;
     }
 
-    // A member read is only a stable substitute across a side-effect-free gap to its use
-    // (an intervening call / assignment could mutate the receiver or move a getter).
-    if (readsMember && hasSideEffectBetween(bodyNodes, declMeta.location, useCtx.node.start)) {
-      continue;
+    // Member-reading bindings: the read must be a single eager evaluation that is a stable
+    // substitute at the use. Disqualify when the use is re-evaluated (loop) or deferred
+    // (closure not containing the decl), or when any effect intervenes between the RHS and
+    // the use (call/assignment/member-read/… could mutate the receiver or reorder getters).
+    if (readsMember) {
+      if (useInLoopOrForeignClosure(useCtx, declMeta.location)) {
+        continue;
+      }
+
+      if (hasSideEffectBetween(bodyNodes, rhs.end, useCtx.node.start)) {
+        continue;
+      }
     }
 
     findings.push(buildRedundantBindingFinding(meta.name, declMeta.location, filePath, lineOffsets));

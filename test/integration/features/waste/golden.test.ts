@@ -205,6 +205,16 @@ describe('golden/waste', () => {
   // 단일사용 plain destructuring binding (`const { a } = obj` → `obj.a`) → DEAD
   runGolden(import.meta.dir, 'redundant-destructure-single-use-dead', program => detectWaste([...program]));
 
+  // ── Phase 2 (증분 2): member 경로 FP 가드 (적대적 리뷰 재현 → KEEP) ───────────
+  // member read의 단일 use가 루프 안 → 반복 재평가 → KEEP
+  runGolden(import.meta.dir, 'redundant-member-use-in-loop-keep', program => detectWaste([...program]));
+  // member read를 closure가 캡처 + 이후 receiver 변형 → 스냅샷 소실 → KEEP
+  runGolden(import.meta.dir, 'redundant-member-use-in-closure-keep', program => detectWaste([...program]));
+  // 루프 내 receiver 프로퍼티 write → 재평가 시 다른 값 → KEEP
+  runGolden(import.meta.dir, 'redundant-member-receiver-prop-write-loop-keep', program => detectWaste([...program]));
+  // array destructuring → 이터레이터 소비 → KEEP
+  runGolden(import.meta.dir, 'redundant-array-destructure-keep', program => detectWaste([...program]));
+
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)
   runGolden(import.meta.dir, 'redundant-alias-intra-node-reassign-keep', program => detectWaste([...program]));
