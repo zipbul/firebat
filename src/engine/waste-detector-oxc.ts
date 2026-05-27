@@ -1439,14 +1439,36 @@ const hasReassignmentOfNames = (bodyNodes: ReadonlyArray<Node>, names: ReadonlyS
         if (node.type === 'AssignmentExpression') {
           const left = (node as { left: Node }).left;
 
-          if (left.type === 'Identifier' && names.has((left as { name: string }).name)) {
-            found = true;
+          // Identifier target (`name = …`) or a destructuring target (`({ name } = …)`,
+          // `[name] = …`) — for a pattern, any identifier inside it may be a write target.
+          if (left.type === 'Identifier') {
+            if (names.has((left as { name: string }).name)) {
+              found = true;
+            }
+          } else if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+            if (identifierAppearsIn(left, names)) {
+              found = true;
+            }
           }
         } else if (node.type === 'UpdateExpression') {
           const arg = (node as { argument: Node }).argument;
 
           if (arg.type === 'Identifier' && names.has((arg as { name: string }).name)) {
             found = true;
+          }
+        } else if (node.type === 'ForInStatement' || node.type === 'ForOfStatement') {
+          // `for (existing of …)` / `for ({ existing } of …)` — a non-declaration left
+          // reassigns an outer binding each iteration.
+          const left = (node as { left: Node }).left;
+
+          if (left.type === 'Identifier') {
+            if (names.has((left as { name: string }).name)) {
+              found = true;
+            }
+          } else if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+            if (identifierAppearsIn(left, names)) {
+              found = true;
+            }
           }
         }
       },
@@ -1515,7 +1537,7 @@ const useInNarrowedBranch = (useCtx: IdentifierContext, names: ReadonlySet<strin
       if (child === node.right && identifierAppearsIn(node.left, names)) {
         return true;
       }
-    } else if (ancestor.type === 'WhileStatement') {
+    } else if (ancestor.type === 'WhileStatement' || ancestor.type === 'DoWhileStatement') {
       const node = ancestor as { test: Node; body: Node };
 
       if (child === node.body && identifierAppearsIn(node.test, names)) {

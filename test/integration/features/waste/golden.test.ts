@@ -216,6 +216,10 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-array-destructure-keep', program => detectWaste([...program]));
   // 별칭 사용처가 source를 좁히는 분기 안 → TS narrowing 결과 변경 → KEEP
   runGolden(import.meta.dir, 'redundant-narrowed-branch-alias-keep', program => detectWaste([...program]));
+  // source가 destructuring 할당(`({cur}=src)`)으로 재할당 → KEEP
+  runGolden(import.meta.dir, 'redundant-alias-destructure-reassign-keep', program => detectWaste([...program]));
+  // 별칭 사용처가 do-while 본문, 가드가 source 좁힘 → TS narrowing 변경 → KEEP
+  runGolden(import.meta.dir, 'redundant-narrowed-do-while-keep', program => detectWaste([...program]));
 
   // ── Phase 2: KEEP 가드 (진짜 spec-K — 구현이 절대 flag하면 안 됨) ────────────
   // source가 decl~use 사이 재할당(같은 식) → 인라인 시 새 값 → KEEP (zustand:59)
