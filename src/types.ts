@@ -58,7 +58,7 @@ export type FirebatCatalogCode =
   // collapsible-if (2)
   | 'COLLAPSIBLE_IF'
   | 'COLLAPSIBLE_ELSE_IF'
-  // error-flow (15)
+  // error-flow (16)
   | 'EF_THROW_NON_ERROR'
   | 'EF_PROMISE_CONSTRUCTOR_HYGIENE'
   | 'EF_MISSING_ERROR_CAUSE'
@@ -74,6 +74,7 @@ export type FirebatCatalogCode =
   | 'EF_UNOBSERVED_PROMISE_VARIABLE'
   | 'EF_UNOBSERVED_PROMISE_ALWAYS_RETURN'
   | 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE'
+  | 'EF_EMPTY_CATCH'
   // unknown-proof (5)
   | 'UNKNOWN_UNNARROWED'
   | 'UNKNOWN_INFERRED'
@@ -161,7 +162,8 @@ export type ErrorFlowFindingKind =
   | 'misused-promises'
   | 'unobserved-variable'
   | 'always-return'
-  | 'no-callback-in-promise';
+  | 'no-callback-in-promise'
+  | 'empty-catch';
 
 export interface ErrorFlowFinding {
   readonly kind: ErrorFlowFindingKind;

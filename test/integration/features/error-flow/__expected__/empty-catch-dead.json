@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "empty catch swallows the error",
+    "file": "/virtual/empty-catch-dead.ts",
+    "kind": "empty-catch",
+    "span": {
+      "end": {
+        "column": 12,
+        "line": 4
+      },
+      "start": {
+        "column": 10,
+        "line": 4
+      }
+    }
+  }
+]

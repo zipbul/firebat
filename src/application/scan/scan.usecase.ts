@@ -218,6 +218,7 @@ const ERROR_FLOW_KIND_TO_CODE: Record<Exclude<ErrorFlowFindingKind, 'tool-unavai
   'unobserved-variable': 'EF_UNOBSERVED_PROMISE_VARIABLE',
   'always-return': 'EF_UNOBSERVED_PROMISE_ALWAYS_RETURN',
   'no-callback-in-promise': 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE',
+  'empty-catch': 'EF_EMPTY_CATCH',
 };
 const UNKNOWN_PROOF_KIND_TO_CODE: Record<Exclude<UnknownProofFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
   'unknown-type': 'UNKNOWN_UNNARROWED',

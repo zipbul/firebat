@@ -244,6 +244,14 @@ export const FIREBAT_CODE_CATALOG = {
       'If no Promise alternative exists, wrap the callback in `new Promise((resolve, reject) => { api(args, (err, result) => err ? reject(err) : resolve(result)) })` and await it.',
     ],
   },
+  EF_EMPTY_CATCH: {
+    cause: 'A catch block has no statements, so the caught error is silently swallowed — its observability, propagation and cause are all lost.',
+    think: [
+      'Read the catch block and the try body. Decide how the error should be handled: rethrow it (`throw err`), log it, or convert it into a recovery value.',
+      'If the failure is genuinely expected and ignorable, make the intent observable in code — bind the error and pass it to a no-op handler, or narrow the try to the single statement that may fail. A comment alone does not restore observability.',
+      'If the catch only exists to suppress a specific expected error, re-throw any other error so unexpected failures still propagate.',
+    ],
+  },
   EF_RETURN_AWAIT_IN_TRY: {
     cause:
       'A return statement inside a try block does not await a promise-returning expression, so the catch clause cannot intercept rejections.',

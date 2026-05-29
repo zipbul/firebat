@@ -186,8 +186,9 @@ describe('integration/error-flow', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report misused-promises when an async callback is passed to map', async () => {
-    // Arrange
+  it('should not report misused-promises when an async map result is returned (K: rejections propagate)', async () => {
+    // Arrange — map returns the promises, and the array is returned to the caller, so the
+    // rejections are observable. map is in the result-returning group: W only when discarded.
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/misused-map.ts';
     let source = [
@@ -210,7 +211,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should report misused-promises when an async callback is passed to filter', async () => {
@@ -530,8 +531,8 @@ describe('integration/error-flow', () => {
     expect(hits.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should report useless-catch when inner useless catch exists under an outer catch', async () => {
-    // Arrange
+  it('should not report useless-catch for nested bare rethrows (out of scope: redundancy)', async () => {
+    // Arrange — every catch rethrows the original error unchanged; redundancy is lint's domain.
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/nested-redundant.ts';
     let source = [
@@ -556,11 +557,11 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(0);
   });
 
-  it('should not report useless-catch (nested variant) when there is no outer catch', async () => {
-    // Arrange
+  it('should not report useless-catch for a rethrow inside try/finally (out of scope: redundancy)', async () => {
+    // Arrange — the inner catch rethrows the original error; the try/finally only adds cleanup.
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/nested-ok-no-outer.ts';
     let source = [
@@ -585,6 +586,6 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(0);
   });
 });

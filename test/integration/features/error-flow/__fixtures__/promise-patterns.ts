@@ -1,5 +1,5 @@
-// promise-patterns: floating-promises, misused-promises, prefer-catch,
-//   prefer-await-to-then, catch-or-return
+// promise-patterns: floating-promises, misused-promises (forEach), catch-or-return.
+//   prefer-await-to-then / prefer-catch are style (out of scope, not reported).
 
 declare function fetchData(): Promise<string>;
 

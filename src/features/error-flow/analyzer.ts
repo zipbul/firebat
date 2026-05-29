@@ -285,117 +285,77 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
   return result;
 };
 
-const containsThrowInExecutor = (body: Node): boolean => {
-  let found = false;
+// Names bound to the executor's settle callbacks (resolve, reject) — used to detect a
+// throw that runs AFTER the promise is already settled.
+const collectExecutorParamNames = (executor: Node): ReadonlySet<string> => {
+  const names = new Set<string>();
 
-  walkOxcTree(body, node => {
-    if (node.type === 'ThrowStatement') {
-      found = true;
+  if (executor.type !== 'ArrowFunctionExpression' && executor.type !== 'FunctionExpression') {
+    return names;
+  }
 
-      return false;
+  for (const param of executor.params) {
+    if (param.type === 'Identifier' && typeof param.name === 'string') {
+      names.add(param.name);
     }
+  }
 
-    // Don't cross function boundaries
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
-      return false;
-    }
-
-    return true;
-  });
-
-  return found;
+  return names;
 };
 
-const containsNonEmptyReturnInExecutor = (body: Node): boolean => {
-  let found = false;
-
-  walkOxcTree(body, node => {
-    if (node.type === 'ReturnStatement') {
-      const arg = node.argument;
-
-      // return; (no argument) is fine
-      if (arg !== null) {
-        found = true;
-
-        return false;
-      }
-    }
-
-    // Don't cross function boundaries
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
-      return false;
-    }
-
-    return true;
-  });
-
-  return found;
-};
-
-const callbackApiMethods = new Set(['addEventListener', 'on', 'once', 'subscribe', 'addListener']);
-
-const containsCallbackApiCall = (body: Node): boolean => {
-  let found = false;
-
-  walkOxcTree(body, node => {
-    if (node.type === 'CallExpression') {
-      const method = getMemberPropertyName(node.callee);
-
-      if (method !== null && callbackApiMethods.has(method)) {
-        found = true;
-
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  return found;
-};
-
-const isPromiseWrapCall = (expr: Node): boolean => {
-  if (expr.type !== 'CallExpression') {
+// A bare `throw` in a sync executor is converted to a rejection by the Promise
+// constructor (observable, propagated, cause preserved — K). Only a throw that runs AFTER
+// a settle call (resolve/reject) is swallowed, because the promise is already settled and
+// the constructor's reject becomes a no-op. Bounded to top-level sequential statements to
+// stay sound (no branch analysis → flag only a guaranteed-after-settle throw).
+const throwAfterSettleInExecutor = (body: Node, settleNames: ReadonlySet<string>): boolean => {
+  if (body.type !== 'BlockStatement') {
     return false;
   }
 
-  const callee = expr.callee;
+  let settled = false;
 
-  if (callee.type !== 'MemberExpression') {
+  for (const stmt of body.body) {
+    if (settled && stmt.type === 'ThrowStatement') {
+      return true;
+    }
+
+    if (
+      stmt.type === 'ExpressionStatement' &&
+      stmt.expression.type === 'CallExpression' &&
+      stmt.expression.callee.type === 'Identifier' &&
+      settleNames.has(stmt.expression.callee.name)
+    ) {
+      settled = true;
+    }
+  }
+
+  return false;
+};
+
+// misused-promises (result-returning group): the async-callback result is lost only when
+// the call's value is discarded — a bare expression statement, a `void` operand, or a
+// non-final element of a sequence expression. Anywhere else the promises flow onward (K).
+const isResultDiscarded = (call: Node, parent: Node | null): boolean => {
+  if (parent === null) {
     return false;
   }
 
-  const obj = callee.object;
-  const prop = callee.property;
-
-  return (
-    obj.type === 'Identifier' &&
-    obj.name === 'Promise' &&
-    prop.type === 'Identifier' &&
-    (prop.name === 'resolve' || prop.name === 'reject')
-  );
-};
-
-const containsPromiseWrapReturn = (body: Node): boolean => {
-  let found = false;
-
-  walkOxcTree(body, node => {
-    if (node.type === 'ReturnStatement') {
-      if (node.argument !== null && isPromiseWrapCall(node.argument)) {
-        found = true;
-
-        return false;
-      }
-    }
-
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
-      return false;
-    }
-
+  if (parent.type === 'ExpressionStatement') {
     return true;
-  });
+  }
 
-  return found;
+  if (parent.type === 'UnaryExpression' && parent.operator === 'void') {
+    return true;
+  }
+
+  if (parent.type === 'SequenceExpression') {
+    const exprs = parent.expressions;
+
+    return exprs.length > 0 && exprs[exprs.length - 1] !== call;
+  }
+
+  return false;
 };
 
 const nodeStyleCallbackMethods = new Set([
@@ -444,10 +404,6 @@ const containsNodeStyleCallback = (body: Node): boolean => {
 
   return found;
 };
-
-interface TryCatchEntry {
-  readonly hasCatch: boolean;
-}
 
 const containsIdentifierUse = (node: Node, name: string): boolean => {
   let found = false;
@@ -578,7 +534,6 @@ const collectCallVarPositions = (program: Node): number[] => {
 const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): CollectFindingsResult => {
   const findings: ErrorFlowFinding[] = [];
   const constructorNames: Map<ErrorFlowFinding, string> = new Map();
-  const tryCatchStack: TryCatchEntry[] = [];
   let functionTryCatchDepth = 0;
   let inTryBlockDepth = 0;
   let inAsyncFunction = false;
@@ -900,62 +855,32 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     });
   };
 
-  const isNestedUnderOuterCatch = (): boolean => {
-    if (tryCatchStack.length < 2) {
-      return false;
-    }
-
-    // Any outer try in this function that has a catch qualifies
-    return tryCatchStack.slice(0, -1).some(e => e.hasCatch);
-  };
-
-  const isUselessRethrow = (catchClause: Node): boolean => {
+  // empty-catch: a catch with no statements swallows the error entirely — observability,
+  // propagation and cause are all lost (W). A comment does not restore any of them, so it
+  // does not exempt the catch (notation conventions are out of scope per the concept def).
+  const reportEmptyCatchIfNeeded = (catchClause: Node): void => {
     if (catchClause.type !== 'CatchClause') {
-      return false;
-    }
-
-    const param = catchClause.param;
-    const body = catchClause.body;
-
-    if (param === null || param.type !== 'Identifier') {
-      return false;
-    }
-
-    const name = param.name;
-    const stmts = body.body;
-
-    if (stmts.length !== 1) {
-      return false;
-    }
-
-    const only = stmts[0];
-
-    if (only === undefined || only.type !== 'ThrowStatement') {
-      return false;
-    }
-
-    return isIdentifierName(only.argument, name);
-  };
-
-  const reportUselessCatchIfNeeded = (catchClause: Node): void => {
-    if (!isUselessRethrow(catchClause)) {
       return;
     }
 
-    const isNested = isNestedUnderOuterCatch();
+    const body = catchClause.body;
+
+    if (body.type !== 'BlockStatement' || body.body.length !== 0) {
+      return;
+    }
 
     pushFinding(findings, {
-      kind: 'useless-catch',
-      node: catchClause,
+      kind: 'empty-catch',
+      node: body,
       filePath,
       sourceText,
-      message: isNested ? 'nested catch is redundant under an outer catch' : 'catch rethrows without adding context',
-      evidence: getEvidenceLineAt(sourceText, catchClause.start),
-      recipes: ['RCP-01', 'RCP-02'],
+      message: 'empty catch swallows the error — observe, rethrow, or log it',
+      evidence: 'empty catch swallows the error',
+      recipes: [],
     });
   };
 
-  const visit = (node: Node): void => {
+  const visit = (node: Node, parent: Node | null): void => {
     // Function scope boundary: isolate try-catch depth for EF-06 return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
     if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
@@ -971,7 +896,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       pushUnobservedScope();
 
-      forEachChildNode(node, visit);
+      forEachChildNode(node, child => visit(child, node));
 
       popUnobservedScope();
 
@@ -1005,22 +930,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      // Nested try/catch: flag try/catch inside another try block that has catch (SonarQube S1141)
-      // Allowed: inner try/catch inside outer try/finally (no catch) — cleanup pattern
-      if (hasCatch && inTryBlockWithCatchDepth > 0) {
-        pushFinding(findings, {
-          kind: 'useless-catch',
-          node,
-          filePath,
-          sourceText,
-          message: 'nested try/catch inside try block increases error flow complexity',
-          evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: [],
-        });
-      }
-
-      tryCatchStack.push({ hasCatch });
-
       if (hasCatch || hasFinalizer) {
         functionTryCatchDepth++;
       }
@@ -1032,7 +941,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         inTryBlockWithCatchDepth++;
       }
 
-      visit(node.block);
+      visit(node.block, node);
 
       if (hasCatch) {
         inTryBlockWithCatchDepth--;
@@ -1041,18 +950,16 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       inTryBlockDepth--;
 
       if (node.handler !== null) {
-        visit(node.handler as Node);
+        visit(node.handler as Node, node);
       }
 
       if (node.finalizer !== null) {
-        visit(node.finalizer as Node);
+        visit(node.finalizer as Node, node);
       }
 
       if (hasCatch || hasFinalizer) {
         functionTryCatchDepth--;
       }
-
-      tryCatchStack.pop();
 
       return;
     }
@@ -1167,37 +1074,20 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             });
           }
 
-          // sync executor throw: throw in executor does NOT reject, it throws synchronously
+          // sync executor throw AFTER settle: once resolve/reject has run the promise is
+          // settled, so a later throw is swallowed (the constructor's reject is a no-op).
+          // A bare throw with no prior settle is correctly converted to a rejection (K).
           if (!isAsync) {
             const executorBody = executor.body;
 
             if (executorBody !== null && executorBody.type === 'BlockStatement') {
-              if (containsThrowInExecutor(executorBody)) {
+              if (throwAfterSettleInExecutor(executorBody, collectExecutorParamNames(executor))) {
                 pushFinding(findings, {
                   kind: 'promise-constructor-hygiene',
                   node,
                   filePath,
                   sourceText,
-                  message: 'throw in sync Promise executor does not reject — use reject() instead',
-                  evidence: getEvidenceLineAt(sourceText, node.start),
-                  recipes: [],
-                });
-              }
-            }
-          }
-
-          // executor return value: return in executor is ignored
-          if (!isAsync) {
-            const executorBody = executor.body;
-
-            if (executorBody !== null && executorBody.type === 'BlockStatement') {
-              if (containsNonEmptyReturnInExecutor(executorBody)) {
-                pushFinding(findings, {
-                  kind: 'promise-constructor-hygiene',
-                  node,
-                  filePath,
-                  sourceText,
-                  message: 'return value in Promise executor is ignored — use resolve() instead',
+                  message: 'throw after settling a Promise executor is swallowed — throw before resolve/reject',
                   evidence: getEvidenceLineAt(sourceText, node.start),
                   recipes: [],
                 });
@@ -1221,30 +1111,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           }
         }
 
-        // unnecessary new Promise in async function (GAP-14)
-        // Skip if already flagged as async executor — avoid duplicate on same node
-        const isAsyncExecutor = isInlineExecutor && executor.async === true;
-
-        if (inAsyncFunction && !isAsyncExecutor) {
-          const hasCallbackWrapping = isInlineExecutor && executor.body !== null && containsCallbackApiCall(executor.body);
-
-          if (!hasCallbackWrapping) {
-            pushFinding(findings, {
-              kind: 'promise-constructor-hygiene',
-              node,
-              filePath,
-              sourceText,
-              message: 'unnecessary new Promise in async function — use await instead',
-              evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
-            });
-          }
-        }
       }
     }
 
     if (node.type === 'CatchClause') {
-      reportUselessCatchIfNeeded(node);
+      reportEmptyCatchIfNeeded(node);
       reportCatchTransformHygieneIfNeeded(node);
       // Keep visiting for other rules
     }
@@ -1327,102 +1198,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      // EF-07 prefer-catch: .then(success, failure)
-      if (method === 'then') {
-        const second = node.arguments[1];
-
-        if (second !== undefined) {
-          pushFinding(findings, {
-            kind: 'prefer-catch',
-            node,
-            filePath,
-            sourceText,
-            message: 'prefer .catch over then second argument',
-            evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: ['RCP-07'],
-          });
-        }
-      }
-
-      // EF-07 prefer-await-to-then: long then chains with block callbacks
-      if (method === 'then') {
-        const inner = callee.type === 'MemberExpression' ? callee.object : null;
-        const hasNestedThen = inner !== null && inner.type === 'CallExpression' && getMemberPropertyName(inner.callee) === 'then';
-
-        if (hasNestedThen) {
-          const anyBlockCb = node.arguments.some(
-            arg => arg.type === 'ArrowFunctionExpression' && arg.body.type === 'BlockStatement',
-          );
-
-          if (anyBlockCb) {
-            pushFinding(findings, {
-              kind: 'prefer-await-to-then',
-              node,
-              filePath,
-              sourceText,
-              message: 'prefer await over long then chains for control flow',
-              evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: ['RCP-08'],
-            });
-          }
-        }
-      }
-
-      // no-return-wrap: .then(() => Promise.resolve(x)) — unnecessary wrapping
-      if (method === 'then') {
-        for (const arg of node.arguments) {
-          if (arg.type !== 'ArrowFunctionExpression' && arg.type !== 'FunctionExpression') {
-            continue;
-          }
-
-          const body = arg.body;
-
-          if (body !== null && body.type !== 'BlockStatement' && isPromiseWrapCall(body)) {
-            pushFinding(findings, {
-              kind: 'no-return-wrap',
-              node,
-              filePath,
-              sourceText,
-              message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
-              evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
-            });
-          }
-
-          if (body !== null && body.type === 'BlockStatement' && containsPromiseWrapReturn(body)) {
-            pushFinding(findings, {
-              kind: 'no-return-wrap',
-              node,
-              filePath,
-              sourceText,
-              message: 'unnecessary Promise.resolve/reject wrapping in then callback — return value directly',
-              evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
-            });
-          }
-        }
-      }
-
-      // always-return: then callback with block body that has no return
-      if (method === 'then') {
-        const first = node.arguments[0];
-
-        if (first !== undefined && (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression')) {
-          const body = first.body;
-
-          if (body !== null && body.type === 'BlockStatement' && !containsReturnStatement(body)) {
-            pushFinding(findings, {
-              kind: 'always-return',
-              node,
-              filePath,
-              sourceText,
-              message: 'then callback does not return a value — breaks Promise chain',
-              evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
-            });
-          }
-        }
-      }
+      // EF-07 prefer-catch (`.then(onOk, onErr)`): out of scope. When onErr observes the
+      // upstream rejection, the reason reaches a handler (observability/propagation/cause
+      // preserved) — preferring `.catch` over a second argument is a pure notation
+      // convention (lint domain), like its disabled PREFER siblings (prefer-await-to-then,
+      // no-return-wrap). The one genuine error-flow case — onOk throws and the chain result
+      // is discarded with no downstream catch — belongs to catch-or-return (backlog: precise
+      // its two-argument suppression), not to a blanket `.then(_, _)` style rule.
 
       // no-callback-in-promise: callback-style API inside then/catch/finally callback
       if (method === 'then' || method === 'catch') {
@@ -1445,27 +1227,31 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      // EF-08 misused-promises: async callback passed to forEach/map/filter/etc.
-      if (
-        method !== null &&
-        (method === 'forEach' ||
-          method === 'map' ||
-          method === 'filter' ||
-          method === 'some' ||
-          method === 'every' ||
-          method === 'find' ||
-          method === 'findIndex' ||
-          method === 'reduce' ||
-          method === 'reduceRight' ||
-          method === 'sort')
-      ) {
+      // EF-08 misused-promises: async callback passed to a sync-array iteration method.
+      //  - always-W group: forEach ignores the result; predicate/comparator methods coerce
+      //    the returned (always-truthy) Promise, so the async intent is lost regardless of
+      //    where the call's value goes.
+      //  - result-W group (map/flatMap/reduce/reduceRight): the promises are the return
+      //    value, so the rejections are observable when that value flows somewhere; only a
+      //    discarded result loses them.
+      const alwaysMisused =
+        method === 'forEach' ||
+        method === 'filter' ||
+        method === 'some' ||
+        method === 'every' ||
+        method === 'find' ||
+        method === 'findIndex' ||
+        method === 'sort';
+      const resultMisused = method === 'map' || method === 'flatMap' || method === 'reduce' || method === 'reduceRight';
+
+      if (alwaysMisused || resultMisused) {
         const first = node.arguments[0];
         const isAsyncFn =
           first !== undefined &&
           (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
           first.async === true;
 
-        if (isAsyncFn) {
+        if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {
           pushFinding(findings, {
             kind: 'misused-promises',
             node,
@@ -1517,13 +1303,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // Fall back to generic traversal
-    forEachChildNode(node, visit);
+    forEachChildNode(node, child => visit(child, node.type === 'ParenthesizedExpression' ? parent : node));
   };
 
   // Single-pass traversal: all rules handled in visit().
   // Top-level program body gets an unobserved-variable scope.
   pushUnobservedScope();
-  visit(program);
+  visit(program, null);
   popUnobservedScope();
 
   return { findings, constructorNames };

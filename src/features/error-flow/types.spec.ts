@@ -69,9 +69,10 @@ describe('features/error-flow/types — structural shape', () => {
       'unobserved-variable',
       'always-return',
       'no-callback-in-promise',
+      'empty-catch',
     ] satisfies import('./types').ErrorFlowFindingKind[];
 
-    expect(kinds.length).toBe(16);
+    expect(kinds.length).toBe(17);
     expect(kinds[0]).toBe('tool-unavailable');
   });
 });

@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "forEach callback is async",
+    "file": "/virtual/misused-foreach-dead.ts",
+    "kind": "misused-promises",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 4
+      },
+      "start": {
+        "column": 2,
+        "line": 2
+      }
+    }
+  }
+]

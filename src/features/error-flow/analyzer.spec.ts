@@ -111,8 +111,8 @@ describe('error-flow/analyzer', () => {
     expect(sample.recipes).toBeUndefined();
   });
 
-  it('should report useless-catch when catch rethrows the same error', async () => {
-    // Arrange
+  it('should not report useless-catch for a bare rethrow (out of scope: redundancy)', async () => {
+    // Arrange — a rethrow preserves observability/propagation/cause; redundancy is lint's domain.
     const filePath = '/virtual/src/features/useless.ts';
     const source = ['export function f() {', '  try {', '    return 1;', '  } catch (e) {', '    throw e;', '  }', '}'].join(
       '\n',
@@ -122,10 +122,10 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
-  it('should report useless-catch when catch rethrows the same error with a different name', async () => {
+  it('should not report useless-catch for a bare rethrow under a different name (out of scope: redundancy)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/useless-rename.ts';
     const source = ['export function f() {', '  try {', '    return 1;', '  } catch (err) {', '    throw err;', '  }', '}'].join(
@@ -136,7 +136,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should not report useless-catch when catch logs and rethrows', async () => {
@@ -454,8 +454,9 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report prefer-catch when then handles rejection with a second argument', async () => {
-    // Arrange
+  it('should not report prefer-catch for a second-argument rejection handler (out of scope: style)', async () => {
+    // Arrange — onErr observes the upstream rejection, so the reason reaches a handler;
+    // preferring `.catch` over a second argument is a pure notation convention (lint domain).
     const filePath = '/virtual/src/features/prefer-catch.ts';
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
@@ -463,11 +464,12 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
-  it('should report prefer-catch even when a catch is also chained', async () => {
-    // Arrange
+  it('should not report prefer-catch when a downstream catch also exists (rejection fully observed)', async () => {
+    // Arrange — both the upstream rejection (onErr) and any onOk throw (downstream .catch) are
+    // observed, so nothing is lost; flagging this was a clear over-report.
     const filePath = '/virtual/src/features/prefer-catch-and-catch.ts';
     const source = [
       'export function f() {',
@@ -481,7 +483,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-catch');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should not report prefer-catch when catch is used', async () => {
@@ -496,8 +498,9 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report prefer-await-to-then when then-chains are long and used for control flow', async () => {
-    // Arrange
+  it('should not report prefer-await-to-then for long control-flow chains (out of scope: style)', async () => {
+    // Arrange — await-vs-then is a style preference; the chain is returned, so its rejection
+    // propagates to the caller.
     const filePath = '/virtual/src/features/prefer-await.ts';
     const source = [
       'export function f() {',
@@ -516,10 +519,10 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
-  it('should report prefer-await-to-then when then-chain contains side effects', async () => {
+  it('should not report prefer-await-to-then for a chain with side effects (out of scope: style)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/prefer-await-side-effect.ts';
     const source = [
@@ -537,7 +540,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should not report prefer-await-to-then when then is a short value mapping', async () => {
@@ -639,14 +642,14 @@ describe('error-flow/analyzer', () => {
   });
 
   it('should not over-report unrelated kinds when only one rule is violated', async () => {
-    // Arrange
+    // Arrange — a single floating promise (rejection unobserved); nothing else is violated.
     const filePath = '/virtual/src/features/single-violation.ts';
-    const source = ['export function f() {', '  Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
+    const source = ['export function f() {', '  Promise.resolve(1);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
 
     // Assert
-    expect(kinds(analysis)).toContain('prefer-catch');
+    expect(kinds(analysis)).toContain('floating-promises');
     expect(kinds(analysis)).not.toContain('useless-catch');
     expect(kinds(analysis)).not.toContain('unsafe-finally');
   });
@@ -691,7 +694,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report useless-catch when an inner useless catch exists under an outer catch', async () => {
+  it('should not report useless-catch for nested bare rethrows (out of scope: redundancy)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-redundant.ts';
     const source = [
@@ -711,13 +714,11 @@ describe('error-flow/analyzer', () => {
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
-    // Assert — analyzer flags every useless rethrow site (the throw inside `try`,
-    // the inner `catch (e) { throw e }`, and the outer `catch (outer) { throw outer }`).
-    expect(hits.length).toBe(3);
-    expect(hits.map(h => h.span.start.line).sort((a, b) => a - b)).toEqual([3, 5, 8]);
+    // Assert — every site rethrows the original error unchanged (observability/cause preserved).
+    expect(hits.length).toBe(0);
   });
 
-  it('should not report useless-catch (nested variant) when there is no outer catch', async () => {
+  it('should not report useless-catch for a single bare rethrow (out of scope: redundancy)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/nested-no-outer.ts';
     const source = [
@@ -734,13 +735,13 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
-  // --- useless-catch: nested try/catch ---
+  // --- useless-catch: nested try/catch (complexity is out of scope) ---
 
-  it('should report useless-catch for nested try/catch inside try block', async () => {
-    // Arrange
+  it('should not report useless-catch for nested try/catch complexity (out of scope: redundancy)', async () => {
+    // Arrange — nested try/catch is a complexity/redundancy smell, not an error-flow loss.
     const filePath = '/virtual/src/features/nested-try.ts';
     const source = [
       'export function f() {',
@@ -760,7 +761,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'useless-catch');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', async () => {
@@ -1652,8 +1653,9 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report promise-constructor-hygiene for throw in sync executor', async () => {
-    // Arrange
+  it('should not report promise-constructor-hygiene for a bare throw before settling', async () => {
+    // Arrange — a throw before resolve/reject is converted to a rejection by the Promise
+    // constructor (observable, propagated, cause preserved), so it is K.
     const filePath = '/virtual/src/features/executor-throw.ts';
     const source = [
       'export const p = new Promise((resolve) => {',
@@ -1663,20 +1665,39 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert
-    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+    expect(hits.length).toBe(0);
   });
 
-  it('should report promise-constructor-hygiene for return value in executor', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/executor-return.ts';
-    const source = ['export const p = new Promise((resolve) => {', '  return 42;', '});'].join('\n');
+  it('should report promise-constructor-hygiene for a throw after settling', async () => {
+    // Arrange — once resolve has run the promise is settled, so the later throw is swallowed.
+    const filePath = '/virtual/src/features/executor-throw-after-settle.ts';
+    const source = [
+      'export const p = new Promise((resolve) => {',
+      '  resolve(42);',
+      '  throw new Error("swallowed");',
+      '});',
+    ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
 
     // Assert
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+  });
+
+  it('should not report promise-constructor-hygiene for a return inside a sync executor (out of scope)', async () => {
+    // Arrange — a `return` in the executor is resolve/value hygiene (or an early-exit idiom
+    // like `return reject(err)` where the rejection is still delivered), not error propagation.
+    const filePath = '/virtual/src/features/executor-return.ts';
+    const source = ['export const p = new Promise((resolve) => {', '  return 42;', '});'].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
+
+    // Assert
+    expect(hits.length).toBe(0);
   });
 
   it('should report promise-constructor-hygiene for swapped params (reject, resolve)', async () => {
@@ -1690,17 +1711,19 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).toContain('promise-constructor-hygiene');
   });
 
-  it('should report promise-constructor-hygiene for unnecessary new Promise in async function', async () => {
-    // Arrange
+  it('should not report promise-constructor-hygiene for new Promise in an async function (out of scope: style)', async () => {
+    // Arrange — "prefer await over new Promise" is a style preference; the promise here is
+    // returned, so its rejection is fully observable/propagated.
     const filePath = '/virtual/src/features/unnecessary-promise.ts';
     const source = ['export async function f() {', '  return new Promise((resolve) => {', '    resolve(42);', '  });', '}'].join(
       '\n',
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert
-    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
+    expect(hits.length).toBe(0);
   });
 
   it('should not report unnecessary new Promise when wrapping callback API', async () => {
@@ -1723,8 +1746,8 @@ describe('error-flow/analyzer', () => {
 
   // --- no-return-wrap ---
 
-  it('should report no-return-wrap for Promise.resolve in then callback expression body', async () => {
-    // Arrange
+  it('should not report no-return-wrap for Promise.resolve in then expression body (out of scope: style)', async () => {
+    // Arrange — Promise.resolve wrapping is redundant style; the value still flows onward.
     const filePath = '/virtual/src/features/return-wrap-expr.ts';
     const source = 'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));';
     // Act
@@ -1732,10 +1755,10 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
-  it('should report no-return-wrap for Promise.resolve in then callback block body', async () => {
+  it('should not report no-return-wrap for Promise.resolve in then block body (out of scope: style)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/return-wrap-block.ts';
     const source = ['export const p = Promise.resolve(1).then(x => {', '  return Promise.resolve(x + 1);', '});'].join('\n');
@@ -1744,7 +1767,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should not report no-return-wrap for direct value return in then callback', async () => {
@@ -1761,8 +1784,8 @@ describe('error-flow/analyzer', () => {
 
   // --- always-return ---
 
-  it('should report always-return when then callback has block body without return', async () => {
-    // Arrange
+  it('should not report always-return for a then callback without return (out of scope: style)', async () => {
+    // Arrange — a missing return is a chain-style smell, not an error-flow loss.
     const filePath = '/virtual/src/features/always-return.ts';
     const source = ['export const p = Promise.resolve(1).then(x => {', '  console.log(x);', '});'].join('\n');
     // Act
@@ -1770,7 +1793,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'always-return');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   it('should not report always-return when then callback returns a value', async () => {
@@ -1797,7 +1820,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report always-return when then callback has nested return only in inner function', async () => {
+  it('should not report always-return for a return only in an inner function (out of scope: style)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/always-return-nested-fn.ts';
     const source = [
@@ -1810,14 +1833,14 @@ describe('error-flow/analyzer', () => {
     const analysis = await analyzeSingle(filePath, source);
     const hits = analysis.filter(f => f.kind === 'always-return');
 
-    // Assert — inner function's return doesn't count as callback return
-    expect(hits.length).toBe(1);
+    // Assert
+    expect(hits.length).toBe(0);
   });
 
   // --- no-return-wrap: additional ---
 
-  it('should report no-return-wrap for Promise.reject wrapping in then callback', async () => {
-    // Arrange
+  it('should not report no-return-wrap for Promise.reject wrapping (out of scope: style)', async () => {
+    // Arrange — wrapping is redundant style; the rejection still propagates down the chain.
     const filePath = '/virtual/src/features/return-wrap-reject.ts';
     const source = 'export const p = Promise.resolve(1).then(x => Promise.reject(new Error("fail")));';
     // Act
@@ -1825,7 +1848,7 @@ describe('error-flow/analyzer', () => {
     const hits = analysis.filter(f => f.kind === 'no-return-wrap');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
   // --- catch-or-return: additional ---

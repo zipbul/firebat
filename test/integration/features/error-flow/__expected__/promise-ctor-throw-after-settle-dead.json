@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "return new Promise<number>((resolve) => {",
+    "file": "/virtual/promise-ctor-throw-after-settle-dead.ts",
+    "kind": "promise-constructor-hygiene",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 5
+      },
+      "start": {
+        "column": 9,
+        "line": 2
+      }
+    }
+  }
+]

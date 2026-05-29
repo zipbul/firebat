@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "filter callback is async",
+    "file": "/virtual/misused-filter-async-dead.ts",
+    "kind": "misused-promises",
+    "span": {
+      "end": {
+        "column": 53,
+        "line": 2
+      },
+      "start": {
+        "column": 21,
+        "line": 2
+      }
+    }
+  }
+]

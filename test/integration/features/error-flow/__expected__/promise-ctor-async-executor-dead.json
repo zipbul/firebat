@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "const p = new Promise<number>(async (resolve) => {",
+    "file": "/virtual/promise-ctor-async-executor-dead.ts",
+    "kind": "promise-constructor-hygiene",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 4
+      },
+      "start": {
+        "column": 12,
+        "line": 2
+      }
+    }
+  }
+]

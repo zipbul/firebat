@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "flatMap callback is async",
+    "file": "/virtual/misused-flatmap-discarded-dead.ts",
+    "kind": "misused-promises",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 2
+      },
+      "start": {
+        "column": 2,
+        "line": 2
+      }
+    }
+  }
+]

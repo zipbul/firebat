@@ -1,5 +1,5 @@
-// nested-try-catch: useless-catch (dead catch + nested),
-//   missing-error-cause, unsafe-finally
+// nested-try-catch: missing-error-cause + unsafe-finally. useless-catch / nested-redundant
+//   are redundancy (out of scope); fallback-return swallows are a documented FN.
 
 export function overscopedTry(): string {
   try {
