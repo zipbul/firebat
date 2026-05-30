@@ -1224,6 +1224,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         method === 'findIndex' ||
         method === 'sort';
       const resultMisused = method === 'map' || method === 'flatMap' || method === 'reduce' || method === 'reduceRight';
+      let misusedReported = false;
 
       if (alwaysMisused || resultMisused) {
         const first = node.arguments[0];
@@ -1240,6 +1241,33 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             sourceText,
             evidence: `${method} callback is async`,
           });
+
+          misusedReported = true;
+        }
+      }
+
+      // misused-promises (general void-callback slot): an async callback passed into any argument
+      // whose contextual type is a void-returning callback discards the rejection at the call
+      // boundary (the call ignores the returned promise — a floating rejection). gildash-gated via
+      // the oracle, so degraded scans never flag. Skipped when the syntactic array path already
+      // reported this call (avoids a double `forEach` finding); inert for result-returning methods
+      // (map/reduce expect a value, so their slot is not void-returning).
+      if (!misusedReported) {
+        for (const arg of node.arguments) {
+          const isAsyncCallback =
+            (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') && arg.async === true;
+
+          if (isAsyncCallback && oracle.expectsVoidReturningCallback(arg)) {
+            pushFinding(findings, {
+              kind: 'misused-promises',
+              node,
+              filePath,
+              sourceText,
+              evidence: 'async callback in a void-returning callback slot',
+            });
+
+            break;
+          }
         }
       }
 
