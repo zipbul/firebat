@@ -284,39 +284,13 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report unsafe-finally when finally callback returns a value', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/promise-finally.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join(
-      '\n',
-    );
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when finally callback has expression body', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/promise-finally-expr.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when finally callback returns undefined explicitly', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/promise-finally-undefined.ts';
+  it('should report unsafe-finally when a .finally callback throws (masks the original rejection)', async () => {
+    // Arrange — a throw in the finally callback rejects the result, discarding the original error.
+    const filePath = '/virtual/src/features/promise-finally-throw.ts';
     const source = [
       'export function f() {',
       '  return Promise.resolve(1).finally(() => {',
-      '    return undefined;',
+      '    throw new Error("boom");',
       '  });',
       '}',
     ].join('\n');
@@ -326,6 +300,50 @@ describe('error-flow/analyzer', () => {
 
     // Assert
     expect(hits.length).toBe(1);
+  });
+
+  it('should not report unsafe-finally when a .finally callback returns a value (Promise.finally ignores it)', async () => {
+    // Arrange — Promise.finally discards the callback return; the original settlement passes through.
+    const filePath = '/virtual/src/features/promise-finally.ts';
+    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join(
+      '\n',
+    );
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unsafe-finally when a .finally callback has an expression body', async () => {
+    // Arrange — the returned value is ignored.
+    const filePath = '/virtual/src/features/promise-finally-expr.ts';
+    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unsafe-finally when a .finally callback throw is caught locally', async () => {
+    // Arrange — the throw is caught inside the callback, so it does not escape / mask anything.
+    const filePath = '/virtual/src/features/promise-finally-caught.ts';
+    const source = [
+      'export function f() {',
+      '  return Promise.resolve(1).finally(() => {',
+      '    try { risky(); } catch (e) { handle(e); }',
+      '  });',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
   });
 
   it('should not report unsafe-finally (.finally() variant) when finally callback has no return', async () => {

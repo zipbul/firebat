@@ -340,27 +340,6 @@ const chainHasThen = (expr: Node): boolean => {
   return false;
 };
 
-const containsReturnStatement = (node: Node): boolean => {
-  let found = false;
-
-  walkOxcTree(node, inner => {
-    if (inner.type === 'ReturnStatement') {
-      found = true;
-
-      return false;
-    }
-
-    // Don't cross function boundaries
-    if (inner.type === 'FunctionDeclaration' || inner.type === 'FunctionExpression' || inner.type === 'ArrowFunctionExpression') {
-      return false;
-    }
-
-    return true;
-  });
-
-  return found;
-};
-
 type UnsafeControlFlowKind = 'return' | 'throw' | 'break' | 'continue';
 
 const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind | null => {
@@ -661,31 +640,51 @@ const bodyAssignsCauseFromParam = (body: Node, name: string): boolean => {
   return found;
 };
 
-const hasNonEmptyReturnInFinallyCallback = (arg: Node | undefined): boolean => {
-  if (arg === undefined) {
+// Promise.prototype.finally IGNORES the callback's return value, but if the callback THROWS (or
+// returns a rejected promise) the result promise rejects with that — masking the original
+// settlement, including the original rejection. So a returned value is harmless (not flagged),
+// while an escaping throw masks the error. Detect a throw that escapes the callback body: not
+// inside a nested function, and conservatively not inside a try statement (which may catch it).
+const finallyCallbackThrows = (arg: Node | undefined): boolean => {
+  if (
+    arg === undefined ||
+    (arg.type !== 'ArrowFunctionExpression' && arg.type !== 'FunctionExpression' && arg.type !== 'FunctionDeclaration')
+  ) {
     return false;
   }
 
-  if (arg.type === 'ArrowFunctionExpression') {
-    const body = arg.body;
+  const body = arg.body;
 
-    if (body.type === 'BlockStatement') {
-      return containsReturnStatement(body);
+  if (body === null || body.type !== 'BlockStatement') {
+    return false;
+  }
+
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (found) {
+      return false;
     }
 
-    // expression body => returns a value
+    if (node.type === 'ThrowStatement') {
+      found = true;
+
+      return false;
+    }
+
+    if (
+      node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression' ||
+      node.type === 'TryStatement'
+    ) {
+      return false;
+    }
+
     return true;
-  }
+  });
 
-  if (arg.type === 'FunctionExpression' || arg.type === 'FunctionDeclaration') {
-    const body = arg.body;
-
-    if (body !== null && body.type === 'BlockStatement') {
-      return containsReturnStatement(body);
-    }
-  }
-
-  return false;
+  return found;
 };
 
 interface CollectFindingsResult {
@@ -1304,11 +1303,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
-      // return-in-finally: .finally(() => { return ... })
+      // unsafe-finally (promise form): .finally(() => { throw ... }) masks the original rejection
+      // (a returned value is ignored by Promise.finally, so it is not flagged).
       if (method === 'finally') {
         const first = node.arguments[0];
 
-        if (hasNonEmptyReturnInFinallyCallback(first)) {
+        if (finallyCallbackThrows(first)) {
           pushFinding(findings, {
             kind: 'unsafe-finally',
             node,

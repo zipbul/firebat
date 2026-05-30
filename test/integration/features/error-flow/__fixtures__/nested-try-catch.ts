@@ -52,8 +52,8 @@ export async function returnAwaitOutsideTry(): Promise<string> {
   return await Promise.resolve('data');
 }
 
-export function returnInFinally(): Promise<string> {
+export function throwInFinally(): Promise<string> {
   return Promise.resolve('value').finally(() => {
-    return 'replaced';
+    throw new Error('replaced');
   });
 }
