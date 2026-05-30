@@ -119,7 +119,7 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -133,7 +133,7 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -154,7 +154,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -174,7 +174,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -194,7 +194,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -461,7 +461,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -480,7 +480,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -492,7 +492,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -516,7 +516,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -537,7 +537,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -549,7 +549,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -563,7 +563,7 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'prefer-await-to-then');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -616,6 +616,107 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
+  it('should report floating-promises for a bare call whose result gildash proves is a Promise', async () => {
+    // Arrange — `fetchData();` discards a Promise; its rejection is unobserved.
+    const filePath = '/virtual/src/features/floating-bare-call.ts';
+    const source = 'export function f() { fetchData(); }';
+    // Act — gildash reports the callee returns a PromiseLike.
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(1);
+  });
+
+  it('should not report floating-promises for a bare call gildash cannot prove returns a Promise', async () => {
+    // Arrange — conservative: an unresolved/non-Promise call type is never flagged.
+    const filePath = '/virtual/src/features/floating-bare-sync.ts';
+    const source = 'export function f() { syncFn(); }';
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, () => false);
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
+  });
+
+  it('should not report floating-promises for a voided bare Promise-returning call', async () => {
+    // Arrange — `void` is an explicit discard (K), even when gildash proves a Promise.
+    const filePath = '/virtual/src/features/floating-bare-void.ts';
+    const source = 'export function f() { void fetchData(); }';
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
+  });
+
+  it('should not flag a bare call when gildash is unavailable (degraded scans never over-report)', async () => {
+    // Arrange — without the semantic layer, a bare call type is unknown → not flagged.
+    const filePath = '/virtual/src/features/floating-bare-nogildash.ts';
+    const source = 'export function f() { fetchData(); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
+  });
+
+  // --- empty rejection handler (promise form of empty-catch), gildash-gated ---
+
+  it('should report empty-catch for an empty .catch(() => {}) when gildash proves the receiver is a Promise', async () => {
+    // Arrange — an empty .catch swallows the rejection just like an empty catch block.
+    const filePath = '/virtual/src/features/empty-catch-handler.ts';
+    const source = 'export function f(p: Promise<number>) { p.catch(() => {}); }';
+    // Act — gildash confirms the receiver is PromiseLike.
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(1);
+  });
+
+  it('should report empty-catch for an empty second .then(_, () => {}) handler on a Promise', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/empty-then-handler.ts';
+    const source = 'export function f(p: Promise<number>) { p.then(v => v, () => {}); }';
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(1);
+  });
+
+  it('should not report empty-catch for an empty .catch on a non-Promise fluent API', async () => {
+    // Arrange — a query builder with its own `.catch` method is not a rejection channel.
+    const filePath = '/virtual/src/features/empty-catch-nonpromise.ts';
+    const source = 'export function f(q: { catch(cb: () => void): void }) { q.catch(() => {}); }';
+    // Act — gildash reports the receiver is NOT PromiseLike.
+    const analysis = await analyzeWithSemantic(filePath, source, () => false);
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
+  });
+
+  it('should not report empty-catch when the rejection handler has a body', async () => {
+    // Arrange — observing the error (logging) is not a swallow.
+    const filePath = '/virtual/src/features/nonempty-catch-handler.ts';
+    const source = 'export function f(p: Promise<number>) { p.catch((e) => { console.error(e); }); }';
+    // Act
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
+  });
+
+  it('should not flag an empty .catch when gildash is unavailable (degraded scans never over-report)', async () => {
+    // Arrange — without the semantic layer the receiver type is unknown → not flagged.
+    const filePath = '/virtual/src/features/empty-catch-nogildash.ts';
+    const source = 'export function f(p: Promise<number>) { p.catch(() => {}); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
+  });
+
   // --- misused-promises ---
 
   it('should report misused-promises for async callback in forEach', async () => {
@@ -650,8 +751,8 @@ describe('error-flow/analyzer', () => {
 
     // Assert
     expect(kinds(analysis)).toContain('floating-promises');
-    expect(kinds(analysis)).not.toContain('useless-catch');
     expect(kinds(analysis)).not.toContain('unsafe-finally');
+    expect(kinds(analysis)).not.toContain('missing-error-cause');
   });
 
   it('should report missing-error-cause when catch throws new Error without cause', async () => {
@@ -712,7 +813,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert — every site rethrows the original error unchanged (observability/cause preserved).
     expect(hits.length).toBe(0);
@@ -732,7 +833,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -758,7 +859,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -782,7 +883,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -807,7 +908,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -834,7 +935,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'useless-catch');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1135,7 +1236,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  // --- P3-1 throw-non-error ---
+  // --- throw-non-error ---
 
   it('should report throw-non-error for string literal throw', async () => {
     // Arrange
@@ -1192,6 +1293,94 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).not.toContain('throw-non-error');
   });
 
+  it('should report throw-non-error for an object literal throw', async () => {
+    // Arrange — a plain object is not an Error instance (loses stack/cause).
+    const filePath = '/virtual/src/features/throw-object.ts';
+    const source = 'export function f() { throw { code: "E_FAIL" }; }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('throw-non-error');
+  });
+
+  it('should report throw-non-error for a string asserted as Error (cast is a runtime lie)', async () => {
+    // Arrange — `as unknown as Error` does not change the runtime string; stack is still lost.
+    const filePath = '/virtual/src/features/throw-cast.ts';
+    const source = 'export function f() { throw "boom" as unknown as Error; }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for a member-expression throw (could hold an Error)', async () => {
+    // Arrange — `state.error` may well be an Error; without proof it gets the benefit of doubt.
+    const filePath = '/virtual/src/features/throw-member.ts';
+    const source = 'export function f(state: { error: Error }) { throw state.error; }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for an array-element throw (could hold an Error)', async () => {
+    // Arrange — `errs[0]` may be an Error; member access is not provably non-Error.
+    const filePath = '/virtual/src/features/throw-index.ts';
+    const source = 'export function f(errs: Error[]) { throw errs[0]; }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for an identifier of unknown type', async () => {
+    // Arrange — a bare identifier (e.g. a catch binding) could be an Error → benefit of doubt.
+    const filePath = '/virtual/src/features/throw-ident.ts';
+    const source = 'export function f() { try { risky(); } catch (e) { throw e; } }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
+  it('should report throw-non-error for Promise.reject with a non-Error literal', async () => {
+    // Arrange — Promise.reject('x') loses the stack trace / cause like `throw 'x'`.
+    const filePath = '/virtual/src/features/reject-literal.ts';
+    const source = 'export function f() { return Promise.reject("boom"); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for Promise.reject with a new Error', async () => {
+    // Arrange
+    const filePath = '/virtual/src/features/reject-error.ts';
+    const source = 'export function f() { return Promise.reject(new Error("x")); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
+  it('should not report throw-non-error for Promise.reject with an identifier', async () => {
+    // Arrange — the rejected value could be an Error → benefit of the doubt.
+    const filePath = '/virtual/src/features/reject-ident.ts';
+    const source = 'export function f(err: unknown) { return Promise.reject(err); }';
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+
+    // Assert
+    expect(kinds(analysis)).not.toContain('throw-non-error');
+  });
+
   // --- return-await-in-try ---
 
   it('should report return-await-in-try when returning a call without await in try block with catch', async () => {
@@ -1206,8 +1395,8 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
+    // Act — gildash proves the callee returns a Promise.
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1339,7 +1528,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — CallExpression: target is '(...args: any[]) => PromiseLike<any>'
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1380,7 +1569,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — Identifier: target is 'PromiseLike<any>'
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1408,7 +1597,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('return-await-in-try - isTypeAssignableToType returns null - falls back to AST heuristic', async () => {
+  it('return-await-in-try - gildash cannot resolve the type - no finding (conservative)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/semantic-null.ts';
     const source = [
@@ -1420,12 +1609,12 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
+    // Act — gildash returns null (cannot determine); there is no flag-all fallback.
     const analysis = await analyzeWithSemantic(filePath, source, () => null);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
-    // Assert — CallExpression이므로 AST 휴리스틱으로 플래그
-    expect(hits.length).toBe(1);
+    // Assert — unresolved type is not flagged (zero-FP over degraded coverage).
+    expect(hits.length).toBe(0);
   });
 
   it('return-await-in-try - semantic union with Promise member (CallExpression) - flags finding', async () => {
@@ -1441,7 +1630,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — () => Promise<Response> | null is assignable to (...args: any[]) => PromiseLike<any>
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1481,7 +1670,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — () => Promise<Response> & Loggable is assignable to (...args: any[]) => PromiseLike<any>
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1501,7 +1690,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1520,12 +1709,16 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act — mock inspects targetTypeExpression
+    // Act — the callee is probed with the promise-fn target (+ an `any` discriminator probe).
     const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target, options) => {
-      expect(target).toBe('(...args: any[]) => PromiseLike<any>');
-      expect(options).toBeUndefined();
+      if (target === '(...args: any[]) => PromiseLike<any>') {
+        expect(options).toEqual({ anyConstituent: true });
 
-      return true;
+        return true;
+      }
+
+      // the `(...args) => string` any-discriminator probe → not assignable for a real promise fn
+      return false;
     });
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
@@ -1546,12 +1739,16 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act — mock inspects targetTypeExpression and options
+    // Act — the value is probed with PromiseLike (+ a `string` any-discriminator probe).
     const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target, options) => {
-      expect(target).toBe('PromiseLike<any>');
-      expect(options).toEqual({ anyConstituent: true });
+      if (target === 'PromiseLike<any>') {
+        expect(options).toEqual({ anyConstituent: true });
 
-      return true;
+        return true;
+      }
+
+      // the `string` any-discriminator probe → not assignable for a real promise value
+      return false;
     });
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
@@ -1559,7 +1756,7 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(1);
   });
 
-  it('return-await-in-try - semantic layer throws - falls back to AST heuristic', async () => {
+  it('return-await-in-try - semantic layer throws - no finding (conservative)', async () => {
     // Arrange
     const filePath = '/virtual/src/features/semantic-throw.ts';
     const source = [
@@ -1577,13 +1774,13 @@ describe('error-flow/analyzer', () => {
     });
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
-    // Assert — CallExpression이므로 AST 휴리스틱으로 플래그
-    expect(hits.length).toBe(1);
+    // Assert — a thrown semantic query is swallowed and not flagged.
+    expect(hits.length).toBe(0);
   });
 
-  it('return-await-in-try - fallback NewExpression in async function - flags finding', async () => {
+  it('return-await-in-try - NewExpression is not flagged (a constructed instance is not a thenable)', async () => {
     // Arrange
-    const filePath = '/virtual/src/features/fallback-new-expr.ts';
+    const filePath = '/virtual/src/features/return-new-expr.ts';
     const source = [
       'export async function f() {',
       '  try {',
@@ -1593,15 +1790,15 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
+    // Act — even with gildash, `new X()` results are not treated as promises here.
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(hits.length).toBe(0);
   });
 
-  // --- P3-2 promise-constructor-hygiene ---
+  // --- promise-constructor-hygiene ---
 
   it('should report promise-constructor-hygiene for async executor', async () => {
     // Arrange
@@ -1752,7 +1949,7 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1764,7 +1961,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export const p = Promise.resolve(1).then(x => {', '  return Promise.resolve(x + 1);', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1776,7 +1973,7 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => x + 1);';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1790,7 +1987,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export const p = Promise.resolve(1).then(x => {', '  console.log(x);', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'always-return');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1802,7 +1999,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export const p = Promise.resolve(1).then(x => {', '  return x + 1;', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'always-return');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1814,7 +2011,7 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => console.log(x));';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'always-return');
+    const hits = analysis;
 
     // Assert — expression body always returns implicitly
     expect(hits.length).toBe(0);
@@ -1831,7 +2028,7 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'always-return');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);
@@ -1845,7 +2042,7 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => Promise.reject(new Error("fail")));';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'no-return-wrap');
+    const hits = analysis;
 
     // Assert
     expect(hits.length).toBe(0);

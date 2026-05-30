@@ -336,14 +336,14 @@ describe('integration/error-flow', () => {
     expect(hits.length).toBe(0);
   });
 
-  it('should report return-await-in-try when call is returned without await in try with catch', async () => {
-    // Arrange
+  it('should report return-await-in-try when import() is returned without await in try with catch', async () => {
+    // Arrange — import() is syntactically always a Promise, so it is flagged without gildash.
     let sources = new Map<string, string>();
     let filePath = '/virtual/src/features/return-no-await.ts';
     let source = [
       'export async function f() {',
       '  try {',
-      '    return fetchData();',
+      '    return import("./mod");',
       '  } catch (e) {',
       '    handleError(e);',
       '  }',
@@ -554,10 +554,9 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
-    let hits = analysis.filter(f => f.kind === 'useless-catch');
 
-    // Assert
-    expect(hits.length).toBe(0);
+    // Assert — the construct produces no error-flow finding at all.
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch for a rethrow inside try/finally (out of scope: redundancy)', async () => {
@@ -583,9 +582,8 @@ describe('integration/error-flow', () => {
     // Act
     let program = createProgramFromMap(sources);
     let analysis = await analyzeErrorFlow(program, { gildash: noopGildash });
-    let hits = analysis.filter(f => f.kind === 'useless-catch');
 
-    // Assert
-    expect(hits.length).toBe(0);
+    // Assert — the construct produces no error-flow finding at all.
+    expect(analysis.length).toBe(0);
   });
 });

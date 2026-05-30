@@ -39,11 +39,11 @@ describe('golden/error-flow', () => {
   rg('misused-filter-async-dead');
   rg('misused-flatmap-returned-keep');
 
-  // ── Fix2 promise-ctor: GAP-14 제거 (RED), async-executor/sync-throw 유지 (가드) ──
+  // ── promise-ctor: async-executor / throw-after-settle = W; bare sync throw / delay / deferred = K ──
   rg('promise-ctor-delay-keep');
   rg('promise-ctor-deferred-keep');
   rg('promise-ctor-async-executor-dead');
-  rg('promise-ctor-sync-throw-dead');
+  rg('promise-ctor-sync-throw-keep');
   rg('promise-ctor-throw-after-settle-dead');
 
   // ── Fix3 비대상 스타일·redundancy 비보고 (RED), prefer-catch 유지 (가드) ──
@@ -59,4 +59,12 @@ describe('golden/error-flow', () => {
   rg('empty-catch-whitespace-dead');
   rg('empty-catch-commented-dead');
   rg('empty-catch-nonempty-keep');
+
+  // ── throw-non-error: 증명 가능한 non-Error만 W (member/identifier는 benefit-of-doubt) ──
+  rg('throw-member-error-keep');
+  rg('throw-cast-string-dead');
+
+  // ── Promise.reject(non-Error) = throw-non-error (empty rejection handler is gildash-gated → spec-tested) ──
+  rg('reject-non-error-dead');
+  rg('reject-error-keep');
 });

@@ -58,21 +58,16 @@ export type FirebatCatalogCode =
   // collapsible-if (2)
   | 'COLLAPSIBLE_IF'
   | 'COLLAPSIBLE_ELSE_IF'
-  // error-flow (16)
+  // error-flow (11)
   | 'EF_THROW_NON_ERROR'
   | 'EF_PROMISE_CONSTRUCTOR_HYGIENE'
   | 'EF_MISSING_ERROR_CAUSE'
-  | 'EF_USELESS_CATCH'
   | 'EF_UNSAFE_FINALLY'
   | 'EF_RETURN_AWAIT_IN_TRY'
-  | 'EF_PREFER_DOT_CATCH_CATCH'
-  | 'EF_PREFER_DOT_CATCH_AWAIT'
-  | 'EF_PREFER_DOT_CATCH_NO_WRAP'
   | 'EF_UNOBSERVED_PROMISE_FLOATING'
   | 'EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN'
   | 'EF_UNOBSERVED_PROMISE_MISUSED'
   | 'EF_UNOBSERVED_PROMISE_VARIABLE'
-  | 'EF_UNOBSERVED_PROMISE_ALWAYS_RETURN'
   | 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE'
   | 'EF_EMPTY_CATCH'
   // unknown-proof (5)
@@ -151,17 +146,12 @@ export type ErrorFlowFindingKind =
   | 'throw-non-error'
   | 'promise-constructor-hygiene'
   | 'missing-error-cause'
-  | 'useless-catch'
   | 'unsafe-finally'
   | 'return-await-in-try'
-  | 'prefer-catch'
-  | 'prefer-await-to-then'
-  | 'no-return-wrap'
   | 'floating-promises'
   | 'catch-or-return'
   | 'misused-promises'
   | 'unobserved-variable'
-  | 'always-return'
   | 'no-callback-in-promise'
   | 'empty-catch';
 

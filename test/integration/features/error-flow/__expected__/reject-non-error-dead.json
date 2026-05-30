@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "return Promise.reject('boom');",
+    "file": "/virtual/reject-non-error-dead.ts",
+    "kind": "throw-non-error",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 2
+      },
+      "start": {
+        "column": 9,
+        "line": 2
+      }
+    }
+  }
+]

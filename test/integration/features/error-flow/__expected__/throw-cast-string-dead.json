@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "throw 'boom' as unknown as Error;",
+    "file": "/virtual/throw-cast-string-dead.ts",
+    "kind": "throw-non-error",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 2
+      },
+      "start": {
+        "column": 2,
+        "line": 2
+      }
+    }
+  }
+]

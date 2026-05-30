@@ -144,11 +144,11 @@ export const FIREBAT_CODE_CATALOG = {
   },
   EF_PROMISE_CONSTRUCTOR_HYGIENE: {
     cause:
-      'The Promise constructor has a hygiene issue: async executor, throw in sync executor, return value in executor, swapped params, or unnecessary new Promise in async function.',
+      'The Promise constructor has a hygiene issue that swallows or misdirects errors: an async executor (thrown errors never reject), a throw after the promise is already settled (no-op), or swapped resolve/reject parameters.',
     think: [
-      'Read the Promise constructor call. If the enclosing function is already async, replace `return new Promise(...)` with direct async/await logic and remove the constructor entirely.',
-      'If the Promise wraps a callback-based API (e.g., `fs.readFile` with callback), the constructor is justified — fix only the specific hygiene issue (async executor → sync executor, swapped params → correct order) — stop, no action needed for the constructor itself.',
-      'If none of the above, convert to an async function with try/catch to eliminate the Promise constructor.',
+      'For an async executor, move the async work out of the executor: await it and call resolve/reject from a surrounding async function, or drop the constructor entirely in favor of async/await.',
+      'For a throw after settle, move the throw before the resolve/reject call (so it converts to a rejection), or call reject(err) instead of throwing.',
+      'For swapped parameters, restore the conventional `(resolve, reject)` order so rejections are delivered through the reject callback.',
     ],
   },
   EF_MISSING_ERROR_CAUSE: {
@@ -159,44 +159,12 @@ export const FIREBAT_CODE_CATALOG = {
       'Add `{ cause: caughtError }` as the second argument to the Error constructor (e.g., `new Error("message", { cause: err })`). If the error is re-thrown with `throw err`, no change is needed — stop, no action needed.',
     ],
   },
-  EF_USELESS_CATCH: {
-    cause: 'A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.',
-    think: [
-      'Read the entire try-catch-finally structure. If a `finally` block exists that performs cleanup, the try block must remain — remove only the catch clause, not the try-finally.',
-      'If there is no finally block, remove the entire try-catch wrapper and leave only the body of the try block.',
-      'Check git log for the catch block. If the commit message indicates future handling was planned, leave a TODO comment instead of removing.',
-    ],
-  },
   EF_UNSAFE_FINALLY: {
     cause:
       'A finally block contains a throw or return statement that can override the try/catch result, silently discarding errors.',
     think: [
       'Read the finally block and identify the throw or return statement. If it is a return that provides a meaningful fallback value (documented intent), this may be deliberate — stop, no action needed.',
       'Remove the return/throw from the finally block. Move it into the try block (for success returns) or catch block (for error re-throws). The finally block should contain only cleanup code (close connections, release resources).',
-    ],
-  },
-  EF_PREFER_DOT_CATCH_CATCH: {
-    cause:
-      'Error handling uses .then(onFulfilled, onRejected) instead of .catch(), which is less readable and can miss errors thrown in onFulfilled.',
-    think: [
-      'Read the `.then(onFulfilled, onRejected)` call. Note that errors thrown inside `onFulfilled` are NOT caught by `onRejected` in the two-argument form — this is a real bug if `onFulfilled` can throw.',
-      'Replace `.then(onFulfilled, onRejected)` with `.then(onFulfilled).catch(onRejected)` so that both the original rejection and errors from `onFulfilled` are handled.',
-    ],
-  },
-  EF_PREFER_DOT_CATCH_AWAIT: {
-    cause:
-      'Promise chains use .then()/.catch() inside an async function instead of await, reducing readability and error flow clarity.',
-    think: [
-      'Read the enclosing function. If the .then() chain runs multiple promises in parallel (e.g., `Promise.all([...]).then()`), await would change concurrency semantics — stop, no action needed.',
-      'Replace the .then() chain with `const result = await promise` and move error handling into a try-catch block wrapping the await.',
-      'If there is a .catch() handler, convert it to the catch clause of the try-catch. Ensure the same error handling logic is preserved.',
-    ],
-  },
-  EF_PREFER_DOT_CATCH_NO_WRAP: {
-    cause: 'A .then() callback returns Promise.resolve() or Promise.reject() unnecessarily — the value can be returned directly.',
-    think: [
-      'Read the .then() callback body. Replace `return Promise.resolve(value)` with `return value` and `return Promise.reject(error)` with `throw error`.',
-      'Run the type checker to confirm the return type is compatible after removing the wrapper.',
     ],
   },
   EF_UNOBSERVED_PROMISE_FLOATING: {
@@ -228,13 +196,6 @@ export const FIREBAT_CODE_CATALOG = {
     think: [
       'Grep for the variable name in the current file. If it is passed to another function, returned, or used in `Promise.all()`, the Promise is observed elsewhere — stop, no action needed.',
       'If the variable is truly unused after assignment, add `await` before the assignment expression, or remove the assignment if the result is not needed.',
-    ],
-  },
-  EF_UNOBSERVED_PROMISE_ALWAYS_RETURN: {
-    cause: 'A .then() callback does not return a value, breaking the Promise chain and losing the resolved value.',
-    think: [
-      'Read the .then() callback. If it performs a side effect (logging, mutation) and no downstream .then() depends on the return value, this is acceptable — stop, no action needed.',
-      'If downstream .then() calls or the final consumer expects a transformed value, add an explicit `return` statement to the callback.',
     ],
   },
   EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE: {

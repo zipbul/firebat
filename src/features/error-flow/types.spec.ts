@@ -7,20 +7,20 @@ import { describe, expect, it } from 'bun:test';
 describe('features/error-flow/types — structural shape', () => {
   it('ErrorFlowFinding shape satisfies expected keys', () => {
     const finding = {
-      kind: 'useless-catch' as const,
+      kind: 'empty-catch' as const,
       file: '/src/foo.ts',
       span: {
         start: { line: 10, column: 2 },
         end: { line: 10, column: 20 },
       },
-      evidence: 'catch block is empty',
+      evidence: 'empty catch swallows the error',
     };
 
-    expect(finding.kind).toBe('useless-catch');
+    expect(finding.kind).toBe('empty-catch');
     expect(finding.file).toBe('/src/foo.ts');
     expect(finding.span.start.line).toBe(10);
     expect(finding.span.end.column).toBe(20);
-    expect(finding.evidence).toBe('catch block is empty');
+    expect(finding.evidence).toBe('empty catch swallows the error');
   });
 
   it('optional code field can be provided or omitted', () => {
@@ -57,22 +57,17 @@ describe('features/error-flow/types — structural shape', () => {
       'throw-non-error',
       'promise-constructor-hygiene',
       'missing-error-cause',
-      'useless-catch',
       'unsafe-finally',
       'return-await-in-try',
-      'prefer-catch',
-      'prefer-await-to-then',
-      'no-return-wrap',
       'floating-promises',
       'catch-or-return',
       'misused-promises',
       'unobserved-variable',
-      'always-return',
       'no-callback-in-promise',
       'empty-catch',
     ] satisfies import('./types').ErrorFlowFindingKind[];
 
-    expect(kinds.length).toBe(17);
+    expect(kinds.length).toBe(12);
     expect(kinds[0]).toBe('tool-unavailable');
   });
 });

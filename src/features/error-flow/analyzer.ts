@@ -27,9 +27,7 @@ interface PushFindingInput {
   readonly filePath: string;
   readonly sourceText: string;
   readonly node: Node;
-  readonly message: string;
   readonly evidence: string;
-  readonly recipes: ReadonlyArray<string>;
 }
 
 const pushFinding = (findings: ErrorFlowFinding[], input: PushFindingInput): void => {
@@ -73,9 +71,104 @@ const getMemberPropertyName = (callee: Node): string | null => {
   return null;
 };
 
+// An identifier is a *read* (its value escapes to the surrounding expression) unless it is a
+// declaration name, a non-computed member property, a non-shorthand object key, or the target of
+// an assignment / update. Used by unobserved-variable so a promise escaping via ANY expression
+// (`return { p }`, `return [p]`, `cond ? p : x`, `o.p = p`, …) counts as observed.
+const isIdentifierReadEscape = (node: Node, parent: Node): boolean => {
+  switch (parent.type) {
+    case 'VariableDeclarator':
+      return parent.id !== node;
+    case 'MemberExpression':
+      return !(parent.property === node && parent.computed === false);
+    case 'Property':
+      return !(parent.key === node && parent.shorthand === false);
+    case 'AssignmentExpression':
+      return parent.left !== node;
+    case 'UpdateExpression':
+      return false;
+    // TS value-wrappers: only the wrapped expression is a runtime read (`x as T` → `x`).
+    case 'TSAsExpression':
+    case 'TSSatisfiesExpression':
+    case 'TSNonNullExpression':
+    case 'TSTypeAssertion':
+      return parent.expression === node;
+    default:
+      // Other `TS*` parents are type positions (type references, signatures, `typeof` queries,
+      // type parameters …) — identifiers there are not runtime reads of the value.
+      return !parent.type.startsWith('TS');
+  }
+};
+
 const knownPrimitiveWrappers = new Set(['String', 'Number', 'Boolean', 'Symbol', 'BigInt']);
 
 const isPrimitiveWrapperName = (name: string): boolean => knownPrimitiveWrappers.has(name);
+
+// Unwrap TS type-assertion wrappers so the *runtime* value is judged, not the asserted type:
+// `'x' as unknown as Error` is a string at runtime and still loses the stack trace.
+const unwrapThrowExpression = (node: Node): Node => {
+  let current = node;
+
+  while (
+    current.type === 'TSAsExpression' ||
+    current.type === 'TSSatisfiesExpression' ||
+    current.type === 'TSNonNullExpression' ||
+    current.type === 'TSTypeAssertion'
+  ) {
+    current = current.expression;
+  }
+
+  return current;
+};
+
+// throw-non-error fires only when the thrown value is *provably* not an Error (it would lose
+// the stack trace / cause). Sound by construction: anything that could be an Error —
+// identifiers, member access, calls of unknown type, new, await, conditionals — is given the
+// benefit of the doubt (K). The syntactic floor reports literal-shaped values; gildash augments
+// it by proving a value's static type is a bare primitive (`throw msg` where `msg: string`).
+// A union like `string | Error` is NOT assignable to the primitive union, so it stays K.
+const isProvablyNonErrorThrow = (arg: Node, gildash: Gildash | null, filePath: string): boolean => {
+  const value = unwrapThrowExpression(arg);
+
+  // Literals and composite literals are never Error instances.
+  if (
+    value.type === 'Literal' ||
+    value.type === 'TemplateLiteral' ||
+    value.type === 'ObjectExpression' ||
+    value.type === 'ArrayExpression'
+  ) {
+    return true;
+  }
+
+  // String()/Number()/Boolean()/Symbol()/BigInt() always produce a primitive.
+  if (value.type === 'CallExpression' && value.callee.type === 'Identifier' && isPrimitiveWrapperName(value.callee.name)) {
+    return true;
+  }
+
+  // Semantic augmentation: the value's static type is wholly a bare primitive (no anyConstituent,
+  // so a `string | Error` union — which could be an Error — is not flagged). `any` is assignable
+  // to the primitive union too yet could hold an Error at runtime, so it is excluded via the extra
+  // `object` check: only `any` is assignable to BOTH the primitive union and `object`.
+  // For a non-computed member access (`obj.msg`) the member *property* name resolves the value's
+  // type — `value.start` would resolve the receiver — so probe the property position.
+  if (gildash !== null) {
+    const position = value.type === 'MemberExpression' && value.computed === false ? value.property.start : value.start;
+
+    try {
+      const isPrimitive = gildash.isTypeAssignableToType(filePath, position, 'string | number | boolean | bigint | symbol') === true;
+
+      if (!isPrimitive) {
+        return false;
+      }
+
+      return gildash.isTypeAssignableToType(filePath, position, 'object') !== true;
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+};
 
 const isErrorConstructor = (callee: Node): boolean => {
   if (callee.type !== 'Identifier') {
@@ -135,6 +228,71 @@ const isPromiseFactoryCall = (expr: Node): boolean => {
   return name === 'resolve' || name === 'reject' || name === 'all' || name === 'race' || name === 'any' || name === 'allSettled';
 };
 
+// `any` is assignable to PromiseLike yet could be anything at runtime, so it must not be treated
+// as a proven Promise. The discriminator: only an `any`(-returning) type is assignable to BOTH
+// the promise target AND a string-returning function — a real Promise-returning function is not.
+// So a positive ANY_FN_PROBE means the callee returned `any` and we bail out. (`receiverIsPromiseLike`
+// uses the value-level analogue, a bare `string`; same idea as throw-non-error's `object` probe.)
+const PROMISE_FN_TARGET = '(...args: any[]) => PromiseLike<any>';
+const ANY_FN_PROBE = '(...args: any[]) => string';
+
+// True only when gildash proves the called function returns a PromiseLike (and not `any`).
+// Resolves the type at the callee *name* (the method property for `obj.m()`, the identifier for
+// `f()`) so member and bare calls are both covered. Conservative: any failure → false.
+const callReturnsPromise = (call: Node, gildash: Gildash, filePath: string): boolean => {
+  if (call.type !== 'CallExpression') {
+    return false;
+  }
+
+  const callee = call.callee;
+  const position = callee.type === 'MemberExpression' ? callee.property.start : callee.start;
+
+  try {
+    // anyConstituent so an optional method (`fn | undefined`) is still recognized by its
+    // promise-returning constituent.
+    if (gildash.isTypeAssignableToType(filePath, position, PROMISE_FN_TARGET, { anyConstituent: true }) !== true) {
+      return false;
+    }
+
+    return gildash.isTypeAssignableToType(filePath, position, ANY_FN_PROBE, { anyConstituent: true }) !== true;
+  } catch {
+    return false;
+  }
+};
+
+// True only when gildash proves the receiver is a PromiseLike (and not `any`). Conservative: any
+// failure → false — guards `.catch`/`.then` rules against non-Promise fluent APIs (e.g. a query
+// builder with its own `.catch` method) and against `any`-typed receivers, never over-reporting.
+const receiverIsPromiseLike = (receiver: Node, gildash: Gildash, filePath: string): boolean => {
+  try {
+    if (gildash.isTypeAssignableToType(filePath, receiver.start, 'PromiseLike<any>', { anyConstituent: true }) !== true) {
+      return false;
+    }
+
+    return gildash.isTypeAssignableToType(filePath, receiver.start, 'string', { anyConstituent: true }) !== true;
+  } catch {
+    return false;
+  }
+};
+
+// An empty rejection handler — `.catch(() => {})` or `.then(_, () => {})` — swallows the
+// rejection exactly like an empty catch block. Returns the empty handler body, or null.
+const emptyRejectionHandlerBody = (method: string | null, args: ReadonlyArray<Node>): Node | null => {
+  const handler = method === 'catch' ? args[0] : method === 'then' ? args[1] : undefined;
+
+  if (
+    handler !== undefined &&
+    (handler.type === 'ArrowFunctionExpression' || handler.type === 'FunctionExpression') &&
+    handler.body !== null &&
+    handler.body.type === 'BlockStatement' &&
+    handler.body.body.length === 0
+  ) {
+    return handler.body;
+  }
+
+  return null;
+};
+
 const chainHasCatch = (expr: Node): boolean => {
   let current: Node = expr;
 
@@ -154,6 +312,26 @@ const chainHasCatch = (expr: Node): boolean => {
     // Walk down the chain: expr.callee.object is the previous call
     if (callee.type === 'MemberExpression') {
       current = callee.object;
+    } else {
+      break;
+    }
+  }
+
+  return false;
+};
+
+// True when the chain contains a `.then(...)` call anywhere — a started-but-incomplete chain
+// whose rejection is unobserved unless a `.catch` also appears (checked separately).
+const chainHasThen = (expr: Node): boolean => {
+  let current: Node = expr;
+
+  while (current.type === 'CallExpression') {
+    if (getMemberPropertyName(current.callee) === 'then') {
+      return true;
+    }
+
+    if (current.callee.type === 'MemberExpression') {
+      current = current.callee.object;
     } else {
       break;
     }
@@ -455,6 +633,34 @@ const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
   return found;
 };
 
+// A direct assignment `<member>.cause = <param>` preserves the original error's cause just like
+// `new Error(msg, { cause })`. Body-level and conservative: any such assignment in the catch
+// body marks the cause as preserved (avoids false positives on the wrap-then-assign pattern).
+const bodyAssignsCauseFromParam = (body: Node, name: string): boolean => {
+  let found = false;
+
+  walkOxcTree(body, node => {
+    if (
+      node.type === 'AssignmentExpression' &&
+      node.operator === '=' &&
+      getMemberPropertyName(node.left) === 'cause' &&
+      isIdentifierName(node.right, name)
+    ) {
+      found = true;
+
+      return false;
+    }
+
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+      return false;
+    }
+
+    return true;
+  });
+
+  return found;
+};
+
 const hasNonEmptyReturnInFinallyCallback = (arg: Node | undefined): boolean => {
   if (arg === undefined) {
     return false;
@@ -549,7 +755,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // rather than registering ALL (which produces broad FP for every sync call result).
   const promisePositions = new Set<number>();
 
-  if (gildash) {
+  if (gildash !== null) {
     const allPositions = collectCallVarPositions(program);
 
     if (allPositions.length > 0) {
@@ -600,9 +806,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           node,
           filePath,
           sourceText,
-          message: `variable '${name}' is assigned a call result but never awaited, .then()ed, or .catch()ed`,
           evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: [],
         });
       }
     }
@@ -662,9 +866,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             node,
             filePath,
             sourceText,
-            message: 'catch block has no error binding — cannot preserve error cause',
             evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: [],
           });
         }
 
@@ -680,6 +882,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     const name = param.name;
+    // `err.cause = e` preserves the cause as effectively as `new Error(msg, { cause: e })`.
+    const causeAssigned = bodyAssignsCauseFromParam(body, name);
     // Catch param reassignment: catch(e) { e = new Error(); throw e; }
     let hasReassignment = false;
 
@@ -706,9 +910,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         node: catchClause,
         filePath,
         sourceText,
-        message: `catch param '${name}' is reassigned — original error context destroyed`,
         evidence: getEvidenceLineAt(sourceText, catchClause.start),
-        recipes: [],
       });
 
       return;
@@ -755,7 +957,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
         if (newExpr !== undefined && newExpr.type === 'NewExpression') {
           if (isErrorConstructor(newExpr.callee)) {
-            const hasCause = hasCausePropertyWithIdentifier(newExpr, name);
+            const hasCause = causeAssigned || hasCausePropertyWithIdentifier(newExpr, name);
 
             if (!hasCause) {
               pushFinding(findings, {
@@ -763,9 +965,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
                 node,
                 filePath,
                 sourceText,
-                message: `variable '${varName}' holds new Error() without { cause: ${name} } — loses original error context`,
                 evidence: getEvidenceLineAt(sourceText, node.start),
-                recipes: [],
               });
             }
           }
@@ -780,23 +980,15 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       // Prefer a specific finding for Error constructors without { cause }.
       if (isErrorConstructor(arg.callee)) {
-        const hasCause = hasCausePropertyWithIdentifier(arg, name);
+        const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name);
 
         if (!hasCause) {
-          // Check for vibe pattern: catch param used in Error message position
-          const firstArg = arg.arguments[0];
-          const isVibePattern = firstArg !== undefined && containsIdentifierUse(firstArg, name);
-
           pushFinding(findings, {
             kind: 'missing-error-cause',
             node,
             filePath,
             sourceText,
-            message: isVibePattern
-              ? `catch param '${name}' used in Error message instead of { cause: ${name} } — loses stack trace`
-              : `new Error() in catch block without { cause: ${name} }`,
             evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: [],
           });
         }
 
@@ -804,7 +996,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       const usesIdentifier = containsIdentifierUse(arg, name);
-      const hasCause = hasCausePropertyWithIdentifier(arg, name);
+      const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name);
 
       // Custom error class: catch param is used but cause is not preserved.
       // Lower confidence since we cannot statically verify it extends Error.
@@ -816,9 +1008,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           node,
           filePath,
           sourceText,
-          message: `new expression in catch block uses '${name}' but may not preserve { cause: ${name} }`,
           evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: [],
         });
 
         const addedFinding = findings[findings.length - 1];
@@ -839,9 +1029,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           node: catchClause,
           filePath,
           sourceText,
-          message: 'catch transforms error without preserving cause/context',
           evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: ['RCP-02'],
         });
 
         const addedFinding = findings[findings.length - 1];
@@ -874,14 +1062,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       node: body,
       filePath,
       sourceText,
-      message: 'empty catch swallows the error — observe, rethrow, or log it',
       evidence: 'empty catch swallows the error',
-      recipes: [],
     });
   };
 
   const visit = (node: Node, parent: Node | null): void => {
-    // Function scope boundary: isolate try-catch depth for EF-06 return-await-in-try
+    // Function scope boundary: isolate try-catch depth for return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
     if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
       const savedDepth = functionTryCatchDepth;
@@ -908,12 +1094,18 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return;
     }
 
+    // unobserved-variable: any read of a candidate's identifier (return/object/array/ternary/
+    // assignment-RHS/call-arg/await/.then …) means the promise escaped and is observed.
+    if (node.type === 'Identifier' && parent !== null && isIdentifierReadEscape(node, parent)) {
+      markObserved(node.name);
+    }
+
     // Pre-order hooks
     if (node.type === 'TryStatement') {
       const hasCatch = node.handler !== null;
       const hasFinalizer = node.finalizer !== null;
 
-      // EF-03 unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
+      // unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
       if (hasFinalizer && node.finalizer !== null) {
         const unsafeKind = findUnsafeControlFlowInFinally(node.finalizer);
 
@@ -923,9 +1115,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             node,
             filePath,
             sourceText,
-            message: `finally masks original control flow with ${unsafeKind}`,
             evidence: `finally contains ${unsafeKind}`,
-            recipes: ['RCP-03'],
           });
         }
       }
@@ -964,34 +1154,27 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return;
     }
 
-    // EF-06 return-await-in-try: return without await in try block misses rejection
+    // return-await-in-try: return without await in try block misses rejection
     if (node.type === 'ReturnStatement') {
       const arg = node.argument;
 
       if (inTryBlockWithCatchDepth > 0 && inAsyncFunction) {
         if (arg !== null && arg.type !== 'AwaitExpression') {
+          // Conservative, mirroring floating-promises: flag only what is provably a Promise.
+          // `import()` is syntactically always one; calls/members need gildash (no flag-all
+          // fallback — that produced FPs like `return new Response()` in degraded scans).
           let shouldFlag = false;
 
-          if (gildash) {
-            // CallExpression/NewExpression: callee position → function type → match function returning PromiseLike
-            // Other expressions: direct type → match PromiseLike, anyConstituent for union (e.g. Promise<T> | null)
-            try {
-              const isCall = arg.type === 'CallExpression' || arg.type === 'NewExpression';
-              const assignable = isCall
-                ? gildash.isTypeAssignableToType(filePath, arg.start, '(...args: any[]) => PromiseLike<any>')
-                : gildash.isTypeAssignableToType(filePath, arg.start, 'PromiseLike<any>', { anyConstituent: true });
-
-              if (assignable !== null) {
-                shouldFlag = assignable;
-              } else {
-                shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
-              }
-            } catch {
-              // semantic layer 미활성 등 → AST 휴리스틱 fallback
-              shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
+          if (arg.type === 'ImportExpression') {
+            shouldFlag = true;
+          } else if (gildash !== null) {
+            if (arg.type === 'CallExpression') {
+              shouldFlag = callReturnsPromise(arg, gildash, filePath);
+            } else if (arg.type !== 'NewExpression') {
+              // Identifier / member etc.: the value's own type must be PromiseLike.
+              shouldFlag = receiverIsPromiseLike(arg, gildash, filePath);
             }
-          } else {
-            shouldFlag = arg.type === 'CallExpression' || arg.type === 'NewExpression' || arg.type === 'ImportExpression';
+            // NewExpression: a constructed instance is almost never a thenable → not flagged.
           }
 
           if (shouldFlag) {
@@ -1000,48 +1183,28 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
               node,
               filePath,
               sourceText,
-              message: 'return without await in try block — catch cannot intercept rejections',
               evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
             });
           }
         }
       }
 
-      // Mark returned identifier as observed for unobserved-variable
-      if (arg !== null && arg.type === 'Identifier') {
-        markObserved(arg.name);
-      }
     }
 
-    // P3-1 throw-non-error
+    // throw-non-error: flag only when the thrown value is provably not an Error.
     if (node.type === 'ThrowStatement') {
-      const arg = node.argument;
-      const isLikelyError =
-        arg.type === 'NewExpression' ||
-        arg.type === 'Identifier' ||
-        arg.type === 'AwaitExpression' ||
-        arg.type === 'ChainExpression';
-      // CallExpression is allowed in general (e.g. createError()),
-      // but reject known primitive wrappers that never produce Error instances.
-      const isCallButPrimitiveWrapper =
-        arg.type === 'CallExpression' && arg.callee.type === 'Identifier' && isPrimitiveWrapperName(arg.callee.name);
-      const isAllowedCall = arg.type === 'CallExpression' && !isCallButPrimitiveWrapper;
-
-      if (!isLikelyError && !isAllowedCall) {
+      if (isProvablyNonErrorThrow(node.argument, gildash, filePath)) {
         pushFinding(findings, {
           kind: 'throw-non-error',
           node,
           filePath,
           sourceText,
-          message: 'throw argument is not an Error instance (loses stack trace)',
           evidence: getEvidenceLineAt(sourceText, node.start),
-          recipes: [],
         });
       }
     }
 
-    // P3-2 promise-constructor-hygiene
+    // promise-constructor-hygiene
     if (node.type === 'NewExpression') {
       const callee = node.callee;
       const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise';
@@ -1068,9 +1231,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
               node,
               filePath,
               sourceText,
-              message: 'Promise executor is async; thrown errors will not reject',
               evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
             });
           }
 
@@ -1087,9 +1248,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
                   node,
                   filePath,
                   sourceText,
-                  message: 'throw after settling a Promise executor is swallowed — throw before resolve/reject',
                   evidence: getEvidenceLineAt(sourceText, node.start),
-                  recipes: [],
                 });
               }
             }
@@ -1104,9 +1263,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
               node,
               filePath,
               sourceText,
-              message: 'Promise executor first param should be resolve, not reject — params appear swapped',
               evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: [],
             });
           }
         }
@@ -1141,47 +1298,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
     }
 
-    // AwaitExpression: mark awaited identifier as observed
-    if (node.type === 'AwaitExpression') {
-      const arg = node.argument;
-
-      if (arg.type === 'Identifier') {
-        markObserved(arg.name);
-      }
-    }
-
-    // CallExpression: mark .then/.catch/.finally on identifier; mark args as observed
-    // Also handle walkOxcTree rules: prefer-catch, prefer-await-to-then, no-return-wrap,
-    // always-return, no-callback-in-promise, misused-promises, unsafe-finally(.finally())
+    // CallExpression: no-callback-in-promise and misused-promises.
+    // (unobserved-variable observation is handled by the generic identifier-read hook above.)
     if (node.type === 'CallExpression') {
       const callee = node.callee;
       const method = getMemberPropertyName(callee);
 
-      // Unobserved-variable: x.then/catch/finally(...) marks x as observed
-      if (method !== null && (method === 'then' || method === 'catch' || method === 'finally')) {
-        if (callee.type === 'MemberExpression') {
-          const obj = callee.object;
-
-          if (obj.type === 'Identifier') {
-            markObserved(obj.name);
-          }
-        }
-      }
-
-      // Unobserved-variable: fn(p) or fn([p]) — passed as function argument marks p as observed
-      for (const callArg of node.arguments) {
-        if (callArg.type === 'Identifier') {
-          markObserved(callArg.name);
-        } else if (callArg.type === 'ArrayExpression') {
-          for (const el of callArg.elements) {
-            if (el !== null && el.type === 'Identifier') {
-              markObserved(el.name);
-            }
-          }
-        }
-      }
-
-      // EF-03 return-in-finally: .finally(() => { return ... })
+      // return-in-finally: .finally(() => { return ... })
       if (method === 'finally') {
         const first = node.arguments[0];
 
@@ -1191,20 +1314,16 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             node,
             filePath,
             sourceText,
-            message: 'return in .finally() callback overrides original control flow',
             evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: ['RCP-04'],
           });
         }
       }
 
-      // EF-07 prefer-catch (`.then(onOk, onErr)`): out of scope. When onErr observes the
-      // upstream rejection, the reason reaches a handler (observability/propagation/cause
-      // preserved) — preferring `.catch` over a second argument is a pure notation
-      // convention (lint domain), like its disabled PREFER siblings (prefer-await-to-then,
-      // no-return-wrap). The one genuine error-flow case — onOk throws and the chain result
-      // is discarded with no downstream catch — belongs to catch-or-return (backlog: precise
-      // its two-argument suppression), not to a blanket `.then(_, _)` style rule.
+      // Note: `.then(onOk, onErr)` style preference (".catch is nicer") is deliberately not a
+      // rule — when onErr observes the upstream rejection the reason still reaches a handler, so
+      // it is a pure notation convention (lint domain). The one genuine error-flow case — onOk
+      // throws and the chain result is discarded with no downstream catch — belongs to
+      // catch-or-return (backlog: precise its two-argument suppression).
 
       // no-callback-in-promise: callback-style API inside then/catch/finally callback
       if (method === 'then' || method === 'catch') {
@@ -1218,16 +1337,14 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
                 node,
                 filePath,
                 sourceText,
-                message: 'callback-style API inside Promise chain — use Promise-based alternative',
                 evidence: getEvidenceLineAt(sourceText, node.start),
-                recipes: [],
               });
             }
           }
         }
       }
 
-      // EF-08 misused-promises: async callback passed to a sync-array iteration method.
+      // misused-promises: async callback passed to a sync-array iteration method.
       //  - always-W group: forEach ignores the result; predicate/comparator methods coerce
       //    the returned (always-truthy) Promise, so the async intent is lost regardless of
       //    where the call's value goes.
@@ -1257,53 +1374,101 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             node,
             filePath,
             sourceText,
-            message: 'async callback is passed where a sync callback is expected',
             evidence: `${method} callback is async`,
-            recipes: ['RCP-12', 'RCP-13'],
           });
         }
       }
+
+      // throw-non-error via rejection: Promise.reject(<provably-non-Error>) loses the stack
+      // trace / cause exactly like `throw <non-Error>`.
+      if (
+        method === 'reject' &&
+        callee.type === 'MemberExpression' &&
+        callee.object.type === 'Identifier' &&
+        callee.object.name === 'Promise'
+      ) {
+        const first = node.arguments[0];
+
+        if (first !== undefined && isProvablyNonErrorThrow(first, gildash, filePath)) {
+          pushFinding(findings, {
+            kind: 'throw-non-error',
+            node,
+            filePath,
+            sourceText,
+            evidence: getEvidenceLineAt(sourceText, node.start),
+          });
+        }
+      }
+
+      // empty-catch (promise form): an empty `.catch(…)` / `.then(_, …)` rejection handler
+      // swallows the rejection. gildash-gated on the receiver being PromiseLike so a non-Promise
+      // fluent API with its own `.catch` is never flagged (zero-FP over degraded coverage).
+      const emptyHandler = emptyRejectionHandlerBody(method, node.arguments);
+
+      if (
+        emptyHandler !== null &&
+        callee.type === 'MemberExpression' &&
+        gildash !== null &&
+        receiverIsPromiseLike(callee.object, gildash, filePath)
+      ) {
+        pushFinding(findings, {
+          kind: 'empty-catch',
+          node: emptyHandler,
+          filePath,
+          sourceText,
+          evidence: 'empty rejection handler swallows the error',
+        });
+      }
     }
 
-    // Expression-statement based rules.
+    // Discarded-promise rules: a promise whose rejection is unobserved at an expression statement.
     if (node.type === 'ExpressionStatement') {
       const expr = node.expression;
 
-      // ignore explicit void
+      // explicit `void` is an intentional discard (K)
       if (!(expr.type === 'UnaryExpression' && expr.operator === 'void')) {
-        // EF-08 floating-promises: Promise.* / new Promise as expression statement
-        if (isPromiseFactoryCall(expr)) {
+        // Unwrap optional-chain calls (`p?.then()`, `o.f?.()`) to the underlying call.
+        const target = expr.type === 'ChainExpression' ? expr.expression : expr;
+
+        if (isPromiseFactoryCall(target)) {
+          // Promise.* / new Promise / import() created but not observed (syntactic).
           pushFinding(findings, {
             kind: 'floating-promises',
             node,
             filePath,
             sourceText,
-            message: 'promise is created but not observed',
             evidence: getEvidenceLineAt(sourceText, node.start),
-            recipes: ['RCP-09', 'RCP-10', 'RCP-11'],
           });
-        } else if (expr.type === 'CallExpression') {
-          // EF-08 catch-or-return: top-level then call without catch anywhere in chain
-          const exprCallee = expr.callee;
-          const exprMethod = getMemberPropertyName(exprCallee);
-
-          if (exprMethod === 'then' && !chainHasCatch(expr)) {
+        } else if (target.type === 'CallExpression' && !chainHasCatch(target)) {
+          if (chainHasThen(target)) {
+            // catch-or-return: a `.then` chain with no `.catch` anywhere — rejection unobserved.
+            // Syntactic (no gildash gate, unlike the bare-call branch below): `.then` is itself
+            // the thenable signature, so a `.then` chain is promise-like by construction — the
+            // same basis as ESLint's promise/catch-or-return.
             pushFinding(findings, {
               kind: 'catch-or-return',
               node,
               filePath,
               sourceText,
-              message: 'promise chain should have catch or be awaited/returned',
               evidence: getEvidenceLineAt(sourceText, node.start),
-              recipes: ['RCP-05', 'RCP-06'],
+            });
+          } else if (gildash !== null && callReturnsPromise(target, gildash, filePath)) {
+            // floating-promises: a discarded call whose result gildash proves is a Promise
+            // (bare/method/optional/`.finally`). gildash-gated so non-Promise calls never flag.
+            pushFinding(findings, {
+              kind: 'floating-promises',
+              node,
+              filePath,
+              sourceText,
+              evidence: getEvidenceLineAt(sourceText, node.start),
             });
           }
         }
       }
     }
 
-    // Fall back to generic traversal
-    forEachChildNode(node, child => visit(child, node.type === 'ParenthesizedExpression' ? parent : node));
+    // Fall back to generic traversal (parentheses are already normalized away upstream).
+    forEachChildNode(node, child => visit(child, node));
   };
 
   // Single-pass traversal: all rules handled in visit().

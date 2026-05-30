@@ -1,6 +1,6 @@
 # error-flow
 
-Detects error handling anti-patterns. Covers throw non-Error, useless catch, unsafe finally, unobserved promises (floating, variable, misused), missing error cause, promise constructor hygiene, and return-await-in-try.
+Detects error handling anti-patterns. Covers throw non-Error (throw & `Promise.reject`), empty catch (block & empty promise rejection handler), unsafe finally, unobserved promises (floating, variable, misused, catch-or-return), missing error cause, promise constructor hygiene, and return-await-in-try.
 
 **Finding fields:** `kind, code, file, span, evidence`
 
@@ -20,7 +20,7 @@ Detects error handling anti-patterns. Covers throw non-Error, useless catch, uns
 
 ## EF_PROMISE_CONSTRUCTOR_HYGIENE
 
-**Cause:** The Promise constructor has a hygiene issue: async executor, throw in sync executor, return value in executor, swapped params, or unnecessary new Promise in async function.
+**Cause:** The Promise constructor has a hygiene issue: an async executor (thrown errors are swallowed), a throw after the promise is already settled, or swapped resolve/reject params.
 
 <think>
 
@@ -41,15 +41,15 @@ Detects error handling anti-patterns. Covers throw non-Error, useless catch, uns
 
 </think>
 
-## EF_USELESS_CATCH
+## EF_EMPTY_CATCH
 
-**Cause:** A catch block catches an error and immediately re-throws it without transformation, making the try-catch pointless.
+**Cause:** A catch block has no statements (or an empty `.catch(…)` / `.then(_, …)` rejection handler), so the caught error is silently swallowed — its observability, propagation and cause are all lost.
 
 <think>
 
-1. Read the entire try-catch-finally structure. If a `finally` block exists that performs cleanup, the try block must remain — remove only the catch clause, not the try-finally.
-2. If there is no finally block, remove the entire try-catch wrapper and leave only the body of the try block.
-3. Check git log for the catch block. If the commit message indicates future handling was planned, leave a TODO comment instead of removing.
+1. Read the catch block and the try body. Decide how the error should be handled: rethrow it (`throw err`), log it, or convert it into a recovery value.
+2. If the failure is genuinely expected and ignorable, make the intent observable in code — bind the error and pass it to a no-op handler, or narrow the try to the single statement that may fail. A comment alone does not restore observability.
+3. If the catch only exists to suppress a specific expected error, re-throw any other error so unexpected failures still propagate.
 
 </think>
 
@@ -61,40 +61,6 @@ Detects error handling anti-patterns. Covers throw non-Error, useless catch, uns
 
 1. Read the finally block and identify the throw or return statement. If it is a return that provides a meaningful fallback value (documented intent), this may be deliberate — **stop, no action needed**.
 2. Remove the return/throw from the finally block. Move it into the try block (for success returns) or catch block (for error re-throws). The finally block should contain only cleanup code (close connections, release resources).
-
-</think>
-
-## EF_PREFER_DOT_CATCH_CATCH
-
-**Cause:** Error handling uses .then(onFulfilled, onRejected) instead of .catch(), which is less readable and can miss errors thrown in onFulfilled.
-
-<think>
-
-1. Read the `.then(onFulfilled, onRejected)` call. Note that errors thrown inside `onFulfilled` are NOT caught by `onRejected` in the two-argument form — this is a real bug if `onFulfilled` can throw.
-2. Replace `.then(onFulfilled, onRejected)` with `.then(onFulfilled).catch(onRejected)` so that both the original rejection and errors from `onFulfilled` are handled.
-
-</think>
-
-## EF_PREFER_DOT_CATCH_AWAIT
-
-**Cause:** Promise chains use .then()/.catch() inside an async function instead of await, reducing readability and error flow clarity.
-
-<think>
-
-1. Read the enclosing function. If the .then() chain runs multiple promises in parallel (e.g., `Promise.all([...]).then()`), await would change concurrency semantics — **stop, no action needed**.
-2. Replace the .then() chain with `const result = await promise` and move error handling into a try-catch block wrapping the await.
-3. If there is a .catch() handler, convert it to the catch clause of the try-catch. Ensure the same error handling logic is preserved.
-
-</think>
-
-## EF_PREFER_DOT_CATCH_NO_WRAP
-
-**Cause:** A .then() callback returns Promise.resolve() or Promise.reject() unnecessarily — the value can be returned directly.
-
-<think>
-
-1. Read the .then() callback body. Replace `return Promise.resolve(value)` with `return value` and `return Promise.reject(error)` with `throw error`.
-2. Run the type checker to confirm the return type is compatible after removing the wrapper.
 
 </think>
 
@@ -141,17 +107,6 @@ Detects error handling anti-patterns. Covers throw non-Error, useless catch, uns
 
 1. Grep for the variable name in the current file. If it is passed to another function, returned, or used in `Promise.all()`, the Promise is observed elsewhere — **stop, no action needed**.
 2. If the variable is truly unused after assignment, add `await` before the assignment expression, or remove the assignment if the result is not needed.
-
-</think>
-
-## EF_UNOBSERVED_PROMISE_ALWAYS_RETURN
-
-**Cause:** A .then() callback does not return a value, breaking the Promise chain and losing the resolved value.
-
-<think>
-
-1. Read the .then() callback. If it performs a side effect (logging, mutation) and no downstream .then() depends on the return value, this is acceptable — **stop, no action needed**.
-2. If downstream .then() calls or the final consumer expects a transformed value, add an explicit `return` statement to the callback.
 
 </think>
 
