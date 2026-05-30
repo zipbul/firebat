@@ -6,9 +6,9 @@ import { analyzeErrorFlow } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 const noopGildash = {
-  isTypeAssignableToType: () => null,
-  getResolvedTypesAtPositions: () => new Map(),
-  isTypeAssignableToTypeAtPositions: () => new Map(),
+  isThenableAtSpan: () => null,
+  getExpressionTypeAtSpan: () => null,
+  getContextualCallReturnsAtSpan: () => null,
 } as unknown as Gildash;
 
 describe('integration/error-flow', () => {

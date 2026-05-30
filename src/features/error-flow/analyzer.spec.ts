@@ -6,9 +6,9 @@ import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
 
 const noopGildash = {
-  isTypeAssignableToType: () => null,
-  getResolvedTypesAtPositions: () => new Map(),
-  isTypeAssignableToTypeAtPositions: () => new Map<number, boolean>(),
+  isThenableAtSpan: () => null,
+  getExpressionTypeAtSpan: () => null,
+  getContextualCallReturnsAtSpan: () => null,
 } as unknown as Gildash;
 
 const analyzeSingle = async (filePath: string, sourceText: string) => {
@@ -23,45 +23,24 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
   return findings;
 };
 
+// The error-flow detector reaches gildash only through the TypeOracle, whose sole thenable seam is
+// `isThenableAtSpan(filePath, span, { anyConstituent })`. These unit tests stub that seam directly:
+// `mockIsThenableAtSpan` decides, for any queried expression span, whether the value is a thenable
+// (`true`), provably not (`false`), or unresolvable (`null` → treated conservatively as not).
 const analyzeWithSemantic = async (
   filePath: string,
   sourceText: string,
-  mockIsTypeAssignableToType: (
+  mockIsThenableAtSpan: (
     filePath: string,
-    position: number,
-    targetTypeExpression: string,
+    span: { start: number; end: number },
     options?: { anyConstituent?: boolean },
   ) => boolean | null,
-  mockBatchPositions?: (
-    filePath: string,
-    positions: number[],
-    targetTypeExpression: string,
-    options?: { anyConstituent?: boolean },
-  ) => Map<number, boolean>,
 ) => {
   const program = [parseSource(filePath, sourceText)];
   const gildash = {
-    isTypeAssignableToType: mockIsTypeAssignableToType,
-    getResolvedTypesAtPositions: (_f: string, positions: number[]) => {
-      const result = new Map<number, { text: string; flags: number }>();
-
-      for (const pos of positions) {
-        result.set(pos, { text: 'unknown', flags: 0 });
-      }
-
-      return result;
-    },
-    isTypeAssignableToTypeAtPositions:
-      mockBatchPositions ??
-      ((_f: string, positions: number[]) => {
-        const result = new Map<number, boolean>();
-
-        for (const pos of positions) {
-          result.set(pos, true);
-        }
-
-        return result;
-      }),
+    isThenableAtSpan: mockIsThenableAtSpan,
+    getExpressionTypeAtSpan: () => null,
+    getContextualCallReturnsAtSpan: () => null,
   } as unknown as Gildash;
 
   return analyzeErrorFlow(program, { gildash });
@@ -639,7 +618,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/floating-bare-call.ts';
     const source = 'export function f() { fetchData(); }';
     // Act — gildash reports the callee returns a PromiseLike.
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
 
     // Assert
     expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(1);
@@ -661,7 +640,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/floating-bare-void.ts';
     const source = 'export function f() { void fetchData(); }';
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
 
     // Assert
     expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
@@ -685,7 +664,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/empty-catch-handler.ts';
     const source = 'export function f(p: Promise<number>) { p.catch(() => {}); }';
     // Act — gildash confirms the receiver is PromiseLike.
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
 
     // Assert
     expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(1);
@@ -696,7 +675,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/empty-then-handler.ts';
     const source = 'export function f(p: Promise<number>) { p.then(v => v, () => {}); }';
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
 
     // Assert
     expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(1);
@@ -718,7 +697,7 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/features/nonempty-catch-handler.ts';
     const source = 'export function f(p: Promise<number>) { p.catch((e) => { console.error(e); }); }';
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
 
     // Assert
     expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
@@ -1414,7 +1393,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — gildash proves the callee returns a Promise.
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1546,7 +1525,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — CallExpression: target is '(...args: any[]) => PromiseLike<any>'
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1587,7 +1566,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — Identifier: target is 'PromiseLike<any>'
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1648,7 +1627,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — () => Promise<Response> | null is assignable to (...args: any[]) => PromiseLike<any>
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1688,7 +1667,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — () => Promise<Response> & Loggable is assignable to (...args: any[]) => PromiseLike<any>
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -1708,14 +1687,14 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
     expect(hits.length).toBe(1);
   });
 
-  it('return-await-in-try - CallExpression passes function target type', async () => {
+  it('return-await-in-try - CallExpression result span is probed with anyConstituent', async () => {
     // Arrange
     const filePath = '/virtual/src/features/semantic-call-target.ts';
     const source = [
@@ -1727,16 +1706,11 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act — the callee is probed with the promise-fn target (+ an `any` discriminator probe).
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target, options) => {
-      if (target === '(...args: any[]) => PromiseLike<any>') {
-        expect(options).toEqual({ anyConstituent: true });
+    // Act — the oracle queries the call-result span for thenable-ness, passing anyConstituent.
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _span, options) => {
+      expect(options).toEqual({ anyConstituent: true });
 
-        return true;
-      }
-
-      // the `(...args) => string` any-discriminator probe → not assignable for a real promise fn
-      return false;
+      return true;
     });
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
@@ -1757,16 +1731,11 @@ describe('error-flow/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act — the value is probed with PromiseLike (+ a `string` any-discriminator probe).
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target, options) => {
-      if (target === 'PromiseLike<any>') {
-        expect(options).toEqual({ anyConstituent: true });
+    // Act — the value's span is probed for thenable-ness, passing anyConstituent.
+    const analysis = await analyzeWithSemantic(filePath, source, (_f, _span, options) => {
+      expect(options).toEqual({ anyConstituent: true });
 
-        return true;
-      }
-
-      // the `string` any-discriminator probe → not assignable for a real promise value
-      return false;
+      return true;
     });
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
@@ -1809,7 +1778,7 @@ describe('error-flow/analyzer', () => {
       '}',
     ].join('\n');
     // Act — even with gildash, `new X()` results are not treated as promises here.
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _p, target) => target.includes('PromiseLike'));
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
@@ -2121,11 +2090,11 @@ describe('error-flow/analyzer', () => {
   // --- unobserved-variable ---
 
   it('should report unobserved-variable when Promise call result is never awaited', async () => {
-    // Arrange — gildash batch confirms fetchData returns Promise
+    // Arrange — the oracle confirms the init expression's type is a thenable.
     const filePath = '/virtual/src/features/unobserved-var.ts';
     const source = ['export function f() {', '  const p = fetchData();', '  console.log("done");', '}'].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => null);
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
@@ -2133,24 +2102,11 @@ describe('error-flow/analyzer', () => {
   });
 
   it('should not report unobserved-variable when non-Promise call result (gildash confirms)', async () => {
-    // Arrange — gildash batch confirms fetchData does NOT return Promise
+    // Arrange — the oracle confirms the init expression's type is NOT a thenable.
     const filePath = '/virtual/src/features/sync-var.ts';
     const source = ['export function f() {', '  const x = getData();', '  console.log("done");', '}'].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(
-      filePath,
-      source,
-      () => null,
-      (_f, positions) => {
-        const m = new Map<number, boolean>();
-
-        for (const p of positions) {
-          m.set(p, false);
-        }
-
-        return m;
-      },
-    );
+    const analysis = await analyzeWithSemantic(filePath, source, () => false);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
@@ -2179,11 +2135,15 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
     const program = [parseSource(filePath, source)];
     const throwingGildash = {
-      getResolvedTypesAtPositions: () => {
+      isThenableAtSpan: () => {
         throw new Error('semantic layer offline');
       },
-      isTypeAssignableToTypeAtPositions: () => new Map<number, boolean>(),
-      isTypeAssignableToType: () => null,
+      getExpressionTypeAtSpan: () => {
+        throw new Error('semantic layer offline');
+      },
+      getContextualCallReturnsAtSpan: () => {
+        throw new Error('semantic layer offline');
+      },
     } as unknown as Gildash;
     // Act
     const analysis = await analyzeErrorFlow(program, { gildash: throwingGildash });
@@ -2194,11 +2154,11 @@ describe('error-flow/analyzer', () => {
   });
 
   it('should not report unobserved-variable when call result is awaited', async () => {
-    // Arrange
+    // Arrange — the init is a thenable (candidate registered); the `await p` read observes it.
     const filePath = '/virtual/src/features/observed-var.ts';
     const source = ['export async function f() {', '  const p = fetchData();', '  await p;', '}'].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => null);
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
@@ -2206,11 +2166,11 @@ describe('error-flow/analyzer', () => {
   });
 
   it('should not report unobserved-variable when call result is returned', async () => {
-    // Arrange
+    // Arrange — the init is a thenable (candidate registered); the `return p` read observes it.
     const filePath = '/virtual/src/features/returned-var.ts';
     const source = ['export function f() {', '  const p = fetchData();', '  return p;', '}'].join('\n');
     // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => null);
+    const analysis = await analyzeWithSemantic(filePath, source, () => true);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert

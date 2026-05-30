@@ -6,9 +6,9 @@ import { analyzeErrorFlow } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
 
 const noopGildash = {
-  isTypeAssignableToType: () => null,
-  getResolvedTypesAtPositions: () => new Map(),
-  isTypeAssignableToTypeAtPositions: () => new Map(),
+  isThenableAtSpan: () => null,
+  getExpressionTypeAtSpan: () => null,
+  getContextualCallReturnsAtSpan: () => null,
 } as unknown as Gildash;
 
 describe('golden/error-flow', () => {

@@ -5,9 +5,11 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import type { ParsedFile } from '../../engine/types';
 import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
+import type { TypeOracle } from './type-oracle';
 
 import { forEachChildNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { PartialResultError } from '../../engine/partial-result-error';
+import { createTypeOracle } from './type-oracle';
 
 interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
@@ -121,13 +123,12 @@ const unwrapThrowExpression = (node: Node): Node => {
   return current;
 };
 
-// throw-non-error fires only when the thrown value is *provably* not an Error (it would lose
-// the stack trace / cause). Sound by construction: anything that could be an Error —
-// identifiers, member access, calls of unknown type, new, await, conditionals — is given the
-// benefit of the doubt (K). The syntactic floor reports literal-shaped values; gildash augments
-// it by proving a value's static type is a bare primitive (`throw msg` where `msg: string`).
-// A union like `string | Error` is NOT assignable to the primitive union, so it stays K.
-const isProvablyNonErrorThrow = (arg: Node, gildash: Gildash | null, filePath: string): boolean => {
+// throw-non-error fires only when the thrown value is *provably* not an Error (it would lose the
+// stack trace / cause). Sound by construction: anything that could be an Error — identifiers,
+// member access, calls of unknown type, new, await, conditionals — gets the benefit of the doubt
+// (K). The syntactic floor reports literal-shaped values; the oracle augments it by proving the
+// value's static type is a bare primitive (`throw msg`/`throw o.msg`/`throw g()`).
+const isProvablyNonErrorThrow = (arg: Node, oracle: TypeOracle): boolean => {
   const value = unwrapThrowExpression(arg);
 
   // Literals and composite literals are never Error instances.
@@ -145,39 +146,7 @@ const isProvablyNonErrorThrow = (arg: Node, gildash: Gildash | null, filePath: s
     return true;
   }
 
-  // Semantic augmentation: the value's static type is wholly a bare primitive (no anyConstituent,
-  // so a `string | Error` union — which could be an Error — is not flagged). `any` is assignable
-  // to the primitive union too yet could hold an Error at runtime, so it is excluded via the extra
-  // `object` check: only `any` is assignable to BOTH the primitive union and `object`.
-  // For a non-computed member access (`obj.msg`) the member *property* name resolves the value's
-  // type — `value.start` would resolve the receiver — so probe the property position. For a call
-  // (`g()`), probe the callee with a primitive-returning-function target (`g`'s return type).
-  if (gildash !== null) {
-    try {
-      if (value.type === 'CallExpression') {
-        const callee = value.callee;
-        const pos = callee.type === 'MemberExpression' ? callee.property.start : callee.start;
-
-        if (gildash.isTypeAssignableToType(filePath, pos, '(...args: any[]) => string | number | boolean | bigint | symbol') !== true) {
-          return false;
-        }
-
-        return gildash.isTypeAssignableToType(filePath, pos, '(...args: any[]) => object') !== true;
-      }
-
-      const position = value.type === 'MemberExpression' && value.computed === false ? value.property.start : value.start;
-
-      if (gildash.isTypeAssignableToType(filePath, position, 'string | number | boolean | bigint | symbol') !== true) {
-        return false;
-      }
-
-      return gildash.isTypeAssignableToType(filePath, position, 'object') !== true;
-    } catch {
-      return false;
-    }
-  }
-
-  return false;
+  return oracle.isPrimitiveValue(value);
 };
 
 const isErrorConstructor = (callee: Node): boolean => {
@@ -236,53 +205,6 @@ const isPromiseFactoryCall = (expr: Node): boolean => {
   const name = prop.name;
 
   return name === 'resolve' || name === 'reject' || name === 'all' || name === 'race' || name === 'any' || name === 'allSettled';
-};
-
-// `any` is assignable to PromiseLike yet could be anything at runtime, so it must not be treated
-// as a proven Promise. The discriminator: only an `any`(-returning) type is assignable to BOTH
-// the promise target AND a string-returning function — a real Promise-returning function is not.
-// So a positive ANY_FN_PROBE means the callee returned `any` and we bail out. (`receiverIsPromiseLike`
-// uses the value-level analogue, a bare `string`; same idea as throw-non-error's `object` probe.)
-const PROMISE_FN_TARGET = '(...args: any[]) => PromiseLike<any>';
-const ANY_FN_PROBE = '(...args: any[]) => string';
-
-// True only when gildash proves the called function returns a PromiseLike (and not `any`).
-// Resolves the type at the callee *name* (the method property for `obj.m()`, the identifier for
-// `f()`) so member and bare calls are both covered. Conservative: any failure → false.
-const callReturnsPromise = (call: Node, gildash: Gildash, filePath: string): boolean => {
-  if (call.type !== 'CallExpression') {
-    return false;
-  }
-
-  const callee = call.callee;
-  const position = callee.type === 'MemberExpression' ? callee.property.start : callee.start;
-
-  try {
-    // anyConstituent so an optional method (`fn | undefined`) is still recognized by its
-    // promise-returning constituent.
-    if (gildash.isTypeAssignableToType(filePath, position, PROMISE_FN_TARGET, { anyConstituent: true }) !== true) {
-      return false;
-    }
-
-    return gildash.isTypeAssignableToType(filePath, position, ANY_FN_PROBE, { anyConstituent: true }) !== true;
-  } catch {
-    return false;
-  }
-};
-
-// True only when gildash proves the receiver is a PromiseLike (and not `any`). Conservative: any
-// failure → false — guards `.catch`/`.then` rules against non-Promise fluent APIs (e.g. a query
-// builder with its own `.catch` method) and against `any`-typed receivers, never over-reporting.
-const receiverIsPromiseLike = (receiver: Node, gildash: Gildash, filePath: string): boolean => {
-  try {
-    if (gildash.isTypeAssignableToType(filePath, receiver.start, 'PromiseLike<any>', { anyConstituent: true }) !== true) {
-      return false;
-    }
-
-    return gildash.isTypeAssignableToType(filePath, receiver.start, 'string', { anyConstituent: true }) !== true;
-  } catch {
-    return false;
-  }
 };
 
 // An empty rejection handler — `.catch(() => {})` or `.then(_, () => {})` — swallows the
@@ -719,33 +641,6 @@ const extractConstructorName = (callee: Node): string | null => {
   return null;
 };
 
-/** Pre-scan: collect variable identifier positions for VariableDeclarators with CallExpression init.
- *  Uses id.start (Identifier position) instead of init.start (CallExpression position) because
- *  gildash resolves types at identifier positions, and the variable's type IS the call result type. */
-const collectCallVarPositions = (program: Node): number[] => {
-  const positions: number[] = [];
-
-  walkOxcTree(program, node => {
-    if (node.type === 'VariableDeclarator') {
-      const id = node.id;
-      const init = node.init;
-
-      if (
-        id.type === 'Identifier' &&
-        typeof id.name === 'string' &&
-        init !== null &&
-        (init.type === 'CallExpression' || init.type === 'NewExpression')
-      ) {
-        positions.push(id.start);
-      }
-    }
-
-    return true;
-  });
-
-  return positions;
-};
-
 const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): CollectFindingsResult => {
   const findings: ErrorFlowFinding[] = [];
   const constructorNames: Map<ErrorFlowFinding, string> = new Map();
@@ -756,44 +651,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // Unobserved-variable tracking: stack of candidate/observed sets per function scope
   const unobservedCandidates: Map<string, Node>[] = [];
   const unobservedObserved: Set<string>[] = [];
-  // Pre-compute which variable positions have Promise types (one batch call per file).
-  // Uses id.start positions so gildash resolves the variable's type (= call result type).
-  // Filters out `any` typed positions since `any` is assignable to everything.
-  //
-  // Default is an empty set: when gildash is unavailable or throws, register NO candidates
-  // rather than registering ALL (which produces broad FP for every sync call result).
-  const promisePositions = new Set<number>();
-
-  if (gildash !== null) {
-    const allPositions = collectCallVarPositions(program);
-
-    if (allPositions.length > 0) {
-      try {
-        // Step 1: Resolve types to filter out `any` positions (TypeFlags.Any = 1).
-        const resolvedTypes = gildash.getResolvedTypesAtPositions(filePath, allPositions);
-        const nonAnyPositions = allPositions.filter(pos => {
-          const resolved = resolvedTypes.get(pos);
-
-          return resolved !== undefined && (resolved.flags & 1) === 0;
-        });
-
-        // Step 2: Check PromiseLike assignability only for non-any positions.
-        if (nonAnyPositions.length > 0) {
-          const results = gildash.isTypeAssignableToTypeAtPositions(filePath, nonAnyPositions, 'PromiseLike<any>', {
-            anyConstituent: true,
-          });
-
-          for (const [pos, isPromise] of results) {
-            if (isPromise) {
-              promisePositions.add(pos);
-            }
-          }
-        }
-      } catch {
-        // Semantic layer error — promisePositions stays empty, conservative fallback.
-      }
-    }
-  }
+  // The sole owner of gildash type queries for this file. When gildash is unavailable every query
+  // answers `false`, so degraded scans never over-report.
+  const oracle = createTypeOracle(gildash, filePath);
 
   const pushUnobservedScope = (): void => {
     unobservedCandidates.push(new Map());
@@ -1176,14 +1036,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
           if (arg.type === 'ImportExpression') {
             shouldFlag = true;
-          } else if (gildash !== null) {
-            if (arg.type === 'CallExpression') {
-              shouldFlag = callReturnsPromise(arg, gildash, filePath);
-            } else if (arg.type !== 'NewExpression') {
-              // Identifier / member etc.: the value's own type must be PromiseLike.
-              shouldFlag = receiverIsPromiseLike(arg, gildash, filePath);
-            }
-            // NewExpression: a constructed instance is almost never a thenable → not flagged.
+          } else if (arg.type !== 'NewExpression') {
+            // A CallExpression result type, or an identifier/member value type, must be a thenable.
+            // (A constructed instance is almost never a thenable, so NewExpression is not flagged.)
+            shouldFlag = oracle.isThenable(arg);
           }
 
           if (shouldFlag) {
@@ -1202,7 +1058,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     // throw-non-error: flag only when the thrown value is provably not an Error.
     if (node.type === 'ThrowStatement') {
-      if (isProvablyNonErrorThrow(node.argument, gildash, filePath)) {
+      if (isProvablyNonErrorThrow(node.argument, oracle)) {
         pushFinding(findings, {
           kind: 'throw-non-error',
           node,
@@ -1297,11 +1153,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         init !== null &&
         (init.type === 'CallExpression' || init.type === 'NewExpression')
       ) {
-        // Only register as candidate if gildash confirmed the call returns a Promise.
-        // When gildash is unavailable, promisePositions is empty → no candidates registered
-        // (conservative fallback; broadcasting unobserved-variable for every call result
-        // produced massive FP for sync function results).
-        if (promisePositions.has(id.start)) {
+        // Register only when the init expression's type is a thenable (the oracle excludes `any`
+        // and answers `false` without gildash — so degraded scans register nothing).
+        if (oracle.isThenable(init)) {
           addCandidate(id.name, node);
         }
       }
@@ -1399,7 +1253,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       ) {
         const first = node.arguments[0];
 
-        if (first !== undefined && isProvablyNonErrorThrow(first, gildash, filePath)) {
+        if (first !== undefined && isProvablyNonErrorThrow(first, oracle)) {
           pushFinding(findings, {
             kind: 'throw-non-error',
             node,
@@ -1415,12 +1269,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // fluent API with its own `.catch` is never flagged (zero-FP over degraded coverage).
       const emptyHandler = emptyRejectionHandlerBody(method, node.arguments);
 
-      if (
-        emptyHandler !== null &&
-        callee.type === 'MemberExpression' &&
-        gildash !== null &&
-        receiverIsPromiseLike(callee.object, gildash, filePath)
-      ) {
+      if (emptyHandler !== null && callee.type === 'MemberExpression' && oracle.isThenable(callee.object)) {
         pushFinding(findings, {
           kind: 'empty-catch',
           node: emptyHandler,
@@ -1462,7 +1311,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
               sourceText,
               evidence: getEvidenceLineAt(sourceText, node.start),
             });
-          } else if (gildash !== null && callReturnsPromise(target, gildash, filePath)) {
+          } else if (oracle.isThenable(target)) {
             // floating-promises: a discarded call whose result gildash proves is a Promise
             // (bare/method/optional/`.finally`). gildash-gated so non-Promise calls never flag.
             pushFinding(findings, {

@@ -18,9 +18,9 @@ import { analyzeDuplicates } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 
 const noopGildash = {
-  isTypeAssignableToType: () => null,
-  getResolvedTypesAtPositions: () => new Map(),
-  isTypeAssignableToTypeAtPositions: () => new Map(),
+  isThenableAtSpan: () => null,
+  getExpressionTypeAtSpan: () => null,
+  getContextualCallReturnsAtSpan: () => null,
 } as unknown as Gildash;
 const SOURCE = `
 import { readFileSync } from 'node:fs';
