@@ -150,14 +150,24 @@ const isProvablyNonErrorThrow = (arg: Node, gildash: Gildash | null, filePath: s
   // to the primitive union too yet could hold an Error at runtime, so it is excluded via the extra
   // `object` check: only `any` is assignable to BOTH the primitive union and `object`.
   // For a non-computed member access (`obj.msg`) the member *property* name resolves the value's
-  // type — `value.start` would resolve the receiver — so probe the property position.
+  // type — `value.start` would resolve the receiver — so probe the property position. For a call
+  // (`g()`), probe the callee with a primitive-returning-function target (`g`'s return type).
   if (gildash !== null) {
-    const position = value.type === 'MemberExpression' && value.computed === false ? value.property.start : value.start;
-
     try {
-      const isPrimitive = gildash.isTypeAssignableToType(filePath, position, 'string | number | boolean | bigint | symbol') === true;
+      if (value.type === 'CallExpression') {
+        const callee = value.callee;
+        const pos = callee.type === 'MemberExpression' ? callee.property.start : callee.start;
 
-      if (!isPrimitive) {
+        if (gildash.isTypeAssignableToType(filePath, pos, '(...args: any[]) => string | number | boolean | bigint | symbol') !== true) {
+          return false;
+        }
+
+        return gildash.isTypeAssignableToType(filePath, pos, '(...args: any[]) => object') !== true;
+      }
+
+      const position = value.type === 'MemberExpression' && value.computed === false ? value.property.start : value.start;
+
+      if (gildash.isTypeAssignableToType(filePath, position, 'string | number | boolean | bigint | symbol') !== true) {
         return false;
       }
 

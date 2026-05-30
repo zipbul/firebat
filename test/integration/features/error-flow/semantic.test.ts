@@ -161,6 +161,24 @@ describe('integration/error-flow (real typed gildash)', () => {
     expect(await kindsFor(code)).not.toContain('throw-non-error');
   });
 
+  it('flags a throw of a primitive-returning call result', async () => {
+    const code = ['declare function getMsg(): string;', 'export function f(): never {', '  throw getMsg();', '}'].join('\n');
+
+    expect(await kindsFor(code)).toContain('throw-non-error');
+  });
+
+  it('does not flag a throw of an Error-returning call result', async () => {
+    const code = ['declare function makeError(): Error;', 'export function f(): never {', '  throw makeError();', '}'].join('\n');
+
+    expect(await kindsFor(code)).not.toContain('throw-non-error');
+  });
+
+  it('does not flag a throw of an any-returning call result', async () => {
+    const code = ['declare function getAny(): any;', 'export function f(): never {', '  throw getAny();', '}'].join('\n');
+
+    expect(await kindsFor(code)).not.toContain('throw-non-error');
+  });
+
   it('flags Promise.reject with a string-typed reason', async () => {
     const code = ['export function f(reason: string): Promise<never> {', '  return Promise.reject(reason);', '}'].join('\n');
 
