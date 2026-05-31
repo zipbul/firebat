@@ -80,6 +80,23 @@ const isFunctionScope = <T extends TypedNode>(node: T): node is T & FunctionScop
 const isFunctionLiteral = <T extends TypedNode>(node: T): node is T & FunctionLiteralKind =>
   node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression';
 
+// A construct whose body executes conditionally / repeatedly. Used to nest the unobserved-variable
+// branch depth so a reassignment inside one is not treated as an unconditional overwrite. (TryStatement
+// is handled by the walker directly.)
+const branchConstructTypes = new Set([
+  'IfStatement',
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+  'SwitchStatement',
+  'ConditionalExpression',
+  'LogicalExpression',
+]);
+
+const isBranchConstruct = (node: Node): boolean => branchConstructTypes.has(node.type);
+
 const getMemberPropertyName = (callee: Node): string | null => {
   if (callee.type !== 'MemberExpression') {
     return null;
@@ -699,14 +716,25 @@ interface NodeTypeTag<K extends string> {
 
 type NodeOfType<K extends Node['type']> = Extract<Node, NodeTypeTag<K>>;
 
+// An unobserved-variable candidate: the declaration/assignment node to report, plus the branch
+// nesting depth where it was bound (so a reassignment is only treated as an overwrite when it
+// happens at the same depth — an unconditional, dominating reassignment, not a conditional one).
+interface CandidateInfo {
+  readonly node: Node;
+  readonly branchDepth: number;
+}
+
 const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): ErrorFlowFinding[] => {
   const findings: ErrorFlowFinding[] = [];
   // Traversal state read by return-await-in-try: are we inside an async function, and inside the
   // *block* of a try that has a catch clause? Maintained by the walker, saved/restored per function.
   let inAsyncFunction = false;
   let inTryBlockWithCatchDepth = 0;
+  // Branch nesting within the current function (if/loop/switch/ternary/logical/try) — used by the
+  // reassignment-kill check for unobserved-variable.
+  let branchDepth = 0;
   // Unobserved-variable tracking: stack of candidate/observed sets per function scope
-  const unobservedCandidates: Map<string, Node>[] = [];
+  const unobservedCandidates: Map<string, CandidateInfo>[] = [];
   const unobservedObserved: Set<string>[] = [];
   // The sole owner of gildash type queries for this file. When gildash is unavailable every query
   // answers `false`, so degraded scans never over-report.
@@ -755,9 +783,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return;
     }
 
-    for (const [name, node] of candidates) {
+    for (const [name, info] of candidates) {
       if (!observed.has(name)) {
-        report('unobserved-variable', node);
+        report('unobserved-variable', info.node);
       }
     }
   };
@@ -785,7 +813,39 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const top = unobservedCandidates[unobservedCandidates.length - 1];
 
     if (top !== undefined) {
-      top.set(name, node);
+      top.set(name, { node, branchDepth });
+    }
+  };
+
+  // Reassignment-kill: `p = <new value>` overwrites the binding. If `p` currently holds an
+  // unobserved thenable candidate bound at the same branch depth (an unconditional, dominating
+  // reassignment — not one guarded by an if/loop) and the right-hand side does not read `p`, the old
+  // promise's rejection floats. Flag it, then track the new value if it too is a thenable.
+  const ruleReassignmentKill = (node: NodeOfType<'AssignmentExpression'>): void => {
+    if (node.operator !== '=' || node.left.type !== 'Identifier') {
+      return;
+    }
+
+    const name = node.left.name;
+    const top = unobservedCandidates[unobservedCandidates.length - 1];
+    const info = top?.get(name);
+    const observed = unobservedObserved[unobservedObserved.length - 1];
+
+    if (
+      top === undefined ||
+      info === undefined ||
+      observed?.has(name) === true ||
+      info.branchDepth !== branchDepth ||
+      containsIdentifierUse(node.right, name)
+    ) {
+      return;
+    }
+
+    report('unobserved-variable', info.node);
+    top.delete(name);
+
+    if (oracle.isThenable(node.right)) {
+      addCandidate(name, node);
     }
   };
 
@@ -1234,9 +1294,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     if (isFunctionScope(node)) {
       const savedAsync = inAsyncFunction;
       const savedTryWithCatch = inTryBlockWithCatchDepth;
+      const savedBranchDepth = branchDepth;
 
       inAsyncFunction = node.async === true;
       inTryBlockWithCatchDepth = 0;
+      branchDepth = 0;
 
       pushUnobservedScope();
 
@@ -1246,6 +1308,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       inAsyncFunction = savedAsync;
       inTryBlockWithCatchDepth = savedTryWithCatch;
+      branchDepth = savedBranchDepth;
 
       return;
     }
@@ -1262,6 +1325,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       ruleUnsafeFinally(node);
 
       const hasCatch = node.handler !== null;
+
+      // The try/catch/finally bodies are conditionally executed relative to surrounding code.
+      branchDepth++;
 
       if (hasCatch) {
         inTryBlockWithCatchDepth++;
@@ -1280,6 +1346,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       if (node.finalizer !== null) {
         visit(node.finalizer, node);
       }
+
+      branchDepth--;
 
       return;
     }
@@ -1302,6 +1370,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       case 'VariableDeclarator':
         ruleUnobservedCandidate(node);
         break;
+      case 'AssignmentExpression':
+        ruleReassignmentKill(node);
+        break;
       case 'CallExpression':
         ruleCallExpression(node, parent);
         break;
@@ -1310,6 +1381,18 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         break;
       default:
         break;
+    }
+
+    // Branching constructs nest their children one branch deeper, so a reassignment guarded by a
+    // condition/loop is not treated as an unconditional overwrite of a candidate bound outside it.
+    if (isBranchConstruct(node)) {
+      branchDepth++;
+
+      forEachChildNode(node, child => visit(child, node));
+
+      branchDepth--;
+
+      return;
     }
 
     // Fall back to generic traversal (parentheses are already normalized away upstream).
