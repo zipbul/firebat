@@ -26,7 +26,7 @@ describe('golden/error-flow', () => {
   runGolden(import.meta.dir, 'unobserved-variable', program => analyzeErrorFlow(program, { gildash: noopGildash }));
 
   // ════════════════════════════════════════════════════════════════════════
-  // RED (구현 전): 코퍼스 감사 + 새 CLAUDE.md 기준 정렬. 구현 전이라 실패해야 정상.
+  // 코퍼스 감사 + CLAUDE.md 개념 정의 정렬로 추가된 고정 케이스 (모두 구현 완료, GREEN).
   // ════════════════════════════════════════════════════════════════════════
   const rg = (name: string) => runGolden(import.meta.dir, name, program => analyzeErrorFlow(program, { gildash: noopGildash }));
 

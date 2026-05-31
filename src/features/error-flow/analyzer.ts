@@ -97,17 +97,57 @@ const branchConstructTypes = new Set([
 
 const isBranchConstruct = (node: Node): boolean => branchConstructTypes.has(node.type);
 
-// The simple-identifier parameter names a function binds (e.g. `function g(p, q)` → {p, q}). Used to
-// shadow same-named outer unobserved-variable candidates. Only plain identifiers are collected —
-// destructured/rest params are skipped, which is conservative (under-collecting only ever keeps the
-// old, safe behaviour for the outer name; it never causes a false positive).
-const collectSimpleParamNames = (params: ReadonlyArray<Node>): Set<string> => {
+// Collect the binding identifiers a parameter pattern introduces — plain `p`, default `p = …`, rest
+// `...p`, and destructured `{ p }` / `[p]` (recursively). Only true binding positions are added; a
+// computed key (`{ [c]: v }`) contributes `v`, never `c`, so an outer reference is never mistaken for
+// a shadow (which would be a false positive).
+const collectBindingNames = (pattern: Node, names: Set<string>): void => {
+  switch (pattern.type) {
+    case 'Identifier':
+      if (typeof pattern.name === 'string') {
+        names.add(pattern.name);
+      }
+
+      break;
+    case 'AssignmentPattern':
+      collectBindingNames(pattern.left, names);
+      break;
+    case 'RestElement':
+      collectBindingNames(pattern.argument, names);
+      break;
+    case 'ArrayPattern':
+      for (const element of pattern.elements) {
+        if (element !== null) {
+          collectBindingNames(element, names);
+        }
+      }
+
+      break;
+    case 'ObjectPattern':
+      for (const property of pattern.properties) {
+        if (property.type === 'RestElement') {
+          collectBindingNames(property.argument, names);
+        } else {
+          collectBindingNames(property.value, names);
+        }
+      }
+
+      break;
+    case 'TSParameterProperty':
+      collectBindingNames(pattern.parameter, names);
+      break;
+    default:
+      break;
+  }
+};
+
+// The names a function binds as parameters — they shadow same-named outer unobserved-variable
+// candidates, so a read of a shadowing param must not mark the outer promise observed.
+const collectParamBindingNames = (params: ReadonlyArray<Node>): Set<string> => {
   const names = new Set<string>();
 
   for (const param of params) {
-    if (param.type === 'Identifier' && typeof param.name === 'string') {
-      names.add(param.name);
-    }
+    collectBindingNames(param, names);
   }
 
   return names;
@@ -319,6 +359,13 @@ const emptyRejectionHandlerBody = (method: string | null, args: ReadonlyArray<No
   return null;
 };
 
+// A `.then` second argument / `.catch` argument that handles nothing — `undefined`, `null`, or
+// `void x`. Such a placeholder does not actually observe the rejection.
+const isNonHandler = (node: Node): boolean =>
+  (node.type === 'Identifier' && node.name === 'undefined') ||
+  (node.type === 'Literal' && node.value === null) ||
+  (node.type === 'UnaryExpression' && node.operator === 'void');
+
 const chainHasCatch = (expr: Node): boolean => {
   let current: Node = expr;
 
@@ -330,9 +377,14 @@ const chainHasCatch = (expr: Node): boolean => {
       return true;
     }
 
-    // .then(onFulfilled, onRejected) — second argument handles rejection just like .catch()
-    if (method === 'then' && Array.isArray(current.arguments) && current.arguments.length >= 2) {
-      return true;
+    // .then(onFulfilled, onRejected) — the second argument handles rejection like .catch(), but only
+    // when it is a real handler (a `undefined`/`null`/`void` placeholder observes nothing).
+    if (method === 'then' && current.arguments.length >= 2) {
+      const onRejected = current.arguments[1];
+
+      if (onRejected !== undefined && !isNonHandler(onRejected)) {
+        return true;
+      }
     }
 
     // Walk down the chain: expr.callee.object is the previous call
@@ -615,7 +667,12 @@ const containsIdentifierUse = (node: Node, name: string): boolean => {
 // as opposed to a derived value (`new E(e.message)`). A whole-error argument may be forwarded as the
 // constructor's cause, so it counts as cause-possibly-preserved.
 const errorParamIsDirectArgument = (newExpr: Node, name: string): boolean =>
-  newExpr.type === 'NewExpression' && newExpr.arguments.some(argument => isIdentifierName(argument, name));
+  newExpr.type === 'NewExpression' &&
+  newExpr.arguments.some(
+    // `new E(…, e)` — the caught error passed whole, or `new E(…, ...rest)` where a spread could
+    // carry it (the spread contents are opaque, so suppress conservatively rather than over-report).
+    argument => isIdentifierName(argument, name) || argument.type === 'SpreadElement',
+  );
 
 const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
   let found = false;
@@ -1336,7 +1393,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       inTryBlockWithCatchDepth = 0;
       branchDepth = 0;
 
-      pushUnobservedScope(collectSimpleParamNames(node.params));
+      pushUnobservedScope(collectParamBindingNames(node.params));
 
       forEachChildNode(node, child => visit(child, node));
 

@@ -4,13 +4,11 @@ import * as path from 'node:path';
 import { analyzeErrorFlow, parseSource } from '../../../../src/test-api';
 import { createTempGildash } from '../../shared/gildash-test-kit';
 
-// RED contract for the void-callback-arg case of misused-promises (typescript-eslint
-// no-misused-promises / voidReturnArgument): an async (Promise-returning) callback passed into a
-// parameter slot whose contextual type returns void discards the rejection at the call boundary.
-//
-// PENDING gildash API `expectsVoidReturningCallbackAt` (contextual-type / all-signatures-void).
-// The W cases below FAIL until that API + the GREEN path land; the K cases are the guard rails.
-// Behaviour-level (code -> W/K), independent of how the gildash API is implemented.
+// The void-callback-arg case of misused-promises (typescript-eslint no-misused-promises /
+// voidReturnArgument): an async (Promise-returning) callback passed into a parameter slot whose
+// contextual type returns void discards the rejection at the call boundary. Implemented via the
+// oracle's expectsVoidReturningCallback (gildash 0.34.0). Behaviour-level (code -> W/K): the W cases
+// flag, the K cases are the guard rails.
 
 const TSCONFIG = JSON.stringify({
   compilerOptions: {
