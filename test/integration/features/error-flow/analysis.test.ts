@@ -37,7 +37,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report floating-promises when Promise.reject is unobserved', async () => {
@@ -54,7 +54,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report floating-promises when Promise.all is unobserved', async () => {
@@ -71,7 +71,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should report floating-promises when new Promise is unobserved', async () => {
@@ -88,7 +88,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'floating-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report floating-promises when promise is explicitly ignored with void', async () => {
@@ -183,7 +183,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report misused-promises when an async map result is returned (K: rejections propagate)', async () => {
@@ -238,7 +238,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'misused-promises');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report misused-promises when a sync wrapper is used', async () => {
@@ -282,7 +282,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'throw-non-error');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report throw-non-error when throwing an identifier', async () => {
@@ -316,7 +316,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report misused-promises when callback is sync', async () => {
@@ -358,7 +358,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'return-await-in-try');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report return-await-in-try when return uses await in try with catch', async () => {
@@ -478,7 +478,7 @@ describe('integration/error-flow', () => {
     let hits = analysis.filter(f => f.kind === 'missing-error-cause');
 
     // Assert
-    expect(hits.length).toBeGreaterThanOrEqual(1);
+    expect(hits.length).toBe(1);
   });
 
   it('should not report missing-error-cause when cause is preserved', async () => {

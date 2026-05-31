@@ -1963,8 +1963,8 @@ describe('error-flow/analyzer', () => {
   });
 
   it('should not report promise-constructor-hygiene for a return inside a sync executor (out of scope)', async () => {
-    // Arrange — a `return` in the executor is resolve/value hygiene (or an early-exit idiom
-    // like `return reject(err)` where the rejection is still delivered), not error propagation.
+    // Arrange — a value `return` in the executor is hygiene, not error propagation. (The same holds
+    // for the `return reject(err)` early-exit idiom, where the rejection is still delivered.)
     const filePath = '/virtual/src/features/executor-return.ts';
     const source = ['export const p = new Promise((resolve) => {', '  return 42;', '});'].join('\n');
     // Act

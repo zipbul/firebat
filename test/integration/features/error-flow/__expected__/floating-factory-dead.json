@@ -1,0 +1,32 @@
+[
+  {
+    "evidence": "import('./side-effect');",
+    "file": "/virtual/floating-factory-dead.ts",
+    "kind": "floating-promises",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 3
+      },
+      "start": {
+        "column": 2,
+        "line": 3
+      }
+    }
+  },
+  {
+    "evidence": "new Promise<void>(resolve => resolve());",
+    "file": "/virtual/floating-factory-dead.ts",
+    "kind": "floating-promises",
+    "span": {
+      "end": {
+        "column": 42,
+        "line": 4
+      },
+      "start": {
+        "column": 2,
+        "line": 4
+      }
+    }
+  }
+]

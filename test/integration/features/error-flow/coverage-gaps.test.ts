@@ -71,6 +71,32 @@ describe('coverage — promise-constructor-hygiene global-object member receiver
   });
 });
 
+describe('coverage — no-callback-in-promise negative branch', () => {
+  it('does NOT flag a node-style method name whose last argument is not a function literal', () => {
+    const code = [
+      'declare const fs: { readFile(p: string): Promise<string> };',
+      'export function f(p: Promise<void>): Promise<string> {',
+      '  return p.then(() => fs.readFile("a"));',
+      '}',
+    ].join('\n');
+
+    expect(kindsFor(code)).not.toContain('no-callback-in-promise');
+  });
+});
+
+describe('coverage — missing-error-cause skips a destructured catch param (intentional)', () => {
+  it('does NOT flag `catch ({ message }) { throw new Error() }` (no whole-error binding to attach as cause)', () => {
+    const code = [
+      'export function f(): void {',
+      '  try { g(); } catch ({ message }) { throw new Error(String(message)); }',
+      '}',
+      'declare function g(): void;',
+    ].join('\n');
+
+    expect(kindsFor(code)).not.toContain('missing-error-cause');
+  });
+});
+
 describe('coverage — throw-non-error composite-literal shapes', () => {
   it('flags throwing an array literal', () => {
     expect(kindsFor('export function f(): never { throw [1, 2]; }')).toContain('throw-non-error');

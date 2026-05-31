@@ -9,6 +9,7 @@ const noopGildash = {
   isThenableAtSpan: () => null,
   getExpressionTypeAtSpan: () => null,
   getContextualCallReturnsAtSpan: () => null,
+  isTypeAssignableToTypeAtSpan: () => null,
 } as unknown as Gildash;
 
 describe('golden/error-flow', () => {
@@ -33,7 +34,7 @@ describe('golden/error-flow', () => {
   rg('misused-map-promise-all-keep');
   rg('misused-map-returned-keep');
   rg('misused-reduce-awaited-keep');
-  rg('misused-flatmap-discarded-dead'); // FN: flatMap 편입 후 misused
+  rg('misused-flatmap-discarded-dead'); // flatMap is result-group: W when the result is discarded
   rg('misused-foreach-dead');
   rg('misused-map-discarded-dead');
   rg('misused-filter-async-dead');
@@ -73,4 +74,10 @@ describe('golden/error-flow', () => {
 
   // ── missing-error-cause: cause-preserving throws never flag (incl. FP-A/FP-B regression guards) ──
   rg('missing-error-cause-keep');
+
+  // ── unsafe-finally (block form): return/break in a finally masks the try; cleanup-only is K ──
+  rg('unsafe-finally-return-dead');
+
+  // ── floating-promises (syntactic factories): discarded import() and new Promise ──
+  rg('floating-factory-dead');
 });

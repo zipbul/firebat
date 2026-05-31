@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "finally contains return",
+    "file": "/virtual/unsafe-finally-return-dead.ts",
+    "kind": "unsafe-finally",
+    "span": {
+      "end": {
+        "column": 3,
+        "line": 7
+      },
+      "start": {
+        "column": 2,
+        "line": 3
+      }
+    }
+  }
+]
