@@ -63,6 +63,10 @@ export interface TypeOracle {
   expectsVoidReturningCallback(argNode: Node): boolean;
   /** The expression's static type is a subtype of `Error` (a thrown one would carry a stack). Conservative `false` (see isThenable). */
   isErrorSubtype(node: Node): boolean;
+  /** gildash PROVES the expression's type is not a thenable. `false` when thenable, unknown, or gildash absent — so a syntactic rule keeps firing unless the negative is proven. */
+  isProvenNonThenable(node: Node): boolean;
+  /** gildash PROVES the expression's type is not an array (not assignable to `ReadonlyArray`). `false` when array, unknown, or gildash absent. */
+  isProvenNonArray(node: Node): boolean;
 }
 
 export const createTypeOracle = (gildash: Gildash | null, filePath: string): TypeOracle => {
@@ -116,6 +120,31 @@ export const createTypeOracle = (gildash: Gildash | null, filePath: string): Typ
 
       try {
         return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'Error', { anyConstituent: true }) === true;
+      } catch {
+        return false;
+      }
+    },
+
+    isProvenNonThenable(node) {
+      if (gildash === null) {
+        return false;
+      }
+
+      try {
+        // `false` (not null) means gildash resolved the type and it is not thenable.
+        return gildash.isThenableAtSpan(filePath, spanOf(node), { anyConstituent: true }) === false;
+      } catch {
+        return false;
+      }
+    },
+
+    isProvenNonArray(node) {
+      if (gildash === null) {
+        return false;
+      }
+
+      try {
+        return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'ReadonlyArray<unknown>') === false;
       } catch {
         return false;
       }

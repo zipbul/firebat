@@ -231,3 +231,61 @@ describe('createTypeOracle — isErrorSubtype', () => {
     expect(calls).toEqual([{ f: FILE, span: SPAN, target: 'Error', options: { anyConstituent: true } }]);
   });
 });
+
+describe('createTypeOracle — isProvenNonThenable (only true when gildash PROVES not-thenable)', () => {
+  it('true when isThenableAtSpan resolves to false', () => {
+    expect(oracleWith({ isThenableAtSpan: () => false }).isProvenNonThenable(NODE)).toBe(true);
+  });
+
+  it('false when the type IS thenable', () => {
+    expect(oracleWith({ isThenableAtSpan: () => true }).isProvenNonThenable(NODE)).toBe(false);
+  });
+
+  it('false when unresolved (null) — not proven', () => {
+    expect(oracleWith({ isThenableAtSpan: () => null }).isProvenNonThenable(NODE)).toBe(false);
+  });
+
+  it('false when gildash is absent', () => {
+    expect(createTypeOracle(null, FILE).isProvenNonThenable(NODE)).toBe(false);
+  });
+
+  it('false when the query throws', () => {
+    expect(oracleWith({ isThenableAtSpan: throws }).isProvenNonThenable(NODE)).toBe(false);
+  });
+});
+
+describe('createTypeOracle — isProvenNonArray (only true when gildash PROVES not-Array)', () => {
+  it('true when not assignable to ReadonlyArray (resolved false)', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => false }).isProvenNonArray(NODE)).toBe(true);
+  });
+
+  it('false when assignable to ReadonlyArray (is an array)', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => true }).isProvenNonArray(NODE)).toBe(false);
+  });
+
+  it('false when unresolved (null) — not proven', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => null }).isProvenNonArray(NODE)).toBe(false);
+  });
+
+  it('false when gildash is absent', () => {
+    expect(createTypeOracle(null, FILE).isProvenNonArray(NODE)).toBe(false);
+  });
+
+  it('false when the query throws', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: throws }).isProvenNonArray(NODE)).toBe(false);
+  });
+
+  it('queries assignability to ReadonlyArray<unknown> (side-effect)', () => {
+    const calls: unknown[] = [];
+
+    oracleWith({
+      isTypeAssignableToTypeAtSpan: (f, span, target) => {
+        calls.push({ f, span, target });
+
+        return false;
+      },
+    }).isProvenNonArray(NODE);
+
+    expect(calls).toEqual([{ f: FILE, span: SPAN, target: 'ReadonlyArray<unknown>' }]);
+  });
+});

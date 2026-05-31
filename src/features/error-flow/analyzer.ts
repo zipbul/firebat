@@ -1169,11 +1169,20 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   // unsafe-finally (promise form): `.finally(() => { throw … })` masks the original rejection
-  // (a returned value is ignored by Promise.finally, so it is not flagged).
+  // (a returned value is ignored by Promise.finally, so it is not flagged). Suppressed when gildash
+  // proves the receiver is not a thenable (a custom `.finally`, not Promise.prototype.finally).
   const ruleUnsafeFinallyCallback = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
-    if (method === 'finally' && finallyCallbackThrows(node.arguments[0])) {
-      reportWith('unsafe-finally', node, 'finally callback throws');
+    if (method !== 'finally' || !finallyCallbackThrows(node.arguments[0])) {
+      return;
     }
+
+    const callee = node.callee;
+
+    if (callee.type === 'MemberExpression' && oracle.isProvenNonThenable(callee.object)) {
+      return;
+    }
+
+    reportWith('unsafe-finally', node, 'finally callback throws');
   };
 
   // no-callback-in-promise: a node-style callback API inside a then/catch handler. One finding per
@@ -1203,8 +1212,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     if (alwaysMisused || resultMisused) {
       const first = node.arguments[0];
       const isAsyncFn = first !== undefined && isFunctionLiteral(first) && first.async === true;
+      const callee = node.callee;
+      // Suppress when gildash proves the receiver is not an Array — a like-named method on a custom
+      // type (RxJS, a query builder) may handle the promise itself. Unproven/degraded → fire.
+      const provenNonArray = callee.type === 'MemberExpression' && oracle.isProvenNonArray(callee.object);
 
-      if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {
+      if (isAsyncFn && !provenNonArray && (alwaysMisused || isResultDiscarded(node, parent))) {
         reportWith('misused-promises', node, `${method} callback is async`);
 
         return;
