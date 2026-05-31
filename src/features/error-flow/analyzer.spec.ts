@@ -281,6 +281,97 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(1);
   });
 
+  it('should report unsafe-finally when an unlabeled continue in finally escapes to the enclosing loop', async () => {
+    // Arrange — the continue has no loop inside the finally, so it targets the outer for, abandoning
+    // whatever the try was settling (its return/throw is discarded).
+    const filePath = '/virtual/src/features/finally-continue.ts';
+    const source = [
+      'export function f(items: number[]) {',
+      '  for (const x of items) {',
+      '    try { return x; } finally { continue; }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('should report unsafe-finally when a labeled break in finally targets a label outside it', async () => {
+    // Arrange — `break outer` jumps out of the finally to the labeled loop, discarding the try outcome.
+    const filePath = '/virtual/src/features/finally-labeled-break.ts';
+    const source = [
+      'export function f(items: number[]) {',
+      '  outer: for (const x of items) {',
+      '    try { return x; } finally { break outer; }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('should report unsafe-finally when a labeled continue in finally targets a label outside it', async () => {
+    // Arrange — `continue outer` jumps out of the finally to the labeled loop, discarding the try outcome.
+    const filePath = '/virtual/src/features/finally-labeled-continue.ts';
+    const source = [
+      'export function f(items: number[]) {',
+      '  outer: for (const x of items) {',
+      '    try { return x; } finally { continue outer; }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(1);
+  });
+
+  it('should not report unsafe-finally when a break stays inside a loop declared in the finally', async () => {
+    // Arrange — the break targets the finally-local for, so it never escapes the finally (K).
+    const filePath = '/virtual/src/features/finally-local-loop-break.ts';
+    const source = [
+      'export function f() {',
+      '  try { return 1; } finally {',
+      '    for (let i = 0; i < 3; i++) { if (i === 1) break; }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
+  it('should not report unsafe-finally when a break stays inside a switch declared in the finally', async () => {
+    // Arrange — the break belongs to the finally-local switch, not an escape (K).
+    const filePath = '/virtual/src/features/finally-local-switch-break.ts';
+    const source = [
+      'export function f(k: number) {',
+      '  try { return 1; } finally {',
+      '    switch (k) { case 1: break; default: break; }',
+      '  }',
+      '}',
+    ].join('\n');
+    // Act
+    const analysis = await analyzeSingle(filePath, source);
+    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
+
+    // Assert
+    expect(hits.length).toBe(0);
+  });
+
   it('should not report unsafe-finally when a .finally callback returns a value (Promise.finally ignores it)', async () => {
     // Arrange — Promise.finally discards the callback return; the original settlement passes through.
     const filePath = '/virtual/src/features/promise-finally.ts';

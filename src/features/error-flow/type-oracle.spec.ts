@@ -1,8 +1,10 @@
-import type { ResolvedType } from '@zipbul/gildash';
+import type { Gildash, ResolvedType } from '@zipbul/gildash';
+import type { Node } from 'oxc-parser';
 
 import { describe, expect, it } from 'bun:test';
 
-import { isVoidReturn, isWhollyPrimitive } from './type-oracle';
+import { parseSource } from '../../engine/ast/parse-source';
+import { createTypeOracle, isVoidReturn, isWhollyPrimitive } from './type-oracle';
 
 // ts.TypeFlags bits used to build fixtures.
 const ANY = 1;
@@ -96,5 +98,136 @@ describe('isVoidReturn', () => {
 
   it('is false for a Promise (object) return', () => {
     expect(isVoidReturn(leaf(OBJECT, 'Promise<void>'))).toBe(false);
+  });
+});
+
+// ── createTypeOracle: the gildash-facing seam. Matrix per method: null gildash (negative),
+// value mapping (happy/negative), throw (exception), and the exact query it issues (side-effect). ──
+
+const FILE = '/virtual/sample.ts';
+const NODE: Node = parseSource(FILE, 'doThing();').program;
+const SPAN = { start: NODE.start, end: NODE.end };
+const throws = () => {
+  throw new Error('semantic layer offline');
+};
+// A partial gildash test double — only the queried method matters per test (mirrors the noopGildash
+// pattern used across the integration suites).
+const oracleWith = (methods: Partial<Gildash>) => createTypeOracle(methods as unknown as Gildash, FILE);
+
+describe('createTypeOracle — null gildash answers false for every query (degraded scan)', () => {
+  const oracle = createTypeOracle(null, FILE);
+
+  it('isThenable', () => expect(oracle.isThenable(NODE)).toBe(false));
+  it('isPrimitiveValue', () => expect(oracle.isPrimitiveValue(NODE)).toBe(false));
+  it('expectsVoidReturningCallback', () => expect(oracle.expectsVoidReturningCallback(NODE)).toBe(false));
+  it('isErrorSubtype', () => expect(oracle.isErrorSubtype(NODE)).toBe(false));
+});
+
+describe('createTypeOracle — isThenable', () => {
+  it('true when isThenableAtSpan returns true', () => {
+    expect(oracleWith({ isThenableAtSpan: () => true }).isThenable(NODE)).toBe(true);
+  });
+
+  it('false when isThenableAtSpan returns false', () => {
+    expect(oracleWith({ isThenableAtSpan: () => false }).isThenable(NODE)).toBe(false);
+  });
+
+  it('false when isThenableAtSpan returns null (unresolved)', () => {
+    expect(oracleWith({ isThenableAtSpan: () => null }).isThenable(NODE)).toBe(false);
+  });
+
+  it('false when isThenableAtSpan throws (exception swallowed)', () => {
+    expect(oracleWith({ isThenableAtSpan: throws }).isThenable(NODE)).toBe(false);
+  });
+
+  it('queries the node span with anyConstituent (side-effect)', () => {
+    const calls: unknown[] = [];
+
+    oracleWith({
+      isThenableAtSpan: (f, span, options) => {
+        calls.push({ f, span, options });
+
+        return true;
+      },
+    }).isThenable(NODE);
+
+    expect(calls).toEqual([{ f: FILE, span: SPAN, options: { anyConstituent: true } }]);
+  });
+});
+
+describe('createTypeOracle — isPrimitiveValue', () => {
+  const primitive: ResolvedType = leaf(STRING, 'string');
+  const object: ResolvedType = leaf(OBJECT, 'Error');
+
+  it('true when the expression type is wholly primitive', () => {
+    expect(oracleWith({ getExpressionTypeAtSpan: () => primitive }).isPrimitiveValue(NODE)).toBe(true);
+  });
+
+  it('false when the expression type is an object', () => {
+    expect(oracleWith({ getExpressionTypeAtSpan: () => object }).isPrimitiveValue(NODE)).toBe(false);
+  });
+
+  it('false when the type is unresolved (null)', () => {
+    expect(oracleWith({ getExpressionTypeAtSpan: () => null }).isPrimitiveValue(NODE)).toBe(false);
+  });
+
+  it('false when getExpressionTypeAtSpan throws (exception swallowed)', () => {
+    expect(oracleWith({ getExpressionTypeAtSpan: throws }).isPrimitiveValue(NODE)).toBe(false);
+  });
+});
+
+describe('createTypeOracle — expectsVoidReturningCallback', () => {
+  it('true when every contextual call signature returns void', () => {
+    expect(oracleWith({ getContextualCallReturnsAtSpan: () => [leaf(VOID, 'void')] }).expectsVoidReturningCallback(NODE)).toBe(true);
+  });
+
+  it('false when a signature returns a non-void value', () => {
+    expect(oracleWith({ getContextualCallReturnsAtSpan: () => [leaf(NUMBER, 'number')] }).expectsVoidReturningCallback(NODE)).toBe(
+      false,
+    );
+  });
+
+  it('false when the slot is not callable (empty array)', () => {
+    expect(oracleWith({ getContextualCallReturnsAtSpan: () => [] }).expectsVoidReturningCallback(NODE)).toBe(false);
+  });
+
+  it('false when there is no contextual type (null)', () => {
+    expect(oracleWith({ getContextualCallReturnsAtSpan: () => null }).expectsVoidReturningCallback(NODE)).toBe(false);
+  });
+
+  it('false when getContextualCallReturnsAtSpan throws (exception swallowed)', () => {
+    expect(oracleWith({ getContextualCallReturnsAtSpan: throws }).expectsVoidReturningCallback(NODE)).toBe(false);
+  });
+});
+
+describe('createTypeOracle — isErrorSubtype', () => {
+  it('true when the type is assignable to Error', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => true }).isErrorSubtype(NODE)).toBe(true);
+  });
+
+  it('false when the type is not assignable to Error', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => false }).isErrorSubtype(NODE)).toBe(false);
+  });
+
+  it('false when assignability is unresolved (null)', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => null }).isErrorSubtype(NODE)).toBe(false);
+  });
+
+  it('false when isTypeAssignableToTypeAtSpan throws (exception swallowed)', () => {
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: throws }).isErrorSubtype(NODE)).toBe(false);
+  });
+
+  it('queries the node span against the Error type with anyConstituent (side-effect)', () => {
+    const calls: unknown[] = [];
+
+    oracleWith({
+      isTypeAssignableToTypeAtSpan: (f, span, target, options) => {
+        calls.push({ f, span, target, options });
+
+        return true;
+      },
+    }).isErrorSubtype(NODE);
+
+    expect(calls).toEqual([{ f: FILE, span: SPAN, target: 'Error', options: { anyConstituent: true } }]);
   });
 });
