@@ -94,9 +94,7 @@ const isIdentifierNamed = (node: NodeValue, name: string): boolean => {
     return false;
   }
 
-  const id = node as IdentifierReference;
-
-  return id.name === name;
+  return (node as IdentifierReference).name === name;
 };
 
 const isMemberNamed = (callee: NodeValue, name: string): { object: Node; computed: boolean } | null => {

@@ -797,15 +797,11 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 };
 
 export const runInstall = async (argv: readonly string[] | undefined, logger: FirebatLogger): Promise<number> => {
-  const safeArgv = argv ?? [];
-
-  return runInstallLike('install', safeArgv, logger);
+  return runInstallLike('install', argv ?? [], logger);
 };
 
 export const runUpdate = async (argv: readonly string[] | undefined, logger: FirebatLogger): Promise<number> => {
-  const safeArgv = argv ?? [];
-
-  return runInstallLike('update', safeArgv, logger);
+  return runInstallLike('update', argv ?? [], logger);
 };
 
 export const __testing__ = {

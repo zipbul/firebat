@@ -60,9 +60,8 @@ const findTsconfigPath = (rootAbs: string): string | undefined => {
 
   try {
     const file = Bun.file(candidate);
-    const exists = file.size > 0;
 
-    return exists ? candidate : undefined;
+    return file.size > 0 ? candidate : undefined;
   } catch {
     return undefined;
   }

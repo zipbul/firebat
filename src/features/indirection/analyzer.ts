@@ -862,10 +862,8 @@ const analyzeIndirection = async (
 
         const typeArgs = typeAnnotation.typeArguments;
         const typeParams = node.typeParameters;
-        const hasTypeArgs = typeArgs !== null;
-        const hasTypeParams = typeParams !== null;
 
-        if (!hasTypeArgs && !hasTypeParams) {
+        if (typeArgs === null && typeParams === null) {
           const header = node.id.name;
           const typeName = typeAnnotation.typeName;
           let targetName = 'unknown';
