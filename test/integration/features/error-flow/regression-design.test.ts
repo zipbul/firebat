@@ -26,7 +26,7 @@ const kindsFor = async (code: string): Promise<readonly string[]> => {
   try {
     const filePath = path.join(tmpDir, 'src', 'sample.ts');
     const program = [parseSource(filePath, await Bun.file(filePath).text())];
-    const findings = await analyzeErrorFlow(program, { gildash });
+    const findings = analyzeErrorFlow(program, { gildash });
 
     return findings.map(f => f.kind);
   } finally {

@@ -1,4 +1,4 @@
-import type { Gildash, HeritageNode } from '@zipbul/gildash';
+import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
@@ -8,7 +8,6 @@ import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types
 import type { TypeOracle } from './type-oracle';
 
 import { forEachChildNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
-import { PartialResultError } from '../../engine/partial-result-error';
 import { createTypeOracle } from './type-oracle';
 
 interface AnalyzeErrorFlowInput {
@@ -646,11 +645,6 @@ const finallyCallbackThrows = (arg: Node | undefined): boolean => {
   return found;
 };
 
-interface CollectFindingsResult {
-  readonly findings: ErrorFlowFinding[];
-  readonly constructorNames: Map<ErrorFlowFinding, string>;
-}
-
 // The specific oxc node type for a given `type` discriminant — lets each rule take its exact node
 // (e.g. NodeOfType<'ThrowStatement'>) so there is no re-checking or casting inside.
 interface NodeTypeTag<K extends string> {
@@ -659,26 +653,8 @@ interface NodeTypeTag<K extends string> {
 
 type NodeOfType<K extends Node['type']> = Extract<Node, NodeTypeTag<K>>;
 
-const extractConstructorName = (callee: Node): string | null => {
-  if (callee.type === 'Identifier' && typeof callee.name === 'string') {
-    return callee.name;
-  }
-
-  // Namespaced: ns.ClassName
-  if (callee.type === 'MemberExpression') {
-    const prop = callee.property;
-
-    if (prop.type === 'Identifier' && typeof prop.name === 'string') {
-      return prop.name;
-    }
-  }
-
-  return null;
-};
-
-const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): CollectFindingsResult => {
+const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): ErrorFlowFinding[] => {
   const findings: ErrorFlowFinding[] = [];
-  const constructorNames: Map<ErrorFlowFinding, string> = new Map();
   // Traversal state read by return-await-in-try: are we inside an async function, and inside the
   // *block* of a try that has a catch clause? Maintained by the walker, saved/restored per function.
   let inAsyncFunction = false;
@@ -943,48 +919,23 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         return true;
       }
 
-      const usesIdentifier = containsIdentifierUse(arg, name);
+      // Custom error class: a cause-less wrap loses the chain only when the thrown class is actually
+      // an Error subtype (throwing a non-Error object is throw-non-error's concern, not this rule's).
+      // The oracle proves the subtype at the throw site; degraded scans answer `false` (no over-report).
       const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name);
 
-      // Custom error class: catch param is used but cause is not preserved.
-      // Lower confidence since we cannot statically verify it extends Error.
-      if (usesIdentifier && !hasCause) {
-        const constructorName = extractConstructorName(arg.callee);
+      if (!hasCause && oracle.isErrorSubtype(arg)) {
+        // Span at the throw when the param is used in the thrown expression, else at the catch clause
+        // (the original error is only referenced by the binding, so the loss is the clause as a whole).
+        const target = containsIdentifierUse(arg, name) ? node : catchClause;
 
         pushFinding(findings, {
           kind: 'missing-error-cause',
-          node,
+          node: target,
           filePath,
           sourceText,
           evidence: getEvidenceLineAt(sourceText, node.start),
         });
-
-        const addedFinding = findings[findings.length - 1];
-
-        if (addedFinding !== undefined && constructorName !== null) {
-          constructorNames.set(addedFinding, constructorName);
-        }
-
-        return true;
-      }
-
-      // If identifier only appears as catch parameter but not in thrown expression, it's information loss
-      if (!usesIdentifier && !hasCause) {
-        const constructorName = extractConstructorName(arg.callee);
-
-        pushFinding(findings, {
-          kind: 'missing-error-cause',
-          node: catchClause,
-          filePath,
-          sourceText,
-          evidence: getEvidenceLineAt(sourceText, node.start),
-        });
-
-        const addedFinding = findings[findings.length - 1];
-
-        if (addedFinding !== undefined && constructorName !== null) {
-          constructorNames.set(addedFinding, constructorName);
-        }
       }
 
       return true;
@@ -1333,104 +1284,20 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   visit(program, null);
   popUnobservedScope();
 
-  return { findings, constructorNames };
+  return findings;
 };
 
 const createEmptyErrorFlow = (): ReadonlyArray<ErrorFlowFinding> => [];
 
-interface ConstructorToVerify {
-  readonly name: string;
-  readonly filePath: string;
-}
-
-const heritageExtendsError = (node: HeritageNode): boolean => {
-  if (node.symbolName === 'Error') {
-    return true;
-  }
-
-  return node.children.some(child => child.kind === 'extends' && heritageExtendsError(child));
-};
-
-// KNOWN GAP (pending gildash — see gildash/FIREBAT_ERROR_FLOW_API_REQUEST_2.md):
-// `getHeritageChain` requires a project-relative path while every other gildash path API (and the
-// TypeOracle's span queries) accepts an absolute one. `finding.file` is absolute here, so heritage
-// resolves to empty children and every custom-Error-subclass `missing-error-cause` finding is
-// dropped (a silent false negative for `catch(e){ throw new CustomError(e.message) }`). Once gildash
-// ships R1 (uniform absolute-path) + R2 (`isTypeAssignableToTypeAtSpan`), this post-hoc heritage
-// round-trip is replaced by an oracle `isErrorSubtype(throwArg)` decided at the throw site — folding
-// the last direct gildash call back under the TypeOracle's single-owner boundary.
-const verifyCustomErrorClasses = async (
-  findings: ErrorFlowFinding[],
-  constructorNames: Map<ErrorFlowFinding, string>,
-  gildash: Gildash,
-): Promise<ErrorFlowFinding[]> => {
-  // Collect unique constructor names from missing-error-cause findings on custom error classes
-  // Uses the tagged constructorNames map instead of parsing evidence strings.
-  const customErrorFindings = findings.filter(f => f.kind === 'missing-error-cause' && constructorNames.has(f));
-
-  if (customErrorFindings.length === 0) {
-    return findings;
-  }
-
-  const toVerify = new Map<string, ConstructorToVerify>();
-
-  for (const finding of customErrorFindings) {
-    const constructorName = constructorNames.get(finding);
-
-    if (constructorName !== undefined) {
-      toVerify.set(`${finding.file}:${constructorName}`, { name: constructorName, filePath: finding.file });
-    }
-  }
-
-  // Check heritage chains
-  const confirmedErrors = new Set<string>();
-
-  for (const [key, { name, filePath }] of toVerify) {
-    try {
-      const heritage = await gildash.getHeritageChain(name, filePath);
-
-      if (heritageExtendsError(heritage)) {
-        confirmedErrors.add(key);
-      }
-    } catch {
-      // Heritage check failed — keep the finding (lower confidence)
-      confirmedErrors.add(key);
-    }
-  }
-
-  // Filter out findings where constructor is confirmed NOT to extend Error
-  return findings.filter(f => {
-    if (f.kind !== 'missing-error-cause') {
-      return true;
-    }
-
-    const constructorName = constructorNames.get(f);
-
-    if (constructorName === undefined) {
-      return true;
-    }
-
-    const key = `${f.file}:${constructorName}`;
-
-    // If we verified this constructor and it's NOT an error class, drop the finding
-    if (toVerify.has(key) && !confirmedErrors.has(key)) {
-      return false;
-    }
-
-    return true;
-  });
-};
-
-const analyzeErrorFlow = async (
+const analyzeErrorFlow = (
   files: ReadonlyArray<ParsedFile>,
   input?: AnalyzeErrorFlowInput,
-): Promise<ReadonlyArray<ErrorFlowFinding>> => {
+): ReadonlyArray<ErrorFlowFinding> => {
   if (files.length === 0) {
     return createEmptyErrorFlow();
   }
 
   const findings: ErrorFlowFinding[] = [];
-  const allConstructorNames: Map<ErrorFlowFinding, string> = new Map();
   const gildash = input?.gildash ?? null;
 
   for (const file of files) {
@@ -1438,26 +1305,7 @@ const analyzeErrorFlow = async (
       continue;
     }
 
-    const result = collectFindings(file.program, file.sourceText, file.filePath, gildash);
-
-    findings.push(...result.findings);
-
-    for (const [finding, name] of result.constructorNames) {
-      allConstructorNames.set(finding, name);
-    }
-  }
-
-  // gildash heritage verification for custom error classes
-  if (input?.gildash) {
-    try {
-      return await verifyCustomErrorClasses(findings, allConstructorNames, input.gildash);
-    } catch (e) {
-      if (e instanceof PartialResultError) {
-        throw e;
-      }
-
-      throw new PartialResultError('gildash heritage check failed', findings);
-    }
+    findings.push(...collectFindings(file.program, file.sourceText, file.filePath, gildash));
   }
 
   return findings;

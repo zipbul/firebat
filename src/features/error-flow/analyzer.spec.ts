@@ -15,7 +15,7 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
   // Arrange
   const program = [parseSource(filePath, sourceText)];
   // Act
-  const findings = await analyzeErrorFlow(program, { gildash: noopGildash });
+  const findings = analyzeErrorFlow(program, { gildash: noopGildash });
 
   // Assert (shape)
   expect(Array.isArray(findings)).toBe(true);
@@ -55,7 +55,7 @@ describe('error-flow/analyzer', () => {
     // Arrange
     const program: ReturnType<typeof parseSource>[] = [];
     // Act
-    const findings = await analyzeErrorFlow(program, { gildash: noopGildash });
+    const findings = analyzeErrorFlow(program, { gildash: noopGildash });
 
     // Assert
     expect(findings.length).toBe(0);
@@ -2121,7 +2121,7 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
     const program = [parseSource(filePath, source)];
     // Act — no gildash passed
-    const analysis = await analyzeErrorFlow(program);
+    const analysis = analyzeErrorFlow(program);
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert
@@ -2146,7 +2146,7 @@ describe('error-flow/analyzer', () => {
       },
     } as unknown as Gildash;
     // Act
-    const analysis = await analyzeErrorFlow(program, { gildash: throwingGildash });
+    const analysis = analyzeErrorFlow(program, { gildash: throwingGildash });
     const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
     // Assert

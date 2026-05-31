@@ -61,6 +61,8 @@ export interface TypeOracle {
   isPrimitiveValue(node: Node): boolean;
   /** The argument slot's contextual type is a callback whose every signature returns void. Conservative `false` (see isThenable). */
   expectsVoidReturningCallback(argNode: Node): boolean;
+  /** The expression's static type is a subtype of `Error` (a thrown one would carry a stack). Conservative `false` (see isThenable). */
+  isErrorSubtype(node: Node): boolean;
 }
 
 export const createTypeOracle = (gildash: Gildash | null, filePath: string): TypeOracle => {
@@ -102,6 +104,18 @@ export const createTypeOracle = (gildash: Gildash | null, filePath: string): Typ
         const returns = gildash.getContextualCallReturnsAtSpan(filePath, spanOf(argNode));
 
         return returns !== null && returns.length > 0 && returns.every(isVoidReturn);
+      } catch {
+        return false;
+      }
+    },
+
+    isErrorSubtype(node) {
+      if (gildash === null) {
+        return false;
+      }
+
+      try {
+        return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'Error', { anyConstituent: true }) === true;
       } catch {
         return false;
       }

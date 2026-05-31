@@ -83,7 +83,7 @@ describe('cross-feature integration', () => {
     const program = buildProgram(SOURCE);
     // Act
     const earlyReturn = analyzeEarlyReturn(program);
-    const errorFlow = await analyzeErrorFlow(program, { gildash: noopGildash });
+    const errorFlow = analyzeErrorFlow(program, { gildash: noopGildash });
     const duplicates = analyzeDuplicates([...program], { minSize: 5 });
     const nesting = analyzeNesting(program);
 

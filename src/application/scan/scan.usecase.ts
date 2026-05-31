@@ -1117,7 +1117,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('detector: start', { detector: 'error-flow' });
 
     try {
-      const result = await analyzeErrorFlow(program, { gildash });
+      const result = analyzeErrorFlow(program, { gildash });
       const durationMs = nowMs() - t0;
 
       detectorTimings['error-flow'] = durationMs;
