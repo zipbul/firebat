@@ -669,9 +669,9 @@ const containsIdentifierUse = (node: Node, name: string): boolean => {
 const errorParamIsDirectArgument = (newExpr: Node, name: string): boolean =>
   newExpr.type === 'NewExpression' &&
   newExpr.arguments.some(
-    // `new E(…, e)` — the caught error passed whole, or `new E(…, ...rest)` where a spread could
-    // carry it (the spread contents are opaque, so suppress conservatively rather than over-report).
-    argument => isIdentifierName(argument, name) || argument.type === 'SpreadElement',
+    // `new E(…, e)` / `new E(…, e as Error)` — the caught error passed whole (TS casts unwrapped), or
+    // `new E(…, ...rest)` where a spread could carry it (opaque — suppress rather than over-report).
+    argument => isIdentifierName(unwrapThrowExpression(argument), name) || argument.type === 'SpreadElement',
   );
 
 const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
@@ -695,7 +695,9 @@ const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
         continue;
       }
 
-      if (isIdentifierName(value, name)) {
+      // Unwrap TS assertions on the cause value — `{ cause: error as Error }` / `{ cause: error! }`
+      // still forwards the caught error.
+      if (isIdentifierName(unwrapThrowExpression(value), name)) {
         found = true;
 
         return false;
