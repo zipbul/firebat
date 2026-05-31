@@ -50,11 +50,16 @@ export const isVoidReturn = (type: ResolvedType): boolean =>
  * over-report.
  */
 export interface TypeOracle {
-  /** The expression's (result) type is a thenable / Promise. */
+  /**
+   * The expression's (result) type is a thenable / Promise. `false` is conservative — returned both
+   * when gildash *proved* the type is not thenable AND when it could not decide (gildash absent, the
+   * query threw, or `any`/`unknown`). Callers must read `false` as "not provably thenable", never as
+   * "proven non-thenable".
+   */
   isThenable(node: Node): boolean;
-  /** The value's static type is provably a bare primitive (never an Error). */
+  /** The value's static type is provably a bare primitive (never an Error). Conservative `false` (see isThenable). */
   isPrimitiveValue(node: Node): boolean;
-  /** The argument slot's contextual type is a callback whose every signature returns void. */
+  /** The argument slot's contextual type is a callback whose every signature returns void. Conservative `false` (see isThenable). */
   expectsVoidReturningCallback(argNode: Node): boolean;
 }
 

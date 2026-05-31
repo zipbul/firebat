@@ -484,6 +484,13 @@ const nodeStyleCallbackMethods = new Set([
   'execFile',
   'spawn',
 ]);
+// Array iteration methods misused with an async callback (misused-promises).
+//  - always-W: forEach ignores the result; predicate/comparator methods coerce the returned
+//    (always-truthy) promise, so the async intent is lost regardless of where the value goes.
+//  - result-W: map/flatMap/reduce/reduceRight make the promises the return value, so the
+//    rejections are observable when that value flows somewhere — only a discarded result loses them.
+const alwaysMisusedArrayMethods = new Set(['forEach', 'filter', 'some', 'every', 'find', 'findIndex', 'sort']);
+const resultMisusedArrayMethods = new Set(['map', 'flatMap', 'reduce', 'reduceRight']);
 
 const containsNodeStyleCallback = (body: Node): boolean => {
   let found = false;
@@ -1278,22 +1285,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      // misused-promises: async callback passed to a sync-array iteration method.
-      //  - always-W group: forEach ignores the result; predicate/comparator methods coerce
-      //    the returned (always-truthy) Promise, so the async intent is lost regardless of
-      //    where the call's value goes.
-      //  - result-W group (map/flatMap/reduce/reduceRight): the promises are the return
-      //    value, so the rejections are observable when that value flows somewhere; only a
-      //    discarded result loses them.
-      const alwaysMisused =
-        method === 'forEach' ||
-        method === 'filter' ||
-        method === 'some' ||
-        method === 'every' ||
-        method === 'find' ||
-        method === 'findIndex' ||
-        method === 'sort';
-      const resultMisused = method === 'map' || method === 'flatMap' || method === 'reduce' || method === 'reduceRight';
+      // misused-promises: async callback passed to a sync-array iteration method (see the Set defs).
+      const alwaysMisused = method !== null && alwaysMisusedArrayMethods.has(method);
+      const resultMisused = method !== null && resultMisusedArrayMethods.has(method);
       let misusedReported = false;
 
       if (alwaysMisused || resultMisused) {
