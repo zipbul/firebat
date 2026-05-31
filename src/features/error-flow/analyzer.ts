@@ -1066,33 +1066,37 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
   };
 
-  // CallExpression rules: unsafe-finally (promise .finally), no-callback-in-promise, misused-promises
-  // (array fast-path + general void-callback slot), Promise.reject(non-Error), empty rejection handler.
-  const ruleCallExpression = (node: NodeOfType<'CallExpression'>, parent: Node | null): void => {
-    const callee = node.callee;
-    const method = getMemberPropertyName(callee);
-
-    // .finally(() => { throw ... }) masks the original rejection (a returned value is ignored).
+  // unsafe-finally (promise form): `.finally(() => { throw … })` masks the original rejection
+  // (a returned value is ignored by Promise.finally, so it is not flagged).
+  const ruleUnsafeFinallyCallback = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
     if (method === 'finally' && finallyCallbackThrows(node.arguments[0])) {
       reportWith('unsafe-finally', node, 'finally callback throws');
     }
+  };
 
-    // no-callback-in-promise: a node-style callback API inside a then/catch handler. One finding per
-    // call (a .then(onOk, onErr) with such a callback in both handlers is a single misuse).
-    if (method === 'then' || method === 'catch') {
-      for (const arg of node.arguments) {
-        if (isFunctionLiteral(arg) && arg.body !== null && containsNodeStyleCallback(arg.body)) {
-          report('no-callback-in-promise', node);
-
-          break;
-        }
-      }
+  // no-callback-in-promise: a node-style callback API inside a then/catch handler. One finding per
+  // call (a `.then(onOk, onErr)` with such a callback in both handlers is a single misuse).
+  const ruleNoCallbackInPromise = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
+    if (method !== 'then' && method !== 'catch') {
+      return;
     }
 
-    // misused-promises (array fast-path, syntactic): an async callback to a sync array method.
+    for (const arg of node.arguments) {
+      if (isFunctionLiteral(arg) && arg.body !== null && containsNodeStyleCallback(arg.body)) {
+        report('no-callback-in-promise', node);
+
+        return;
+      }
+    }
+  };
+
+  // misused-promises: an async callback to a sync array method (syntactic fast-path), or a
+  // thenable-returning callback in any slot whose contextual type returns void (gildash-gated). The
+  // array path takes precedence so `forEach` is reported once; result methods (map/reduce) expect a
+  // value, so their slot is not void-returning and only the array path applies.
+  const ruleMisusedPromises = (node: NodeOfType<'CallExpression'>, parent: Node | null, method: string | null): void => {
     const alwaysMisused = method !== null && alwaysMisusedArrayMethods.has(method);
     const resultMisused = method !== null && resultMisusedArrayMethods.has(method);
-    let misusedReported = false;
 
     if (alwaysMisused || resultMisused) {
       const first = node.arguments[0];
@@ -1101,24 +1105,23 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {
         reportWith('misused-promises', node, `${method} callback is async`);
 
-        misusedReported = true;
+        return;
       }
     }
 
-    // misused-promises (general void-callback slot): a thenable-returning callback in a slot whose
-    // contextual type returns void floats the rejection. Skipped when the array path already fired
-    // (no double forEach finding); inert for result methods (map/reduce expect a value, not void).
-    if (!misusedReported) {
-      for (const arg of node.arguments) {
-        if (callbackReturnsThenable(arg) && oracle.expectsVoidReturningCallback(arg)) {
-          reportWith('misused-promises', node, 'thenable-returning callback in a void-returning callback slot');
+    for (const arg of node.arguments) {
+      if (callbackReturnsThenable(arg) && oracle.expectsVoidReturningCallback(arg)) {
+        reportWith('misused-promises', node, 'thenable-returning callback in a void-returning callback slot');
 
-          break;
-        }
+        return;
       }
     }
+  };
 
-    // throw-non-error via rejection: Promise.reject(<provably-non-Error>) loses stack/cause.
+  // throw-non-error via rejection: `Promise.reject(<provably-non-Error>)` loses stack/cause.
+  const ruleRejectNonError = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
+    const callee = node.callee;
+
     if (method === 'reject' && callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'Promise') {
       const first = node.arguments[0];
 
@@ -1126,14 +1129,28 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         report('throw-non-error', node);
       }
     }
+  };
 
-    // empty-catch (promise form): an empty .catch / .then(_, ) handler swallows the rejection.
-    // gildash-gated on the receiver being a thenable so a non-Promise fluent .catch is never flagged.
+  // empty-catch (promise form): an empty `.catch` / `.then(_, )` handler swallows the rejection.
+  // gildash-gated on the receiver being a thenable so a non-Promise fluent `.catch` is never flagged.
+  const ruleEmptyRejectionHandler = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
+    const callee = node.callee;
     const emptyHandler = emptyRejectionHandlerBody(method, node.arguments);
 
     if (emptyHandler !== null && callee.type === 'MemberExpression' && oracle.isThenable(callee.object)) {
       reportWith('empty-catch', emptyHandler, 'empty rejection handler swallows the error');
     }
+  };
+
+  // The five CallExpression-keyed rules, sharing only the computed method name.
+  const ruleCallExpression = (node: NodeOfType<'CallExpression'>, parent: Node | null): void => {
+    const method = getMemberPropertyName(node.callee);
+
+    ruleUnsafeFinallyCallback(node, method);
+    ruleNoCallbackInPromise(node, method);
+    ruleMisusedPromises(node, parent, method);
+    ruleRejectNonError(node, method);
+    ruleEmptyRejectionHandler(node, method);
   };
 
   // Discarded-promise rules at an expression statement: floating-promises and catch-or-return.
