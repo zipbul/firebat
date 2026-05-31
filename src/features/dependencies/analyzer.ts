@@ -882,7 +882,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
         const relModule = toRelativePath(rootAbs, moduleAbs);
         // Get all symbols in this file (including non-exported members)
-        let fileSymbols: ReturnType<Gildash['getSymbolsByFile']> = [];
+        let fileSymbols: ReturnType<Gildash['getSymbolsByFile']>;
 
         try {
           fileSymbols = gildash.getSymbolsByFile(relModule);

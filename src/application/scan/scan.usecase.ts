@@ -57,7 +57,7 @@ const nowMs = (): number => {
 
 const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<string | undefined> => {
   const candidate = path.join(rootAbs, basename);
-  let exists = false;
+  let exists: boolean;
 
   try {
     const file = Bun.file(candidate);

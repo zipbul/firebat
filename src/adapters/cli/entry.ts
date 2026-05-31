@@ -399,7 +399,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
 };
 
 const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof createCliLogger>): Promise<number> => {
-  let report: FirebatReport | null = null;
+  let report: FirebatReport | null;
 
   try {
     report = await scanUseCase(options, { logger });
@@ -438,7 +438,7 @@ const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof cre
 const runCli = async (argv: readonly string[]): Promise<number> => {
   // Create early logger for resolveOptions; upgraded after options are known.
   const earlyLogger = createCliLogger({ level: undefined, logStack: undefined });
-  let options: FirebatCliOptions | null = null;
+  let options: FirebatCliOptions | null;
 
   try {
     options = await resolveOptions(argv, earlyLogger);

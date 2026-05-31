@@ -61,6 +61,6 @@ export const analyzeUnknownProof = (
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
 
-    throw new PartialResultError(message, exprFindings);
+    throw new PartialResultError(message, exprFindings, { cause: e });
   }
 };
