@@ -671,8 +671,8 @@ const extractConstructorName = (callee: Node): string | null => {
 const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): CollectFindingsResult => {
   const findings: ErrorFlowFinding[] = [];
   const constructorNames: Map<ErrorFlowFinding, string> = new Map();
-  let functionTryCatchDepth = 0;
-  let inTryBlockDepth = 0;
+  // Traversal state read by return-await-in-try: are we inside an async function, and inside the
+  // *block* of a try that has a catch clause? Maintained by the walker, saved/restored per function.
   let inAsyncFunction = false;
   let inTryBlockWithCatchDepth = 0;
   // Unobserved-variable tracking: stack of candidate/observed sets per function scope
@@ -1010,13 +1010,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     // Function scope boundary: isolate try-catch depth for return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
     if (isFunctionScope(node)) {
-      const savedDepth = functionTryCatchDepth;
-      const savedTryBlockDepth = inTryBlockDepth;
       const savedAsync = inAsyncFunction;
       const savedTryWithCatch = inTryBlockWithCatchDepth;
 
-      functionTryCatchDepth = 0;
-      inTryBlockDepth = 0;
       inAsyncFunction = node.async === true;
       inTryBlockWithCatchDepth = 0;
 
@@ -1026,8 +1022,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       popUnobservedScope();
 
-      functionTryCatchDepth = savedDepth;
-      inTryBlockDepth = savedTryBlockDepth;
       inAsyncFunction = savedAsync;
       inTryBlockWithCatchDepth = savedTryWithCatch;
 
@@ -1042,11 +1036,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     // Pre-order hooks
     if (node.type === 'TryStatement') {
-      const hasCatch = node.handler !== null;
-      const hasFinalizer = node.finalizer !== null;
-
       // unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
-      if (hasFinalizer && node.finalizer !== null) {
+      if (node.finalizer !== null) {
         const unsafeKind = findUnsafeControlFlowInFinally(node.finalizer);
 
         if (unsafeKind !== null) {
@@ -1060,12 +1051,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      if (hasCatch || hasFinalizer) {
-        functionTryCatchDepth++;
-      }
-
-      // Visit block with depth tracking
-      inTryBlockDepth++;
+      // return-await-in-try only fires for returns inside a try that has a catch, so the
+      // with-catch depth is raised only around the try block — not the handler or finalizer.
+      const hasCatch = node.handler !== null;
 
       if (hasCatch) {
         inTryBlockWithCatchDepth++;
@@ -1077,18 +1065,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         inTryBlockWithCatchDepth--;
       }
 
-      inTryBlockDepth--;
-
       if (node.handler !== null) {
-        visit(node.handler as Node, node);
+        visit(node.handler, node);
       }
 
       if (node.finalizer !== null) {
-        visit(node.finalizer as Node, node);
-      }
-
-      if (hasCatch || hasFinalizer) {
-        functionTryCatchDepth--;
+        visit(node.finalizer, node);
       }
 
       return;
