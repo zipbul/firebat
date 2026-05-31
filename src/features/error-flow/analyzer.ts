@@ -228,18 +228,22 @@ const isPromiseFactoryCall = (expr: Node): boolean => {
   return name === 'resolve' || name === 'reject' || name === 'all' || name === 'race' || name === 'any' || name === 'allSettled';
 };
 
-// An empty rejection handler — `.catch(() => {})` or `.then(_, () => {})` — swallows the
-// rejection exactly like an empty catch block. Returns the empty handler body, or null.
+// A handler body that discards the rejection without observing or rethrowing it: an empty block
+// (`() => {}`) or an expression body that yields a no-information value (`() => undefined`,
+// `() => null`, `() => void x`). These all settle the chain to a value, swallowing the reason
+// identically. A handler that returns a meaningful recovery value or calls anything is NOT trivial.
+const isTrivialSwallowBody = (body: Node): boolean =>
+  (body.type === 'BlockStatement' && body.body.length === 0) ||
+  (body.type === 'Identifier' && body.name === 'undefined') ||
+  (body.type === 'Literal' && body.value === null) ||
+  (body.type === 'UnaryExpression' && body.operator === 'void');
+
+// A rejection handler — `.catch(<h>)` or `.then(_, <h>)` — that swallows the rejection exactly like
+// an empty catch block. Returns the handler body (the finding span), or null.
 const emptyRejectionHandlerBody = (method: string | null, args: ReadonlyArray<Node>): Node | null => {
   const handler = method === 'catch' ? args[0] : method === 'then' ? args[1] : undefined;
 
-  if (
-    handler !== undefined &&
-    isFunctionLiteral(handler) &&
-    handler.body !== null &&
-    handler.body.type === 'BlockStatement' &&
-    handler.body.body.length === 0
-  ) {
+  if (handler !== undefined && isFunctionLiteral(handler) && handler.body !== null && isTrivialSwallowBody(handler.body)) {
     return handler.body;
   }
 
@@ -537,6 +541,12 @@ const containsIdentifierUse = (node: Node, name: string): boolean => {
 
   return found;
 };
+
+// The caught error identifier appears as a *direct* argument of the NewExpression (`new E(msg, e)`),
+// as opposed to a derived value (`new E(e.message)`). A whole-error argument may be forwarded as the
+// constructor's cause, so it counts as cause-possibly-preserved.
+const errorParamIsDirectArgument = (newExpr: Node, name: string): boolean =>
+  newExpr.type === 'NewExpression' && newExpr.arguments.some(argument => isIdentifierName(argument, name));
 
 const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
   let found = false;
@@ -845,6 +855,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
+      // `w = new Error(...)` — a wrapper bound by assignment rather than declaration (last write wins).
+      if (node.type === 'AssignmentExpression' && node.operator === '=' && node.left.type === 'Identifier' && node.right.type === 'NewExpression') {
+        localNewExpressions.set(node.left.name, node.right);
+      }
+
       // Don't cross function boundaries
       if (isFunctionScope(node)) {
         return false;
@@ -922,7 +937,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // Custom error class: a cause-less wrap loses the chain only when the thrown class is actually
       // an Error subtype (throwing a non-Error object is throw-non-error's concern, not this rule's).
       // The oracle proves the subtype at the throw site; degraded scans answer `false` (no over-report).
-      const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name);
+      // Passing the caught error *whole* into the constructor (`new DomainError(msg, e)`) may store it
+      // as the cause — the constructor body is opaque, so treat that conservatively as preserved (a
+      // derived value like `e.message` does not count).
+      const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name) || errorParamIsDirectArgument(arg, name);
 
       if (!hasCause && oracle.isErrorSubtype(arg)) {
         // Span at the throw when the param is used in the thrown expression, else at the catch clause
