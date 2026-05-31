@@ -97,6 +97,22 @@ const branchConstructTypes = new Set([
 
 const isBranchConstruct = (node: Node): boolean => branchConstructTypes.has(node.type);
 
+// The simple-identifier parameter names a function binds (e.g. `function g(p, q)` → {p, q}). Used to
+// shadow same-named outer unobserved-variable candidates. Only plain identifiers are collected —
+// destructured/rest params are skipped, which is conservative (under-collecting only ever keeps the
+// old, safe behaviour for the outer name; it never causes a false positive).
+const collectSimpleParamNames = (params: ReadonlyArray<Node>): Set<string> => {
+  const names = new Set<string>();
+
+  for (const param of params) {
+    if (param.type === 'Identifier' && typeof param.name === 'string') {
+      names.add(param.name);
+    }
+  }
+
+  return names;
+};
+
 const getMemberPropertyName = (callee: Node): string | null => {
   if (callee.type !== 'MemberExpression') {
     return null;
@@ -733,9 +749,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // Branch nesting within the current function (if/loop/switch/ternary/logical/try) — used by the
   // reassignment-kill check for unobserved-variable.
   let branchDepth = 0;
-  // Unobserved-variable tracking: stack of candidate/observed sets per function scope
+  // Unobserved-variable tracking: stack of candidate/observed sets per function scope, plus the
+  // names a scope's function binds as parameters (those shadow same-named outer candidates, so a
+  // read of a shadowing param must not mark the outer promise observed).
   const unobservedCandidates: Map<string, CandidateInfo>[] = [];
   const unobservedObserved: Set<string>[] = [];
+  const unobservedShadows: Set<string>[] = [];
   // The sole owner of gildash type queries for this file. When gildash is unavailable every query
   // answers `false`, so degraded scans never over-report.
   const oracle = createTypeOracle(gildash, filePath);
@@ -770,14 +789,17 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     return true;
   });
 
-  const pushUnobservedScope = (): void => {
+  const pushUnobservedScope = (shadowNames: Set<string>): void => {
     unobservedCandidates.push(new Map());
     unobservedObserved.push(new Set());
+    unobservedShadows.push(shadowNames);
   };
 
   const popUnobservedScope = (): void => {
     const candidates = unobservedCandidates.pop();
     const observed = unobservedObserved.pop();
+
+    unobservedShadows.pop();
 
     if (candidates === undefined || observed === undefined) {
       return;
@@ -791,9 +813,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   const markObserved = (name: string): void => {
-    // Walk from innermost scope outward. Mark observed in each scope,
-    // but stop at the first scope that has this name as a candidate —
-    // that scope "owns" this variable, and outer scopes with the same name are different variables.
+    // Walk from innermost scope outward. Mark observed in each scope, but stop at the first scope
+    // that OWNS the name — it is a candidate there, or that scope's function binds it as a parameter
+    // (a shadowing binding). Outer scopes with the same name are different variables.
     for (let i = unobservedObserved.length - 1; i >= 0; i -= 1) {
       const scope = unobservedObserved[i];
 
@@ -802,8 +824,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       const candidates = unobservedCandidates[i];
+      const shadows = unobservedShadows[i];
 
-      if (candidates !== undefined && candidates.has(name)) {
+      if ((candidates !== undefined && candidates.has(name)) || shadows?.has(name) === true) {
         break;
       }
     }
@@ -1313,7 +1336,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       inTryBlockWithCatchDepth = 0;
       branchDepth = 0;
 
-      pushUnobservedScope();
+      pushUnobservedScope(collectSimpleParamNames(node.params));
 
       forEachChildNode(node, child => visit(child, node));
 
@@ -1413,8 +1436,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   // Single-pass traversal: all rules handled in visit().
-  // Top-level program body gets an unobserved-variable scope.
-  pushUnobservedScope();
+  // Top-level program body gets an unobserved-variable scope (no parameters at module scope).
+  pushUnobservedScope(new Set());
   visit(program, null);
   popUnobservedScope();
 
