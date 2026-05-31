@@ -15,7 +15,7 @@
     }
   },
   {
-    "evidence": "return Promise.resolve('value').finally(() => {",
+    "evidence": "finally callback throws",
     "file": "/virtual/nested-try-catch.ts",
     "kind": "unsafe-finally",
     "span": {

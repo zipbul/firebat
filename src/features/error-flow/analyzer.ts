@@ -721,13 +721,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     for (const [name, node] of candidates) {
       if (!observed.has(name)) {
-        pushFinding(findings, {
-          kind: 'unobserved-variable',
-          node,
-          filePath,
-          sourceText,
-          evidence: getEvidenceLineAt(sourceText, node.start),
-        });
+        report('unobserved-variable', node);
       }
     }
   };
@@ -759,11 +753,18 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
   };
 
-  const reportCatchTransformHygieneIfNeeded = (catchClause: Node): void => {
-    if (catchClause.type !== 'CatchClause') {
-      return;
-    }
+  // Finding emitters bound to this file's invariants (findings/filePath/sourceText). `report` uses
+  // the source line at the node's start as evidence (the common case); `reportWith` takes explicit
+  // prose evidence (or a different evidence anchor than the finding node).
+  const report = (kind: ErrorFlowFindingKind, node: Node): void => {
+    pushFinding(findings, { kind, node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+  };
 
+  const reportWith = (kind: ErrorFlowFindingKind, node: Node, evidence: string): void => {
+    pushFinding(findings, { kind, node, filePath, sourceText, evidence });
+  };
+
+  const ruleMissingErrorCause = (catchClause: NodeOfType<'CatchClause'>): void => {
     const param = catchClause.param;
     const body = catchClause.body;
 
@@ -781,13 +782,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
 
         if (isErrorConstructor(arg.callee)) {
-          pushFinding(findings, {
-            kind: 'missing-error-cause',
-            node,
-            filePath,
-            sourceText,
-            evidence: getEvidenceLineAt(sourceText, node.start),
-          });
+          report('missing-error-cause', node);
         }
 
         return true;
@@ -830,13 +825,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     });
 
     if (hasUncausedReassignment) {
-      pushFinding(findings, {
-        kind: 'missing-error-cause',
-        node: catchClause,
-        filePath,
-        sourceText,
-        evidence: getEvidenceLineAt(sourceText, catchClause.start),
-      });
+      report('missing-error-cause', catchClause);
 
       return;
     }
@@ -899,13 +888,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
             const hasCause = causeAssigned || hasCausePropertyWithIdentifier(newExpr, name);
 
             if (!hasCause) {
-              pushFinding(findings, {
-                kind: 'missing-error-cause',
-                node,
-                filePath,
-                sourceText,
-                evidence: getEvidenceLineAt(sourceText, node.start),
-              });
+              report('missing-error-cause', node);
             }
           }
         }
@@ -922,13 +905,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name);
 
         if (!hasCause) {
-          pushFinding(findings, {
-            kind: 'missing-error-cause',
-            node,
-            filePath,
-            sourceText,
-            evidence: getEvidenceLineAt(sourceText, node.start),
-          });
+          report('missing-error-cause', node);
         }
 
         return true;
@@ -947,13 +924,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         // (the original error is only referenced by the binding, so the loss is the clause as a whole).
         const target = containsIdentifierUse(arg, name) ? node : catchClause;
 
-        pushFinding(findings, {
-          kind: 'missing-error-cause',
-          node: target,
-          filePath,
-          sourceText,
-          evidence: getEvidenceLineAt(sourceText, node.start),
-        });
+        reportWith('missing-error-cause', target, getEvidenceLineAt(sourceText, node.start));
       }
 
       return true;
@@ -963,24 +934,14 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // empty-catch: a catch with no statements swallows the error entirely — observability,
   // propagation and cause are all lost (W). A comment does not restore any of them, so it
   // does not exempt the catch (notation conventions are out of scope per the concept def).
-  const reportEmptyCatchIfNeeded = (catchClause: Node): void => {
-    if (catchClause.type !== 'CatchClause') {
-      return;
-    }
-
+  const ruleEmptyCatch = (catchClause: NodeOfType<'CatchClause'>): void => {
     const body = catchClause.body;
 
     if (body.type !== 'BlockStatement' || body.body.length !== 0) {
       return;
     }
 
-    pushFinding(findings, {
-      kind: 'empty-catch',
-      node: body,
-      filePath,
-      sourceText,
-      evidence: 'empty catch swallows the error',
-    });
+    reportWith('empty-catch', body, 'empty catch swallows the error');
   };
 
   // ── Leaf rules — one error-flow concern each. The walker narrows the node and dispatches. ──
@@ -994,7 +955,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const unsafeKind = findUnsafeControlFlowInFinally(node.finalizer);
 
     if (unsafeKind !== null) {
-      pushFinding(findings, { kind: 'unsafe-finally', node, filePath, sourceText, evidence: `finally contains ${unsafeKind}` });
+      reportWith('unsafe-finally', node, `finally contains ${unsafeKind}`);
     }
   };
 
@@ -1024,14 +985,14 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     if (shouldFlag) {
-      pushFinding(findings, { kind: 'return-await-in-try', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      report('return-await-in-try', node);
     }
   };
 
   // throw-non-error: flag only when the thrown value is provably not an Error (loses stack/cause).
   const ruleThrowNonError = (node: NodeOfType<'ThrowStatement'>): void => {
     if (isProvablyNonErrorThrow(node.argument, oracle)) {
-      pushFinding(findings, { kind: 'throw-non-error', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      report('throw-non-error', node);
     }
   };
 
@@ -1059,7 +1020,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     const reportHygiene = (): void => {
-      pushFinding(findings, { kind: 'promise-constructor-hygiene', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      report('promise-constructor-hygiene', node);
     };
 
     if (executor.async === true) {
@@ -1113,7 +1074,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     // .finally(() => { throw ... }) masks the original rejection (a returned value is ignored).
     if (method === 'finally' && finallyCallbackThrows(node.arguments[0])) {
-      pushFinding(findings, { kind: 'unsafe-finally', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      reportWith('unsafe-finally', node, 'finally callback throws');
     }
 
     // no-callback-in-promise: a node-style callback API inside a then/catch handler. One finding per
@@ -1121,7 +1082,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     if (method === 'then' || method === 'catch') {
       for (const arg of node.arguments) {
         if (isFunctionLiteral(arg) && arg.body !== null && containsNodeStyleCallback(arg.body)) {
-          pushFinding(findings, { kind: 'no-callback-in-promise', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+          report('no-callback-in-promise', node);
 
           break;
         }
@@ -1138,7 +1099,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const isAsyncFn = first !== undefined && isFunctionLiteral(first) && first.async === true;
 
       if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {
-        pushFinding(findings, { kind: 'misused-promises', node, filePath, sourceText, evidence: `${method} callback is async` });
+        reportWith('misused-promises', node, `${method} callback is async`);
 
         misusedReported = true;
       }
@@ -1150,7 +1111,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     if (!misusedReported) {
       for (const arg of node.arguments) {
         if (callbackReturnsThenable(arg) && oracle.expectsVoidReturningCallback(arg)) {
-          pushFinding(findings, { kind: 'misused-promises', node, filePath, sourceText, evidence: 'thenable-returning callback in a void-returning callback slot' });
+          reportWith('misused-promises', node, 'thenable-returning callback in a void-returning callback slot');
 
           break;
         }
@@ -1162,7 +1123,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const first = node.arguments[0];
 
       if (first !== undefined && isProvablyNonErrorThrow(first, oracle)) {
-        pushFinding(findings, { kind: 'throw-non-error', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+        report('throw-non-error', node);
       }
     }
 
@@ -1171,7 +1132,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const emptyHandler = emptyRejectionHandlerBody(method, node.arguments);
 
     if (emptyHandler !== null && callee.type === 'MemberExpression' && oracle.isThenable(callee.object)) {
-      pushFinding(findings, { kind: 'empty-catch', node: emptyHandler, filePath, sourceText, evidence: 'empty rejection handler swallows the error' });
+      reportWith('empty-catch', emptyHandler, 'empty rejection handler swallows the error');
     }
   };
 
@@ -1189,7 +1150,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     // Promise.* / new Promise / import() created but not observed (syntactic).
     if (isPromiseFactoryCall(target)) {
-      pushFinding(findings, { kind: 'floating-promises', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      report('floating-promises', node);
 
       return;
     }
@@ -1201,10 +1162,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     if (chainHasThen(target)) {
       // catch-or-return: a `.then` chain with no `.catch` anywhere — rejection unobserved. Syntactic:
       // `.then` is itself the thenable signature, so the chain is promise-like by construction.
-      pushFinding(findings, { kind: 'catch-or-return', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      report('catch-or-return', node);
     } else if (oracle.isThenable(target)) {
       // floating-promises: a discarded bare/method/optional call gildash proves is a promise.
-      pushFinding(findings, { kind: 'floating-promises', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      report('floating-promises', node);
     }
   };
 
@@ -1276,8 +1237,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         rulePromiseConstructorHygiene(node);
         break;
       case 'CatchClause':
-        reportEmptyCatchIfNeeded(node);
-        reportCatchTransformHygieneIfNeeded(node);
+        ruleEmptyCatch(node);
+        ruleMissingErrorCause(node);
         break;
       case 'VariableDeclarator':
         ruleUnobservedCandidate(node);
