@@ -1,4 +1,4 @@
-// Should flag: fetch() result never awaited
+// unobserved-variable (gildash-gated; asserted real-typed in semantic.test.ts, not in this degraded golden)
 export async function unobservedFetch() {
   const p = fetch('/api');
   console.log('done');
@@ -10,7 +10,7 @@ export async function awaitedFetch() {
   await p;
 }
 
-// Should NOT flag: .then()
+// catch-or-return (syntactic — the finding THIS golden pins): a .then() chain with no .catch
 export async function thenFetch() {
   const p = fetch('/api');
   p.then(r => console.log(r));

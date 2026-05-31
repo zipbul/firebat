@@ -59,6 +59,28 @@ const isIdentifierName = (node: Node, name: string): boolean => {
   return typeof node.name === 'string' && node.name === name;
 };
 
+interface TypedNode {
+  readonly type: string;
+}
+
+interface FunctionScopeKind {
+  readonly type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression';
+}
+
+interface FunctionLiteralKind {
+  readonly type: 'ArrowFunctionExpression' | 'FunctionExpression';
+}
+
+// A function *scope* boundary in traversal — declarations and both expression forms. Used by the
+// local walkers to stop at nested functions (their bodies belong to a different error-flow context).
+// Type predicate so callers keep oxc's discriminated-union narrowing.
+const isFunctionScope = <T extends TypedNode>(node: T): node is T & FunctionScopeKind =>
+  node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression';
+
+// A function *literal* usable as a callback argument (never a declaration).
+const isFunctionLiteral = <T extends TypedNode>(node: T): node is T & FunctionLiteralKind =>
+  node.type === 'ArrowFunctionExpression' || node.type === 'FunctionExpression';
+
 const getMemberPropertyName = (callee: Node): string | null => {
   if (callee.type !== 'MemberExpression') {
     return null;
@@ -214,7 +236,7 @@ const emptyRejectionHandlerBody = (method: string | null, args: ReadonlyArray<No
 
   if (
     handler !== undefined &&
-    (handler.type === 'ArrowFunctionExpression' || handler.type === 'FunctionExpression') &&
+    isFunctionLiteral(handler) &&
     handler.body !== null &&
     handler.body.type === 'BlockStatement' &&
     handler.body.body.length === 0
@@ -289,7 +311,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     // Don't cross function boundaries
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+    if (isFunctionScope(node)) {
       return false;
     }
 
@@ -302,7 +324,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     // Don't cross function boundaries
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+    if (isFunctionScope(node)) {
       return;
     }
 
@@ -474,7 +496,7 @@ const containsNodeStyleCallback = (body: Node): boolean => {
         const args = node.arguments;
         const last = args[args.length - 1];
         const isCallbackArg =
-          last !== undefined && (last.type === 'ArrowFunctionExpression' || last.type === 'FunctionExpression');
+          last !== undefined && isFunctionLiteral(last);
 
         if (isCallbackArg) {
           found = true;
@@ -484,7 +506,7 @@ const containsNodeStyleCallback = (body: Node): boolean => {
       }
     }
 
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+    if (isFunctionScope(node)) {
       return false;
     }
 
@@ -562,7 +584,7 @@ const bodyAssignsCauseFromParam = (body: Node, name: string): boolean => {
       return false;
     }
 
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+    if (isFunctionScope(node)) {
       return false;
     }
 
@@ -605,9 +627,7 @@ const finallyCallbackThrows = (arg: Node | undefined): boolean => {
     }
 
     if (
-      node.type === 'FunctionDeclaration' ||
-      node.type === 'FunctionExpression' ||
-      node.type === 'ArrowFunctionExpression' ||
+      isFunctionScope(node) ||
       node.type === 'TryStatement'
     ) {
       return false;
@@ -659,7 +679,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // expression-bodied arrow whose returned expression the oracle proves is a thenable (`() => go()`).
   // Block-bodied non-async functions are not inspected (their returns are not a single expression).
   const callbackReturnsThenable = (fn: Node): boolean => {
-    if (fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression') {
+    if (!isFunctionLiteral(fn)) {
       return false;
     }
 
@@ -801,7 +821,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       // Don't cross function boundaries for reassignment check
-      if (node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration') {
+      if (isFunctionScope(node)) {
         return false;
       }
 
@@ -835,7 +855,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       // Don't cross function boundaries
-      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+      if (isFunctionScope(node)) {
         return false;
       }
 
@@ -982,7 +1002,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   const visit = (node: Node, parent: Node | null): void => {
     // Function scope boundary: isolate try-catch depth for return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
-    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+    if (isFunctionScope(node)) {
       const savedDepth = functionTryCatchDepth;
       const savedTryBlockDepth = inTryBlockDepth;
       const savedAsync = inAsyncFunction;
@@ -1128,7 +1148,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       if (isPromiseIdent || isPromiseMember) {
         const executor = node.arguments[0];
         const isInlineExecutor =
-          executor !== undefined && (executor.type === 'ArrowFunctionExpression' || executor.type === 'FunctionExpression');
+          executor !== undefined && isFunctionLiteral(executor);
 
         if (isInlineExecutor) {
           const isAsync = executor.async === true;
@@ -1240,7 +1260,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // misused-promises below).
       if (method === 'then' || method === 'catch') {
         for (const arg of node.arguments) {
-          if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
+          if (isFunctionLiteral(arg)) {
             const body = arg.body;
 
             if (body !== null && containsNodeStyleCallback(body)) {
@@ -1280,7 +1300,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         const first = node.arguments[0];
         const isAsyncFn =
           first !== undefined &&
-          (first.type === 'ArrowFunctionExpression' || first.type === 'FunctionExpression') &&
+          isFunctionLiteral(first) &&
           first.async === true;
 
         if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {

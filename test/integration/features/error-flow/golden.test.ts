@@ -67,4 +67,10 @@ describe('golden/error-flow', () => {
   // ── Promise.reject(non-Error) = throw-non-error (empty rejection handler is gildash-gated → spec-tested) ──
   rg('reject-non-error-dead');
   rg('reject-error-keep');
+
+  // ── no-callback-in-promise (syntactic): node-style callback inside a .then handler ──
+  rg('no-callback-in-promise-dead');
+
+  // ── missing-error-cause: cause-preserving throws never flag (incl. FP-A/FP-B regression guards) ──
+  rg('missing-error-cause-keep');
 });
