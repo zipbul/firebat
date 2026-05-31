@@ -651,6 +651,14 @@ interface CollectFindingsResult {
   readonly constructorNames: Map<ErrorFlowFinding, string>;
 }
 
+// The specific oxc node type for a given `type` discriminant — lets each rule take its exact node
+// (e.g. NodeOfType<'ThrowStatement'>) so there is no re-checking or casting inside.
+interface NodeTypeTag<K extends string> {
+  readonly type: K;
+}
+
+type NodeOfType<K extends Node['type']> = Extract<Node, NodeTypeTag<K>>;
+
 const extractConstructorName = (callee: Node): string | null => {
   if (callee.type === 'Identifier' && typeof callee.name === 'string') {
     return callee.name;
@@ -1006,6 +1014,231 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     });
   };
 
+  // ── Leaf rules — one error-flow concern each. The walker narrows the node and dispatches. ──
+
+  // unsafe-finally: a finally block that throws/returns/breaks/continues masks the try's outcome.
+  const ruleUnsafeFinally = (node: NodeOfType<'TryStatement'>): void => {
+    if (node.finalizer === null) {
+      return;
+    }
+
+    const unsafeKind = findUnsafeControlFlowInFinally(node.finalizer);
+
+    if (unsafeKind !== null) {
+      pushFinding(findings, { kind: 'unsafe-finally', node, filePath, sourceText, evidence: `finally contains ${unsafeKind}` });
+    }
+  };
+
+  // return-await-in-try: a non-awaited return of a promise inside a try-with-catch escapes the
+  // catch — the rejection is observed by the caller, not the local handler. Reads the traversal
+  // state the walker maintains (only true inside the block of a try that has a catch, in an async fn).
+  const ruleReturnAwaitInTry = (node: NodeOfType<'ReturnStatement'>): void => {
+    if (!(inTryBlockWithCatchDepth > 0 && inAsyncFunction)) {
+      return;
+    }
+
+    const arg = node.argument;
+
+    if (arg === null || arg.type === 'AwaitExpression') {
+      return;
+    }
+
+    // Conservative, mirroring floating-promises: flag only what is provably a promise. `import()`
+    // is syntactically always one; calls/members need gildash (no flag-all fallback — that produced
+    // FPs like `return new Response()`). A constructed instance is almost never a thenable.
+    let shouldFlag = false;
+
+    if (arg.type === 'ImportExpression') {
+      shouldFlag = true;
+    } else if (arg.type !== 'NewExpression') {
+      shouldFlag = oracle.isThenable(arg);
+    }
+
+    if (shouldFlag) {
+      pushFinding(findings, { kind: 'return-await-in-try', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+    }
+  };
+
+  // throw-non-error: flag only when the thrown value is provably not an Error (loses stack/cause).
+  const ruleThrowNonError = (node: NodeOfType<'ThrowStatement'>): void => {
+    if (isProvablyNonErrorThrow(node.argument, oracle)) {
+      pushFinding(findings, { kind: 'throw-non-error', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+    }
+  };
+
+  // promise-constructor-hygiene: async executor (throws swallowed), throw-after-settle, or a first
+  // executor param named `reject` (a real rejection becomes a silent resolution).
+  const rulePromiseConstructorHygiene = (node: NodeOfType<'NewExpression'>): void => {
+    const callee = node.callee;
+    const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise';
+    const isPromiseMember =
+      !isPromiseIdent &&
+      callee.type === 'MemberExpression' &&
+      callee.object.type === 'Identifier' &&
+      (callee.object.name === 'globalThis' || callee.object.name === 'window' || callee.object.name === 'self') &&
+      callee.property.type === 'Identifier' &&
+      callee.property.name === 'Promise';
+
+    if (!(isPromiseIdent || isPromiseMember)) {
+      return;
+    }
+
+    const executor = node.arguments[0];
+
+    if (executor === undefined || !isFunctionLiteral(executor)) {
+      return;
+    }
+
+    const reportHygiene = (): void => {
+      pushFinding(findings, { kind: 'promise-constructor-hygiene', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+    };
+
+    if (executor.async === true) {
+      reportHygiene();
+    } else {
+      const executorBody = executor.body;
+
+      if (
+        executorBody !== null &&
+        executorBody.type === 'BlockStatement' &&
+        throwAfterSettleInExecutor(executorBody, collectExecutorParamNames(executor))
+      ) {
+        reportHygiene();
+      }
+    }
+
+    const firstParam = executor.params[0];
+
+    if (firstParam !== undefined && firstParam.type === 'Identifier' && firstParam.name === 'reject') {
+      reportHygiene();
+    }
+  };
+
+  // unobserved-variable (candidate side): register a `const x = <thenable call/new>` binding whose
+  // rejection would float if never observed. Observation is the walker's identifier-read hook.
+  const ruleUnobservedCandidate = (node: NodeOfType<'VariableDeclarator'>): void => {
+    const id = node.id;
+    const init = node.init;
+
+    if (
+      id.type !== 'Identifier' ||
+      typeof id.name !== 'string' ||
+      init === null ||
+      !(init.type === 'CallExpression' || init.type === 'NewExpression')
+    ) {
+      return;
+    }
+
+    // The oracle excludes `any` and answers `false` without gildash (degraded scans register
+    // nothing); an exported binding is observable cross-module, which is out of file scope.
+    if (oracle.isThenable(init) && !exportedDeclarators.has(node)) {
+      addCandidate(id.name, node);
+    }
+  };
+
+  // CallExpression rules: unsafe-finally (promise .finally), no-callback-in-promise, misused-promises
+  // (array fast-path + general void-callback slot), Promise.reject(non-Error), empty rejection handler.
+  const ruleCallExpression = (node: NodeOfType<'CallExpression'>, parent: Node | null): void => {
+    const callee = node.callee;
+    const method = getMemberPropertyName(callee);
+
+    // .finally(() => { throw ... }) masks the original rejection (a returned value is ignored).
+    if (method === 'finally' && finallyCallbackThrows(node.arguments[0])) {
+      pushFinding(findings, { kind: 'unsafe-finally', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+    }
+
+    // no-callback-in-promise: a node-style callback API inside a then/catch handler. One finding per
+    // call (a .then(onOk, onErr) with such a callback in both handlers is a single misuse).
+    if (method === 'then' || method === 'catch') {
+      for (const arg of node.arguments) {
+        if (isFunctionLiteral(arg) && arg.body !== null && containsNodeStyleCallback(arg.body)) {
+          pushFinding(findings, { kind: 'no-callback-in-promise', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+
+          break;
+        }
+      }
+    }
+
+    // misused-promises (array fast-path, syntactic): an async callback to a sync array method.
+    const alwaysMisused = method !== null && alwaysMisusedArrayMethods.has(method);
+    const resultMisused = method !== null && resultMisusedArrayMethods.has(method);
+    let misusedReported = false;
+
+    if (alwaysMisused || resultMisused) {
+      const first = node.arguments[0];
+      const isAsyncFn = first !== undefined && isFunctionLiteral(first) && first.async === true;
+
+      if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {
+        pushFinding(findings, { kind: 'misused-promises', node, filePath, sourceText, evidence: `${method} callback is async` });
+
+        misusedReported = true;
+      }
+    }
+
+    // misused-promises (general void-callback slot): a thenable-returning callback in a slot whose
+    // contextual type returns void floats the rejection. Skipped when the array path already fired
+    // (no double forEach finding); inert for result methods (map/reduce expect a value, not void).
+    if (!misusedReported) {
+      for (const arg of node.arguments) {
+        if (callbackReturnsThenable(arg) && oracle.expectsVoidReturningCallback(arg)) {
+          pushFinding(findings, { kind: 'misused-promises', node, filePath, sourceText, evidence: 'thenable-returning callback in a void-returning callback slot' });
+
+          break;
+        }
+      }
+    }
+
+    // throw-non-error via rejection: Promise.reject(<provably-non-Error>) loses stack/cause.
+    if (method === 'reject' && callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'Promise') {
+      const first = node.arguments[0];
+
+      if (first !== undefined && isProvablyNonErrorThrow(first, oracle)) {
+        pushFinding(findings, { kind: 'throw-non-error', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+      }
+    }
+
+    // empty-catch (promise form): an empty .catch / .then(_, ) handler swallows the rejection.
+    // gildash-gated on the receiver being a thenable so a non-Promise fluent .catch is never flagged.
+    const emptyHandler = emptyRejectionHandlerBody(method, node.arguments);
+
+    if (emptyHandler !== null && callee.type === 'MemberExpression' && oracle.isThenable(callee.object)) {
+      pushFinding(findings, { kind: 'empty-catch', node: emptyHandler, filePath, sourceText, evidence: 'empty rejection handler swallows the error' });
+    }
+  };
+
+  // Discarded-promise rules at an expression statement: floating-promises and catch-or-return.
+  const ruleDiscardedPromise = (node: NodeOfType<'ExpressionStatement'>): void => {
+    const expr = node.expression;
+
+    // explicit `void` is an intentional discard (K)
+    if (expr.type === 'UnaryExpression' && expr.operator === 'void') {
+      return;
+    }
+
+    // Unwrap optional-chain calls (`p?.then()`, `o.f?.()`) to the underlying call.
+    const target = expr.type === 'ChainExpression' ? expr.expression : expr;
+
+    // Promise.* / new Promise / import() created but not observed (syntactic).
+    if (isPromiseFactoryCall(target)) {
+      pushFinding(findings, { kind: 'floating-promises', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+
+      return;
+    }
+
+    if (target.type !== 'CallExpression' || chainHasCatch(target)) {
+      return;
+    }
+
+    if (chainHasThen(target)) {
+      // catch-or-return: a `.then` chain with no `.catch` anywhere — rejection unobserved. Syntactic:
+      // `.then` is itself the thenable signature, so the chain is promise-like by construction.
+      pushFinding(findings, { kind: 'catch-or-return', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+    } else if (oracle.isThenable(target)) {
+      // floating-promises: a discarded bare/method/optional call gildash proves is a promise.
+      pushFinding(findings, { kind: 'floating-promises', node, filePath, sourceText, evidence: getEvidenceLineAt(sourceText, node.start) });
+    }
+  };
+
   const visit = (node: Node, parent: Node | null): void => {
     // Function scope boundary: isolate try-catch depth for return-await-in-try
     // Also push/pop scope for unobserved-variable tracking.
@@ -1034,25 +1267,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       markObserved(node.name);
     }
 
-    // Pre-order hooks
+    // TryStatement: custom child-visit order so return-await-in-try sees the with-catch depth only
+    // inside the try block — not the handler or finalizer.
     if (node.type === 'TryStatement') {
-      // unsafe-finally: try/finally that throws/returns/breaks/continues in finalizer
-      if (node.finalizer !== null) {
-        const unsafeKind = findUnsafeControlFlowInFinally(node.finalizer);
+      ruleUnsafeFinally(node);
 
-        if (unsafeKind !== null) {
-          pushFinding(findings, {
-            kind: 'unsafe-finally',
-            node,
-            filePath,
-            sourceText,
-            evidence: `finally contains ${unsafeKind}`,
-          });
-        }
-      }
-
-      // return-await-in-try only fires for returns inside a try that has a catch, so the
-      // with-catch depth is raised only around the try block — not the handler or finalizer.
       const hasCatch = node.handler !== null;
 
       if (hasCatch) {
@@ -1076,327 +1295,32 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return;
     }
 
-    // return-await-in-try: return without await in try block misses rejection
-    if (node.type === 'ReturnStatement') {
-      const arg = node.argument;
-
-      if (inTryBlockWithCatchDepth > 0 && inAsyncFunction) {
-        if (arg !== null && arg.type !== 'AwaitExpression') {
-          // Conservative, mirroring floating-promises: flag only what is provably a Promise.
-          // `import()` is syntactically always one; calls/members need gildash (no flag-all
-          // fallback — that produced FPs like `return new Response()` in degraded scans).
-          let shouldFlag = false;
-
-          if (arg.type === 'ImportExpression') {
-            shouldFlag = true;
-          } else if (arg.type !== 'NewExpression') {
-            // A CallExpression result type, or an identifier/member value type, must be a thenable.
-            // (A constructed instance is almost never a thenable, so NewExpression is not flagged.)
-            shouldFlag = oracle.isThenable(arg);
-          }
-
-          if (shouldFlag) {
-            pushFinding(findings, {
-              kind: 'return-await-in-try',
-              node,
-              filePath,
-              sourceText,
-              evidence: getEvidenceLineAt(sourceText, node.start),
-            });
-          }
-        }
-      }
-
-    }
-
-    // throw-non-error: flag only when the thrown value is provably not an Error.
-    if (node.type === 'ThrowStatement') {
-      if (isProvablyNonErrorThrow(node.argument, oracle)) {
-        pushFinding(findings, {
-          kind: 'throw-non-error',
-          node,
-          filePath,
-          sourceText,
-          evidence: getEvidenceLineAt(sourceText, node.start),
-        });
-      }
-    }
-
-    // promise-constructor-hygiene
-    if (node.type === 'NewExpression') {
-      const callee = node.callee;
-      const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise';
-      const isPromiseMember =
-        !isPromiseIdent &&
-        callee.type === 'MemberExpression' &&
-        callee.object.type === 'Identifier' &&
-        (callee.object.name === 'globalThis' || callee.object.name === 'window' || callee.object.name === 'self') &&
-        callee.property.type === 'Identifier' &&
-        callee.property.name === 'Promise';
-
-      if (isPromiseIdent || isPromiseMember) {
-        const executor = node.arguments[0];
-        const isInlineExecutor =
-          executor !== undefined && isFunctionLiteral(executor);
-
-        if (isInlineExecutor) {
-          const isAsync = executor.async === true;
-
-          // async executor: thrown errors silently swallowed
-          if (isAsync) {
-            pushFinding(findings, {
-              kind: 'promise-constructor-hygiene',
-              node,
-              filePath,
-              sourceText,
-              evidence: getEvidenceLineAt(sourceText, node.start),
-            });
-          }
-
-          // sync executor throw AFTER settle: once resolve/reject has run the promise is
-          // settled, so a later throw is swallowed (the constructor's reject is a no-op).
-          // A bare throw with no prior settle is correctly converted to a rejection (K).
-          if (!isAsync) {
-            const executorBody = executor.body;
-
-            if (executorBody !== null && executorBody.type === 'BlockStatement') {
-              if (throwAfterSettleInExecutor(executorBody, collectExecutorParamNames(executor))) {
-                pushFinding(findings, {
-                  kind: 'promise-constructor-hygiene',
-                  node,
-                  filePath,
-                  sourceText,
-                  evidence: getEvidenceLineAt(sourceText, node.start),
-                });
-              }
-            }
-          }
-
-          // param order: first param should be resolve, not reject
-          const firstParam = executor.params[0];
-
-          if (firstParam !== undefined && firstParam.type === 'Identifier' && firstParam.name === 'reject') {
-            pushFinding(findings, {
-              kind: 'promise-constructor-hygiene',
-              node,
-              filePath,
-              sourceText,
-              evidence: getEvidenceLineAt(sourceText, node.start),
-            });
-          }
-        }
-
-      }
-    }
-
-    if (node.type === 'CatchClause') {
-      reportEmptyCatchIfNeeded(node);
-      reportCatchTransformHygieneIfNeeded(node);
-      // Keep visiting for other rules
-    }
-
-    // VariableDeclarator: track candidates for unobserved-variable
-    if (node.type === 'VariableDeclarator') {
-      const id = node.id;
-      const init = node.init;
-
-      if (
-        id.type === 'Identifier' &&
-        typeof id.name === 'string' &&
-        init !== null &&
-        (init.type === 'CallExpression' || init.type === 'NewExpression')
-      ) {
-        // Register only when the init expression's type is a thenable (the oracle excludes `any`
-        // and answers `false` without gildash — so degraded scans register nothing), and the
-        // binding is not exported (an exported promise is observable cross-module — out of scope).
-        if (oracle.isThenable(init) && !exportedDeclarators.has(node)) {
-          addCandidate(id.name, node);
-        }
-      }
-    }
-
-    // CallExpression: no-callback-in-promise and misused-promises.
-    // (unobserved-variable observation is handled by the generic identifier-read hook above.)
-    if (node.type === 'CallExpression') {
-      const callee = node.callee;
-      const method = getMemberPropertyName(callee);
-
-      // unsafe-finally (promise form): .finally(() => { throw ... }) masks the original rejection
-      // (a returned value is ignored by Promise.finally, so it is not flagged).
-      if (method === 'finally') {
-        const first = node.arguments[0];
-
-        if (finallyCallbackThrows(first)) {
-          pushFinding(findings, {
-            kind: 'unsafe-finally',
-            node,
-            filePath,
-            sourceText,
-            evidence: getEvidenceLineAt(sourceText, node.start),
-          });
-        }
-      }
-
-      // Note: `.then(onOk, onErr)` style preference (".catch is nicer") is deliberately not a
-      // rule — when onErr observes the upstream rejection the reason still reaches a handler, so
-      // it is a pure notation convention (lint domain). The one genuine error-flow case — onOk
-      // throws and the chain result is discarded with no downstream catch — belongs to
-      // catch-or-return (backlog: precise its two-argument suppression).
-
-      // no-callback-in-promise: callback-style API inside then/catch/finally callback.
-      // At most one finding per call node — a `.then(onOk, onErr)` with a node-style callback in
-      // both handlers is a single misuse of the same call (emit discipline shared with
-      // misused-promises below).
-      if (method === 'then' || method === 'catch') {
-        for (const arg of node.arguments) {
-          if (isFunctionLiteral(arg)) {
-            const body = arg.body;
-
-            if (body !== null && containsNodeStyleCallback(body)) {
-              pushFinding(findings, {
-                kind: 'no-callback-in-promise',
-                node,
-                filePath,
-                sourceText,
-                evidence: getEvidenceLineAt(sourceText, node.start),
-              });
-
-              break;
-            }
-          }
-        }
-      }
-
-      // misused-promises: async callback passed to a sync-array iteration method (see the Set defs).
-      const alwaysMisused = method !== null && alwaysMisusedArrayMethods.has(method);
-      const resultMisused = method !== null && resultMisusedArrayMethods.has(method);
-      let misusedReported = false;
-
-      if (alwaysMisused || resultMisused) {
-        const first = node.arguments[0];
-        const isAsyncFn =
-          first !== undefined &&
-          isFunctionLiteral(first) &&
-          first.async === true;
-
-        if (isAsyncFn && (alwaysMisused || isResultDiscarded(node, parent))) {
-          pushFinding(findings, {
-            kind: 'misused-promises',
-            node,
-            filePath,
-            sourceText,
-            evidence: `${method} callback is async`,
-          });
-
-          misusedReported = true;
-        }
-      }
-
-      // misused-promises (general void-callback slot): a thenable-returning callback passed into any
-      // argument whose contextual type is a void-returning callback discards the rejection at the
-      // call boundary (the call ignores the returned promise — a floating rejection). The callback
-      // returns a thenable when it is `async`, or when it is an expression-bodied arrow whose body
-      // the oracle proves is a thenable (`() => go()`) — return type, not the `async` keyword.
-      // gildash-gated via the oracle, so degraded scans never flag. Skipped when the syntactic array
-      // path already reported this call (avoids a double `forEach` finding); inert for
-      // result-returning methods (map/reduce expect a value, so their slot is not void-returning).
-      if (!misusedReported) {
-        for (const arg of node.arguments) {
-          if (callbackReturnsThenable(arg) && oracle.expectsVoidReturningCallback(arg)) {
-            pushFinding(findings, {
-              kind: 'misused-promises',
-              node,
-              filePath,
-              sourceText,
-              evidence: 'thenable-returning callback in a void-returning callback slot',
-            });
-
-            break;
-          }
-        }
-      }
-
-      // throw-non-error via rejection: Promise.reject(<provably-non-Error>) loses the stack
-      // trace / cause exactly like `throw <non-Error>`.
-      if (
-        method === 'reject' &&
-        callee.type === 'MemberExpression' &&
-        callee.object.type === 'Identifier' &&
-        callee.object.name === 'Promise'
-      ) {
-        const first = node.arguments[0];
-
-        if (first !== undefined && isProvablyNonErrorThrow(first, oracle)) {
-          pushFinding(findings, {
-            kind: 'throw-non-error',
-            node,
-            filePath,
-            sourceText,
-            evidence: getEvidenceLineAt(sourceText, node.start),
-          });
-        }
-      }
-
-      // empty-catch (promise form): an empty `.catch(…)` / `.then(_, …)` rejection handler
-      // swallows the rejection. gildash-gated on the receiver being PromiseLike so a non-Promise
-      // fluent API with its own `.catch` is never flagged (zero-FP over degraded coverage).
-      const emptyHandler = emptyRejectionHandlerBody(method, node.arguments);
-
-      if (emptyHandler !== null && callee.type === 'MemberExpression' && oracle.isThenable(callee.object)) {
-        pushFinding(findings, {
-          kind: 'empty-catch',
-          node: emptyHandler,
-          filePath,
-          sourceText,
-          evidence: 'empty rejection handler swallows the error',
-        });
-      }
-    }
-
-    // Discarded-promise rules: a promise whose rejection is unobserved at an expression statement.
-    if (node.type === 'ExpressionStatement') {
-      const expr = node.expression;
-
-      // explicit `void` is an intentional discard (K)
-      if (!(expr.type === 'UnaryExpression' && expr.operator === 'void')) {
-        // Unwrap optional-chain calls (`p?.then()`, `o.f?.()`) to the underlying call.
-        const target = expr.type === 'ChainExpression' ? expr.expression : expr;
-
-        if (isPromiseFactoryCall(target)) {
-          // Promise.* / new Promise / import() created but not observed (syntactic).
-          pushFinding(findings, {
-            kind: 'floating-promises',
-            node,
-            filePath,
-            sourceText,
-            evidence: getEvidenceLineAt(sourceText, node.start),
-          });
-        } else if (target.type === 'CallExpression' && !chainHasCatch(target)) {
-          if (chainHasThen(target)) {
-            // catch-or-return: a `.then` chain with no `.catch` anywhere — rejection unobserved.
-            // Syntactic (no gildash gate, unlike the bare-call branch below): `.then` is itself
-            // the thenable signature, so a `.then` chain is promise-like by construction — the
-            // same basis as ESLint's promise/catch-or-return.
-            pushFinding(findings, {
-              kind: 'catch-or-return',
-              node,
-              filePath,
-              sourceText,
-              evidence: getEvidenceLineAt(sourceText, node.start),
-            });
-          } else if (oracle.isThenable(target)) {
-            // floating-promises: a discarded call whose result gildash proves is a Promise
-            // (bare/method/optional/`.finally`). gildash-gated so non-Promise calls never flag.
-            pushFinding(findings, {
-              kind: 'floating-promises',
-              node,
-              filePath,
-              sourceText,
-              evidence: getEvidenceLineAt(sourceText, node.start),
-            });
-          }
-        }
-      }
+    // Leaf rules — dispatched on node type; each owns a single error-flow concern.
+    switch (node.type) {
+      case 'ReturnStatement':
+        ruleReturnAwaitInTry(node);
+        break;
+      case 'ThrowStatement':
+        ruleThrowNonError(node);
+        break;
+      case 'NewExpression':
+        rulePromiseConstructorHygiene(node);
+        break;
+      case 'CatchClause':
+        reportEmptyCatchIfNeeded(node);
+        reportCatchTransformHygieneIfNeeded(node);
+        break;
+      case 'VariableDeclarator':
+        ruleUnobservedCandidate(node);
+        break;
+      case 'CallExpression':
+        ruleCallExpression(node, parent);
+        break;
+      case 'ExpressionStatement':
+        ruleDiscardedPromise(node);
+        break;
+      default:
+        break;
     }
 
     // Fall back to generic traversal (parentheses are already normalized away upstream).
