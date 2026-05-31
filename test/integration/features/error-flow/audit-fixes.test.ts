@@ -102,3 +102,49 @@ describe('audit — missing-error-cause FN: indirect wrap via assignment', () =>
     expect(await kindsFor(code)).not.toContain('missing-error-cause');
   });
 });
+
+describe('audit — missing-error-cause via return Promise.reject (async equivalent of throw)', () => {
+  it('FN#5: flags `return Promise.reject(new Error())` (cause-less, like `throw new Error()`)', async () => {
+    const code = [
+      'export async function f(): Promise<void> {',
+      '  try { await g(); } catch (e) { return Promise.reject(new Error("boom")); }',
+      '}',
+      'declare function g(): Promise<void>;',
+    ].join('\n');
+
+    expect(await kindsFor(code)).toContain('missing-error-cause');
+  });
+
+  it('guard: does not flag `return Promise.reject(e)` (the original error propagates)', async () => {
+    const code = [
+      'export async function f(): Promise<void> {',
+      '  try { await g(); } catch (e) { return Promise.reject(e); }',
+      '}',
+      'declare function g(): Promise<void>;',
+    ].join('\n');
+
+    expect(await kindsFor(code)).not.toContain('missing-error-cause');
+  });
+
+  it('guard: does not flag `return Promise.reject(new Error(m, { cause: e }))`', async () => {
+    const code = [
+      'export async function f(): Promise<void> {',
+      '  try { await g(); } catch (e: any) { return Promise.reject(new Error(e.message, { cause: e })); }',
+      '}',
+      'declare function g(): Promise<void>;',
+    ].join('\n');
+
+    expect(await kindsFor(code)).not.toContain('missing-error-cause');
+  });
+
+  it('guard: does not flag a nested callback `return Promise.reject(new Error())` (not the catch control flow)', async () => {
+    const code = [
+      'export function f(): void {',
+      '  try { g(); } catch (e) { [1].map(() => { return Promise.reject(new Error("x")); }); }',
+      '}',
+      'declare function g(): void;',
+    ].join('\n');
+
+    expect(await kindsFor(code)).not.toContain('missing-error-cause');
+  });
+});

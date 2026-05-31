@@ -170,6 +170,42 @@ const isProvablyNonErrorThrow = (arg: Node, oracle: TypeOracle): boolean => {
   return oracle.isPrimitiveValue(value);
 };
 
+// The first argument of a `Promise.reject(X)` call, or null if `expr` is not one.
+const promiseRejectArgument = (expr: Node): Node | null => {
+  if (expr.type !== 'CallExpression') {
+    return null;
+  }
+
+  const callee = expr.callee;
+
+  if (
+    callee.type !== 'MemberExpression' ||
+    callee.object.type !== 'Identifier' ||
+    callee.object.name !== 'Promise' ||
+    callee.property.type !== 'Identifier' ||
+    callee.property.name !== 'reject'
+  ) {
+    return null;
+  }
+
+  return expr.arguments[0] ?? null;
+};
+
+// The error value a statement throws or rejects with: `throw X` or `return Promise.reject(X)` (the
+// async equivalent — the caller receives the rejection, so the cause-preservation rule applies the
+// same way). Returns null for any other statement.
+const throwOrRejectArgument = (node: Node): Node | null => {
+  if (node.type === 'ThrowStatement') {
+    return node.argument;
+  }
+
+  if (node.type === 'ReturnStatement' && node.argument !== null) {
+    return promiseRejectArgument(node.argument);
+  }
+
+  return null;
+};
+
 const isErrorConstructor = (callee: Node): boolean => {
   if (callee.type !== 'Identifier') {
     return false;
@@ -768,16 +804,17 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const param = catchClause.param;
     const body = catchClause.body;
 
-    // Optional catch binding: catch { throw new Error('fail'); }
+    // Optional catch binding: `catch { throw new Error('fail') }` / `catch { return Promise.reject(new Error()) }`.
     if (param === null) {
       walkOxcTree(body, node => {
-        if (node.type !== 'ThrowStatement') {
-          return true;
+        // A nested function's throw/return is a different control-flow context, not this catch's.
+        if (isFunctionScope(node)) {
+          return false;
         }
 
-        const arg = node.argument;
+        const arg = throwOrRejectArgument(node);
 
-        if (arg.type !== 'NewExpression') {
+        if (arg === null || arg.type !== 'NewExpression') {
           return true;
         }
 
@@ -863,11 +900,16 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     // visit() generic fallthrough re-visits catch body children for OTHER rules (throw-non-error,
     // unobserved-variable, etc.) — no duplicate findings because each path checks different kinds.
     walkOxcTree(body, node => {
-      if (node.type !== 'ThrowStatement') {
-        return true;
+      // A nested function's throw/return is a different control-flow context, not this catch's.
+      if (isFunctionScope(node)) {
+        return false;
       }
 
-      const arg = node.argument;
+      const arg = throwOrRejectArgument(node);
+
+      if (arg === null) {
+        return true;
+      }
 
       // Indirect throw: throw <identifier> where identifier was assigned a new Error(...)
       if (arg.type === 'Identifier' && typeof arg.name === 'string') {
