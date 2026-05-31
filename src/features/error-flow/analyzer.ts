@@ -655,6 +655,36 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // answers `false`, so degraded scans never over-report.
   const oracle = createTypeOracle(gildash, filePath);
 
+  // A function literal whose result is a thenable: `async` (always returns a Promise), or an
+  // expression-bodied arrow whose returned expression the oracle proves is a thenable (`() => go()`).
+  // Block-bodied non-async functions are not inspected (their returns are not a single expression).
+  const callbackReturnsThenable = (fn: Node): boolean => {
+    if (fn.type !== 'ArrowFunctionExpression' && fn.type !== 'FunctionExpression') {
+      return false;
+    }
+
+    if (fn.async === true) {
+      return true;
+    }
+
+    return fn.type === 'ArrowFunctionExpression' && fn.expression === true && fn.body !== null && oracle.isThenable(fn.body);
+  };
+
+  // Declarators of `export const/let/var` bindings. An exported binding's promise can be observed
+  // (awaited / `.catch`-ed) by an importing module, which is cross-module and out of this detector's
+  // file scope — so it is never an unobserved-variable candidate.
+  const exportedDeclarators = new Set<Node>();
+
+  walkOxcTree(program, node => {
+    if (node.type === 'ExportNamedDeclaration' && node.declaration !== null && node.declaration.type === 'VariableDeclaration') {
+      for (const declarator of node.declaration.declarations) {
+        exportedDeclarators.add(declarator);
+      }
+    }
+
+    return true;
+  });
+
   const pushUnobservedScope = (): void => {
     unobservedCandidates.push(new Map());
     unobservedObserved.push(new Set());
@@ -753,16 +783,21 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const name = param.name;
     // `err.cause = e` preserves the cause as effectively as `new Error(msg, { cause: e })`.
     const causeAssigned = bodyAssignsCauseFromParam(body, name);
-    // Catch param reassignment: catch(e) { e = new Error(); throw e; }
-    let hasReassignment = false;
+    // Catch param reassigned to a NEW error that drops the cause: `catch(e){ e = new Error(); throw e }`.
+    // A reassignment that preserves the cause (`e = new Error(m, { cause: e })`) keeps the chain, so it
+    // is not a violation — apply the same cause-preservation check used at the throw sites below.
+    let hasUncausedReassignment = false;
 
     walkOxcTree(body, node => {
-      if (node.type === 'AssignmentExpression') {
-        if (isIdentifierName(node.left, name)) {
-          hasReassignment = true;
+      if (
+        node.type === 'AssignmentExpression' &&
+        isIdentifierName(node.left, name) &&
+        node.right.type === 'NewExpression' &&
+        !(causeAssigned || hasCausePropertyWithIdentifier(node.right, name))
+      ) {
+        hasUncausedReassignment = true;
 
-          return false;
-        }
+        return false;
       }
 
       // Don't cross function boundaries for reassignment check
@@ -773,7 +808,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return true;
     });
 
-    if (hasReassignment) {
+    if (hasUncausedReassignment) {
       pushFinding(findings, {
         kind: 'missing-error-cause',
         node: catchClause,
@@ -822,6 +857,15 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // Indirect throw: throw <identifier> where identifier was assigned a new Error(...)
       if (arg.type === 'Identifier' && typeof arg.name === 'string') {
         const varName = arg.name;
+
+        // `throw <catchParam>` is a bare rethrow of the original caught error (cause preserved). The
+        // catch param cannot be re-declared as a `const` in the same block, so any same-named local
+        // is a dead inner-block shadow — never the thrown binding. (An uncaused reassignment of the
+        // param was already handled above.) Resolve only genuine indirect bindings.
+        if (varName === name) {
+          return true;
+        }
+
         const newExpr = localNewExpressions.get(varName);
 
         if (newExpr !== undefined && newExpr.type === 'NewExpression') {
@@ -1154,8 +1198,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         (init.type === 'CallExpression' || init.type === 'NewExpression')
       ) {
         // Register only when the init expression's type is a thenable (the oracle excludes `any`
-        // and answers `false` without gildash — so degraded scans register nothing).
-        if (oracle.isThenable(init)) {
+        // and answers `false` without gildash — so degraded scans register nothing), and the
+        // binding is not exported (an exported promise is observable cross-module — out of scope).
+        if (oracle.isThenable(init) && !exportedDeclarators.has(node)) {
           addCandidate(id.name, node);
         }
       }
@@ -1189,7 +1234,10 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       // throws and the chain result is discarded with no downstream catch — belongs to
       // catch-or-return (backlog: precise its two-argument suppression).
 
-      // no-callback-in-promise: callback-style API inside then/catch/finally callback
+      // no-callback-in-promise: callback-style API inside then/catch/finally callback.
+      // At most one finding per call node — a `.then(onOk, onErr)` with a node-style callback in
+      // both handlers is a single misuse of the same call (emit discipline shared with
+      // misused-promises below).
       if (method === 'then' || method === 'catch') {
         for (const arg of node.arguments) {
           if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
@@ -1203,6 +1251,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
                 sourceText,
                 evidence: getEvidenceLineAt(sourceText, node.start),
               });
+
+              break;
             }
           }
         }
@@ -1246,24 +1296,23 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         }
       }
 
-      // misused-promises (general void-callback slot): an async callback passed into any argument
-      // whose contextual type is a void-returning callback discards the rejection at the call
-      // boundary (the call ignores the returned promise — a floating rejection). gildash-gated via
-      // the oracle, so degraded scans never flag. Skipped when the syntactic array path already
-      // reported this call (avoids a double `forEach` finding); inert for result-returning methods
-      // (map/reduce expect a value, so their slot is not void-returning).
+      // misused-promises (general void-callback slot): a thenable-returning callback passed into any
+      // argument whose contextual type is a void-returning callback discards the rejection at the
+      // call boundary (the call ignores the returned promise — a floating rejection). The callback
+      // returns a thenable when it is `async`, or when it is an expression-bodied arrow whose body
+      // the oracle proves is a thenable (`() => go()`) — return type, not the `async` keyword.
+      // gildash-gated via the oracle, so degraded scans never flag. Skipped when the syntactic array
+      // path already reported this call (avoids a double `forEach` finding); inert for
+      // result-returning methods (map/reduce expect a value, so their slot is not void-returning).
       if (!misusedReported) {
         for (const arg of node.arguments) {
-          const isAsyncCallback =
-            (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') && arg.async === true;
-
-          if (isAsyncCallback && oracle.expectsVoidReturningCallback(arg)) {
+          if (callbackReturnsThenable(arg) && oracle.expectsVoidReturningCallback(arg)) {
             pushFinding(findings, {
               kind: 'misused-promises',
               node,
               filePath,
               sourceText,
-              evidence: 'async callback in a void-returning callback slot',
+              evidence: 'thenable-returning callback in a void-returning callback slot',
             });
 
             break;
@@ -1382,6 +1431,14 @@ const heritageExtendsError = (node: HeritageNode): boolean => {
   return node.children.some(child => child.kind === 'extends' && heritageExtendsError(child));
 };
 
+// KNOWN GAP (pending gildash — see gildash/FIREBAT_ERROR_FLOW_API_REQUEST_2.md):
+// `getHeritageChain` requires a project-relative path while every other gildash path API (and the
+// TypeOracle's span queries) accepts an absolute one. `finding.file` is absolute here, so heritage
+// resolves to empty children and every custom-Error-subclass `missing-error-cause` finding is
+// dropped (a silent false negative for `catch(e){ throw new CustomError(e.message) }`). Once gildash
+// ships R1 (uniform absolute-path) + R2 (`isTypeAssignableToTypeAtSpan`), this post-hoc heritage
+// round-trip is replaced by an oracle `isErrorSubtype(throwArg)` decided at the throw site — folding
+// the last direct gildash call back under the TypeOracle's single-owner boundary.
 const verifyCustomErrorClasses = async (
   findings: ErrorFlowFinding[],
   constructorNames: Map<ErrorFlowFinding, string>,
