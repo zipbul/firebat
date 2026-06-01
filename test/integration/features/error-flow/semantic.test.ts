@@ -39,7 +39,9 @@ const kindsFor = async (code: string): Promise<readonly string[]> => {
 
 describe('integration/error-flow (real typed gildash)', () => {
   it('flags a discarded bare call whose result type is a Promise', async () => {
-    const code = ['declare function fetchData(): Promise<string>;', 'export function f(): void {', '  fetchData();', '}'].join('\n');
+    const code = ['declare function fetchData(): Promise<string>;', 'export function f(): void {', '  fetchData();', '}'].join(
+      '\n',
+    );
 
     expect(await kindsFor(code)).toContain('floating-promises');
   });
@@ -56,11 +58,7 @@ describe('integration/error-flow (real typed gildash)', () => {
   });
 
   it('flags a discarded optional method call returning a Promise', async () => {
-    const code = [
-      'export function f(h: { load?: () => Promise<void> }): void {',
-      '  h.load?.();',
-      '}',
-    ].join('\n');
+    const code = ['export function f(h: { load?: () => Promise<void> }): void {', '  h.load?.();', '}'].join('\n');
 
     expect(await kindsFor(code)).toContain('floating-promises');
   });
@@ -72,7 +70,12 @@ describe('integration/error-flow (real typed gildash)', () => {
   });
 
   it('does not flag a voided Promise-returning call', async () => {
-    const code = ['declare function fetchData(): Promise<string>;', 'export function f(): void {', '  void fetchData();', '}'].join('\n');
+    const code = [
+      'declare function fetchData(): Promise<string>;',
+      'export function f(): void {',
+      '  void fetchData();',
+      '}',
+    ].join('\n');
 
     expect(await kindsFor(code)).not.toContain('floating-promises');
   });
@@ -186,7 +189,12 @@ describe('integration/error-flow (real typed gildash)', () => {
   });
 
   it('flags a Promise-typed variable that is never observed', async () => {
-    const code = ['declare function fetchData(): Promise<string>;', 'export function f(): void {', '  const p = fetchData();', '}'].join('\n');
+    const code = [
+      'declare function fetchData(): Promise<string>;',
+      'export function f(): void {',
+      '  const p = fetchData();',
+      '}',
+    ].join('\n');
 
     expect(await kindsFor(code)).toContain('unobserved-variable');
   });

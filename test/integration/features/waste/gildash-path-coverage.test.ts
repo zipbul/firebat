@@ -9,11 +9,8 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { getBindingSourceTelemetry, resetBindingSourceTelemetry } from '../../../../src/engine/dataflow/gildash-binding-source';
 import { detectWaste, parseSource } from '../../../../src/test-api';
-import {
-  getBindingSourceTelemetry,
-  resetBindingSourceTelemetry,
-} from '../../../../src/engine/dataflow/gildash-binding-source';
 
 const FIXTURES_DIR = path.join(__dirname, '__fixtures__');
 

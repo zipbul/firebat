@@ -1,7 +1,6 @@
 import type { Gildash, CodeRelation, FullSymbol, SymbolSearchResult } from '@zipbul/gildash';
 
 import { GildashError } from '@zipbul/gildash';
-
 import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from '../../engine/types';

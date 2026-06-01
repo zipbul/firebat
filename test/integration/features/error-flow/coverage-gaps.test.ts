@@ -63,9 +63,11 @@ describe('coverage — misused-promises array discard paths and the full method 
 
 describe('coverage — promise-constructor-hygiene global-object member receivers', () => {
   it.each(['globalThis', 'window', 'self'])('flags an async executor on new %s.Promise(...)', global => {
-    const code = [`declare const ${global}: any;`, `export const p = new ${global}.Promise(async () => { await x(); });`, 'declare function x(): Promise<void>;'].join(
-      '\n',
-    );
+    const code = [
+      `declare const ${global}: any;`,
+      `export const p = new ${global}.Promise(async () => { await x(); });`,
+      'declare function x(): Promise<void>;',
+    ].join('\n');
 
     expect(kindsFor(code)).toContain('promise-constructor-hygiene');
   });

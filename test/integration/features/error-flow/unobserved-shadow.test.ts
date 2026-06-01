@@ -12,7 +12,6 @@ const TSCONFIG = JSON.stringify({
   compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', lib: ['ES2022'] },
   include: ['src/**/*.ts'],
 });
-
 const H = 'declare function a(): Promise<number>;\ndeclare function use(x: unknown): void;\n';
 
 const unobservedCount = async (body: string): Promise<number> => {
@@ -23,8 +22,10 @@ const unobservedCount = async (body: string): Promise<number> => {
 
   try {
     const fp = path.join(tmpDir, 'src', 'sample.ts');
-    return analyzeErrorFlow([parseSource(fp, await Bun.file(fp).text())], { gildash }).filter(f => f.kind === 'unobserved-variable')
-      .length;
+
+    return analyzeErrorFlow([parseSource(fp, await Bun.file(fp).text())], { gildash }).filter(
+      f => f.kind === 'unobserved-variable',
+    ).length;
   } finally {
     await cleanup();
   }
@@ -32,7 +33,9 @@ const unobservedCount = async (body: string): Promise<number> => {
 
 describe('unobserved-variable — shadowing parameter does not observe the outer promise', () => {
   it('flags the outer floating promise when an inner function param shadows its name', async () => {
-    expect(await unobservedCount('export function f(): void { const p = a(); function g(p: number) { return p; } g(1); }')).toBe(1);
+    expect(await unobservedCount('export function f(): void { const p = a(); function g(p: number) { return p; } g(1); }')).toBe(
+      1,
+    );
   });
 
   it('flags it for a shadowing arrow-function param too', async () => {
@@ -46,10 +49,14 @@ describe('unobserved-variable — shadowing parameter does not observe the outer
 
 describe('unobserved-variable — genuine closure reads still observe (K guards)', () => {
   it('does NOT flag when a closure reads the outer promise (no shadow)', async () => {
-    expect(await unobservedCount('export async function f(): Promise<void> { const p = a(); const g = () => p; await g(); }')).toBe(0);
+    expect(
+      await unobservedCount('export async function f(): Promise<void> { const p = a(); const g = () => p; await g(); }'),
+    ).toBe(0);
   });
 
   it('does NOT flag when the outer promise is observed before the shadowing inner function', async () => {
-    expect(await unobservedCount('export function f(): void { const p = a(); use(p); function g(p: number) { return p; } g(1); }')).toBe(0);
+    expect(
+      await unobservedCount('export function f(): void { const p = a(); use(p); function g(p: number) { return p; } g(1); }'),
+    ).toBe(0);
   });
 });

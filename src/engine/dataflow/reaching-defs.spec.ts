@@ -1,28 +1,23 @@
 import { describe, expect, it } from 'bun:test';
-import { parseSource } from '../ast/parse-source';
 
 import type { BindingName } from './reaching-defs';
 
 import { collectFunctionNodes } from '../ast/oxc-ast-utils';
-import {
-  analyzeFunctionBody,
-  collectLocalVarIndexes,
-  collectParameterBindings,
-  extractBindingNames,
-} from './reaching-defs';
+import { parseSource } from '../ast/parse-source';
+import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, extractBindingNames } from './reaching-defs';
 import { buildDeclScopeMap } from './variable-collector';
 
 // Virtual filePath for spec cases. The gildash standalone binding resolver
 // (getStandaloneFileBindings) takes filePath + source content directly, so the
 // path is just an identifier and `_lastSource` carries the content.
 const TEST_FILE_PATH = '/virtual/reaching-defs-spec.ts';
-
 // Tracks the source backing the most recent firstFunction()/parseFunctions()
 // call so the gildash standalone binding resolver receives the file content.
 let _lastSource = '';
 
 const parseFunctions = (code: string) => {
   _lastSource = code;
+
   const parsed = parseSource(TEST_FILE_PATH, code);
 
   return collectFunctionNodes(parsed.program);
@@ -195,8 +190,7 @@ describe('engine/dataflow/reaching-defs', () => {
     // Used so assertions don't depend on the scope-key format, which is now
     // sourced from gildash's tsc-resolved declaration positions instead of
     // ScopeTracker's lexical-scope strings (`''`, `'0'`, ...).
-    const namesOf = (indexes: Map<string, number>): string[] =>
-      [...indexes.keys()].map(k => k.split('@')[0] ?? '').sort();
+    const namesOf = (indexes: Map<string, number>): string[] => [...indexes.keys()].map(k => k.split('@')[0] ?? '').sort();
 
     it('collectLocalVarIndexes - params and locals - includes both', () => {
       // Arrange
@@ -275,7 +269,6 @@ describe('engine/dataflow/reaching-defs', () => {
       const fn = firstFunction('function f(x: number) { { let x = 1; return x; } }');
       // Act
       const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
-
       // Assert — both bindings tracked, with different varIndexes
       const xKeys = [...indexes.keys()].filter(k => k.startsWith('x@'));
 
@@ -320,7 +313,13 @@ describe('engine/dataflow/reaching-defs', () => {
       const paramBindings = collectParameterBindings(fn);
       const body = (fn as any).body;
       // Act
-      const analysis = analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH, _lastSource));
+      const analysis = analyzeFunctionBody(
+        body,
+        localIndexByName,
+        paramBindings,
+        [],
+        buildDeclScopeMap(fn, TEST_FILE_PATH, _lastSource),
+      );
 
       // Assert
       expect(analysis.defsOfVar.length).toBe(localIndexByName.size);
@@ -328,6 +327,7 @@ describe('engine/dataflow/reaching-defs', () => {
       const bKey = [...localIndexByName.keys()].find(k => k.startsWith('b@'));
 
       expect(bKey).toBeDefined();
+
       const bIndex = localIndexByName.get(bKey!);
 
       expect(typeof bIndex).toBe('number');

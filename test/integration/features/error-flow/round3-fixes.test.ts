@@ -19,6 +19,7 @@ const kindsFor = async (code: string): Promise<readonly string[]> => {
 
   try {
     const fp = path.join(tmpDir, 'src', 'sample.ts');
+
     return analyzeErrorFlow([parseSource(fp, await Bun.file(fp).text())], { gildash }).map(f => f.kind);
   } finally {
     await cleanup();
@@ -27,17 +28,21 @@ const kindsFor = async (code: string): Promise<readonly string[]> => {
 
 describe('catch-or-return — `.then(onOk, <non-handler>)` is not a real catch', () => {
   it('flags a discarded `.then(ok, undefined)` (the second arg handles nothing)', async () => {
-    const code = ['declare function go(): Promise<void>;', 'declare function ok(): void;', 'export function f(): void { go().then(ok, undefined); }'].join(
-      '\n',
-    );
+    const code = [
+      'declare function go(): Promise<void>;',
+      'declare function ok(): void;',
+      'export function f(): void { go().then(ok, undefined); }',
+    ].join('\n');
 
     expect(await kindsFor(code)).toContain('catch-or-return');
   });
 
   it('flags a discarded `.then(ok, null)`', async () => {
-    const code = ['declare function go(): Promise<void>;', 'declare function ok(): void;', 'export function f(): void { go().then(ok, null); }'].join(
-      '\n',
-    );
+    const code = [
+      'declare function go(): Promise<void>;',
+      'declare function ok(): void;',
+      'export function f(): void { go().then(ok, null); }',
+    ].join('\n');
 
     expect(await kindsFor(code)).toContain('catch-or-return');
   });

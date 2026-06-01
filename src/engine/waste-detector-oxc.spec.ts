@@ -261,9 +261,9 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const f = toFile('/shadow.ts', source);
     // Act
     const result = detectWasteOxc([f]);
-
     // Assert — waste does not flag the outer `x` (it's use=0, no-unused-vars territory)
     const outerXFindings = result.filter(r => r.label === 'x');
+
     // Inner `x = 2` is read inside the block, so the inner binding is not waste either.
     expect(outerXFindings.length).toBe(0);
   });

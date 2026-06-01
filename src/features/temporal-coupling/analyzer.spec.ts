@@ -1,7 +1,6 @@
 import type { CodeRelation, ParsedFile as GildashParsedFile } from '@zipbul/gildash';
 
 import { GildashError } from '@zipbul/gildash';
-
 import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/ast/parse-source';

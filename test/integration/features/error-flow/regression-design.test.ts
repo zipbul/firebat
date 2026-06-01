@@ -100,10 +100,7 @@ describe('integration/error-flow — RC4 unobserved-variable: binding visibility
   });
 
   it('guard: still flags a local unobserved promise binding', async () => {
-    const code = [
-      'declare function load(): Promise<number>;',
-      'export function f(): void { const ready = load(); }',
-    ].join('\n');
+    const code = ['declare function load(): Promise<number>;', 'export function f(): void { const ready = load(); }'].join('\n');
 
     expect(await kindsFor(code)).toContain('unobserved-variable');
   });
@@ -121,7 +118,6 @@ describe('integration/error-flow — RC5 emit discipline: one finding per node',
       '  );',
       '}',
     ].join('\n');
-
     const hits = (await kindsFor(code)).filter(k => k === 'no-callback-in-promise');
 
     expect(hits.length).toBe(1);

@@ -12,8 +12,8 @@ const TSCONFIG = JSON.stringify({
   compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', lib: ['ES2022'] },
   include: ['src/**/*.ts'],
 });
-
-const decls = 'declare function a(): Promise<number>;\ndeclare function b(): Promise<number>;\ndeclare function use(x: unknown): void;\n';
+const decls =
+  'declare function a(): Promise<number>;\ndeclare function b(): Promise<number>;\ndeclare function use(x: unknown): void;\n';
 
 const unobservedCount = async (bodyLines: string[]): Promise<number> => {
   const code = decls + ['export async function f(c: boolean): Promise<void> {', ...bodyLines.map(l => `  ${l}`), '}'].join('\n');
@@ -24,8 +24,10 @@ const unobservedCount = async (bodyLines: string[]): Promise<number> => {
 
   try {
     const fp = path.join(tmpDir, 'src', 'sample.ts');
-    return analyzeErrorFlow([parseSource(fp, await Bun.file(fp).text())], { gildash }).filter(f => f.kind === 'unobserved-variable')
-      .length;
+
+    return analyzeErrorFlow([parseSource(fp, await Bun.file(fp).text())], { gildash }).filter(
+      f => f.kind === 'unobserved-variable',
+    ).length;
   } finally {
     await cleanup();
   }

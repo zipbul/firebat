@@ -19,6 +19,7 @@ const kindsFor = async (code: string): Promise<readonly string[]> => {
 
   try {
     const filePath = path.join(tmpDir, 'src', 'sample.ts');
+
     return analyzeErrorFlow([parseSource(filePath, await Bun.file(filePath).text())], { gildash }).map(f => f.kind);
   } finally {
     await cleanup();
@@ -49,7 +50,9 @@ describe('audit — missing-error-cause FP: catch param passed whole into the Er
 
 describe('audit — empty-catch FN: expression-bodied trivial rejection handler', () => {
   it('FN#8: flags `.catch(() => undefined)` (swallows identically to `.catch(() => {})`)', async () => {
-    const code = ['declare function go(): Promise<void>;', 'export function f(): void { go().catch(() => undefined); }'].join('\n');
+    const code = ['declare function go(): Promise<void>;', 'export function f(): void { go().catch(() => undefined); }'].join(
+      '\n',
+    );
 
     expect(await kindsFor(code)).toContain('empty-catch');
   });

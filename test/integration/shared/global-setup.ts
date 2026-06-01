@@ -17,7 +17,6 @@ import * as path from 'node:path';
 import { setGildashSemanticContext } from '../../../src/engine/dataflow/gildash-binding-source';
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
-
 let _instance: Gildash | null = null;
 
 const open = async (): Promise<void> => {
@@ -26,6 +25,7 @@ const open = async (): Promise<void> => {
     semantic: true,
     watchMode: false,
   });
+
   setGildashSemanticContext(_instance);
 };
 
@@ -42,6 +42,7 @@ const cleanup = (): void => {
       // Best-effort cleanup, but surface the cause so a close failure isn't invisible.
       console.error('global-setup: gildash close failed during cleanup', error);
     });
+
     _instance = null;
   }
 };

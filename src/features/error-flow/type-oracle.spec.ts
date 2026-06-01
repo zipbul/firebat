@@ -106,9 +106,11 @@ describe('isVoidReturn', () => {
 const FILE = '/virtual/sample.ts';
 const NODE: Node = parseSource(FILE, 'doThing();').program;
 const SPAN = { start: NODE.start, end: NODE.end };
+
 const throws = () => {
   throw new Error('semantic layer offline');
 };
+
 // A partial gildash test double — only the queried method matters per test (mirrors the noopGildash
 // pattern used across the integration suites).
 const oracleWith = (methods: Partial<Gildash>) => createTypeOracle(methods as unknown as Gildash, FILE);
@@ -117,8 +119,11 @@ describe('createTypeOracle — null gildash answers false for every query (degra
   const oracle = createTypeOracle(null, FILE);
 
   it('isThenable', () => expect(oracle.isThenable(NODE)).toBe(false));
+
   it('isPrimitiveValue', () => expect(oracle.isPrimitiveValue(NODE)).toBe(false));
+
   it('expectsVoidReturningCallback', () => expect(oracle.expectsVoidReturningCallback(NODE)).toBe(false));
+
   it('isErrorSubtype', () => expect(oracle.isErrorSubtype(NODE)).toBe(false));
 });
 
@@ -177,13 +182,15 @@ describe('createTypeOracle — isPrimitiveValue', () => {
 
 describe('createTypeOracle — expectsVoidReturningCallback', () => {
   it('true when every contextual call signature returns void', () => {
-    expect(oracleWith({ getContextualCallReturnsAtSpan: () => [leaf(VOID, 'void')] }).expectsVoidReturningCallback(NODE)).toBe(true);
+    expect(oracleWith({ getContextualCallReturnsAtSpan: () => [leaf(VOID, 'void')] }).expectsVoidReturningCallback(NODE)).toBe(
+      true,
+    );
   });
 
   it('false when a signature returns a non-void value', () => {
-    expect(oracleWith({ getContextualCallReturnsAtSpan: () => [leaf(NUMBER, 'number')] }).expectsVoidReturningCallback(NODE)).toBe(
-      false,
-    );
+    expect(
+      oracleWith({ getContextualCallReturnsAtSpan: () => [leaf(NUMBER, 'number')] }).expectsVoidReturningCallback(NODE),
+    ).toBe(false);
   });
 
   it('false when the slot is not callable (empty array)', () => {

@@ -31,13 +31,22 @@ const kindsFor = async (code: string, semantic = true): Promise<readonly string[
 };
 
 const wrap = (decls: string, body: string): string =>
-  [decls, 'export function f(): void {', '  try { g(); } catch (e: any) {', `    ${body}`, '  }', '}', 'declare function g(): void;'].join(
-    '\n',
-  );
+  [
+    decls,
+    'export function f(): void {',
+    '  try { g(); } catch (e: any) {',
+    `    ${body}`,
+    '  }',
+    '}',
+    'declare function g(): void;',
+  ].join('\n');
 
 describe('integration/error-flow — missing-error-cause for custom error classes', () => {
   it('happy: flags a custom Error subclass thrown without cause', async () => {
-    const code = wrap('class CustomError extends Error { constructor(m: string) { super(m); } }', 'throw new CustomError(e.message);');
+    const code = wrap(
+      'class CustomError extends Error { constructor(m: string) { super(m); } }',
+      'throw new CustomError(e.message);',
+    );
 
     expect(await kindsFor(code)).toContain('missing-error-cause');
   });

@@ -100,6 +100,7 @@ describe('computeSequenceSimilarity', () => {
     const n = 6;
     const a = ['a', 'b', 'c', 'd', 'e', 'f'];
     const b = ['a', 'b', 'c', 'd', 'e', 'X'];
+
     expect(computeSequenceSimilarity(a, b)).toBeCloseTo((2 * (n - 1)) / (2 * n), 5);
   });
 

@@ -22,6 +22,7 @@ const kindsFor = async (code: string): Promise<readonly string[]> => {
 
   try {
     const fp = path.join(tmpDir, 'src', 'sample.ts');
+
     return analyzeErrorFlow([parseSource(fp, await Bun.file(fp).text())], { gildash }).map(f => f.kind);
   } finally {
     await cleanup();
@@ -39,13 +40,15 @@ describe('misused-promises — array fast-path receiver gate', () => {
   });
 
   it('guard: still flags an async callback to a real Array method', async () => {
-    const code = 'export function f(a: number[]): void { a.forEach(async r => { await use(r); }); }\ndeclare function use(x: number): Promise<void>;';
+    const code =
+      'export function f(a: number[]): void { a.forEach(async r => { await use(r); }); }\ndeclare function use(x: number): Promise<void>;';
 
     expect(await kindsFor(code)).toContain('misused-promises');
   });
 
   it('guard: still flags on an array literal receiver', async () => {
-    const code = 'export function f(): void { [1, 2, 3].forEach(async r => { await use(r); }); }\ndeclare function use(x: number): Promise<void>;';
+    const code =
+      'export function f(): void { [1, 2, 3].forEach(async r => { await use(r); }); }\ndeclare function use(x: number): Promise<void>;';
 
     expect(await kindsFor(code)).toContain('misused-promises');
   });
