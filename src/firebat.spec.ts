@@ -3,7 +3,7 @@ import * as nodePath from 'node:path';
 
 const __origCliEntry = { ...require(nodePath.resolve(import.meta.dir, './adapters/cli/entry.ts')) };
 
-mock.module(nodePath.resolve(import.meta.dir, './adapters/cli/entry.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, './adapters/cli/entry.ts'), () => ({
   runCli: async (_argv: string[]) => 0,
 }));
 
@@ -17,5 +17,5 @@ describe('runFirebat', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, './adapters/cli/entry.ts'), () => __origCliEntry);
+  void mock.module(nodePath.resolve(import.meta.dir, './adapters/cli/entry.ts'), () => __origCliEntry);
 });
