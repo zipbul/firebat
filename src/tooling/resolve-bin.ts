@@ -26,14 +26,11 @@ const tryResolveLocalBin = async (input: ResolveLocalBinInput): Promise<string |
   }
 
   for (const candidate of candidates) {
-    try {
-      const file = Bun.file(candidate);
-
-      if (await file.exists()) {
-        return candidate;
-      }
-    } catch {
-      // ignore
+    // `.exists()` returns false for every "not found" condition; it only throws on a
+    // malformed path argument (null byte, ENAMETOOLONG) — an upstream bug, not a miss —
+    // which should surface rather than be silently treated as "binary not found".
+    if (await Bun.file(candidate).exists()) {
+      return candidate;
     }
   }
 

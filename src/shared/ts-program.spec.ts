@@ -205,10 +205,10 @@ describe('createFirebatProgram', () => {
     // Arrange
     mockBatchParse.mockRejectedValue(new Error('gildash closed'));
 
-    // Act
-    await createFirebatProgram({ targets: ['/a.ts'], logger }).catch(() => {});
+    // Act & Assert — the rejection is expected; assert it instead of swallowing it,
+    // then confirm cleanup still ran.
+    await expect(createFirebatProgram({ targets: ['/a.ts'], logger })).rejects.toThrow('gildash closed');
 
-    // Assert
     expect(mockClose).toHaveBeenCalledWith({ cleanup: false });
   });
 

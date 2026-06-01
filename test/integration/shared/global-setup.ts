@@ -38,8 +38,9 @@ await open();
 const cleanup = (): void => {
   if (_instance !== null) {
     setGildashSemanticContext(null);
-    _instance.close({ cleanup: false }).catch(() => {
-      /* best-effort */
+    _instance.close({ cleanup: false }).catch((error: unknown) => {
+      // Best-effort cleanup, but surface the cause so a close failure isn't invisible.
+      console.error('global-setup: gildash close failed during cleanup', error);
     });
     _instance = null;
   }

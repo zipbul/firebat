@@ -141,12 +141,11 @@ const findNearestTsconfig = async (rootAbs: string, fromDirAbs: string): Promise
   while (isWithinRoot(rootAbs, current)) {
     const candidate = path.join(current, 'tsconfig.json');
 
-    try {
-      if (await Bun.file(candidate).exists()) {
-        return candidate;
-      }
-    } catch {
-      // ignore
+    // `.exists()` returns false for every "not found" condition (missing file,
+    // ENOTDIR, EACCES); it only throws on a malformed path argument (null byte,
+    // ENAMETOOLONG), which is an upstream bug that should surface, not be masked.
+    if (await Bun.file(candidate).exists()) {
+      return candidate;
     }
 
     const parent = path.dirname(current);

@@ -131,11 +131,9 @@ const closeAll = async (): Promise<void> => {
   const dbInstances = await Promise.all(Array.from(dbPromisesByPath.values()));
 
   for (const db of dbInstances) {
-    try {
-      db.close();
-    } catch {
-      // Best-effort close
-    }
+    // `close()` (throwOnError=false → sqlite3_close_v2) is documented safe to call
+    // repeatedly and is a no-op once closed; it does not throw, so no guard is needed.
+    db.close();
   }
 
   dbPromisesByPath.clear();
