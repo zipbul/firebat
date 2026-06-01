@@ -2,9 +2,14 @@ import type { Gildash, ResolvedType } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 // `ts.TypeFlags` bits (TypeScript does not export the enum at this layer). Only the bits the
-// error-flow rules reason about are named here.
-// `ts.TypeFlags` Any (1) and Unknown (2) — either could be an Error.
-const FLAG_ANY_OR_UNKNOWN = 1 | 2;
+// error-flow rules reason about are named here. Values are written as bare literals so the
+// documenting names survive (the waste detector inlines single-use *computed* initializers).
+// Any (1) and Unknown (2) — either could be an Error.
+const FLAG_ANY_OR_UNKNOWN = 0x3;
+// Contiguous primitive bits, String (1<<2) through UniqueESSymbol (1<<13): (1<<2)|…|(1<<13).
+const FLAG_PRIMITIVE = 0x3ffc;
+// Void (1<<14) and Undefined (1<<15): 0x4000 | 0x8000.
+const FLAG_VOID_OR_UNDEFINED = 0xc000;
 
 // A type proves the value is a bare primitive (so, definitely not an Error) only when no part of
 // it could be `any`/`unknown` and every constituent is a primitive. `string | Error` (mixed) and
@@ -20,16 +25,14 @@ export const isWhollyPrimitive = (type: ResolvedType): boolean => {
     return members.length > 0 && members.every(isWhollyPrimitive);
   }
 
-  // Contiguous `ts.TypeFlags` primitive bits, String (1<<2) through UniqueESSymbol (1<<13):
-  //   (1<<2)|(1<<3)|…|(1<<13) === 0x3ffc.
-  return (type.flags & 0x3ffc) !== 0;
+  return (type.flags & FLAG_PRIMITIVE) !== 0;
 };
 
 // A contextual call-signature return type proves the slot discards the value (a `void` context).
 // `any`/`unknown` returns are rejected — they could accept a thenable.
 export const isVoidReturn = (type: ResolvedType): boolean =>
-  // Not any/unknown, and at least one of Void (1<<14) / Undefined (1<<15).
-  (type.flags & FLAG_ANY_OR_UNKNOWN) === 0 && (type.flags & ((1 << 14) | (1 << 15))) !== 0;
+  // Not any/unknown, and at least one of Void / Undefined.
+  (type.flags & FLAG_ANY_OR_UNKNOWN) === 0 && (type.flags & FLAG_VOID_OR_UNDEFINED) !== 0;
 
 /**
  * The single owner of every gildash type query for the error-flow detector. Rules ask domain
