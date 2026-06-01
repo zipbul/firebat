@@ -42,11 +42,7 @@ import { tryGildashDeclScopeMap } from './gildash-binding-source';
  * `sourceText` is the full file source backing `root`; callers thread it from
  * the ParsedFile.
  */
-export const buildDeclScopeMap = (
-  root: Node,
-  filePath?: string,
-  sourceText?: string,
-): ReadonlyMap<number, string> => {
+export const buildDeclScopeMap = (root: Node, filePath?: string, sourceText?: string): ReadonlyMap<number, string> => {
   void root;
 
   const fromGildash = tryGildashDeclScopeMap(filePath, sourceText);
@@ -275,7 +271,6 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
     allowNestedFunctions: boolean,
     suppressDeclarations: boolean,
   ) => void;
-
   // `declScopeByIdLocation` maps each identifier offset to its binding scope
   // key, letting `declScope` distinguish same-name bindings across scopes
   // (outer `let x` vs inner `let x`). Callers that need full scope resolution
@@ -283,8 +278,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
   // parameters). When omitted, sub-walks (parameter defaults, decorator
   // expressions) fall back to an empty map — they only need local identifier
   // kinds, not cross-reference resolution against an outer scope.
-  const declScopeByIdLocation: ReadonlyMap<number, string> =
-    options.declScopeByIdLocation ?? new Map<number, string>();
+  const declScopeByIdLocation: ReadonlyMap<number, string> = options.declScopeByIdLocation ?? new Map<number, string>();
   const evaluateAllBranches = options.evaluateAllBranches === true;
 
   const pushIdentifierUsage = (

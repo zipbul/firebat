@@ -4,8 +4,8 @@ import type { Node } from 'oxc-parser';
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
 import type { ParsedFile } from '../../engine/types';
-import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 import type { TypeOracle } from './type-oracle';
+import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
 
 import { forEachChildNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { createTypeOracle } from './type-oracle';
@@ -624,8 +624,7 @@ const containsNodeStyleCallback = (body: Node): boolean => {
       if (method !== null && nodeStyleCallbackMethods.has(method)) {
         const args = node.arguments;
         const last = args[args.length - 1];
-        const isCallbackArg =
-          last !== undefined && isFunctionLiteral(last);
+        const isCallbackArg = last !== undefined && isFunctionLiteral(last);
 
         if (isCallbackArg) {
           found = true;
@@ -688,9 +687,7 @@ const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
       const key = prop.key;
       const value = prop.value;
 
-      if (
-        !((key.type === 'Identifier' && key.name === 'cause') || (key.type === 'Literal' && key.value === 'cause'))
-      ) {
+      if (!((key.type === 'Identifier' && key.name === 'cause') || (key.type === 'Literal' && key.value === 'cause'))) {
         continue;
       }
 
@@ -769,10 +766,7 @@ const finallyCallbackThrows = (arg: Node | undefined): boolean => {
       return false;
     }
 
-    if (
-      isFunctionScope(node) ||
-      node.type === 'TryStatement'
-    ) {
+    if (isFunctionScope(node) || node.type === 'TryStatement') {
       return false;
     }
 
@@ -1023,7 +1017,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       // `w = new Error(...)` — a wrapper bound by assignment rather than declaration (last write wins).
-      if (node.type === 'AssignmentExpression' && node.operator === '=' && node.left.type === 'Identifier' && node.right.type === 'NewExpression') {
+      if (
+        node.type === 'AssignmentExpression' &&
+        node.operator === '=' &&
+        node.left.type === 'Identifier' &&
+        node.right.type === 'NewExpression'
+      ) {
         localNewExpressions.set(node.left.name, node.right);
       }
 
@@ -1318,7 +1317,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   const ruleRejectNonError = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
     const callee = node.callee;
 
-    if (method === 'reject' && callee.type === 'MemberExpression' && callee.object.type === 'Identifier' && callee.object.name === 'Promise') {
+    if (
+      method === 'reject' &&
+      callee.type === 'MemberExpression' &&
+      callee.object.type === 'Identifier' &&
+      callee.object.name === 'Promise'
+    ) {
       const first = node.arguments[0];
 
       if (first !== undefined && isProvablyNonErrorThrow(first, oracle)) {
@@ -1504,10 +1508,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
 const createEmptyErrorFlow = (): ReadonlyArray<ErrorFlowFinding> => [];
 
-const analyzeErrorFlow = (
-  files: ReadonlyArray<ParsedFile>,
-  input?: AnalyzeErrorFlowInput,
-): ReadonlyArray<ErrorFlowFinding> => {
+const analyzeErrorFlow = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeErrorFlowInput): ReadonlyArray<ErrorFlowFinding> => {
   if (files.length === 0) {
     return createEmptyErrorFlow();
   }

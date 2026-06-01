@@ -96,6 +96,7 @@ export const analyzeDuplicates = (
     return !exactHashes.has(cachedShape(g.items[0]!.node)) && !shapeHashes.has(hash);
   });
   let allGroups: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
+
   // ── Level 2+3: Near-miss clone detection ───────────────────────────────────
   if (options.enableNearMiss ?? true) {
     // Level 1에서 그룹핑된 모든 노드의 shape hash → excluded

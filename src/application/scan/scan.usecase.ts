@@ -23,6 +23,7 @@ import type { ErrorFlowFindingKind } from '../../features/error-flow';
 import type { FirebatLogger } from '../../shared';
 
 import { computeAutoMinSize } from '../../engine';
+import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow/gildash-binding-source';
 import { analyzeBarrel, createEmptyBarrel } from '../../features/barrel';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
@@ -42,7 +43,6 @@ import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../feat
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createFirebatProgram, loadFirebatConfigFile, computeToolVersion, resolveRuntimeContextFromCwd } from '../../shared';
-import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow/gildash-binding-source';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
@@ -751,576 +751,582 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   // the body still run the finally, and no closure is created that would capture
   // outer locals like `metaErrors`.
   try {
-  const tNamespace0 = nowMs();
-  const cacheNamespace = await computeCacheNamespace({ toolVersion });
+    const tNamespace0 = nowMs();
+    const cacheNamespace = await computeCacheNamespace({ toolVersion });
 
-  logger.trace('Cache namespace computed', { cacheNamespace, durationMs: Math.round(nowMs() - tNamespace0) });
+    logger.trace('Cache namespace computed', { cacheNamespace, durationMs: Math.round(nowMs() - tNamespace0) });
 
-  const tProjectDigest0 = nowMs();
-  const projectInputsDigest = await computeProjectInputsDigest({
-    rootAbs: ctx.rootAbs,
-    gildash,
-  });
-
-  logger.trace('Project inputs digest computed', { projectInputsDigest, durationMs: Math.round(nowMs() - tProjectDigest0) });
-
-  const tInputsDigest0 = nowMs();
-  const inputsDigest = await computeInputsDigest({
-    targets: options.targets,
-    gildash,
-    extraParts: [`ns:${cacheNamespace}`, `project:${projectInputsDigest}`],
-  });
-
-  logger.trace('Inputs digest computed', { inputsDigest, durationMs: Math.round(nowMs() - tInputsDigest0) });
-
-  const artifactKey = computeScanArtifactKey({
-    detectors: options.detectors,
-    minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
-    maxForwardDepth: options.maxForwardDepth,
-    ...(options.detectors.includes('barrel') ? { barrelIgnoreGlobs: options.barrelIgnoreGlobs ?? [] } : {}),
-    ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
-      ? {
-          dependenciesLayers: options.dependenciesLayers,
-          dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
-        }
-      : {}),
-    ...(options.detectors.includes('coupling') && options.couplingConfig
-      ? { couplingConfig: options.couplingConfig as Record<string, unknown> }
-      : {}),
-  });
-
-  logger.trace('Artifact key computed', { artifactKey });
-
-  const allowCache = false;
-
-  logger.debug('Cache strategy', { allowCache });
-
-  const cached = await loadCachedReport({
-    allowCache,
-    artifactRepository,
-    projectKey,
-    artifactKey,
-    inputsDigest,
-    logger,
-  });
-
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  // Note: in fix mode, prefer to run fixable tools before parsing the program
-  // so the report reflects post-fix state.
-  const shouldRunFormat = options.detectors.includes('format');
-  const shouldRunLint = options.detectors.includes('lint');
-
-  logger.debug('Fix mode tools', { shouldRunFormat, shouldRunLint });
-
-  type BarrelResult = ReturnType<typeof createEmptyBarrel>;
-
-  type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
-
-  type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
-
-  logger.info('Fix mode: running fixable tools before parse', {
-    format: shouldRunFormat,
-    lint: shouldRunLint,
-  });
-
-  const tFix0 = nowMs();
-  const [oxfmtConfigPath, oxlintConfigPath] = await Promise.all([
-    resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc'),
-    resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc'),
-  ]);
-  const [fixedFormat, fixedLint] = await Promise.all([
-    shouldRunFormat
-      ? analyzeFormat({
-          targets: options.targets,
-          fix: true,
-          cwd: ctx.rootAbs,
-          resolveMode: 'project-only',
-          ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
-          logger,
-        }).catch(err => {
-          const message = err instanceof Error ? err.message : String(err);
-
-          metaErrors.format = message;
-
-          return null;
-        })
-      : Promise.resolve(createEmptyFormat()),
-    shouldRunLint
-      ? analyzeLint({
-          targets: options.targets,
-          fix: true,
-          cwd: ctx.rootAbs,
-          resolveMode: 'project-only',
-          ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
-          logger,
-        }).catch(err => {
-          const message = err instanceof Error ? err.message : String(err);
-
-          metaErrors.lint = message;
-
-          return null;
-        })
-      : Promise.resolve(createEmptyLint()),
-  ]);
-  const fixTimings: Record<string, number> = {};
-  const fixDur = Math.round(nowMs() - tFix0);
-
-  if (shouldRunFormat) {
-    fixTimings.format = nowMs() - tFix0;
-  }
-
-  if (shouldRunLint) {
-    fixTimings.lint = nowMs() - tFix0;
-  }
-
-  logger.info('Fix mode: tools complete', { durationMs: fixDur });
-
-  const tProgram0 = nowMs();
-  const program = await createFirebatProgram({
-    targets: options.targets,
-    logger,
-    gildash,
-  });
-
-  logger.info('Parse complete', { parsedCount: program.length, durationMs: Math.round(nowMs() - tProgram0) });
-
-  const resolvedMinSize = options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
-
-  logger.debug('Min size resolved', { resolvedMinSize, inputMinSize: String(options.minSize) });
-
-  const tDetectors0 = nowMs();
-
-  logger.info('Running detectors', { detectorCount: options.detectors.length });
-
-  const detectorTimings: Record<string, number> = {};
-  const waste: ReturnType<typeof detectWaste> = (() => {
-    if (!options.detectors.includes('waste')) {
-      return [];
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'waste' });
-
-    const result = detectWaste(program);
-
-    detectorTimings.waste = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: 'waste', durationMs: Math.round(detectorTimings.waste) });
-
-    return result;
-  })();
-  const barrelPromise = options.detectors.includes('barrel')
-    ? (async (): Promise<BarrelResult> => {
-        const t0 = nowMs();
-        const detectorKey = 'barrel';
-
-        logger.debug('detector: start', { detector: detectorKey });
-
-        const r = await analyzeBarrel(program, {
-          rootAbs: ctx.rootAbs,
-          gildash,
-          ...(options.barrelIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelIgnoreGlobs } : {}),
-        });
-        const durationMs = nowMs() - t0;
-
-        detectorTimings[detectorKey] = durationMs;
-
-        logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
-
-        return r;
-      })()
-    : Promise.resolve(createEmptyBarrel());
-  const unknownProof: UnknownProofResult = (() => {
-    if (!options.detectors.includes('unknown-proof')) {
-      return createEmptyUnknownProof();
-    }
-
-    const t0 = nowMs();
-    const detectorKey = 'unknown-proof';
-
-    logger.info('detector: start', { detector: detectorKey });
-
-    try {
-      const result = analyzeUnknownProof(program, {
-        rootAbs: ctx.rootAbs,
-        ...(semanticAvailable ? { gildash } : {}),
-      });
-
-      detectorTimings[detectorKey] = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey]!) });
-
-      return result;
-    } catch (err) {
-      detectorTimings[detectorKey] = nowMs() - t0;
-
-      const message = err instanceof Error ? err.message : String(err);
-
-      metaErrors[detectorKey] = message;
-
-      const partial = (err as { partial?: unknown })?.partial;
-
-      return Array.isArray(partial) ? (partial as UnknownProofResult) : createEmptyUnknownProof();
-    }
-  })();
-  const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
-    ? (async (): Promise<TypecheckResult | null> => {
-        const t0 = nowMs();
-        const detectorKey = 'typecheck';
-
-        logger.info('detector: start', { detector: detectorKey });
-
-        try {
-          const r = await analyzeTypecheck(program, { rootAbs: ctx.rootAbs, logger, ...(semanticAvailable ? { gildash } : {}) });
-
-          detectorTimings.typecheck = nowMs() - t0;
-
-          logger.debug('detector: complete', {
-            detector: detectorKey,
-            durationMs: Math.round(detectorTimings.typecheck),
-          });
-
-          return r;
-        } catch (err) {
-          detectorTimings.typecheck = nowMs() - t0;
-
-          const message = err instanceof Error ? err.message : String(err);
-
-          metaErrors.typecheck = message;
-
-          logger.debug('detector: failed', {
-            detector: detectorKey,
-            durationMs: Math.round(detectorTimings.typecheck),
-            message: metaErrors.typecheck,
-          });
-
-          return null;
-        }
-      })()
-    : Promise.resolve(createEmptyTypecheck());
-  const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
-  const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await (async () => {
-    if (!shouldRunDependencies) {
-      return createEmptyDependencies();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'dependencies' });
-
-    const result = await analyzeDependencies(gildash, {
+    const tProjectDigest0 = nowMs();
+    const projectInputsDigest = await computeProjectInputsDigest({
       rootAbs: ctx.rootAbs,
-      readFileFn: (p: string) => readFileSync(p, 'utf8'),
-      ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
-      ...(options.dependenciesAllowedDependencies !== undefined
-        ? { allowedDependencies: options.dependenciesAllowedDependencies }
+      gildash,
+    });
+
+    logger.trace('Project inputs digest computed', { projectInputsDigest, durationMs: Math.round(nowMs() - tProjectDigest0) });
+
+    const tInputsDigest0 = nowMs();
+    const inputsDigest = await computeInputsDigest({
+      targets: options.targets,
+      gildash,
+      extraParts: [`ns:${cacheNamespace}`, `project:${projectInputsDigest}`],
+    });
+
+    logger.trace('Inputs digest computed', { inputsDigest, durationMs: Math.round(nowMs() - tInputsDigest0) });
+
+    const artifactKey = computeScanArtifactKey({
+      detectors: options.detectors,
+      minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
+      maxForwardDepth: options.maxForwardDepth,
+      ...(options.detectors.includes('barrel') ? { barrelIgnoreGlobs: options.barrelIgnoreGlobs ?? [] } : {}),
+      ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
+        ? {
+            dependenciesLayers: options.dependenciesLayers,
+            dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
+          }
+        : {}),
+      ...(options.detectors.includes('coupling') && options.couplingConfig
+        ? { couplingConfig: options.couplingConfig as Record<string, unknown> }
         : {}),
     });
 
-    detectorTimings.dependencies = nowMs() - t0;
+    logger.trace('Artifact key computed', { artifactKey });
 
-    logger.debug('detector: complete', { detector: 'dependencies', durationMs: Math.round(detectorTimings.dependencies) });
+    const allowCache = false;
 
-    return result;
-  })();
-  const coupling: ReturnType<typeof analyzeCoupling> = (() => {
-    if (!options.detectors.includes('coupling')) {
-      return createEmptyCoupling();
-    }
+    logger.debug('Cache strategy', { allowCache });
 
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'coupling' });
-
-    const result = analyzeCoupling(dependencies, options.couplingConfig);
-
-    detectorTimings.coupling = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: 'coupling', durationMs: Math.round(detectorTimings.coupling) });
-
-    return result;
-  })();
-  const nesting: ReturnType<typeof analyzeNesting> = (() => {
-    if (!options.detectors.includes('nesting')) {
-      return createEmptyNesting();
-    }
-
-    const nestingCfg = config?.features?.nesting;
-    const nestingCfgObj = typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg : null;
-    const resolvedNestingOptions = {
-      maxCognitiveComplexity: nestingCfgObj?.maxCognitiveComplexity ?? DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
-      maxCallbackDepth: nestingCfgObj?.maxCallbackDepth ?? DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
-      maxPromiseChainDepth: nestingCfgObj?.maxPromiseChainDepth ?? DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
-      maxNestingDepth: nestingCfgObj?.maxNestingDepth ?? DEFAULT_NESTING_OPTIONS.maxNestingDepth,
-      minDensityLoc: nestingCfgObj?.minDensityLoc ?? DEFAULT_NESTING_OPTIONS.minDensityLoc,
-      maxDensity: nestingCfgObj?.maxDensity ?? DEFAULT_NESTING_OPTIONS.maxDensity,
-    };
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'nesting' });
-
-    const result = analyzeNesting(program, resolvedNestingOptions);
-
-    detectorTimings.nesting = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: 'nesting', durationMs: Math.round(detectorTimings.nesting) });
-
-    return result;
-  })();
-  const earlyReturn: ReturnType<typeof analyzeEarlyReturn> = (() => {
-    if (!options.detectors.includes('early-return')) {
-      return createEmptyEarlyReturn();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'early-return' });
-
-    const result = analyzeEarlyReturn(program);
-    const durationMs = nowMs() - t0;
-
-    detectorTimings['early-return'] = durationMs;
-
-    logger.debug('detector: complete', { detector: 'early-return', durationMs: Math.round(durationMs) });
-
-    return result;
-  })();
-  const collapsibleIf: ReturnType<typeof analyzeCollapsibleIf> = (() => {
-    if (!options.detectors.includes('collapsible-if')) {
-      return createEmptyCollapsibleIf();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'collapsible-if' });
-
-    const result = analyzeCollapsibleIf(program);
-    const durationMs = nowMs() - t0;
-
-    detectorTimings['collapsible-if'] = durationMs;
-
-    logger.debug('detector: complete', { detector: 'collapsible-if', durationMs: Math.round(durationMs) });
-
-    return result;
-  })();
-  const errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>> = await (async () => {
-    if (!options.detectors.includes('error-flow')) {
-      return createEmptyErrorFlow();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'error-flow' });
-
-    try {
-      const result = analyzeErrorFlow(program, { gildash });
-      const durationMs = nowMs() - t0;
-
-      detectorTimings['error-flow'] = durationMs;
-
-      logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
-
-      return result;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      metaErrors['error-flow'] = message;
-
-      const durationMs = nowMs() - t0;
-
-      detectorTimings['error-flow'] = durationMs;
-
-      logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
-
-      const partial = (err as { partial?: unknown })?.partial;
-
-      return Array.isArray(partial) ? (partial as ReadonlyArray<import('../../types').ErrorFlowFinding>) : createEmptyErrorFlow();
-    }
-  })();
-  const indirection: Awaited<ReturnType<typeof analyzeIndirection>> = await (async () => {
-    if (!options.detectors.includes('indirection')) {
-      return createEmptyIndirection();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'indirection' });
-
-    const result = await analyzeIndirection(
-      gildash,
-      program,
-      { maxForwardDepth: options.maxForwardDepth, crossFileMinDepth: options.crossFileMinDepth ?? 2 },
-      ctx.rootAbs,
-    );
-
-    detectorTimings.indirection = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: 'indirection', durationMs: Math.round(detectorTimings.indirection) });
-
-    return result;
-  })();
-  const [barrel, typecheck] = await Promise.all([barrelPromise, typecheckPromise]);
-  const lint = fixedLint;
-  const format = fixedFormat;
-
-  logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
-
-  const giantFile: ReturnType<typeof analyzeGiantFile> = (() => {
-    if (!options.detectors.includes('giant-file')) {
-      return createEmptyGiantFile();
-    }
-
-    const { 'giant-file': giantFileCfg } = config?.features ?? {};
-    const resolvedGiantFileMaxLines =
-      (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'giant-file' });
-
-    const result = analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
-
-    detectorTimings['giant-file'] = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: 'giant-file', durationMs: Math.round(detectorTimings['giant-file'] ?? 0) });
-
-    return result;
-  })();
-  const variableLifetime: ReturnType<typeof analyzeVariableLifetime> = (() => {
-    if (!options.detectors.includes('variable-lifetime')) {
-      return createEmptyVariableLifetime();
-    }
-
-    const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
-    const vlCfgObj = typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg : null;
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'variable-lifetime' });
-
-    const result = analyzeVariableLifetime(program, {
-      maxLifetimeLines: Number(vlCfgObj?.maxLifetimeLines ?? 30),
-      maxLiveVariables: Number(vlCfgObj?.maxLiveVariables ?? 7),
-      minFunctionLines: Number(vlCfgObj?.minFunctionLines ?? 40),
-      maxMutationCount: vlCfgObj?.maxMutationCount ?? Infinity,
-    });
-
-    detectorTimings['variable-lifetime'] = nowMs() - t0;
-
-    logger.debug('detector: complete', {
-      detector: 'variable-lifetime',
-      durationMs: Math.round(detectorTimings['variable-lifetime'] ?? 0),
-    });
-
-    return result;
-  })();
-  const temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = (() => {
-    if (!options.detectors.includes('temporal-coupling')) {
-      return createEmptyTemporalCoupling();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'temporal-coupling' });
-
-    const result = analyzeTemporalCoupling(program, { gildash });
-
-    detectorTimings['temporal-coupling'] = nowMs() - t0;
-
-    logger.debug('detector: complete', {
-      detector: 'temporal-coupling',
-      durationMs: Math.round(detectorTimings['temporal-coupling'] ?? 0),
-    });
-
-    return result;
-  })();
-  const duplicatesUnified: ReturnType<typeof analyzeDuplicates> = (() => {
-    if (!options.detectors.includes('duplicates')) {
-      return createEmptyDuplicates();
-    }
-
-    const t0 = nowMs();
-
-    logger.debug('detector: start', { detector: 'duplicates' });
-
-    const result = analyzeDuplicates(program, { minSize: resolvedMinSize });
-
-    detectorTimings.duplicates = nowMs() - t0;
-
-    logger.debug('detector: complete', { detector: 'duplicates', durationMs: Math.round(detectorTimings.duplicates ?? 0) });
-
-    return result;
-  })();
-  const selectedDetectors = new Set(options.detectors);
-
-  const toProjectRelative = (filePath: string): string => {
-    const rel = path.relative(ctx.rootAbs, filePath);
-    const normalized = rel.replaceAll('\\', '/');
-
-    return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
-  };
-
-  const analyses: FirebatReport['analyses'] = {
-    ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
-    ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
-    ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling) } : {}),
-    ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('collapsible-if')
-      ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf, toProjectRelative) }
-      : {}),
-    ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection, toProjectRelative) } : {}),
-    ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile, 'GIANT_FILE', toProjectRelative) } : {}),
-    ...(selectedDetectors.has('variable-lifetime')
-      ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime, toProjectRelative) }
-      : {}),
-    ...(selectedDetectors.has('temporal-coupling')
-      ? { 'temporal-coupling': enrichPhase1(temporalCoupling, 'TEMPORAL_COUPLING', toProjectRelative) }
-      : {}),
-    ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified, toProjectRelative) } : {}),
-  };
-  const diagnostics = aggregateDiagnostics({ analyses: analyses as Readonly<Record<string, unknown>> });
-  const catalog = buildCatalog({ analyses, diagnostics });
-  const functionRangeMap = buildFunctionRangeMap(program, toProjectRelative);
-  const findings = flattenToFindings(analyses, functionRangeMap);
-  const report: FirebatReport = {
-    meta: {
-      engine: 'oxc',
-      targetCount: program.length,
-      minSize: resolvedMinSize,
-      maxForwardDepth: options.maxForwardDepth,
-      detectors: options.detectors,
-      detectorTimings: { ...detectorTimings, ...fixTimings },
-      ...(Object.keys(metaErrors).length > 0 ? { errors: metaErrors } : {}),
-    },
-    analyses,
-    catalog,
-    findings,
-  };
-
-  if (allowCache) {
-    const tSave0 = nowMs();
-
-    artifactRepository.set({
+    const cached = await loadCachedReport({
+      allowCache,
+      artifactRepository,
       projectKey,
-      kind: 'firebat:report',
       artifactKey,
       inputsDigest,
-      value: report,
+      logger,
     });
 
-    logger.trace('Report cached', { durationMs: Math.round(nowMs() - tSave0) });
-  }
+    if (cached !== undefined) {
+      return cached;
+    }
 
-  return report;
+    // Note: in fix mode, prefer to run fixable tools before parsing the program
+    // so the report reflects post-fix state.
+    const shouldRunFormat = options.detectors.includes('format');
+    const shouldRunLint = options.detectors.includes('lint');
+
+    logger.debug('Fix mode tools', { shouldRunFormat, shouldRunLint });
+
+    type BarrelResult = ReturnType<typeof createEmptyBarrel>;
+
+    type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
+
+    type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
+
+    logger.info('Fix mode: running fixable tools before parse', {
+      format: shouldRunFormat,
+      lint: shouldRunLint,
+    });
+
+    const tFix0 = nowMs();
+    const [oxfmtConfigPath, oxlintConfigPath] = await Promise.all([
+      resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc'),
+      resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc'),
+    ]);
+    const [fixedFormat, fixedLint] = await Promise.all([
+      shouldRunFormat
+        ? analyzeFormat({
+            targets: options.targets,
+            fix: true,
+            cwd: ctx.rootAbs,
+            resolveMode: 'project-only',
+            ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
+            logger,
+          }).catch(err => {
+            const message = err instanceof Error ? err.message : String(err);
+
+            metaErrors.format = message;
+
+            return null;
+          })
+        : Promise.resolve(createEmptyFormat()),
+      shouldRunLint
+        ? analyzeLint({
+            targets: options.targets,
+            fix: true,
+            cwd: ctx.rootAbs,
+            resolveMode: 'project-only',
+            ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
+            logger,
+          }).catch(err => {
+            const message = err instanceof Error ? err.message : String(err);
+
+            metaErrors.lint = message;
+
+            return null;
+          })
+        : Promise.resolve(createEmptyLint()),
+    ]);
+    const fixTimings: Record<string, number> = {};
+    const fixDur = Math.round(nowMs() - tFix0);
+
+    if (shouldRunFormat) {
+      fixTimings.format = nowMs() - tFix0;
+    }
+
+    if (shouldRunLint) {
+      fixTimings.lint = nowMs() - tFix0;
+    }
+
+    logger.info('Fix mode: tools complete', { durationMs: fixDur });
+
+    const tProgram0 = nowMs();
+    const program = await createFirebatProgram({
+      targets: options.targets,
+      logger,
+      gildash,
+    });
+
+    logger.info('Parse complete', { parsedCount: program.length, durationMs: Math.round(nowMs() - tProgram0) });
+
+    const resolvedMinSize = options.minSize === 'auto' ? computeAutoMinSize(program) : Math.max(0, Math.round(options.minSize));
+
+    logger.debug('Min size resolved', { resolvedMinSize, inputMinSize: String(options.minSize) });
+
+    const tDetectors0 = nowMs();
+
+    logger.info('Running detectors', { detectorCount: options.detectors.length });
+
+    const detectorTimings: Record<string, number> = {};
+    const waste: ReturnType<typeof detectWaste> = (() => {
+      if (!options.detectors.includes('waste')) {
+        return [];
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'waste' });
+
+      const result = detectWaste(program);
+
+      detectorTimings.waste = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'waste', durationMs: Math.round(detectorTimings.waste) });
+
+      return result;
+    })();
+    const barrelPromise = options.detectors.includes('barrel')
+      ? (async (): Promise<BarrelResult> => {
+          const t0 = nowMs();
+          const detectorKey = 'barrel';
+
+          logger.debug('detector: start', { detector: detectorKey });
+
+          const r = await analyzeBarrel(program, {
+            rootAbs: ctx.rootAbs,
+            gildash,
+            ...(options.barrelIgnoreGlobs !== undefined ? { ignoreGlobs: options.barrelIgnoreGlobs } : {}),
+          });
+          const durationMs = nowMs() - t0;
+
+          detectorTimings[detectorKey] = durationMs;
+
+          logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(durationMs) });
+
+          return r;
+        })()
+      : Promise.resolve(createEmptyBarrel());
+    const unknownProof: UnknownProofResult = (() => {
+      if (!options.detectors.includes('unknown-proof')) {
+        return createEmptyUnknownProof();
+      }
+
+      const t0 = nowMs();
+      const detectorKey = 'unknown-proof';
+
+      logger.info('detector: start', { detector: detectorKey });
+
+      try {
+        const result = analyzeUnknownProof(program, {
+          rootAbs: ctx.rootAbs,
+          ...(semanticAvailable ? { gildash } : {}),
+        });
+
+        detectorTimings[detectorKey] = nowMs() - t0;
+
+        logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey]!) });
+
+        return result;
+      } catch (err) {
+        detectorTimings[detectorKey] = nowMs() - t0;
+
+        const message = err instanceof Error ? err.message : String(err);
+
+        metaErrors[detectorKey] = message;
+
+        const partial = (err as { partial?: unknown })?.partial;
+
+        return Array.isArray(partial) ? (partial as UnknownProofResult) : createEmptyUnknownProof();
+      }
+    })();
+    const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
+      ? (async (): Promise<TypecheckResult | null> => {
+          const t0 = nowMs();
+          const detectorKey = 'typecheck';
+
+          logger.info('detector: start', { detector: detectorKey });
+
+          try {
+            const r = await analyzeTypecheck(program, {
+              rootAbs: ctx.rootAbs,
+              logger,
+              ...(semanticAvailable ? { gildash } : {}),
+            });
+
+            detectorTimings.typecheck = nowMs() - t0;
+
+            logger.debug('detector: complete', {
+              detector: detectorKey,
+              durationMs: Math.round(detectorTimings.typecheck),
+            });
+
+            return r;
+          } catch (err) {
+            detectorTimings.typecheck = nowMs() - t0;
+
+            const message = err instanceof Error ? err.message : String(err);
+
+            metaErrors.typecheck = message;
+
+            logger.debug('detector: failed', {
+              detector: detectorKey,
+              durationMs: Math.round(detectorTimings.typecheck),
+              message: metaErrors.typecheck,
+            });
+
+            return null;
+          }
+        })()
+      : Promise.resolve(createEmptyTypecheck());
+    const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
+    const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await (async () => {
+      if (!shouldRunDependencies) {
+        return createEmptyDependencies();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'dependencies' });
+
+      const result = await analyzeDependencies(gildash, {
+        rootAbs: ctx.rootAbs,
+        readFileFn: (p: string) => readFileSync(p, 'utf8'),
+        ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
+        ...(options.dependenciesAllowedDependencies !== undefined
+          ? { allowedDependencies: options.dependenciesAllowedDependencies }
+          : {}),
+      });
+
+      detectorTimings.dependencies = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'dependencies', durationMs: Math.round(detectorTimings.dependencies) });
+
+      return result;
+    })();
+    const coupling: ReturnType<typeof analyzeCoupling> = (() => {
+      if (!options.detectors.includes('coupling')) {
+        return createEmptyCoupling();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'coupling' });
+
+      const result = analyzeCoupling(dependencies, options.couplingConfig);
+
+      detectorTimings.coupling = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'coupling', durationMs: Math.round(detectorTimings.coupling) });
+
+      return result;
+    })();
+    const nesting: ReturnType<typeof analyzeNesting> = (() => {
+      if (!options.detectors.includes('nesting')) {
+        return createEmptyNesting();
+      }
+
+      const nestingCfg = config?.features?.nesting;
+      const nestingCfgObj = typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg : null;
+      const resolvedNestingOptions = {
+        maxCognitiveComplexity: nestingCfgObj?.maxCognitiveComplexity ?? DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
+        maxCallbackDepth: nestingCfgObj?.maxCallbackDepth ?? DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
+        maxPromiseChainDepth: nestingCfgObj?.maxPromiseChainDepth ?? DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
+        maxNestingDepth: nestingCfgObj?.maxNestingDepth ?? DEFAULT_NESTING_OPTIONS.maxNestingDepth,
+        minDensityLoc: nestingCfgObj?.minDensityLoc ?? DEFAULT_NESTING_OPTIONS.minDensityLoc,
+        maxDensity: nestingCfgObj?.maxDensity ?? DEFAULT_NESTING_OPTIONS.maxDensity,
+      };
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'nesting' });
+
+      const result = analyzeNesting(program, resolvedNestingOptions);
+
+      detectorTimings.nesting = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'nesting', durationMs: Math.round(detectorTimings.nesting) });
+
+      return result;
+    })();
+    const earlyReturn: ReturnType<typeof analyzeEarlyReturn> = (() => {
+      if (!options.detectors.includes('early-return')) {
+        return createEmptyEarlyReturn();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'early-return' });
+
+      const result = analyzeEarlyReturn(program);
+      const durationMs = nowMs() - t0;
+
+      detectorTimings['early-return'] = durationMs;
+
+      logger.debug('detector: complete', { detector: 'early-return', durationMs: Math.round(durationMs) });
+
+      return result;
+    })();
+    const collapsibleIf: ReturnType<typeof analyzeCollapsibleIf> = (() => {
+      if (!options.detectors.includes('collapsible-if')) {
+        return createEmptyCollapsibleIf();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'collapsible-if' });
+
+      const result = analyzeCollapsibleIf(program);
+      const durationMs = nowMs() - t0;
+
+      detectorTimings['collapsible-if'] = durationMs;
+
+      logger.debug('detector: complete', { detector: 'collapsible-if', durationMs: Math.round(durationMs) });
+
+      return result;
+    })();
+    const errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>> = await (async () => {
+      if (!options.detectors.includes('error-flow')) {
+        return createEmptyErrorFlow();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'error-flow' });
+
+      try {
+        const result = analyzeErrorFlow(program, { gildash });
+        const durationMs = nowMs() - t0;
+
+        detectorTimings['error-flow'] = durationMs;
+
+        logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
+
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+
+        metaErrors['error-flow'] = message;
+
+        const durationMs = nowMs() - t0;
+
+        detectorTimings['error-flow'] = durationMs;
+
+        logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
+
+        const partial = (err as { partial?: unknown })?.partial;
+
+        return Array.isArray(partial)
+          ? (partial as ReadonlyArray<import('../../types').ErrorFlowFinding>)
+          : createEmptyErrorFlow();
+      }
+    })();
+    const indirection: Awaited<ReturnType<typeof analyzeIndirection>> = await (async () => {
+      if (!options.detectors.includes('indirection')) {
+        return createEmptyIndirection();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'indirection' });
+
+      const result = await analyzeIndirection(
+        gildash,
+        program,
+        { maxForwardDepth: options.maxForwardDepth, crossFileMinDepth: options.crossFileMinDepth ?? 2 },
+        ctx.rootAbs,
+      );
+
+      detectorTimings.indirection = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'indirection', durationMs: Math.round(detectorTimings.indirection) });
+
+      return result;
+    })();
+    const [barrel, typecheck] = await Promise.all([barrelPromise, typecheckPromise]);
+    const lint = fixedLint;
+    const format = fixedFormat;
+
+    logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
+
+    const giantFile: ReturnType<typeof analyzeGiantFile> = (() => {
+      if (!options.detectors.includes('giant-file')) {
+        return createEmptyGiantFile();
+      }
+
+      const { 'giant-file': giantFileCfg } = config?.features ?? {};
+      const resolvedGiantFileMaxLines =
+        (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'giant-file' });
+
+      const result = analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
+
+      detectorTimings['giant-file'] = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'giant-file', durationMs: Math.round(detectorTimings['giant-file'] ?? 0) });
+
+      return result;
+    })();
+    const variableLifetime: ReturnType<typeof analyzeVariableLifetime> = (() => {
+      if (!options.detectors.includes('variable-lifetime')) {
+        return createEmptyVariableLifetime();
+      }
+
+      const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
+      const vlCfgObj = typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg : null;
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'variable-lifetime' });
+
+      const result = analyzeVariableLifetime(program, {
+        maxLifetimeLines: Number(vlCfgObj?.maxLifetimeLines ?? 30),
+        maxLiveVariables: Number(vlCfgObj?.maxLiveVariables ?? 7),
+        minFunctionLines: Number(vlCfgObj?.minFunctionLines ?? 40),
+        maxMutationCount: vlCfgObj?.maxMutationCount ?? Infinity,
+      });
+
+      detectorTimings['variable-lifetime'] = nowMs() - t0;
+
+      logger.debug('detector: complete', {
+        detector: 'variable-lifetime',
+        durationMs: Math.round(detectorTimings['variable-lifetime'] ?? 0),
+      });
+
+      return result;
+    })();
+    const temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = (() => {
+      if (!options.detectors.includes('temporal-coupling')) {
+        return createEmptyTemporalCoupling();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'temporal-coupling' });
+
+      const result = analyzeTemporalCoupling(program, { gildash });
+
+      detectorTimings['temporal-coupling'] = nowMs() - t0;
+
+      logger.debug('detector: complete', {
+        detector: 'temporal-coupling',
+        durationMs: Math.round(detectorTimings['temporal-coupling'] ?? 0),
+      });
+
+      return result;
+    })();
+    const duplicatesUnified: ReturnType<typeof analyzeDuplicates> = (() => {
+      if (!options.detectors.includes('duplicates')) {
+        return createEmptyDuplicates();
+      }
+
+      const t0 = nowMs();
+
+      logger.debug('detector: start', { detector: 'duplicates' });
+
+      const result = analyzeDuplicates(program, { minSize: resolvedMinSize });
+
+      detectorTimings.duplicates = nowMs() - t0;
+
+      logger.debug('detector: complete', { detector: 'duplicates', durationMs: Math.round(detectorTimings.duplicates ?? 0) });
+
+      return result;
+    })();
+    const selectedDetectors = new Set(options.detectors);
+
+    const toProjectRelative = (filePath: string): string => {
+      const rel = path.relative(ctx.rootAbs, filePath);
+      const normalized = rel.replaceAll('\\', '/');
+
+      return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
+    };
+
+    const analyses: FirebatReport['analyses'] = {
+      ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
+      ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
+      ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling) } : {}),
+      ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('collapsible-if')
+        ? { 'collapsible-if': enrichCollapsibleIf(collapsibleIf, toProjectRelative) }
+        : {}),
+      ...(selectedDetectors.has('indirection') ? { indirection: enrichIndirection(indirection, toProjectRelative) } : {}),
+      ...(selectedDetectors.has('giant-file') ? { 'giant-file': enrichPhase1(giantFile, 'GIANT_FILE', toProjectRelative) } : {}),
+      ...(selectedDetectors.has('variable-lifetime')
+        ? { 'variable-lifetime': enrichVariableLifetime(variableLifetime, toProjectRelative) }
+        : {}),
+      ...(selectedDetectors.has('temporal-coupling')
+        ? { 'temporal-coupling': enrichPhase1(temporalCoupling, 'TEMPORAL_COUPLING', toProjectRelative) }
+        : {}),
+      ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified, toProjectRelative) } : {}),
+    };
+    const diagnostics = aggregateDiagnostics({ analyses: analyses as Readonly<Record<string, unknown>> });
+    const catalog = buildCatalog({ analyses, diagnostics });
+    const functionRangeMap = buildFunctionRangeMap(program, toProjectRelative);
+    const findings = flattenToFindings(analyses, functionRangeMap);
+    const report: FirebatReport = {
+      meta: {
+        engine: 'oxc',
+        targetCount: program.length,
+        minSize: resolvedMinSize,
+        maxForwardDepth: options.maxForwardDepth,
+        detectors: options.detectors,
+        detectorTimings: { ...detectorTimings, ...fixTimings },
+        ...(Object.keys(metaErrors).length > 0 ? { errors: metaErrors } : {}),
+      },
+      analyses,
+      catalog,
+      findings,
+    };
+
+    if (allowCache) {
+      const tSave0 = nowMs();
+
+      artifactRepository.set({
+        projectKey,
+        kind: 'firebat:report',
+        artifactKey,
+        inputsDigest,
+        value: report,
+      });
+
+      logger.trace('Report cached', { durationMs: Math.round(nowMs() - tSave0) });
+    }
+
+    return report;
   } finally {
     setGildashSemanticContext(previousBindingContext);
     await gildash.close({ cleanup: false });

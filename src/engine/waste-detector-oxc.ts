@@ -254,9 +254,7 @@ const ARRAY_MUTATION_METHODS = new Set<string>([
   'fill',
   'copyWithin',
 ]);
-
 const MAPSET_MUTATION_METHODS = new Set<string>(['set', 'add', 'delete', 'clear']);
-
 // Mutation methods that RETURN THE RECEIVER itself: Array sort/reverse/fill/
 // copyWithin return the array; Map.set returns the map; Set.add returns the
 // set. When such a call's result is consumed (not a discarded statement), the
@@ -745,6 +743,7 @@ const unwrapValueWrappers = (node: Node): Node => {
       }
 
       current = inner;
+
       continue;
     }
 
@@ -1118,6 +1117,7 @@ const compoundAssignmentMayCoerceObject = (
 // eval. Disable case 1–4/6/7 for the whole scope when direct eval is present.
 const scopeUsesDirectEval = (bodyNodes: ReadonlyArray<Node>): boolean => {
   let found = false;
+
   const visit = (node: Node): void => {
     if (found) {
       return;
@@ -1182,6 +1182,7 @@ const buildVarHasMeaningfulUse = (
       // No syntactic context found (defensive — variable-collector's evaluated branches
       // should always have a corresponding walk visit). Conservatively treat as real.
       meaningful.add(idx);
+
       continue;
     }
 
@@ -1190,6 +1191,7 @@ const buildVarHasMeaningfulUse = (
     // mutations hidden inside the class body.
     if (ctx.ancestors.some(ancestor => ancestor.type === 'StaticBlock')) {
       meaningful.add(idx);
+
       continue;
     }
 
@@ -1343,7 +1345,13 @@ const hasSideEffectBetween = (bodyNodes: ReadonlyArray<Node>, lo: number, hi: nu
 // Whether the single use sits inside a loop or a nested function that does NOT contain
 // the declaration — in which case the member read is re-evaluated per iteration or
 // deferred to a later call, diverging from the binding's single eager evaluation.
-const LOOP_NODE_TYPES = new Set<string>(['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement']);
+const LOOP_NODE_TYPES = new Set<string>([
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+]);
 
 const useInLoopOrForeignClosure = (useCtx: IdentifierContext, declLoc: number): boolean => {
   for (const ancestor of useCtx.ancestors) {
@@ -1666,8 +1674,8 @@ interface RedundantBindingInput {
 }
 
 const collectRedundantBindingFindings = (input: RedundantBindingInput): void => {
-  const { bodyNodes, defs, defCtxByLocation, syntacticReads, localIndexByName, varInitKind, filePath, lineOffsets, findings } = input;
-
+  const { bodyNodes, defs, defCtxByLocation, syntacticReads, localIndexByName, varInitKind, filePath, lineOffsets, findings } =
+    input;
   // Per-variable use summary, restricted to reads in the same scope (a read inside a
   // nested function has no entry in defCtxByLocation → recorded as a closure read,
   // which disqualifies the binding in this increment).
@@ -1684,6 +1692,7 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
 
     if (entry === undefined) {
       entry = { real: [], closureRead: false, otherKind: false };
+
       usesByVar.set(idx, entry);
     }
 
@@ -1691,6 +1700,7 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
 
     if (ctx === undefined) {
       entry.closureRead = true;
+
       continue;
     }
 
@@ -1772,8 +1782,9 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     // binding (`const { a } = obj`) substitutes `obj.a` — a member read of the declarator
     // init — so it is treated like a member-reading RHS below.
     const isSimpleBinding =
-      declCtx.parent !== null && declCtx.parent.type === 'VariableDeclarator' && (declCtx.parent as { id: Node }).id === declCtx.node;
-
+      declCtx.parent !== null &&
+      declCtx.parent.type === 'VariableDeclarator' &&
+      (declCtx.parent as { id: Node }).id === declCtx.node;
     const rhs = resolveDeclarationInit(declCtx);
 
     if (rhs === null) {
@@ -1986,6 +1997,7 @@ const collectWasteFindingsForFunction = (
   for (const binding of parameterBindings) {
     parameterLocations.add(binding.location);
   }
+
   // Syntactic read counting (ignores static dead-branch pruning) to classify
   // "사용처 0회 변수 (no-unused-vars 영역)" correctly. Includes reads inside nested
   // functions so closure captures count as syntactic uses of the outer binding.
@@ -2078,7 +2090,6 @@ const collectWasteFindingsForFunction = (
   // not `defId`, because the question is whether the *variable* is ever observed; a
   // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
   const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation, varInitKind);
-
   // Case 6/7's safety claim ("mutation is local-only") requires that *every* def of
   // the variable is a fresh allocation. If one branch assigns a fresh `[]` and another
   // aliases an outer reference, the mutation site (`c.push(...)`) reaches both, so
@@ -2126,6 +2137,7 @@ const collectWasteFindingsForFunction = (
 
       if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
         allFresh = false;
+
         break;
       }
 
@@ -2305,6 +2317,7 @@ const collectModuleLocalVarIndexes = (
 
   for (const key of keys) {
     out.set(key, index);
+
     index += 1;
   }
 
@@ -2593,6 +2606,7 @@ const collectWasteFindingsForModule = (
 
       if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
         allFresh = false;
+
         break;
       }
 
@@ -2607,6 +2621,7 @@ const collectWasteFindingsForModule = (
       varHasOnlyFreshDefs.add(varIndex);
     }
   }
+
   const emittedKeys = new Set<string>();
 
   for (let defId = 0; defId < defs.length; defId += 1) {

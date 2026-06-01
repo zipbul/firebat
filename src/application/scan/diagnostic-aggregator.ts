@@ -26,7 +26,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   WASTE_REDUNDANT_BINDING: {
-    cause: "A const binding's initializer is read exactly once; the binding is needless indirection and the initializer can be inlined at its single use.",
+    cause:
+      "A const binding's initializer is read exactly once; the binding is needless indirection and the initializer can be inlined at its single use.",
     think: [
       'Read the declaration and its single use. If the initializer is evaluated anywhere else, or the variable is read more than once, this is a false positive — stop, no action needed.',
       'Confirm nothing between the declaration and the use reassigns the source or mutates a receiver the initializer reads (snapshot-before-mutation), and the use is not inside a closure that runs more than once — if any holds, the binding is load-bearing, stop.',
@@ -206,7 +207,8 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   EF_EMPTY_CATCH: {
-    cause: 'A catch block has no statements, so the caught error is silently swallowed — its observability, propagation and cause are all lost.',
+    cause:
+      'A catch block has no statements, so the caught error is silently swallowed — its observability, propagation and cause are all lost.',
     think: [
       'Read the catch block and the try body. Decide how the error should be handled: rethrow it (`throw err`), log it, or convert it into a recovery value.',
       'If the failure is genuinely expected and ignorable, make the intent observable in code — bind the error and pass it to a no-op handler, or narrow the try to the single statement that may fail. A comment alone does not restore observability.',

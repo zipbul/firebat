@@ -97,7 +97,6 @@ export const parameterScopeKey = (binding: BindingName, declScopeByIdLocation: R
 export const collectLocalVarIndexes = (functionNode: Node, filePath?: string, sourceText?: string): Map<string, number> => {
   const keys = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
-
   // Build the decl-scope map from the function root so parameters are registered.
   // Without this, body-only walks miss the parameter declarations and any usage of
   // a parameter inside the body would resolve to a different (wrong) scope key.
@@ -248,7 +247,6 @@ const processNodeUsages = (
     includeNestedFunctions: false as const,
     declScopeByIdLocation,
   };
-
   const usages = Array.isArray(payload)
     ? (payload as Node[]).flatMap(p => collectVariables(p, collectorOptions))
     : collectVariables(payload as Node, collectorOptions);
@@ -542,6 +540,7 @@ const recordReadProvenanceForNode = (
 
     if (byVarName === undefined) {
       byVarName = new Map<string, Set<number>>();
+
       readProvenanceByDefId.set(defId, byVarName);
     }
 
@@ -571,6 +570,7 @@ const recordReadProvenanceForNode = (
 
       if (priorDefs === undefined) {
         priorDefs = new Set<number>();
+
         byVarName.set(varName, priorDefs);
       }
 
@@ -620,6 +620,7 @@ const collectUsedAndOverwrittenDefs = (
     const reachingIn = inByNode[nodeId] ?? createBitSet();
 
     usedDefs = collectUsedDefsForNode(uses, reachingIn, defsOfVar, usedDefs, useCountByDefId);
+
     recordReadProvenanceForNode(
       genDefIdsByNode[nodeId] ?? [],
       uses,
