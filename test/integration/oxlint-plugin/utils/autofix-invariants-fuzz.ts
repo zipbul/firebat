@@ -38,9 +38,7 @@ const mulberry32 = (seed: number): Rng => {
         throw new Error('invalid int range');
       }
 
-      const span = maxInclusive - min + 1;
-
-      return min + (nextU32() % span);
+      return min + (nextU32() % (maxInclusive - min + 1));
     },
     bool(pTrue: number): boolean {
       const threshold = Math.max(0, Math.min(1, pTrue));
@@ -67,12 +65,11 @@ const mulberry32 = (seed: number): Rng => {
 
 const makeIdentifier = (rng: Rng, minLen = 1, maxLen = 10): string => {
   const firstChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$';
-  const nextChars = firstChars + '0123456789';
   const len = rng.int(minLen, maxLen);
   let out = rng.pick(firstChars.split(''));
 
   for (let i = 1; i < len; i += 1) {
-    out += rng.pick(nextChars.split(''));
+    out += rng.pick((firstChars + '0123456789').split(''));
   }
 
   return out;
@@ -382,11 +379,10 @@ const runAutofixInvariantsFuzz = (): void => {
         const stmtA = `const ${a} = 1;`;
         const stmtB = `const ${b} = 2;`;
         const hasBlank = rng.bool(0.6);
-        const between = hasBlank ? `${nl}${nl}` : nl;
         const { text, program } = buildTwoStatementProgram(
           stmtA,
           stmtB,
-          between,
+          hasBlank ? `${nl}${nl}` : nl,
           { type: 'VariableDeclaration', kind: 'const', declarations: [] },
           { type: 'VariableDeclaration', kind: 'const', declarations: [] },
         );
@@ -422,11 +418,10 @@ const runAutofixInvariantsFuzz = (): void => {
         const stmtA = `const ${a} = 1;`;
         const stmtB = `function ${f}() {}`;
         const hasBlank = rng.bool(0.4);
-        const between = hasBlank ? `${nl}${nl}` : nl;
         const { text, program } = buildTwoStatementProgram(
           stmtA,
           stmtB,
-          between,
+          hasBlank ? `${nl}${nl}` : nl,
           { type: 'VariableDeclaration', kind: 'const', declarations: [] },
           { type: 'FunctionDeclaration' },
         );
@@ -470,11 +465,10 @@ const runAutofixInvariantsFuzz = (): void => {
       const stmtA = `function ${fn}() {}`;
       const stmtB = `const ${v} = 1;`;
       const hasBlank = rng.bool(0.3);
-      const between = hasBlank ? `${nl}${nl}` : nl;
       const { text, program } = buildTwoStatementProgram(
         stmtA,
         stmtB,
-        between,
+        hasBlank ? `${nl}${nl}` : nl,
         { type: 'FunctionDeclaration' },
         { type: 'VariableDeclaration', kind: 'const', declarations: [] },
       );

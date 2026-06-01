@@ -107,10 +107,8 @@ describe('is-function-variable-declaration', () => {
   });
 
   it('should return false when node is undefined', () => {
-    // Arrange
-    const node = undefined;
     // Act
-    const result = isFunctionVariableDeclaration(node);
+    const result = isFunctionVariableDeclaration(undefined);
 
     // Assert
     expect(result).toBe(false);

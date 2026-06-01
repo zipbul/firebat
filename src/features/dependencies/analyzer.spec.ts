@@ -291,9 +291,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
         }
 
@@ -320,9 +318,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
         }
 
@@ -349,18 +345,14 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/util.ts', 'helperFn')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')];
         }
 
@@ -385,18 +377,14 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'publicFn')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', '/project/src/lib.ts', 'publicFn')];
         }
 
@@ -421,9 +409,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return exported;
         }
 
@@ -450,9 +436,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return exported;
         }
 
@@ -495,19 +479,15 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
         // import * as Lib from './lib' → dstSymbolName = '*'
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', '*')];
         }
 
@@ -530,19 +510,15 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
         // import './lib' → dstSymbolName = null (side-effect)
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/main.ts', '/project/src/lib.ts', null)];
         }
 
@@ -567,18 +543,14 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 're-exports') {
+        if ((q as { type?: string }).type === 're-exports') {
           return [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')];
         }
 
@@ -668,9 +640,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
         }
 
@@ -699,9 +669,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
         }
 
@@ -834,18 +802,14 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return exported;
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'testOnlyFn')];
         }
 
@@ -942,9 +906,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' })];
         }
 
@@ -967,9 +929,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'unlisted-pkg' })];
         }
 
@@ -992,9 +952,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'express' })];
         }
 
@@ -1020,9 +978,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [
             mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'node:fs' }),
             mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'bun:test' }),
@@ -1047,9 +1003,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg/sub' })];
         }
 
@@ -1072,9 +1026,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: '#config/missing' })];
         }
 
@@ -1097,9 +1049,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing-module' })];
         }
 
@@ -1140,9 +1090,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [
             mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
             mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
@@ -1173,9 +1121,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/a.ts', 'helper', 'function'), mkSymbol(2, '/project/src/b.ts', 'helper', 'function')];
         }
 
@@ -1194,9 +1140,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'MyType', 'type'), mkSymbol(2, '/project/src/lib.ts', 'MyEnum', 'enum')];
         }
 
@@ -1224,9 +1168,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [
             mkSymbol(1, '/project/src/utils.ts', 'foo', 'function'),
             mkSymbol(2, '/project/src/utils.ts', 'bar', 'function'),
@@ -1236,9 +1178,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [
             mkImport('/project/src/index.ts', '/project/src/utils.ts', '*', { specifier: './utils', srcSymbolName: 'Utils' }),
           ];
@@ -1264,9 +1204,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/packages/ws1/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' })];
         }
 
@@ -1300,9 +1238,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum')];
         }
 
@@ -1364,19 +1300,15 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
         // Namespace import → usesAll
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', '/project/src/colors.ts', '*')];
         }
 
@@ -1409,9 +1341,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/guards.ts', 'Guards', 'namespace')];
         }
 
@@ -1512,9 +1442,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'my-package' })];
         }
 
@@ -1559,9 +1487,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/a.ts', 'util', 'function'), mkSymbol(2, '/project/src/b.ts', 'util', 'function')];
         }
 
@@ -1590,18 +1516,14 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'fn', 'function')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 're-exports') {
+        if ((q as { type?: string }).type === 're-exports') {
           return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', null)];
         }
 
@@ -1625,9 +1547,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
+        if ((q as { type?: string }).type === 'imports') {
           return [
             mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' }),
             mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg' }),
@@ -1651,9 +1571,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/a.ts', 'foo', 'function'), mkSymbol(2, '/project/src/b.ts', 'bar', 'function')];
         }
 
@@ -1676,9 +1594,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [
             mkSymbol(1, '/project/src/lib.ts', 'usedFn', 'function'),
             mkSymbol(2, '/project/src/lib.ts', 'deadFn', 'function'),
@@ -1723,19 +1639,15 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/shared/config.ts', 'MyConfig', 'type')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
         // types.ts does `export type { MyConfig } from './shared/config'`
-        if (query.type === 'type-references') {
+        if ((q as { type?: string }).type === 'type-references') {
           return [mkTypeRef('/project/src/types.ts', '/project/src/shared/config.ts', 'MyConfig', true)];
         }
 
@@ -1761,19 +1673,15 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
-        const query = q as { isExported?: boolean };
-
-        if (query.isExported) {
+        if ((q as { isExported?: boolean }).isExported) {
           return [mkSymbol(1, '/project/src/lib.ts', 'orphanFn', 'function')];
         }
 
         return [];
       },
       searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
         // index.ts re-exports orphanFn, but nobody imports from index.ts
-        if (query.type === 're-exports') {
+        if ((q as { type?: string }).type === 're-exports') {
           return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn')];
         }
 

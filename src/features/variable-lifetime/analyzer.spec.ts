@@ -624,12 +624,9 @@ describe('variable-lifetime/analyzer', () => {
     const parse = (expr: string) => {
       const src = `function f() { const x = ${expr}; }`;
       const parsed = parseSource('/p/a.ts', src);
-      // Navigate: Program -> body[0] (FunctionDeclaration) -> body -> body[0] (VariableDeclaration) -> declarations[0] -> init
-      const fnDecl = (parsed.program as any).body[0];
-      const varDecl = fnDecl.body.body[0];
-      const init = varDecl.declarations[0].init;
 
-      return init;
+      // Navigate: Program -> body[0] (FunctionDeclaration) -> body -> body[0] (VariableDeclaration) -> declarations[0] -> init
+      return (parsed.program as any).body[0].body.body[0].declarations[0].init;
     };
 
     it('isPureInitializer - numeric literal - returns true', () => {
@@ -1192,10 +1189,8 @@ describe('variable-lifetime/analyzer', () => {
       const parse = (expr: string) => {
         const src = `function f() { const x = ${expr}; }`;
         const parsed = parseSource('/p/a.ts', src);
-        const fnDecl = (parsed.program as any).body[0];
-        const varDecl = fnDecl.body.body[0];
 
-        return varDecl.declarations[0].init;
+        return (parsed.program as any).body[0].body.body[0].declarations[0].init;
       };
 
       const node = parse('{ [compute()]: 1 }');
@@ -1224,10 +1219,8 @@ describe('variable-lifetime/analyzer', () => {
       const parse = (expr: string) => {
         const src = `function f() { const x = ${expr}; }`;
         const parsed = parseSource('/p/a.ts', src);
-        const fnDecl = (parsed.program as any).body[0];
-        const varDecl = fnDecl.body.body[0];
 
-        return varDecl.declarations[0].init;
+        return (parsed.program as any).body[0].body.body[0].declarations[0].init;
       };
 
       const node = parse('(a, b)');
@@ -1253,10 +1246,8 @@ describe('variable-lifetime/analyzer', () => {
       const parse = (expr: string) => {
         const src = `function f() { const x = ${expr}; }`;
         const parsed = parseSource('/p/a.ts', src);
-        const fnDecl = (parsed.program as any).body[0];
-        const varDecl = fnDecl.body.body[0];
 
-        return varDecl.declarations[0].init;
+        return (parsed.program as any).body[0].body.body[0].declarations[0].init;
       };
 
       const node = parse('() => 1');

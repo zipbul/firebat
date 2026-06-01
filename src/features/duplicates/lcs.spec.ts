@@ -100,9 +100,7 @@ describe('computeSequenceSimilarity', () => {
     const n = 6;
     const a = ['a', 'b', 'c', 'd', 'e', 'f'];
     const b = ['a', 'b', 'c', 'd', 'e', 'X'];
-    const expected = (2 * (n - 1)) / (2 * n);
-
-    expect(computeSequenceSimilarity(a, b)).toBeCloseTo(expected, 5);
+    expect(computeSequenceSimilarity(a, b)).toBeCloseTo((2 * (n - 1)) / (2 * n), 5);
   });
 
   it('범위 [0, 1] 보장', () => {

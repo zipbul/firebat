@@ -72,9 +72,7 @@ const mulberry32 = (seed: number): Rng => {
         throw new Error('invalid int range');
       }
 
-      const span = maxInclusive - min + 1;
-
-      return min + (nextU32() % span);
+      return min + (nextU32() % (maxInclusive - min + 1));
     },
     bool(pTrue: number): boolean {
       const threshold = Math.max(0, Math.min(1, pTrue));
@@ -100,12 +98,11 @@ const mulberry32 = (seed: number): Rng => {
 
 const makeIdentifier = (rng: Rng, minLen = 1, maxLen = 10): string => {
   const firstChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$';
-  const nextChars = firstChars + '0123456789';
   const len = rng.int(minLen, maxLen);
   let out = rng.pick(firstChars.split(''));
 
   for (let i = 1; i < len; i += 1) {
-    out += rng.pick(nextChars.split(''));
+    out += rng.pick((firstChars + '0123456789').split(''));
   }
 
   return out;
@@ -374,8 +371,7 @@ const runParserAutofixInvariantsFuzz = (): void => {
       const wsL = whitespace(rng);
       const wsR = whitespace(rng);
       const nl = newline(rng);
-      const member = multi ? `obj[${nl}${wsL}'${key}'${wsR}${nl}]` : `obj[${wsL}'${key}'${wsR}]`;
-      const code = `const x = ${member};`;
+      const code = `const x = ${multi ? `obj[${nl}${wsL}'${key}'${wsR}${nl}]` : `obj[${wsL}'${key}'${wsR}]`};`;
       const r1 = runRuleOnParsedCode('no-bracket-notation.ts', code, noBracketNotationRule);
 
       if (r1.reports.length <= 0) {
@@ -437,8 +433,7 @@ const runParserAutofixInvariantsFuzz = (): void => {
           return multiline ? `,${nl}${ws2}${name}` : `,${ws2}${name}`;
         })
         .join('');
-      const importPrefix = importKind === 'type' ? 'import type' : 'import';
-      const importLine = `${importPrefix}${ws1}{${ws1}${spec}${ws1}}${ws1}from${ws1}'x';`;
+      const importLine = `${importKind === 'type' ? 'import type' : 'import'}${ws1}{${ws1}${spec}${ws1}}${ws1}from${ws1}'x';`;
       const usageLines = names
         .filter(name => used.has(name))
         .map(name => `console.log(${name});`)
@@ -477,13 +472,11 @@ const runParserAutofixInvariantsFuzz = (): void => {
     for (let i = 0; i < 160; i += 1) {
       const nl = newline(rng);
       const hasBlank = rng.bool(0.45);
-      const between = hasBlank ? `${nl}${nl}` : nl;
       const mode = rng.pick(['const-const', 'const-fn'] as const);
       const a = makeIdentifier(rng, 3, 8);
       const b = makeIdentifier(rng, 3, 8);
       const stmtA = `const ${a} = 1;`;
-      const stmtB = mode === 'const-fn' ? `function ${b}() {}` : `const ${b} = 2;`;
-      const code = `${stmtA}${between}${stmtB}${nl}`;
+      const code = `${stmtA}${hasBlank ? `${nl}${nl}` : nl}${mode === 'const-fn' ? `function ${b}() {}` : `const ${b} = 2;`}${nl}`;
       const r1 = runRuleOnParsedCode('padding.ts', code, paddingLineBetweenStatementsRule);
 
       if (r1.fixed !== code) {
@@ -506,12 +499,11 @@ const runParserAutofixInvariantsFuzz = (): void => {
     for (let i = 0; i < 140; i += 1) {
       const nl = newline(rng);
       const hasBlank = rng.bool(0.25);
-      const between = hasBlank ? `${nl}${nl}` : nl;
       const f = makeIdentifier(rng, 3, 8);
       const v = makeIdentifier(rng, 3, 8);
       const stmtA = `function ${f}() {}`;
       const stmtB = `const ${v} = 1;`;
-      const code = `${stmtA}${between}${stmtB}${nl}`;
+      const code = `${stmtA}${hasBlank ? `${nl}${nl}` : nl}${stmtB}${nl}`;
       const r1 = runRuleOnParsedCode('blank-lines.ts', code, blankLinesBetweenStatementGroupsRule);
 
       if (r1.fixed !== code) {

@@ -56,9 +56,8 @@ const createFuzzSource = (kind: number, name: string, literal: number): string =
 
 const createFuzzName = (kind: number, iteration: number): string => {
   const namePrefixes = ['noRead', 'read', 'iife', 'unreachable', 'reachable'];
-  const namePrefix = namePrefixes[kind] ?? 'noRead';
 
-  return `${namePrefix}_${iteration}`;
+  return `${namePrefixes[kind] ?? 'noRead'}_${iteration}`;
 };
 
 const hasValueDeadStore = (signatures: readonly string[]): boolean => {

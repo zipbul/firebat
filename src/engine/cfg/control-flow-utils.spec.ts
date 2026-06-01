@@ -6,9 +6,7 @@ import { resolveFunctionBody, shouldIncreaseDepth } from './control-flow-utils';
 const functionNodeOf = (src: string) => {
   const program = parseSource('test.ts', src).program;
   // program.body[0] should be the function declaration
-  const body = (program as { body: unknown[] }).body;
-
-  return body[0] as Parameters<typeof resolveFunctionBody>[0];
+  return (program as { body: unknown[] }).body[0] as Parameters<typeof resolveFunctionBody>[0];
 };
 
 describe('shouldIncreaseDepth', () => {

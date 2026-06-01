@@ -5,9 +5,8 @@ import { getNodeHeader } from './node-header';
 
 const functionNodeOf = (src: string) => {
   const program = parseSource('test.ts', src).program;
-  const body = (program as { body: unknown[] }).body;
 
-  return body[0] as Parameters<typeof getNodeHeader>[0];
+  return (program as { body: unknown[] }).body[0] as Parameters<typeof getNodeHeader>[0];
 };
 
 describe('getNodeHeader', () => {

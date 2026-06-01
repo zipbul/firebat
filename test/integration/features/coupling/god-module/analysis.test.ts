@@ -22,9 +22,7 @@ describe('integration/coupling/god-module', () => {
       sources.set(`/virtual/coupling/god/in${index}.ts`, `import './core';\nexport const in${index} = 1;`);
     }
 
-    const fillerCount = totalModules - (fan + fan + 1);
-
-    for (let index = 0; index < fillerCount; index += 1) {
+    for (let index = 0; index < totalModules - (fan + fan + 1); index += 1) {
       sources.set(`/virtual/coupling/god/f${index}.ts`, `export const f${index} = ${index};`);
     }
 

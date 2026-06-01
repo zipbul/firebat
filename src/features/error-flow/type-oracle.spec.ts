@@ -14,7 +14,6 @@ const NUMBER = 1 << 3;
 const STRING_LITERAL = 1 << 7;
 const OBJECT = 1 << 19;
 const VOID = 1 << 14;
-const UNDEFINED = 1 << 15;
 
 const leaf = (flags: number, text = 'T'): ResolvedType => ({
   text,
@@ -81,7 +80,7 @@ describe('isVoidReturn', () => {
   });
 
   it('is true for undefined', () => {
-    expect(isVoidReturn(leaf(UNDEFINED, 'undefined'))).toBe(true);
+    expect(isVoidReturn(leaf(1 << 15, 'undefined'))).toBe(true);
   });
 
   it('is false for number', () => {

@@ -98,10 +98,9 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch for a bare rethrow under a different name (out of scope: redundancy)', async () => {
@@ -112,10 +111,9 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch when catch logs and rethrows', async () => {
@@ -133,10 +131,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch when catch rethrows a new error with cause', async () => {
@@ -153,10 +150,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch when catch adds context', async () => {
@@ -173,10 +169,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should report unsafe-finally when finally returns and masks a throw', async () => {
@@ -549,10 +544,9 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report prefer-catch when a downstream catch also exists (rejection fully observed)', async () => {
@@ -568,10 +562,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report prefer-catch when catch is used', async () => {
@@ -580,10 +573,9 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report prefer-await-to-then for long control-flow chains (out of scope: style)', async () => {
@@ -604,10 +596,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report prefer-await-to-then for a chain with side effects (out of scope: style)', async () => {
@@ -625,10 +616,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report prefer-await-to-then when then is a short value mapping', async () => {
@@ -637,10 +627,9 @@ describe('error-flow/analyzer', () => {
     const source = ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report prefer-await-to-then when chain is short even if callback uses block', async () => {
@@ -651,10 +640,9 @@ describe('error-flow/analyzer', () => {
     );
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   // --- floating-promises ---
@@ -901,10 +889,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert — every site rethrows the original error unchanged (observability/cause preserved).
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch for a single bare rethrow (out of scope: redundancy)', async () => {
@@ -921,10 +908,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   // --- useless-catch: nested try/catch (complexity is out of scope) ---
@@ -947,10 +933,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', async () => {
@@ -971,10 +956,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch (nested variant) for try/catch in catch block (cleanup pattern)', async () => {
@@ -996,10 +980,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report useless-catch (nested variant) for try/catch inside a function defined in try block', async () => {
@@ -1023,10 +1006,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   // --- unsafe-finally: break/continue ---
@@ -2027,10 +2009,9 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report no-return-wrap for Promise.resolve in then block body (out of scope: style)', async () => {
@@ -2039,10 +2020,9 @@ describe('error-flow/analyzer', () => {
     const source = ['export const p = Promise.resolve(1).then(x => {', '  return Promise.resolve(x + 1);', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report no-return-wrap for direct value return in then callback', async () => {
@@ -2051,10 +2031,9 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => x + 1);';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   // --- always-return ---
@@ -2065,10 +2044,9 @@ describe('error-flow/analyzer', () => {
     const source = ['export const p = Promise.resolve(1).then(x => {', '  console.log(x);', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report always-return when then callback returns a value', async () => {
@@ -2077,10 +2055,9 @@ describe('error-flow/analyzer', () => {
     const source = ['export const p = Promise.resolve(1).then(x => {', '  return x + 1;', '});'].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report always-return when then callback has expression body', async () => {
@@ -2089,10 +2066,9 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => console.log(x));';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert — expression body always returns implicitly
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   it('should not report always-return for a return only in an inner function (out of scope: style)', async () => {
@@ -2106,10 +2082,9 @@ describe('error-flow/analyzer', () => {
     ].join('\n');
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   // --- no-return-wrap: additional ---
@@ -2120,10 +2095,9 @@ describe('error-flow/analyzer', () => {
     const source = 'export const p = Promise.resolve(1).then(x => Promise.reject(new Error("fail")));';
     // Act
     const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis;
 
     // Assert
-    expect(hits.length).toBe(0);
+    expect(analysis.length).toBe(0);
   });
 
   // --- catch-or-return: additional ---

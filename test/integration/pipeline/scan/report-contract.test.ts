@@ -490,8 +490,7 @@ exit 1
 
       expect(Array.isArray(barrel)).toBe(true);
 
-      const findings = barrel as any[];
-      const exportStar = findings.find(f => f?.kind === 'export-star');
+      const exportStar = (barrel as any[]).find(f => f?.kind === 'export-star');
 
       expect(exportStar).toBeDefined();
       expect(typeof exportStar?.file).toBe('string');

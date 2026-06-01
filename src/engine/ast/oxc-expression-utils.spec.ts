@@ -6,12 +6,10 @@ import { parseSource } from './parse-source';
 /** Parse `expr;` and return the expression node of the ExpressionStatement */
 const exprOf = (src: string) => {
   const program = parseSource('test.ts', `(${src});`).program;
-  const stmt = (program as { body: unknown[] }).body[0] as {
-    type: string;
-    expression?: unknown;
-  };
 
-  return (stmt.expression ?? null) as Parameters<typeof unwrapExpression>[0];
+  return (((program as { body: unknown[] }).body[0] as { expression?: unknown }).expression ?? null) as Parameters<
+    typeof unwrapExpression
+  >[0];
 };
 
 describe('unwrapExpression', () => {
