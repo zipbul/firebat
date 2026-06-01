@@ -1,5 +1,7 @@
 import type { Gildash, CodeRelation, FullSymbol, SymbolSearchResult } from '@zipbul/gildash';
 
+import { GildashError } from '@zipbul/gildash';
+
 import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from '../../engine/types';
@@ -1000,7 +1002,7 @@ describe('analyzer', () => {
       const program = createProgram('/virtual/remap.ts', source);
       const gildash = createMockGildash({
         isTypeAssignableTo: () => {
-          throw new Error('semantic layer unavailable');
+          throw new GildashError('semantic', 'semantic layer unavailable');
         },
       });
       // Act
@@ -1095,6 +1097,7 @@ describe('analyzer', () => {
               signature: 'params:1|async:0',
               fingerprint: null,
               decorators: [],
+              detail: { modifiers: [] },
             } as unknown as FullSymbol;
           }
 
@@ -1122,7 +1125,7 @@ describe('analyzer', () => {
       const program = createProgram('/virtual/fallback.ts', source);
       const gildash = createMockGildash({
         getFullSymbol: () => {
-          throw new Error('gildash unavailable');
+          throw new GildashError('semantic', 'gildash unavailable');
         },
       });
       // Act

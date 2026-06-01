@@ -786,7 +786,10 @@ const analyzeIndirection = async (
             return;
           }
         }
-      } catch {
+      } catch (e) {
+        if (!(e instanceof GildashError)) {
+          throw e;
+        }
         // Semantic layer unavailable — keep existing thin-wrapper behavior
       }
 
@@ -910,7 +913,10 @@ const analyzeIndirection = async (
             const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
 
             addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
-          } catch {
+          } catch (e) {
+            if (!(e instanceof GildashError)) {
+              throw e;
+            }
             // Semantic layer unavailable — skip this check
           }
         }
@@ -970,7 +976,10 @@ const analyzeIndirection = async (
           if (otherFileHasSameName) {
             return true;
           }
-        } catch {
+        } catch (e) {
+          if (!(e instanceof GildashError)) {
+            throw e;
+          }
           // gildash failure: conservative — do not skip
         }
 

@@ -144,6 +144,8 @@ export const buildMockGildashFromSources = (sources: Map<string, string> | Recor
   return {
     searchRelations: () => relations,
     searchSymbols: () => symbols,
+    getFullSymbol: () => null,
+    isTypeAssignableTo: () => false,
     getAffected: async (changedFiles: string[]) => {
       const all = new Set<string>();
 

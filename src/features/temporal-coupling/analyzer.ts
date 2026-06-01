@@ -562,7 +562,10 @@ const analyzeClassTemporalCoupling = (
             if (shouldSuppressByCallGraph(gildash, rel, qualifiedWriters, qualifiedReaders)) {
               continue;
             }
-          } catch {
+          } catch (e) {
+            if (!(e instanceof GildashError)) {
+              throw e;
+            }
             // gildash 에러 → AST-only fallback
           }
         }
@@ -1384,7 +1387,10 @@ const analyzeTemporalCoupling = (
           if (shouldSuppressByCallGraph(input.gildash, rel, writers, readers)) {
             continue;
           }
-        } catch {
+        } catch (e) {
+          if (!(e instanceof GildashError)) {
+            throw e;
+          }
           // gildash 에러 → AST-only fallback
         }
       }

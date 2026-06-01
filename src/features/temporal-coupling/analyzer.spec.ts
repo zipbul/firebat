@@ -1,5 +1,7 @@
 import type { CodeRelation, ParsedFile as GildashParsedFile } from '@zipbul/gildash';
 
+import { GildashError } from '@zipbul/gildash';
+
 import { describe, expect, it } from 'bun:test';
 
 import { parseSource } from '../../engine/ast/parse-source';
@@ -692,7 +694,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     const throwingGildash = {
       searchRelations: (_query: unknown) => {
-        throw new Error('gildash error');
+        throw new GildashError('search', 'gildash error');
       },
       getInternalRelations: (_filePath: string) => [],
     };
@@ -1330,7 +1332,7 @@ describe('temporal-coupling/analyzer', () => {
     ];
     const throwingGildash = {
       searchRelations: (_query: unknown) => {
-        throw new Error('gildash error');
+        throw new GildashError('search', 'gildash error');
       },
       getInternalRelations: (_filePath: string) => [],
     };
