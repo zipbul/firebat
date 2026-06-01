@@ -47,9 +47,8 @@ const scanWithGlob = async (cwd: string, patterns: ReadonlyArray<string>): Promi
 const shouldIncludeSourceFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
   const segments = normalized.split('/');
-  const nodeModulesSegment = 'node' + '_modules';
 
-  if (segments.includes(nodeModulesSegment)) {
+  if (segments.includes('node' + '_modules')) {
     return false;
   }
 

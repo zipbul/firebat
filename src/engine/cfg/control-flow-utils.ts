@@ -7,8 +7,7 @@ const resolveFunctionBody = (functionNode: Node): Node | null => {
     return null;
   }
 
-  const fn = functionNode as OxcFunction;
-  const body = fn.body;
+  const body = (functionNode as OxcFunction).body;
 
   if (body === null || body === undefined) {
     return null;

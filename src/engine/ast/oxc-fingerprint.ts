@@ -107,9 +107,8 @@ const visitChildValue = (value: unknown, visit: (n: Node) => void): void => {
 const pushIdentifierToken = (rec: Record<string, unknown>, diffs: string[], includeIdentifierNames: boolean): void => {
   if (includeIdentifierNames) {
     const nameValue = rec.name;
-    const resolved = typeof nameValue === 'string' ? nameValue : '';
 
-    diffs.push(`id:${resolved}`);
+    diffs.push(`id:${typeof nameValue === 'string' ? nameValue : ''}`);
   } else {
     diffs.push('$ID');
   }

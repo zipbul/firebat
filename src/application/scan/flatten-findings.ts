@@ -109,9 +109,7 @@ const makeGroupId = (category: string, seed: string): string => `${category}-${h
 // ── Span helpers ─────────────────────────────────────────────────────────────
 
 const extractLine = (finding: Record<string, unknown>): number => {
-  const span = finding.span as { start?: { line?: number } } | undefined;
-
-  return span?.start?.line ?? 0;
+  return (finding.span as { start?: { line?: number } } | undefined)?.start?.line ?? 0;
 };
 
 /**
@@ -280,9 +278,8 @@ const labelVariableLifetime: LabelFn = (f, fn) => {
 
 const labelTemporalCoupling: LabelFn = (f, fn) => {
   const state = String(f.state ?? '');
-  const base = state ? `temporal-coupling: ${state}` : 'temporal-coupling';
 
-  return withFunc(base, fn);
+  return withFunc(state ? `temporal-coupling: ${state}` : 'temporal-coupling', fn);
 };
 
 const labelGiantFile: LabelFn = (f, _fn) => {

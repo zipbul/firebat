@@ -60,9 +60,8 @@ export const extractBindingNames = (node: Node, out: BindingName[]): void => {
 
 export const collectParameterBindings = (functionNode: Node): ReadonlyArray<BindingName> => {
   const bindings: BindingName[] = [];
-  const fn = functionNode as OxcFunction;
 
-  for (const param of fn.params) {
+  for (const param of (functionNode as OxcFunction).params) {
     extractBindingNames(param, bindings);
   }
 
@@ -108,8 +107,7 @@ export const collectLocalVarIndexes = (functionNode: Node, filePath?: string, so
     keys.add(bindingKey(binding.name, parameterScopeKey(binding, declScopeByIdLocation)));
   }
 
-  const fn2 = functionNode as OxcFunction;
-  const bodyNode = fn2.body as Node | null;
+  const bodyNode = (functionNode as OxcFunction).body as Node | null;
   const bodyUsages =
     bodyNode !== null
       ? collectVariables(bodyNode, {

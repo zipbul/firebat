@@ -3,29 +3,14 @@ import type { Node } from 'oxc-parser';
 
 // `ts.TypeFlags` bits (TypeScript does not export the enum at this layer). Only the bits the
 // error-flow rules reason about are named here.
-const FLAG_ANY = 1;
-const FLAG_UNKNOWN = 2;
-const FLAG_VOID = 1 << 14; // 16384
-const FLAG_UNDEFINED = 1 << 15; // 32768
-const FLAG_PRIMITIVE =
-  (1 << 2) | // String
-  (1 << 3) | // Number
-  (1 << 4) | // Boolean
-  (1 << 5) | // Enum
-  (1 << 6) | // BigInt
-  (1 << 7) | // StringLiteral
-  (1 << 8) | // NumberLiteral
-  (1 << 9) | // BooleanLiteral
-  (1 << 10) | // EnumLiteral
-  (1 << 11) | // BigIntLiteral
-  (1 << 12) | // ESSymbol
-  (1 << 13); // UniqueESSymbol
+// `ts.TypeFlags` Any (1) and Unknown (2) — either could be an Error.
+const FLAG_ANY_OR_UNKNOWN = 1 | 2;
 
 // A type proves the value is a bare primitive (so, definitely not an Error) only when no part of
 // it could be `any`/`unknown` and every constituent is a primitive. `string | Error` (mixed) and
 // `any` both stay false — the value could be an Error.
 export const isWhollyPrimitive = (type: ResolvedType): boolean => {
-  if ((type.flags & (FLAG_ANY | FLAG_UNKNOWN)) !== 0) {
+  if ((type.flags & FLAG_ANY_OR_UNKNOWN) !== 0) {
     return false;
   }
 
@@ -35,13 +20,16 @@ export const isWhollyPrimitive = (type: ResolvedType): boolean => {
     return members.length > 0 && members.every(isWhollyPrimitive);
   }
 
-  return (type.flags & FLAG_PRIMITIVE) !== 0;
+  // Contiguous `ts.TypeFlags` primitive bits, String (1<<2) through UniqueESSymbol (1<<13):
+  //   (1<<2)|(1<<3)|…|(1<<13) === 0x3ffc.
+  return (type.flags & 0x3ffc) !== 0;
 };
 
 // A contextual call-signature return type proves the slot discards the value (a `void` context).
 // `any`/`unknown` returns are rejected — they could accept a thenable.
 export const isVoidReturn = (type: ResolvedType): boolean =>
-  (type.flags & (FLAG_ANY | FLAG_UNKNOWN)) === 0 && (type.flags & (FLAG_VOID | FLAG_UNDEFINED)) !== 0;
+  // Not any/unknown, and at least one of Void (1<<14) / Undefined (1<<15).
+  (type.flags & FLAG_ANY_OR_UNKNOWN) === 0 && (type.flags & ((1 << 14) | (1 << 15))) !== 0;
 
 /**
  * The single owner of every gildash type query for the error-flow detector. Rules ask domain

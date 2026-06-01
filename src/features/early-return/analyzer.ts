@@ -209,10 +209,8 @@ const detectWrappingIf = (bodyStatements: ReadonlyArray<Node>, sourceText: strin
     return null;
   }
 
-  const alternateValue = last.alternate;
-
   // alternate must be absent (pure wrapping-if)
-  if (alternateValue !== null) {
+  if (last.alternate !== null) {
     return null;
   }
 
@@ -473,9 +471,8 @@ const analyzeFunctionNode = (
           // 2. Try invertible-if-else — skip when alternate is an else-if chain
           //    (countStatements would sum the entire chain, producing a false positive)
           const alternateNode = alternateValue;
-          const isElseIfChain = alternateNode.type === 'IfStatement';
 
-          if (!isElseIfChain) {
+          if (alternateNode.type !== 'IfStatement') {
             const consequentValue = node.consequent;
             const consequentCount = countStatements(consequentValue);
             const alternateCount = countStatements(alternateNode);
@@ -539,9 +536,8 @@ const analyzeFunctionNode = (
 
     forEachChildNode(node, child => {
       const isLoop = isLoopNodeType(nodeType);
-      const childTailPos = isLoop ? true : inTailPosition;
 
-      visit(child, nextDepth, insideLoop || isLoop, childTailPos);
+      visit(child, nextDepth, insideLoop || isLoop, isLoop ? true : inTailPosition);
     });
   };
 

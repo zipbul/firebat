@@ -30,8 +30,7 @@ export const computeAutoMinSize = (files: ReadonlyArray<ParsedFile>): number => 
   // For small/medium repos, use a median-ish threshold; for large repos, raise the percentile
   // to avoid boilerplate dominating results.
   const fileCount = files.length;
-  const percentile = fileCount >= 1000 ? 0.75 : fileCount >= 500 ? 0.6 : 0.5;
-  const index = Math.floor((counts.length - 1) * percentile);
+  const index = Math.floor((counts.length - 1) * (fileCount >= 1000 ? 0.75 : fileCount >= 500 ? 0.6 : 0.5));
   const selected = counts[index] ?? 60;
 
   return clamp(Math.round(selected), 10, 200);

@@ -13,9 +13,8 @@ export type { ParsedFile };
 const shouldIncludeFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
   const segments = normalized.split('/');
-  const nodeModulesSegment = 'node' + '_modules';
 
-  if (segments.includes(nodeModulesSegment)) {
+  if (segments.includes('node' + '_modules')) {
     return false;
   }
 

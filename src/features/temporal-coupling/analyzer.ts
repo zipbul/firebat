@@ -572,9 +572,14 @@ const analyzeClassTemporalCoupling = (
 
         for (const readerMethodName of readerMethods) {
           // Phase 5: guard 패턴 — class reader가 self-protecting이면 finding 억제
-          const qualifiedReader = className !== null ? `${className}.${readerMethodName}` : readerMethodName;
-
-          if (isReaderSelfProtecting(program, qualifiedReader, prop.name, true)) {
+          if (
+            isReaderSelfProtecting(
+              program,
+              className !== null ? `${className}.${readerMethodName}` : readerMethodName,
+              prop.name,
+              true,
+            )
+          ) {
             continue;
           }
 
@@ -784,9 +789,8 @@ const findFunctionBody = (program: Node, symbolName: string): Node | null => {
   let result: Node | null = null;
   // Handle ClassName.method format
   const dotIndex = symbolName.indexOf('.');
-  const isMethod = dotIndex !== -1;
 
-  if (isMethod) {
+  if (dotIndex !== -1) {
     const className = symbolName.slice(0, dotIndex);
     const methodName = symbolName.slice(dotIndex + 1);
 

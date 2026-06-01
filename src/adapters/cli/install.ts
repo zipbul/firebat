@@ -406,9 +406,8 @@ const printAgentPromptGuide = (): void => {
 
     // Layout: "  " + "│ " + content + "" (we print the right border separately).
     // Keep it within a readable range even on very wide terminals.
-    const available = columns - 2 /* leading indent */ - 2 /* left border + space */ - 2 /* space + right border */;
-
-    return Math.max(48, Math.min(100, available));
+    // columns - 2 (leading indent) - 2 (left border + space) - 2 (space + right border).
+    return Math.max(48, Math.min(100, columns - 6));
   };
 
   const boxWidth = getBoxInnerWidth();

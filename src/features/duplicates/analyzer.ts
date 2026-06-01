@@ -97,9 +97,7 @@ export const analyzeDuplicates = (
   });
   let allGroups: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
   // ── Level 2+3: Near-miss clone detection ───────────────────────────────────
-  const enableNearMiss = options.enableNearMiss ?? true;
-
-  if (enableNearMiss) {
+  if (options.enableNearMiss ?? true) {
     // Level 1에서 그룹핑된 모든 노드의 shape hash → excluded
     const excludedHashes = new Set<string>();
 
@@ -290,10 +288,9 @@ const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup[] => {
     const varCounts = auResults.map(({ result }) => result.variables.length);
     const mean = varCounts.reduce((s, v) => s + v, 0) / varCounts.length;
     const stdDev = Math.sqrt(varCounts.reduce((s, v) => s + (v - mean) ** 2, 0) / varCounts.length);
-    const threshold = mean + 2 * stdDev;
     const outlierAuIndices = auResults
       .map(({ idx, result }, auIdx) => ({ auIdx, idx, varCount: result.variables.length }))
-      .filter(({ varCount }) => varCount > threshold);
+      .filter(({ varCount }) => varCount > mean + 2 * stdDev);
 
     if (outlierAuIndices.length > 0 && outlierAuIndices.length < items.length - 1) {
       const outlierItemIndices = new Set(outlierAuIndices.map(({ idx }) => idx));

@@ -137,11 +137,10 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     return all;
   }
 
-  const record = features as Record<string, unknown>;
   const disabled = new Set<FirebatDetector>();
 
   for (const detector of all) {
-    if (record[detector] === false) {
+    if ((features as Record<string, unknown>)[detector] === false) {
       disabled.add(detector);
     }
   }
@@ -238,12 +237,10 @@ const resolveMinSizeFromFeatures = (
   features: FirebatConfig['features'] | undefined,
 ): FirebatCliOptions['minSize'] | undefined => {
   const { duplicates: unified } = features ?? {};
-  const unifiedSize =
-    typeof unified === 'object' && unified !== null
-      ? ((unified as Record<string, unknown>).minSize as number | undefined)
-      : undefined;
 
-  return unifiedSize;
+  return typeof unified === 'object' && unified !== null
+    ? ((unified as Record<string, unknown>).minSize as number | undefined)
+    : undefined;
 };
 
 const resolveMaxForwardDepthFromFeatures = (features: FirebatConfig['features'] | undefined): number | undefined => {

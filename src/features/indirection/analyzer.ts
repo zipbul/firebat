@@ -165,8 +165,7 @@ const getCallFromStatement = (statement: Node): Node | null => {
 };
 
 const getFunctionParams = (node: Node): ReadonlyArray<Node> | null => {
-  const fn = node as OxcFunction;
-  const params = fn.params;
+  const params = (node as OxcFunction).params;
 
   if (!Array.isArray(params)) {
     return null;
@@ -302,8 +301,7 @@ const getWrapperCall = (node: Node): Node | null => {
     return null;
   }
 
-  const fn = node as OxcFunction;
-  const body: Node | null = fn.body;
+  const body: Node | null = (node as OxcFunction).body;
 
   if (body === null) {
     return null;

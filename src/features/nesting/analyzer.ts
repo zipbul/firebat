@@ -275,8 +275,7 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
           continue;
         }
 
-        const nextDepth = isTestRunner ? depth : depth + 1;
-        const d = measureMaxCallbackDepth(callbackBody, nextDepth);
+        const d = measureMaxCallbackDepth(callbackBody, isTestRunner ? depth : depth + 1);
 
         if (d > max) {
           max = d;
@@ -615,11 +614,10 @@ const analyzeFunctionNode = (
     if (node.type === 'MemberExpression') {
       const optional = node.optional;
       const computed = node.computed;
-      const op = optional ? '?.' : computed ? '[]' : '.';
 
       totalOperators++;
 
-      uniqueOperators.add(op);
+      uniqueOperators.add(optional ? '?.' : computed ? '[]' : '.');
     }
 
     // Operands: Identifier
@@ -767,7 +765,6 @@ const analyzeFunctionNode = (
   const n2 = totalOperands;
   const vocabulary = eta1 + eta2;
   const halsteadVolume = vocabulary > 0 ? (n1 + n2) * Math.log2(vocabulary) : 0;
-  const halsteadDifficulty = eta2 > 0 ? (eta1 / 2) * (n2 / eta2) : 0;
   const PRIORITY: ReadonlyArray<NestingKind> = [
     'accidental-quadratic',
     'high-cognitive-complexity',
@@ -829,7 +826,7 @@ const analyzeFunctionNode = (
       quadraticTargets,
       density,
       halsteadVolume: Math.round(halsteadVolume * 100) / 100,
-      halsteadDifficulty: Math.round(halsteadDifficulty * 100) / 100,
+      halsteadDifficulty: Math.round((eta2 > 0 ? (eta1 / 2) * (n2 / eta2) : 0) * 100) / 100,
     },
     score: nestingScore,
   };

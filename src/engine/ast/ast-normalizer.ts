@@ -185,8 +185,7 @@ const normalizeOptionalChain = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const chain = node as ChainExpression;
-  const expression = chain.expression;
+  const expression = (node as ChainExpression).expression;
 
   if (!isOxcNode(expression as NodeValue) || !isNodeRecord(expression as Node)) {
     return null;
@@ -224,9 +223,8 @@ const normalizeDeMorgan = (node: AnyNode): NodeValue | null => {
   }
 
   const ue = node as UnaryExpression;
-  const operator = ue.operator;
 
-  if (operator !== '!') {
+  if (ue.operator !== '!') {
     return null;
   }
 
@@ -265,9 +263,7 @@ const normalizeDeMorgan = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const newOp = innerOperator === '&&' ? '||' : '&&';
-
-  return logical(newOp, unary('!', left), unary('!', right));
+  return logical(innerOperator === '&&' ? '||' : '&&', unary('!', left), unary('!', right));
 };
 
 const normalizeTernaryInversion = (node: AnyNode): NodeValue | null => {
@@ -287,9 +283,8 @@ const normalizeTernaryInversion = (node: AnyNode): NodeValue | null => {
   }
 
   const ue = test as UnaryExpression;
-  const operator = ue.operator;
 
-  if (operator !== '!') {
+  if (ue.operator !== '!') {
     return null;
   }
 
@@ -554,8 +549,7 @@ const normalizeForEach = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const es = node as ExpressionStatement;
-  const expression = es.expression;
+  const expression = (node as ExpressionStatement).expression;
 
   if (
     !isOxcNode(expression as NodeValue) ||
@@ -788,8 +782,7 @@ const extractGuardCallArg = (guard: Node): GuardCallInfo | null => {
     return null;
   }
 
-  const stmtEs = stmt as ExpressionStatement;
-  const expr = stmtEs.expression as Node;
+  const expr = (stmt as ExpressionStatement).expression as Node;
 
   if (!isOxcNode(expr as NodeValue) || !isNodeRecord(expr as Node) || (expr as Node).type !== 'CallExpression') {
     return null;

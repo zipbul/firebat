@@ -575,9 +575,7 @@ const findInitNode = (bodyStatements: ReadonlyArray<Node>, defLocation: number):
         continue;
       }
 
-      const init = decl.init;
-
-      return init ?? null;
+      return decl.init ?? null;
     }
   }
 
@@ -803,8 +801,7 @@ const analyzeVariableLifetime = (
       }
 
       const paramBindings = collectParameterBindings(functionNode);
-      const fn = functionNode as OxcFunction;
-      const bodyNode = fn.body ?? undefined;
+      const bodyNode = (functionNode as OxcFunction).body ?? undefined;
 
       if (bodyNode === undefined) {
         continue;
@@ -924,9 +921,8 @@ const analyzeVariableLifetime = (
 
         if (firstUseOffset !== undefined) {
           const firstUseLoc = lineColumnAt(file.sourceText, firstUseOffset);
-          const improvedLifetime = useLoc.line - firstUseLoc.line;
 
-          if (improvedLifetime > maxLifetimeLines) {
+          if (useLoc.line - firstUseLoc.line > maxLifetimeLines) {
             // Even after moving, lifetime still exceeds threshold — not actionable.
             continue;
           }

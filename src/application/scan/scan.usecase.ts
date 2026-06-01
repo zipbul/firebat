@@ -934,7 +934,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         return r;
       })()
     : Promise.resolve(createEmptyBarrel());
-  const unknownProofResult: UnknownProofResult = (() => {
+  const unknownProof: UnknownProofResult = (() => {
     if (!options.detectors.includes('unknown-proof')) {
       return createEmptyUnknownProof();
     }
@@ -1166,7 +1166,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   const [barrel, typecheck] = await Promise.all([barrelPromise, typecheckPromise]);
   const lint = fixedLint;
   const format = fixedFormat;
-  const unknownProof = unknownProofResult;
 
   logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 

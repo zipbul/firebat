@@ -84,9 +84,8 @@ const extractEvidenceText = async (filePath: string, span: SourceSpan): Promise<
 
   const lines = splitLines(text);
   const lineIdx = Math.max(0, Math.min(lines.length - 1, span.start.line - 1));
-  const lineText = lines[lineIdx] ?? '';
 
-  return lineText.trim().slice(0, 300);
+  return (lines[lineIdx] ?? '').trim().slice(0, 300);
 };
 
 const resolveRelatedFiles = async (input: TraceSymbolInput): Promise<string[]> => {

@@ -62,9 +62,11 @@ const paddingLineBetweenStatementsRule = {
       const first = lines[0];
       const last = lines.at(-1);
       const middle = lines.slice(1, -1).filter(line => line.trim() !== '');
-      const safeLast = typeof last === 'string' ? last : '';
 
-      return fixer.replaceTextRange([prevEnd, nextStart], [first, ...middle, safeLast].join(newline));
+      return fixer.replaceTextRange(
+        [prevEnd, nextStart],
+        [first, ...middle, typeof last === 'string' ? last : ''].join(newline),
+      );
     };
 
     const defaultRules: PaddingRule[] = [

@@ -507,11 +507,9 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
       node.type === 'ForInStatement' ||
       node.type === 'ForOfStatement';
     const isSwitch = node.type === 'SwitchStatement';
-    const nextLoop = isLoop ? loopDepth + 1 : loopDepth;
-    const nextSwitch = isSwitch ? switchDepth + 1 : switchDepth;
 
     forEachChildNode(node, child => {
-      walk(child, nextLoop, nextSwitch);
+      walk(child, isLoop ? loopDepth + 1 : loopDepth, isSwitch ? switchDepth + 1 : switchDepth);
     });
   };
 
@@ -689,9 +687,10 @@ const hasCausePropertyWithIdentifier = (node: Node, name: string): boolean => {
 
       const key = prop.key;
       const value = prop.value;
-      const isCauseKey = (key.type === 'Identifier' && key.name === 'cause') || (key.type === 'Literal' && key.value === 'cause');
 
-      if (!isCauseKey) {
+      if (
+        !((key.type === 'Identifier' && key.name === 'cause') || (key.type === 'Literal' && key.value === 'cause'))
+      ) {
         continue;
       }
 

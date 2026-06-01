@@ -37,18 +37,14 @@ const unusedImportsRule = {
     const isVariableUsed = (variable: Variable): boolean => Array.isArray(variable?.references) && variable.references.length > 0;
 
     const isTypeOnlyImport = (node: AstNode): boolean => {
-      const importKind = typeof node.importKind === 'string' ? node.importKind : null;
-
-      if (importKind === 'type') {
+      if (node.importKind === 'type') {
         return true;
       }
 
       const specifiers = Array.isArray(node.specifiers) ? node.specifiers : [];
 
       for (const spec of specifiers) {
-        const specImportKind = typeof spec.importKind === 'string' ? spec.importKind : null;
-
-        if (specImportKind === 'type') {
+        if (spec.importKind === 'type') {
           return true;
         }
       }
