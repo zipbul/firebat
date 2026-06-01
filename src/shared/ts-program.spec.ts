@@ -24,7 +24,7 @@ const mockGildash = {
 } as unknown as Gildash;
 const mockCreateGildash = mock(async (_opts: unknown) => mockGildash);
 
-mock.module('../store/gildash', () => ({ createGildash: mockCreateGildash }));
+void mock.module('../store/gildash', () => ({ createGildash: mockCreateGildash }));
 
 // ── Import after mock ─────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ afterEach(() => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../store/gildash.ts'), () => __origGildashStore);
+  void mock.module(nodePath.resolve(import.meta.dir, '../store/gildash.ts'), () => __origGildashStore);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

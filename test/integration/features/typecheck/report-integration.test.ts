@@ -64,7 +64,7 @@ const typecheckEntryAbs = path.resolve(import.meta.dir, '../../../../src/feature
 const analyzeTypecheckMock = mock(async (): Promise<ReadonlyArray<TypecheckItem>> => createTypecheckOk([]));
 const __origTypecheckEntry = { ...require(typecheckEntryAbs) };
 
-mock.module(typecheckEntryAbs, () => {
+void mock.module(typecheckEntryAbs, () => {
   return {
     analyzeTypecheck: analyzeTypecheckMock,
     createEmptyTypecheck: () => createTypecheckOk([]),
@@ -180,5 +180,5 @@ describe('integration/typecheck/report-integration', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(typecheckEntryAbs, () => __origTypecheckEntry);
+  void mock.module(typecheckEntryAbs, () => __origTypecheckEntry);
 });

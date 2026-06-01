@@ -32,12 +32,12 @@ const __origNearMissDetector = {
 
 // Apply mocks
 
-mock.module(path.resolve(import.meta.dir, './anti-unifier.ts'), () => ({
+void mock.module(path.resolve(import.meta.dir, './anti-unifier.ts'), () => ({
   antiUnify: antiUnifyMock,
   classifyDiff: classifyDiffMock,
 }));
 
-mock.module(path.resolve(import.meta.dir, './near-miss-detector.ts'), () => ({
+void mock.module(path.resolve(import.meta.dir, './near-miss-detector.ts'), () => ({
   detectNearMissClones: detectNearMissClonesMock,
 }));
 
@@ -150,8 +150,8 @@ const makeErrorFile = (fileName: string): ParsedFile => ({
 // ─── Teardown ─────────────────────────────────────────────────────────────────
 
 afterAll(() => {
-  mock.module(path.resolve(import.meta.dir, './anti-unifier.ts'), () => __origAntiUnifier);
-  mock.module(path.resolve(import.meta.dir, './near-miss-detector.ts'), () => __origNearMissDetector);
+  void mock.module(path.resolve(import.meta.dir, './anti-unifier.ts'), () => __origAntiUnifier);
+  void mock.module(path.resolve(import.meta.dir, './near-miss-detector.ts'), () => __origNearMissDetector);
 });
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

@@ -19,8 +19,8 @@ const mockGildash = {
 const mockCreateGildash = mock(async (_opts: unknown) => mockGildash);
 const mockResolveTargets = mock(async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => []);
 
-mock.module('../../store/gildash', () => ({ createGildash: mockCreateGildash }));
-mock.module('../../shared/target-discovery', () => ({ resolveTargets: mockResolveTargets }));
+void mock.module('../../store/gildash', () => ({ createGildash: mockCreateGildash }));
+void mock.module('../../shared/target-discovery', () => ({ resolveTargets: mockResolveTargets }));
 
 // ── Import after mock ─────────────────────────────────────────────────────────
 
@@ -72,8 +72,8 @@ afterEach(() => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => __origGildashStore);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => __origGildashStore);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
 });
 
 describe('findPatternUseCase', () => {

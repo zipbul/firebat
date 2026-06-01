@@ -10,32 +10,32 @@ const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../shar
 const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 
 // Heavy dependencies mocked to prevent side-effects and slow load
-mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => ({
   scanUseCase: mock(async () => ({ analyses: {}, summary: {} })),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts'), () => ({
   resolveFirebatRootFromCwd: mock(async () => ({ rootAbs: '/project' })),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => ({
   resolveTargets: mock(async () => []),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => ({
   loadFirebatConfigFile: mock(async () => ({ config: null, resolvedPath: undefined })),
   resolveDefaultFirebatRcPath: mock((rootAbs: string) => nodePath.join(rootAbs, '.firebatrc.jsonc')),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => ({
   formatReport: mock((_r: unknown) => '[]'),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
   appendFirebatLog: mock(async () => undefined),
 }));
 
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => ({
   createPrettyConsoleLogger: mock(() => ({
     error: mock(() => undefined),
     info: mock(() => undefined),
@@ -207,11 +207,11 @@ describe('runCli', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => __origScanUsecase);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts'), () => __origRootResolver);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => __origConfigLoader);
-  mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => __origReport);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origLogging);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origPrettyLogger);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => __origScanUsecase);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts'), () => __origRootResolver);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts'), () => __origTargetDiscovery);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => __origConfigLoader);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../report.ts'), () => __origReport);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origLogging);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/logger.ts'), () => __origPrettyLogger);
 });

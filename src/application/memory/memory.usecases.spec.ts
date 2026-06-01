@@ -5,11 +5,11 @@ const __origFirebatDb = { ...require(path.resolve(import.meta.dir, '../../infras
 const __origMemoryStore = { ...require(path.resolve(import.meta.dir, '../../store/memory.ts')) };
 
 // mock SQLite DB to avoid filesystem side effects
-mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
+void mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
   getDb: async () => ({}),
 }));
 
-mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => {
+void mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => {
   // In-memory store for tests
   const store = new Map<string, string>();
 
@@ -131,6 +131,6 @@ describe('application/memory/memory.usecases — deleteMemoryUseCase', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
-  mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => __origMemoryStore);
+  void mock.module(path.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
+  void mock.module(path.resolve(import.meta.dir, '../../store/memory.ts'), () => __origMemoryStore);
 });

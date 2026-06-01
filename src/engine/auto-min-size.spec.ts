@@ -33,9 +33,9 @@ const makeFiles = (count: number): ParsedFile[] => Array.from({ length: count },
 
 describe('computeAutoMinSize', () => {
   beforeAll(() => {
-    mock.module(duplicateDetectorAbs, () => ({ isCloneTarget: isCloneTargetMock }));
-    mock.module(oxcAstUtilsAbs, () => ({ collectOxcNodes: collectOxcNodesMock }));
-    mock.module(oxcSizeCountAbs, () => ({ countOxcSize: countOxcSizeMock }));
+    void mock.module(duplicateDetectorAbs, () => ({ isCloneTarget: isCloneTargetMock }));
+    void mock.module(oxcAstUtilsAbs, () => ({ collectOxcNodes: collectOxcNodesMock }));
+    void mock.module(oxcSizeCountAbs, () => ({ countOxcSize: countOxcSizeMock }));
   });
 
   beforeEach(() => {
@@ -209,8 +209,8 @@ describe('computeAutoMinSize', () => {
   afterAll(() => {
     mock.restore();
     // Re-register original modules to prevent mock.module contamination of subsequent test files
-    mock.module(duplicateDetectorAbs, () => __origDuplicateDetector);
-    mock.module(oxcAstUtilsAbs, () => __origOxcAstUtils);
-    mock.module(oxcSizeCountAbs, () => __origOxcSizeCount);
+    void mock.module(duplicateDetectorAbs, () => __origDuplicateDetector);
+    void mock.module(oxcAstUtilsAbs, () => __origOxcAstUtils);
+    void mock.module(oxcSizeCountAbs, () => __origOxcSizeCount);
   });
 });

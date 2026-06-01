@@ -7,7 +7,7 @@ const runOxlintMock = mock(
 );
 const __origOxlintRunner = { ...require(path.resolve(import.meta.dir, '../../tooling/oxlint/oxlint-runner.ts')) };
 
-mock.module(path.resolve(import.meta.dir, '../../tooling/oxlint/oxlint-runner.ts'), () => ({
+void mock.module(path.resolve(import.meta.dir, '../../tooling/oxlint/oxlint-runner.ts'), () => ({
   runOxlint: runOxlintMock,
 }));
 
@@ -79,5 +79,5 @@ describe('analyzeLint', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(path.resolve(import.meta.dir, '../../tooling/oxlint/oxlint-runner.ts'), () => __origOxlintRunner);
+  void mock.module(path.resolve(import.meta.dir, '../../tooling/oxlint/oxlint-runner.ts'), () => __origOxlintRunner);
 });

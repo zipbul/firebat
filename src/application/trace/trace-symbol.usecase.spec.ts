@@ -8,17 +8,17 @@ const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../
 const __origToolVersion = { ...require(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts')) };
 
 // Mock all heavy infrastructure
-mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => ({
   getDb: async () => ({}),
   getOrmDb: async () => ({}),
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => ({
   createArtifactStore: () => ({
     get: () => null,
     set: () => {},
   }),
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => ({
   createGildash: async () => ({
     getFileInfo: () => null,
     getSemanticReferences: () => [],
@@ -32,10 +32,10 @@ mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => (
   }),
   __testing__: __origGildashStore.__testing__,
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
   resolveRuntimeContextFromCwd: async () => ({ rootAbs: '/project' }),
 }));
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => ({
   computeToolVersion: () => '1.0.0-test',
 }));
 
@@ -75,9 +75,9 @@ describe('traceSymbolUseCase', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
-  mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => __origArtifactStore);
-  mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => __origGildashStore);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => __origToolVersion);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts'), () => __origFirebatDb);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../store/artifact.ts'), () => __origArtifactStore);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), () => __origGildashStore);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/tool-version.ts'), () => __origToolVersion);
 });

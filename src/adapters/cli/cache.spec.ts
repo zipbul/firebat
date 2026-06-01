@@ -4,13 +4,13 @@ import * as nodePath from 'node:path';
 const __origRuntimeContext = { ...require(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts')) };
 const __origFsPromises = { ...require('node:fs/promises') };
 
-mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
+void mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => ({
   resolveRuntimeContextFromCwd: async () => ({ rootAbs: '/project' }),
 }));
 
 const mockRm = mock(async () => undefined);
 
-mock.module('node:fs/promises', () => ({
+void mock.module('node:fs/promises', () => ({
   rm: mockRm,
 }));
 
@@ -72,6 +72,6 @@ describe('runCache', () => {
 
 afterAll(() => {
   mock.restore();
-  mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
-  mock.module('node:fs/promises', () => __origFsPromises);
+  void mock.module(nodePath.resolve(import.meta.dir, '../../shared/runtime-context.ts'), () => __origRuntimeContext);
+  void mock.module('node:fs/promises', () => __origFsPromises);
 });
