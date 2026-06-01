@@ -23,7 +23,7 @@ describe('features/unknown-proof/analyzer — analyzeUnknownProof', () => {
   it('analyzeUnknownProof - as any cast - returns any-cast finding', () => {
     const f = toFile('/any-cast.ts', `const x = response as any;`);
     // no gildash -> PartialResultError, but expression findings are still returned
-    let result: ReadonlyArray<{ kind: string }> = [];
+    let result: ReadonlyArray<{ kind: string }>;
 
     try {
       result = analyzeUnknownProof([f], { rootAbs: '/tmp' });
@@ -38,7 +38,7 @@ describe('features/unknown-proof/analyzer — analyzeUnknownProof', () => {
 
   it('analyzeUnknownProof - double cast - returns double-cast finding', () => {
     const f = toFile('/double-cast.ts', `const x = data as unknown as User;`);
-    let result: ReadonlyArray<{ kind: string }> = [];
+    let result: ReadonlyArray<{ kind: string }>;
 
     try {
       result = analyzeUnknownProof([f], { rootAbs: '/tmp' });
