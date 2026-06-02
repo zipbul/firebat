@@ -14,7 +14,6 @@ import { FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
  * Add a prefix → file entry to extend coverage to other categories.
  */
 const REF_DIR = path.resolve(import.meta.dir, '../../../.claude/skills/firebat/references');
-
 const PREFIX_TO_FILE: ReadonlyArray<readonly [string, string]> = [
   ['WASTE_', 'waste.md'],
   ['EF_', 'error-flow.md'],
@@ -62,6 +61,7 @@ const fileFor = (code: string): string | null => {
 
 describe('catalog ↔ reference parity (waste + error-flow)', () => {
   const refCache = new Map<string, ReadonlyMap<string, RefSection>>();
+
   const loadRef = (file: string): ReadonlyMap<string, RefSection> => {
     const cached = refCache.get(file);
 
