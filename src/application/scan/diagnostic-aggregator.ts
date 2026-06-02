@@ -13,8 +13,8 @@ export const FIREBAT_CODE_CATALOG = {
     cause: 'A value is assigned to a variable but is overwritten or goes out of scope before being read.',
     think: [
       'Read the function containing the dead store. Trace every read of this variable through all branches. If any branch does read the value before it goes out of scope, this is a false positive — stop, no action needed.',
-      'Check git log for the commit that introduced or last modified this assignment. If it was part of a larger refactor that removed the consuming code, the assignment is a leftover — delete it.',
-      'Grep the function for other dead-store findings. If multiple exist in the same function, the function likely handles too many concerns — flag for extraction rather than fixing individual stores.',
+      'Delete the assignment. If the declaration and assignment are one statement (`let x = value`), drop the initializer (`let x`) or move the declaration to where the value is actually first used.',
+      'If multiple dead stores exist in the same function, it likely handles too many concerns — flag for extraction rather than patching each store.',
     ],
   },
   WASTE_DEAD_STORE_OVERWRITE: {
@@ -29,9 +29,9 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       "A const binding's initializer is read exactly once; the binding is needless indirection and the initializer can be inlined at its single use.",
     think: [
-      'Read the declaration and its single use. If the initializer is evaluated anywhere else, or the variable is read more than once, this is a false positive — stop, no action needed.',
-      'Confirm nothing between the declaration and the use reassigns the source or mutates a receiver the initializer reads (snapshot-before-mutation), and the use is not inside a closure that runs more than once — if any holds, the binding is load-bearing, stop.',
-      'Inline the initializer at the use site and delete the declaration. Keep the binding if its name documents a non-obvious value and removing it would hurt readability more than the indirection costs.',
+      'Read the declaration and its single use. If the initializer is evaluated elsewhere or the variable is read more than once, this is a false positive — stop, no action needed.',
+      "Confirm none of the detector's keep-conditions hold (any one ⇒ false positive, stop): the source identifier is reassigned, or a receiver/getter the initializer reads is mutated, between declaration and use; the use sits inside a loop or a closure that does not contain the declaration (re-evaluated/deferred); the source is type-narrowed (guard/assertion) between declaration and use; inlining would move a member read into call/tag position and change `this`; or the RHS is an optional chain.",
+      'Inline the initializer at the use site and delete the declaration — a single-use name earns no keep; the substituted expression carries the same meaning. (Readability of the name is not a keep-reason per CLAUDE.md. The one information-preservation exception — an opaque bare-literal value whose name is its only documentation — never reaches you here, because the detector does not flag bare-literal initializers.)',
     ],
   },
 
@@ -136,10 +136,11 @@ export const FIREBAT_CODE_CATALOG = {
   },
 
   EF_THROW_NON_ERROR: {
-    cause: 'A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.',
+    cause:
+      'A throw (or Promise rejection) of a value that is provably not an Error loses message/stack/cause traceability — the original error information cannot be followed at the handler, even when the value reaches one.',
     think: [
-      'Read the throw statement and identify the thrown value type (string literal, object, number, etc.). If it is already an Error subclass, this is a false positive — stop, no action needed.',
-      'Wrap the thrown value in a new Error (or a domain-specific Error subclass) using `new Error(message, { cause: originalValue })` to preserve both the stack trace and the original information.',
+      'Identify the thrown/rejected value. The detector flags only values it can *prove* are non-Error (a string/number/boolean/template literal, an object or array literal, or a primitive-wrapper call like `String(x)`/`Number(x)`); a member or identifier whose type gildash cannot resolve is given the benefit of the doubt and is NOT flagged. If the value is (or may be) an Error subtype, this is a false positive — stop, no action needed.',
+      'Wrap the value in a new Error (or a domain-specific Error subclass) using `new Error(message, { cause: originalValue })` to preserve both the stack trace and the original information.',
       'Grep for catch blocks that handle this throw. If they access `.stack` or `.message`, confirm the new Error subclass provides those properties correctly.',
     ],
   },
@@ -156,22 +157,22 @@ export const FIREBAT_CODE_CATALOG = {
     cause:
       "A caught error is re-thrown or wrapped without preserving the original error via the 'cause' option, breaking the error chain.",
     think: [
-      'Read the catch block. Locate where the new error is created or re-thrown.',
-      'Add `{ cause: caughtError }` as the second argument to the Error constructor (e.g., `new Error("message", { cause: err })`). If the error is re-thrown with `throw err`, no change is needed — stop, no action needed.',
+      'Read the catch block. Locate where the new error is created or re-thrown. If it logs/transforms then rethrows the ORIGINAL error (`throw err`), the cause is intact — this is a false positive, stop, no action needed.',
+      'Otherwise add `{ cause: caughtError }` as the second argument to the Error constructor (e.g., `new Error("message", { cause: err })`) so the original error stays in the chain.',
     ],
   },
   EF_UNSAFE_FINALLY: {
     cause:
-      'A finally block contains a throw or return statement that can override the try/catch result, silently discarding errors.',
+      'A finally block contains a control-flow statement (throw, return, break, or continue) that can override the try/catch result, silently discarding errors.',
     think: [
-      'Read the finally block and identify the throw or return statement. If it is a return that provides a meaningful fallback value (documented intent), this may be deliberate — stop, no action needed.',
+      'Read the finally block. The concept\'s only keep is a finally that does pure cleanup (no throw/return). A `return` or `throw` in finally overrides the try/catch outcome and swallows any in-flight error, so it is W even when intended — do not treat "documented fallback" as an escape; proceed to fix.',
       'Remove the return/throw from the finally block. Move it into the try block (for success returns) or catch block (for error re-throws). The finally block should contain only cleanup code (close connections, release resources).',
     ],
   },
   EF_UNOBSERVED_PROMISE_FLOATING: {
     cause: 'A Promise is created but not awaited, returned, or stored, so its rejection will be silently lost.',
     think: [
-      'Read the function call that creates the floating Promise. If the result genuinely does not matter and errors are handled inside the called function, add `void` prefix for clarity (e.g., `void doSomething()`) — stop, no action needed.',
+      'Read the function call that creates the floating Promise. If the result genuinely does not matter AND the callee handles its own errors, mark the discard explicit with a `void` prefix (e.g., `void doSomething()`) — stop. (Bare `void` does NOT restore observability when the callee does not handle its errors — in that case the finding stands; go to the next step.)',
       'If the enclosing function is async, add `await` before the Promise-producing call.',
       'If the enclosing function is sync, either convert it to async and await, or add `.catch(handleError)` to the floating Promise.',
     ],
@@ -208,7 +209,7 @@ export const FIREBAT_CODE_CATALOG = {
   },
   EF_EMPTY_CATCH: {
     cause:
-      'A catch block has no statements, so the caught error is silently swallowed — its observability, propagation and cause are all lost.',
+      'A catch block with no statements (or an empty `.catch(…)` / `.then(_, …)` rejection handler) silently swallows the caught error — its observability, propagation and cause are all lost.',
     think: [
       'Read the catch block and the try body. Decide how the error should be handled: rethrow it (`throw err`), log it, or convert it into a recovery value.',
       'If the failure is genuinely expected and ignorable, make the intent observable in code — bind the error and pass it to a no-op handler, or narrow the try to the single statement that may fail. A comment alone does not restore observability.',

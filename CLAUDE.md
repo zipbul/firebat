@@ -8,6 +8,8 @@ TypeScript 코드 품질 스캐너. 17개 detector.
 
 **관찰 가능한 동작**: side-effect의 종류·횟수·순서, 함수 반환값, 외부로 노출되는 reference identity. 디버거 inspect, stack frame 위치, 변수명을 통한 가독성은 포함하지 않는다.
 
+**정보보존 예외 (형태로 판정, 가독성과 구분)**: RHS가 **bare literal**(매직넘버·비트마스크 등 — `0x3ffc`)인 *형태*일 때에 한해 K다. 리터럴을 치환하면 의미 없는 매직값만 남아 이름이 유일한 정보 전달자가 되기 때문(정보 소실 방지). 이는 RHS 노드 형태로 판정하는 *닫힌 규칙*이지 "의미 있는 이름인가"라는 주관적 가독성 판단이 아니다 — RHS가 표현식(member·연산·캐스트 등: `req.user.id`, `u.role === 'admin'`)이면 치환해도 표현식이 의미를 그대로 담으므로, 이름이 아무리 서술적이어도 단일 사용이면 **항상 W**다.
+
 **판정 절차**: RHS 표현식을 사용처에 치환 (괄호·shorthand 등 의미 보존 syntactic 보정 허용) 시 위 동작이 보존되면 W, 아니면 K.
 
 **대상**: 모든 scope (module / function / block)의 const/let/var 변수 선언과 destructuring binding.
@@ -18,7 +20,7 @@ TypeScript 코드 품질 스캐너. 17개 detector.
 - 함수 파라미터 / class field / enum / namespace / import binding
 - 변수가 아닌 waste (unreachable code, dead branch, unused expression statement, 미사용 import)
 
-**K 예시 (망라 아님)**: closure capture, 타입 narrowing, mutation 시점 snapshot, 자원 핸들 lifetime, 다중 사용처에서의 평가 횟수/순서 보존, await/yield 위치 보존, reference identity 고정 (useEffect 의존성 등), context-sensitive expression (this/super/private).
+**K 예시 (망라 아님)**: closure capture, 타입 narrowing, mutation 시점 snapshot, 자원 핸들 lifetime, 다중 사용처에서의 평가 횟수/순서 보존, await/yield 위치 보존, reference identity 고정 (useEffect 의존성 등), context-sensitive expression (this/super/private), 불투명 bare literal의 명명 (정보보존 — 위 참조).
 
 ## error-flow detector
 
