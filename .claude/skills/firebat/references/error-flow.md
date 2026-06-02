@@ -8,25 +8,25 @@ Detects error handling anti-patterns. Covers throw non-Error (throw & `Promise.r
 
 ## EF_THROW_NON_ERROR
 
-**Cause:** A throw statement throws a value that is not an Error instance, losing stack trace and error chain capabilities.
+**Cause:** A throw (or Promise rejection) of a value that is provably not an Error loses message/stack/cause traceability — the original error information cannot be followed at the handler, even when the value reaches one.
 
 <think>
 
-1. Read the throw statement and identify the thrown value type (string literal, object, number, etc.). If it is already an Error subclass, this is a false positive — **stop, no action needed**.
-2. Wrap the thrown value in a new Error (or a domain-specific Error subclass) using `new Error(message, { cause: originalValue })` to preserve both the stack trace and the original information.
+1. Identify the thrown/rejected value. The detector flags only values it can *prove* are non-Error (a string/number/boolean/template literal, an object or array literal, or a primitive-wrapper call like `String(x)`/`Number(x)`); a member or identifier whose type gildash cannot resolve is given the benefit of the doubt and is NOT flagged. If the value is (or may be) an Error subtype, this is a false positive — **stop, no action needed**.
+2. Wrap the value in a new Error (or a domain-specific Error subclass) using `new Error(message, { cause: originalValue })` to preserve both the stack trace and the original information.
 3. Grep for catch blocks that handle this throw. If they access `.stack` or `.message`, confirm the new Error subclass provides those properties correctly.
 
 </think>
 
 ## EF_PROMISE_CONSTRUCTOR_HYGIENE
 
-**Cause:** The Promise constructor has a hygiene issue: an async executor (thrown errors are swallowed), a throw after the promise is already settled, or swapped resolve/reject params.
+**Cause:** The Promise constructor has a hygiene issue that swallows or misdirects errors: an async executor (thrown errors never reject), a throw after the promise is already settled (no-op), or swapped resolve/reject parameters.
 
 <think>
 
-1. Read the Promise constructor call. If the enclosing function is already async, replace `return new Promise(...)` with direct async/await logic and remove the constructor entirely.
-2. If the Promise wraps a callback-based API (e.g., `fs.readFile` with callback), the constructor is justified — fix only the specific hygiene issue (async executor → sync executor, swapped params → correct order) — **stop, no action needed** for the constructor itself.
-3. If none of the above, convert to an async function with try/catch to eliminate the Promise constructor.
+1. For an async executor, move the async work out of the executor: await it and call resolve/reject from a surrounding async function, or drop the constructor entirely in favor of async/await.
+2. For a throw after settle, move the throw before the resolve/reject call (so it converts to a rejection), or call reject(err) instead of throwing.
+3. For swapped parameters, restore the conventional `(resolve, reject)` order so rejections are delivered through the reject callback.
 
 </think>
 
@@ -36,14 +36,14 @@ Detects error handling anti-patterns. Covers throw non-Error (throw & `Promise.r
 
 <think>
 
-1. Read the catch block. Locate where the new error is created or re-thrown.
-2. Add `{ cause: caughtError }` as the second argument to the Error constructor (e.g., `new Error("message", { cause: err })`). If the error is re-thrown with `throw err`, no change is needed — **stop, no action needed**.
+1. Read the catch block. Locate where the new error is created or re-thrown. If it logs/transforms then rethrows the ORIGINAL error (`throw err`), the cause is intact — this is a false positive, **stop, no action needed**.
+2. Otherwise add `{ cause: caughtError }` as the second argument to the Error constructor (e.g., `new Error("message", { cause: err })`) so the original error stays in the chain.
 
 </think>
 
 ## EF_EMPTY_CATCH
 
-**Cause:** A catch block has no statements (or an empty `.catch(…)` / `.then(_, …)` rejection handler), so the caught error is silently swallowed — its observability, propagation and cause are all lost.
+**Cause:** A catch block with no statements (or an empty `.catch(…)` / `.then(_, …)` rejection handler) silently swallows the caught error — its observability, propagation and cause are all lost.
 
 <think>
 
@@ -55,11 +55,11 @@ Detects error handling anti-patterns. Covers throw non-Error (throw & `Promise.r
 
 ## EF_UNSAFE_FINALLY
 
-**Cause:** A finally block contains a throw or return statement that can override the try/catch result, silently discarding errors.
+**Cause:** A finally block contains a control-flow statement (throw, return, break, or continue) that can override the try/catch result, silently discarding errors.
 
 <think>
 
-1. Read the finally block and identify the throw or return statement. If it is a return that provides a meaningful fallback value (documented intent), this may be deliberate — **stop, no action needed**.
+1. Read the finally block. The concept's only keep is a finally that does pure cleanup (no throw/return). A `return` or `throw` in finally overrides the try/catch outcome and swallows any in-flight error, so it is W even when intended — do not treat "documented fallback" as an escape; proceed to fix.
 2. Remove the return/throw from the finally block. Move it into the try block (for success returns) or catch block (for error re-throws). The finally block should contain only cleanup code (close connections, release resources).
 
 </think>
@@ -70,7 +70,7 @@ Detects error handling anti-patterns. Covers throw non-Error (throw & `Promise.r
 
 <think>
 
-1. Read the function call that creates the floating Promise. If the result genuinely does not matter and errors are handled inside the called function, add `void` prefix for clarity (e.g., `void doSomething()`) — **stop, no action needed**.
+1. Read the function call that creates the floating Promise. If the result genuinely does not matter AND the callee handles its own errors, mark the discard explicit with a `void` prefix (e.g., `void doSomething()`) — **stop**. (Bare `void` does NOT restore observability when the callee does not handle its errors — in that case the finding stands; go to the next step.)
 2. If the enclosing function is async, add `await` before the Promise-producing call.
 3. If the enclosing function is sync, either convert it to async and await, or add `.catch(handleError)` to the floating Promise.
 
