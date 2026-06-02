@@ -2302,4 +2302,24 @@ describe('error-flow/analyzer', () => {
     // Assert
     expect(hits.length).toBe(1);
   });
+
+  it('two-arg `.then(onFulfilled, onRejected)`: real handler = K, empty handler = W (non-vacuous contrast)', async () => {
+    // Regression lock: the two-arg `.then` form delivers rejections to onRejected. A REAL onRejected
+    // observes the rejection (K); an EMPTY one swallows it (W). Uses a proven-thenable gildash so the
+    // rejection-handler path is actually exercised (with the noop gildash it would pass vacuously).
+    const filePath = '/virtual/src/features/then-two-arg.ts';
+    const realHandler = [
+      'export function f(p: Promise<number>): void {',
+      '  p.then(v => v + 1, e => console.error(e));',
+      '}',
+    ].join('\n');
+    const emptyHandler = ['export function f(p: Promise<number>): void {', '  p.then(v => v + 1, () => {});', '}'].join('\n');
+    // Act — gildash proves `p` is thenable so the empty-rejection path runs
+    const realFindings = await analyzeWithSemantic(filePath, realHandler, () => true);
+    const emptyFindings = await analyzeWithSemantic(filePath, emptyHandler, () => true);
+
+    // Assert — real onRejected observes the rejection (no empty-catch); empty onRejected swallows (exactly one)
+    expect(realFindings.some(f => f.kind === 'empty-catch')).toBe(false);
+    expect(emptyFindings.filter(f => f.kind === 'empty-catch').length).toBe(1);
+  });
 });

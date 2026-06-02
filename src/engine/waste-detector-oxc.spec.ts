@@ -527,4 +527,43 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
 
     expect(result.length).toBe(0);
   });
+
+  // ── redundant-binding W/K boundary locks (concept-aligned; pin the inline-vs-keep edges) ──
+  const isRb = (label: string) => (r: { kind: string; label: string }) => r.kind === 'redundant-binding' && r.label === label;
+
+  it('redundant-binding - bare-literal single-use - NOT flagged (information-preservation; name is sole documentation)', () => {
+    const f = toFile('/lit.ts', 'const FLAG = 0x3ffc;\nexport function f(x: number) { return x & FLAG; }');
+
+    expect(detectWasteOxc([f]).some(isRb('FLAG'))).toBe(false);
+  });
+
+  it('redundant-binding - computed-arith single-use - flagged W (expression self-documents)', () => {
+    const f = toFile('/arith.ts', 'export function f(x: number) { const y = 1 + 1; return x * y; }');
+
+    expect(detectWasteOxc([f]).some(isRb('y'))).toBe(true);
+  });
+
+  it('redundant-binding - `as const` RHS single-use - NOT flagged', () => {
+    const f = toFile('/asconst.ts', 'export function f() { const x = [1, 2] as const; return x.length; }');
+
+    expect(detectWasteOxc([f]).some(isRb('x'))).toBe(false);
+  });
+
+  it('redundant-binding - `satisfies` object RHS single-use - NOT flagged', () => {
+    const f = toFile('/sat.ts', 'export function f() { const o = { a: 1 } satisfies Record<string, number>; return o.a; }');
+
+    expect(detectWasteOxc([f]).some(isRb('o'))).toBe(false);
+  });
+
+  it('redundant-binding - non-null `!` member RHS single-use - flagged W', () => {
+    const f = toFile('/nonnull.ts', 'export function f(obj: { a?: number }) { const v = obj.a!; return v + 1; }');
+
+    expect(detectWasteOxc([f]).some(isRb('v'))).toBe(true);
+  });
+
+  it('redundant-binding - optional-chain RHS single-use - NOT flagged (branch-dependent, conservative)', () => {
+    const f = toFile('/optchain.ts', 'export function f(obj?: { a: number }) { const a = obj?.a; return a; }');
+
+    expect(detectWasteOxc([f]).some(isRb('a'))).toBe(false);
+  });
 });
