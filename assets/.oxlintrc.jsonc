@@ -33,6 +33,9 @@
     "default-param-last": "error",
     "no-self-compare": "error",
     "no-loop-func": "error",
+    // Switch fall-through is owned by tsc `noFallthroughCasesInSwitch`; off here to
+    // avoid duplicate findings across the typecheck and lint detectors.
+    "no-fallthrough": "off",
     "typescript/no-empty-object-type": [
       "error",
       {
@@ -60,7 +63,8 @@
     "typescript/no-unsafe-return": "error",
     "typescript/no-unsafe-type-assertion": "error",
     "typescript/non-nullable-type-assertion-style": "error",
-    "typescript/only-throw-error": "error",
+    // Non-Error throws are owned by the error-flow detector (EF_THROW_NON_ERROR); off here.
+    "typescript/only-throw-error": "off",
     "typescript/prefer-includes": "error",
     "typescript/prefer-nullish-coalescing": "error",
     "typescript/prefer-optional-chain": "error",
@@ -72,7 +76,7 @@
     "typescript/require-await": "error",
     "typescript/restrict-plus-operands": "error",
     "typescript/return-await": "off",
-    "typescript/use-unknown-in-catch-callback-variable": "off",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
     "no-unused-vars": [
       "error",
       {
@@ -93,8 +97,10 @@
     "promise/prefer-catch": "off",
     "promise/prefer-await-to-then": "off",
     "promise/valid-params": "error",
-    "promise/no-callback-in-promise": "error",
-    "import/no-cycle": "error",
+    // Callback-in-promise is owned by the error-flow detector (EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE); off here.
+    "promise/no-callback-in-promise": "off",
+    // Import cycles are owned by the dependencies detector (circular-dependency); off here.
+    "import/no-cycle": "off",
     "import/no-commonjs": "error",
     "import/no-amd": "error",
     "import/no-dynamic-require": "error",
@@ -241,8 +247,10 @@
   "ignorePatterns": [
     "node_modules",
     "**/node_modules/**",
+    "**/*.d.ts",
     "dist",
     "**/dist/**",
-    "**/*.d.ts",
+    "**/__fixtures__/**",
+    "commitlint.config.cjs",
   ],
 }

@@ -13,12 +13,16 @@
     "strictPropertyInitialization": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": false,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    // Unused locals/params are owned by oxlint's `no-unused-vars` (it honors the
+    // `^_` ignore convention; tsc has no ignore pattern). Kept off here to avoid
+    // duplicate findings across the typecheck and lint detectors.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
     "noImplicitOverride": true,
     "verbatimModuleSyntax": true
   },
