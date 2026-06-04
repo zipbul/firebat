@@ -89,7 +89,7 @@ const printHelp = (): void => {
     `  ${hc('DETECTORS', `${H.bold}${H.yellow}`, c)}`,
     '',
     `    waste, nesting, early-return,`,
-    `    indirection, barrel, unknown-proof,`,
+    `    indirection, barrel,`,
     `    error-flow, lint, format, typecheck, dependencies, coupling,`,
     `    temporal-coupling,`,
     `    variable-lifetime,`,
@@ -116,7 +116,6 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
   const all: ReadonlyArray<FirebatDetector> = [
     'waste',
     'barrel',
-    'unknown-proof',
     'error-flow',
     'format',
     'lint',

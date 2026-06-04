@@ -224,56 +224,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Add `await` before the returned expression (change `return fetchData()` to `return await fetchData()`) so that rejections are caught by the surrounding catch block.',
     ],
   },
-  UNKNOWN_UNNARROWED: {
-    cause: "A value of type 'unknown' is used without narrowing, meaning no runtime type check guards the access.",
-    think: [
-      'Read the code where the unknown value is used. Trace its origin — catch clause (`catch (e)`), external API response, generic parameter, or JSON.parse result.',
-      'Add a type guard before the usage site: `typeof` for primitives, `instanceof` for class instances, or a schema validator (e.g., zod) for complex objects. If the value comes from a catch clause, narrow with `if (e instanceof Error)`.',
-      'If multiple usage sites exist for the same unknown value, add a single validation function at the entry point and reuse the narrowed result downstream.',
-    ],
-  },
-  UNKNOWN_INFERRED: {
-    cause: "TypeScript infers 'unknown' for a value where a more specific type was likely intended.",
-    think: [
-      'Read the declaration site. Identify why TypeScript infers unknown: missing return type annotation on a function, untyped third-party import, or insufficient generic constraints.',
-      'Add an explicit type annotation at the declaration site (e.g., `const result: ExpectedType = ...`). Run the type checker — if it reports a mismatch, the annotation reveals a real bug.',
-    ],
-  },
-  UNKNOWN_ANY_INFERRED: {
-    cause: "TypeScript infers 'any' for a value, disabling type checking for all downstream usage.",
-    think: [
-      'Read the declaration and identify the `any` source: untyped import (add `@types/` package or declare module), `JSON.parse` result (add `as Type` or validate with schema), catch clause (use `unknown` instead), or missing generic parameter.',
-      'Add a type annotation at the root source. Grep for downstream usages of this variable — each one is currently unchecked and may hide bugs.',
-      'After adding the annotation, run the type checker. Any new errors indicate places where the code relied on the implicit `any` bypass.',
-    ],
-  },
-  UNKNOWN_ANY_CAST: {
-    cause: "An explicit 'as any' cast removes type safety, allowing any operation on the value without type checking.",
-    think: [
-      'Read the `as any` cast site. If it works around a missing type definition for a third-party library, add proper types (`@types/` package or local declaration file) and remove the cast.',
-      'If it works around a type error in your own code, fix the underlying type mismatch instead. Replace `as any` with a specific type assertion (`as SpecificType`) if a cast is truly needed.',
-      'If the cast is unavoidable at a system boundary, minimize its scope — cast in a single wrapper function and return a typed result so `any` does not propagate.',
-    ],
-  },
-  UNKNOWN_DOUBLE_CAST: {
-    cause:
-      "A double assertion (e.g. `x as unknown as T`) bypasses TypeScript's type safety by casting through an intermediate type.",
-    think: [
-      'Read the double assertion and the types involved. If `x` and `T` are structurally incompatible, this masks a genuine type mismatch — investigate why the code needs this value as type `T`.',
-      'Try replacing the double assertion with a type guard (`if (isT(x))`) or a generic constraint. If neither works, add an interface that both types satisfy and use a single assertion.',
-      'If the cast is at a system boundary (FFI, serialization), isolate it in a typed wrapper function and document why the assertion is safe.',
-    ],
-  },
-  UNKNOWN_NON_NULL_ASSERTION: {
-    cause:
-      'A non-null assertion (`x!`) tells TypeScript the value is non-null/undefined without any runtime check. If the assertion is wrong, the code crashes with a TypeError at runtime instead of being caught by the compiler.',
-    think: [
-      'Read why the value might be nullish. If TypeScript inferred a `T | null` or `T | undefined`, the assertion is silencing a real possibility — narrow it with `if (x != null)` or `x ?? default` instead.',
-      'For Map/Array lookups (`map.get(k)!`, `arr[i]!`), prefer an explicit check or use a default-providing helper. The runtime error from a wrong assertion loses the context that a type guard would surface.',
-      'When the upstream type definition is wrong, fix that type rather than asserting at every call site — a single corrected type eliminates all the assertions.',
-    ],
-  },
-
   DEP_LAYER_VIOLATION: {
     cause: 'A module imports from a layer that the architecture rules prohibit, breaking the intended dependency direction.',
     think: [

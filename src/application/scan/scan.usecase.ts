@@ -15,7 +15,6 @@ import type {
   MutationDensityFinding,
   NestingKind,
   ScopeNarrowingFinding,
-  UnknownProofFindingKind,
   VariableLifetimeFinding,
   WasteKind,
 } from '../..';
@@ -38,7 +37,6 @@ import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
-import { analyzeUnknownProof, createEmptyUnknownProof } from '../../features/unknown-proof';
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
@@ -215,14 +213,6 @@ const ERROR_FLOW_KIND_TO_CODE: Record<Exclude<ErrorFlowFindingKind, 'tool-unavai
   'no-callback-in-promise': 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE',
   'empty-catch': 'EF_EMPTY_CATCH',
 };
-const UNKNOWN_PROOF_KIND_TO_CODE: Record<Exclude<UnknownProofFindingKind, 'tool-unavailable'>, FirebatCatalogCode> = {
-  'unknown-type': 'UNKNOWN_UNNARROWED',
-  'unknown-inferred': 'UNKNOWN_INFERRED',
-  'any-inferred': 'UNKNOWN_ANY_INFERRED',
-  'any-cast': 'UNKNOWN_ANY_CAST',
-  'double-cast': 'UNKNOWN_DOUBLE_CAST',
-  'non-null-assertion': 'UNKNOWN_NON_NULL_ASSERTION',
-};
 const INDIRECTION_KIND_TO_CODE: Readonly<Record<IndirectionFindingKind, FirebatCatalogCode>> = {
   'thin-wrapper': 'IND_THIN_WRAPPER',
   'forward-chain': 'IND_FORWARD_CHAIN',
@@ -336,24 +326,6 @@ const enrichErrorFlow = (items: ReadonlyArray<any>, toProjectRelative: ToProject
         file: enrichFilePath(toProjectRelative, filePath),
         span: item?.span,
         evidence: item?.evidence,
-      };
-    });
-
-const enrichUnknownProof = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
-  items
-    .filter((item: any) => item?.kind !== 'tool-unavailable')
-    .map(item => {
-      const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
-
-      return {
-        kind,
-        code: (UNKNOWN_PROOF_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
-        file: enrichFilePath(toProjectRelative, filePath),
-        span: item?.span,
-        symbol: item?.symbol,
-        evidence: item?.evidence,
-        typeText: item?.typeText,
       };
     });
 
@@ -713,7 +685,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   // gildash's getFileBindings (tsc-authoritative), which requires the
   // semantic layer to be active.
   const needsSemantic =
-    options.detectors.includes('unknown-proof') ||
     options.detectors.includes('error-flow') ||
     options.detectors.includes('typecheck') ||
     options.detectors.includes('waste') ||
@@ -816,8 +787,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.debug('Fix mode tools', { shouldRunFormat, shouldRunLint });
 
     type BarrelResult = ReturnType<typeof createEmptyBarrel>;
-
-    type UnknownProofResult = ReturnType<typeof createEmptyUnknownProof>;
 
     type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
 
@@ -934,39 +903,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           return r;
         })()
       : Promise.resolve(createEmptyBarrel());
-    const unknownProof: UnknownProofResult = (() => {
-      if (!options.detectors.includes('unknown-proof')) {
-        return createEmptyUnknownProof();
-      }
-
-      const t0 = nowMs();
-      const detectorKey = 'unknown-proof';
-
-      logger.info('detector: start', { detector: detectorKey });
-
-      try {
-        const result = analyzeUnknownProof(program, {
-          rootAbs: ctx.rootAbs,
-          ...(semanticAvailable ? { gildash } : {}),
-        });
-
-        detectorTimings[detectorKey] = nowMs() - t0;
-
-        logger.debug('detector: complete', { detector: detectorKey, durationMs: Math.round(detectorTimings[detectorKey]!) });
-
-        return result;
-      } catch (err) {
-        detectorTimings[detectorKey] = nowMs() - t0;
-
-        const message = err instanceof Error ? err.message : String(err);
-
-        metaErrors[detectorKey] = message;
-
-        const partial = (err as { partial?: unknown })?.partial;
-
-        return Array.isArray(partial) ? (partial as UnknownProofResult) : createEmptyUnknownProof();
-      }
-    })();
     const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
       ? (async (): Promise<TypecheckResult | null> => {
           const t0 = nowMs();
@@ -1271,7 +1207,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     const analyses: FirebatReport['analyses'] = {
       ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste, toProjectRelative) } : {}),
       ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel, toProjectRelative) } : {}),
-      ...(selectedDetectors.has('unknown-proof') ? { 'unknown-proof': enrichUnknownProof(unknownProof, toProjectRelative) } : {}),
       ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow, toProjectRelative) } : {}),
       ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format, toProjectRelative) } : {}),
       ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),

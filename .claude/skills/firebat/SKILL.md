@@ -92,7 +92,7 @@ Note: `firebat-reviewer` was removed — `verify-plan.sh` is authoritative for C
 <category-priority>
 1. dependencies   2. coupling   3. error-flow
 4. nesting / early-return / collapsible-if   5. waste
-6. barrel / unknown-proof / indirection
+6. barrel / indirection
 7. variable-lifetime / temporal-coupling / giant-file
 8. duplicates   9. lint / format / typecheck
 </category-priority>
@@ -106,7 +106,6 @@ Sub-agents fetch per-code reference via `bash .claude/skills/firebat/scripts/ext
 | barrel | `references/barrel.md` |
 | indirection | `references/indirection.md` |
 | error-flow | `references/error-flow.md` |
-| unknown-proof | `references/unknown-proof.md` |
 | dependencies | `references/dependencies.md` |
 | nesting | `references/nesting.md` |
 | early-return | `references/early-return.md` |

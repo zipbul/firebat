@@ -54,7 +54,7 @@ Work through this reasoning internally before writing the plan file. Do NOT outp
 5. Identify cross-directory coupling: `duplicates` findings with secondary entries in other directories — determine the sharing strategy (extract helper, which directory owns the helper, how secondary directories reference it).
 6. Read already-reviewed-pass child plans. Note any locked decisions (helper file paths, shared type locations). Do not contradict them.
 7. Identify structural problems (SRP/architecture/structure) ONLY if they produced findings. Do not invent problems.
-8. Order steps by category priority: 1.dependencies → 2.coupling → 3.error-flow → 4.nesting/early-return/collapsible-if → 5.waste → 6.barrel/unknown-proof/indirection → 7.variable-lifetime/temporal-coupling/giant-file → 8.duplicates → 9.lint/format/typecheck
+8. Order steps by category priority: 1.dependencies → 2.coupling → 3.error-flow → 4.nesting/early-return/collapsible-if → 5.waste → 6.barrel/indirection → 7.variable-lifetime/temporal-coupling/giant-file → 8.duplicates → 9.lint/format/typecheck
 </thinking-phase>
 
 <output-contract>
@@ -123,7 +123,7 @@ finding_count: <primary count from tree.json>
 
 ### <finding-id>
 
-- **category**: waste | barrel | indirection | error-flow | unknown-proof | dependencies | nesting | early-return | collapsible-if | coupling | duplicates | temporal-coupling | variable-lifetime | giant-file | lint | format | typecheck
+- **category**: waste | barrel | indirection | error-flow | dependencies | nesting | early-return | collapsible-if | coupling | duplicates | temporal-coupling | variable-lifetime | giant-file | lint | format | typecheck
 - **code**: <the `code` field from the finding, e.g., WASTE_DEAD_STORE>
 - **location**: <file>:<line> — if span is 0,0,0,0 write `<file> (file-scope)`
 - **root_cause**: 1-2 sentence cause grounded in the actual code (not restated from finding kind)
@@ -255,7 +255,7 @@ finding_count: 3
 - **fix_action**: Remove `case 'MemberExpression':` block (lines 142-148) from `visitNode`. Delete the accompanying local variable `memberTemp` initialized at line 144. Verify no other references to `memberTemp` in the file.
 - **verification**: `bun test src/engine/ast/visitor.spec.ts` passes, and `bun dist/firebat.js --log-level error | jq '.analyses.waste[] | select(.file == "src/engine/ast/visitor.ts")' | jq -s 'length'` returns 0 (or drops by 2 if batched with waste-5).
 - **rollback_trigger**: If visitor.spec.ts has a test targeting MemberExpression visit that fails after removal, revert and investigate whether the guard at line 140 is actually unsound.
-- **new_finding_risk**: Low. Removing dead code rarely creates new findings. Possible: UNKNOWN_PROOF if `memberTemp` had type narrowing that now moves elsewhere.
+- **new_finding_risk**: Low. Removing dead code rarely creates new findings. Possible: a WASTE redundant-binding if `memberTemp` had type narrowing that now moves elsewhere.
 
 ### waste-5
 - **category**: waste

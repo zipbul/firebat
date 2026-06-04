@@ -154,7 +154,7 @@ declare -A CAT_PRIORITY=(
   ["dependencies"]=1 ["coupling"]=2 ["error-flow"]=3
   ["nesting"]=4 ["early-return"]=4 ["collapsible-if"]=4
   ["waste"]=5
-  ["barrel"]=6 ["unknown-proof"]=6 ["indirection"]=6
+  ["barrel"]=6 ["indirection"]=6
   ["variable-lifetime"]=7 ["temporal-coupling"]=7 ["giant-file"]=7
   ["duplicates"]=8
   ["lint"]=9 ["format"]=9 ["typecheck"]=9
@@ -180,7 +180,7 @@ if [[ "$ORDER_OK" == "true" ]]; then
 else
   set_check "C4" "false" "out-of-order: $ORDER_VIOLATION"
   add_feedback "C4" "Step categories not in priority order: $ORDER_VIOLATION" \
-    "Reorder Steps: dependencies(1) > coupling(2) > error-flow(3) > nesting/early-return/collapsible-if(4) > waste(5) > barrel/unknown-proof/indirection(6) > variable-lifetime/temporal-coupling/giant-file(7) > duplicates(8) > lint/format/typecheck(9)"
+    "Reorder Steps: dependencies(1) > coupling(2) > error-flow(3) > nesting/early-return/collapsible-if(4) > waste(5) > barrel/indirection(6) > variable-lifetime/temporal-coupling/giant-file(7) > duplicates(8) > lint/format/typecheck(9)"
 fi
 
 # ============================================================

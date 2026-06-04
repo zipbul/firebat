@@ -1,6 +1,6 @@
 # firebat
 
-TypeScript 코드 품질 스캐너. 17개 detector.
+TypeScript 코드 품질 스캐너. 16개 detector.
 
 ## waste detector
 

@@ -496,24 +496,6 @@ describe('flattenToFindings: labels by category', () => {
     ).toBe("throw 'oops'");
   });
 
-  it('unknown-proof label: symbol + evidence', () => {
-    expect(
-      firstFinding({
-        'unknown-proof': [
-          {
-            kind: 'unknown-type',
-            code: 'UNKNOWN_UNNARROWED',
-            file: 'a.ts',
-            span: span(1),
-            symbol: 'result',
-            evidence: 'result.foo',
-            typeText: 'unknown',
-          } as any,
-        ],
-      }).label,
-    ).toBe('result: result.foo');
-  });
-
   it('indirection label: header + depth', () => {
     expect(
       firstFinding({
@@ -827,27 +809,6 @@ describe('flattenToFindings: function name injection', () => {
         fnMap,
       ).label,
     ).toBe("throw 'x' in processData()");
-  });
-
-  it('injects function name into unknown-proof label', () => {
-    expect(
-      firstFinding(
-        {
-          'unknown-proof': [
-            {
-              kind: 'unknown-type',
-              code: 'UNKNOWN_UNNARROWED',
-              file: 'src/a.ts',
-              span: span(10),
-              symbol: 'result',
-              evidence: 'result.x',
-              typeText: 'unknown',
-            } as any,
-          ],
-        },
-        fnMap,
-      ).label,
-    ).toBe('result: result.x in processData()');
   });
 
   it('picks innermost function for nested functions', () => {

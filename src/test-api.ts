@@ -23,7 +23,6 @@ export { analyzeGiantFile } from './features/giant-file';
 export { analyzeLint } from './features/lint';
 export { analyzeNesting } from './features/nesting';
 export { analyzeTemporalCoupling } from './features/temporal-coupling';
-export { analyzeUnknownProof } from './features/unknown-proof';
 export { analyzeVariableLifetime } from './features/variable-lifetime';
 export { detectWaste } from './features/waste';
 export { analyzeDuplicates } from './features/duplicates';
@@ -43,7 +42,7 @@ export type { ParsedFile } from './engine/types';
 // ---------------------------------------------------------------------------
 // Types  (Phase 3 에서 shared/ 이동 가능)
 // ---------------------------------------------------------------------------
-export type { DuplicateGroup, TypecheckItem, UnknownProofFinding, WasteFinding, FirebatReport } from './types';
+export type { DuplicateGroup, TypecheckItem, WasteFinding, FirebatReport } from './types';
 
 // ---------------------------------------------------------------------------
 // Application — scan  (Phase 2 에서 pipeline 으로 전환 예정)

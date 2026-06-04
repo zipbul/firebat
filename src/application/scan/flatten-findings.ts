@@ -190,14 +190,6 @@ const labelErrorFlow: LabelFn = (f, fn) => {
   return withFunc(base, fn);
 };
 
-const labelUnknownProof: LabelFn = (f, fn) => {
-  const symbol = f.symbol ? String(f.symbol) : '';
-  const evidence = String(f.evidence ?? '');
-  const base = symbol && evidence ? `${symbol}: ${evidence}` : symbol || evidence || String(f.kind ?? 'unknown');
-
-  return withFunc(base, fn);
-};
-
 const labelIndirection: LabelFn = (f, _fn) => {
   const header = String(f.header ?? '');
   const depth = f.depth;
@@ -323,7 +315,6 @@ const LABEL_BY_CATEGORY: Readonly<Record<string, LabelFn>> = {
   'early-return': labelEarlyReturn,
   'collapsible-if': labelCollapsibleIf,
   'error-flow': labelErrorFlow,
-  'unknown-proof': labelUnknownProof,
   indirection: labelIndirection,
   coupling: labelCoupling,
   dependencies: labelDependency,

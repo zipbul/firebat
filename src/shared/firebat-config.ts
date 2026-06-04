@@ -64,7 +64,6 @@ interface FirebatFeaturesConfig {
   readonly duplicates?: FeatureToggle<FirebatDuplicatesConfig> | undefined;
   readonly waste?: boolean | undefined;
   readonly barrel?: FeatureToggle<FirebatBarrelConfig> | undefined;
-  readonly 'unknown-proof'?: boolean | undefined;
   readonly 'error-flow'?: boolean | undefined;
   readonly format?: boolean | undefined;
   readonly lint?: boolean | undefined;
@@ -117,7 +116,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        'unknown-proof': z.boolean().optional(),
         'error-flow': z.boolean().optional(),
         format: z.boolean().optional(),
         lint: z.boolean().optional(),

@@ -606,48 +606,6 @@ exit 7
     }
   });
 
-  it('should expose unknown-proof findings as a bare array with file+code and no wrapper fields', async () => {
-    // Arrange
-    const project = await createScanProjectFixture(
-      'firebat-report-contract-unknown-proof-bare-array',
-      ['export function anyCase() {', '  const data = JSON.parse("{}");', '  return data;', '}'].join('\n'),
-    );
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['unknown-proof'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
-      // Assert
-      const findings = report.analyses['unknown-proof'] as any;
-
-      expect(Array.isArray(findings)).toBe(true);
-
-      // gildash semantic may not be available; findings may be empty
-      if ((findings as any[]).length > 0) {
-        const anyInferred = (findings as any[]).find(f => f?.kind === 'any-inferred');
-
-        expect(anyInferred).toBeDefined();
-        expect(typeof anyInferred?.file).toBe('string');
-        expect(anyInferred?.filePath).toBeUndefined();
-        expect(anyInferred?.status).toBeUndefined();
-        expect(anyInferred?.tool).toBeUndefined();
-      }
-    } finally {
-      await project.dispose();
-    }
-  });
-
   it('should expose indirection findings as a bare array with file+code and no wrapper fields', async () => {
     // Arrange
     const project = await createScanProjectFixtureWithFiles('firebat-report-contract-indirection-bare-array', {

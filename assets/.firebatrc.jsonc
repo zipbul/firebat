@@ -55,7 +55,6 @@
     "indirection": { "maxForwardDepth": 0 },
 
     // Unknown-proof checks (propagation-only). Optional boundaryGlobs can restrict boundary matching.
-    "unknown-proof": true,
 
     // --- Phase 1 detectors (IMPROVE.md) ---
 

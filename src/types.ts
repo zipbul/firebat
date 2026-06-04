@@ -3,7 +3,6 @@ export type MinSizeOption = number | 'auto';
 export type FirebatDetector =
   | 'waste'
   | 'barrel'
-  | 'unknown-proof'
   | 'error-flow'
   | 'format'
   | 'lint'
@@ -70,13 +69,6 @@ export type FirebatCatalogCode =
   | 'EF_UNOBSERVED_PROMISE_VARIABLE'
   | 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE'
   | 'EF_EMPTY_CATCH'
-  // unknown-proof (5)
-  | 'UNKNOWN_UNNARROWED'
-  | 'UNKNOWN_INFERRED'
-  | 'UNKNOWN_ANY_INFERRED'
-  | 'UNKNOWN_ANY_CAST'
-  | 'UNKNOWN_DOUBLE_CAST'
-  | 'UNKNOWN_NON_NULL_ASSERTION'
   // indirection (5)
   | 'IND_THIN_WRAPPER'
   | 'IND_FORWARD_CHAIN'
@@ -540,26 +532,6 @@ export interface TypecheckItem {
   readonly catalogCode?: FirebatCatalogCode;
 }
 
-export type UnknownProofFindingKind =
-  | 'tool-unavailable'
-  | 'unknown-type'
-  | 'unknown-inferred'
-  | 'any-inferred'
-  | 'any-cast'
-  | 'double-cast'
-  | 'non-null-assertion';
-
-export interface UnknownProofFinding {
-  readonly kind: UnknownProofFindingKind;
-  readonly message: string;
-  readonly filePath: string;
-  readonly span: SourceSpan;
-  readonly code?: FirebatCatalogCode;
-  readonly symbol?: string;
-  readonly evidence?: string;
-  readonly typeText?: string;
-}
-
 export interface CatalogEntry {
   readonly cause: string;
   readonly think: ReadonlyArray<string>;
@@ -642,7 +614,6 @@ export interface GiantFileFinding {
 export interface FirebatAnalyses {
   readonly waste: ReadonlyArray<WasteFinding>;
   readonly barrel: ReadonlyArray<BarrelFinding>;
-  readonly 'unknown-proof': ReadonlyArray<UnknownProofFinding>;
   readonly 'error-flow': ReadonlyArray<ErrorFlowFinding>;
   readonly format: ReadonlyArray<FormatFinding>;
   readonly lint: ReadonlyArray<LintDiagnostic>;
