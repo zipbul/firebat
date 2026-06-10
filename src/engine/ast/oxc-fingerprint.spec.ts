@@ -3,7 +3,7 @@ import type { Node } from 'oxc-parser';
 import { describe, expect, it } from 'bun:test';
 
 import { collectOxcNodes } from './oxc-ast-utils';
-import { createOxcFingerprintExact, createOxcFingerprintShape } from './oxc-fingerprint';
+import { createOxcFingerprintExact, createOxcFingerprintNormalized, createOxcFingerprintShape } from './oxc-fingerprint';
 import { parseSource } from './parse-source';
 
 const shapeOfFirstFunction = (source: string): string => {
@@ -97,5 +97,23 @@ describe('engine/ast/oxc-fingerprint', () => {
     expect(shapeOfFirstFunction('function f(p) { return { p: 1 }; }')).not.toBe(
       shapeOfFirstFunction('function f(q) { return { q: 1 }; }'),
     );
+  });
+
+  it('should give an interface and a type alias with the same members one normalized fingerprint', () => {
+    const iface = parseSource('/v/i.ts', 'interface X { id: string; active: boolean; }');
+    const alias = parseSource('/v/t.ts', 'type X = { id: string; active: boolean; };');
+    const ifaceNode = collectOxcNodes(iface.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
+    const aliasNode = collectOxcNodes(alias.program, (n: Node) => n.type === 'TSTypeAliasDeclaration')[0]!;
+
+    expect(createOxcFingerprintNormalized(ifaceNode)).toBe(createOxcFingerprintNormalized(aliasNode));
+  });
+
+  it('should distinguish contracts whose member order differs', () => {
+    const a = parseSource('/v/a.ts', 'interface X { x: number; y: number; }');
+    const b = parseSource('/v/b.ts', 'interface X { y: number; x: number; }');
+    const an = collectOxcNodes(a.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
+    const bn = collectOxcNodes(b.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
+
+    expect(createOxcFingerprintNormalized(an)).not.toBe(createOxcFingerprintNormalized(bn));
   });
 });

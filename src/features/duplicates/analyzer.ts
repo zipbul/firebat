@@ -112,7 +112,128 @@ export const analyzeDuplicates = (
 
   result.push(...fragmentGroups);
 
+  // ── 규칙 데이터(매핑·룩업 테이블) 클론 ──────────────────────────────────────
+  result.push(...detectDataTableClones(uniqueFiles, minSize));
+
   return filterSubsumedGroups(result);
+};
+
+// ─── 규칙 데이터 클론 ─────────────────────────────────────────────────────────
+
+/** 값이 정적(리터럴·정적 객체/배열)인지 — 변수 참조·호출이 있으면 데이터 규칙이 아니다 */
+const isStaticValue = (node: Node): boolean => {
+  if (node.type === 'Literal') {
+    return true;
+  }
+
+  if (node.type === 'UnaryExpression') {
+    const arg = (node as Node & { readonly argument: Node }).argument;
+
+    return arg.type === 'Literal';
+  }
+
+  if (node.type === 'ObjectExpression') {
+    return (node as Node & { readonly properties: ReadonlyArray<Node> }).properties.every(isStaticProperty);
+  }
+
+  if (node.type === 'ArrayExpression') {
+    return (node as Node & { readonly elements: ReadonlyArray<Node | null> }).elements.every(
+      el => el !== null && isStaticValue(el),
+    );
+  }
+
+  return false;
+};
+
+const isStaticProperty = (prop: Node): boolean => {
+  if (prop.type !== 'Property') {
+    return false;
+  }
+
+  const p = prop as Node & { readonly computed: boolean; readonly value: Node };
+
+  return !p.computed && isStaticValue(p.value);
+};
+
+const isDataTableDeclarator = (node: Node): boolean => {
+  if (node.type !== 'VariableDeclarator') {
+    return false;
+  }
+
+  const init = (node as Node & { readonly init: Node | null }).init;
+
+  if (init === null) {
+    return false;
+  }
+
+  // 모든 값이 정적인 매핑/룩업 테이블만 — 계산된 객체(변수 참조 포함)는 데이터 규칙이 아님
+  if (init.type === 'ObjectExpression') {
+    const props = (init as Node & { readonly properties: ReadonlyArray<Node> }).properties;
+
+    return props.length >= 2 && props.every(isStaticProperty);
+  }
+
+  if (init.type === 'ArrayExpression') {
+    const elements = (init as Node & { readonly elements: ReadonlyArray<Node | null> }).elements;
+
+    return elements.length >= 2 && elements.every(el => el !== null && isStaticValue(el));
+  }
+
+  return false;
+};
+
+/**
+ * 규칙 데이터(매핑·룩업 테이블)의 중복을 잡는다. 내용이 곧 결정이므로 리터럴을
+ * 보존(exact)하여 비교한다 — 같은 내용이면 변수명이 달라도 W, 내용이 다르면 K.
+ */
+const detectDataTableClones = (files: ReadonlyArray<ParsedFile>, minSize: number): DuplicateGroup[] => {
+  const map = new Map<string, InternalCloneItem[]>();
+
+  for (const file of files) {
+    if (file.errors.length > 0) {
+      continue;
+    }
+
+    for (const decl of collectOxcNodes(file.program, isDataTableDeclarator)) {
+      const init = (decl as Node & { readonly init: Node }).init;
+      const size = countOxcSize(init);
+
+      if (size < minSize) {
+        continue;
+      }
+
+      const hash = createOxcFingerprintExact(init);
+      const item: InternalCloneItem = {
+        node: decl,
+        kind: 'node',
+        header: getNodeHeader(decl),
+        filePath: file.filePath,
+        span: resolveSpan(file.sourceText, decl),
+        size,
+      };
+      const list = map.get(hash);
+
+      if (list === undefined) {
+        map.set(hash, [item]);
+      } else {
+        list.push(item);
+      }
+    }
+  }
+
+  const groups: DuplicateGroup[] = [];
+
+  for (const items of map.values()) {
+    if (items.length >= 2) {
+      groups.push({
+        cloneType: 'exact',
+        findingKind: 'exact-clone',
+        items: sortItemsDeterministic(items).map(toDuplicateItem),
+      });
+    }
+  }
+
+  return groups;
 };
 
 /**

@@ -1,4 +1,4 @@
-import { describe, it } from 'bun:test';
+import { describe } from 'bun:test';
 
 import { analyzeDuplicates } from '../../../../src/test-api';
 import { runGolden } from '../../shared/golden-runner';
@@ -59,10 +59,9 @@ describe('golden/duplicates', () => {
   rgFrag('stmt-run-free-id-keep'); // K: 다른 함수 호출 = 다른 결정 (run 끊김)
 
   // ════════════════════════════════════════════════════════════════════════
-  // W — 미구현 영역 (구현 시 runGolden으로 전환)
+  // 계약·데이터 — cross-kind 구조 비교 + 규칙 데이터 중복
   // ════════════════════════════════════════════════════════════════════════
 
-  it.todo('golden: interface-vs-typealias-dead — 같은 계약이 interface와 type alias 양쪽에 (cross-kind 구조 비교 미구현)', () => {});
-
-  it.todo('golden: lookup-table-dead — 동일 규칙 테이블 중복 (데이터 선언 대상 수집 미구현)', () => {});
+  rg('interface-vs-typealias-dead'); // W: 같은 계약이 interface와 type alias 양쪽에 (cross-kind)
+  rg('lookup-table-dead'); // W: 동일 규칙 테이블이 다른 이름으로 중복 (데이터 선언)
 });

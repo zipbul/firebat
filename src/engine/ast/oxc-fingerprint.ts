@@ -379,7 +379,47 @@ export const createOxcFingerprintShapeWithBindings = (node: Node, boundNames: Re
     boundNames,
   });
 
+/**
+ * 계약(interface / type alias의 타입 리터럴)의 멤버 목록을 반환한다.
+ * interface와 type alias는 선언 구문이 달라도 같은 멤버 구조면 같은 계약이므로
+ * (CLAUDE.md: 계약은 선언 구문과 무관하게 구조로 비교), 정규형을 멤버 기준으로 통일한다.
+ */
+const getContractMembers = (node: Node): ReadonlyArray<Node> | null => {
+  if (node.type === 'TSInterfaceDeclaration') {
+    const body = (node as Node & { readonly body: Node & { readonly body: ReadonlyArray<Node> } }).body;
+
+    return body.body;
+  }
+
+  if (node.type === 'TSTypeAliasDeclaration') {
+    const annotation = (node as Node & { readonly typeAnnotation: Node }).typeAnnotation;
+
+    if (annotation.type === 'TSTypeLiteral') {
+      return (annotation as Node & { readonly members: ReadonlyArray<Node> }).members;
+    }
+  }
+
+  return null;
+};
+
 export const createOxcFingerprintNormalized = (node: Node): string => {
+  // 계약: 선언 구문(interface vs type)을 지우고 멤버 구조만 정규형으로 비교한다.
+  const members = getContractMembers(node);
+
+  if (members !== null) {
+    const boundNames = collectBindingNames(node);
+    const parts = members.map(member =>
+      createOxcFingerprintCore(member, {
+        includeLiteralValues: false,
+        includeIdentifierNames: false,
+        ignoredKeys: TYPE_DECL_IGNORED_KEYS,
+        boundNames,
+      }),
+    );
+
+    return hashString(`Contract\x00${parts.join('\x00')}`);
+  }
+
   const normalized = normalizeForFingerprint(node);
 
   return createOxcFingerprintCore(normalized as Node, {

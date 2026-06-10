@@ -1,0 +1,38 @@
+[
+  {
+    "cloneType": "normalized",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/interface-vs-typealias-dead.ts",
+        "header": "UserContract",
+        "kind": "interface",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/interface-vs-typealias-dead.ts",
+        "header": "UserShape",
+        "kind": "type",
+        "span": {
+          "end": {
+            "column": 2,
+            "line": 11
+          },
+          "start": {
+            "column": 0,
+            "line": 7
+          }
+        }
+      }
+    ]
+  }
+]
