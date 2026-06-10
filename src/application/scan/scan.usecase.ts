@@ -236,7 +236,6 @@ const DUPLICATE_KIND_TO_CODE: Readonly<Record<DuplicateCloneType, FirebatCatalog
   exact: 'DUP_EXACT',
   shape: 'DUP_SHAPE',
   normalized: 'DUP_NORMALIZED',
-  'near-miss': 'DUP_NEAR_MISS',
 } as const;
 const VARIABLE_LIFETIME_KIND_TO_CODE: Readonly<Record<string, FirebatCatalogCode>> = {
   'scope-narrowing': 'LIFETIME_SCOPE_NARROWING',

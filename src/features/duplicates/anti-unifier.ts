@@ -14,7 +14,7 @@ import type { Node } from 'oxc-parser';
 import { visitorKeys } from 'oxc-parser';
 
 import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
-import { createOxcFingerprintShape } from '../../engine/ast/oxc-fingerprint';
+import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { computeLcsAlignment } from './lcs';
 
@@ -52,10 +52,12 @@ export type DiffClassification = 'rename-only' | 'literal-variant' | 'type-varia
 export const antiUnify = (left: Node, right: Node): AntiUnificationResult => {
   const leftSize = countOxcSize(left);
   const rightSize = countOxcSize(right);
+  const boundNames = new Set<string>([...collectBindingNames(left), ...collectBindingNames(right)]);
   const ctx: TraversalContext = {
     variables: [],
     sharedSize: 0,
     nextId: 1,
+    boundNames,
   };
 
   traverse(ctx, left, right, '');
@@ -131,6 +133,8 @@ interface TraversalContext {
   variables: AntiUnificationVariable[];
   sharedSize: number;
   nextId: number;
+  /** 비교 단위 전체(좌+우)의 바인딩 이름 — sub-node 정렬 시 enclosing 스코프 보존용 */
+  boundNames: ReadonlySet<string>;
 }
 
 /** 메타/positional 키 — 비교에서 제외 */
@@ -187,8 +191,8 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
 
   // TSTypeReference 비교 (type annotation 차이)
   if (left.type === 'TSTypeReference') {
-    const leftFp = createOxcFingerprintShape(left);
-    const rightFp = createOxcFingerprintShape(right);
+    const leftFp = createOxcFingerprintShapeWithBindings(left, ctx.boundNames);
+    const rightFp = createOxcFingerprintShapeWithBindings(right, ctx.boundNames);
 
     if (leftFp !== rightFp) {
       pushVariable(ctx, path, left.type, right.type, 'type');
@@ -300,8 +304,8 @@ const traverseArrayChildren = (
   const leftFiltered = leftArr.filter((n): n is Node => n !== null);
   const rightFiltered = rightArr.filter((n): n is Node => n !== null);
   // fingerprint로 LCS 정렬
-  const leftFps = leftFiltered.map(n => createOxcFingerprintShape(n));
-  const rightFps = rightFiltered.map(n => createOxcFingerprintShape(n));
+  const leftFps = leftFiltered.map(n => createOxcFingerprintShapeWithBindings(n, ctx.boundNames));
+  const rightFps = rightFiltered.map(n => createOxcFingerprintShapeWithBindings(n, ctx.boundNames));
   const alignment = computeLcsAlignment(leftFps, rightFps);
 
   // 매칭된 쌍 → 재귀

@@ -97,7 +97,6 @@ export type FirebatCatalogCode =
   | 'DUP_EXACT'
   | 'DUP_SHAPE'
   | 'DUP_NORMALIZED'
-  | 'DUP_NEAR_MISS'
   // diagnostics (7)
   | 'DIAG_GOD_FUNCTION'
   | 'DIAG_CIRCULAR_DEPENDENCY'
@@ -175,15 +174,9 @@ export interface CloneDiff {
   readonly pairs: ReadonlyArray<CloneDiffPair>;
 }
 
-export type DuplicateCloneType = 'exact' | 'shape' | 'normalized' | 'near-miss';
+export type DuplicateCloneType = 'exact' | 'shape' | 'normalized';
 
-export type DuplicateFindingKind =
-  | 'exact-clone'
-  | 'structural-clone'
-  | 'near-miss-clone'
-  | 'literal-variant'
-  | 'type-variant'
-  | 'pattern-outlier';
+export type DuplicateFindingKind = 'exact-clone' | 'structural-clone' | 'literal-variant' | 'type-variant' | 'pattern-outlier';
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
@@ -191,7 +184,6 @@ export interface DuplicateGroup {
   readonly code?: FirebatCatalogCode;
   readonly items: ReadonlyArray<DuplicateItem>;
   readonly suggestedParams?: CloneDiff;
-  readonly similarity?: number;
 }
 
 interface DependencyCycle {

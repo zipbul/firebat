@@ -1,9 +1,8 @@
 /**
  * 통합 중복 코드 분석기.
  *
- * Level 1: Hash 기반 정확 매칭 (인라인)
- * Level 2+3: MinHash/LSH pre-filter + LCS 유사도 검증
- * Level 4: Anti-unification 상세 분석 + outlier detection
+ * Level 1: Hash 기반 정규형 매칭 (exact / shape / normalized)
+ * Level 2: Anti-unification 상세 분석 + outlier detection
  *
  * 이 파일이 duplicates 피처의 유일한 public 진입점이다.
  */
@@ -30,8 +29,7 @@ import {
 } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
-import { getItemKind, isCloneTarget, resolveSpan } from './clone-targets';
-import { detectNearMissClones, type NearMissDetectorOptions } from './near-miss-detector';
+import { getItemKind, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
 
 export { isCloneTarget };
 
@@ -39,14 +37,8 @@ export { isCloneTarget };
 
 interface DuplicatesAnalyzerOptions {
   readonly minSize: number;
-  /** LCS 유사도 임계값 (default: 0.7) */
-  readonly nearMissSimilarityThreshold?: number;
-  /** near-miss 탐지 활성화 (default: true) */
-  readonly enableNearMiss?: boolean;
   /** anti-unification 활성화 (default: true) */
   readonly enableAntiUnification?: boolean;
-  /** MinHash 최소 statement 수 (default: 5) */
-  readonly minStatementCount?: number;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -95,44 +87,10 @@ export const analyzeDuplicates = (
 
     return !exactHashes.has(cachedShape(g.items[0]!.node)) && !shapeHashes.has(hash);
   });
-  let allGroups: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
+  const grouped: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
 
-  // ── Level 2+3: Near-miss clone detection ───────────────────────────────────
-  if (options.enableNearMiss ?? true) {
-    // Level 1에서 그룹핑된 모든 노드의 shape hash → excluded
-    const excludedHashes = new Set<string>();
-
-    for (const group of allGroups) {
-      for (const item of group.items) {
-        excludedHashes.add(cachedShape(item.node));
-      }
-    }
-
-    const nearMissOpts: NearMissDetectorOptions = {
-      minSize,
-      similarityThreshold: options.nearMissSimilarityThreshold ?? 0.7,
-      jaccardThreshold: 0.5,
-      minHashK: 128,
-      sizeRatio: 0.5,
-      minStatementCount: options.minStatementCount ?? 5,
-    };
-    const nearMissGroups = detectNearMissClones(uniqueFiles, nearMissOpts, excludedHashes);
-
-    for (const nmGroup of nearMissGroups) {
-      allGroups.push({
-        cloneType: 'near-miss',
-        items: nmGroup.items.map(nmItem => ({
-          node: nmItem.node,
-          kind: nmItem.kind,
-          header: nmItem.header,
-          filePath: nmItem.filePath,
-          span: nmItem.span,
-          size: nmItem.size,
-        })),
-        similarity: nmGroup.similarity,
-      });
-    }
-  }
+  // ── 결정성 보장: 입력 파일 순서와 무관하게 그룹 내 항목 순서 고정 ─────────
+  const allGroups = grouped.map(group => ({ ...group, items: sortItemsDeterministic(group.items) }));
 
   // ── Level 4: Anti-unification ──────────────────────────────────────────────
   const enableAntiUnification = options.enableAntiUnification ?? true;
@@ -155,6 +113,21 @@ export const analyzeDuplicates = (
  * 빈 DuplicateGroup 배열을 반환.
  */
 export const createEmptyDuplicates = (): ReadonlyArray<DuplicateGroup> => [];
+
+// ─── 결정성 정렬 ─────────────────────────────────────────────────────────────
+
+const sortItemsDeterministic = (items: ReadonlyArray<InternalCloneItem>): ReadonlyArray<InternalCloneItem> =>
+  [...items].sort((a, b) => {
+    if (a.filePath !== b.filePath) {
+      return a.filePath < b.filePath ? -1 : 1;
+    }
+
+    if (a.span.start.line !== b.span.start.line) {
+      return a.span.start.line - b.span.start.line;
+    }
+
+    return a.span.start.column - b.span.start.column;
+  });
 
 // ─── 캐시 래퍼 ───────────────────────────────────────────────────────────────
 
@@ -191,7 +164,8 @@ const groupByHash = (
       continue;
     }
 
-    const nodes = collectOxcNodes(file.program, isCloneTarget);
+    // 골격(결정 없음)은 정규형이 같아도 K — 수집 단계에서 제외 (CLAUDE.md 구조 일치 예외)
+    const nodes = collectOxcNodes(file.program, node => isCloneTarget(node) && !isDecisionlessSkeleton(node));
 
     for (const node of nodes) {
       const size = countOxcSize(node);
@@ -353,8 +327,6 @@ const cloneTypeToFindingKind = (cloneType: DuplicateCloneType): DuplicateFinding
     case 'shape':
     case 'normalized':
       return 'structural-clone';
-    case 'near-miss':
-      return 'near-miss-clone';
   }
 };
 
@@ -369,7 +341,6 @@ const toDuplicateGroup = (
   findingKind: findingKindOverride ?? group.findingKind ?? cloneTypeToFindingKind(group.cloneType),
   items: group.items.map(toDuplicateItem),
   ...(suggestedParams !== undefined ? { suggestedParams } : {}),
-  ...(group.similarity !== undefined ? { similarity: group.similarity } : {}),
 });
 
 const toDuplicateItem = (item: InternalCloneItem): DuplicateItem => ({
@@ -389,7 +360,6 @@ const CLONE_TYPE_PRIORITY: Readonly<Record<DuplicateCloneType, number>> = {
   exact: 0,
   shape: 1,
   normalized: 2,
-  'near-miss': 3,
 };
 
 const buildSpanIndex = (items: ReadonlyArray<DuplicateItem>): Map<string, ReadonlyArray<DuplicateItem>> => {

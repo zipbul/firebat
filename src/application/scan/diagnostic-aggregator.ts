@@ -484,15 +484,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Create a shared function that accepts the varying parts as parameters or callbacks. If the variations are too complex to parameterize cleanly, the duplication may be preferable to a forced abstraction — stop, no action needed.',
     ],
   },
-  DUP_NEAR_MISS: {
-    cause:
-      'Two or more code blocks are structurally similar but have diverged beyond simple naming or cosmetic differences, suggesting shared origin with incremental drift.',
-    think: [
-      'Read the clones and highlight the divergence points. Each divergence represents either a deliberate design decision or accidental drift. Check git log to see when and why the blocks diverged.',
-      'If the drift is growing (more differences in recent commits), the clones serve genuinely different purposes — keep them separate, but add comments documenting the intentional differences.',
-      'If the clones should be unified, create a shared function that handles the common structure, with hooks (callbacks or options) for the divergent parts. Test both call sites to ensure behavioral equivalence.',
-    ],
-  },
 
   DIAG_GOD_FUNCTION: {
     cause:
