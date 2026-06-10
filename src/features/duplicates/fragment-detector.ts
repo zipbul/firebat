@@ -1,0 +1,410 @@
+/**
+ * Statement-run(함수 내부 연속 문장열) 클론 탐지.
+ *
+ * 선언 단위 매칭(analyzer.ts)이 못 잡는 "함수 경계 안의 복붙된 문장 덩어리"를
+ * AST 정규형으로 잡는다. CLAUDE.md duplicates 닫힌 규칙:
+ *  - 경계: 한 BlockStatement.body의 연속 형제 문장만
+ *  - 최소 크기: 정규형 AST 노드 수 ≥ minSize
+ *  - 추출 안전성: live-out ≤ 1, 제어 이탈 없음
+ *  - 중첩: 같은 시그니처의 최대 run만
+ */
+
+import type { Node } from 'oxc-parser';
+
+import { visitorKeys } from 'oxc-parser';
+
+import type { ParsedFile } from '../../engine/types';
+import type { DuplicateGroup, DuplicateItem, SourceSpan } from '../../types';
+
+import { collectOxcNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
+import { countOxcSize } from '../../engine/ast/oxc-size-count';
+import { resolveSpan } from './clone-targets';
+
+// ─── 내부 모델 ───────────────────────────────────────────────────────────────
+
+interface BlockInfo {
+  readonly filePath: string;
+  readonly sourceText: string;
+  readonly statements: ReadonlyArray<Node>;
+  readonly fps: ReadonlyArray<string>;
+  readonly sizes: ReadonlyArray<number>;
+}
+
+interface RunOccurrence {
+  readonly blockIdx: number;
+  readonly start: number;
+  readonly length: number;
+}
+
+const FUNCTION_BODY_OWNERS = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+  'MethodDefinition',
+]);
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+interface FragmentDetectorOptions {
+  readonly minSize: number;
+}
+
+export const detectFragmentClones = (
+  files: ReadonlyArray<ParsedFile>,
+  options: FragmentDetectorOptions,
+): ReadonlyArray<DuplicateGroup> => {
+  const blocks = collectBlocks(files);
+
+  if (blocks.length === 0) {
+    return [];
+  }
+
+  // ── 시그니처별 최대 run 수집 (블록 쌍 비교) ──────────────────────────────────
+  const runsBySignature = new Map<string, RunOccurrence[]>();
+
+  const record = (sig: string, occ: RunOccurrence): void => {
+    const list = runsBySignature.get(sig);
+
+    if (list === undefined) {
+      runsBySignature.set(sig, [occ]);
+
+      return;
+    }
+
+    // 동일 위치 중복 방지
+    const dup = list.some(o => o.blockIdx === occ.blockIdx && o.start === occ.start && o.length === occ.length);
+
+    if (!dup) {
+      list.push(occ);
+    }
+  };
+
+  for (let i = 0; i < blocks.length; i++) {
+    for (let j = i + 1; j < blocks.length; j++) {
+      collectMaximalRuns(blocks[i]!, i, blocks[j]!, j, record);
+    }
+  }
+
+  // ── 그룹 생성 + 필터 ─────────────────────────────────────────────────────────
+  const groups: DuplicateGroup[] = [];
+
+  for (const occurrences of runsBySignature.values()) {
+    if (occurrences.length < 2) {
+      continue;
+    }
+
+    const rep = occurrences[0]!;
+    const repBlock = blocks[rep.blockIdx]!;
+    // 최소 크기: run의 정규형 AST 노드 수 합
+    const runSize = sumRange(repBlock.sizes, rep.start, rep.length);
+
+    if (runSize < options.minSize) {
+      continue;
+    }
+
+    // 추출 안전성: 대표 run으로 판정 (모든 멤버 동일 구조)
+    if (!isExtractable(repBlock, rep.start, rep.length)) {
+      continue;
+    }
+
+    const items = occurrences.map(occ => toFragmentItem(blocks[occ.blockIdx]!, occ));
+
+    groups.push({
+      cloneType: 'fragment',
+      findingKind: 'fragment-clone',
+      items: dedupeItems(items),
+    });
+  }
+
+  return groups.filter(g => g.items.length >= 2);
+};
+
+// ─── 블록 수집 ───────────────────────────────────────────────────────────────
+
+const collectBlocks = (files: ReadonlyArray<ParsedFile>): BlockInfo[] => {
+  const blocks: BlockInfo[] = [];
+
+  for (const file of files) {
+    if (file.errors.length > 0) {
+      continue;
+    }
+
+    const fnNodes = collectOxcNodes(file.program, n => FUNCTION_BODY_OWNERS.has(n.type));
+
+    for (const fn of fnNodes) {
+      const body = getFunctionBody(fn);
+
+      if (body === null || body.length < 2) {
+        continue;
+      }
+
+      const boundNames = collectBindingNames(fn);
+      const fps = body.map(stmt => createOxcFingerprintShapeWithBindings(stmt, boundNames));
+      const sizes = body.map(stmt => countOxcSize(stmt));
+
+      blocks.push({ filePath: file.filePath, sourceText: file.sourceText, statements: body, fps, sizes });
+    }
+  }
+
+  return blocks;
+};
+
+const getFunctionBody = (fn: Node): ReadonlyArray<Node> | null => {
+  const rec = fn as unknown as Record<string, unknown>;
+  // MethodDefinition → value(FunctionExpression) → body
+  if (fn.type === 'MethodDefinition') {
+    const value = rec.value;
+
+    return isOxcNode(value) ? getFunctionBody(value) : null;
+  }
+
+  const body = rec.body;
+
+  if (isOxcNode(body) && body.type === 'BlockStatement') {
+    const block = body as Node & { readonly body: ReadonlyArray<Node> };
+
+    return block.body;
+  }
+
+  return null;
+};
+
+// ─── 최대 run 추출 (두 블록) ──────────────────────────────────────────────────
+
+const collectMaximalRuns = (
+  a: BlockInfo,
+  aIdx: number,
+  b: BlockInfo,
+  bIdx: number,
+  record: (sig: string, occ: RunOccurrence) => void,
+): void => {
+  const aLen = a.fps.length;
+  const bLen = b.fps.length;
+
+  for (let si = 0; si < aLen; si++) {
+    for (let sj = 0; sj < bLen; sj++) {
+      if (a.fps[si] !== b.fps[sj]) {
+        continue;
+      }
+
+      // 최대 시작점만: 직전 문장이 같으면 더 긴 run의 일부이므로 skip
+      if (si > 0 && sj > 0 && a.fps[si - 1] === b.fps[sj - 1]) {
+        continue;
+      }
+
+      let k = 0;
+
+      while (si + k < aLen && sj + k < bLen && a.fps[si + k] === b.fps[sj + k]) {
+        k++;
+      }
+
+      // 같은 블록 내 자기 자신과의 겹침(si==sj) 방지
+      if (aIdx === bIdx && si === sj) {
+        continue;
+      }
+
+      const sig = a.fps.slice(si, si + k).join('');
+
+      record(sig, { blockIdx: aIdx, start: si, length: k });
+      record(sig, { blockIdx: bIdx, start: sj, length: k });
+    }
+  }
+};
+
+// ─── 추출 안전성 ──────────────────────────────────────────────────────────────
+
+const isExtractable = (block: BlockInfo, start: number, length: number): boolean => {
+  const run = block.statements.slice(start, start + length);
+  const after = block.statements.slice(start + length);
+
+  // 제어 이탈: run 안에 (자기 run의 루프/스위치 밖으로 나가는) return/break/continue
+  if (run.some(hasControlEscape)) {
+    return false;
+  }
+
+  // live-out: run에서 선언한 바인딩 중 run 밖에서 쓰이는 것
+  const declared = new Set<string>();
+
+  for (const stmt of run) {
+    for (const name of collectBindingNames(stmt)) {
+      declared.add(name);
+    }
+  }
+
+  if (declared.size === 0) {
+    return true;
+  }
+
+  const afterRefs = collectReferencedNames(after);
+  let liveOuts = 0;
+
+  for (const name of declared) {
+    if (afterRefs.has(name)) {
+      liveOuts++;
+    }
+  }
+
+  return liveOuts <= 1;
+};
+
+const CONTROL_ESCAPE_TYPES = new Set(['ReturnStatement']);
+const LOOP_TYPES = new Set(['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement']);
+
+/** run 노드가 자신의 경계 밖으로 제어를 넘기는 return/break/continue를 포함하는지 */
+const hasControlEscape = (node: Node): boolean => {
+  let escape = false;
+
+  const walk = (n: Node, loopDepth: number, switchDepth: number): void => {
+    if (escape) {
+      return;
+    }
+
+    if (CONTROL_ESCAPE_TYPES.has(n.type)) {
+      escape = true;
+
+      return;
+    }
+
+    if (n.type === 'BreakStatement' && loopDepth === 0 && switchDepth === 0) {
+      escape = true;
+
+      return;
+    }
+
+    if (n.type === 'ContinueStatement' && loopDepth === 0) {
+      escape = true;
+
+      return;
+    }
+
+    // 함수 경계에서 멈춤 (중첩 함수 내부의 return은 무관)
+    if (n !== node && FUNCTION_BODY_OWNERS.has(n.type)) {
+      return;
+    }
+
+    const nextLoop = LOOP_TYPES.has(n.type) ? loopDepth + 1 : loopDepth;
+    const nextSwitch = n.type === 'SwitchStatement' ? switchDepth + 1 : switchDepth;
+    const rec = n as unknown as Record<string, unknown>;
+    const keys = visitorKeys[n.type];
+
+    if (keys === undefined) {
+      return;
+    }
+
+    for (const key of keys) {
+      const value = rec[key];
+
+      if (isOxcNode(value)) {
+        walk(value, nextLoop, nextSwitch);
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isOxcNode(item)) {
+            walk(item, nextLoop, nextSwitch);
+          }
+        }
+      }
+    }
+  };
+
+  walk(node, 0, 0);
+
+  return escape;
+};
+
+/** 노드 목록에서 참조된 식별자 이름 (프로퍼티명 제외) */
+const collectReferencedNames = (nodes: ReadonlyArray<Node>): ReadonlySet<string> => {
+  const names = new Set<string>();
+
+  const walk = (n: Node): void => {
+    const rec = n as unknown as Record<string, unknown>;
+
+    if (n.type === 'Identifier') {
+      names.add((n as Node & { readonly name: string }).name);
+    }
+
+    const keys = visitorKeys[n.type];
+
+    if (keys === undefined) {
+      return;
+    }
+
+    for (const key of keys) {
+      // member property / object key 는 참조가 아님 → skip
+      if (
+        (n.type === 'MemberExpression' && key === 'property' && rec.computed !== true) ||
+        (n.type === 'Property' && key === 'key' && rec.computed !== true)
+      ) {
+        continue;
+      }
+
+      const value = rec[key];
+
+      if (isOxcNode(value)) {
+        walk(value);
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isOxcNode(item)) {
+            walk(item);
+          }
+        }
+      }
+    }
+  };
+
+  for (const node of nodes) {
+    walk(node);
+  }
+
+  return names;
+};
+
+// ─── 변환 / 유틸 ─────────────────────────────────────────────────────────────
+
+const sumRange = (sizes: ReadonlyArray<number>, start: number, length: number): number => {
+  let total = 0;
+
+  for (let i = start; i < start + length; i++) {
+    total += sizes[i]!;
+  }
+
+  return total;
+};
+
+const toFragmentItem = (block: BlockInfo, occ: RunOccurrence): DuplicateItem => {
+  const first = block.statements[occ.start]!;
+  const last = block.statements[occ.start + occ.length - 1]!;
+  const span: SourceSpan = {
+    start: resolveSpan(block.sourceText, first).start,
+    end: resolveSpan(block.sourceText, last).end,
+  };
+
+  return {
+    kind: 'node',
+    header: `${occ.length} statements`,
+    filePath: block.filePath,
+    span,
+  };
+};
+
+const dedupeItems = (items: ReadonlyArray<DuplicateItem>): DuplicateItem[] => {
+  const seen = new Set<string>();
+  const out: DuplicateItem[] = [];
+
+  for (const item of items) {
+    const key = `${item.filePath}:${item.span.start.line}:${item.span.start.column}:${item.span.end.line}`;
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(item);
+    }
+  }
+
+  return out.sort((a, b) => {
+    if (a.filePath !== b.filePath) {
+      return a.filePath < b.filePath ? -1 : 1;
+    }
+
+    return a.span.start.line - b.span.start.line;
+  });
+};

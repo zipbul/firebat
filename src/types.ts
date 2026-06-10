@@ -95,6 +95,7 @@ export type FirebatCatalogCode =
   | 'DEP_UNUSED_NS_MEMBER'
   // duplicates (4)
   | 'DUP_EXACT'
+  | 'DUP_FRAGMENT'
   | 'DUP_SHAPE'
   | 'DUP_NORMALIZED'
   // diagnostics (7)
@@ -174,9 +175,15 @@ export interface CloneDiff {
   readonly pairs: ReadonlyArray<CloneDiffPair>;
 }
 
-export type DuplicateCloneType = 'exact' | 'shape' | 'normalized';
+export type DuplicateCloneType = 'exact' | 'shape' | 'normalized' | 'fragment';
 
-export type DuplicateFindingKind = 'exact-clone' | 'structural-clone' | 'literal-variant' | 'type-variant' | 'pattern-outlier';
+export type DuplicateFindingKind =
+  | 'exact-clone'
+  | 'structural-clone'
+  | 'literal-variant'
+  | 'type-variant'
+  | 'pattern-outlier'
+  | 'fragment-clone';
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;

@@ -484,6 +484,15 @@ export const FIREBAT_CODE_CATALOG = {
       'Create a shared function that accepts the varying parts as parameters or callbacks. If the variations are too complex to parameterize cleanly, the duplication may be preferable to a forced abstraction — stop, no action needed.',
     ],
   },
+  DUP_FRAGMENT: {
+    cause:
+      'A contiguous run of statements inside one function body is duplicated, with the same normalized structure, inside another function — a copy-pasted block below declaration granularity.',
+    think: [
+      'Read the duplicated statement run in both functions. It carries a single decision (a computation or transformation) expressed twice; changing it in one place but not the other introduces an inconsistency bug.',
+      'Extract the run into a shared helper. The run is reported only when it is safely extractable (at most one value flows out, no control-flow escapes), so a single function with the run body and its inputs as parameters is mechanically sound.',
+      'If the two runs are about to diverge for independent reasons, the duplication may be intentional — confirm the decision is genuinely shared before unifying.',
+    ],
+  },
 
   DIAG_GOD_FUNCTION: {
     cause:

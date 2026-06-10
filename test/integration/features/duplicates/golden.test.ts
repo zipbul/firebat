@@ -7,6 +7,9 @@ describe('golden/duplicates', () => {
   // minSize 1: 크기 임계로 케이스가 공허하게 통과(vacuous pass)하는 것을 차단하고
   // 모든 판정이 개념 규칙(정규형·골격·비대상)에서만 나오도록 고정한다.
   const rg = (name: string) => runGolden(import.meta.dir, name, program => analyzeDuplicates(program, { minSize: 1 }));
+  // statement-run 케이스는 현실적 최소 크기(noise floor)에서 판정한다 — 사소한 1~2문 run을
+  // 임계로 거르고, 추출 안전성·자유식별자·중첩 규칙이 실제로 검증되도록 한다.
+  const rgFrag = (name: string) => runGolden(import.meta.dir, name, program => analyzeDuplicates(program, { minSize: 12 }));
 
   // ════════════════════════════════════════════════════════════════════════
   // W — 결정을 담은 구문 + 정규형 일치 → 보고해야 한다 (CLAUDE.md 판정 절차)
@@ -34,9 +37,7 @@ describe('golden/duplicates', () => {
   rg('overload-signatures-keep'); // 골격: 본문 없는 overload 시그니처
   rg('empty-marker-interface-keep'); // 골격: 빈 marker 타입
   rg('decorator-registration-keep'); // 골격: 프레임워크 등록 형태의 위임
-  rg('near-miss-gapped-keep'); // 비대상: 문장 삽입으로 정규형 어긋남 (Type-3)
   rg('free-id-divergent-keep'); // 자유 식별자는 치환 불가 — 다른 호출 대상 = 다른 결정
-  rg('subfunction-fragment-keep'); // 비대상: 함수 내부 일부 구문열 (선언 단위 밖)
   rg('single-literal-keep'); // 비대상: 단일 상수값 반복 (상수 추출 영역)
   rg('type-alias-diff-bodies-keep'); // 타입 선언 본문은 결정 그 자체 — 치환 금지
   rg('interface-member-order-keep'); // 멤버 순서 다름 = 정규형 어긋남
@@ -46,14 +47,16 @@ describe('golden/duplicates', () => {
   // statement run — 함수 내부 연속 문장열 클론 (CLAUDE.md 닫힌 규칙)
   // ════════════════════════════════════════════════════════════════════════
 
-  // W — 조각 탐지 미구현. 구현 후 it.todo → rg 전환하며 골든 락.
-  it.todo('golden: stmt-run-extractable-dead — 추출 가능한 연속 문장열 복제', () => {});
-  it.todo('golden: stmt-run-rename-dead — 지역변수명만 다른 문장열 (jscpd는 못 잡음)', () => {});
+  // W — 추출 가능한 연속 문장열 복제 (jscpd가 잡는 조각 + jscpd가 못 잡는 rename까지)
+  rgFrag('stmt-run-extractable-dead'); // W: live-out ≤1, 추출 가능
+  rgFrag('stmt-run-rename-dead'); // W: 지역변수명만 다른 문장열 (바인딩 정규화)
+  rgFrag('near-miss-gapped-dead'); // W: 선언 near-miss는 미보고, 공유 문장열은 fragment 클론
+  rgFrag('subfunction-fragment-dead'); // W: 서로 다른 함수가 공유하는 내부 문장열
 
-  // K — 조각 경계/안전성 가드. 조각 탐지 구현 후 over-report 방지를 검증 (지금은 vacuous green).
-  rg('stmt-run-leaks-binding-keep'); // K: 조각 내 선언을 밖에서 사용 → 추출 불가
-  rg('stmt-run-too-small-keep'); // K: 최소 크기 미만 사소한 문장열
-  rg('stmt-run-free-id-keep'); // K: 다른 함수 호출 = 다른 결정
+  // K — 조각 경계/안전성 가드 (minSize 12에서 실제 검증)
+  rgFrag('stmt-run-leaks-binding-keep'); // K: live-out 2개 → 추출 불가
+  rgFrag('stmt-run-too-small-keep'); // K: 최소 크기 미만 사소한 문장열
+  rgFrag('stmt-run-free-id-keep'); // K: 다른 함수 호출 = 다른 결정 (run 끊김)
 
   // ════════════════════════════════════════════════════════════════════════
   // W — 미구현 영역 (구현 시 runGolden으로 전환)

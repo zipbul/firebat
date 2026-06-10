@@ -30,6 +30,7 @@ import {
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
 import { getItemKind, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
+import { detectFragmentClones } from './fragment-detector';
 
 export { isCloneTarget };
 
@@ -105,6 +106,11 @@ export const analyzeDuplicates = (
       result.push(toDuplicateGroup(group, undefined));
     }
   }
+
+  // ── 함수 내부 연속 문장열(statement run) 클론 ──────────────────────────────
+  const fragmentGroups = detectFragmentClones(uniqueFiles, { minSize });
+
+  result.push(...fragmentGroups);
 
   return filterSubsumedGroups(result);
 };
@@ -327,6 +333,8 @@ const cloneTypeToFindingKind = (cloneType: DuplicateCloneType): DuplicateFinding
     case 'shape':
     case 'normalized':
       return 'structural-clone';
+    case 'fragment':
+      return 'fragment-clone';
   }
 };
 
@@ -360,6 +368,7 @@ const CLONE_TYPE_PRIORITY: Readonly<Record<DuplicateCloneType, number>> = {
   exact: 0,
   shape: 1,
   normalized: 2,
+  fragment: 3,
 };
 
 const buildSpanIndex = (items: ReadonlyArray<DuplicateItem>): Map<string, ReadonlyArray<DuplicateItem>> => {
