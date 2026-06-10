@@ -65,7 +65,15 @@ describe('golden/duplicates', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   rg('interface-vs-typealias-dead'); // W: 같은 계약이 interface와 type alias 양쪽에 (cross-kind)
+  rg('contract-method-sig-dead'); // W: 메서드 시그니처 계약 cross-kind
+  rg('contract-index-sig-dead'); // W: index signature 계약 cross-kind
   rg('contract-optional-mismatch-keep'); // K: optional(?)은 계약의 일부 — id? vs id는 다른 계약
   rg('lookup-table-dead'); // W: 동일 규칙 테이블이 다른 이름으로 중복 (데이터 선언)
   rg('lookup-array-table-dead'); // W: 배열 룩업 테이블 중복 (ArrayExpression 경로)
+
+  // ════════════════════════════════════════════════════════════════════════
+  // 중첩 subsumption — 통째 클론 안의 fragment는 별도 보고하지 않는다
+  // ════════════════════════════════════════════════════════════════════════
+
+  rgFrag('fragment-subsumed-dead'); // 선언 클론만 보고, 내부 fragment는 subsume
 });

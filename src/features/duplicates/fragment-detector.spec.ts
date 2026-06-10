@@ -204,6 +204,35 @@ function b(y: number): number {
     expect(groups[0]!.findingKind).toBe('fragment-clone');
   });
 
+  it('should flip a run from K to W exactly at the minimum-size floor', () => {
+    // 동일한 추출 가능 run을 floor 위/아래에서 평가 — 임계 자체를 직접 probe한다.
+    const src = `
+function a(xs: number[]): number {
+  warmA();
+  const seen = new Set<number>();
+  for (const x of xs) {
+    seen.add(x);
+  }
+  const total = seen.size;
+  return total + 1;
+}
+function b(ys: number[]): number {
+  prepB();
+  other();
+  const seen = new Set<number>();
+  for (const x of ys) {
+    seen.add(x);
+  }
+  const total = seen.size;
+  return total + 1;
+}
+`;
+    // 아주 큰 floor → 모든 run이 걸러짐 (K)
+    expect(run(src, 10_000)).toEqual([]);
+    // floor 1 → run 보고 (W)
+    expect(kinds(src, 1)).toEqual(['fragment-clone']);
+  });
+
   it('should return empty for a single function with no internal repetition', () => {
     const src = `
 function solo(x: number): number {

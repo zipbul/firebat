@@ -1,0 +1,48 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/fragment-subsumed-dead.ts",
+        "header": "alpha",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 8
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/fragment-subsumed-dead.ts",
+        "header": "bravo",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 17
+          },
+          "start": {
+            "column": 0,
+            "line": 10
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "alpha",
+          "location": "id.name",
+          "right": "bravo"
+        }
+      ]
+    }
+  }
+]

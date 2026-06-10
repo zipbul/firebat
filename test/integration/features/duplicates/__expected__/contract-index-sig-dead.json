@@ -1,0 +1,38 @@
+[
+  {
+    "cloneType": "normalized",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/contract-index-sig-dead.ts",
+        "header": "NumMap",
+        "kind": "interface",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 3
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/contract-index-sig-dead.ts",
+        "header": "NumDict",
+        "kind": "type",
+        "span": {
+          "end": {
+            "column": 2,
+            "line": 7
+          },
+          "start": {
+            "column": 0,
+            "line": 5
+          }
+        }
+      }
+    ]
+  }
+]
