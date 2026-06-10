@@ -1,0 +1,53 @@
+[
+  {
+    "cloneType": "fragment",
+    "findingKind": "fragment-clone",
+    "items": [
+      {
+        "filePath": "/virtual/fragment-three-sites-dead.ts",
+        "header": "4 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 18,
+            "line": 8
+          },
+          "start": {
+            "column": 2,
+            "line": 3
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/fragment-three-sites-dead.ts",
+        "header": "4 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 18,
+            "line": 19
+          },
+          "start": {
+            "column": 2,
+            "line": 14
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/fragment-three-sites-dead.ts",
+        "header": "4 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 18,
+            "line": 29
+          },
+          "start": {
+            "column": 2,
+            "line": 24
+          }
+        }
+      }
+    ]
+  }
+]

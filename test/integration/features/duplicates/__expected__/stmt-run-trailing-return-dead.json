@@ -1,0 +1,38 @@
+[
+  {
+    "cloneType": "fragment",
+    "findingKind": "fragment-clone",
+    "items": [
+      {
+        "filePath": "/virtual/stmt-run-trailing-return-dead.ts",
+        "header": "4 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 19,
+            "line": 8
+          },
+          "start": {
+            "column": 2,
+            "line": 3
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/stmt-run-trailing-return-dead.ts",
+        "header": "4 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 19,
+            "line": 19
+          },
+          "start": {
+            "column": 2,
+            "line": 14
+          }
+        }
+      }
+    ]
+  }
+]

@@ -218,8 +218,12 @@ const isExtractable = (block: BlockInfo, start: number, length: number): boolean
   const run = block.statements.slice(start, start + length);
   const after = block.statements.slice(start + length);
 
-  // 제어 이탈: run 안에 (자기 run의 루프/스위치 밖으로 나가는) return/break/continue
-  if (run.some(hasControlEscape)) {
+  // 마지막 top-level return은 추출 가능: 헬퍼가 그 값을 반환하고 호출자가 `return helper()`.
+  // 그 외 위치의 return·break·continue는 제어 이탈 → 추출 불가.
+  const last = run[run.length - 1];
+  const body = last !== undefined && last.type === 'ReturnStatement' ? run.slice(0, -1) : run;
+
+  if (body.some(hasControlEscape)) {
     return false;
   }
 

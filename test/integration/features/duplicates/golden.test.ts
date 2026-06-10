@@ -34,10 +34,10 @@ describe('golden/duplicates', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   rg('delegating-wrapper-keep'); // 골격: 파라미터 무변형 단일 호출 반환
-  rg('overload-signatures-keep'); // 골격: 본문 없는 overload 시그니처
+  rg('overload-signatures-keep'); // 비대상: overload 시그니처(TSDeclareFunction)는 수집 대상 아님
   rg('empty-marker-interface-keep'); // 골격: 빈 marker 타입
   rg('decorator-registration-keep'); // 골격: 프레임워크 등록 형태의 위임
-  rg('free-id-divergent-keep'); // 자유 식별자는 치환 불가 — 다른 호출 대상 = 다른 결정
+  rgFrag('free-id-divergent-keep'); // 자유 식별자는 치환 불가 — 다른 호출 대상 = 다른 결정 (선언 레벨; 사소한 suffix는 floor)
   rg('single-literal-keep'); // 비대상: 단일 상수값 반복 (상수 추출 영역)
   rg('type-alias-diff-bodies-keep'); // 타입 선언 본문은 결정 그 자체 — 치환 금지
   rg('interface-member-order-keep'); // 멤버 순서 다름 = 정규형 어긋남
@@ -50,8 +50,10 @@ describe('golden/duplicates', () => {
   // W — 추출 가능한 연속 문장열 복제 (jscpd가 잡는 조각 + jscpd가 못 잡는 rename까지)
   rgFrag('stmt-run-extractable-dead'); // W: live-out ≤1, 추출 가능
   rgFrag('stmt-run-rename-dead'); // W: 지역변수명만 다른 문장열 (바인딩 정규화)
+  rgFrag('stmt-run-trailing-return-dead'); // W: 마지막 top-level return은 추출 가능 (값 반환 헬퍼)
   rgFrag('near-miss-gapped-dead'); // W: 선언 near-miss는 미보고, 공유 문장열은 fragment 클론
   rgFrag('subfunction-fragment-dead'); // W: 서로 다른 함수가 공유하는 내부 문장열
+  rgFrag('fragment-three-sites-dead'); // W: 같은 run이 3곳 → 하나의 그룹(items 3)
 
   // K — 조각 경계/안전성 가드 (minSize 12에서 실제 검증)
   rgFrag('stmt-run-leaks-binding-keep'); // K: live-out 2개 → 추출 불가
@@ -63,5 +65,7 @@ describe('golden/duplicates', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   rg('interface-vs-typealias-dead'); // W: 같은 계약이 interface와 type alias 양쪽에 (cross-kind)
+  rg('contract-optional-mismatch-keep'); // K: optional(?)은 계약의 일부 — id? vs id는 다른 계약
   rg('lookup-table-dead'); // W: 동일 규칙 테이블이 다른 이름으로 중복 (데이터 선언)
+  rg('lookup-array-table-dead'); // W: 배열 룩업 테이블 중복 (ArrayExpression 경로)
 });

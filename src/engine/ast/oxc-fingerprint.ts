@@ -325,6 +325,17 @@ const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): s
       diffs.push(operatorValue);
     }
 
+    // 계약 멤버의 optional(?)·readonly는 계약의 일부 — 정규형에 반영 (거짓병합 방지)
+    if (n.type === 'TSPropertySignature' || n.type === 'TSMethodSignature' || n.type === 'TSIndexSignature') {
+      if (rec.optional === true) {
+        diffs.push('?');
+      }
+
+      if (rec.readonly === true) {
+        diffs.push('readonly');
+      }
+    }
+
     // Identifier name handling — 이름 위치(프로퍼티·멤버·키)면 치환 없이 그대로 비교
     if (n.type === 'Identifier') {
       if (verbatim) {

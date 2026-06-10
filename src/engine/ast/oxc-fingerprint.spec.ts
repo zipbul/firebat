@@ -108,6 +108,26 @@ describe('engine/ast/oxc-fingerprint', () => {
     expect(createOxcFingerprintNormalized(ifaceNode)).toBe(createOxcFingerprintNormalized(aliasNode));
   });
 
+  it('should distinguish contracts differing only in an optional member', () => {
+    const norm = (src: string) => {
+      const p = parseSource('/v/x.ts', src);
+
+      return createOxcFingerprintNormalized(collectOxcNodes(p.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!);
+    };
+
+    expect(norm('interface X { id?: string; }')).not.toBe(norm('interface X { id: string; }'));
+  });
+
+  it('should distinguish contracts differing only in a readonly member', () => {
+    const norm = (src: string) => {
+      const p = parseSource('/v/x.ts', src);
+
+      return createOxcFingerprintNormalized(collectOxcNodes(p.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!);
+    };
+
+    expect(norm('interface X { readonly id: string; }')).not.toBe(norm('interface X { id: string; }'));
+  });
+
   it('should distinguish contracts whose member order differs', () => {
     const a = parseSource('/v/a.ts', 'interface X { x: number; y: number; }');
     const b = parseSource('/v/b.ts', 'interface X { y: number; x: number; }');

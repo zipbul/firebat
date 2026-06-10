@@ -88,7 +88,33 @@ function b(xs: number[]): string {
     expect(run(src)).toEqual([]);
   });
 
-  it('should NOT report a run that escapes control flow with a return', () => {
+  it('should report a run whose final statement is a top-level return (extractable as a value)', () => {
+    const src = `
+function a(xs: number[]): number {
+  warmA();
+  const seen = new Set<number>();
+  for (const x of xs) {
+    seen.add(x);
+  }
+  const total = seen.size;
+  return total + 1;
+}
+function b(ys: number[]): number {
+  prepB();
+  other();
+  const seen = new Set<number>();
+  for (const x of ys) {
+    seen.add(x);
+  }
+  const total = seen.size;
+  return total + 1;
+}
+`;
+
+    expect(kinds(src)).toEqual(['fragment-clone']);
+  });
+
+  it('should NOT report a run with a non-terminal early return', () => {
     const src = `
 function a(xs: number[]): number {
   for (const x of xs) {
