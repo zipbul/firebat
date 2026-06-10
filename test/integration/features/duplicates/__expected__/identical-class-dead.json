@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/identical-class-dead/a.ts",
+        "header": "PriceEngine",
+        "kind": "type",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 13
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/identical-class-dead/b.ts",
+        "header": "PriceEngine",
+        "kind": "type",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 13
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]

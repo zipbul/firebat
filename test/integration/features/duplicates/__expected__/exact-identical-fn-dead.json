@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/exact-identical-fn-dead/a.ts",
+        "header": "applyDiscount",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/exact-identical-fn-dead/b.ts",
+        "header": "applyDiscount",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]

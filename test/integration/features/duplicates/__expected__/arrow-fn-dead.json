@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/arrow-fn-dead/a.ts",
+        "header": "anonymous",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 91,
+            "line": 1
+          },
+          "start": {
+            "column": 26,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/arrow-fn-dead/b.ts",
+        "header": "anonymous",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 91,
+            "line": 1
+          },
+          "start": {
+            "column": 26,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]

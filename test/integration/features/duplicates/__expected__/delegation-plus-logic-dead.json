@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/delegation-plus-logic-dead.ts",
+        "header": "find",
+        "kind": "method",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 7
+          },
+          "start": {
+            "column": 2,
+            "line": 4
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/delegation-plus-logic-dead.ts",
+        "header": "find",
+        "kind": "method",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 20
+          },
+          "start": {
+            "column": 2,
+            "line": 17
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]

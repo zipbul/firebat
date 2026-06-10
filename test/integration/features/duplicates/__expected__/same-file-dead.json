@@ -1,0 +1,48 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/same-file-dead.ts",
+        "header": "sumOrders",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/same-file-dead.ts",
+        "header": "sumRefunds",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 15
+          },
+          "start": {
+            "column": 0,
+            "line": 9
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "sumOrders",
+          "location": "id.name",
+          "right": "sumRefunds"
+        }
+      ]
+    }
+  }
+]

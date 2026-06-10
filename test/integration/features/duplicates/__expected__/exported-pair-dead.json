@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/exported-pair-dead/a.ts",
+        "header": "normalizeTag",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 7,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/exported-pair-dead/b.ts",
+        "header": "normalizeTag",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 7,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]

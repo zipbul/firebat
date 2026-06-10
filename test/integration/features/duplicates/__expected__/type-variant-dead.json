@@ -1,0 +1,38 @@
+[
+  {
+    "cloneType": "normalized",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/type-variant-dead/a.ts",
+        "header": "wrapValue",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 4
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/type-variant-dead/b.ts",
+        "header": "wrapValue",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 4
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      }
+    ]
+  }
+]

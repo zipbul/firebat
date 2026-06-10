@@ -1,0 +1,88 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/rename-bound-vars-dead/a.ts",
+        "header": "normalizePrice",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/rename-bound-vars-dead/b.ts",
+        "header": "normalizePrice",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "price",
+          "location": "params[0].name",
+          "right": "amount"
+        },
+        {
+          "left": "rate",
+          "location": "params[1].name",
+          "right": "factor"
+        },
+        {
+          "left": "discounted",
+          "location": "body.body[0].declarations[0].id.name",
+          "right": "reduced"
+        },
+        {
+          "left": "price",
+          "location": "body.body[0].declarations[0].init.left.name",
+          "right": "amount"
+        },
+        {
+          "left": "price",
+          "location": "body.body[0].declarations[0].init.right.left.name",
+          "right": "amount"
+        },
+        {
+          "left": "rate",
+          "location": "body.body[0].declarations[0].init.right.right.name",
+          "right": "factor"
+        },
+        {
+          "left": "rounded",
+          "location": "body.body[1].declarations[0].id.name",
+          "right": "snapped"
+        },
+        {
+          "left": "discounted",
+          "location": "body.body[1].declarations[0].init.arguments[0].name",
+          "right": "reduced"
+        },
+        {
+          "left": "rounded",
+          "location": "body.body[2].argument.name",
+          "right": "snapped"
+        }
+      ]
+    }
+  }
+]

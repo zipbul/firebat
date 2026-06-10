@@ -1,0 +1,3 @@
+interface SerializableMarker {}
+
+interface TaggableMarker {}

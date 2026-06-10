@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/method-across-classes-dead.ts",
+        "header": "compute",
+        "kind": "method",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 8
+          },
+          "start": {
+            "column": 2,
+            "line": 4
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/method-across-classes-dead.ts",
+        "header": "compute",
+        "kind": "method",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 22
+          },
+          "start": {
+            "column": 2,
+            "line": 18
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]

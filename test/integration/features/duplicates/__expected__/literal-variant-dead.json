@@ -1,0 +1,53 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "literal-variant",
+    "items": [
+      {
+        "filePath": "/virtual/literal-variant-dead/a.ts",
+        "header": "applyDiscount",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/literal-variant-dead/b.ts",
+        "header": "applyDiscount",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "literal",
+      "pairs": [
+        {
+          "left": "0",
+          "location": "body.body[1].test.right.value",
+          "right": "8"
+        },
+        {
+          "left": "0",
+          "location": "body.body[1].consequent.body[0].argument.value",
+          "right": "8"
+        }
+      ]
+    }
+  }
+]
