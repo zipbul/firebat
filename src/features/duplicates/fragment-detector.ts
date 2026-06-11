@@ -50,14 +50,27 @@ interface FragmentDetectorOptions {
   readonly minSize: number;
 }
 
-export const detectFragmentClones = (
-  files: ReadonlyArray<ParsedFile>,
-  options: FragmentDetectorOptions,
-): ReadonlyArray<DuplicateGroup> => {
+/** 후보 run 그룹의 판정 — 골든이 "고려 후 거부"를 증명할 수 있게 사유를 노출한다. */
+export type FragmentVerdict =
+  | { readonly outcome: 'reported' }
+  | { readonly outcome: 'rejected'; readonly reason: 'below-min-size' | 'multiple-live-outs' | 'control-escape' };
+
+export interface FragmentCandidate {
+  readonly sites: number;
+  readonly runSize: number;
+  readonly verdict: FragmentVerdict;
+}
+
+interface FragmentAnalysis {
+  readonly groups: ReadonlyArray<DuplicateGroup>;
+  readonly candidates: ReadonlyArray<FragmentCandidate>;
+}
+
+const analyzeFragments = (files: ReadonlyArray<ParsedFile>, options: FragmentDetectorOptions): FragmentAnalysis => {
   const blocks = collectBlocks(files);
 
   if (blocks.length === 0) {
-    return [];
+    return { groups: [], candidates: [] };
   }
 
   // ── 시그니처별 최대 run 수집 (블록 쌍 비교) ──────────────────────────────────
@@ -86,8 +99,9 @@ export const detectFragmentClones = (
     }
   }
 
-  // ── 그룹 생성 + 필터 ─────────────────────────────────────────────────────────
+  // ── 후보 판정 (사유 기록) ─────────────────────────────────────────────────────
   const groups: DuplicateGroup[] = [];
+  const candidates: FragmentCandidate[] = [];
 
   for (const occurrences of runsBySignature.values()) {
     if (occurrences.length < 2) {
@@ -96,29 +110,47 @@ export const detectFragmentClones = (
 
     const rep = occurrences[0]!;
     const repBlock = blocks[rep.blockIdx]!;
-    // 최소 크기: run의 정규형 AST 노드 수 합
     const runSize = sumRange(repBlock.sizes, rep.start, rep.length);
+    const verdict = classifyCandidate(repBlock, rep, runSize, options.minSize);
 
-    if (runSize < options.minSize) {
-      continue;
+    candidates.push({ sites: occurrences.length, runSize, verdict });
+
+    if (verdict.outcome === 'reported') {
+      groups.push({
+        cloneType: 'fragment',
+        findingKind: 'fragment-clone',
+        items: dedupeItems(occurrences.map(occ => toFragmentItem(blocks[occ.blockIdx]!, occ))),
+      });
     }
-
-    // 추출 안전성: 대표 run으로 판정 (모든 멤버 동일 구조)
-    if (!isExtractable(repBlock, rep.start, rep.length)) {
-      continue;
-    }
-
-    const items = occurrences.map(occ => toFragmentItem(blocks[occ.blockIdx]!, occ));
-
-    groups.push({
-      cloneType: 'fragment',
-      findingKind: 'fragment-clone',
-      items: dedupeItems(items),
-    });
   }
 
-  return groups.filter(g => g.items.length >= 2);
+  return { groups: groups.filter(g => g.items.length >= 2), candidates };
 };
+
+const classifyCandidate = (block: BlockInfo, rep: RunOccurrence, runSize: number, minSize: number): FragmentVerdict => {
+  if (runSize < minSize) {
+    return { outcome: 'rejected', reason: 'below-min-size' };
+  }
+
+  const safety = extractSafety(block, rep.start, rep.length);
+
+  if (safety !== 'ok') {
+    return { outcome: 'rejected', reason: safety };
+  }
+
+  return { outcome: 'reported' };
+};
+
+export const detectFragmentClones = (
+  files: ReadonlyArray<ParsedFile>,
+  options: FragmentDetectorOptions,
+): ReadonlyArray<DuplicateGroup> => analyzeFragments(files, options).groups;
+
+/** 골든 보조: 어떤 후보 run이 어떤 사유로 거부됐는지 노출 (vacuous K 방지 검증용). */
+export const explainFragments = (
+  files: ReadonlyArray<ParsedFile>,
+  options: FragmentDetectorOptions,
+): ReadonlyArray<FragmentCandidate> => analyzeFragments(files, options).candidates;
 
 // ─── 블록 수집 ───────────────────────────────────────────────────────────────
 
@@ -214,7 +246,9 @@ const collectMaximalRuns = (
 
 // ─── 추출 안전성 ──────────────────────────────────────────────────────────────
 
-const isExtractable = (block: BlockInfo, start: number, length: number): boolean => {
+type ExtractSafety = 'ok' | 'multiple-live-outs' | 'control-escape';
+
+const extractSafety = (block: BlockInfo, start: number, length: number): ExtractSafety => {
   const run = block.statements.slice(start, start + length);
   const after = block.statements.slice(start + length);
 
@@ -224,7 +258,7 @@ const isExtractable = (block: BlockInfo, start: number, length: number): boolean
   const body = last !== undefined && last.type === 'ReturnStatement' ? run.slice(0, -1) : run;
 
   if (body.some(hasControlEscape)) {
-    return false;
+    return 'control-escape';
   }
 
   // live-out: run에서 선언한 바인딩 중 run 밖에서 쓰이는 것
@@ -237,7 +271,7 @@ const isExtractable = (block: BlockInfo, start: number, length: number): boolean
   }
 
   if (declared.size === 0) {
-    return true;
+    return 'ok';
   }
 
   const afterRefs = collectReferencedNames(after);
@@ -249,7 +283,7 @@ const isExtractable = (block: BlockInfo, start: number, length: number): boolean
     }
   }
 
-  return liveOuts <= 1;
+  return liveOuts <= 1 ? 'ok' : 'multiple-live-outs';
 };
 
 const CONTROL_ESCAPE_TYPES = new Set(['ReturnStatement']);
