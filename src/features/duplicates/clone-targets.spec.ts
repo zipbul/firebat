@@ -112,17 +112,32 @@ describe('isDecisionlessSkeleton', () => {
 
   // ── 클래스/일반 노드는 골격 판정 비대상 ──────────────────────────────────
 
-  it('should not classify a class declaration as skeleton', () => {
+  it('should not classify an empty class declaration as skeleton', () => {
     const node = firstNodeOfType(`class Empty {}`, 'ClassDeclaration');
 
     expect(isDecisionlessSkeleton(node)).toBe(false);
   });
 
-  it('should not classify a multi-statement function as skeleton', () => {
+  it('should classify a class with only abstract members as skeleton', () => {
     const node = firstNodeOfType(
-      `function f(x: number) { const y = x * 2; return repo.find(y); }`,
-      'FunctionDeclaration',
+      `abstract class A { abstract run(x: number): void; abstract get(id: string): number; }`,
+      'ClassDeclaration',
     );
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should not classify a class with an implemented method as skeleton', () => {
+    const node = firstNodeOfType(
+      `abstract class A { abstract run(x: number): void; help(): number { return 1; } }`,
+      'ClassDeclaration',
+    );
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  it('should not classify a multi-statement function as skeleton', () => {
+    const node = firstNodeOfType(`function f(x: number) { const y = x * 2; return repo.find(y); }`, 'FunctionDeclaration');
 
     expect(isDecisionlessSkeleton(node)).toBe(false);
   });

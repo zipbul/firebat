@@ -138,6 +138,32 @@ export const isDecisionlessSkeleton = (node: Node): boolean => {
     return false;
   }
 
+  // 멤버가 전부 구현 없는 abstract/시그니처뿐인 클래스 = 프로토콜 강제 골격 (결정 없음)
+  if (t === 'ClassDeclaration' || t === 'ClassExpression') {
+    const members = (node as Node & { readonly body: Node & { readonly body: ReadonlyArray<Node> } }).body.body;
+
+    return members.length > 0 && members.every(isBodylessMember);
+  }
+
+  return false;
+};
+
+const isBodylessMember = (member: Node): boolean => {
+  if (member.type === 'TSAbstractMethodDefinition' || member.type === 'TSAbstractPropertyDefinition') {
+    return true;
+  }
+
+  if (member.type === 'MethodDefinition') {
+    const value = (member as Node & { readonly value: Node | null }).value;
+
+    return value === null || value === undefined || (value as Node & { readonly body: Node | null }).body === null;
+  }
+
+  // 초기값 없는 필드 선언
+  if (member.type === 'PropertyDefinition') {
+    return (member as Node & { readonly value: Node | null }).value === null;
+  }
+
   return false;
 };
 

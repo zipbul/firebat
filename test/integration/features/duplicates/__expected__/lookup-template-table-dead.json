@@ -1,0 +1,38 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/lookup-template-table-dead.ts",
+        "header": "TEMPLATES_A",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 6,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/lookup-template-table-dead.ts",
+        "header": "TEMPLATES_B",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 11
+          },
+          "start": {
+            "column": 6,
+            "line": 7
+          }
+        }
+      }
+    ]
+  }
+]

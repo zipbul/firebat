@@ -36,6 +36,7 @@ describe('golden/duplicates', () => {
   rg('delegating-wrapper-keep'); // 골격: 파라미터 무변형 단일 호출 반환
   rg('overload-signatures-keep'); // 비대상: overload 시그니처(TSDeclareFunction)는 수집 대상 아님
   rg('empty-marker-interface-keep'); // 골격: 빈 marker 타입
+  rg('abstract-class-skeleton-keep'); // 골격: 멤버가 전부 abstract인 프로토콜 클래스
   rg('decorator-registration-keep'); // 골격: 프레임워크 등록 형태의 위임
   rgFrag('free-id-divergent-keep'); // 자유 식별자는 치환 불가 — 다른 호출 대상 = 다른 결정 (선언 레벨; 사소한 suffix는 floor)
   rg('single-literal-keep'); // 비대상: 단일 상수값 반복 (상수 추출 영역)
@@ -56,9 +57,11 @@ describe('golden/duplicates', () => {
   rgFrag('fragment-three-sites-dead'); // W: 같은 run이 3곳 → 하나의 그룹(items 3)
 
   // K — 조각 경계/안전성 가드 (minSize 12에서 실제 검증)
+  rgFrag('stmt-run-nested-block-dead'); // W: if/for 등 중첩 블록 안의 공유 문장열도 대상
   rgFrag('stmt-run-leaks-binding-keep'); // K: live-out 2개 → 추출 불가
   rgFrag('stmt-run-too-small-keep'); // K: 최소 크기 미만 사소한 문장열
   rgFrag('stmt-run-free-id-keep'); // K: 다른 함수 호출 = 다른 결정 (run 끊김)
+  rgFrag('stmt-run-yield-keep'); // K: yield 포함 run은 추출 불가 (generator 프로토콜)
 
   // ════════════════════════════════════════════════════════════════════════
   // 계약·데이터 — cross-kind 구조 비교 + 규칙 데이터 중복
@@ -70,6 +73,7 @@ describe('golden/duplicates', () => {
   rg('contract-optional-mismatch-keep'); // K: optional(?)은 계약의 일부 — id? vs id는 다른 계약
   rg('lookup-table-dead'); // W: 동일 규칙 테이블이 다른 이름으로 중복 (데이터 선언)
   rg('lookup-array-table-dead'); // W: 배열 룩업 테이블 중복 (ArrayExpression 경로)
+  rg('lookup-template-table-dead'); // W: 보간 없는 template literal 값 테이블
 
   // ════════════════════════════════════════════════════════════════════════
   // 중첩 subsumption — 통째 클론 안의 fragment는 별도 보고하지 않는다

@@ -126,6 +126,11 @@ const isStaticValue = (node: Node): boolean => {
     return true;
   }
 
+  // 보간 없는 템플릿 리터럴은 정적 (값이 곧 데이터)
+  if (node.type === 'TemplateLiteral') {
+    return (node as Node & { readonly expressions: ReadonlyArray<Node> }).expressions.length === 0;
+  }
+
   if (node.type === 'UnaryExpression') {
     const arg = (node as Node & { readonly argument: Node }).argument;
 
@@ -518,7 +523,9 @@ const filterSubsumedGroups = (groups: DuplicateGroup[]): DuplicateGroup[] => {
           return false;
         }
 
-        if (parent.items.length < child.items.length) {
+        // 같은 tier 안에서만 item 수 가드 — 상위 tier(선언)는 item 1개가 하위 tier(fragment)
+        // item 여러 개를 공간적으로 포함할 수 있으므로 수 비교로 막지 않는다.
+        if (parent.cloneType === child.cloneType && parent.items.length < child.items.length) {
           return false;
         }
 

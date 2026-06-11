@@ -233,6 +233,103 @@ function b(ys: number[]): number {
     expect(kinds(src, 1)).toEqual(['fragment-clone']);
   });
 
+  it('should NOT report a run containing a yield (generator protocol binds its position)', () => {
+    const src = `
+function* a(xs: number[]): Generator<number> {
+  primeA();
+  const s = aggregate(xs);
+  yield s;
+  const z = s + 1;
+  emit(z);
+}
+function* b(ys: number[]): Generator<number> {
+  primeB();
+  const s = aggregate(ys);
+  yield s;
+  const z = s + 1;
+  emit(z);
+}
+`;
+
+    expect(run(src)).toEqual([]);
+  });
+
+  it('should report a nested-block statement run (run lives inside an if-body)', () => {
+    const src = `
+function a(flag: boolean, xs: number[]): number {
+  if (flag) {
+    const seen = new Set<number>();
+    for (const x of xs) {
+      seen.add(x);
+    }
+    const c = seen.size;
+    const w = c * 3;
+    recordX(w);
+  }
+  return uniqueA();
+}
+function b(flag: boolean, xs: number[]): number {
+  warm();
+  if (flag) {
+    const seen = new Set<number>();
+    for (const x of xs) {
+      seen.add(x);
+    }
+    const c = seen.size;
+    const w = c * 3;
+    recordX(w);
+  }
+  return uniqueB();
+}
+`;
+    // detector 레벨에서는 중첩 블록 run을 잡는다 (if-문 자체와 if-body run; pipeline이 subsume).
+    const ks = kinds(src);
+
+    expect(ks.length).toBeGreaterThanOrEqual(1);
+    expect(ks.every(k => k === 'fragment-clone')).toBe(true);
+  });
+
+  it('should not emit overlapping runs from a tandem-repeated statement', () => {
+    // p()가 반복되는 블록 — 겹치는 슬라이스를 서로의 클론으로 보고하면 안 된다.
+    const src = `
+function a(): void {
+  lead(11, 22);
+  payload(33, 44);
+  payload(33, 44);
+  payload(33, 44);
+  tailA(55, 66);
+}
+function b(): void {
+  warm(77, 88);
+  payload(33, 44);
+  payload(33, 44);
+  payload(33, 44);
+  tailB(99, 10);
+}
+`;
+    const groups = run(src, 1);
+
+    // 보고된 fragment 그룹들 안에서 같은 파일 내 span이 서로 겹치면 안 됨
+    for (const g of groups) {
+      const byFile = new Map<string, Array<{ s: number; e: number }>>();
+
+      for (const item of g.items) {
+        const list = byFile.get(item.filePath) ?? [];
+
+        list.push({ s: item.span.start.line, e: item.span.end.line });
+        byFile.set(item.filePath, list);
+      }
+
+      for (const spans of byFile.values()) {
+        spans.sort((p, q) => p.s - q.s);
+
+        for (let i = 1; i < spans.length; i++) {
+          expect(spans[i]!.s).toBeGreaterThan(spans[i - 1]!.e);
+        }
+      }
+    }
+  });
+
   it('should return empty for a single function with no internal repetition', () => {
     const src = `
 function solo(x: number): number {

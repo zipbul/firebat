@@ -103,7 +103,11 @@ const analyzeFragments = (files: ReadonlyArray<ParsedFile>, options: FragmentDet
   const groups: DuplicateGroup[] = [];
   const candidates: FragmentCandidate[] = [];
 
-  for (const occurrences of runsBySignature.values()) {
+  for (const rawOccurrences of runsBySignature.values()) {
+    // 반복 문장(tandem repeat)에서 생기는 같은 블록 내 겹치는 run을 제거 — 겹치는 두
+    // 슬라이스를 서로의 클론으로 보고하는 비일관(둘 다 추출 불가)을 막는다.
+    const occurrences = dropOverlappingOccurrences(rawOccurrences);
+
     if (occurrences.length < 2) {
       continue;
     }
@@ -125,6 +129,26 @@ const analyzeFragments = (files: ReadonlyArray<ParsedFile>, options: FragmentDet
   }
 
   return { groups: groups.filter(g => g.items.length >= 2), candidates };
+};
+
+/** 같은 블록 내에서 statement 범위가 겹치는 occurrence를 제거 (이른 시작 우선). */
+const dropOverlappingOccurrences = (occurrences: ReadonlyArray<RunOccurrence>): RunOccurrence[] => {
+  const sorted = [...occurrences].sort((a, b) => (a.blockIdx !== b.blockIdx ? a.blockIdx - b.blockIdx : a.start - b.start));
+  const kept: RunOccurrence[] = [];
+  const lastEndByBlock = new Map<number, number>();
+
+  for (const occ of sorted) {
+    const lastEnd = lastEndByBlock.get(occ.blockIdx);
+
+    if (lastEnd !== undefined && occ.start < lastEnd) {
+      continue; // 같은 블록에서 직전 kept run과 겹침 → 버림
+    }
+
+    kept.push(occ);
+    lastEndByBlock.set(occ.blockIdx, occ.start + occ.length);
+  }
+
+  return kept;
 };
 
 const classifyCandidate = (block: BlockInfo, rep: RunOccurrence, runSize: number, minSize: number): FragmentVerdict => {
@@ -162,24 +186,90 @@ const collectBlocks = (files: ReadonlyArray<ParsedFile>): BlockInfo[] => {
       continue;
     }
 
-    const fnNodes = collectOxcNodes(file.program, n => FUNCTION_BODY_OWNERS.has(n.type));
-
-    for (const fn of fnNodes) {
+    for (const fn of collectOxcNodes(file.program, n => FUNCTION_BODY_OWNERS.has(n.type))) {
       const body = getFunctionBody(fn);
 
-      if (body === null || body.length < 2) {
+      if (body === null) {
         continue;
       }
 
+      // 함수의 모든 바인딩으로 정규형 통일 후, 함수 본문 + 그 안의 모든 중첩 블록을
+      // 각각 candidate 블록으로 수집한다 (CLAUDE.md: "한 BlockStatement.body" = 모든 블록).
       const boundNames = collectBindingNames(fn);
-      const fps = body.map(stmt => createOxcFingerprintShapeWithBindings(stmt, boundNames));
-      const sizes = body.map(stmt => countOxcSize(stmt));
 
-      blocks.push({ filePath: file.filePath, sourceText: file.sourceText, statements: body, fps, sizes });
+      addBlockTree(blocks, file.filePath, file.sourceText, fn, boundNames);
     }
   }
 
   return blocks;
+};
+
+/** fn 본문과 그 안의 중첩 BlockStatement.body들을 블록으로 추가 (중첩 함수는 자기 스코프로 별도 처리). */
+const addBlockTree = (
+  out: BlockInfo[],
+  filePath: string,
+  sourceText: string,
+  fn: Node,
+  boundNames: ReadonlySet<string>,
+): void => {
+  const seenBodies = new Set<ReadonlyArray<Node>>();
+
+  const fnBody = getFunctionBody(fn);
+
+  const pushBlock = (statements: ReadonlyArray<Node>): void => {
+    if (statements.length < 2 || seenBodies.has(statements)) {
+      return;
+    }
+
+    seenBodies.add(statements);
+    out.push({
+      filePath,
+      sourceText,
+      statements,
+      fps: statements.map(stmt => createOxcFingerprintShapeWithBindings(stmt, boundNames)),
+      sizes: statements.map(stmt => countOxcSize(stmt)),
+    });
+  };
+
+  const walk = (n: Node): void => {
+    // 중첩 함수는 collectBlocks 상위 순회가 자기 boundNames로 따로 다룬다 → 멈춤
+    if (n !== fn && FUNCTION_BODY_OWNERS.has(n.type)) {
+      return;
+    }
+
+    if (n.type === 'BlockStatement' || n.type === 'StaticBlock') {
+      pushBlock((n as Node & { readonly body: ReadonlyArray<Node> }).body);
+    }
+
+    if (n.type === 'SwitchCase') {
+      pushBlock((n as Node & { readonly consequent: ReadonlyArray<Node> }).consequent);
+    }
+
+    const rec = n as unknown as Record<string, unknown>;
+    const keys = visitorKeys[n.type];
+
+    if (keys === undefined) {
+      return;
+    }
+
+    for (const key of keys) {
+      const value = rec[key];
+
+      if (isOxcNode(value)) {
+        walk(value);
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isOxcNode(item)) {
+            walk(item);
+          }
+        }
+      }
+    }
+  };
+
+  if (fnBody !== null) {
+    walk(fn);
+  }
 };
 
 const getFunctionBody = (fn: Node): ReadonlyArray<Node> | null => {
@@ -286,10 +376,12 @@ const extractSafety = (block: BlockInfo, start: number, length: number): Extract
   return liveOuts <= 1 ? 'ok' : 'multiple-live-outs';
 };
 
-const CONTROL_ESCAPE_TYPES = new Set(['ReturnStatement']);
+// return + yield/await: yield는 generator 프로토콜에, await는 async coloring에 묶여
+// 위치를 보존해야 추출이 안전하다 (CLAUDE.md waste: await/yield 위치 보존).
+const CONTROL_ESCAPE_TYPES = new Set(['ReturnStatement', 'YieldExpression', 'AwaitExpression']);
 const LOOP_TYPES = new Set(['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement']);
 
-/** run 노드가 자신의 경계 밖으로 제어를 넘기는 return/break/continue를 포함하는지 */
+/** run 노드가 자신의 경계 밖으로 제어를 넘기거나(return/break/continue) yield·await를 포함하는지 */
 const hasControlEscape = (node: Node): boolean => {
   let escape = false;
 
