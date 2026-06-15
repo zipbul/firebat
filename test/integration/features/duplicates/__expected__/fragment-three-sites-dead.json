@@ -49,8 +49,6 @@
         }
       }
     ],
-    "severity": 93,
-    "size": 31,
     "suggestedExtraction": {
       "params": [
         "xs"

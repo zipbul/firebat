@@ -34,8 +34,6 @@
         }
       }
     ],
-    "severity": 76,
-    "size": 38,
     "suggestedExtraction": {
       "params": [
         "flag",

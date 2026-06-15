@@ -34,8 +34,6 @@
         }
       }
     ],
-    "severity": 78,
-    "size": 39,
     "suggestedParams": {
       "kind": "identifier",
       "pairs": []

@@ -115,29 +115,8 @@ export const analyzeDuplicates = (
   // ── 규칙 데이터(매핑·룩업 테이블) 클론 ──────────────────────────────────────
   result.push(...detectDataTableClones(uniqueFiles, minSize));
 
-  return sortBySeverity(filterSubsumedGroups(result));
+  return filterSubsumedGroups(result);
 };
-
-/** severity 내림차순 정렬 — 영향 큰 클론 먼저. 동률은 안정적 tiebreak(첫 site 위치). */
-const sortBySeverity = (groups: ReadonlyArray<DuplicateGroup>): DuplicateGroup[] =>
-  [...groups].sort((a, b) => {
-    if (a.severity !== b.severity) {
-      return b.severity - a.severity;
-    }
-
-    const ai = a.items[0];
-    const bi = b.items[0];
-
-    if (ai === undefined || bi === undefined) {
-      return 0;
-    }
-
-    if (ai.filePath !== bi.filePath) {
-      return ai.filePath < bi.filePath ? -1 : 1;
-    }
-
-    return ai.span.start.line - bi.span.start.line;
-  });
 
 // ─── 규칙 데이터 클론 ─────────────────────────────────────────────────────────
 
@@ -270,14 +249,10 @@ const detectDataTableClones = (files: ReadonlyArray<ParsedFile>, minSize: number
 
   for (const items of map.values()) {
     if (items.length >= 2) {
-      const size = items[0]!.size;
-
       groups.push({
         cloneType: 'exact',
         findingKind: 'exact-clone',
         items: sortItemsDeterministic(items).map(toDuplicateItem),
-        size,
-        severity: size * items.length,
       });
     }
   }
@@ -473,18 +448,12 @@ const toDuplicateGroup = (
   group: InternalCloneGroup,
   suggestedParams: CloneDiff | undefined,
   findingKindOverride?: DuplicateFindingKind,
-): DuplicateGroup => {
-  const size = group.items[0]?.size ?? 0;
-
-  return {
-    cloneType: group.cloneType,
-    findingKind: findingKindOverride ?? group.findingKind ?? cloneTypeToFindingKind(group.cloneType),
-    items: group.items.map(toDuplicateItem),
-    ...(suggestedParams !== undefined ? { suggestedParams } : {}),
-    size,
-    severity: size * group.items.length,
-  };
-};
+): DuplicateGroup => ({
+  cloneType: group.cloneType,
+  findingKind: findingKindOverride ?? group.findingKind ?? cloneTypeToFindingKind(group.cloneType),
+  items: group.items.map(toDuplicateItem),
+  ...(suggestedParams !== undefined ? { suggestedParams } : {}),
+});
 
 const toDuplicateItem = (item: InternalCloneItem): DuplicateItem => ({
   kind: item.kind,

@@ -197,10 +197,6 @@ export interface DuplicateGroup {
   readonly suggestedParams?: CloneDiff;
   /** 문장열 클론을 헬퍼로 추출하는 계획 (fragment-clone 한정). */
   readonly suggestedExtraction?: ExtractionPlan;
-  /** 클론 단위의 정규형 AST 노드 수 (영향 크기). */
-  readonly size: number;
-  /** 결정적 우선순위 = size × 사이트 수. 클수록 영향이 큼. */
-  readonly severity: number;
 }
 
 interface DependencyCycle {

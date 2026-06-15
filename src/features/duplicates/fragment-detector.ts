@@ -128,8 +128,6 @@ const analyzeFragments = (files: ReadonlyArray<ParsedFile>, options: FragmentDet
         cloneType: 'fragment',
         findingKind: 'fragment-clone',
         items,
-        size: runSize,
-        severity: runSize * items.length,
         suggestedExtraction: buildExtractionPlan(repBlock, rep.start, rep.length),
       });
     }

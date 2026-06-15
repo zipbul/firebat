@@ -34,8 +34,6 @@
         }
       }
     ],
-    "severity": 48,
-    "size": 24,
     "suggestedExtraction": {
       "params": [
         "rows"
