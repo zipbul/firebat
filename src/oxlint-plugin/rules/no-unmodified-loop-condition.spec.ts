@@ -5,13 +5,27 @@ import type { AstNode } from '../types';
 import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noUnmodifiedLoopConditionRule } from './no-unmodified-loop-condition';
 
+const emptyBody: AstNode = { type: 'BlockStatement', body: [] };
+
 describe('no-unmodified-loop-condition', () => {
-  it('should report when loop condition identifiers are never mutated', () => {
+  it.each<[string, AstNode]>([
+    ['loop condition identifiers are never mutated', { type: 'Identifier', name: 'flag' }],
+    [
+      'object member in condition is unmodified',
+      // while (list.length > 0) {} <-- if list is not mutated
+      {
+        type: 'BinaryExpression',
+        left: {
+          type: 'MemberExpression',
+          object: { type: 'Identifier', name: 'list' },
+          property: { type: 'Identifier', name: 'length' },
+        },
+      },
+    ],
+  ])('should report when %s', (_label, testNode) => {
     // Arrange
     const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
-    const testNode: AstNode = { type: 'Identifier', name: 'flag' };
-    const bodyNode: AstNode = { type: 'BlockStatement', body: [] };
-    const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: bodyNode };
+    const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: emptyBody };
 
     // Act
     visitor.WhileStatement(whileNode);
@@ -47,37 +61,13 @@ describe('no-unmodified-loop-condition', () => {
     // for (; i < 10; i++)
     const testNode: AstNode = { type: 'BinaryExpression', left: { type: 'Identifier', name: 'i' } };
     const updateNode: AstNode = { type: 'UpdateExpression', argument: { type: 'Identifier', name: 'i' } };
-    const bodyNode: AstNode = { type: 'BlockStatement', body: [] };
-    const forNode: AstNode = { type: 'ForStatement', test: testNode, update: updateNode, body: bodyNode };
+    const forNode: AstNode = { type: 'ForStatement', test: testNode, update: updateNode, body: emptyBody };
 
     // Act
     visitor.ForStatement(forNode);
 
     // Assert
     expect(reports.length).toBe(0);
-  });
-
-  it('should report when object member in condition is unmodified', () => {
-    // Arrange
-    // while (list.length > 0) {}  <-- if list is not mutated
-    const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
-    const testNode: AstNode = {
-      type: 'BinaryExpression',
-      left: {
-        type: 'MemberExpression',
-        object: { type: 'Identifier', name: 'list' },
-        property: { type: 'Identifier', name: 'length' },
-      },
-    };
-    const bodyNode: AstNode = { type: 'BlockStatement', body: [] };
-    const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: bodyNode };
-
-    // Act
-    visitor.WhileStatement(whileNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('unmodified');
   });
 
   it('should skip report when DoWhileStatement mutates condition', () => {

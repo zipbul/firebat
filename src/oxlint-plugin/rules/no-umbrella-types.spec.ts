@@ -22,42 +22,19 @@ describe('no-umbrella-types', () => {
     expect(reports[1]?.messageId).toBe('objectKeyword');
   });
 
-  it('should report forbidden globals when referenced', () => {
+  it.each<[string, string, string[]]>([
+    ['forbidden globals are referenced', 'Function', ['forbiddenGlobal']],
+    ['type reference is allowed', 'AllowedType', []],
+    ['generic references are forbidden', 'DeepPartial', ['forbiddenAlias']],
+  ])('should produce expected reports when %s', (_label, name, expectedMessageIds) => {
     // Arrange
     const { visitor, reports } = setupRule(noUmbrellaTypesRule);
-    const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'Function' } };
+    const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name } };
 
     // Act
     visitor.TSTypeReference(typeNode);
 
     // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('forbiddenGlobal');
-  });
-
-  it('should skip report when type reference is allowed', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(noUmbrellaTypesRule);
-    const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'AllowedType' } };
-
-    // Act
-    visitor.TSTypeReference(typeNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should report generic references when they are forbidden', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(noUmbrellaTypesRule);
-    // DeepPartial<T>
-    const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'DeepPartial' } };
-
-    // Act
-    visitor.TSTypeReference(typeNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('forbiddenAlias');
+    expect(reports.map(report => report.messageId)).toEqual(expectedMessageIds);
   });
 });

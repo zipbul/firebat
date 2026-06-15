@@ -6,12 +6,27 @@ import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-te
 import { memberOrderingRule } from './member-ordering';
 
 describe('member-ordering', () => {
-  it('should report members when ordering is invalid', () => {
+  it.each<[string, AstNode, AstNode]>([
+    ['ordering is invalid', { type: 'MethodDefinition', kind: 'method' }, { type: 'PropertyDefinition' }],
+    [
+      'constructor appears after methods',
+      { type: 'MethodDefinition', kind: 'method' },
+      { type: 'MethodDefinition', kind: 'constructor' },
+    ],
+    [
+      'static fields follow instance fields',
+      { type: 'PropertyDefinition', static: false },
+      { type: 'PropertyDefinition', static: true },
+    ],
+    [
+      'public members follow private members',
+      { type: 'MethodDefinition', accessibility: 'private' },
+      { type: 'MethodDefinition', accessibility: 'public' },
+    ],
+  ])('should report members when %s', (_label, firstMember, secondMember) => {
     // Arrange
     const { visitor, reports } = setupRule(memberOrderingRule);
-    const methodMember: AstNode = { type: 'MethodDefinition', kind: 'method' };
-    const fieldMember: AstNode = { type: 'PropertyDefinition' };
-    const classBody: AstNode = { type: 'ClassBody', body: [methodMember, fieldMember] };
+    const classBody: AstNode = { type: 'ClassBody', body: [firstMember, secondMember] };
 
     // Act
     visitor.ClassBody(classBody);
@@ -33,50 +48,5 @@ describe('member-ordering', () => {
 
     // Assert
     expect(reports.length).toBe(0);
-  });
-
-  it('should report when constructor appears after methods', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(memberOrderingRule);
-    const methodMember: AstNode = { type: 'MethodDefinition', kind: 'method' };
-    const ctorMember: AstNode = { type: 'MethodDefinition', kind: 'constructor' };
-    const classBody: AstNode = { type: 'ClassBody', body: [methodMember, ctorMember] };
-
-    // Act
-    visitor.ClassBody(classBody);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('invalidOrder');
-  });
-
-  it('should report when static fields follow instance fields', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(memberOrderingRule);
-    const instanceField: AstNode = { type: 'PropertyDefinition', static: false };
-    const staticField: AstNode = { type: 'PropertyDefinition', static: true };
-    const classBody: AstNode = { type: 'ClassBody', body: [instanceField, staticField] };
-
-    // Act
-    visitor.ClassBody(classBody);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('invalidOrder');
-  });
-
-  it('should report when public members follow private members', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(memberOrderingRule);
-    const privateMethod: AstNode = { type: 'MethodDefinition', accessibility: 'private' };
-    const publicMethod: AstNode = { type: 'MethodDefinition', accessibility: 'public' };
-    const classBody: AstNode = { type: 'ClassBody', body: [privateMethod, publicMethod] };
-
-    // Act
-    visitor.ClassBody(classBody);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('invalidOrder');
   });
 });

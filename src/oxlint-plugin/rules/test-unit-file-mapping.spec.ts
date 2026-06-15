@@ -54,132 +54,38 @@ describe('test-unit-file-mapping', () => {
     expect(reports.length).toBe(0);
   });
 
-  it('should ignore file when extension is .test.ts', () => {
-    // Arrange
-    const implFile = '/repo/user-service.test.ts';
-    const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: () => false,
-      readFile: () => null,
-    });
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should ignore file when extension is .e2e.test.ts', () => {
-    // Arrange
-    const implFile = '/repo/user-service.e2e.test.ts';
-    const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: () => false,
-      readFile: () => null,
-    });
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should ignore file when name is index.ts', () => {
-    // Arrange
-    const implFile = '/repo/index.ts';
-    const programNode = createProgram([{ type: 'ExportAllDeclaration' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: () => false,
-      readFile: () => null,
-    });
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should ignore file when extension is .d.ts', () => {
-    // Arrange
-    const implFile = '/repo/user-service.d.ts';
-    const programNode = createProgram([{ type: 'TSInterfaceDeclaration' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: () => false,
-      readFile: () => null,
-    });
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should ignore file when only exports types', () => {
-    // Arrange
-    const implFile = '/repo/types.ts';
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'TSTypeAliasDeclaration',
+  it.each<[string, string, AstNode[]]>([
+    ['extension is .test.ts', '/repo/user-service.test.ts', [{ type: 'ExpressionStatement' }]],
+    ['extension is .e2e.test.ts', '/repo/user-service.e2e.test.ts', [{ type: 'ExpressionStatement' }]],
+    ['name is index.ts', '/repo/index.ts', [{ type: 'ExportAllDeclaration' }]],
+    ['extension is .d.ts', '/repo/user-service.d.ts', [{ type: 'TSInterfaceDeclaration' }]],
+    [
+      'only exports types',
+      '/repo/types.ts',
+      [{ type: 'ExportNamedDeclaration', declaration: { type: 'TSTypeAliasDeclaration' } }],
+    ],
+    ['module has only imports', '/repo/user-service.ts', [{ type: 'ImportDeclaration' }]],
+    [
+      'module only re-exports',
+      '/repo/user-service.ts',
+      [
+        {
+          type: 'ExportNamedDeclaration',
+          specifiers: [
+            {
+              type: 'ExportSpecifier',
+              local: { type: 'Identifier', name: 'Foo' },
+              exported: { type: 'Identifier', name: 'Foo' },
+            },
+          ],
         },
-      },
-    ]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: () => false,
-      readFile: () => null,
-    });
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should ignore file when module has only imports', () => {
+      ],
+    ],
+  ])('should ignore file when %s', (_label, filename, body) => {
     // Arrange
-    const implFile = '/repo/user-service.ts';
-    const programNode = createProgram([{ type: 'ImportDeclaration' }]);
+    const programNode = createProgram(body);
     const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: () => false,
-      readFile: () => null,
-    });
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should ignore file when module only re-exports', () => {
-    // Arrange
-    const implFile = '/repo/user-service.ts';
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        specifiers: [
-          {
-            type: 'ExportSpecifier',
-            local: { type: 'Identifier', name: 'Foo' },
-            exported: { type: 'Identifier', name: 'Foo' },
-          },
-        ],
-      },
-    ]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
+      filename,
       fileExists: () => false,
       readFile: () => null,
     });

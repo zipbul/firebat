@@ -5,29 +5,34 @@ import type { AstNode } from '../types';
 import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
 
+type Range = [number, number];
+
+/** const declaration node with an optional source location (line span). */
+function constDecl(range: Range, lines?: [number, number]): AstNode {
+  const node: AstNode = { type: 'VariableDeclaration', kind: 'const', range, declarations: [] };
+
+  if (lines) {
+    node.loc = {
+      start: { line: lines[0], column: 0 },
+      end: { line: lines[1], column: range[1] - range[0] },
+    };
+  }
+
+  return node;
+}
+
+const funcDecl = (range: Range): AstNode => ({ type: 'FunctionDeclaration', range });
+
+const program = (body: AstNode[]): AstNode => ({ type: 'Program', body });
+
 describe('padding-line-between-statements', () => {
   it('should report unexpected blank lines when const declarations are separated', () => {
     // Arrange
     const text = 'const alpha = 1;\n\nconst beta = 2;';
     const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
-    const prevNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [0, 16],
-      loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 16 } },
-      declarations: [],
-    };
-    const nextNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [18, 33],
-      loc: { start: { line: 3, column: 0 }, end: { line: 3, column: 15 } },
-      declarations: [],
-    };
-    const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
 
     // Act
-    visitor.Program(programNode);
+    visitor.Program(program([constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]));
 
     // Assert
     expect(reports.length).toBe(1);
@@ -38,24 +43,9 @@ describe('padding-line-between-statements', () => {
     // Arrange
     const text = 'const alpha = 1;\n\nconst beta = 2;';
     const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
-    const prevNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [0, 16],
-      loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 16 } },
-      declarations: [],
-    };
-    const nextNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [18, 33],
-      loc: { start: { line: 3, column: 0 }, end: { line: 3, column: 15 } },
-      declarations: [],
-    };
-    const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
 
     // Act
-    visitor.Program(programNode);
+    visitor.Program(program([constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]));
 
     // Assert
     expect(reports.length).toBe(1);
@@ -68,24 +58,9 @@ describe('padding-line-between-statements', () => {
     // Re-run should be clean.
     // Arrange
     const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
-    const prevNode2: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [0, 16],
-      loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 16 } },
-      declarations: [],
-    };
-    const nextNode2: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [17, 32],
-      loc: { start: { line: 2, column: 0 }, end: { line: 2, column: 15 } },
-      declarations: [],
-    };
-    const programNode2: AstNode = { type: 'Program', body: [prevNode2, nextNode2] };
 
     // Act
-    visitor2.Program(programNode2);
+    visitor2.Program(program([constDecl([0, 16], [1, 1]), constDecl([17, 32], [2, 2])]));
 
     // Assert
     expect(reports2.length).toBe(0);
@@ -95,20 +70,9 @@ describe('padding-line-between-statements', () => {
     // Arrange
     const text = 'const alpha = 1;\nfunction beta() {}';
     const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
-    const prevNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [0, 16],
-      declarations: [],
-    };
-    const nextNode: AstNode = {
-      type: 'FunctionDeclaration',
-      range: [17, 35],
-    };
-    const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
 
     // Act
-    visitor.Program(programNode);
+    visitor.Program(program([constDecl([0, 16]), funcDecl([17, 35])]));
 
     // Assert
     expect(reports.length).toBe(1);
@@ -123,13 +87,7 @@ describe('padding-line-between-statements', () => {
     const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
 
     // Act
-    visitor2.Program({
-      type: 'Program',
-      body: [
-        { type: 'VariableDeclaration', kind: 'const', range: [0, 16], declarations: [] },
-        { type: 'FunctionDeclaration', range: [18, 36] },
-      ],
-    });
+    visitor2.Program(program([constDecl([0, 16]), funcDecl([18, 36])]));
 
     // Assert
     expect(reports2.length).toBe(0);
@@ -141,13 +99,7 @@ describe('padding-line-between-statements', () => {
     const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
 
     // Act
-    visitor.Program({
-      type: 'Program',
-      body: [
-        { type: 'VariableDeclaration', kind: 'const', range: [0, 16], declarations: [] },
-        { type: 'FunctionDeclaration', range: [18, 36] },
-      ],
-    });
+    visitor.Program(program([constDecl([0, 16]), funcDecl([18, 36])]));
 
     // Assert
     expect(reports.length).toBe(1);
@@ -162,13 +114,7 @@ describe('padding-line-between-statements', () => {
     const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
 
     // Act
-    visitor2.Program({
-      type: 'Program',
-      body: [
-        { type: 'VariableDeclaration', kind: 'const', range: [0, 16], declarations: [] },
-        { type: 'FunctionDeclaration', range: [20, 38] },
-      ],
-    });
+    visitor2.Program(program([constDecl([0, 16]), funcDecl([20, 38])]));
 
     // Assert
     expect(reports2.length).toBe(0);
@@ -178,24 +124,9 @@ describe('padding-line-between-statements', () => {
     // Arrange
     const text = 'const alpha = 1;\nconst beta = 2;';
     const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
-    const prevNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [0, 16],
-      loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 16 } },
-      declarations: [],
-    };
-    const nextNode: AstNode = {
-      type: 'VariableDeclaration',
-      kind: 'const',
-      range: [17, 32],
-      loc: { start: { line: 2, column: 0 }, end: { line: 2, column: 15 } },
-      declarations: [],
-    };
-    const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
 
     // Act
-    visitor.Program(programNode);
+    visitor.Program(program([constDecl([0, 16], [1, 1]), constDecl([17, 32], [2, 2])]));
 
     // Assert
     expect(reports.length).toBe(0);

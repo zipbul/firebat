@@ -6,6 +6,9 @@ import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-te
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testDescribeSutNameRule } from './test-describe-sut-name';
 
+const testFile = '/repo/user-service.spec.ts';
+const implFile = '/repo/user-service.ts';
+
 function createTopLevelDescribeCall(title: string): [AstNode, AstNode] {
   const program: AstNode = { type: 'Program', body: [] };
   const expressionStatement: AstNode = { type: 'ExpressionStatement', parent: program };
@@ -26,18 +29,26 @@ function createTopLevelDescribeCall(title: string): [AstNode, AstNode] {
   return [program, call];
 }
 
+/** Build a rule wired to a virtual FS that backs implFile with the given source. */
+function setupWithImpl(implSource: string) {
+  const virtualFs = createVirtualFs([[implFile, implSource]]);
+
+  return setupRule(testDescribeSutNameRule, {
+    filename: testFile,
+    fileExists: filePath => virtualFs.fileExists(filePath),
+    readFile: filePath => virtualFs.readFile(filePath),
+  });
+}
+
 describe('test-describe-sut-name', () => {
-  it('should require class name when implementation exports a class', () => {
+  it.each<[string, string, string]>([
+    ['implementation exports a class', 'export class UserService {}\n', 'UserService'],
+    ['implementation does not export a class', 'export function createUser() {}\n', 'user-service'],
+    ['implementation exports multiple classes', 'export class A {}\nexport class B {}\n', 'user-service'],
+  ])('should accept describe title when %s', (_label, implSource, title) => {
     // Arrange
-    const testFile = '/repo/user-service.spec.ts';
-    const implFile = '/repo/user-service.ts';
-    const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
-    const [, call] = createTopLevelDescribeCall('UserService');
+    const { visitor, reports } = setupWithImpl(implSource);
+    const [, call] = createTopLevelDescribeCall(title);
 
     // Act
     visitor.CallExpression(call);
@@ -48,9 +59,8 @@ describe('test-describe-sut-name', () => {
 
   it('should ignore when file is not a unit spec', () => {
     // Arrange
-    const testFile = '/repo/user-service.test.ts';
     const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
+      filename: '/repo/user-service.test.ts',
       fileExists: () => false,
       readFile: () => null,
     });
@@ -63,54 +73,9 @@ describe('test-describe-sut-name', () => {
     expect(reports.length).toBe(0);
   });
 
-  it('should fall back to filename when implementation does not export a class', () => {
-    // Arrange
-    const testFile = '/repo/user-service.spec.ts';
-    const implFile = '/repo/user-service.ts';
-    const virtualFs = createVirtualFs([[implFile, 'export function createUser() {}\n']]);
-    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
-    const [, call] = createTopLevelDescribeCall('user-service');
-
-    // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should fall back to filename when implementation exports multiple classes', () => {
-    // Arrange
-    const testFile = '/repo/user-service.spec.ts';
-    const implFile = '/repo/user-service.ts';
-    const virtualFs = createVirtualFs([[implFile, 'export class A {}\nexport class B {}\n']]);
-    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
-    const [, call] = createTopLevelDescribeCall('user-service');
-
-    // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
   it('should report when describe title does not match expected SUT', () => {
     // Arrange
-    const testFile = '/repo/user-service.spec.ts';
-    const implFile = '/repo/user-service.ts';
-    const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithImpl('export class UserService {}\n');
     const [, call] = createTopLevelDescribeCall('user-service');
 
     // Act
@@ -124,7 +89,6 @@ describe('test-describe-sut-name', () => {
 
   it('should fall back to filename when implementation file is missing', () => {
     // Arrange
-    const testFile = '/repo/user-service.spec.ts';
     const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: () => false,
@@ -143,14 +107,7 @@ describe('test-describe-sut-name', () => {
 
   it('should report when any top-level describe title mismatches', () => {
     // Arrange
-    const testFile = '/repo/user-service.spec.ts';
-    const implFile = '/repo/user-service.ts';
-    const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithImpl('export class UserService {}\n');
     const first = createTopLevelDescribeCall('UserService')[1];
     const second = createTopLevelDescribeCall('Other')[1];
 
@@ -166,14 +123,7 @@ describe('test-describe-sut-name', () => {
 
   it('should ignore nested describe calls when not top-level', () => {
     // Arrange
-    const testFile = '/repo/user-service.spec.ts';
-    const implFile = '/repo/user-service.ts';
-    const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
-      filename: testFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithImpl('export class UserService {}\n');
     // Describe call whose parent is not Program → should be ignored.
     const call: AstNode = {
       type: 'CallExpression',

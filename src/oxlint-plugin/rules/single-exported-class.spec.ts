@@ -9,19 +9,40 @@ function createProgram(body: AstNode[]): AstNode {
   return { type: 'Program', body };
 }
 
+const exportClass = (name: string): AstNode => ({
+  type: 'ExportNamedDeclaration',
+  declaration: { type: 'ClassDeclaration', id: { type: 'Identifier', name } },
+});
+
+const exportVariable: AstNode = {
+  type: 'ExportNamedDeclaration',
+  declaration: { type: 'VariableDeclaration' },
+};
+
 describe('single-exported-class', () => {
-  it('should allow a single exported class when only one is exported', () => {
+  it.each<[string, AstNode[]]>([
+    ['a single exported class when only one is exported', [exportClass('UserService')]],
+    ['files when no class is exported', [exportVariable]],
+    [
+      'class declaration when exported via specifier',
+      [
+        { type: 'ClassDeclaration', id: { type: 'Identifier', name: 'Foo' } },
+        {
+          type: 'ExportNamedDeclaration',
+          specifiers: [
+            {
+              type: 'ExportSpecifier',
+              local: { type: 'Identifier', name: 'Foo' },
+              exported: { type: 'Identifier', name: 'Foo' },
+            },
+          ],
+        },
+      ],
+    ],
+  ])('should allow %s', (_label, body) => {
     // Arrange
     const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'UserService' },
-        },
-      },
-    ]);
+    const programNode = createProgram(body);
 
     // Act
     visitor.Program(programNode);
@@ -30,190 +51,34 @@ describe('single-exported-class', () => {
     expect(reports.length).toBe(0);
   });
 
-  it('should ignore files when no class is exported', () => {
+  it.each<[string, AstNode[], string]>([
+    ['exporting a class and another export', [exportClass('UserService'), exportVariable], 'mixed'],
+    ['exporting two classes', [exportClass('A'), exportClass('B')], 'multiple'],
+    [
+      'exporting a class and an exported type',
+      [exportClass('Foo'), { type: 'ExportNamedDeclaration', declaration: { type: 'TSTypeAliasDeclaration' } }],
+      'mixed',
+    ],
+    [
+      'default-exporting a class and also exporting something else',
+      [
+        { type: 'ExportDefaultDeclaration', declaration: { type: 'ClassDeclaration', id: { type: 'Identifier', name: 'Foo' } } },
+        exportVariable,
+      ],
+      'mixed',
+    ],
+    ['exporting a class and also re-exporting everything', [exportClass('Foo'), { type: 'ExportAllDeclaration' }], 'mixed'],
+  ])('should report when %s', (_label, body, messageId) => {
     // Arrange
     const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'VariableDeclaration',
-        },
-      },
-    ]);
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should report when exporting a class and another export', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'UserService' },
-        },
-      },
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'VariableDeclaration',
-        },
-      },
-    ]);
+    const programNode = createProgram(body);
 
     // Act
     visitor.Program(programNode);
 
     // Assert
     expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('mixed');
-
-    const reportedNode = reports[0]?.node;
-
-    expect(reportedNode?.type).toBe('Program');
-  });
-
-  it('should report when exporting two classes', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'A' },
-        },
-      },
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'B' },
-        },
-      },
-    ]);
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('multiple');
-
-    const reportedNode = reports[0]?.node;
-
-    expect(reportedNode?.type).toBe('Program');
-  });
-
-  it('should allow class declaration when exported via specifier', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ClassDeclaration',
-        id: { type: 'Identifier', name: 'Foo' },
-      },
-      {
-        type: 'ExportNamedDeclaration',
-        specifiers: [
-          {
-            type: 'ExportSpecifier',
-            local: { type: 'Identifier', name: 'Foo' },
-            exported: { type: 'Identifier', name: 'Foo' },
-          },
-        ],
-      },
-    ]);
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
-  });
-
-  it('should report when exporting a class and an exported type', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'Foo' },
-        },
-      },
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'TSTypeAliasDeclaration',
-        },
-      },
-    ]);
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('mixed');
-  });
-
-  it('should report when default-exporting a class and also exporting something else', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportDefaultDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'Foo' },
-        },
-      },
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'VariableDeclaration',
-        },
-      },
-    ]);
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('mixed');
-  });
-
-  it('should report when exporting a class and also re-exporting everything', () => {
-    // Arrange
-    const { visitor, reports } = setupRule(singleExportedClassRule);
-    const programNode = createProgram([
-      {
-        type: 'ExportNamedDeclaration',
-        declaration: {
-          type: 'ClassDeclaration',
-          id: { type: 'Identifier', name: 'Foo' },
-        },
-      },
-      {
-        type: 'ExportAllDeclaration',
-      },
-    ]);
-
-    // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('mixed');
+    expect(reports[0]?.messageId).toBe(messageId);
+    expect(reports[0]?.node?.type).toBe('Program');
   });
 });
