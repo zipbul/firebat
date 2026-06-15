@@ -13,6 +13,42 @@ import * as path from 'node:path';
 import { getGildashSemanticContext } from '../../../../src/engine/dataflow/gildash-binding-source';
 import { detectWaste, parseSource } from '../../../../src/test-api';
 
+interface KeepCase {
+  readonly title: string;
+  readonly fixture: string;
+}
+
+interface DeadCase {
+  readonly title: string;
+  readonly fixture: string;
+}
+
+const keepCases: KeepCase[] = [
+  {
+    title: 'var-hoist-for-init: outer ref resolves to inner var binding → KEEP',
+    fixture: 'integration/features/waste/__fixtures__/var-hoist-for-init-keep.ts',
+  },
+  {
+    title: 'var-hoist-block: var in if-branch resolves to function scope → KEEP',
+    fixture: 'integration/features/waste/__fixtures__/var-hoist-block-keep.ts',
+  },
+  {
+    title: 'closure-read KEEP boundary holds via gildash binding',
+    fixture: 'integration/features/waste/__fixtures__/closure-read.ts',
+  },
+];
+
+const deadCases: DeadCase[] = [
+  {
+    title: 'case 7 positive: no-escape-object DEAD via gildash binding',
+    fixture: 'integration/features/waste/__fixtures__/no-escape-object.ts',
+  },
+  {
+    title: 'case 6 positive: no-escape-accumulator DEAD via gildash binding',
+    fixture: 'integration/features/waste/__fixtures__/no-escape-accumulator.ts',
+  },
+];
+
 describe('waste detector via gildash semantic layer', () => {
   it('preload-registered gildash context is available', () => {
     expect(getGildashSemanticContext()).not.toBeNull();
@@ -27,35 +63,16 @@ describe('waste detector via gildash semantic layer', () => {
     return detectWaste([parsed]);
   };
 
-  it('var-hoist-for-init: outer ref resolves to inner var binding → KEEP', () => {
-    const findings = runDetectOnFixture('integration/features/waste/__fixtures__/var-hoist-for-init-keep.ts');
+  it.each(keepCases)('$title', ({ fixture }) => {
+    const findings = runDetectOnFixture(fixture);
 
     expect(findings).toEqual([]);
   });
 
-  it('var-hoist-block: var in if-branch resolves to function scope → KEEP', () => {
-    const findings = runDetectOnFixture('integration/features/waste/__fixtures__/var-hoist-block-keep.ts');
-
-    expect(findings).toEqual([]);
-  });
-
-  it('case 7 positive: no-escape-object DEAD via gildash binding', () => {
-    const findings = runDetectOnFixture('integration/features/waste/__fixtures__/no-escape-object.ts');
+  it.each(deadCases)('$title', ({ fixture }) => {
+    const findings = runDetectOnFixture(fixture);
 
     expect(findings.length).toBeGreaterThan(0);
     expect(findings.every((f: { kind: string }) => f.kind === 'dead-store')).toBe(true);
-  });
-
-  it('case 6 positive: no-escape-accumulator DEAD via gildash binding', () => {
-    const findings = runDetectOnFixture('integration/features/waste/__fixtures__/no-escape-accumulator.ts');
-
-    expect(findings.length).toBeGreaterThan(0);
-    expect(findings.every((f: { kind: string }) => f.kind === 'dead-store')).toBe(true);
-  });
-
-  it('closure-read KEEP boundary holds via gildash binding', () => {
-    const findings = runDetectOnFixture('integration/features/waste/__fixtures__/closure-read.ts');
-
-    expect(findings).toEqual([]);
   });
 });

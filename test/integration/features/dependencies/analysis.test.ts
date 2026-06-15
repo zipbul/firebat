@@ -14,6 +14,85 @@ const toCycleKey = (cycle: { readonly path: ReadonlyArray<string> }): string => 
     .join('|');
 };
 
+const expectEmptyGraphStats = (dependencies: {
+  readonly cycles: ReadonlyArray<unknown>;
+  readonly fanIn: ReadonlyArray<unknown>;
+  readonly fanOut: ReadonlyArray<unknown>;
+  readonly cuts: ReadonlyArray<unknown>;
+}): void => {
+  expect(dependencies.cycles.length).toBe(0);
+  expect(dependencies.fanIn.length).toBe(0);
+  expect(dependencies.fanOut.length).toBe(0);
+  expect(dependencies.cuts.length).toBe(0);
+};
+
+interface CyclePresenceCase {
+  readonly title: string;
+  readonly files: Readonly<Record<string, string>>;
+  readonly expectedKey: ReadonlyArray<string>;
+}
+
+const cyclePresenceCases: CyclePresenceCase[] = [
+  {
+    title: 'a module imports itself',
+    files: { '/virtual/deps/self.ts': `import './self';\nexport const value = 1;` },
+    expectedKey: ['self.ts'],
+  },
+  {
+    title: 'modules import each other',
+    files: {
+      '/virtual/deps/a.ts': `import './b';\nexport const alpha = 1;`,
+      '/virtual/deps/b.ts': `import './a';\nexport const beta = 2;`,
+    },
+    expectedKey: ['a.ts', 'b.ts'],
+  },
+  {
+    title: 'export-from edges close a cycle',
+    files: {
+      '/virtual/deps/a.ts': `export * from './b';\nexport const alpha = 1;`,
+      '/virtual/deps/b.ts': `export { gamma } from './c';\nexport const beta = 2;`,
+      '/virtual/deps/c.ts': `import './a';\nexport const gamma = 3;`,
+    },
+    expectedKey: ['a.ts', 'b.ts', 'c.ts'],
+  },
+  {
+    title: 'type-only import edges close a cycle',
+    files: {
+      '/virtual/deps/a.ts': `import type { Beta } from './b';\nexport const alpha = 1;`,
+      '/virtual/deps/b.ts': `import './a';\nexport type Beta = { value: number };`,
+    },
+    expectedKey: ['a.ts', 'b.ts'],
+  },
+];
+
+interface DeadExportCase {
+  readonly title: string;
+  readonly kind: string;
+  readonly expectedName: string;
+  readonly files: Readonly<Record<string, string>>;
+}
+
+const deadExportCases: DeadExportCase[] = [
+  {
+    title: 'an exported symbol is never imported',
+    kind: 'dead-export',
+    expectedName: 'unused',
+    files: {
+      '/virtual/dead/a.ts': `export const unused = 1;\nexport const used = 2;`,
+      '/virtual/dead/b.ts': `import { used } from './a';\nexport const x = used;`,
+    },
+  },
+  {
+    title: 'an export is only imported from test files',
+    kind: 'test-only-export',
+    expectedName: 'onlyTest',
+    files: {
+      '/virtual/dead/a.ts': `export const onlyTest = 1;`,
+      '/virtual/dead/a.spec.ts': `import { onlyTest } from './a';\nexport const x = onlyTest;`,
+    },
+  },
+];
+
 describe('integration/dependencies', () => {
   it('should detect cycles and fan stats when modules are linked', async () => {
     const sources = new Map<string, string>();
@@ -65,92 +144,38 @@ describe('integration/dependencies', () => {
     });
   });
 
-  it('should detect self-loop cycles when a module imports itself', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/deps/self.ts', `import './self';\nexport const value = 1;`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
+  it.each(cyclePresenceCases)('should detect a cycle when $title', async ({ files, expectedKey }) => {
+    await withTempGildash(files, async (gildash, tmpDir) => {
       const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
       const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
 
-      expect(cycleKeys.has(['self.ts'].join('|'))).toBe(true);
-    });
-  });
-
-  it('should detect two-node cycles when modules import each other', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/deps/a.ts', `import './b';\nexport const alpha = 1;`);
-    sources.set('/virtual/deps/b.ts', `import './a';\nexport const beta = 2;`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-      const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
-
-      expect(cycleKeys.has(['a.ts', 'b.ts'].sort().join('|'))).toBe(true);
+      expect(cycleKeys.has([...expectedKey].sort().join('|'))).toBe(true);
     });
   });
 
   it('should return empty stats when modules do not import each other', async () => {
-    const sources = new Map<string, string>();
+    await withTempGildash(
+      {
+        '/virtual/deps/solo.ts': `export const solo = 1;`,
+        '/virtual/deps/other.ts': `export const other = 2;`,
+      },
+      async (gildash, tmpDir) => {
+        const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
 
-    sources.set('/virtual/deps/solo.ts', `export const solo = 1;`);
-    sources.set('/virtual/deps/other.ts', `export const other = 2;`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
-      expect(dependencies.cycles.length).toBe(0);
-      expect(dependencies.fanIn.length).toBe(0);
-      expect(dependencies.fanOut.length).toBe(0);
-      expect(dependencies.cuts.length).toBe(0);
-    });
+        expectEmptyGraphStats(dependencies);
+      },
+    );
   });
 
   it('should return empty stats when input is empty', async () => {
-    const sources = new Map<string, string>();
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
+    await withTempGildash(new Map<string, string>(), async (gildash, tmpDir) => {
       const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
 
-      expect(dependencies.cycles.length).toBe(0);
-      expect(dependencies.fanIn.length).toBe(0);
-      expect(dependencies.fanOut.length).toBe(0);
-      expect(dependencies.cuts.length).toBe(0);
+      expectEmptyGraphStats(dependencies);
     });
   });
 
   it.todo('should resolve index modules when importing a directory', () => {});
-
-  it('should include export-from edges when building the graph', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/deps/a.ts', `export * from './b';\nexport const alpha = 1;`);
-    sources.set('/virtual/deps/b.ts', `export { gamma } from './c';\nexport const beta = 2;`);
-    sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-      const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
-
-      expect(cycleKeys.has(['a.ts', 'b.ts', 'c.ts'].sort().join('|'))).toBe(true);
-    });
-  });
-
-  it('should include type-only import edges when building the graph', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/deps/a.ts', `import type { Beta } from './b';\nexport const alpha = 1;`);
-    sources.set('/virtual/deps/b.ts', `import './a';\nexport type Beta = { value: number };`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-      const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
-
-      expect(cycleKeys.has(['a.ts', 'b.ts'].sort().join('|'))).toBe(true);
-    });
-  });
 
   it('should include dynamic import() edges when building the graph', async () => {
     const sources = new Map<string, string>();
@@ -166,31 +191,12 @@ describe('integration/dependencies', () => {
     });
   });
 
-  it('should report dead exports when an exported symbol is never imported', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/dead/a.ts', `export const unused = 1;\nexport const used = 2;`);
-    sources.set('/virtual/dead/b.ts', `import { used } from './a';\nexport const x = used;`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
+  it.each(deadExportCases)('should report $kind when $title', async ({ kind, files, expectedName }) => {
+    await withTempGildash(files, async (gildash, tmpDir) => {
       const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-      const hits = dependencies.deadExports.filter(f => f.kind === 'dead-export');
+      const hits = dependencies.deadExports.filter(f => f.kind === kind);
 
-      expect(hits.some(f => f.module === 'dead/a.ts' && f.name === 'unused')).toBe(true);
-    });
-  });
-
-  it('should report test-only-export when an export is only imported from test files', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/dead/a.ts', `export const onlyTest = 1;`);
-    sources.set('/virtual/dead/a.spec.ts', `import { onlyTest } from './a';\nexport const x = onlyTest;`);
-
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-      const hits = dependencies.deadExports.filter(f => f.kind === 'test-only-export');
-
-      expect(hits.some(f => f.module === 'dead/a.ts' && f.name === 'onlyTest')).toBe(true);
+      expect(hits.some(f => f.module === 'dead/a.ts' && f.name === expectedName)).toBe(true);
     });
   });
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { detectWaste } from '../../../../src/test-api';
 import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
 
-const createBreakThenRead = (functionName: string, literal: number): string => {
+const createBreakThenReturn = (functionName: string, literal: number, returned: string): string => {
   return [
     `export function ${functionName}() {`,
     `  let value = 0;`,
@@ -11,22 +11,17 @@ const createBreakThenRead = (functionName: string, literal: number): string => {
     `    value = ${literal};`,
     `    break;`,
     `  }`,
-    `  return value;`,
+    `  return ${returned};`,
     `}`,
   ].join('\n');
 };
 
+const createBreakThenRead = (functionName: string, literal: number): string => {
+  return createBreakThenReturn(functionName, literal, 'value');
+};
+
 const createBreakThenNoRead = (functionName: string, literal: number): string => {
-  return [
-    `export function ${functionName}() {`,
-    `  let value = 0;`,
-    `  while (true) {`,
-    `    value = ${literal};`,
-    `    break;`,
-    `  }`,
-    `  return 0;`,
-    `}`,
-  ].join('\n');
+  return createBreakThenReturn(functionName, literal, '0');
 };
 
 const getLoopGenerator = (shouldRead: boolean) => {

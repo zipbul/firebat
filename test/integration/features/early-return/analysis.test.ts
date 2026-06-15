@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
 import { analyzeEarlyReturn } from '../../../../src/test-api';
-import { createProgramFromMap } from '../../shared/test-kit';
+import { findItemByHeader } from '../../shared/early-return-cases';
+import { analyzeSource } from '../../shared/test-kit';
 
 function createComplexSource(): string {
   return [
@@ -53,75 +54,53 @@ function createTryCatchSource(): string {
   ].join('\n');
 }
 
+interface NoFindingCase {
+  title: string;
+  source: string;
+  header: string;
+}
+
+const noFindingCases: NoFindingCase[] = [
+  {
+    // guard clause (1-stmt), mid-body if (not last), loop 1-stmt if → no actionable pattern
+    title: 'should not report complex function when no actionable pattern exists',
+    source: createComplexSource(),
+    header: 'complex',
+  },
+  {
+    // simple function has no opportunities, no finding
+    title: 'should not include simple functions without patterns',
+    source: createSimpleSource(),
+    header: 'simple',
+  },
+  {
+    // balanced 1:1 if-else doesn't meet 2x ratio threshold
+    title: 'should not report balanced if-else as invertible',
+    source: createIfElseSource(),
+    header: 'hasElse',
+  },
+  {
+    // no wrapping-if/invertible/cascade patterns → no finding
+    title: 'should not report try-catch function without actionable patterns',
+    source: createTryCatchSource(),
+    header: 'guarded',
+  },
+];
+
 describe('integration/early-return', () => {
-  it('should not report complex function when no actionable pattern exists', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/early-return/complex.ts', createComplexSource());
-
+  it.each(noFindingCases)('$title', ({ source, header }) => {
     // Act
-    let program = createProgramFromMap(sources);
-    let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.find(entry => entry.header === 'complex');
+    const item = findItemByHeader(source, header);
 
-    // Assert — guard clause (1-stmt), mid-body if (not last), loop 1-stmt if → no actionable pattern
-    expect(item).toBeUndefined();
-  });
-
-  it('should not include simple functions without patterns', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/early-return/simple.ts', createSimpleSource());
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.find(entry => entry.header === 'simple');
-
-    // Assert — simple function has no opportunities, no finding
-    expect(item).toBeUndefined();
-  });
-
-  it('should not report balanced if-else as invertible', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/early-return/else.ts', createIfElseSource());
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.find(entry => entry.header === 'hasElse');
-
-    // Assert — balanced 1:1 if-else doesn't meet 2x ratio threshold
+    // Assert
     expect(item).toBeUndefined();
   });
 
   it('should return no findings when input is empty', () => {
-    // Arrange
-    let sources = new Map<string, string>();
     // Act
-    let program = createProgramFromMap(sources);
-    let earlyReturn = analyzeEarlyReturn(program);
+    const earlyReturn = analyzeSource('', analyzeEarlyReturn);
 
     // Assert
     expect(earlyReturn.length).toBe(0);
-  });
-
-  it('should not report try-catch function without actionable patterns', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/early-return/try.ts', createTryCatchSource());
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let earlyReturn = analyzeEarlyReturn(program);
-    let item = earlyReturn.find(entry => entry.header === 'guarded');
-
-    // Assert — no wrapping-if/invertible/cascade patterns → no finding
-    expect(item).toBeUndefined();
   });
 });

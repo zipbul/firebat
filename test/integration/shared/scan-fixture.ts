@@ -1,6 +1,7 @@
+import { expect } from 'bun:test';
 import * as path from 'node:path';
 
-import { createPrettyConsoleLogger } from '../../../src/test-api';
+import { createPrettyConsoleLogger, scanUseCase } from '../../../src/test-api';
 import { createTempProject, writeText } from './external-tool-test-kit';
 
 export const writeJson = async (filePath: string, value: unknown): Promise<void> => {
@@ -60,4 +61,69 @@ export const createScanProjectFixtureWithFiles = async (
 
 export const createScanLogger = () => {
   return createPrettyConsoleLogger({ level: 'error', includeStack: false });
+};
+
+/**
+ * Assert the shared BaseFinding shape of a scan finding.
+ *
+ * `expectedKind` may be a single kind string, an array of allowed kinds, or
+ * omitted to skip the kind check. Collapses the `expectBaseFinding` helper that
+ * every scan-based feature spec otherwise re-declares verbatim.
+ */
+export const expectBaseFinding = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  item: any,
+  expectedKind?: string | ReadonlyArray<string>,
+): void => {
+  expect(item).toBeDefined();
+
+  if (typeof expectedKind === 'string') {
+    expect(item.kind).toBe(expectedKind);
+  } else if (Array.isArray(expectedKind)) {
+    expect(expectedKind).toContain(item.kind);
+  }
+
+  expect(typeof item.file).toBe('string');
+  expect(item.file.endsWith('.ts')).toBe(true);
+  expect(item.span).toBeDefined();
+};
+
+/**
+ * End-to-end scan harness shared by single-detector integration specs.
+ *
+ * Writes `files` into a fresh temp project, runs {@link scanUseCase} for the one
+ * `detector` under that project's cwd, disposes the fixture, and returns the
+ * detector's findings list (`[]` when absent). This collapses the
+ * create-fixture → withCwd(scanUseCase) → read-analyses → dispose lifecycle that
+ * every such spec otherwise restates verbatim; callers keep only their distinct
+ * fixture and assertions.
+ */
+export const scanDetectorFindings = async (
+  prefix: string,
+  detector: string,
+  files: Readonly<Record<string, string>>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<any[]> => {
+  const project = await createScanProjectFixtureWithFiles(prefix, files);
+
+  try {
+    const report = await withCwd(project.rootAbs, () =>
+      scanUseCase(
+        {
+          targets: [...project.targetsAbs],
+          minSize: 0,
+          maxForwardDepth: 0,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          detectors: [detector as any],
+          help: false,
+        },
+        { logger: createScanLogger() },
+      ),
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return ((report as any)?.analyses?.[detector] as any[] | undefined) ?? [];
+  } finally {
+    await project.dispose();
+  }
 };

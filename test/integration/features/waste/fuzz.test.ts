@@ -17,11 +17,11 @@ const createReadViaIife = (functionName: string, literal: number): string => {
   );
 };
 
-const createReadOnlyInUnreachableBranch = (functionName: string, literal: number): string => {
+const createReadOnlyInBranch = (functionName: string, literal: number, condition: string): string => {
   return [
     `export function ${functionName}() {`,
     `  let value = ${literal};`,
-    `  if (false) {`,
+    `  if (${condition}) {`,
     `    value;`,
     `  }`,
     `  return 0;`,
@@ -29,16 +29,12 @@ const createReadOnlyInUnreachableBranch = (functionName: string, literal: number
   ].join('\n');
 };
 
+const createReadOnlyInUnreachableBranch = (functionName: string, literal: number): string => {
+  return createReadOnlyInBranch(functionName, literal, 'false');
+};
+
 const createReadOnlyInReachableBranch = (functionName: string, literal: number): string => {
-  return [
-    `export function ${functionName}() {`,
-    `  let value = ${literal};`,
-    `  if (1) {`,
-    `    value;`,
-    `  }`,
-    `  return 0;`,
-    `}`,
-  ].join('\n');
+  return createReadOnlyInBranch(functionName, literal, '1');
 };
 
 const createFuzzSource = (kind: number, name: string, literal: number): string => {
@@ -72,21 +68,11 @@ const shouldHaveDeadStore = (kind: number): boolean => {
 };
 
 const createReachableReadSource = (): string => {
-  return ['export function reachableRead() {', '  let value = 1;', '  if (1) {', '    value;', '  }', '  return 0;', '}'].join(
-    '\n',
-  );
+  return createReadOnlyInBranch('reachableRead', 1, '1');
 };
 
 const createUnreachableReadSource = (): string => {
-  return [
-    'export function unreachableRead() {',
-    '  let value = 1;',
-    '  if (false) {',
-    '    value;',
-    '  }',
-    '  return 0;',
-    '}',
-  ].join('\n');
+  return createReadOnlyInBranch('unreachableRead', 1, 'false');
 };
 
 describe('integration/waste (fuzz)', () => {

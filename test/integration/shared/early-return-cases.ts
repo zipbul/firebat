@@ -3,7 +3,7 @@ import { expect } from 'bun:test';
 import type { EarlyReturnItem } from '../../../src/types';
 
 import { analyzeEarlyReturn } from '../../../src/features/early-return/analyzer';
-import { parseProgram } from './test-kit';
+import { analyzeSource, parseProgram } from './test-kit';
 
 /** Partial metric shape asserted within an {@link ExpectedFinding}. */
 export interface ExpectedMetrics {
@@ -50,3 +50,13 @@ export const expectNoFinding = ({ source }: NoFindingCase): void => {
 
   expect(result).toEqual([]);
 };
+
+/**
+ * Analyze `source` (single virtual file) and return the early-return item whose
+ * `header` matches `header`, or `undefined` when the analyzer reports none for it.
+ *
+ * Collapses the `analyze → find(entry => entry.header === …)` preamble that the
+ * sibling early-return integration specs otherwise restate verbatim.
+ */
+export const findItemByHeader = (source: string, header: string): EarlyReturnItem | undefined =>
+  analyzeSource(source, analyzeEarlyReturn).find(entry => entry.header === header);

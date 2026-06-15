@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { scanUseCase } from '../../../../src/test-api';
-import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
+import { expectBaseFinding, scanDetectorFindings } from '../../shared/scan-fixture';
 
 const VARIABLE_LIFETIME_KINDS: ReadonlyArray<string> = [
   'variable-lifetime',
@@ -10,124 +9,75 @@ const VARIABLE_LIFETIME_KINDS: ReadonlyArray<string> = [
   'mutation-density',
 ];
 
-const expectBaseFinding = (item: any, expectedKind?: string): void => {
-  expect(item).toBeDefined();
+const fillerConsts = (count: number, name: string): string => {
+  return Array.from({ length: count }, (_, i) => `  const ${name}${i} = ${i};`).join('\n');
+};
 
-  if (expectedKind !== undefined) {
-    expect(item.kind).toBe(expectedKind);
-  } else {
-    expect(VARIABLE_LIFETIME_KINDS).toContain(item.kind);
-  }
-
-  expect(typeof item.file).toBe('string');
-  expect(item.file.endsWith('.ts')).toBe(true);
-  expect(item.span).toBeDefined();
+/** 8 variables all live at the return of a padded ~50-line function. */
+const eightLiveVarsSource = (fnName: string): string => {
+  return [
+    `export function ${fnName}() {`,
+    '  const a = 1;',
+    '  const b = 2;',
+    '  const c = 3;',
+    '  const d = 4;',
+    '  const e = 5;',
+    '  const f = 6;',
+    '  const g = 7;',
+    '  const h = 8;',
+    fillerConsts(45, 'pad'),
+    '  return a + b + c + d + e + f + g + h;',
+    '}',
+  ].join('\n');
 };
 
 describe('integration/variable-lifetime', () => {
   it('should report long-lived variables when definition-to-last-use spans many lines', async () => {
-    // Arrange
-    const filler = Array.from({ length: 90 }, (_, i) => `  const x${i} = ${i};`).join('\n');
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-1', {
-      'src/a.ts': ['export function f() {', '  const config = { a: 1 };', filler, '  return config.a;', '}'].join('\n'),
+    // Act
+    const list = await scanDetectorFindings('p1-var-life-1', 'variable-lifetime', {
+      'src/a.ts': ['export function f() {', '  const config = { a: 1 };', fillerConsts(90, 'x'), '  return config.a;', '}'].join(
+        '\n',
+      ),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
+    // Assert
+    expect(list.length).toBeGreaterThan(0);
 
-      expect(Array.isArray(list)).toBe(true);
-      expect((list ?? []).length).toBeGreaterThan(0);
-
-      for (const item of list ?? []) {
-        expectBaseFinding(item);
-      }
-    } finally {
-      await project.dispose();
+    for (const item of list) {
+      expectBaseFinding(item, VARIABLE_LIFETIME_KINDS);
     }
   });
 
   it('should report context burden when multiple long-lived variables exist', async () => {
-    // Arrange
-    const filler = Array.from({ length: 60 }, (_, i) => `  const x${i} = ${i};`).join('\n');
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-2', {
-      'src/a.ts': ['export function f() {', '  const a = 1;', '  const b = 2;', filler, '  return a + b;', '}'].join('\n'),
+    // Act
+    const list = await scanDetectorFindings('p1-var-life-2', 'variable-lifetime', {
+      'src/a.ts': ['export function f() {', '  const a = 1;', '  const b = 2;', fillerConsts(60, 'x'), '  return a + b;', '}'].join(
+        '\n',
+      ),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
-
-      expect(Array.isArray(list)).toBe(true);
-      expect((list ?? []).length).toBeGreaterThan(0);
-      expect(list?.[0]?.contextBurden).toBeDefined();
-      expect(typeof list?.[0]?.contextBurden).toBe('number');
-      expect(list?.[0]?.contextBurden).toBeGreaterThan(0);
-    } finally {
-      await project.dispose();
-    }
+    // Assert
+    expect(list.length).toBeGreaterThan(0);
+    expect(list[0]?.contextBurden).toBeDefined();
+    expect(typeof list[0]?.contextBurden).toBe('number');
+    expect(list[0]?.contextBurden).toBeGreaterThan(0);
   });
 
   it('should report multiple variables when several lifetimes exceed the threshold', async () => {
-    // Arrange
-    const filler = Array.from({ length: 80 }, (_, i) => `  const y${i} = ${i};`).join('\n');
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-3', {
-      'src/a.ts': ['export function f() {', '  const a = 1;', '  const b = 2;', filler, '  return a + b;', '}'].join('\n'),
+    // Act
+    const list = await scanDetectorFindings('p1-var-life-3', 'variable-lifetime', {
+      'src/a.ts': ['export function f() {', '  const a = 1;', '  const b = 2;', fillerConsts(80, 'y'), '  return a + b;', '}'].join(
+        '\n',
+      ),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
-
-      expect(Array.isArray(list)).toBe(true);
-      expect((list ?? []).length).toBeGreaterThanOrEqual(2);
-    } finally {
-      await project.dispose();
-    }
+    // Assert
+    expect(list.length).toBeGreaterThanOrEqual(2);
   });
 
   it('should support config threshold maxLifetimeLines when configuration is present', async () => {
-    // Arrange
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-4', {
+    // Act
+    const list = await scanDetectorFindings('p1-var-life-4', 'variable-lifetime', {
       '.firebatrc.jsonc': '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 5 } }\n}',
       'src/a.ts': [
         'export function f() {',
@@ -140,194 +90,64 @@ describe('integration/variable-lifetime', () => {
       ].join('\n'),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
-
-      expect(Array.isArray(list)).toBe(true);
-    } finally {
-      await project.dispose();
-    }
+    // Assert
+    expect(Array.isArray(list)).toBe(true);
   });
 
   it('should not emit natural-language fields in variable-lifetime findings', async () => {
-    // Arrange
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-5', {
+    // Act
+    const list = await scanDetectorFindings('p1-var-life-5', 'variable-lifetime', {
       'src/a.ts': 'export const f = () => 1;',
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
-
-      expect(Array.isArray(list)).toBe(true);
-
-      for (const item of list ?? []) {
-        expectBaseFinding(item);
-        expect(item.message).toBeUndefined();
-        expect(item.why).toBeUndefined();
-        expect(item.suggestedRefactor).toBeUndefined();
-      }
-    } finally {
-      await project.dispose();
+    // Assert
+    for (const item of list) {
+      expectBaseFinding(item, VARIABLE_LIFETIME_KINDS);
+      expect(item.message).toBeUndefined();
+      expect(item.why).toBeUndefined();
+      expect(item.suggestedRefactor).toBeUndefined();
     }
   });
 
   it('should not report variable lifetime when definition-to-last-use is short', async () => {
-    // Arrange
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-neg-1', {
+    // Act
+    const list = await scanDetectorFindings('p1-var-life-neg-1', 'variable-lifetime', {
       'src/a.ts': ['export function f() {', '  const a = 1;', '  return a + 1;', '}'].join('\n'),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
-
-      expect(Array.isArray(list)).toBe(true);
-      expect((list ?? []).length).toBe(0);
-    } finally {
-      await project.dispose();
-    }
+    // Assert
+    expect(list.length).toBe(0);
   });
 
   it('should emit liveness-pressure finding when maxLiveVariables and minFunctionLines are configured', async () => {
     // Arrange: 8 vars all live at return, 50-line function; config sets maxLiveVariables:7, minFunctionLines:10
-    const filler = Array.from({ length: 45 }, (_, i) => `  const pad${i} = ${i};`).join('\n');
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-liveness-1', {
+    const list = await scanDetectorFindings('p1-var-life-liveness-1', 'variable-lifetime', {
       '.firebatrc.jsonc':
         '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 999, "maxLiveVariables": 7, "minFunctionLines": 10 } }\n}',
-      'src/a.ts': [
-        'export function bigFn() {',
-        '  const a = 1;',
-        '  const b = 2;',
-        '  const c = 3;',
-        '  const d = 4;',
-        '  const e = 5;',
-        '  const f = 6;',
-        '  const g = 7;',
-        '  const h = 8;',
-        filler,
-        '  return a + b + c + d + e + f + g + h;',
-        '}',
-      ].join('\n'),
+      'src/a.ts': eightLiveVarsSource('bigFn'),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert
-      const list = (report as any)?.analyses?.['variable-lifetime'];
+    // Assert
+    const pressureFindings = list.filter((item: any) => item.kind === 'liveness-pressure');
 
-      expect(Array.isArray(list)).toBe(true);
-
-      const pressureFindings = (list ?? []).filter((item: any) => item.kind === 'liveness-pressure');
-
-      expect(pressureFindings.length).toBeGreaterThanOrEqual(1);
-      expect(pressureFindings[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
-      expect(typeof pressureFindings[0]?.functionLineCount).toBe('number');
-      expect(pressureFindings[0]?.functionLineCount).toBeGreaterThanOrEqual(10);
-      expect(typeof pressureFindings[0]?.hotSpotLine).toBe('number');
-    } finally {
-      await project.dispose();
-    }
+    expect(pressureFindings.length).toBeGreaterThanOrEqual(1);
+    expect(pressureFindings[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+    expect(typeof pressureFindings[0]?.functionLineCount).toBe('number');
+    expect(pressureFindings[0]?.functionLineCount).toBeGreaterThanOrEqual(10);
+    expect(typeof pressureFindings[0]?.hotSpotLine).toBe('number');
   });
 
   it('should not emit liveness-pressure finding when maxLiveVariables is set very high in config', async () => {
     // Arrange: 8 vars all live at return, 50-line function; config sets maxLiveVariables to 999 → no fire
-    const filler = Array.from({ length: 45 }, (_, i) => `  const pad${i} = ${i};`).join('\n');
-    const project = await createScanProjectFixtureWithFiles('p1-var-life-liveness-2', {
+    const list = await scanDetectorFindings('p1-var-life-liveness-2', 'variable-lifetime', {
       '.firebatrc.jsonc':
         '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 999, "maxLiveVariables": 999, "minFunctionLines": 10 } }\n}',
-      'src/a.ts': [
-        'export function bigFnHighThreshold() {',
-        '  const a = 1;',
-        '  const b = 2;',
-        '  const c = 3;',
-        '  const d = 4;',
-        '  const e = 5;',
-        '  const f = 6;',
-        '  const g = 7;',
-        '  const h = 8;',
-        filler,
-        '  return a + b + c + d + e + f + g + h;',
-        '}',
-      ].join('\n'),
+      'src/a.ts': eightLiveVarsSource('bigFnHighThreshold'),
     });
 
-    try {
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['variable-lifetime' as any],
-            help: false,
-          },
-          { logger: createScanLogger() },
-        ),
-      );
-      // Assert — no liveness-pressure because maxLiveVariables threshold (999) is above actual live count
-      const list = (report as any)?.analyses?.['variable-lifetime'];
+    // Assert — no liveness-pressure because maxLiveVariables threshold (999) is above actual live count
+    const pressureFindings = list.filter((item: any) => item.kind === 'liveness-pressure');
 
-      expect(Array.isArray(list)).toBe(true);
-
-      const pressureFindings = (list ?? []).filter((item: any) => item.kind === 'liveness-pressure');
-
-      expect(pressureFindings.length).toBe(0);
-    } finally {
-      await project.dispose();
-    }
+    expect(pressureFindings.length).toBe(0);
   });
 });

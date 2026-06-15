@@ -47,43 +47,44 @@ describe('integration/indirection', () => {
     expect(thinWrappers[0]?.header).toBe('wrapper');
   });
 
-  it('should report thin wrappers when destructured params are forwarded', async () => {
+  interface DestructuredForwardCase {
+    name: string;
+    path: string;
+    source: string;
+  }
+
+  const destructuredForwardCases: DestructuredForwardCase[] = [
+    {
+      name: 'destructured params are forwarded',
+      path: '/virtual/indirection/object-pattern.ts',
+      source: [
+        'function target(a, b) {',
+        '  return a + b;',
+        '}',
+        'export function wrapper({ a, b }) {',
+        '  return target(a, b);',
+        '}',
+      ].join('\n'),
+    },
+    {
+      name: 'destructured rest params are forwarded',
+      path: '/virtual/indirection/object-pattern-rest.ts',
+      source: [
+        'function target(a, ...rest) {',
+        '  return [a, ...rest].length;',
+        '}',
+        'export function wrapper({ a, ...rest }) {',
+        '  return target(a, ...rest);',
+        '}',
+      ].join('\n'),
+    },
+  ];
+
+  it.each(destructuredForwardCases)('should report thin wrappers when $name', async ({ path, source }) => {
     // Arrange
     const sources = new Map<string, string>();
-    const source = [
-      'function target(a, b) {',
-      '  return a + b;',
-      '}',
-      'export function wrapper({ a, b }) {',
-      '  return target(a, b);',
-      '}',
-    ].join('\n');
 
-    sources.set('/virtual/indirection/object-pattern.ts', source);
-
-    // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-    const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
-
-    // Assert
-    expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
-  });
-
-  it('should report thin wrappers when destructured rest params are forwarded', async () => {
-    // Arrange
-    const sources = new Map<string, string>();
-    const source = [
-      'function target(a, ...rest) {',
-      '  return [a, ...rest].length;',
-      '}',
-      'export function wrapper({ a, ...rest }) {',
-      '  return target(a, ...rest);',
-      '}',
-    ].join('\n');
-
-    sources.set('/virtual/indirection/object-pattern-rest.ts', source);
+    sources.set(path, source);
 
     // Act
     const program = createProgramFromMap(sources);

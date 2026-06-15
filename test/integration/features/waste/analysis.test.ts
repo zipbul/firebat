@@ -7,6 +7,14 @@ interface WasteKindFinding {
   readonly kind: string;
 }
 
+interface KindCase {
+  readonly title: string;
+  readonly filePath: string;
+  readonly source: string;
+  readonly kind: string;
+  readonly message: string;
+}
+
 function createDeadStoreSource(): string {
   // case 1: declaration initializer overwritten before read.
   return ['export function deadStore() {', '  let value = 1;', '  value = 2;', '  return value;', '}'].join('\n');
@@ -24,41 +32,40 @@ function hasKind(findings: ReadonlyArray<WasteKindFinding>, kind: string): boole
   return findings.some(finding => finding.kind === kind);
 }
 
+const kindCases: KindCase[] = [
+  {
+    title: 'dead-store when values are never read',
+    filePath: '/virtual/waste/dead-store.ts',
+    source: createDeadStoreSource(),
+    kind: 'dead-store',
+    message: 'assigned but never read',
+  },
+  {
+    title: 'dead-store-overwrite when writes are overwritten',
+    filePath: '/virtual/waste/overwrite.ts',
+    source: createOverwriteSource(),
+    kind: 'dead-store-overwrite',
+    message: 'overwritten before being read',
+  },
+];
+
 describe('integration/waste', () => {
-  it('should report dead-store when values are never read', () => {
+  it.each(kindCases)('should report $title', ({ filePath, source, kind, message }) => {
     // Arrange
     let sources = new Map<string, string>();
 
-    sources.set('/virtual/waste/dead-store.ts', createDeadStoreSource());
+    sources.set(filePath, source);
 
     // Act
     let program = createProgramFromMap(sources);
     let findings = detectWaste(program);
 
     // Assert
-    expect(hasKind(findings, 'dead-store')).toBe(true);
+    expect(hasKind(findings, kind)).toBe(true);
 
-    let deadStore = findings.find(f => f.kind === 'dead-store');
+    let finding = findings.find(f => f.kind === kind);
 
-    expect(deadStore?.message).toContain('assigned but never read');
-  });
-
-  it('should report dead-store-overwrite when writes are overwritten', () => {
-    // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/waste/overwrite.ts', createOverwriteSource());
-
-    // Act
-    let program = createProgramFromMap(sources);
-    let findings = detectWaste(program);
-
-    // Assert
-    expect(hasKind(findings, 'dead-store-overwrite')).toBe(true);
-
-    let overwrite = findings.find(f => f.kind === 'dead-store-overwrite');
-
-    expect(overwrite?.message).toContain('overwritten before being read');
+    expect(finding?.message).toContain(message);
   });
 
   it('should not report findings when values are read', () => {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { DuplicateGroup } from '../../../../src/test-api';
+
 import { analyzeDuplicates } from '../../../../src/test-api';
 import { createProgramFromMap } from '../../shared/test-kit';
 
@@ -7,73 +9,74 @@ function createFunctionSource(name: string, value: number): string {
   return [`export function ${name}() {`, `  const localValue = ${value};`, '  return localValue + 1;', '}'].join('\n');
 }
 
+interface FnSpec {
+  name: string;
+  value: number;
+}
+
+const analyzeTwoFunctions = (one: FnSpec, two: FnSpec, minSize: number): readonly DuplicateGroup[] => {
+  const sources = new Map<string, string>();
+
+  sources.set('/virtual/dup/one.ts', createFunctionSource(one.name, one.value));
+  sources.set('/virtual/dup/two.ts', createFunctionSource(two.name, two.value));
+
+  const program = createProgramFromMap(sources);
+
+  return analyzeDuplicates(program, { minSize });
+};
+
 describe('integration/duplicates', () => {
-  it('should detect exact-clone groups when functions are identical', () => {
-    const sources = new Map<string, string>();
+  interface DetectCase {
+    title: string;
+    one: FnSpec;
+    two: FnSpec;
+    matches: (g: DuplicateGroup) => boolean;
+  }
 
-    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup/two.ts', createFunctionSource('alpha', 1));
+  const detectCases: DetectCase[] = [
+    {
+      title: 'should detect exact-clone groups when functions are identical',
+      one: { name: 'alpha', value: 1 },
+      two: { name: 'alpha', value: 1 },
+      matches: g => g.items.length >= 2,
+    },
+    {
+      // Shape fingerprint strips both identifiers and literals → same shape → shape group
+      title: 'should detect shape group when functions have same name but different literals',
+      one: { name: 'alpha', value: 1 },
+      two: { name: 'alpha', value: 2 },
+      matches: g => g.items.length >= 2 && g.cloneType === 'shape',
+    },
+    {
+      // Same shape, different function name + value → structural duplicate
+      title: 'should detect structural-clone groups when structures match but literals differ',
+      one: { name: 'alpha', value: 1 },
+      two: { name: 'beta', value: 2 },
+      matches: g => g.items.length >= 2 && g.findingKind !== 'exact-clone',
+    },
+  ];
 
-    const program = createProgramFromMap(sources);
-    const groups = analyzeDuplicates(program, { minSize: 1 });
-    const hasGroup = groups.some(group => group.items.length >= 2);
+  it.each(detectCases)('$title', ({ one, two, matches }) => {
+    const groups = analyzeTwoFunctions(one, two, 1);
 
-    expect(hasGroup).toBe(true);
+    expect(groups.some(matches)).toBe(true);
   });
 
   it('should not group functions when minSize is too high', () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup/two.ts', createFunctionSource('alpha', 1));
-
-    const program = createProgramFromMap(sources);
-    const groups = analyzeDuplicates(program, { minSize: 500 });
+    const groups = analyzeTwoFunctions({ name: 'alpha', value: 1 }, { name: 'alpha', value: 1 }, 500);
 
     expect(groups.length).toBe(0);
   });
 
-  it('should detect shape group when functions have same name but different literals', () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup/two.ts', createFunctionSource('alpha', 2));
-
-    const program = createProgramFromMap(sources);
-    const groups = analyzeDuplicates(program, { minSize: 1 });
-    // Shape fingerprint strips both identifiers and literals → same shape → shape group
-    const hasShapeGroup = groups.some(g => g.items.length >= 2 && g.cloneType === 'shape');
-
-    expect(hasShapeGroup).toBe(true);
-
-    // Should NOT be exact-clone (literal differs)
+  it('should not detect exact-clone when literals differ', () => {
+    const groups = analyzeTwoFunctions({ name: 'alpha', value: 1 }, { name: 'alpha', value: 2 }, 1);
     const hasExactClone = groups.some(g => g.items.length >= 2 && g.cloneType === 'exact');
 
     expect(hasExactClone).toBe(false);
   });
 
-  it('should detect structural-clone groups when structures match but literals differ', () => {
-    const sources = new Map<string, string>();
-
-    // Same shape, different function name + value → structural duplicate
-    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup/two.ts', createFunctionSource('beta', 2));
-
-    const program = createProgramFromMap(sources);
-    const groups = analyzeDuplicates(program, { minSize: 1 });
-    const hasStructural = groups.some(g => g.items.length >= 2 && g.findingKind !== 'exact-clone');
-
-    expect(hasStructural).toBe(true);
-  });
-
   it('each group should have required findingKind field', () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/dup/one.ts', createFunctionSource('alpha', 1));
-    sources.set('/virtual/dup/two.ts', createFunctionSource('alpha', 1));
-
-    const program = createProgramFromMap(sources);
-    const groups = analyzeDuplicates(program, { minSize: 1 });
+    const groups = analyzeTwoFunctions({ name: 'alpha', value: 1 }, { name: 'alpha', value: 1 }, 1);
 
     for (const group of groups) {
       expect(typeof group.findingKind).toBe('string');

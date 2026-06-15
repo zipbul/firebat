@@ -3,58 +3,7 @@ import * as path from 'node:path';
 
 import type { TypecheckItem } from '../../../../src/test-api';
 
-import { createPrettyConsoleLogger } from '../../../../src/test-api';
-import { createTempProject, writeText } from '../../shared/external-tool-test-kit';
-
-const writeJson = async (filePath: string, value: unknown): Promise<void> => {
-  await writeText(filePath, JSON.stringify(value, null, 2));
-};
-
-const withCwd = async <T>(cwdAbs: string, fn: () => Promise<T>): Promise<T> => {
-  const prev = process.cwd();
-
-  process.chdir(cwdAbs);
-
-  try {
-    return await fn();
-  } finally {
-    process.chdir(prev);
-  }
-};
-
-interface TypecheckProjectFixture {
-  readonly rootAbs: string;
-  readonly srcFileAbs: string;
-  dispose: () => Promise<void>;
-}
-
-const createTypecheckProjectFixture = async (prefix: string, sourceText: string): Promise<TypecheckProjectFixture> => {
-  const project = await createTempProject(prefix);
-  const srcFileAbs = path.join(project.rootAbs, 'src', 'a.ts');
-
-  await writeJson(path.join(project.rootAbs, 'package.json'), {
-    name: `${prefix}-fixture`,
-    private: true,
-    devDependencies: { firebat: '0.0.0' },
-  });
-
-  await writeJson(path.join(project.rootAbs, 'tsconfig.json'), {
-    compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-    include: ['src/**/*.ts'],
-  });
-
-  await writeText(srcFileAbs, sourceText);
-
-  return {
-    rootAbs: project.rootAbs,
-    srcFileAbs,
-    dispose: project.dispose,
-  };
-};
-
-const createLogger = () => {
-  return createPrettyConsoleLogger({ level: 'error', includeStack: false });
-};
+import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
 
 const createTypecheckOk = (items: ReadonlyArray<TypecheckItem>): ReadonlyArray<TypecheckItem> => {
   return items;
@@ -86,10 +35,12 @@ afterEach(() => {
 describe('integration/typecheck/report-integration', () => {
   it('should capture typecheck failures into meta.errors and not throw when typecheck execution fails', async () => {
     // Arrange
-    const project = await createTypecheckProjectFixture('firebat-typecheck-error-aggregation', 'export const a = 1;');
+    const project = await createScanProjectFixtureWithFiles('firebat-typecheck-error-aggregation', {
+      'src/a.ts': 'export const a = 1;',
+    });
 
     try {
-      const logger = createLogger();
+      const logger = createScanLogger();
 
       analyzeTypecheckMock.mockImplementationOnce(async () => {
         throw new Error('typecheck failed');
@@ -99,7 +50,7 @@ describe('integration/typecheck/report-integration', () => {
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
           {
-            targets: [project.srcFileAbs],
+            targets: [...project.targetsAbs],
             minSize: 0,
             maxForwardDepth: 0,
             detectors: ['typecheck'],
@@ -120,10 +71,12 @@ describe('integration/typecheck/report-integration', () => {
 
   it('should exclude typecheck from top even when typecheck returns many items', async () => {
     // Arrange
-    const project = await createTypecheckProjectFixture('firebat-typecheck-top-exclusion', 'export const a = 1;');
+    const project = await createScanProjectFixtureWithFiles('firebat-typecheck-top-exclusion', {
+      'src/a.ts': 'export const a = 1;',
+    });
 
     try {
-      const logger = createLogger();
+      const logger = createScanLogger();
 
       analyzeTypecheckMock.mockImplementationOnce(async () =>
         createTypecheckOk([
@@ -156,7 +109,7 @@ describe('integration/typecheck/report-integration', () => {
       const report = await withCwd(project.rootAbs, () =>
         scanUseCase(
           {
-            targets: [project.srcFileAbs],
+            targets: [...project.targetsAbs],
             minSize: 0,
             maxForwardDepth: 0,
             detectors: ['typecheck'],

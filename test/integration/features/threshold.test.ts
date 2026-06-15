@@ -82,28 +82,36 @@ describe('threshold/variable-lifetime', () => {
 // ── nesting ─────────────────────────────────────────────────────────────────
 
 describe('threshold/nesting', () => {
-  it('depth exactly at maxNestingDepth → no finding (< threshold)', () => {
-    // depth=2, maxNestingDepth=3 → 2 < 3 → no finding
-    const src = ['export function f(a: boolean, b: boolean) {', '  if (a) { if (b) { return 1; } }', '  return 0;', '}'].join(
-      '\n',
-    );
+  interface DepthCase {
+    title: string;
+    src: string;
+    expectedKinds: string[];
+  }
+
+  const depthCases: DepthCase[] = [
+    {
+      // depth=2, maxNestingDepth=3 → 2 < 3 → no finding
+      title: 'depth exactly at maxNestingDepth → no finding (< threshold)',
+      src: ['export function f(a: boolean, b: boolean) {', '  if (a) { if (b) { return 1; } }', '  return 0;', '}'].join('\n'),
+      expectedKinds: [],
+    },
+    {
+      // depth=3, maxNestingDepth=3 → 3 >= 3 → finding
+      title: 'depth at maxNestingDepth → finding (>= threshold)',
+      src: [
+        'export function f(a: boolean, b: boolean, c: boolean) {',
+        '  if (a) { if (b) { if (c) { return 1; } } }',
+        '  return 0;',
+        '}',
+      ].join('\n'),
+      expectedKinds: ['deep-nesting'],
+    },
+  ];
+
+  it.each(depthCases)('$title', ({ src, expectedKinds }) => {
     const findings = analyzeNesting([parse(src)], { maxNestingDepth: 3, maxCognitiveComplexity: 999 });
 
-    expect(findings).toHaveLength(0);
-  });
-
-  it('depth at maxNestingDepth → finding (>= threshold)', () => {
-    // depth=3, maxNestingDepth=3 → 3 >= 3 → finding
-    const src = [
-      'export function f(a: boolean, b: boolean, c: boolean) {',
-      '  if (a) { if (b) { if (c) { return 1; } } }',
-      '  return 0;',
-      '}',
-    ].join('\n');
-    const findings = analyzeNesting([parse(src)], { maxNestingDepth: 3, maxCognitiveComplexity: 999 });
-
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.kind).toBe('deep-nesting');
+    expect(findings.map(f => f.kind as string)).toEqual(expectedKinds);
   });
 
   it('CC below maxCognitiveComplexity → no finding', () => {

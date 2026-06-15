@@ -1,24 +1,9 @@
-import { describe, expect, it } from 'bun:test';
-import * as path from 'node:path';
+import { describe, it } from 'bun:test';
 
-import { resolveToolRcPath } from '../../../../../src/test-api';
-import { createTempProject, writeText } from '../../../shared/external-tool-test-kit';
+import { expectRcNotResolvedFromParent } from '../../../shared/external-tool-test-kit';
 
 describe('integration/lint/config-missing', () => {
   it('should not search parent directories for .oxlintrc.jsonc', async () => {
-    const parent = await createTempProject('firebat-lint-config-parent');
-
-    try {
-      const childAbs = path.join(parent.rootAbs, 'child');
-
-      await writeText(path.join(parent.rootAbs, '.oxlintrc.jsonc'), '{ /* parent */ }');
-      await writeText(path.join(childAbs, 'placeholder.txt'), 'ok');
-
-      const resolved = await resolveToolRcPath(childAbs, '.oxlintrc.jsonc');
-
-      expect(resolved).toBeUndefined();
-    } finally {
-      await parent.dispose();
-    }
+    await expectRcNotResolvedFromParent('firebat-lint-config-parent', '.oxlintrc.jsonc');
   });
 });

@@ -1,23 +1,9 @@
-import { describe, expect, it } from 'bun:test';
-import * as path from 'node:path';
+import { describe, it } from 'bun:test';
 
-import { resolveToolRcPath } from '../../../../../src/test-api';
-import { createTempProject, writeText } from '../../../shared/external-tool-test-kit';
+import { expectRcResolvedFromRoot } from '../../../shared/external-tool-test-kit';
 
 describe('integration/lint/config-found', () => {
   it('should resolve .oxlintrc.jsonc only from rootAbs', async () => {
-    const project = await createTempProject('firebat-lint-config-found');
-
-    try {
-      const configAbs = path.join(project.rootAbs, '.oxlintrc.jsonc');
-
-      await writeText(configAbs, '{ /* test */ }');
-
-      const resolved = await resolveToolRcPath(project.rootAbs, '.oxlintrc.jsonc');
-
-      expect(resolved).toBe(configAbs);
-    } finally {
-      await project.dispose();
-    }
+    await expectRcResolvedFromRoot('firebat-lint-config-found', '.oxlintrc.jsonc');
   });
 });
