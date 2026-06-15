@@ -164,6 +164,16 @@ export interface DuplicateItem {
   readonly span: SourceSpan;
 }
 
+/** 문장열 클론을 하나의 헬퍼로 추출하기 위한 결정적 계획 (자동수정 아님, 가이드). */
+export interface ExtractionPlan {
+  /** 헬퍼 파라미터가 될 외부 지역변수 (런이 읽지만 런 밖에서 선언된 것). */
+  readonly params: ReadonlyArray<string>;
+  /** 헬퍼 반환값 (런 안에서 선언돼 밖에서 쓰이는 단일 바인딩) 또는 void. */
+  readonly returns: string | null;
+  /** 런이 this를 참조하면 헬퍼는 메서드여야 함. */
+  readonly usesThis: boolean;
+}
+
 export interface CloneDiffPair {
   readonly left: string;
   readonly right: string;
@@ -185,6 +195,8 @@ export interface DuplicateGroup {
   readonly code?: FirebatCatalogCode;
   readonly items: ReadonlyArray<DuplicateItem>;
   readonly suggestedParams?: CloneDiff;
+  /** 문장열 클론을 헬퍼로 추출하는 계획 (fragment-clone 한정). */
+  readonly suggestedExtraction?: ExtractionPlan;
   /** 클론 단위의 정규형 AST 노드 수 (영향 크기). */
   readonly size: number;
   /** 결정적 우선순위 = size × 사이트 수. 클수록 영향이 큼. */

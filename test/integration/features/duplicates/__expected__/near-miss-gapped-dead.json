@@ -35,7 +35,14 @@
       }
     ],
     "severity": 46,
-    "size": 23
+    "size": 23,
+    "suggestedExtraction": {
+      "params": [
+        "total"
+      ],
+      "returns": "grand",
+      "usesThis": false
+    }
   },
   {
     "cloneType": "fragment",
@@ -73,6 +80,13 @@
       }
     ],
     "severity": 28,
-    "size": 14
+    "size": 14,
+    "suggestedExtraction": {
+      "params": [
+        "values"
+      ],
+      "returns": "total",
+      "usesThis": false
+    }
   }
 ]

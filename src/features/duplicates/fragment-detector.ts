@@ -14,7 +14,7 @@ import type { Node } from 'oxc-parser';
 import { visitorKeys } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
-import type { DuplicateGroup, DuplicateItem, SourceSpan } from '../../types';
+import type { DuplicateGroup, DuplicateItem, ExtractionPlan, SourceSpan } from '../../types';
 
 import { collectOxcNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
@@ -29,6 +29,8 @@ interface BlockInfo {
   readonly statements: ReadonlyArray<Node>;
   readonly fps: ReadonlyArray<string>;
   readonly sizes: ReadonlyArray<number>;
+  /** 둘러싼 함수의 바인딩 이름 — 추출 시 파라미터(외부 지역변수) 계산용. */
+  readonly boundNames: ReadonlySet<string>;
 }
 
 interface RunOccurrence {
@@ -128,6 +130,7 @@ const analyzeFragments = (files: ReadonlyArray<ParsedFile>, options: FragmentDet
         items,
         size: runSize,
         severity: runSize * items.length,
+        suggestedExtraction: buildExtractionPlan(repBlock, rep.start, rep.length),
       });
     }
   }
@@ -232,6 +235,7 @@ const addBlockTree = (
       statements,
       fps: statements.map(stmt => createOxcFingerprintShapeWithBindings(stmt, boundNames)),
       sizes: statements.map(stmt => countOxcSize(stmt)),
+      boundNames,
     });
   };
 
@@ -339,6 +343,79 @@ const collectMaximalRuns = (
 };
 
 // ─── 추출 안전성 ──────────────────────────────────────────────────────────────
+
+/** 추출 계획: 파라미터(외부 지역변수)·반환값(단일 live-out)·this 사용 — 전부 결정적. */
+const buildExtractionPlan = (block: BlockInfo, start: number, length: number): ExtractionPlan => {
+  const run = block.statements.slice(start, start + length);
+  const after = block.statements.slice(start + length);
+
+  const declared = new Set<string>();
+
+  for (const stmt of run) {
+    for (const name of collectBindingNames(stmt)) {
+      declared.add(name);
+    }
+  }
+
+  const referenced = collectReferencedNames(run);
+  // 파라미터 = 런이 읽지만 런 밖(둘러싼 함수)에서 선언된 지역변수. 전역·callee는 boundNames에 없어 제외.
+  const params = [...referenced].filter(n => block.boundNames.has(n) && !declared.has(n)).sort();
+
+  const afterRefs = collectReferencedNames(after);
+  const liveOuts = [...declared].filter(n => afterRefs.has(n)).sort();
+
+  return {
+    params,
+    returns: liveOuts[0] ?? null,
+    usesThis: run.some(referencesThis),
+  };
+};
+
+const referencesThis = (node: Node): boolean => {
+  let found = false;
+
+  const walk = (n: Node): void => {
+    if (found) {
+      return;
+    }
+
+    if (n.type === 'ThisExpression') {
+      found = true;
+
+      return;
+    }
+
+    // 중첩 함수의 this는 별개 — 단, arrow는 this를 상속하므로 멈추지 않는다
+    if (n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression') {
+      return;
+    }
+
+    const rec = n as unknown as Record<string, unknown>;
+    const keys = visitorKeys[n.type];
+
+    if (keys === undefined) {
+      return;
+    }
+
+    for (const key of keys) {
+      const value = rec[key];
+
+      if (isOxcNode(value)) {
+        walk(value);
+      } else if (Array.isArray(value)) {
+        for (const item of value) {
+          if (isOxcNode(item)) {
+            walk(item);
+          }
+        }
+      }
+    }
+  };
+
+  walk(node);
+
+  return found;
+};
 
 type ExtractSafety = 'ok' | 'multiple-live-outs' | 'control-escape';
 

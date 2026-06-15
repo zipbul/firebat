@@ -330,6 +330,67 @@ function b(): void {
     }
   });
 
+  it('should attach a deterministic extraction plan (params, return, this) to a fragment', () => {
+    const src = `
+function a(ids: string[]): number {
+  warmA();
+  const seen = new Set<string>();
+  for (const id of ids) {
+    seen.add(id.trim());
+  }
+  const count = seen.size;
+  return count + 1;
+}
+function b(ids: string[]): number {
+  prepB();
+  other();
+  const seen = new Set<string>();
+  for (const id of ids) {
+    seen.add(id.trim());
+  }
+  const count = seen.size;
+  return count * 9;
+}
+`;
+    const groups = run(src);
+
+    expect(groups.length).toBe(1);
+
+    const plan = groups[0]!.suggestedExtraction;
+
+    expect(plan).toBeDefined();
+    expect(plan!.params).toEqual(['ids']); // 런이 읽는 외부 지역변수
+    expect(plan!.returns).toBe('count'); // 단일 live-out (return이 달라 run에서 제외됨)
+    expect(plan!.usesThis).toBe(false);
+  });
+
+  it('should flag usesThis when the run references this', () => {
+    const src = `
+class A {
+  svc: Store;
+  run(id: string): number {
+    leadA();
+    const key = id.trim();
+    const row = this.svc.find(key);
+    const n = row.count;
+    return n + sideA();
+  }
+  other(id: string): number {
+    warmB();
+    extra();
+    const key = id.trim();
+    const row = this.svc.find(key);
+    const n = row.count;
+    return n + sideB();
+  }
+}
+`;
+    const groups = run(src);
+
+    expect(groups.length).toBeGreaterThanOrEqual(1);
+    expect(groups[0]!.suggestedExtraction!.usesThis).toBe(true);
+  });
+
   it('should return empty for a single function with no internal repetition', () => {
     const src = `
 function solo(x: number): number {

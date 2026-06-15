@@ -50,6 +50,13 @@
       }
     ],
     "severity": 93,
-    "size": 31
+    "size": 31,
+    "suggestedExtraction": {
+      "params": [
+        "xs"
+      ],
+      "returns": null,
+      "usesThis": false
+    }
   }
 ]
