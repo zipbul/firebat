@@ -1,123 +1,69 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
+import type { FirebatDetector } from '../types';
+
 import { parseArgs } from './arg-parse';
 
+interface ParsedDefaults {
+  targets: string[];
+  minSize: 'auto' | number;
+  maxForwardDepth: number;
+  help: boolean;
+}
+
+// Expected default detector list, hardcoded here so the assertion is independent
+// of the production constant (importing it would make the test tautological).
+const EXPECTED_DEFAULT_DETECTORS: FirebatDetector[] = [
+  'duplicates',
+  'waste',
+  'barrel',
+  'error-flow',
+  'format',
+  'lint',
+  'typecheck',
+  'dependencies',
+  'coupling',
+  'nesting',
+  'early-return',
+  'collapsible-if',
+  'indirection',
+  'temporal-coupling',
+  'variable-lifetime',
+  'giant-file',
+];
+
 describe('arg-parse', () => {
-  it('should return default options when no args are provided', () => {
-    // Arrange
-    let argv: string[] = [];
+  it.each<[string, string[], ParsedDefaults]>([
+    ['no args are provided', [], { targets: [], minSize: 'auto', maxForwardDepth: 0, help: false }],
+    ['help flag is provided', ['--help'], { targets: [], minSize: 'auto', maxForwardDepth: 0, help: true }],
+    [
+      'min-size, max-forward-depth and a target are provided',
+      ['--min-size', '120', '--max-forward-depth', '2', 'packages'],
+      { targets: [path.resolve('packages')], minSize: 120, maxForwardDepth: 2, help: false },
+    ],
+  ])('should keep default detectors and parse options when %s', (_label, argv, expected) => {
     // Act
-    let result = parseArgs(argv);
+    const result = parseArgs(argv);
 
     // Assert
-    expect(result.targets).toEqual([]);
-    expect(result.minSize).toBe('auto');
-    expect(result.maxForwardDepth).toBe(0);
-    expect(result.detectors).toEqual([
-      'duplicates',
-      'waste',
-      'barrel',
-      'error-flow',
-      'format',
-      'lint',
-      'typecheck',
-      'dependencies',
-      'coupling',
-      'nesting',
-      'early-return',
-      'collapsible-if',
-      'indirection',
-      'temporal-coupling',
-      'variable-lifetime',
-      'giant-file',
-    ]);
-    expect(result.help).toBe(false);
+    expect(result.targets).toEqual(expected.targets);
+    expect(result.minSize).toBe(expected.minSize);
+    expect(result.maxForwardDepth).toBe(expected.maxForwardDepth);
+    expect(result.detectors).toEqual(EXPECTED_DEFAULT_DETECTORS);
+    expect(result.help).toBe(expected.help);
     expect(result.explicit).toBeDefined();
   });
 
-  it('should return help mode with defaults when help flag is provided', () => {
-    // Arrange
-    let argv = ['--help'];
+  it.each<[string, string[], FirebatDetector[]]>([
+    ['a single detector is selected', ['--only', 'waste', 'packages'], ['waste']],
+    ['a P1 detector is selected', ['--only', 'temporal-coupling', 'packages'], ['temporal-coupling']],
+  ])('should parse only the requested detectors when %s', (_label, argv, expectedDetectors) => {
     // Act
-    let result = parseArgs(argv);
+    const result = parseArgs(argv);
 
     // Assert
-    expect(result.help).toBe(true);
-    expect(result.targets).toEqual([]);
-    expect(result.minSize).toBe('auto');
-    expect(result.maxForwardDepth).toBe(0);
-    expect(result.detectors).toEqual([
-      'duplicates',
-      'waste',
-      'barrel',
-      'error-flow',
-      'format',
-      'lint',
-      'typecheck',
-      'dependencies',
-      'coupling',
-      'nesting',
-      'early-return',
-      'collapsible-if',
-      'indirection',
-      'temporal-coupling',
-      'variable-lifetime',
-      'giant-file',
-    ]);
-    expect(result.explicit).toBeDefined();
-  });
-
-  it('should parse minSize and targets when options are provided', () => {
-    // Arrange
-    let argv = ['--min-size', '120', '--max-forward-depth', '2', 'packages'];
-    // Act
-    let result = parseArgs(argv);
-
-    // Assert
-    expect(result.minSize).toBe(120);
-    expect(result.maxForwardDepth).toBe(2);
-    expect(result.targets).toEqual([path.resolve('packages')]);
-    expect(result.detectors).toEqual([
-      'duplicates',
-      'waste',
-      'barrel',
-      'error-flow',
-      'format',
-      'lint',
-      'typecheck',
-      'dependencies',
-      'coupling',
-      'nesting',
-      'early-return',
-      'collapsible-if',
-      'indirection',
-      'temporal-coupling',
-      'variable-lifetime',
-      'giant-file',
-    ]);
-    expect(result.help).toBe(false);
-    expect(result.explicit).toBeDefined();
-  });
-
-  it('should parse detectors when --only is provided', () => {
-    // Arrange
-    let argv = ['--only', 'waste', 'packages'];
-    // Act
-    let result = parseArgs(argv);
-
-    // Assert
-    expect(result.detectors).toEqual(['waste']);
-  });
-
-  it('should parse P1 detectors when --only is provided', () => {
-    // Arrange
-    let argv = ['--only', 'temporal-coupling', 'packages'];
-    // Act
-    let result = parseArgs(argv);
-
-    // Assert
-    expect(result.detectors).toEqual(['temporal-coupling']);
+    expect(result.detectors).toEqual(expectedDetectors);
   });
 
   it('should parse configPath and logLevel when provided', () => {

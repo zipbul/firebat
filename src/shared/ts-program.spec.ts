@@ -11,13 +11,16 @@ import { createNoopLogger } from './logger';
 
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../store/gildash.ts')) };
 // ── Mocks ─────────────────────────────────────────────────────────────────────
+
+const defaultBatchParse = async (
+  _filePaths: string[],
+): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
+  parsed: new Map(),
+  failures: [],
+});
+
 const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
-const mockBatchParse = mock(
-  async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
-    parsed: new Map(),
-    failures: [],
-  }),
-);
+const mockBatchParse = mock(defaultBatchParse);
 const mockGildash = {
   batchParse: mockBatchParse,
   close: mockClose,
@@ -57,12 +60,7 @@ beforeEach(() => {
 
   mockCreateGildash.mockImplementation(async (_opts: unknown) => mockGildash);
   mockClose.mockImplementation(async (_opts?: { cleanup?: boolean }) => {});
-  mockBatchParse.mockImplementation(
-    async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
-      parsed: new Map(),
-      failures: [],
-    }),
-  );
+  mockBatchParse.mockImplementation(defaultBatchParse);
 });
 
 afterEach(() => {
@@ -91,7 +89,10 @@ describe('createFirebatProgram', () => {
     expect(result[0]?.filePath).toBe('/proj/src/a.ts');
   });
 
-  it('should exclude node_modules path from batchParse call', async () => {
+  it.each<[string, string]>([
+    ['a node_modules path', '/proj/node_modules/lib/index.ts'],
+    ['a .d.ts file', '/proj/src/types.d.ts'],
+  ])('should exclude %s from the batchParse call', async (_label, excludedTarget) => {
     // Arrange
     const pf = makeParsedFile('/proj/src/a.ts');
 
@@ -99,25 +100,7 @@ describe('createFirebatProgram', () => {
 
     // Act
     await createFirebatProgram({
-      targets: ['/proj/src/a.ts', '/proj/node_modules/lib/index.ts'],
-      logger,
-    });
-
-    // Assert
-    const [calledWith] = mockBatchParse.mock.calls[0] as [string[]];
-
-    expect(calledWith).toEqual(['/proj/src/a.ts']);
-  });
-
-  it('should exclude .d.ts files from batchParse call', async () => {
-    // Arrange
-    const pf = makeParsedFile('/proj/src/a.ts');
-
-    mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
-
-    // Act
-    await createFirebatProgram({
-      targets: ['/proj/src/a.ts', '/proj/src/types.d.ts'],
+      targets: ['/proj/src/a.ts', excludedTarget],
       logger,
     });
 
@@ -169,24 +152,12 @@ describe('createFirebatProgram', () => {
     expect(mockCreateGildash).not.toHaveBeenCalled();
   });
 
-  it('should return empty array and not create gildash when all targets are in node_modules', async () => {
+  it.each<[string, string[]]>([
+    ['all targets are in node_modules', ['/proj/node_modules/a.ts', '/proj/node_modules/sub/b.ts']],
+    ['all targets are .d.ts files', ['/proj/src/types.d.ts', '/proj/src/global.d.ts']],
+  ])('should return empty array and not create gildash when %s', async (_label, targets) => {
     // Arrange & Act
-    const result = await createFirebatProgram({
-      targets: ['/proj/node_modules/a.ts', '/proj/node_modules/sub/b.ts'],
-      logger,
-    });
-
-    // Assert
-    expect(result).toEqual([]);
-    expect(mockCreateGildash).not.toHaveBeenCalled();
-  });
-
-  it('should return empty array and not create gildash when all targets are .d.ts files', async () => {
-    // Arrange & Act
-    const result = await createFirebatProgram({
-      targets: ['/proj/src/types.d.ts', '/proj/src/global.d.ts'],
-      logger,
-    });
+    const result = await createFirebatProgram({ targets, logger });
 
     // Assert
     expect(result).toEqual([]);

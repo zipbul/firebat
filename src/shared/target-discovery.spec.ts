@@ -58,7 +58,10 @@ describe('resolveTargets - exclude', () => {
     expect(relResults).not.toContain(path.join('__fixtures__', 'fixture.ts'));
   });
 
-  it('resolveTargets - no exclude - returns all files', async () => {
+  it.each<[string, ReadonlyArray<string> | undefined]>([
+    ['exclude arg is omitted', undefined],
+    ['exclude is an empty array', []],
+  ])('resolveTargets - returns all files when %s', async (_label, exclude) => {
     // Arrange
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-test-'));
 
@@ -69,26 +72,7 @@ describe('resolveTargets - exclude', () => {
     await fs.writeFile(path.join(fixturesDir, 'fixture.ts'), '');
 
     // Act
-    const result = await resolveTargets(tmpDir, [tmpDir]);
-    // Assert
-    const relResults = result.map(p => path.relative(tmpDir, p));
-
-    expect(relResults).toContain('app.ts');
-    expect(relResults).toContain(path.join('__fixtures__', 'fixture.ts'));
-  });
-
-  it('resolveTargets - empty exclude array - returns all files', async () => {
-    // Arrange
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-test-'));
-
-    const fixturesDir = path.join(tmpDir, '__fixtures__');
-
-    await fs.mkdir(fixturesDir, { recursive: true });
-    await fs.writeFile(path.join(tmpDir, 'app.ts'), '');
-    await fs.writeFile(path.join(fixturesDir, 'fixture.ts'), '');
-
-    // Act
-    const result = await resolveTargets(tmpDir, [tmpDir], []);
+    const result = await resolveTargets(tmpDir, [tmpDir], exclude);
     // Assert
     const relResults = result.map(p => path.relative(tmpDir, p));
 

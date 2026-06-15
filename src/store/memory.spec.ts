@@ -3,6 +3,30 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 
 import { type MemoryStore, createMemoryStore } from './memory';
 
+interface PayloadRoundtripCase {
+  readonly name: string;
+  readonly projectKey: string;
+  readonly memoryKey: string;
+  readonly payloadJson: string;
+}
+
+interface CrossStoreCase {
+  readonly name: string;
+  readonly payloadJson: string;
+}
+
+interface WriteInput {
+  readonly projectKey: string;
+  readonly memoryKey: string;
+  readonly payloadJson: string;
+}
+
+interface DeleteCase {
+  readonly name: string;
+  readonly memoryKey: string;
+  readonly seeds: ReadonlyArray<WriteInput>;
+}
+
 describe('createMemoryStore', () => {
   let db: Database;
   let store: MemoryStore;
@@ -21,6 +45,12 @@ describe('createMemoryStore', () => {
     db.close();
   });
 
+  const writeAt = (ts: number, input: WriteInput): void => {
+    nowValue = ts;
+
+    store.write(input);
+  };
+
   // ---------- HP ----------
 
   it('should return empty array when project has no entries', () => {
@@ -30,13 +60,8 @@ describe('createMemoryStore', () => {
   });
 
   it('should return entries sorted by updatedAt DESC when listing keys', () => {
-    nowValue = 1000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'older', payloadJson: '{}' });
-
-    nowValue = 2000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'newer', payloadJson: '{}' });
+    writeAt(1000, { projectKey: 'proj', memoryKey: 'older', payloadJson: '{}' });
+    writeAt(2000, { projectKey: 'proj', memoryKey: 'newer', payloadJson: '{}' });
 
     const result = store.listKeys({ projectKey: 'proj' });
 
@@ -77,9 +102,7 @@ describe('createMemoryStore', () => {
   });
 
   it('should create new record with createdAt equal to updatedAt when writing new key', () => {
-    nowValue = 5000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'new', payloadJson: '{}' });
+    writeAt(5000, { projectKey: 'proj', memoryKey: 'new', payloadJson: '{}' });
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'new' });
 
@@ -88,13 +111,8 @@ describe('createMemoryStore', () => {
   });
 
   it('should preserve original createdAt when updating existing record', () => {
-    nowValue = 1000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":1}' });
-
-    nowValue = 2000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":2}' });
+    writeAt(1000, { projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":1}' });
+    writeAt(2000, { projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":2}' });
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'k' });
 
@@ -103,20 +121,19 @@ describe('createMemoryStore', () => {
     expect(record!.payloadJson).toBe('{"v":2}');
   });
 
-  it('should remove existing key when deleting', () => {
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{}' });
-    store.delete({ projectKey: 'proj', memoryKey: 'k' });
+  const deleteCases: DeleteCase[] = [
+    { name: 'removing an existing key', memoryKey: 'k', seeds: [{ projectKey: 'proj', memoryKey: 'k', payloadJson: '{}' }] },
+    { name: 'a no-op when the key does not exist', memoryKey: 'ghost', seeds: [] },
+  ];
 
-    const result = store.read({ projectKey: 'proj', memoryKey: 'k' });
+  it.each(deleteCases)('should leave no readable record after $name', ({ memoryKey, seeds }) => {
+    for (const seed of seeds) {
+      store.write(seed);
+    }
 
-    expect(result).toBeNull();
-  });
+    store.delete({ projectKey: 'proj', memoryKey });
 
-  it('should be no-op when deleting non-existent key', () => {
-    // Should not throw
-    store.delete({ projectKey: 'proj', memoryKey: 'ghost' });
-
-    const result = store.read({ projectKey: 'proj', memoryKey: 'ghost' });
+    const result = store.read({ projectKey: 'proj', memoryKey });
 
     expect(result).toBeNull();
   });
@@ -139,15 +156,11 @@ describe('createMemoryStore', () => {
   });
 
   it('should assign new createdAt when writing after delete of same key', () => {
-    nowValue = 1000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":1}' });
+    writeAt(1000, { projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":1}' });
 
     store.delete({ projectKey: 'proj', memoryKey: 'k' });
 
-    nowValue = 5000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":2}' });
+    writeAt(5000, { projectKey: 'proj', memoryKey: 'k', payloadJson: '{"v":2}' });
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'k' });
 
@@ -158,50 +171,49 @@ describe('createMemoryStore', () => {
 
   // ---------- ED ----------
 
-  it('should handle empty string projectKey and memoryKey correctly', () => {
-    store.write({ projectKey: '', memoryKey: '', payloadJson: '{"empty":true}' });
+  const payloadRoundtripCases: PayloadRoundtripCase[] = [
+    { name: 'empty string projectKey and memoryKey', projectKey: '', memoryKey: '', payloadJson: '{"empty":true}' },
+    { name: 'empty string payloadJson', projectKey: 'proj', memoryKey: 'k', payloadJson: '' },
+    {
+      name: 'raw string without JSON validation',
+      projectKey: 'proj',
+      memoryKey: 'k',
+      payloadJson: 'this is not json at all <<<>>>',
+    },
+  ];
 
-    const result = store.read({ projectKey: '', memoryKey: '' });
+  it.each(payloadRoundtripCases)(
+    'should store and return payloadJson as-is for $name',
+    ({ projectKey, memoryKey, payloadJson }) => {
+      store.write({ projectKey, memoryKey, payloadJson });
 
-    expect(result!.payloadJson).toBe('{"empty":true}');
-  });
+      const result = store.read({ projectKey, memoryKey });
 
-  it('should store and return empty string payloadJson as-is', () => {
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '' });
-
-    const result = store.read({ projectKey: 'proj', memoryKey: 'k' });
-
-    expect(result!.payloadJson).toBe('');
-  });
-
-  it('should store payloadJson as raw string without JSON validation', () => {
-    const notJson = 'this is not json at all <<<>>>';
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: notJson });
-
-    const result = store.read({ projectKey: 'proj', memoryKey: 'k' });
-
-    expect(result!.payloadJson).toBe(notJson);
-  });
+      expect(result!.payloadJson).toBe(payloadJson);
+    },
+  );
 
   // ---------- CO ----------
 
-  it('should share data between two stores on same DB', () => {
+  const crossStoreCases: CrossStoreCase[] = [
+    { name: 'sharing data between two stores on same DB', payloadJson: '{"s":1}' },
+    { name: 'creating schema idempotently when called twice on same DB', payloadJson: '{}' },
+  ];
+
+  it.each(crossStoreCases)('should read a value written via a sibling store when $name', ({ payloadJson }) => {
     const store2 = createMemoryStore(db);
 
-    store.write({ projectKey: 'proj', memoryKey: 'shared', payloadJson: '{"s":1}' });
+    store.write({ projectKey: 'proj', memoryKey: 'shared', payloadJson });
 
     const result = store2.read({ projectKey: 'proj', memoryKey: 'shared' });
 
-    expect(result!.payloadJson).toBe('{"s":1}');
+    expect(result!.payloadJson).toBe(payloadJson);
   });
 
   it('should apply last-write-wins when same key written from different stores', () => {
     const store2 = createMemoryStore(db);
 
-    nowValue = 1000;
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: 'from-store1' });
+    writeAt(1000, { projectKey: 'proj', memoryKey: 'k', payloadJson: 'from-store1' });
 
     nowValue = 2000;
 
@@ -213,16 +225,6 @@ describe('createMemoryStore', () => {
   });
 
   // ---------- ID ----------
-
-  it('should create schema idempotently when called twice on same DB', () => {
-    const store2 = createMemoryStore(db);
-
-    store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{}' });
-
-    const result = store2.read({ projectKey: 'proj', memoryKey: 'k' });
-
-    expect(result!.payloadJson).toBe('{}');
-  });
 
   it('should return same result when same key and payload is written twice', () => {
     store.write({ projectKey: 'proj', memoryKey: 'k', payloadJson: '{"dup":1}' });
@@ -236,17 +238,9 @@ describe('createMemoryStore', () => {
   // ---------- OR ----------
 
   it('should return entries with latest updatedAt first when listing keys after sequential writes', () => {
-    nowValue = 100;
-
-    store.write({ projectKey: 'proj', memoryKey: 'first', payloadJson: '{}' });
-
-    nowValue = 200;
-
-    store.write({ projectKey: 'proj', memoryKey: 'second', payloadJson: '{}' });
-
-    nowValue = 300;
-
-    store.write({ projectKey: 'proj', memoryKey: 'third', payloadJson: '{}' });
+    writeAt(100, { projectKey: 'proj', memoryKey: 'first', payloadJson: '{}' });
+    writeAt(200, { projectKey: 'proj', memoryKey: 'second', payloadJson: '{}' });
+    writeAt(300, { projectKey: 'proj', memoryKey: 'third', payloadJson: '{}' });
 
     const keys = store.listKeys({ projectKey: 'proj' }).map(e => e.memoryKey);
 

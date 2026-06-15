@@ -55,14 +55,15 @@ afterAll(async () => {
 });
 
 describe('appendFirebatLog', () => {
-  it('[HP] creates the log file and appends a message', async () => {
-    const logRelPath = 'logs/test.log';
-
-    await appendFirebatLog(tmpDir, logRelPath, 'hello log');
+  it.each<[string, string, string]>([
+    ['writes a message to the log file', 'logs/test.log', 'hello log'],
+    ['creates nested directories automatically', 'a/b/c/deep.log', 'deep'],
+  ])('[HP] %s', async (_label, logRelPath, message) => {
+    await appendFirebatLog(tmpDir, logRelPath, message);
 
     const content = await fs.readFile(path.join(tmpDir, logRelPath), 'utf8');
 
-    expect(content).toContain('hello log');
+    expect(content).toContain(message);
   });
 
   it('[HP] appended entry includes ISO timestamp bracket and newline', async () => {
@@ -74,16 +75,6 @@ describe('appendFirebatLog', () => {
 
     expect(content).toMatch(/\[\d{4}-\d{2}-\d{2}T/);
     expect(content).toEndWith('\n');
-  });
-
-  it('[HP] creates nested directories automatically', async () => {
-    const deepRelPath = 'a/b/c/deep.log';
-
-    await appendFirebatLog(tmpDir, deepRelPath, 'deep');
-
-    const content = await fs.readFile(path.join(tmpDir, deepRelPath), 'utf8');
-
-    expect(content).toContain('deep');
   });
 
   it('[HP] appending multiple times accumulates entries', async () => {
@@ -111,6 +102,10 @@ describe('createPrettyConsoleLogger', () => {
   afterEach(() => {
     consoleErrorSpy.mockRestore();
   });
+
+  function firstLoggedLine(): string | undefined {
+    return (consoleErrorSpy.mock.calls[0] as string[])[0];
+  }
 
   it('[HP] has the specified level', () => {
     const logger = createPrettyConsoleLogger({ level: 'warn', useColor: false });
@@ -153,7 +148,7 @@ describe('createPrettyConsoleLogger', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
 
-    const output = (consoleErrorSpy.mock.calls[0] as string[])[0];
+    const output = firstLoggedLine();
 
     expect(output).toContain('test message');
     expect(output).toContain('DEBUG');
@@ -164,30 +159,23 @@ describe('createPrettyConsoleLogger', () => {
 
     logger.info('with fields', { key: 'val', count: 42 });
 
-    const output = (consoleErrorSpy.mock.calls[0] as string[])[0];
+    const output = firstLoggedLine();
 
     expect(output).toContain('key=val');
     expect(output).toContain('count=42');
   });
 
-  it('[HP] formats durationMs field specially', () => {
+  it.each<[string, number, string]>([
+    ['formats durationMs below 1000ms in milliseconds', 500, '500ms'],
+    ['formats durationMs ≥ 1000ms as seconds', 2000, '2.00s'],
+  ])('[HP] %s', (_label, durationMs, expectedFragment) => {
     const logger = createPrettyConsoleLogger({ level: 'info', useColor: false });
 
-    logger.info('with duration', { durationMs: 500 });
+    logger.info('with duration', { durationMs });
 
-    const output = (consoleErrorSpy.mock.calls[0] as string[])[0];
+    const output = firstLoggedLine();
 
-    expect(output).toContain('500ms');
-  });
-
-  it('[HP] formats durationMs ≥ 1000ms as seconds', () => {
-    const logger = createPrettyConsoleLogger({ level: 'info', useColor: false });
-
-    logger.info('with duration', { durationMs: 2000 });
-
-    const output = (consoleErrorSpy.mock.calls[0] as string[])[0];
-
-    expect(output).toContain('2.00s');
+    expect(output).toContain(expectedFragment);
   });
 
   it('[HP] includeStack appends error stack trace', () => {
@@ -196,7 +184,7 @@ describe('createPrettyConsoleLogger', () => {
 
     logger.error('failed', {}, err);
 
-    const output = (consoleErrorSpy.mock.calls[0] as string[])[0];
+    const output = firstLoggedLine();
 
     expect(output).toContain('Error: stack test');
   });
@@ -206,7 +194,7 @@ describe('createPrettyConsoleLogger', () => {
 
     logger.info('msg', { present: 'yes', absent: undefined });
 
-    const output = (consoleErrorSpy.mock.calls[0] as string[])[0];
+    const output = firstLoggedLine();
 
     expect(output).toContain('present=yes');
     expect(output).not.toContain('absent');
