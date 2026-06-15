@@ -1,29 +1,11 @@
-import type { AstNode, JsonObject, JsonValue, NodeOrNull, RuleContext } from '../types';
+import type { AstNode, JsonValue, NodeOrNull, RuleContext } from '../types';
+
+import { isJsonObject, toStringList } from '../utils/json-options';
 
 interface NoUmbrellaTypesOptions {
   forbiddenAliases?: string[];
   forbiddenGlobals?: string[];
 }
-
-const isJsonObject = (value: JsonValue | undefined): value is JsonObject => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
-
-const toStringList = (value: JsonValue | undefined): string[] | null => {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const out: string[] = [];
-
-  for (const item of value) {
-    if (typeof item === 'string') {
-      out.push(item);
-    }
-  }
-
-  return out.length > 0 ? out : null;
-};
 
 const readOptions = (raw: JsonValue | undefined): NoUmbrellaTypesOptions => {
   if (!isJsonObject(raw)) {
@@ -62,21 +44,17 @@ const noUmbrellaTypesRule = {
       });
     };
 
+    const checkNamedDeclaration = (node: AstNode): void => {
+      const name = getIdentifierName(node.id);
+
+      if (name !== null && forbiddenAliases.has(name)) {
+        reportIdentifier(node.id ?? node, 'forbiddenAlias');
+      }
+    };
+
     return {
-      TSTypeAliasDeclaration(node: AstNode) {
-        const name = getIdentifierName(node.id);
-
-        if (name !== null && forbiddenAliases.has(name)) {
-          reportIdentifier(node.id ?? node, 'forbiddenAlias');
-        }
-      },
-      TSInterfaceDeclaration(node: AstNode) {
-        const name = getIdentifierName(node.id);
-
-        if (name !== null && forbiddenAliases.has(name)) {
-          reportIdentifier(node.id ?? node, 'forbiddenAlias');
-        }
-      },
+      TSTypeAliasDeclaration: checkNamedDeclaration,
+      TSInterfaceDeclaration: checkNamedDeclaration,
       TSTypeReference(node: AstNode) {
         const name = getIdentifierName(node.typeName);
 

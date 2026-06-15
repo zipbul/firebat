@@ -1,6 +1,8 @@
-import type { AstNode, Fix, Fixer, JsonObject, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types.js';
+import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types.js';
 
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
+import { isJsonObject, toStringOrStringList } from '../utils/json-options.js';
+import { createStatementBodyVisitor } from '../utils/statement-body-visitor.js';
 
 const paddingLineBetweenStatementsRule = {
   create(context: RuleContext) {
@@ -83,29 +85,6 @@ const paddingLineBetweenStatementsRule = {
       { blankLine: 'never', prev: ['const', 'let', 'var'], next: ['const', 'let', 'var'] },
       { blankLine: 'always', prev: '*', next: 'return' },
     ];
-
-    const isJsonObject = (value: JsonValue): value is JsonObject =>
-      typeof value === 'object' && value !== null && !Array.isArray(value);
-
-    const toStringOrStringList = (value: JsonValue | undefined): string | string[] | null => {
-      if (typeof value === 'string') {
-        return value;
-      }
-
-      if (Array.isArray(value)) {
-        const out: string[] = [];
-
-        for (const item of value) {
-          if (typeof item === 'string') {
-            out.push(item);
-          }
-        }
-
-        return out.length > 0 ? out : null;
-      }
-
-      return null;
-    };
 
     const toPaddingRule = (value: JsonValue): PaddingRule | null => {
       if (!isJsonObject(value)) {
@@ -270,18 +249,7 @@ const paddingLineBetweenStatementsRule = {
       }
     };
 
-    return {
-      BlockStatement(node: AstNode) {
-        const body = Array.isArray(node.body) ? node.body : [];
-
-        checkBody(body);
-      },
-      Program(node: AstNode) {
-        const body = Array.isArray(node.body) ? node.body : [];
-
-        checkBody(body);
-      },
-    };
+    return createStatementBodyVisitor(checkBody);
   },
   meta: {
     fixable: 'whitespace',

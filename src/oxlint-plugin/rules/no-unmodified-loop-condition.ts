@@ -208,19 +208,16 @@ const noUnmodifiedLoopConditionRule = {
       });
     };
 
+    const checkSimpleLoop = (node: AstNode): void => {
+      const testNode = node.test ?? null;
+      const bodyNode = Array.isArray(node.body) ? null : (node.body ?? null);
+
+      checkLoop(node, testNode, bodyNode, null);
+    };
+
     return {
-      WhileStatement(node: AstNode) {
-        const testNode = node.test ?? null;
-        const bodyNode = Array.isArray(node.body) ? null : (node.body ?? null);
-
-        checkLoop(node, testNode, bodyNode, null);
-      },
-      DoWhileStatement(node: AstNode) {
-        const testNode = node.test ?? null;
-        const bodyNode = Array.isArray(node.body) ? null : (node.body ?? null);
-
-        checkLoop(node, testNode, bodyNode, null);
-      },
+      WhileStatement: checkSimpleLoop,
+      DoWhileStatement: checkSimpleLoop,
       ForStatement(node: AstNode) {
         const testNode = node.test ?? null;
         const bodyNode = Array.isArray(node.body) ? null : (node.body ?? null);

@@ -1,28 +1,10 @@
-import type { AstNode, JsonObject, JsonValue, NodeOrNull, RuleContext } from '../types';
+import type { AstNode, JsonValue, NodeOrNull, RuleContext } from '../types';
+
+import { isJsonObject, toStringList } from '../utils/json-options';
 
 interface MemberOrderingOptions {
   default?: string[];
 }
-
-const isJsonObject = (value: JsonValue | undefined): value is JsonObject => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
-
-const toStringList = (value: JsonValue | undefined): string[] | null => {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-
-  const out: string[] = [];
-
-  for (const item of value) {
-    if (typeof item === 'string') {
-      out.push(item);
-    }
-  }
-
-  return out.length > 0 ? out : null;
-};
 
 const readOptions = (raw: JsonValue | undefined): MemberOrderingOptions => {
   if (!isJsonObject(raw)) {

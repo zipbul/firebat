@@ -1,6 +1,8 @@
 import type { AstNode, Fix, Fixer, NodeOrNull, Range, RuleContext, SourceCode } from '../types';
 
+import { matchExpressionStatement } from '../utils/expression-statement';
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration';
+import { createStatementBodyVisitor } from '../utils/statement-body-visitor';
 
 const insertBlankLine = (sourceCode: SourceCode, prev: AstNode, next: AstNode, fixer: Fixer): Fix | null => {
   const prevEnd = prev.range?.[1];
@@ -152,165 +154,78 @@ const blankLinesBetweenStatementGroupsRule = {
       return false;
     };
 
-    const isCallExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
+    const isCallExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => {
+        if (isLoggingCallExpression(expr)) {
+          return false;
+        }
+
+        const unwrapped = unwrapExpression(expr);
+
+        if (!unwrapped) {
+          return false;
+        }
+
+        if (unwrapped.type === 'CallExpression') {
+          return true;
+        }
+
+        if (unwrapped.type === 'NewExpression') {
+          return true;
+        }
+
         return false;
-      }
+      });
 
-      const expr = node.expression;
+    const isAssignmentExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => expr.type === 'AssignmentExpression' && expr.operator === '=');
 
-      if (!expr) {
+    const isThisAssignmentExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(
+        node,
+        expr => expr.type === 'AssignmentExpression' && expr.operator === '=' && isThisMemberExpression(expr.left),
+      );
+
+    const isMutationExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => {
+        if (expr.type === 'UpdateExpression') {
+          return true;
+        }
+
+        if (expr.type === 'AssignmentExpression' && expr.operator !== '=') {
+          return true;
+        }
+
         return false;
-      }
+      });
 
-      if (isLoggingCallExpression(expr)) {
+    const isThisMutationExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => {
+        if (expr.type === 'UpdateExpression') {
+          return isThisMemberExpression(expr.argument);
+        }
+
+        if (expr.type === 'AssignmentExpression' && expr.operator !== '=') {
+          return isThisMemberExpression(expr.left);
+        }
+
         return false;
-      }
+      });
 
-      const unwrapped = unwrapExpression(expr);
+    const isDeleteExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => expr.type === 'UnaryExpression' && expr.operator === 'delete');
 
-      if (!unwrapped) {
-        return false;
-      }
+    const isThisDeleteExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(
+        node,
+        expr => expr.type === 'UnaryExpression' && expr.operator === 'delete' && isThisMemberExpression(expr.argument),
+      );
 
-      if (unwrapped.type === 'CallExpression') {
-        return true;
-      }
+    const isUseStrictExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => expr.type === 'Literal' && expr.value === 'use strict');
 
-      if (unwrapped.type === 'NewExpression') {
-        return true;
-      }
-
-      return false;
-    };
-
-    const isAssignmentExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      return expr.type === 'AssignmentExpression' && expr.operator === '=';
-    };
-
-    const isThisAssignmentExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      return expr.type === 'AssignmentExpression' && expr.operator === '=' && isThisMemberExpression(expr.left);
-    };
-
-    const isMutationExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      if (expr.type === 'UpdateExpression') {
-        return true;
-      }
-
-      if (expr.type === 'AssignmentExpression' && expr.operator !== '=') {
-        return true;
-      }
-
-      return false;
-    };
-
-    const isThisMutationExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      if (expr.type === 'UpdateExpression') {
-        return isThisMemberExpression(expr.argument);
-      }
-
-      if (expr.type === 'AssignmentExpression' && expr.operator !== '=') {
-        return isThisMemberExpression(expr.left);
-      }
-
-      return false;
-    };
-
-    const isDeleteExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      return expr.type === 'UnaryExpression' && expr.operator === 'delete';
-    };
-
-    const isThisDeleteExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      return expr.type === 'UnaryExpression' && expr.operator === 'delete' && isThisMemberExpression(expr.argument);
-    };
-
-    const isUseStrictExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      return expr.type === 'Literal' && expr.value === 'use strict';
-    };
-
-    const isDirectiveExpressionStatement = (node: NodeOrNull): boolean => {
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-
-      const expr = node.expression;
-
-      if (!expr) {
-        return false;
-      }
-
-      return expr.type === 'Literal' && typeof expr.value === 'string';
-    };
+    const isDirectiveExpressionStatement = (node: NodeOrNull): boolean =>
+      matchExpressionStatement(node, expr => expr.type === 'Literal' && typeof expr.value === 'string');
 
     const isTypeAliasDeclaration = (node: NodeOrNull): boolean => node?.type === 'TSTypeAliasDeclaration';
 
@@ -445,18 +360,7 @@ const blankLinesBetweenStatementGroupsRule = {
       }
     };
 
-    return {
-      BlockStatement(node: AstNode) {
-        const body = Array.isArray(node.body) ? node.body : [];
-
-        checkBody(body);
-      },
-      Program(node: AstNode) {
-        const body = Array.isArray(node.body) ? node.body : [];
-
-        checkBody(body);
-      },
-    };
+    return createStatementBodyVisitor(checkBody);
   },
   meta: {
     fixable: 'whitespace',

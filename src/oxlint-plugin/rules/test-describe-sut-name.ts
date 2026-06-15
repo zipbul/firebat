@@ -2,21 +2,7 @@ import { basename } from 'node:path';
 
 import type { AstNode, RuleContext } from '../types';
 
-function getContextFilename(context: RuleContext): string | null {
-  if (typeof context.getFilename === 'function') {
-    const filename = context.getFilename();
-
-    if (typeof filename === 'string' && filename.length > 0) {
-      return filename;
-    }
-  }
-
-  if (typeof context.filename === 'string' && context.filename.length > 0) {
-    return context.filename;
-  }
-
-  return null;
-}
+import { getContextFilename } from '../utils/context-filename';
 
 function fileExists(context: RuleContext, filePath: string): boolean | null {
   if (typeof context.fileExists === 'function') {
