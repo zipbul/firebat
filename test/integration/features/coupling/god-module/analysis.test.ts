@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeCoupling } from '../../../../../src/test-api';
 import { analyzeDependencies } from '../../../../../src/test-api';
-import { createTempGildash } from '../../../shared/gildash-test-kit';
+import { withTempGildash } from '../../../shared/gildash-test-kit';
 
 describe('integration/coupling/god-module', () => {
   it('should use a dynamic threshold based on total module count', async () => {
@@ -30,9 +30,7 @@ describe('integration/coupling/god-module', () => {
 
     sources.set('/virtual/coupling/god/core.ts', `${coreImports}\nexport const core = 1;`);
 
-    const { gildash, tmpDir, cleanup } = await createTempGildash(sources);
-
-    try {
+    await withTempGildash(sources, async (gildash, tmpDir) => {
       // Act
       const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
       const hotspots = analyzeCoupling(dependencies);
@@ -43,8 +41,6 @@ describe('integration/coupling/god-module', () => {
       expect(core?.signals.includes('god-module')).toBe(true);
       expect(core?.metrics.fanIn).toBe(fan);
       expect(core?.metrics.fanOut).toBe(fan);
-    } finally {
-      await cleanup();
-    }
+    });
   });
 });

@@ -4,20 +4,15 @@ import type { FixtureSources } from '../../shared/golden-runner';
 
 import { analyzeCoupling } from '../../../../src/test-api';
 import { analyzeDependencies } from '../../../../src/test-api';
-import { createTempGildash } from '../../shared/gildash-test-kit';
+import { withTempGildash } from '../../shared/gildash-test-kit';
 import { runGolden } from '../../shared/golden-runner';
 
-const gildashAdapter = async (_program: ReadonlyArray<unknown>, sources: FixtureSources): Promise<unknown> => {
-  const { gildash, tmpDir, cleanup } = await createTempGildash(sources);
-
-  try {
+const gildashAdapter = (_program: ReadonlyArray<unknown>, sources: FixtureSources): Promise<unknown> =>
+  withTempGildash(sources, async (gildash, tmpDir) => {
     const deps = await analyzeDependencies(gildash, { rootAbs: tmpDir });
 
     return analyzeCoupling(deps);
-  } finally {
-    await cleanup();
-  }
-};
+  });
 
 describe('golden/coupling', () => {
   runGolden(import.meta.dir, 'hub-module', gildashAdapter);

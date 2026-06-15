@@ -15,6 +15,16 @@ export interface TempGildash {
   readonly cleanup: () => Promise<void>;
 }
 
+/** Virtual-path → source-text fixtures, as a Map or a plain record. */
+export type GildashSources = Map<string, string> | Record<string, string>;
+
+export interface TempGildashOptions {
+  /** Path prefix to strip from source keys (default `/virtual/`). */
+  readonly stripPrefix?: string;
+  /** Open gildash with the semantic layer enabled. */
+  readonly semantic?: boolean;
+}
+
 /**
  * Create a Gildash instance from a Map of virtual-path → source-text.
  *
@@ -24,8 +34,8 @@ export interface TempGildash {
  * @param stripPrefix  Path prefix to strip from source keys (default `/virtual/`).
  */
 export const createTempGildash = async (
-  sources: Map<string, string> | Record<string, string>,
-  options?: { stripPrefix?: string; semantic?: boolean },
+  sources: GildashSources,
+  options?: TempGildashOptions,
 ): Promise<TempGildash> => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firebat-int-test-'));
   const prefix = options?.stripPrefix ?? '/virtual/';
@@ -67,4 +77,27 @@ export const createTempGildash = async (
       fs.rmSync(tmpDir, { recursive: true, force: true });
     },
   };
+};
+
+/**
+ * Run `fn` against a temporary Gildash instance built from `sources`, always
+ * cleaning up afterwards (even if `fn` throws).
+ *
+ * This is the create → try/finally(cleanup) scaffold that every gildash-backed
+ * integration test repeats verbatim. The body of `fn` is the only thing that
+ * differs per test (which analyzer is run, which assertions follow), so callers
+ * keep their distinct Act/Assert while the lifecycle lives in one place.
+ */
+export const withTempGildash = async <T>(
+  sources: GildashSources,
+  fn: (gildash: Gildash, tmpDir: string) => T | Promise<T>,
+  options?: TempGildashOptions,
+): Promise<T> => {
+  const { gildash, tmpDir, cleanup } = await createTempGildash(sources, options);
+
+  try {
+    return await fn(gildash, tmpDir);
+  } finally {
+    await cleanup();
+  }
 };
