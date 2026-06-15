@@ -63,17 +63,24 @@ export interface TypeOracle {
 export const createTypeOracle = (gildash: Gildash | null, filePath: string): TypeOracle => {
   const spanOf = (node: Node) => ({ start: node.start, end: node.end });
 
+  // The single thenable probe both isThenable and isProvenNonThenable build on. Returns
+  // gildash's tri-state verdict (`true` thenable, `false` proven non-thenable) or `null`
+  // when gildash is absent / undecided / threw. The two callers read opposite ends of it.
+  const queryThenable = (node: Node): boolean | null => {
+    if (gildash === null) {
+      return null;
+    }
+
+    try {
+      return gildash.isThenableAtSpan(filePath, spanOf(node), { anyConstituent: true });
+    } catch {
+      return null;
+    }
+  };
+
   return {
     isThenable(node) {
-      if (gildash === null) {
-        return false;
-      }
-
-      try {
-        return gildash.isThenableAtSpan(filePath, spanOf(node), { anyConstituent: true }) === true;
-      } catch {
-        return false;
-      }
+      return queryThenable(node) === true;
     },
 
     isPrimitiveValue(node) {
@@ -117,16 +124,8 @@ export const createTypeOracle = (gildash: Gildash | null, filePath: string): Typ
     },
 
     isProvenNonThenable(node) {
-      if (gildash === null) {
-        return false;
-      }
-
-      try {
-        // `false` (not null) means gildash resolved the type and it is not thenable.
-        return gildash.isThenableAtSpan(filePath, spanOf(node), { anyConstituent: true }) === false;
-      } catch {
-        return false;
-      }
+      // `false` (not null) means gildash resolved the type and it is not thenable.
+      return queryThenable(node) === false;
     },
 
     isProvenNonArray(node) {

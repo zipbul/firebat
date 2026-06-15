@@ -5,6 +5,7 @@ export {
   bindingKey,
   collectLocalVarIndexes,
   collectParameterBindings,
+  densifyKeys,
   extractBindingNames,
 } from './reaching-defs';
 export type { AnalyzeFunctionBodyOptions, BindingName } from './reaching-defs';

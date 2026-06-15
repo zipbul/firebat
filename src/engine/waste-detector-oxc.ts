@@ -6,7 +6,7 @@ import type { WasteFinding } from '..';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode } from './ast';
-import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
+import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables, densifyKeys } from './dataflow';
 import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import { buildDeclScopeMap } from './dataflow/variable-collector';
 
@@ -2330,16 +2330,7 @@ const collectModuleLocalVarIndexes = (
     }
   }
 
-  const out = new Map<string, number>();
-  let index = 0;
-
-  for (const key of keys) {
-    out.set(key, index);
-
-    index += 1;
-  }
-
-  return out;
+  return densifyKeys(keys);
 };
 
 interface ExportExemption {

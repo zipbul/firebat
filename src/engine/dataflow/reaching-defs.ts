@@ -94,6 +94,26 @@ export const bindingKey = (name: string, declScope: string | undefined): string 
 export const parameterScopeKey = (binding: BindingName, declScopeByIdLocation: ReadonlyMap<number, string>): string =>
   declScopeByIdLocation.get(binding.location) ?? PARAMETER_SCOPE;
 
+/**
+ * Assign each unique key a dense, zero-based sequential index in insertion order.
+ * This is the var-index assignment scheme the dataflow engine relies on; every
+ * varIndex producer (function-scope and module-scope) must share it so indexes
+ * stay consistent. Changing the scheme (start offset, ordering) changes it for
+ * every caller at once.
+ */
+export const densifyKeys = (keys: ReadonlySet<string>): Map<string, number> => {
+  const out = new Map<string, number>();
+  let index = 0;
+
+  for (const key of keys) {
+    out.set(key, index);
+
+    index += 1;
+  }
+
+  return out;
+};
+
 export const collectLocalVarIndexes = (functionNode: Node, filePath?: string, sourceText?: string): Map<string, number> => {
   const keys = new Set<string>();
   const parameterBindings = collectParameterBindings(functionNode);
@@ -121,16 +141,7 @@ export const collectLocalVarIndexes = (functionNode: Node, filePath?: string, so
     }
   }
 
-  const out = new Map<string, number>();
-  let index = 0;
-
-  for (const key of keys) {
-    out.set(key, index);
-
-    index += 1;
-  }
-
-  return out;
+  return densifyKeys(keys);
 };
 
 const unionAll = (sets: readonly BitSet[], empty: BitSet): BitSet => {
