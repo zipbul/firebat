@@ -120,10 +120,14 @@ const analyzeFragments = (files: ReadonlyArray<ParsedFile>, options: FragmentDet
     candidates.push({ sites: occurrences.length, runSize, verdict });
 
     if (verdict.outcome === 'reported') {
+      const items = dedupeItems(occurrences.map(occ => toFragmentItem(blocks[occ.blockIdx]!, occ)));
+
       groups.push({
         cloneType: 'fragment',
         findingKind: 'fragment-clone',
-        items: dedupeItems(occurrences.map(occ => toFragmentItem(blocks[occ.blockIdx]!, occ))),
+        items,
+        size: runSize,
+        severity: runSize * items.length,
       });
     }
   }

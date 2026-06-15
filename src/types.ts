@@ -185,6 +185,10 @@ export interface DuplicateGroup {
   readonly code?: FirebatCatalogCode;
   readonly items: ReadonlyArray<DuplicateItem>;
   readonly suggestedParams?: CloneDiff;
+  /** 클론 단위의 정규형 AST 노드 수 (영향 크기). */
+  readonly size: number;
+  /** 결정적 우선순위 = size × 사이트 수. 클수록 영향이 큼. */
+  readonly severity: number;
 }
 
 interface DependencyCycle {

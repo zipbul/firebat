@@ -5,42 +5,6 @@
     "items": [
       {
         "filePath": "/virtual/near-miss-gapped-dead/a.ts",
-        "header": "2 statements",
-        "kind": "node",
-        "span": {
-          "end": {
-            "column": 3,
-            "line": 5
-          },
-          "start": {
-            "column": 2,
-            "line": 2
-          }
-        }
-      },
-      {
-        "filePath": "/virtual/near-miss-gapped-dead/b.ts",
-        "header": "2 statements",
-        "kind": "node",
-        "span": {
-          "end": {
-            "column": 3,
-            "line": 5
-          },
-          "start": {
-            "column": 2,
-            "line": 2
-          }
-        }
-      }
-    ]
-  },
-  {
-    "cloneType": "fragment",
-    "findingKind": "fragment-clone",
-    "items": [
-      {
-        "filePath": "/virtual/near-miss-gapped-dead/a.ts",
         "header": "3 statements",
         "kind": "node",
         "span": {
@@ -69,6 +33,46 @@
           }
         }
       }
-    ]
+    ],
+    "severity": 46,
+    "size": 23
+  },
+  {
+    "cloneType": "fragment",
+    "findingKind": "fragment-clone",
+    "items": [
+      {
+        "filePath": "/virtual/near-miss-gapped-dead/a.ts",
+        "header": "2 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 5
+          },
+          "start": {
+            "column": 2,
+            "line": 2
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/near-miss-gapped-dead/b.ts",
+        "header": "2 statements",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 5
+          },
+          "start": {
+            "column": 2,
+            "line": 2
+          }
+        }
+      }
+    ],
+    "severity": 28,
+    "size": 14
   }
 ]
