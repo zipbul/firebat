@@ -2,15 +2,13 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noInlineObjectTypeRule } from './no-inline-object-type';
 
 describe('no-inline-object-type', () => {
   it('should report inline object types when encountered', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noInlineObjectTypeRule.create(context);
+    const { visitor, reports } = setupRule(noInlineObjectTypeRule);
     const node: AstNode = { type: 'TSTypeLiteral' };
 
     // Act
@@ -23,9 +21,7 @@ describe('no-inline-object-type', () => {
 
   it('should report each inline object when multiple occurrences exist', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noInlineObjectTypeRule.create(context);
+    const { visitor, reports } = setupRule(noInlineObjectTypeRule);
     const firstNode: AstNode = { type: 'TSTypeLiteral' };
     const secondNode: AstNode = { type: 'TSTypeLiteral' };
 
@@ -41,9 +37,7 @@ describe('no-inline-object-type', () => {
 
   it('should allow empty object type when allowEmpty is true', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [{ allowEmpty: true }]);
-    const visitor = noInlineObjectTypeRule.create(context);
+    const { visitor, reports } = setupRule(noInlineObjectTypeRule, { options: [{ allowEmpty: true }] });
     const node: AstNode = { type: 'TSTypeLiteral', members: [] };
 
     // Act

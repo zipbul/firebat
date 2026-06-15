@@ -2,15 +2,13 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, TemplateElementValue } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noBracketNotationRule } from './no-bracket-notation';
 
 describe('no-bracket-notation', () => {
   it('should report when string literal key is not allowed', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule);
     const propertyNode: AstNode = { type: 'Literal', value: 'blocked' };
     const memberNode: AstNode = { type: 'MemberExpression', computed: true, property: propertyNode };
 
@@ -24,9 +22,7 @@ describe('no-bracket-notation', () => {
 
   it('should allow string literal keys when configured', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [{ allow: ['allowed'] }]);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule, { options: [{ allow: ['allowed'] }] });
     const propertyNode: AstNode = { type: 'Literal', value: 'allowed' };
     const memberNode: AstNode = { type: 'MemberExpression', computed: true, property: propertyNode };
 
@@ -39,9 +35,7 @@ describe('no-bracket-notation', () => {
 
   it('should ignore member access when not computed', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule);
     const propertyNode: AstNode = { type: 'Identifier', name: 'value' };
     const memberNode: AstNode = { type: 'MemberExpression', computed: false, property: propertyNode };
 
@@ -54,9 +48,7 @@ describe('no-bracket-notation', () => {
 
   it('should report when template literal key lacks expressions', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule);
     const templateValue: TemplateElementValue = { cooked: 'templated' };
     const quasiNode: AstNode = { type: 'TemplateElement', value: templateValue };
     const templateNode: AstNode = { type: 'TemplateLiteral', expressions: [], quasis: [quasiNode] };
@@ -72,9 +64,7 @@ describe('no-bracket-notation', () => {
 
   it('should ignore template literals when expressions exist', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule);
     const templateNode: AstNode = {
       type: 'TemplateLiteral',
       expressions: [{ type: 'Identifier', name: 'expr' }],
@@ -91,9 +81,7 @@ describe('no-bracket-notation', () => {
 
   it('should ignore bracket notation when key is numeric', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule);
     const propertyNode: AstNode = { type: 'Literal', value: 0 };
     const memberNode: AstNode = { type: 'MemberExpression', computed: true, property: propertyNode };
 
@@ -107,9 +95,7 @@ describe('no-bracket-notation', () => {
   it('should autofix when bracket notation is safe', () => {
     // Arrange
     const text = "obj['alpha']";
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule, { text });
 
     // Act
     visitor.MemberExpression({
@@ -129,9 +115,7 @@ describe('no-bracket-notation', () => {
     expect(fixed).toBe('obj.alpha');
 
     // Arrange
-    const sourceCode2 = createSourceCode(fixed, null, null, []);
-    const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-    const visitor2 = noBracketNotationRule.create(context2);
+    const { visitor: visitor2, reports: reports2 } = setupRule(noBracketNotationRule, { text: fixed });
 
     // Act
     visitor2.MemberExpression({
@@ -149,9 +133,7 @@ describe('no-bracket-notation', () => {
   it('should refuse autofix when key is unsafe', () => {
     // Arrange
     const text = "obj['not-valid']";
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule, { text });
 
     // Act
     visitor.MemberExpression({
@@ -174,9 +156,7 @@ describe('no-bracket-notation', () => {
   it('should refuse autofix when bracket notation is multiline', () => {
     // Arrange
     const text = "obj[\n'alpha'\n]";
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noBracketNotationRule.create(context);
+    const { visitor, reports } = setupRule(noBracketNotationRule, { text });
 
     // Act
     visitor.MemberExpression({

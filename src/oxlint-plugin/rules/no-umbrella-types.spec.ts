@@ -2,15 +2,13 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noUmbrellaTypesRule } from './no-umbrella-types';
 
 describe('no-umbrella-types', () => {
   it('should report forbidden aliases when encountering umbrella types', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUmbrellaTypesRule.create(context);
+    const { visitor, reports } = setupRule(noUmbrellaTypesRule);
     const aliasNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'AnyValue' } };
     const objectNode: AstNode = { type: 'TSObjectKeyword' };
 
@@ -26,9 +24,7 @@ describe('no-umbrella-types', () => {
 
   it('should report forbidden globals when referenced', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUmbrellaTypesRule.create(context);
+    const { visitor, reports } = setupRule(noUmbrellaTypesRule);
     const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'Function' } };
 
     // Act
@@ -41,9 +37,7 @@ describe('no-umbrella-types', () => {
 
   it('should skip report when type reference is allowed', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUmbrellaTypesRule.create(context);
+    const { visitor, reports } = setupRule(noUmbrellaTypesRule);
     const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'AllowedType' } };
 
     // Act
@@ -55,9 +49,7 @@ describe('no-umbrella-types', () => {
 
   it('should report generic references when they are forbidden', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUmbrellaTypesRule.create(context);
+    const { visitor, reports } = setupRule(noUmbrellaTypesRule);
     // DeepPartial<T>
     const typeNode: AstNode = { type: 'TSTypeReference', typeName: { type: 'Identifier', name: 'DeepPartial' } };
 

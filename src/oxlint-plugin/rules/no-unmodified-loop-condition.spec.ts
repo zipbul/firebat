@@ -2,15 +2,13 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noUnmodifiedLoopConditionRule } from './no-unmodified-loop-condition';
 
 describe('no-unmodified-loop-condition', () => {
   it('should report when loop condition identifiers are never mutated', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUnmodifiedLoopConditionRule.create(context);
+    const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
     const testNode: AstNode = { type: 'Identifier', name: 'flag' };
     const bodyNode: AstNode = { type: 'BlockStatement', body: [] };
     const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: bodyNode };
@@ -25,9 +23,7 @@ describe('no-unmodified-loop-condition', () => {
 
   it('should not report when loop condition identifiers are mutated', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUnmodifiedLoopConditionRule.create(context);
+    const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
     const testNode: AstNode = { type: 'Identifier', name: 'flag' };
     const assignmentNode: AstNode = {
       type: 'AssignmentExpression',
@@ -47,9 +43,7 @@ describe('no-unmodified-loop-condition', () => {
 
   it('should skip report when ForStatement update clause mutates', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUnmodifiedLoopConditionRule.create(context);
+    const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
     // for (; i < 10; i++)
     const testNode: AstNode = { type: 'BinaryExpression', left: { type: 'Identifier', name: 'i' } };
     const updateNode: AstNode = { type: 'UpdateExpression', argument: { type: 'Identifier', name: 'i' } };
@@ -66,9 +60,7 @@ describe('no-unmodified-loop-condition', () => {
   it('should report when object member in condition is unmodified', () => {
     // Arrange
     // while (list.length > 0) {}  <-- if list is not mutated
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUnmodifiedLoopConditionRule.create(context);
+    const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
     const testNode: AstNode = {
       type: 'BinaryExpression',
       left: {
@@ -90,9 +82,7 @@ describe('no-unmodified-loop-condition', () => {
 
   it('should skip report when DoWhileStatement mutates condition', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noUnmodifiedLoopConditionRule.create(context);
+    const { visitor, reports } = setupRule(noUnmodifiedLoopConditionRule);
     const testNode: AstNode = { type: 'Identifier', name: 'flag' };
     const updateNode: AstNode = {
       type: 'UpdateExpression',

@@ -2,16 +2,14 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { blankLinesBetweenStatementGroupsRule } from './blank-lines-between-statement-groups';
 
 describe('blank-lines-between-statement-groups', () => {
   it('should report when groups change without a blank line', () => {
     // Arrange
     const text = 'function alpha() {}\nconst beta = 1;';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = blankLinesBetweenStatementGroupsRule.create(context);
+    const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
     const prevNode: AstNode = { type: 'FunctionDeclaration', range: [0, 19] };
     const nextNode: AstNode = { type: 'VariableDeclaration', kind: 'const', range: [20, 35], declarations: [] };
     const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
@@ -27,9 +25,7 @@ describe('blank-lines-between-statement-groups', () => {
   it('should skip report when blank line exists between groups', () => {
     // Arrange
     const text = 'function alpha() {}\n\nconst beta = 1;';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = blankLinesBetweenStatementGroupsRule.create(context);
+    const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
     const prevNode: AstNode = { type: 'FunctionDeclaration', range: [0, 19] };
     const nextNode: AstNode = { type: 'VariableDeclaration', kind: 'const', range: [21, 36], declarations: [] };
     const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
@@ -44,9 +40,7 @@ describe('blank-lines-between-statement-groups', () => {
   it('should autofix when blank line is missing between groups', () => {
     // Arrange
     const text = 'function alpha() {}\nconst beta = 1;';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = blankLinesBetweenStatementGroupsRule.create(context);
+    const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
     const prevNode: AstNode = { type: 'FunctionDeclaration', range: [0, 19] };
     const nextNode: AstNode = { type: 'VariableDeclaration', kind: 'const', range: [20, 35], declarations: [] };
     const programNode: AstNode = { type: 'Program', body: [prevNode, nextNode] };
@@ -64,9 +58,7 @@ describe('blank-lines-between-statement-groups', () => {
 
     // Re-run on fixed input: should be clean.
     // Arrange
-    const sourceCode2 = createSourceCode(fixed, null, null, []);
-    const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-    const visitor2 = blankLinesBetweenStatementGroupsRule.create(context2);
+    const { visitor: visitor2, reports: reports2 } = setupRule(blankLinesBetweenStatementGroupsRule, { text: fixed });
     const prevNode2: AstNode = { type: 'FunctionDeclaration', range: [0, 19] };
     const nextNode2: AstNode = { type: 'VariableDeclaration', kind: 'const', range: [21, 36], declarations: [] };
     const programNode2: AstNode = { type: 'Program', body: [prevNode2, nextNode2] };

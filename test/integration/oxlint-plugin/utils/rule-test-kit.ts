@@ -217,5 +217,38 @@ function createRuleContext(
   return { context, reports };
 }
 
-export type { ReportDescriptor, RuleContext, RuleContextExtras, SourceCode };
-export { applyFixes, createRuleContext, createSourceCode };
+interface RuleLike<TVisitor> {
+  create(context: RuleContext): TVisitor;
+}
+
+interface SetupRuleOptions extends RuleContextExtras {
+  /** Source text passed to createSourceCode (default ''). */
+  text?: string;
+  /** Source tokens passed to createSourceCode (default []). */
+  tokens?: SourceToken[];
+  /** Rule options array passed to createRuleContext (default []). */
+  options?: RuleContext['options'];
+  /** Optional getDeclaredVariables hook (used by scope-aware rules). */
+  getDeclaredVariables?: (node: AstNode) => Variable[];
+}
+
+/**
+ * Collapses the repeated rule-test harness scaffold
+ * (createSourceCode -> createRuleContext -> rule.create) into a single call.
+ *
+ * Pure setup only: it builds the context/visitor and exposes the `reports`
+ * sink. Each test still owns its own Arrange (fixture nodes), Act (visitor
+ * invocation) and Assert, so no per-test behavior is hidden here.
+ */
+function setupRule<TVisitor>(rule: RuleLike<TVisitor>, options: SetupRuleOptions = {}) {
+  const { text = '', tokens = [], options: ruleOptions = [], getDeclaredVariables, ...extras } = options;
+  const hasExtras = extras.filename !== undefined || extras.fileExists !== undefined || extras.readFile !== undefined;
+  const sourceCode = createSourceCode(text, null, null, tokens);
+  const { context, reports } = createRuleContext(sourceCode, ruleOptions, getDeclaredVariables, hasExtras ? extras : undefined);
+  const visitor = rule.create(context);
+
+  return { visitor, reports, context, sourceCode };
+}
+
+export type { ReportDescriptor, RuleContext, RuleContextExtras, SetupRuleOptions, SourceCode };
+export { applyFixes, createRuleContext, createSourceCode, setupRule };

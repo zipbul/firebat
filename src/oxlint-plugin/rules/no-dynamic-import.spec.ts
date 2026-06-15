@@ -2,15 +2,13 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noDynamicImportRule } from './no-dynamic-import';
 
 describe('no-dynamic-import', () => {
   it('should report when import expression is non-literal', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noDynamicImportRule.create(context);
+    const { visitor, reports } = setupRule(noDynamicImportRule);
     const importNode: AstNode = { type: 'ImportExpression', source: { type: 'Identifier', name: 'path' } };
 
     // Act
@@ -23,9 +21,7 @@ describe('no-dynamic-import', () => {
 
   it('should allow import expression when source is literal', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = noDynamicImportRule.create(context);
+    const { visitor, reports } = setupRule(noDynamicImportRule);
     const importNode: AstNode = { type: 'ImportExpression', source: { type: 'Literal', value: './path' } };
 
     // Act

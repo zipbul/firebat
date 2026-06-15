@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { singleExportedClassRule } from './single-exported-class';
 
 function createProgram(body: AstNode[]): AstNode {
@@ -12,9 +12,7 @@ function createProgram(body: AstNode[]): AstNode {
 describe('single-exported-class', () => {
   it('should allow a single exported class when only one is exported', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportNamedDeclaration',
@@ -34,9 +32,7 @@ describe('single-exported-class', () => {
 
   it('should ignore files when no class is exported', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportNamedDeclaration',
@@ -55,9 +51,7 @@ describe('single-exported-class', () => {
 
   it('should report when exporting a class and another export', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportNamedDeclaration',
@@ -88,9 +82,7 @@ describe('single-exported-class', () => {
 
   it('should report when exporting two classes', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportNamedDeclaration',
@@ -122,9 +114,7 @@ describe('single-exported-class', () => {
 
   it('should allow class declaration when exported via specifier', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ClassDeclaration',
@@ -151,9 +141,7 @@ describe('single-exported-class', () => {
 
   it('should report when exporting a class and an exported type', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportNamedDeclaration',
@@ -180,9 +168,7 @@ describe('single-exported-class', () => {
 
   it('should report when default-exporting a class and also exporting something else', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportDefaultDeclaration',
@@ -209,9 +195,7 @@ describe('single-exported-class', () => {
 
   it('should report when exporting a class and also re-exporting everything', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = singleExportedClassRule.create(context);
+    const { visitor, reports } = setupRule(singleExportedClassRule);
     const programNode = createProgram([
       {
         type: 'ExportNamedDeclaration',

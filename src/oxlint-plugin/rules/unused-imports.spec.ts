@@ -2,15 +2,13 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, Variable } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../../../test/integration/oxlint-plugin/utils/token-utils';
 import { unusedImportsRule } from './unused-imports';
 
 describe('unused-imports', () => {
   it('should report unused import declarations when references are missing', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-
     const getDeclaredVariables = () =>
       [
         {
@@ -19,8 +17,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       specifiers: [
@@ -42,8 +39,6 @@ describe('unused-imports', () => {
 
   it('should skip report when import is referenced', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-
     const getDeclaredVariables = () =>
       [
         {
@@ -52,8 +47,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       specifiers: [
@@ -74,8 +68,6 @@ describe('unused-imports', () => {
 
   it('should report when one of multiple imports is unused', () => {
     // Arrange
-    const sourceCode = createSourceCode('', null, null, []);
-
     const getDeclaredVariables = () =>
       [
         {
@@ -88,8 +80,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       specifiers: [
@@ -122,7 +113,6 @@ describe('unused-imports', () => {
     const betaStart = text.indexOf('beta');
     const betaEnd = betaStart + 'beta'.length;
     const tokens = buildCommaTokens(text);
-    const sourceCode = createSourceCode(text, null, null, tokens);
 
     const getDeclaredVariables = () =>
       [
@@ -136,8 +126,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { text, tokens, getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       range: [0, text.length],
@@ -171,7 +160,6 @@ describe('unused-imports', () => {
     const text2 = fixed;
     const alphaStart2 = text2.indexOf('alpha');
     const alphaEnd2 = alphaStart2 + 'alpha'.length;
-    const sourceCode2 = createSourceCode(text2, null, null, []);
 
     const getDeclaredVariables2 = () =>
       [
@@ -181,8 +169,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, [], getDeclaredVariables2);
-    const visitor2 = unusedImportsRule.create(context2);
+    const { visitor: visitor2, reports: reports2 } = setupRule(unusedImportsRule, { text: text2, getDeclaredVariables: getDeclaredVariables2 });
     const importNode2: AstNode = {
       type: 'ImportDeclaration',
       range: [0, text2.length],
@@ -207,7 +194,6 @@ describe('unused-imports', () => {
     const text = "import { alpha } from 'x';";
     const alphaStart = text.indexOf('alpha');
     const alphaEnd = alphaStart + 'alpha'.length;
-    const sourceCode = createSourceCode(text, null, null, []);
 
     const getDeclaredVariables = () =>
       [
@@ -217,8 +203,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { text, getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       range: [0, text.length],
@@ -249,7 +234,6 @@ describe('unused-imports', () => {
     const text = "import type { alpha } from 'x';";
     const alphaStart = text.indexOf('alpha');
     const alphaEnd = alphaStart + 'alpha'.length;
-    const sourceCode = createSourceCode(text, null, null, []);
 
     const getDeclaredVariables = () =>
       [
@@ -259,8 +243,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { text, getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       importKind: 'type',
@@ -294,7 +277,6 @@ describe('unused-imports', () => {
     const betaStart = text.indexOf('beta');
     const betaEnd = betaStart + 'beta'.length;
     const tokens = buildCommaTokens(text);
-    const sourceCode = createSourceCode(text, null, null, tokens);
 
     const getDeclaredVariables = () =>
       [
@@ -308,8 +290,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { text, tokens, getDeclaredVariables });
     const importNode: AstNode = {
       type: 'ImportDeclaration',
       range: [0, text.length],
@@ -349,8 +330,6 @@ describe('unused-imports', () => {
     const betaEnd = betaStart + 'beta'.length;
     const gammaStart = text.indexOf('gamma');
     const gammaEnd = gammaStart + 'gamma'.length;
-    const tokens = buildCommaTokens(text);
-    const sourceCode = createSourceCode(text, null, null, tokens);
 
     const getDeclaredVariables = () =>
       [
@@ -368,8 +347,7 @@ describe('unused-imports', () => {
         },
       ] satisfies Variable[];
 
-    const { context, reports } = createRuleContext(sourceCode, [], getDeclaredVariables);
-    const visitor = unusedImportsRule.create(context);
+    const { visitor, reports } = setupRule(unusedImportsRule, { text, getDeclaredVariables });
 
     // Act
     visitor.ImportDeclaration({

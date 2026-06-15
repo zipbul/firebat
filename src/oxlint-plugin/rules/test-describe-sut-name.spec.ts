@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testDescribeSutNameRule } from './test-describe-sut-name';
 
@@ -32,13 +32,11 @@ describe('test-describe-sut-name', () => {
     const testFile = '/repo/user-service.spec.ts';
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('UserService');
 
     // Act
@@ -51,13 +49,11 @@ describe('test-describe-sut-name', () => {
   it('should ignore when file is not a unit spec', () => {
     // Arrange
     const testFile = '/repo/user-service.test.ts';
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('UserService');
 
     // Act
@@ -72,13 +68,11 @@ describe('test-describe-sut-name', () => {
     const testFile = '/repo/user-service.spec.ts';
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[implFile, 'export function createUser() {}\n']]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('user-service');
 
     // Act
@@ -93,13 +87,11 @@ describe('test-describe-sut-name', () => {
     const testFile = '/repo/user-service.spec.ts';
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[implFile, 'export class A {}\nexport class B {}\n']]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('user-service');
 
     // Act
@@ -114,13 +106,11 @@ describe('test-describe-sut-name', () => {
     const testFile = '/repo/user-service.spec.ts';
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('user-service');
 
     // Act
@@ -135,13 +125,11 @@ describe('test-describe-sut-name', () => {
   it('should fall back to filename when implementation file is missing', () => {
     // Arrange
     const testFile = '/repo/user-service.spec.ts';
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const [, call] = createTopLevelDescribeCall('UserService');
 
     // Act
@@ -158,13 +146,11 @@ describe('test-describe-sut-name', () => {
     const testFile = '/repo/user-service.spec.ts';
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testDescribeSutNameRule.create(context);
     const first = createTopLevelDescribeCall('UserService')[1];
     const second = createTopLevelDescribeCall('Other')[1];
 
@@ -183,13 +169,11 @@ describe('test-describe-sut-name', () => {
     const testFile = '/repo/user-service.spec.ts';
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[implFile, 'export class UserService {}\n']]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testDescribeSutNameRule, {
       filename: testFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testDescribeSutNameRule.create(context);
     // Describe call whose parent is not Program → should be ignored.
     const call: AstNode = {
       type: 'CallExpression',

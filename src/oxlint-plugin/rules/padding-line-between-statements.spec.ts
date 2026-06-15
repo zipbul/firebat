@@ -2,16 +2,14 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { applyFixes, createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
 
 describe('padding-line-between-statements', () => {
   it('should report unexpected blank lines when const declarations are separated', () => {
     // Arrange
     const text = 'const alpha = 1;\n\nconst beta = 2;';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = paddingLineBetweenStatementsRule.create(context);
+    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
     const prevNode: AstNode = {
       type: 'VariableDeclaration',
       kind: 'const',
@@ -39,9 +37,7 @@ describe('padding-line-between-statements', () => {
   it('should autofix unexpected blank lines when rule triggers', () => {
     // Arrange
     const text = 'const alpha = 1;\n\nconst beta = 2;';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = paddingLineBetweenStatementsRule.create(context);
+    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
     const prevNode: AstNode = {
       type: 'VariableDeclaration',
       kind: 'const',
@@ -71,9 +67,7 @@ describe('padding-line-between-statements', () => {
 
     // Re-run should be clean.
     // Arrange
-    const sourceCode2 = createSourceCode(fixed, null, null, []);
-    const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-    const visitor2 = paddingLineBetweenStatementsRule.create(context2);
+    const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
     const prevNode2: AstNode = {
       type: 'VariableDeclaration',
       kind: 'const',
@@ -100,9 +94,7 @@ describe('padding-line-between-statements', () => {
   it('should autofix missing blank line when required', () => {
     // Arrange
     const text = 'const alpha = 1;\nfunction beta() {}';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = paddingLineBetweenStatementsRule.create(context);
+    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
     const prevNode: AstNode = {
       type: 'VariableDeclaration',
       kind: 'const',
@@ -128,9 +120,7 @@ describe('padding-line-between-statements', () => {
     expect(fixed).toBe('const alpha = 1;\n\nfunction beta() {}');
 
     // Arrange
-    const sourceCode2 = createSourceCode(fixed, null, null, []);
-    const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-    const visitor2 = paddingLineBetweenStatementsRule.create(context2);
+    const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
 
     // Act
     visitor2.Program({
@@ -148,9 +138,7 @@ describe('padding-line-between-statements', () => {
   it('should autofix missing blank line when input uses CRLF', () => {
     // Arrange
     const text = 'const alpha = 1;\r\nfunction beta() {}';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = paddingLineBetweenStatementsRule.create(context);
+    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
 
     // Act
     visitor.Program({
@@ -171,9 +159,7 @@ describe('padding-line-between-statements', () => {
     expect(fixed).toBe('const alpha = 1;\r\n\r\nfunction beta() {}');
 
     // Arrange
-    const sourceCode2 = createSourceCode(fixed, null, null, []);
-    const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-    const visitor2 = paddingLineBetweenStatementsRule.create(context2);
+    const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
 
     // Act
     visitor2.Program({
@@ -191,9 +177,7 @@ describe('padding-line-between-statements', () => {
   it('should skip report when no blank line exists between const declarations', () => {
     // Arrange
     const text = 'const alpha = 1;\nconst beta = 2;';
-    const sourceCode = createSourceCode(text, null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, []);
-    const visitor = paddingLineBetweenStatementsRule.create(context);
+    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
     const prevNode: AstNode = {
       type: 'VariableDeclaration',
       kind: 'const',

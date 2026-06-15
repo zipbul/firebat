@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { createRuleContext, createSourceCode } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testUnitFileMappingRule } from './test-unit-file-mapping';
 
@@ -17,13 +17,11 @@ describe('test-unit-file-mapping', () => {
     const specFile = '/repo/user-service.spec.ts';
     const virtualFs = createVirtualFs([[implFile, 'export function run() {}']]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -43,13 +41,11 @@ describe('test-unit-file-mapping', () => {
       [specFile, "describe('UserService', () => {})"],
     ]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -62,13 +58,11 @@ describe('test-unit-file-mapping', () => {
     // Arrange
     const implFile = '/repo/user-service.test.ts';
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -81,13 +75,11 @@ describe('test-unit-file-mapping', () => {
     // Arrange
     const implFile = '/repo/user-service.e2e.test.ts';
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -100,13 +92,11 @@ describe('test-unit-file-mapping', () => {
     // Arrange
     const implFile = '/repo/index.ts';
     const programNode = createProgram([{ type: 'ExportAllDeclaration' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -119,13 +109,11 @@ describe('test-unit-file-mapping', () => {
     // Arrange
     const implFile = '/repo/user-service.d.ts';
     const programNode = createProgram([{ type: 'TSInterfaceDeclaration' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -145,13 +133,11 @@ describe('test-unit-file-mapping', () => {
         },
       },
     ]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -164,13 +150,11 @@ describe('test-unit-file-mapping', () => {
     // Arrange
     const implFile = '/repo/user-service.ts';
     const programNode = createProgram([{ type: 'ImportDeclaration' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -194,13 +178,11 @@ describe('test-unit-file-mapping', () => {
         ],
       },
     ]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: implFile,
       fileExists: () => false,
       readFile: () => null,
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -215,13 +197,11 @@ describe('test-unit-file-mapping', () => {
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[specFile, "describe('UserService', () => {})"]]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: specFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
@@ -241,13 +221,11 @@ describe('test-unit-file-mapping', () => {
       [implFile, 'export class UserService {}'],
     ]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const sourceCode = createSourceCode('', null, null, []);
-    const { context, reports } = createRuleContext(sourceCode, [], undefined, {
+    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
       filename: specFile,
       fileExists: filePath => virtualFs.fileExists(filePath),
       readFile: filePath => virtualFs.readFile(filePath),
     });
-    const visitor = testUnitFileMappingRule.create(context);
 
     // Act
     visitor.Program(programNode);
