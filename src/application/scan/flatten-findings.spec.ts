@@ -20,6 +20,17 @@ const firstFinding = (analyses: Partial<FirebatAnalyses>, map?: FunctionRangeMap
   return findings[0]!;
 };
 
+interface LabelRow {
+  readonly name: string;
+  readonly analyses: Partial<FirebatAnalyses>;
+  readonly expected: string;
+}
+
+const lintDetail = (code: string) =>
+  firstFinding({
+    lint: [{ severity: 'error', catalogCode: 'LINT', code, msg: 'm', file: 'a.ts', span: span(1) } as any],
+  }).detail!;
+
 // ── flattenToFindings: core schema ──────────────────────────────────────────
 
 describe('flattenToFindings: core schema', () => {
@@ -177,9 +188,7 @@ describe('flattenToFindings: detail extraction', () => {
   });
 
   it('excludes kind, code, file, filePath, label, catalogCode from detail', () => {
-    const detail = firstFinding({
-      lint: [{ severity: 'error', catalogCode: 'LINT', code: 'r1', msg: 'm', file: 'a.ts', span: span(1) } as any],
-    }).detail!;
+    const detail = lintDetail('r1');
 
     expect(detail).not.toHaveProperty('kind');
     expect(detail).not.toHaveProperty('file');
@@ -189,9 +198,7 @@ describe('flattenToFindings: detail extraction', () => {
   });
 
   it('renames code to ruleCode in detail for findings with catalogCode', () => {
-    const detail = firstFinding({
-      lint: [{ severity: 'error', catalogCode: 'LINT', code: 'no-unused-vars', msg: 'm', file: 'a.ts', span: span(1) } as any],
-    }).detail!;
+    const detail = lintDetail('no-unused-vars');
 
     expect(detail.ruleCode).toBe('no-unused-vars');
     expect(detail).not.toHaveProperty('code');
@@ -450,40 +457,45 @@ describe('flattenToFindings: labels by category', () => {
     expect(label).toBe('processData (CC: 25, depth: 4)');
   });
 
-  it('early-return label: kind + header', () => {
-    const label = firstFinding({
-      'early-return': [
-        {
-          kind: 'wrapping-if',
-          code: 'EARLY_RETURN_WRAPPING_IF',
-          file: 'a.ts',
-          header: 'validate',
-          span: span(1),
-          metrics: { maxDepth: 3, depthReduction: 1, statementsAffected: 5 },
-          score: 1,
-        } as any,
-      ],
-    }).label;
+  const kindHeaderLabelRows: LabelRow[] = [
+    {
+      name: 'early-return label: kind + header',
+      analyses: {
+        'early-return': [
+          {
+            kind: 'wrapping-if',
+            code: 'EARLY_RETURN_WRAPPING_IF',
+            file: 'a.ts',
+            header: 'validate',
+            span: span(1),
+            metrics: { maxDepth: 3, depthReduction: 1, statementsAffected: 5 },
+            score: 1,
+          } as any,
+        ],
+      },
+      expected: 'wrapping-if in validate',
+    },
+    {
+      name: 'collapsible-if label: kind + header',
+      analyses: {
+        'collapsible-if': [
+          {
+            kind: 'collapsible-if',
+            code: 'COLLAPSIBLE_IF',
+            file: 'a.ts',
+            header: 'check',
+            span: span(1),
+            metrics: { maxDepth: 2, depthReduction: 1, statementsAffected: 3 },
+            score: 1,
+          } as any,
+        ],
+      },
+      expected: 'collapsible-if in check',
+    },
+  ];
 
-    expect(label).toBe('wrapping-if in validate');
-  });
-
-  it('collapsible-if label: kind + header', () => {
-    const label = firstFinding({
-      'collapsible-if': [
-        {
-          kind: 'collapsible-if',
-          code: 'COLLAPSIBLE_IF',
-          file: 'a.ts',
-          header: 'check',
-          span: span(1),
-          metrics: { maxDepth: 2, depthReduction: 1, statementsAffected: 3 },
-          score: 1,
-        } as any,
-      ],
-    }).label;
-
-    expect(label).toBe('collapsible-if in check');
+  it.each(kindHeaderLabelRows)('$name', ({ analyses, expected }) => {
+    expect(firstFinding(analyses).label).toBe(expected);
   });
 
   it('error-flow label: evidence', () => {
@@ -783,32 +795,45 @@ describe('flattenToFindings: function name injection', () => {
     ],
   ]);
 
-  it('injects function name into waste label', () => {
-    expect(
-      firstFinding(
-        { waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'src/a.ts', span: span(10), label: 'unused x' } as any] },
-        fnMap,
-      ).label,
-    ).toBe('unused x in processData()');
-  });
+  const fnLabelRows: LabelRow[] = [
+    {
+      name: 'injects function name into waste label',
+      analyses: {
+        waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'src/a.ts', span: span(10), label: 'unused x' } as any],
+      },
+      expected: 'unused x in processData()',
+    },
+    {
+      name: 'injects function name into error-flow label',
+      analyses: {
+        'error-flow': [
+          {
+            kind: 'throw-non-error',
+            code: 'EF_THROW_NON_ERROR',
+            file: 'src/a.ts',
+            span: span(10),
+            evidence: "throw 'x'",
+          } as any,
+        ],
+      },
+      expected: "throw 'x' in processData()",
+    },
+    {
+      name: 'omits function name when line is outside all functions',
+      analyses: { waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'src/a.ts', span: span(1), label: 'x' } as any] },
+      expected: 'x',
+    },
+    {
+      name: 'omits function name when file is not in map',
+      analyses: {
+        waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'src/unknown.ts', span: span(10), label: 'x' } as any],
+      },
+      expected: 'x',
+    },
+  ];
 
-  it('injects function name into error-flow label', () => {
-    expect(
-      firstFinding(
-        {
-          'error-flow': [
-            {
-              kind: 'throw-non-error',
-              code: 'EF_THROW_NON_ERROR',
-              file: 'src/a.ts',
-              span: span(10),
-              evidence: "throw 'x'",
-            } as any,
-          ],
-        },
-        fnMap,
-      ).label,
-    ).toBe("throw 'x' in processData()");
+  it.each(fnLabelRows)('$name', ({ analyses, expected }) => {
+    expect(firstFinding(analyses, fnMap).label).toBe(expected);
   });
 
   it('picks innermost function for nested functions', () => {
@@ -821,24 +846,6 @@ describe('flattenToFindings: function name injection', () => {
 
     expect(label).toContain('inner');
     expect(label).not.toContain('outer()');
-  });
-
-  it('omits function name when line is outside all functions', () => {
-    expect(
-      firstFinding(
-        { waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'src/a.ts', span: span(1), label: 'x' } as any] },
-        fnMap,
-      ).label,
-    ).toBe('x');
-  });
-
-  it('omits function name when file is not in map', () => {
-    expect(
-      firstFinding(
-        { waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'src/unknown.ts', span: span(10), label: 'x' } as any] },
-        fnMap,
-      ).label,
-    ).toBe('x');
   });
 
   it('omits function name when line is 0 (file-scope)', () => {
@@ -899,11 +906,14 @@ describe('flattenToFindings: function name injection', () => {
 describe('buildFunctionRangeMap', () => {
   const rel = (filePath: string) => filePath;
 
-  it('builds map from a single top-level function', () => {
-    const src = `function greet(name) {\n  console.log(name);\n}\n`;
+  const rangesFor = (src: string) => {
     const file = parseSource('src/a.ts', src);
-    const map = buildFunctionRangeMap([file], rel);
-    const ranges = map.get('src/a.ts')!;
+
+    return buildFunctionRangeMap([file], rel).get('src/a.ts')!;
+  };
+
+  it('builds map from a single top-level function', () => {
+    const ranges = rangesFor(`function greet(name) {\n  console.log(name);\n}\n`);
 
     expect(ranges).toHaveLength(1);
     expect(ranges[0]!.name).toBe('greet');
@@ -912,21 +922,15 @@ describe('buildFunctionRangeMap', () => {
   });
 
   it('extracts names for arrow functions via parent context', () => {
-    const src = `const doSomething = () => {\n  return 1;\n};\n`;
-    const file = parseSource('src/a.ts', src);
-    const map = buildFunctionRangeMap([file], rel);
-    const ranges = map.get('src/a.ts')!;
-    const names = ranges.map(r => r.name);
+    const names = rangesFor(`const doSomething = () => {\n  return 1;\n};\n`).map(r => r.name);
 
     expect(names).toContain('doSomething');
   });
 
   it('handles nested functions with distinct ranges', () => {
-    const src = `function outer() {\n  function inner() {\n    return 1;\n  }\n  return inner();\n}\n`;
-    const file = parseSource('src/a.ts', src);
-    const map = buildFunctionRangeMap([file], rel);
-    const ranges = map.get('src/a.ts')!;
-    const names = ranges.map(r => r.name).sort();
+    const names = rangesFor(`function outer() {\n  function inner() {\n    return 1;\n  }\n  return inner();\n}\n`)
+      .map(r => r.name)
+      .sort();
 
     expect(names).toEqual(['inner', 'outer']);
   });

@@ -1,12 +1,13 @@
-import { parseSync as oxcParseSync, type Program } from 'oxc-parser';
+import { parseSync as oxcParseSync } from 'oxc-parser';
 
-import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../../../src/test-api';
+import type { AstNode, RuleContext, Variable } from '../../../../src/test-api';
 
 import { blankLinesBetweenStatementGroupsRule } from '../../../../src/test-api';
 import { noBracketNotationRule } from '../../../../src/test-api';
 import { paddingLineBetweenStatementsRule } from '../../../../src/test-api';
 import { unusedImportsRule } from '../../../../src/test-api';
 
+import { collectIdentifierUsages, ensureRangesDeep, isAstNode, traverseAndVisit, type Visitor } from './ast-walk';
 import {
   buildUniqueIdentifiers,
   getRange as getRangeTuple,
@@ -36,10 +37,6 @@ const parseSync: ParseSync = (filename, code) => {
   return { program: programValue };
 };
 
-interface Visitor {
-  [key: string]: ((node: AstNode) => void) | undefined;
-}
-
 interface RuleModule {
   create(context: RuleContext): Visitor;
 }
@@ -48,173 +45,6 @@ interface RuleRunResult {
   reports: ReturnType<typeof createRuleContext>['reports'];
   fixed: string;
 }
-
-interface AstNodeShape {
-  type?: string;
-}
-
-const isAstNode =(value: AstNodeValue | AstNodeShape | Program | null | undefined): value is AstNode => {
-  if (value === null || value === undefined) {
-    return false;
-  }
-
-  if (Array.isArray(value)) {
-    return false;
-  }
-
-  if (typeof value !== 'object') {
-    return false;
-  }
-
-  if (!('type' in value)) {
-    return false;
-  }
-
-  return typeof value.type === 'string';
-};
-
-const ensureRangesDeep = (root: AstNodeValue | null | undefined): void => {
-  const seen = new WeakSet<AstNode>();
-
-  const walk = (value: AstNodeValue | null | undefined): void => {
-    if (value === null || value === undefined) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-
-      return;
-    }
-
-    if (!isAstNode(value)) {
-      return;
-    }
-
-    if (seen.has(value)) {
-      return;
-    }
-
-    seen.add(value);
-
-    const start = value.start;
-    const end = value.end;
-    const range = value.range;
-
-    if (!Array.isArray(range) && typeof start === 'number' && typeof end === 'number') {
-      value.range = [start, end];
-    }
-
-    for (const key of Object.keys(value)) {
-      if (key === 'parent') {
-        continue;
-      }
-
-      const child = value[key];
-
-      if (Array.isArray(child)) {
-        for (const item of child) {
-          walk(item);
-        }
-
-        continue;
-      }
-
-      walk(child);
-    }
-  };
-
-  walk(root);
-};
-
-const traverseAndVisit = (root: AstNodeValue | null | undefined, visitor: Visitor): void => {
-  const seen = new WeakSet<AstNode>();
-
-  const walk = (value: AstNodeValue | null | undefined): void => {
-    if (value === null || value === undefined) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-
-      return;
-    }
-
-    if (!isAstNode(value)) {
-      return;
-    }
-
-    if (seen.has(value)) {
-      return;
-    }
-
-    seen.add(value);
-
-    const handler = visitor[value.type];
-
-    if (typeof handler === 'function') {
-      handler(value);
-    }
-
-    for (const key of Object.keys(value)) {
-      if (key === 'parent') {
-        continue;
-      }
-
-      const child = value[key];
-
-      if (Array.isArray(child)) {
-        for (const item of child) {
-          walk(item);
-        }
-
-        continue;
-      }
-
-      walk(child);
-    }
-  };
-
-  walk(root);
-};
-
-const collectIdentifierUsages = (
-  root: AstNodeValue | null | undefined,
-  name: string,
-  excludeRange: [number, number] | null,
-): AstNode[] => {
-  const out: AstNode[] = [];
-
-  traverseAndVisit(root, {
-    Identifier(node) {
-      if (typeof node.name !== 'string' || node.name !== name) {
-        return;
-      }
-
-      const range = getRangeTuple(node);
-
-      if (!range) {
-        return;
-      }
-
-      const excludeStart = excludeRange?.[0];
-      const excludeEnd = excludeRange?.[1];
-
-      if (excludeStart !== undefined && excludeEnd !== undefined && range[0] >= excludeStart && range[1] <= excludeEnd) {
-        return;
-      }
-
-      out.push(node);
-    },
-  });
-
-  return out;
-};
 
 const runRuleOnParsedCode = (
   filename: string,
@@ -252,7 +82,7 @@ const runRuleOnParsedCode = (
         continue;
       }
 
-      const references = collectIdentifierUsages(program, localName, importRange);
+      const references = collectIdentifierUsages(program, localName, importRange, getRangeTuple);
 
       vars.push({
         identifiers: [{ type: 'Identifier', range: localRange, name: localName }],

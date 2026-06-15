@@ -1,7 +1,29 @@
+import type { Gildash } from '@zipbul/gildash';
+
 import type { ParsedFile } from '../../../src/test-api';
 import type { DuplicateGroup, WasteFinding } from '../../../src/test-api';
 
 import { parseSource } from '../../../src/test-api';
+
+// ---------------------------------------------------------------------------
+// Gildash mock fixtures — shared by the inputs-digest specs.
+// ---------------------------------------------------------------------------
+
+/** Build a synthetic `FileRecord` for a `getFileInfo` stub. */
+export const makeFileRecord = (filePath: string, contentHash = 'abc123') => ({
+  project: 'test',
+  filePath,
+  mtimeMs: 1000,
+  size: 100,
+  contentHash,
+  updatedAt: new Date().toISOString(),
+});
+
+/** Wrap a `getFileInfo` impl into a minimal `Gildash` stub. */
+export const makeGildash = (getFileInfoImpl: (filePath: string) => ReturnType<Gildash['getFileInfo']>): Gildash =>
+  ({
+    getFileInfo: getFileInfoImpl,
+  }) as unknown as Gildash;
 
 export const getFuzzSeed = (): number => {
   const envSeed = process.env.FUZZ_SEED;

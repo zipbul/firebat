@@ -1,100 +1,45 @@
 import { describe, expect, it } from 'bun:test';
-import * as path from 'node:path';
 
 import type { FirebatReport } from '../../../../src/test-api';
 
 import { scanUseCase } from '../../../../src/test-api';
-import { createPrettyConsoleLogger } from '../../../../src/test-api';
-import { createTempProject, installFakeBin, writeText } from '../../shared/external-tool-test-kit';
+import { installFakeBin } from '../../shared/external-tool-test-kit';
+import {
+  createScanLogger as createLogger,
+  createScanProjectFixture,
+  createScanProjectFixtureWithFiles,
+  expectBareFindingShape,
+  findBareFindingByKind,
+  withCwd,
+} from '../../shared/scan-fixture';
 
-const writeJson = async (filePath: string, value: unknown): Promise<void> => {
-  await writeText(filePath, JSON.stringify(value, null, 2));
-};
-
-const withCwd = async <T>(cwdAbs: string, fn: () => Promise<T>): Promise<T> => {
-  const prev = process.cwd();
-
-  process.chdir(cwdAbs);
-
-  try {
-    return await fn();
-  } finally {
-    process.chdir(prev);
-  }
-};
-
-interface ScanProjectFixture {
-  readonly rootAbs: string;
-  readonly srcFileAbs: string;
-  dispose: () => Promise<void>;
+interface IndirectionContractRow {
+  readonly title: string;
+  readonly prefix: string;
+  readonly source: string;
+  readonly kind: string;
+  readonly code: string;
+  readonly header: string;
 }
 
-interface ScanProjectFixtureMulti {
-  readonly rootAbs: string;
-  readonly targetsAbs: ReadonlyArray<string>;
-  dispose: () => Promise<void>;
-}
-
-const createScanProjectFixture = async (prefix: string, sourceText: string): Promise<ScanProjectFixture> => {
-  const project = await createTempProject(prefix);
-  const srcFileAbs = path.join(project.rootAbs, 'src', 'a.ts');
-
-  await writeJson(path.join(project.rootAbs, 'package.json'), {
-    name: `${prefix}-fixture`,
-    private: true,
-    devDependencies: { firebat: '0.0.0' },
-  });
-
-  await writeJson(path.join(project.rootAbs, 'tsconfig.json'), {
-    compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-    include: ['src/**/*.ts'],
-  });
-
-  await writeText(srcFileAbs, sourceText);
-
-  return {
-    rootAbs: project.rootAbs,
-    srcFileAbs,
-    dispose: project.dispose,
-  };
-};
-
-const createScanProjectFixtureWithFiles = async (
-  prefix: string,
-  files: Readonly<Record<string, string>>,
-): Promise<ScanProjectFixtureMulti> => {
-  const project = await createTempProject(prefix);
-
-  await writeJson(path.join(project.rootAbs, 'package.json'), {
-    name: `${prefix}-fixture`,
-    private: true,
-    devDependencies: { firebat: '0.0.0' },
-  });
-
-  await writeJson(path.join(project.rootAbs, 'tsconfig.json'), {
-    compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext' },
-    include: ['src/**/*.ts'],
-  });
-
-  const targetsAbs: string[] = [];
-
-  for (const [relPath, content] of Object.entries(files)) {
-    const abs = path.join(project.rootAbs, relPath);
-
-    await writeText(abs, content);
-    targetsAbs.push(abs);
-  }
-
-  return {
-    rootAbs: project.rootAbs,
-    targetsAbs,
-    dispose: project.dispose,
-  };
-};
-
-const createLogger = () => {
-  return createPrettyConsoleLogger({ level: 'error', includeStack: false });
-};
+const indirectionContractCases: IndirectionContractRow[] = [
+  {
+    title: 'indirection - type alias synonym - reports IND_TYPE_REMAP with correct code',
+    prefix: 'firebat-report-contract-ind-type-remap',
+    source: 'type A = B;\n',
+    kind: 'type-remap',
+    code: 'IND_TYPE_REMAP',
+    header: 'A',
+  },
+  {
+    title: 'indirection - empty interface with extends - reports IND_INTERFACE_REWRAP with correct code',
+    prefix: 'firebat-report-contract-ind-interface-rewrap',
+    source: 'interface C extends D {}\n',
+    kind: 'interface-rewrap',
+    code: 'IND_INTERFACE_REWRAP',
+    header: 'C',
+  },
+];
 
 describe('integration/scan/report-contract', () => {
   it('should always include catalog field in the report', async () => {
@@ -486,13 +431,8 @@ exit 1
         ),
       );
       // Assert
-      const barrel = report.analyses['barrel'] as any;
+      const exportStar = findBareFindingByKind(report.analyses, 'barrel', 'export-star');
 
-      expect(Array.isArray(barrel)).toBe(true);
-
-      const exportStar = (barrel as any[]).find(f => f?.kind === 'export-star');
-
-      expect(exportStar).toBeDefined();
       expect(typeof exportStar?.file).toBe('string');
       expect(exportStar?.file).toBe('src/index.ts');
       expect(exportStar?.filePath).toBeUndefined();
@@ -586,18 +526,9 @@ exit 7
         ),
       );
       // Assert
-      const findings = report.analyses['error-flow'] as any;
+      const throwNonError = findBareFindingByKind(report.analyses, 'error-flow', 'throw-non-error');
 
-      expect(Array.isArray(findings)).toBe(true);
-
-      const throwNonError = (findings as any[]).find(f => f?.kind === 'throw-non-error');
-
-      expect(throwNonError).toBeDefined();
-      expect(typeof throwNonError?.file).toBe('string');
-      expect(throwNonError?.file).toContain('src/a.ts');
-      expect(throwNonError?.filePath).toBeUndefined();
-      expect(throwNonError?.status).toBeUndefined();
-      expect(throwNonError?.tool).toBeUndefined();
+      expectBareFindingShape(throwNonError, 'src/a.ts');
       expect(throwNonError?.message).toBeUndefined();
       expect(throwNonError?.recipes).toBeUndefined();
       expect(throwNonError?.code).toBe('EF_THROW_NON_ERROR');
@@ -637,11 +568,7 @@ exit 7
 
       const first = (findings as any[])[0];
 
-      expect(typeof first?.file).toBe('string');
-      expect(first?.file).toContain('src/');
-      expect(first?.filePath).toBeUndefined();
-      expect(first?.status).toBeUndefined();
-      expect(first?.tool).toBeUndefined();
+      expectBareFindingShape(first, 'src/');
       expect(typeof first?.code).toBe('string');
       expect(String(first?.code)).toContain('IND_');
     } finally {
@@ -775,9 +702,9 @@ exit 7
     }
   });
 
-  it('indirection - type alias synonym - reports IND_TYPE_REMAP with correct code', async () => {
+  it.each(indirectionContractCases)('$title', async ({ prefix, source, kind, code, header }) => {
     // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-ind-type-remap', 'type A = B;\n');
+    const project = await createScanProjectFixture(prefix, source);
 
     try {
       const logger = createLogger();
@@ -799,45 +726,11 @@ exit 7
 
       expect(Array.isArray(findings)).toBe(true);
       expect(findings.length).toBe(1);
-      expect(findings[0]?.kind).toBe('type-remap');
-      expect(findings[0]?.code).toBe('IND_TYPE_REMAP');
+      expect(findings[0]?.kind).toBe(kind);
+      expect(findings[0]?.code).toBe(code);
       expect(typeof findings[0]?.file).toBe('string');
       expect(findings[0]?.filePath).toBeUndefined();
-      expect(findings[0]?.header).toBe('A');
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('indirection - empty interface with extends - reports IND_INTERFACE_REWRAP with correct code', async () => {
-    // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-ind-interface-rewrap', 'interface C extends D {}\n');
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['indirection'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
-      // Assert
-      const findings = report.analyses.indirection as any[];
-
-      expect(Array.isArray(findings)).toBe(true);
-      expect(findings.length).toBe(1);
-      expect(findings[0]?.kind).toBe('interface-rewrap');
-      expect(findings[0]?.code).toBe('IND_INTERFACE_REWRAP');
-      expect(typeof findings[0]?.file).toBe('string');
-      expect(findings[0]?.filePath).toBeUndefined();
-      expect(findings[0]?.header).toBe('C');
+      expect(findings[0]?.header).toBe(header);
     } finally {
       await project.dispose();
     }

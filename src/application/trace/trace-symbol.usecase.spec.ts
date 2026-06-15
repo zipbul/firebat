@@ -44,6 +44,17 @@ import { traceSymbolUseCase } from './trace-symbol.usecase';
 
 const logger = createNoopLogger('error');
 
+interface GraphShapeRow {
+  readonly name: string;
+  readonly entryFile: string;
+  readonly symbol: string;
+}
+
+const graphShapeRows: GraphShapeRow[] = [
+  { name: 'graph from gildash', entryFile: '/project/src/index.ts', symbol: 'MyClass' },
+  { name: 'graph and evidence structure', entryFile: '/project/src/lib.ts', symbol: 'helperFn' },
+];
+
 describe('traceSymbolUseCase', () => {
   it('should return ok:true with graph from gildash', async () => {
     const result = await traceSymbolUseCase({
@@ -55,17 +66,10 @@ describe('traceSymbolUseCase', () => {
     expect(result.ok).toBe(true);
     expect(result.tool).toBe('gildash');
     expect(result.graph).toBeDefined();
-    expect(Array.isArray(result.graph.nodes)).toBe(true);
-    expect(Array.isArray(result.graph.edges)).toBe(true);
-    expect(Array.isArray(result.evidence)).toBe(true);
   });
 
-  it('should return ok:true with graph and evidence structure', async () => {
-    const result = await traceSymbolUseCase({
-      entryFile: '/project/src/lib.ts',
-      symbol: 'helperFn',
-      logger,
-    });
+  it.each(graphShapeRows)('should return ok:true with $name', async ({ entryFile, symbol }) => {
+    const result = await traceSymbolUseCase({ entryFile, symbol, logger });
 
     expect(Array.isArray(result.graph.nodes)).toBe(true);
     expect(Array.isArray(result.graph.edges)).toBe(true);

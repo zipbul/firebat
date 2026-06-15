@@ -24,21 +24,51 @@ const makeReport = (
   findings: flattenToFindings(analyses),
 });
 
+const parseReport = (
+  analyses: Partial<FirebatReport['analyses']> = {},
+  metaErrors: Record<string, string> | undefined = {},
+): any => {
+  const base = makeReport(['waste'], analyses);
+  const report: FirebatReport = { ...base, meta: { ...base.meta, errors: metaErrors } };
+
+  return JSON.parse(formatReport(report));
+};
+
+interface ErrorsPresentRow {
+  readonly name: string;
+  readonly metaErrors: Record<string, string>;
+  readonly key: string;
+  readonly value: string;
+  readonly count: number;
+}
+
+interface ErrorsAbsentRow {
+  readonly name: string;
+  readonly metaErrors: Record<string, string> | undefined;
+}
+
+const errorsPresentRows: ErrorsPresentRow[] = [
+  { name: 'non-empty', metaErrors: { 'src/a.ts': 'parse error' }, key: 'src/a.ts', value: 'parse error', count: 1 },
+  { name: 'exactly one key', metaErrors: { 'src/only.ts': 'err' }, key: 'src/only.ts', value: 'err', count: 1 },
+];
+const errorsAbsentRows: ErrorsAbsentRow[] = [
+  { name: 'undefined', metaErrors: undefined },
+  { name: 'empty object', metaErrors: {} },
+];
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe('formatReport', () => {
   it('should return valid JSON string', () => {
-    const report = makeReport(['waste'], { waste: [] });
-    const out = formatReport(report);
+    const out = formatReport(makeReport(['waste'], { waste: [] }));
 
     expect(() => JSON.parse(out)).not.toThrow();
   });
 
   it('should output meta.detectors and total at root level', () => {
-    const report = makeReport(['waste'], {
+    const parsed = parseReport({
       waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'x', message: '', file: testFile, span: span() } as any],
     });
-    const parsed = JSON.parse(formatReport(report));
 
     expect(parsed.meta.detectors).toContain('waste');
     expect(typeof parsed.total).toBe('number');
@@ -47,12 +77,11 @@ describe('formatReport', () => {
   });
 
   it('should populate findings from analyses via flattenToFindings', () => {
-    const report = makeReport(['waste'], {
+    const parsed = parseReport({
       waste: [
         { kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'unused x', message: '', file: testFile, span: span(10) } as any,
       ],
     });
-    const parsed = JSON.parse(formatReport(report));
 
     expect(parsed.total).toBe(1);
     expect(parsed.findings).toHaveLength(1);
@@ -60,47 +89,22 @@ describe('formatReport', () => {
     expect(parsed.findings[0].line).toBe(10);
   });
 
-  it('should include errors in meta when meta.errors is non-empty', () => {
-    const report: FirebatReport = {
-      ...makeReport(['waste'], { waste: [] }),
-      meta: { ...makeReport(['waste']).meta, errors: { 'src/a.ts': 'parse error' } },
-    };
-    const parsed = JSON.parse(formatReport(report));
+  it.each(errorsPresentRows)('should include errors in meta when meta.errors is $name', row => {
+    const parsed = parseReport({ waste: [] }, row.metaErrors);
 
     expect(parsed.meta.errors).toBeDefined();
-    expect(parsed.meta.errors['src/a.ts']).toBe('parse error');
+    expect(parsed.meta.errors[row.key]).toBe(row.value);
+    expect(Object.keys(parsed.meta.errors).length).toBe(row.count);
   });
 
-  it('should omit errors key in meta when meta.errors is undefined', () => {
-    const report: FirebatReport = {
-      ...makeReport(['waste'], { waste: [] }),
-      meta: (({ errors: _e, ...rest }) => rest)(makeReport(['waste']).meta),
-    };
-    const parsed = JSON.parse(formatReport(report));
+  it.each(errorsAbsentRows)('should omit errors key in meta when meta.errors is $name', row => {
+    const parsed = parseReport({ waste: [] }, row.metaErrors);
 
     expect('errors' in parsed.meta).toBe(false);
-  });
-
-  it('should omit errors key in meta when meta.errors is empty object', () => {
-    const report = makeReport(['waste'], { waste: [] });
-    const parsed = JSON.parse(formatReport(report));
-
-    expect('errors' in parsed.meta).toBe(false);
-  });
-
-  it('should include errors in meta when meta.errors has exactly one key', () => {
-    const report: FirebatReport = {
-      ...makeReport(['waste'], { waste: [] }),
-      meta: { ...makeReport(['waste']).meta, errors: { 'src/only.ts': 'err' } },
-    };
-    const parsed = JSON.parse(formatReport(report));
-
-    expect(parsed.meta.errors).toBeDefined();
-    expect(Object.keys(parsed.meta.errors).length).toBe(1);
   });
 
   it('preserves required Finding fields through JSON round-trip', () => {
-    const report = makeReport(['waste'], {
+    const parsed = parseReport({
       waste: [
         {
           kind: 'dead-store',
@@ -112,7 +116,6 @@ describe('formatReport', () => {
         } as any,
       ],
     });
-    const parsed = JSON.parse(formatReport(report));
     const finding = parsed.findings[0];
 
     expect(finding).toHaveProperty('id');
@@ -128,22 +131,20 @@ describe('formatReport', () => {
   });
 
   it('emits total matching findings.length', () => {
-    const report = makeReport(['waste'], {
+    const parsed = parseReport({
       waste: [
         { kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'a', message: '', file: testFile, span: span(1) } as any,
         { kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'b', message: '', file: testFile, span: span(2) } as any,
         { kind: 'dead-store', code: 'WASTE_DEAD_STORE', label: 'c', message: '', file: testFile, span: span(3) } as any,
       ],
     });
-    const parsed = JSON.parse(formatReport(report));
 
     expect(parsed.total).toBe(3);
     expect(parsed.findings).toHaveLength(3);
   });
 
   it('output shape exact — only meta, total, findings at root', () => {
-    const report = makeReport(['waste'], { waste: [] });
-    const parsed = JSON.parse(formatReport(report));
+    const parsed = parseReport({ waste: [] });
 
     expect(Object.keys(parsed).sort()).toEqual(['findings', 'meta', 'total']);
   });

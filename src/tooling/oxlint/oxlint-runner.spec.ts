@@ -1,26 +1,23 @@
 import { mock, describe, it, expect, spyOn, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as path from 'node:path';
 
+import { makeProc, restoreToolMocks } from '../../../test/integration/shared/external-tool-test-kit';
+
 // mock.module must come BEFORE importing oxlint-runner (which imports these at module level)
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxlint' as string | null };
 const mockVersionOnce = { logExternalToolVersionOnce: async (_args: unknown) => {} };
-const __origResolveBin = { ...require(path.resolve(import.meta.dir, '../resolve-bin.ts')) };
-const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '../external-tool-version.ts')) };
+const resolveBinPath = path.resolve(import.meta.dir, '../resolve-bin.ts');
+const externalToolVersionPath = path.resolve(import.meta.dir, '../external-tool-version.ts');
+const origResolveBin = { ...require(resolveBinPath) };
+const origExternalToolVersion = { ...require(externalToolVersionPath) };
 
-void mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => mockResolveBin);
-void mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => mockVersionOnce);
+void mock.module(resolveBinPath, () => mockResolveBin);
+void mock.module(externalToolVersionPath, () => mockVersionOnce);
 
 import { createNoopLogger } from '../../shared/logger';
 import { runOxlint, __testing__ } from './oxlint-runner';
 
 const logger = createNoopLogger('error');
-
-const makeProc = (stdout = '', stderr = '', exitCode = 0) => ({
-  stdout: new Response(stdout).body!,
-  stderr: new Response(stderr).body!,
-  exited: Promise.resolve(exitCode),
-});
-
 let spawnSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
@@ -34,67 +31,95 @@ afterEach(() => {
 
 // --- __testing__.parseOxlintOutput unit tests (no spawn needed) ---
 
+interface ParseEmptyRow {
+  readonly name: string;
+  readonly raw: string;
+}
+
+interface ParseDiagRow {
+  readonly name: string;
+  readonly raw: string;
+  readonly message: string;
+  readonly severity: 'error' | 'info' | 'warning';
+  readonly filePath: string | undefined;
+  readonly code: string | undefined;
+  readonly line: number;
+  readonly column: number;
+}
+
+const parseEmptyRows: ParseEmptyRow[] = [
+  { name: 'non-JSON input', raw: 'not json' },
+  { name: 'invalid JSON schema', raw: '{"foo":"bar"}' },
+  { name: 'empty array input', raw: '[]' },
+];
+const parseDiagRows: ParseDiagRow[] = [
+  {
+    name: 'array-style output and normalize fields',
+    raw: JSON.stringify([{ message: 'use const', severity: 'warning', line: 3, column: 5, filePath: '/src/a.ts' }]),
+    message: 'use const',
+    severity: 'warning',
+    filePath: '/src/a.ts',
+    code: undefined,
+    line: 3,
+    column: 5,
+  },
+  {
+    name: 'diagnostics-wrapper-style output',
+    raw: JSON.stringify({ diagnostics: [{ message: 'no-var', severity: 'error', line: 1, column: 1 }] }),
+    message: 'no-var',
+    severity: 'error',
+    filePath: undefined,
+    code: undefined,
+    line: 1,
+    column: 1,
+  },
+  {
+    name: 'text/level field aliases',
+    raw: JSON.stringify([{ text: 'aliased message', level: 'info', row: 10, col: 2, path: '/x.ts', ruleId: 'rule-x' }]),
+    message: 'aliased message',
+    severity: 'info',
+    filePath: '/x.ts',
+    code: 'rule-x',
+    line: 10,
+    column: 2,
+  },
+  {
+    name: 'default severity to warning when absent',
+    raw: JSON.stringify([{ message: 'no severity' }]),
+    message: 'no severity',
+    severity: 'warning',
+    filePath: undefined,
+    code: undefined,
+    line: 0,
+    column: 0,
+  },
+  {
+    name: 'default line/column to 0 when absent',
+    raw: JSON.stringify([{ message: 'no position' }]),
+    message: 'no position',
+    severity: 'warning',
+    filePath: undefined,
+    code: undefined,
+    line: 0,
+    column: 0,
+  },
+];
+
 describe('parseOxlintOutput', () => {
-  it('should return empty array for non-JSON input', () => {
-    expect(__testing__.parseOxlintOutput('not json')).toEqual([]);
+  it.each(parseEmptyRows)('should return empty array for $name', ({ raw }) => {
+    expect(__testing__.parseOxlintOutput(raw)).toEqual([]);
   });
 
-  it('should return empty array for invalid JSON schema', () => {
-    expect(__testing__.parseOxlintOutput('{"foo":"bar"}')).toEqual([]);
-  });
-
-  it('should parse array-style output and normalize fields', () => {
-    const raw = JSON.stringify([{ message: 'use const', severity: 'warning', line: 3, column: 5, filePath: '/src/a.ts' }]);
+  it.each(parseDiagRows)('should parse $name', ({ raw, message, severity, filePath, code, line, column }) => {
     const result = __testing__.parseOxlintOutput(raw);
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.message).toBe('use const');
-    expect(result[0]!.severity).toBe('warning');
-    expect(result[0]!.filePath).toBe('/src/a.ts');
-    expect(result[0]!.span.start.line).toBe(3);
-    expect(result[0]!.span.start.column).toBe(5);
-  });
-
-  it('should parse diagnostics-wrapper-style output', () => {
-    const raw = JSON.stringify({
-      diagnostics: [{ message: 'no-var', severity: 'error', line: 1, column: 1 }],
-    });
-    const result = __testing__.parseOxlintOutput(raw);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]!.message).toBe('no-var');
-    expect(result[0]!.severity).toBe('error');
-  });
-
-  it('should fall back to text/level field aliases', () => {
-    const raw = JSON.stringify([{ text: 'aliased message', level: 'info', row: 10, col: 2, path: '/x.ts', ruleId: 'rule-x' }]);
-    const result = __testing__.parseOxlintOutput(raw);
-
-    expect(result[0]!.message).toBe('aliased message');
-    expect(result[0]!.severity).toBe('info');
-    expect(result[0]!.filePath).toBe('/x.ts');
-    expect(result[0]!.code).toBe('rule-x');
-    expect(result[0]!.span.start.line).toBe(10);
-    expect(result[0]!.span.start.column).toBe(2);
-  });
-
-  it('should default severity to warning when absent', () => {
-    const raw = JSON.stringify([{ message: 'no severity' }]);
-    const result = __testing__.parseOxlintOutput(raw);
-
-    expect(result[0]!.severity).toBe('warning');
-  });
-
-  it('should default line/column to 0 when absent', () => {
-    const raw = JSON.stringify([{ message: 'no position' }]);
-    const result = __testing__.parseOxlintOutput(raw);
-
-    expect(result[0]!.span.start.line).toBe(0);
-    expect(result[0]!.span.start.column).toBe(0);
-  });
-
-  it('should return empty array for empty array input', () => {
-    expect(__testing__.parseOxlintOutput('[]')).toEqual([]);
+    expect(result[0]!.message).toBe(message);
+    expect(result[0]!.severity).toBe(severity);
+    expect(result[0]!.filePath).toBe(filePath);
+    expect(result[0]!.code).toBe(code);
+    expect(result[0]!.span.start.line).toBe(line);
+    expect(result[0]!.span.start.column).toBe(column);
   });
 });
 
@@ -164,7 +189,5 @@ describe('runOxlint', () => {
 });
 
 afterAll(() => {
-  mock.restore();
-  void mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => __origResolveBin);
-  void mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => __origExternalToolVersion);
+  restoreToolMocks({ resolveBinPath, externalToolVersionPath, origResolveBin, origExternalToolVersion });
 });

@@ -66,21 +66,18 @@ describe('giant-file/analyzer', () => {
     expect(result[0]?.metrics.maxLines).toBe(0);
   });
 
-  it('should not count trailing LF as an extra line (LF)', () => {
-    // Arrange — 3 lines of content + trailing LF (commonly produced by editors)
-    const sourceText = 'a\nb\nc\n';
-    const files = [file('src/a.ts', sourceText)];
-    // Act
-    const result = analyzeGiantFile(files as any, { maxLines: 0 });
+  interface TrailingNewlineCase {
+    name: string;
+    sourceText: string;
+  }
 
-    // Assert
-    expect(result.length).toBe(1);
-    expect(result[0]?.metrics.lineCount).toBe(3);
-  });
+  const trailingNewlineCases: TrailingNewlineCase[] = [
+    { name: 'should not count trailing LF as an extra line (LF)', sourceText: 'a\nb\nc\n' },
+    { name: 'should not count trailing CRLF as an extra line', sourceText: 'a\r\nb\r\nc\r\n' },
+  ];
 
-  it('should not count trailing CRLF as an extra line', () => {
-    // Arrange — 3 lines of content + trailing CRLF
-    const sourceText = 'a\r\nb\r\nc\r\n';
+  it.each(trailingNewlineCases)('$name', ({ sourceText }) => {
+    // Arrange — 3 lines of content + a trailing newline (commonly produced by editors)
     const files = [file('src/a.ts', sourceText)];
     // Act
     const result = analyzeGiantFile(files as any, { maxLines: 0 });

@@ -39,6 +39,24 @@ const makeBadRangeReport = (): ReportDescriptor => ({
   fix: () => ({ range: [1] as unknown as [number, number], text: 'X' }),
 });
 
+interface SingleFixCase {
+  readonly title: string;
+  readonly text: string;
+  readonly start: number;
+  readonly end: number;
+  readonly replacement: string;
+  readonly expected: string;
+}
+
+// One makeReport fix applied to one input → one expected output. Each row is a
+// distinct behaviour (replace / delete / replace-all / zero-length insert).
+const singleFixCases: SingleFixCase[] = [
+  { title: 'should apply a single replacement fix correctly', text: 'const foo = 1;', start: 6, end: 9, replacement: 'bar', expected: 'const bar = 1;' },
+  { title: 'should apply a single deletion fix (empty text) over a range', text: 'abcde', start: 1, end: 3, replacement: '', expected: 'ade' },
+  { title: 'should replace entire text when fix range spans [0, text.length]', text: 'oldvalue', start: 0, end: 8, replacement: 'newvalue', expected: 'newvalue' },
+  { title: 'should insert text at position when fix range is zero-length [n, n]', text: 'ac', start: 1, end: 1, replacement: 'b', expected: 'abc' },
+];
+
 // ── applyFixes ────────────────────────────────────────────────────────────────
 
 describe('applyFixes', () => {
@@ -53,28 +71,14 @@ describe('applyFixes', () => {
     expect(result).toBe(text);
   });
 
-  it('should apply a single replacement fix correctly', () => {
+  it.each(singleFixCases)('$title', ({ text, start, end, replacement, expected }) => {
     // Arrange
-    const text = 'const foo = 1;';
-    //                   [6, 9] = 'foo'
-    const reports = [makeReport(6, 9, 'bar')];
+    const reports = [makeReport(start, end, replacement)];
     // Act
     const result = applyFixes(text, reports);
 
     // Assert
-    expect(result).toBe('const bar = 1;');
-  });
-
-  it('should apply a single deletion fix (empty text) over a range', () => {
-    // Arrange
-    const text = 'abcde';
-    // delete [1,3] → 'ade'
-    const reports = [makeReport(1, 3, '')];
-    // Act
-    const result = applyFixes(text, reports);
-
-    // Assert
-    expect(result).toBe('ade');
+    expect(result).toBe(expected);
   });
 
   it('should apply two non-overlapping fixes from right to left', () => {
@@ -185,29 +189,6 @@ describe('applyFixes', () => {
 
     // Assert
     expect(result).toBe('');
-  });
-
-  it('should replace entire text when fix range spans [0, text.length]', () => {
-    // Arrange
-    const text = 'oldvalue';
-    const reports = [makeReport(0, text.length, 'newvalue')];
-    // Act
-    const result = applyFixes(text, reports);
-
-    // Assert
-    expect(result).toBe('newvalue');
-  });
-
-  it('should insert text at position when fix range is zero-length [n, n]', () => {
-    // Arrange
-    const text = 'ac';
-    // Insert 'b' at position 1 → 'abc'
-    const reports = [makeReport(1, 1, 'b')];
-    // Act
-    const result = applyFixes(text, reports);
-
-    // Assert
-    expect(result).toBe('abc');
   });
 
   it('should produce identical output on two successive calls with same arguments', () => {

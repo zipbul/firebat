@@ -1,9 +1,47 @@
-import { expect } from 'bun:test';
+import { expect, mock } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { resolveToolRcPath } from '../../../src/test-api';
+
+export interface MockProc {
+  readonly stdout: ReadableStream<Uint8Array>;
+  readonly stderr: ReadableStream<Uint8Array>;
+  readonly exited: Promise<number>;
+}
+
+/**
+ * Build a `Bun.spawn`-shaped fake process whose stdout/stderr are readable
+ * streams and whose `exited` resolves to `exitCode`. Shared by the oxlint /
+ * oxfmt runner specs, which mock `Bun.spawn` to return this shape.
+ */
+export const makeProc = (stdout = '', stderr = '', exitCode = 0): MockProc => ({
+  stdout: new Response(stdout).body!,
+  stderr: new Response(stderr).body!,
+  exited: Promise.resolve(exitCode),
+});
+
+/**
+ * Snapshot of the real `resolve-bin` / `external-tool-version` modules captured
+ * before they are mocked, so {@link restoreToolMocks} can re-install them.
+ */
+export interface ToolModuleSnapshot {
+  readonly resolveBinPath: string;
+  readonly externalToolVersionPath: string;
+  readonly origResolveBin: Record<string, unknown>;
+  readonly origExternalToolVersion: Record<string, unknown>;
+}
+
+/**
+ * Restore the real `resolve-bin` / `external-tool-version` modules after a spec
+ * that mocked them. Shared by the oxlint / oxfmt runner specs' `afterAll`.
+ */
+export const restoreToolMocks = (snapshot: ToolModuleSnapshot): void => {
+  mock.restore();
+  void mock.module(snapshot.resolveBinPath, () => snapshot.origResolveBin);
+  void mock.module(snapshot.externalToolVersionPath, () => snapshot.origExternalToolVersion);
+};
 
 export interface TempProject {
   readonly rootAbs: string;

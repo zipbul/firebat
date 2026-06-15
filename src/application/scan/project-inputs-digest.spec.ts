@@ -3,23 +3,10 @@ import type { Gildash } from '@zipbul/gildash';
 import { GildashError } from '@zipbul/gildash';
 import { describe, it, expect } from 'bun:test';
 
+import { makeFileRecord, makeGildash } from '../../../test/integration/shared/test-kit';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const makeFileRecord = (filePath: string, contentHash = 'abc123') => ({
-  project: 'test',
-  filePath,
-  mtimeMs: 1000,
-  size: 100,
-  contentHash,
-  updatedAt: new Date().toISOString(),
-});
-
-const makeGildash = (getFileInfoImpl: (filePath: string) => ReturnType<Gildash['getFileInfo']>): Gildash =>
-  ({
-    getFileInfo: getFileInfoImpl,
-  }) as unknown as Gildash;
 
 const noopGildash = makeGildash(() => null);
 

@@ -40,6 +40,31 @@ const findKinds = (findings: Awaited<ReturnType<typeof analyzeIndirection>>, kin
   return findings.filter(finding => finding.kind === kind);
 };
 
+interface TypeRemapReportCase {
+  name: string;
+  source: string;
+  header: string;
+}
+
+interface TypeRemapSkipCase {
+  name: string;
+  filePath: string;
+  source: string;
+}
+
+interface InterfaceRewrapReportCase {
+  name: string;
+  source: string;
+  header: string;
+}
+
+interface InterfaceRewrapSkipCase {
+  name: string;
+  filePath: string;
+  source: string;
+  gildash: Gildash;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Tests                                                              */
 /* ------------------------------------------------------------------ */
@@ -450,232 +475,56 @@ describe('analyzer', () => {
   });
 
   describe('type-remap', () => {
-    it('analyzeIndirection - type alias is direct synonym - reports type-remap', async () => {
+    // Each row declares a type alias that is a direct synonym; `header` is the
+    // reported alias name.
+    const reportCases: TypeRemapReportCase[] = [
+      { name: 'type alias is direct synonym', source: 'type A = B;', header: 'A' },
+      { name: 'exported type alias synonym', source: 'export type A = B;', header: 'A' },
+      { name: 'namespace qualified type synonym', source: 'type Node = ts.Node;', header: 'Node' },
+    ];
+
+    it.each(reportCases)('analyzeIndirection - $name - reports type-remap', async ({ source, header }) => {
       // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type A = B;');
-      const gildash = createMockGildash();
+      const program = createProgram('/virtual/remap.ts', source);
       // Act
-      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
       const remaps = findKinds(analysis, 'type-remap');
 
       // Assert
       expect(remaps.length).toBe(1);
-      expect(remaps[0]?.header).toBe('A');
+      expect(remaps[0]?.header).toBe(header);
     });
 
-    it('analyzeIndirection - exported type alias synonym - reports type-remap', async () => {
+    // Each row is a type alias that must NOT be reported as a synonym; `filePath`
+    // carries the d.ts variant for the ambient-declaration case.
+    const skipCases: TypeRemapSkipCase[] = [
+      { name: 'type alias to primitive keyword', filePath: '/virtual/remap.ts', source: 'type UserId = string;' },
+      { name: 'type alias with generic args', filePath: '/virtual/remap.ts', source: 'type StringArray = Array<string>;' },
+      { name: 'type alias with type params', filePath: '/virtual/remap.ts', source: 'type MyArray<T> = Array<T>;' },
+      { name: 'union type alias', filePath: '/virtual/remap.ts', source: 'type A = B | null;' },
+      { name: 'intersection type alias', filePath: '/virtual/remap.ts', source: 'type A = B & { x: 1 };' },
+      { name: 'typeof type alias', filePath: '/virtual/remap.ts', source: 'const x = 1; type Config = typeof x;' },
+      {
+        name: 'utility type alias with generic args',
+        filePath: '/virtual/remap.ts',
+        source: 'type ReadonlyUser = Readonly<User>;',
+      },
+      { name: 'keyof type alias', filePath: '/virtual/remap.ts', source: 'type Keys = keyof User;' },
+      { name: 'indexed access type alias', filePath: '/virtual/remap.ts', source: "type Name = User['name'];" },
+      { name: 'template literal type alias', filePath: '/virtual/remap.ts', source: 'type E = `on${string}`;' },
+      { name: 'object literal type alias', filePath: '/virtual/remap.ts', source: 'type T = { x: number };' },
+      { name: 'declare type alias', filePath: '/virtual/remap.ts', source: 'declare type A = B;' },
+      { name: 'd.ts file type alias', filePath: '/virtual/remap.d.ts', source: 'type A = B;' },
+    ];
+
+    it.each(skipCases)('analyzeIndirection - $name - skips', async ({ filePath, source }) => {
       // Arrange
-      const program = createProgram('/virtual/remap.ts', 'export type A = B;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(1);
-    });
-
-    it('analyzeIndirection - namespace qualified type synonym - reports type-remap', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type Node = ts.Node;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(1);
-    });
-
-    it('analyzeIndirection - type alias to primitive keyword - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type UserId = string;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - type alias with generic args - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type StringArray = Array<string>;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - type alias with type params - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type MyArray<T> = Array<T>;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - union type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type A = B | null;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - intersection type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type A = B & { x: 1 };');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - typeof type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'const x = 1; type Config = typeof x;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - utility type alias with generic args - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type ReadonlyUser = Readonly<User>;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - keyof type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type Keys = keyof User;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - indexed access type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', "type Name = User['name'];");
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - template literal type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type E = `on${string}`;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - object literal type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'type T = { x: number };');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - declare type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.ts', 'declare type A = B;');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'type-remap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - d.ts file type alias - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/remap.d.ts', 'type A = B;');
+      const program = createProgram(filePath, source);
       // Act
       const analysis = await analyzeIndirection(
         createMockGildash(),
@@ -690,9 +539,17 @@ describe('analyzer', () => {
   });
 
   describe('interface-rewrap', () => {
-    it('analyzeIndirection - empty interface with single extends - reports interface-rewrap', async () => {
+    // Each row is an empty interface that only re-wraps its base(s); `header` is
+    // the reported interface name.
+    const reportCases: InterfaceRewrapReportCase[] = [
+      { name: 'empty interface with single extends', source: 'interface A extends B {}', header: 'A' },
+      { name: 'empty interface with multiple extends', source: 'interface A extends B, C {}', header: 'A' },
+      { name: 'empty interface extends generic base', source: 'interface A extends BaseRepo<User> {}', header: 'A' },
+    ];
+
+    it.each(reportCases)('analyzeIndirection - $name - reports interface-rewrap', async ({ source, header }) => {
       // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'interface A extends B {}');
+      const program = createProgram('/virtual/rewrap.ts', source);
       // Act
       const analysis = await analyzeIndirection(
         createMockGildash(),
@@ -704,158 +561,73 @@ describe('analyzer', () => {
 
       // Assert
       expect(rewraps.length).toBe(1);
-      expect(rewraps[0]?.header).toBe('A');
+      expect(rewraps[0]?.header).toBe(header);
     });
 
-    it('analyzeIndirection - empty interface with multiple extends - reports interface-rewrap', async () => {
+    // Each row is an interface that must NOT be reported as a re-wrap. `filePath`
+    // carries the d.ts variant; `gildash` carries the cross-file-merge override
+    // (default mock otherwise) so the callback never needs a conditional.
+    const skipCases: InterfaceRewrapSkipCase[] = [
+      {
+        name: 'interface with members',
+        filePath: '/virtual/rewrap.ts',
+        source: 'interface A extends B { x: number }',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'marker interface without extends',
+        filePath: '/virtual/rewrap.ts',
+        source: 'interface A {}',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'declare interface',
+        filePath: '/virtual/rewrap.ts',
+        source: 'declare interface A extends B {}',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'same-file interface declaration merging',
+        filePath: '/virtual/rewrap.ts',
+        source: 'interface Foo extends Bar {}\ninterface Foo { x: number }',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'class-interface declaration merging',
+        filePath: '/virtual/rewrap.ts',
+        source: 'interface Table extends SQLWrapper {}\nclass Table implements SQLWrapper { static kind = "Table"; }',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'cross-file declaration merging',
+        filePath: '/virtual/rewrap.ts',
+        source: 'interface Express extends Base {}',
+        gildash: createMockGildash({
+          searchSymbols: () => [
+            { name: 'Express', filePath: '/virtual/rewrap.ts', kind: 'interface' } as unknown as SymbolSearchResult,
+            { name: 'Express', filePath: '/virtual/other.ts', kind: 'interface' } as unknown as SymbolSearchResult,
+          ],
+        }),
+      },
+      {
+        name: 'module augmentation interface',
+        filePath: '/virtual/rewrap.ts',
+        source: "declare module 'express' { interface Request extends Base {} }",
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'd.ts file interface',
+        filePath: '/virtual/rewrap.d.ts',
+        source: 'interface A extends B {}',
+        gildash: createMockGildash(),
+      },
+    ];
+
+    it.each(skipCases)('analyzeIndirection - $name - skips', async ({ filePath, source, gildash }) => {
       // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'interface A extends B, C {}');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(1);
-    });
-
-    it('analyzeIndirection - empty interface extends generic base - reports interface-rewrap', async () => {
-      // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'interface A extends BaseRepo<User> {}');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(1);
-    });
-
-    it('analyzeIndirection - interface with members - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'interface A extends B { x: number }');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - marker interface without extends - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'interface A {}');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - declare interface - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'declare interface A extends B {}');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - same-file interface declaration merging - skips', async () => {
-      // Arrange
-      const source = 'interface Foo extends Bar {}\ninterface Foo { x: number }';
-      const program = createProgram('/virtual/rewrap.ts', source);
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - class-interface declaration merging - skips', async () => {
-      // Arrange
-      const source = 'interface Table extends SQLWrapper {}\nclass Table implements SQLWrapper { static kind = "Table"; }';
-      const program = createProgram('/virtual/rewrap.ts', source);
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - cross-file declaration merging - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/rewrap.ts', 'interface Express extends Base {}');
-      const gildash = createMockGildash({
-        searchSymbols: () => [
-          { name: 'Express', filePath: '/virtual/rewrap.ts', kind: 'interface' } as unknown as SymbolSearchResult,
-          { name: 'Express', filePath: '/virtual/other.ts', kind: 'interface' } as unknown as SymbolSearchResult,
-        ],
-      });
+      const program = createProgram(filePath, source);
       // Act
       const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - module augmentation interface - skips', async () => {
-      // Arrange
-      const source = "declare module 'express' { interface Request extends Base {} }";
-      const program = createProgram('/virtual/rewrap.ts', source);
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
-
-      // Assert
-      expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);
-    });
-
-    it('analyzeIndirection - d.ts file interface - skips', async () => {
-      // Arrange
-      const program = createProgram('/virtual/rewrap.d.ts', 'interface A extends B {}');
-      // Act
-      const analysis = await analyzeIndirection(
-        createMockGildash(),
-        program,
-        { maxForwardDepth: 0, crossFileMinDepth: 2 },
-        '/virtual',
-      );
 
       // Assert
       expect(findKinds(analysis, 'interface-rewrap').length).toBe(0);

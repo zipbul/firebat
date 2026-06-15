@@ -20,11 +20,33 @@ export const withCwd = async <T>(cwdAbs: string, fn: () => Promise<T>): Promise<
   }
 };
 
+export interface ScanProjectFixture {
+  readonly rootAbs: string;
+  readonly srcFileAbs: string;
+  dispose: () => Promise<void>;
+}
+
 export interface ScanProjectFixtureMulti {
   readonly rootAbs: string;
   readonly targetsAbs: ReadonlyArray<string>;
   dispose: () => Promise<void>;
 }
+
+/**
+ * Single-file variant of {@link createScanProjectFixtureWithFiles}: writes
+ * `sourceText` to `src/a.ts` alongside the standard package.json / tsconfig.json
+ * and exposes that one file's absolute path as `srcFileAbs`.
+ */
+export const createScanProjectFixture = async (prefix: string, sourceText: string): Promise<ScanProjectFixture> => {
+  const fixture = await createScanProjectFixtureWithFiles(prefix, { 'src/a.ts': sourceText });
+  const srcFileAbs = path.join(fixture.rootAbs, 'src', 'a.ts');
+
+  return {
+    rootAbs: fixture.rootAbs,
+    srcFileAbs,
+    dispose: fixture.dispose,
+  };
+};
 
 export const createScanProjectFixtureWithFiles = async (
   prefix: string,
@@ -86,6 +108,49 @@ export const expectBaseFinding = (
   expect(typeof item.file).toBe('string');
   expect(item.file.endsWith('.ts')).toBe(true);
   expect(item.span).toBeDefined();
+};
+
+/**
+ * Assert `analyses[detector]` is a bare array, locate the finding whose `kind`
+ * matches, assert it exists, and return it. Report-contract tests repeat this
+ * "array + find-by-kind + defined" preamble for several detectors.
+ */
+export const findBareFindingByKind = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  analyses: any,
+  detector: string,
+  kind: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): any => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const findings = analyses[detector] as any;
+
+  expect(Array.isArray(findings)).toBe(true);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const match = (findings as any[]).find(f => f?.kind === kind);
+
+  expect(match).toBeDefined();
+
+  return match;
+};
+
+/**
+ * Assert the "bare finding" wire shape: a string `file` that contains
+ * `fileSubstring`, with none of the legacy wrapper fields (`filePath`, `status`,
+ * `tool`) present. Multiple report-contract tests assert this same shape for
+ * different detectors, so it lives here as one contract.
+ */
+export const expectBareFindingShape = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  item: any,
+  fileSubstring: string,
+): void => {
+  expect(typeof item?.file).toBe('string');
+  expect(item?.file).toContain(fileSubstring);
+  expect(item?.filePath).toBeUndefined();
+  expect(item?.status).toBeUndefined();
+  expect(item?.tool).toBeUndefined();
 };
 
 /**

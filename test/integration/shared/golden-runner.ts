@@ -21,7 +21,7 @@ import type { ParsedFile } from '../../../src/test-api';
 
 import { parseSource } from '../../../src/test-api';
 import { PartialResultError } from '../../../src/test-api';
-import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
+import { compareGolden, toGoldenJson } from './golden-utils';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,23 +129,7 @@ export const runGolden = <T = unknown>(
       }
     }
 
-    const actualJson = toGoldenJson(actual);
-    const expectedJson = readExpected(expectedDir, name);
-
-    if (expectedJson === null) {
-      // First run: create the expected file and fail so the developer can review.
-      writeExpected(expectedDir, name, actualJson);
-
-      throw new Error(
-        `[golden] Created new expected file for "${name}". ` + `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
-      );
-    }
-
-    // Compare
-    const expectedParsed = JSON.parse(expectedJson.trim()) as unknown;
-    const actualParsed = JSON.parse(actualJson) as unknown;
-
-    expect(actualParsed).toEqual(expectedParsed);
+    const { expectedParsed } = compareGolden(expectedDir, name, actual);
 
     // ── Order stability (P2-19): reversed program input → same result ──────────
     if (program.length > 1) {

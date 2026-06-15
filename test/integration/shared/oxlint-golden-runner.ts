@@ -23,15 +23,19 @@ import { parseSync as oxcParseSync } from 'oxc-parser';
 
 import type { AstNode, AstNodeValue, RuleContext, Variable } from '../../../src/test-api';
 
+import {
+  collectIdentifierUsages,
+  ensureRangesDeep,
+  isAstNode,
+  traverseAndVisit,
+  type Visitor,
+} from '../oxlint-plugin/utils/ast-walk';
+import { getRange as getRangeTuple } from '../oxlint-plugin/utils/fuzz-rng';
 import { applyFixes, createRuleContext, createSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../oxlint-plugin/utils/token-utils';
-import { readExpected, toGoldenJson, writeExpected } from './golden-utils';
+import { compareGolden } from './golden-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Visitor {
-  [key: string]: ((node: AstNode) => void) | undefined;
-}
 
 export interface RuleModule {
   create(context: RuleContext): Visitor;
@@ -61,187 +65,24 @@ interface GoldenRuleResult {
   fixedSource?: string;
 }
 
-// ── AST utilities (mirrors autofix-invariants-parser-fuzz.ts) ─────────────────
-
-interface AstNodeShape {
-  type?: string;
-}
-
-const isAstNode = (value: AstNodeValue | AstNodeShape | null | undefined): value is AstNode => {
-  if (value === null || value === undefined || Array.isArray(value)) {
-    return false;
-  }
-
-  if (typeof value !== 'object') {
-    return false;
-  }
-
-  return typeof (value as AstNodeShape).type === 'string';
-};
-
-/**
- * The oxc-parser may produce `start`/`end` numeric fields alongside (or
- * instead of) `range`. Normalise them to the `range: [start, end]` form that
- * rule implementations expect.
- */
-const ensureRangesDeep = (root: AstNodeValue | null | undefined): void => {
-  const seen = new WeakSet<AstNode>();
-
-  const walk = (value: AstNodeValue | null | undefined): void => {
-    if (value === null || value === undefined) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-
-      return;
-    }
-
-    if (!isAstNode(value)) {
-      return;
-    }
-
-    if (seen.has(value)) {
-      return;
-    }
-
-    seen.add(value);
-
-    const start = (value as Record<string, unknown>)['start'];
-    const end = (value as Record<string, unknown>)['end'];
-    const range = value.range;
-
-    if (!Array.isArray(range) && typeof start === 'number' && typeof end === 'number') {
-      value.range = [start, end];
-    }
-
-    for (const key of Object.keys(value)) {
-      if (key === 'parent') {
-        continue;
-      }
-
-      const child = value[key];
-
-      if (Array.isArray(child)) {
-        for (const item of child) {
-          walk(item);
-        }
-
-        continue;
-      }
-
-      walk(child);
-    }
-  };
-
-  walk(root);
-};
-
-const traverseAndVisit = (root: AstNodeValue | null | undefined, visitor: Visitor): void => {
-  const seen = new WeakSet<AstNode>();
-
-  const walk = (value: AstNodeValue | null | undefined): void => {
-    if (value === null || value === undefined) {
-      return;
-    }
-
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        walk(item);
-      }
-
-      return;
-    }
-
-    if (!isAstNode(value)) {
-      return;
-    }
-
-    if (seen.has(value)) {
-      return;
-    }
-
-    seen.add(value);
-
-    const handler = visitor[value.type];
-
-    if (typeof handler === 'function') {
-      handler(value);
-    }
-
-    for (const key of Object.keys(value)) {
-      if (key === 'parent') {
-        continue;
-      }
-
-      const child = value[key];
-
-      if (Array.isArray(child)) {
-        for (const item of child) {
-          walk(item);
-        }
-
-        continue;
-      }
-
-      walk(child);
-    }
-  };
-
-  walk(root);
-};
+// ── getDeclaredVariables ──────────────────────────────────────────────────────
 
 /**
  * Build a getDeclaredVariables callback for import-aware rules (e.g. unused-imports).
  * Walks the real program AST to collect identifier usages.
  */
 const buildGetDeclaredVariables = (program: AstNode): ((node: AstNode) => Variable[]) => {
-  const getRangeTuple = (node: AstNode | null | undefined): [number, number] | null => {
-    if (!node || !Array.isArray(node.range) || node.range.length !== 2) {
-      return null;
-    }
-
-    const start = node.range[0];
-    const end = node.range[1];
-
-    if (typeof start !== 'number' || typeof end !== 'number') {
-      return null;
-    }
-
-    return [start, end];
-  };
-
-  const collectUsages = (name: string, excludeRange: [number, number] | null): AstNode[] => {
-    const out: AstNode[] = [];
-
-    traverseAndVisit(program, {
-      Identifier(node) {
-        if (typeof node.name !== 'string' || node.name !== name) {
-          return;
-        }
-
-        const range = getRangeTuple(node);
-
-        if (!range) {
-          return;
-        }
-
-        const es = excludeRange?.[0];
-        const ee = excludeRange?.[1];
-
-        if (es !== undefined && ee !== undefined && range[0] >= es && range[1] <= ee) {
-          return;
-        }
-
-        out.push(node);
-      },
-    });
-
-    return out;
-  };
+  // Build one declared Variable: its sole identifier plus every usage outside
+  // the declaration's own range. Shared by all declaration kinds below so the
+  // identifier+references shape lives in one place.
+  const buildVariable = (
+    name: string,
+    idRange: [number, number],
+    excludeRange: [number, number] | null,
+  ): Variable => ({
+    identifiers: [{ type: 'Identifier', range: idRange, name }],
+    references: collectIdentifierUsages(program, name, excludeRange, getRangeTuple),
+  });
 
   return (node: AstNode): Variable[] => {
     if (node.type === 'ImportDeclaration') {
@@ -258,12 +99,7 @@ const buildGetDeclaredVariables = (program: AstNode): ((node: AstNode) => Variab
           continue;
         }
 
-        const references = collectUsages(localName, importRange);
-
-        vars.push({
-          identifiers: [{ type: 'Identifier', range: localRange, name: localName }],
-          references,
-        } satisfies Variable);
+        vars.push(buildVariable(localName, localRange, importRange));
       }
 
       return vars;
@@ -289,12 +125,7 @@ const buildGetDeclaredVariables = (program: AstNode): ((node: AstNode) => Variab
           continue;
         }
 
-        const references = collectUsages(idName, declRange);
-
-        vars.push({
-          identifiers: [{ type: 'Identifier', range: idRange, name: idName }],
-          references,
-        } satisfies Variable);
+        vars.push(buildVariable(idName, idRange, declRange));
       }
 
       return vars;
@@ -315,14 +146,7 @@ const buildGetDeclaredVariables = (program: AstNode): ((node: AstNode) => Variab
         return [];
       }
 
-      const references = collectUsages(idName, nodeRange);
-
-      return [
-        {
-          identifiers: [{ type: 'Identifier', range: idRange, name: idName }],
-          references,
-        } satisfies Variable,
-      ];
+      return [buildVariable(idName, idRange, nodeRange)];
     }
 
     return [];
@@ -418,21 +242,8 @@ export const runGoldenRule = (testDir: string, name: string, rule: RuleModule, o
   it(`golden: ${name}`, () => {
     const source = readFixtureSource(fixturesDir, name);
     const actual = runRuleOnSource(source, rule, opts);
-    const actualJson = toGoldenJson(actual);
-    const expectedJson = readExpected(expectedDir, name);
 
-    if (expectedJson === null) {
-      writeExpected(expectedDir, name, actualJson);
-
-      throw new Error(
-        `[golden] Created new expected file for "${name}". ` + `Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
-      );
-    }
-
-    const expectedParsed = JSON.parse(expectedJson.trim()) as unknown;
-    const actualParsed = JSON.parse(actualJson) as unknown;
-
-    expect(actualParsed).toEqual(expectedParsed);
+    compareGolden(expectedDir, name, actual);
 
     // ── Autofix round-trip + idempotency (P2-18) ──────────────────────────────
     if (typeof actual.fixedSource === 'string') {

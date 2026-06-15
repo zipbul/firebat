@@ -6,6 +6,7 @@
  * single source of truth for those helpers to prevent drift between the two
  * runners.
  */
+import { expect } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -60,4 +61,38 @@ export const readExpected = (expectedDir: string, name: string): string | null =
 export const writeExpected = (expectedDir: string, name: string, json: string): void => {
   fs.mkdirSync(expectedDir, { recursive: true });
   fs.writeFileSync(path.join(expectedDir, `${name}.json`), `${json}\n`, 'utf8');
+};
+
+// ── Golden comparison ────────────────────────────────────────────────────────
+
+export interface GoldenComparison {
+  expectedParsed: unknown;
+  actualParsed: unknown;
+}
+
+/**
+ * Serialize `actual`, compare it against the stored expected file, and assert
+ * equality. On the first run (no expected file) the expected file is written and
+ * the test fails so the developer can review it. Returns the parsed expected and
+ * actual values for any follow-up assertions (e.g. order-stability checks).
+ *
+ * Both golden runners share this read/first-run-write/compare decision; routing
+ * them through one helper keeps that contract in a single place.
+ */
+export const compareGolden = (expectedDir: string, name: string, actual: unknown): GoldenComparison => {
+  const actualJson = toGoldenJson(actual);
+  const expectedJson = readExpected(expectedDir, name);
+
+  if (expectedJson === null) {
+    writeExpected(expectedDir, name, actualJson);
+
+    throw new Error(`[golden] Created new expected file for "${name}". Review ${path.join(expectedDir, `${name}.json`)} and re-run.`);
+  }
+
+  const expectedParsed = JSON.parse(expectedJson.trim()) as unknown;
+  const actualParsed = JSON.parse(actualJson) as unknown;
+
+  expect(actualParsed).toEqual(expectedParsed);
+
+  return { expectedParsed, actualParsed };
 };

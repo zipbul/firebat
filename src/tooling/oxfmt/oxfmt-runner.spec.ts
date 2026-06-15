@@ -1,26 +1,23 @@
 import { mock, describe, it, expect, spyOn, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as path from 'node:path';
 
+import { makeProc, restoreToolMocks } from '../../../test/integration/shared/external-tool-test-kit';
+
 // mock.module must come BEFORE importing oxfmt-runner (which imports these at module level)
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxfmt' as string | null };
 const mockVersionOnce = { logExternalToolVersionOnce: async (_args: unknown) => {} };
-const __origResolveBin = { ...require(path.resolve(import.meta.dir, '../resolve-bin.ts')) };
-const __origExternalToolVersion = { ...require(path.resolve(import.meta.dir, '../external-tool-version.ts')) };
+const resolveBinPath = path.resolve(import.meta.dir, '../resolve-bin.ts');
+const externalToolVersionPath = path.resolve(import.meta.dir, '../external-tool-version.ts');
+const origResolveBin = { ...require(resolveBinPath) };
+const origExternalToolVersion = { ...require(externalToolVersionPath) };
 
-void mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => mockResolveBin);
-void mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => mockVersionOnce);
+void mock.module(resolveBinPath, () => mockResolveBin);
+void mock.module(externalToolVersionPath, () => mockVersionOnce);
 
 import { createNoopLogger } from '../../shared/logger';
 import { runOxfmt } from './oxfmt-runner';
 
 const logger = createNoopLogger('error');
-
-const makeProc = (stdout = '', stderr = '', exitCode = 0) => ({
-  stdout: new Response(stdout).body!,
-  stderr: new Response(stderr).body!,
-  exited: Promise.resolve(exitCode),
-});
-
 let spawnSpy: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
@@ -31,6 +28,38 @@ beforeEach(() => {
 afterEach(() => {
   spawnSpy?.mockRestore();
 });
+
+interface ConfigFlagRow {
+  readonly name: string;
+  readonly configPath: string;
+  readonly assertCmd: (cmd: string[]) => void;
+}
+
+const expectConfigPresent =
+  (configPath: string) =>
+  (cmd: string[]): void => {
+    expect(cmd).toContain('--config');
+    expect(cmd).toContain(configPath);
+  };
+
+const expectConfigAbsent = (cmd: string[]): void => {
+  expect(cmd).not.toContain('--config');
+};
+
+const configFlagRows: ConfigFlagRow[] = [
+  {
+    name: 'include --config in args when configPath is provided',
+    configPath: '/p/.oxfmtrc',
+    assertCmd: expectConfigPresent('/p/.oxfmtrc'),
+  },
+  {
+    name: 'include --config flag when configPath is provided (cfg path)',
+    configPath: '/cfg/.oxfmtrc',
+    assertCmd: expectConfigPresent('/cfg/.oxfmtrc'),
+  },
+  { name: 'not include --config when configPath is whitespace only', configPath: '   ', assertCmd: expectConfigAbsent },
+  { name: 'NOT include --config flag when configPath is only whitespace', configPath: '   ', assertCmd: expectConfigAbsent },
+];
 
 describe('runOxfmt', () => {
   it('should return ok:false with error when binary is not resolved', async () => {
@@ -72,39 +101,17 @@ describe('runOxfmt', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('should include --config in args when configPath is provided', async () => {
+  it.each(configFlagRows)('should $name', async ({ configPath, assertCmd }) => {
     // Arrange
-    let capturedCmd: string[] | undefined;
-
-    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) => {
-      capturedCmd = cmd;
-
-      return makeProc() as ReturnType<typeof Bun.spawn>;
-    }) as unknown as typeof Bun.spawn);
+    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc() as ReturnType<typeof Bun.spawn>);
 
     // Act
-    await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath: '/p/.oxfmtrc', logger });
+    await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath, logger });
 
     // Assert
-    expect(capturedCmd).toContain('--config');
-    expect(capturedCmd).toContain('/p/.oxfmtrc');
-  });
+    const spawnCall = (spawnSpy.mock.calls[0] as [{ cmd: string[] }])[0];
 
-  it('should not include --config when configPath is whitespace only', async () => {
-    // Arrange
-    let capturedCmd: string[] | undefined;
-
-    spawnSpy = spyOn(Bun, 'spawn').mockImplementation((({ cmd }: { cmd: string[] }) => {
-      capturedCmd = cmd;
-
-      return makeProc() as ReturnType<typeof Bun.spawn>;
-    }) as unknown as typeof Bun.spawn);
-
-    // Act
-    await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath: '   ', logger });
-
-    // Assert
-    expect(capturedCmd).not.toContain('--config');
+    assertCmd(spawnCall.cmd);
   });
 
   it('should return ok:false when exit code is non-zero with empty stdout (config error)', async () => {
@@ -149,37 +156,8 @@ describe('runOxfmt', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('spawn error');
   });
-
-  it('should include --config flag when configPath is provided', async () => {
-    // Arrange
-    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc() as ReturnType<typeof Bun.spawn>);
-
-    // Act
-    await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath: '/cfg/.oxfmtrc', logger });
-
-    // Assert
-    const spawnCall = (spawnSpy.mock.calls[0] as [{ cmd: string[] }])[0];
-
-    expect(spawnCall.cmd).toContain('--config');
-    expect(spawnCall.cmd).toContain('/cfg/.oxfmtrc');
-  });
-
-  it('should NOT include --config flag when configPath is only whitespace', async () => {
-    // Arrange
-    spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc() as ReturnType<typeof Bun.spawn>);
-
-    // Act
-    await runOxfmt({ targets: ['/f.ts'], mode: 'check', configPath: '   ', logger });
-
-    // Assert
-    const spawnCall = (spawnSpy.mock.calls[0] as [{ cmd: string[] }])[0];
-
-    expect(spawnCall.cmd).not.toContain('--config');
-  });
 });
 
 afterAll(() => {
-  mock.restore();
-  void mock.module(path.resolve(import.meta.dir, '../resolve-bin.ts'), () => __origResolveBin);
-  void mock.module(path.resolve(import.meta.dir, '../external-tool-version.ts'), () => __origExternalToolVersion);
+  restoreToolMocks({ resolveBinPath, externalToolVersionPath, origResolveBin, origExternalToolVersion });
 });

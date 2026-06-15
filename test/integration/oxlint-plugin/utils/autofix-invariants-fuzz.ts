@@ -128,6 +128,52 @@ const buildTwoStatementProgram = (
   };
 };
 
+interface StatementGroupRule {
+  create(context: ReturnType<typeof createRuleContext>['context']): { Program(node: AstNode): void };
+}
+
+/**
+ * Run a two-statement padding/blank-line rule, apply its autofix, then re-run it
+ * on a freshly-positioned program and assert the second pass reports nothing —
+ * the round-trip idempotency invariant. Both padding branches and the blank-line
+ * branch share this exact check; only the rule and the two node shapes vary.
+ */
+const assertStatementGroupIdempotent = (
+  rule: StatementGroupRule,
+  stmtA: string,
+  stmtB: string,
+  between: string,
+  prevNode: AstNode,
+  nextNode: AstNode,
+  errorMessage: string,
+): void => {
+  const { text, program } = buildTwoStatementProgram(stmtA, stmtB, between, prevNode, nextNode);
+  const sourceCode = createSourceCode(text, null, null, []);
+  const { context, reports } = createRuleContext(sourceCode, []);
+  const visitor = rule.create(context);
+
+  visitor.Program(program);
+
+  const fixed = applyFixes(text, reports);
+  const bStart2 = fixed.indexOf(stmtB);
+  const program2: AstNode = {
+    type: 'Program',
+    body: [
+      { ...prevNode, range: [0, stmtA.length] },
+      { ...nextNode, range: [bStart2, bStart2 + stmtB.length] },
+    ],
+  };
+  const sourceCode2 = createSourceCode(fixed, null, null, []);
+  const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
+  const visitor2 = rule.create(context2);
+
+  visitor2.Program(program2);
+
+  if (reports2.length !== 0) {
+    throw new Error(errorMessage);
+  }
+};
+
 const runAutofixInvariantsFuzz = (): void => {
   const seeds = [1, 2, 3, 4, 5, 42, 1337, 9001];
 
@@ -284,79 +330,33 @@ const runAutofixInvariantsFuzz = (): void => {
       if (mode === 'const-const') {
         const a = makeIdentifier(rng, 3, 8);
         const b = makeIdentifier(rng, 3, 8);
-        const stmtA = `const ${a} = 1;`;
-        const stmtB = `const ${b} = 2;`;
         const hasBlank = rng.bool(0.6);
-        const { text, program } = buildTwoStatementProgram(
-          stmtA,
-          stmtB,
+
+        assertStatementGroupIdempotent(
+          paddingLineBetweenStatementsRule,
+          `const ${a} = 1;`,
+          `const ${b} = 2;`,
           hasBlank ? `${nl}${nl}` : nl,
           { type: 'VariableDeclaration', kind: 'const', declarations: [] },
           { type: 'VariableDeclaration', kind: 'const', declarations: [] },
+          'Expected padding-line-between-statements to be idempotent for const/const.',
         );
-        const sourceCode = createSourceCode(text, null, null, []);
-        const { context, reports } = createRuleContext(sourceCode, []);
-        const visitor = paddingLineBetweenStatementsRule.create(context);
-
-        visitor.Program(program);
-
-        const fixed = applyFixes(text, reports);
-        const bStart2 = fixed.indexOf(stmtB);
-        const program2: AstNode = {
-          type: 'Program',
-          body: [
-            { type: 'VariableDeclaration', kind: 'const', declarations: [], range: [0, stmtA.length] },
-            { type: 'VariableDeclaration', kind: 'const', declarations: [], range: [bStart2, bStart2 + stmtB.length] },
-          ],
-        };
-        const sourceCode2 = createSourceCode(fixed, null, null, []);
-        const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-        const visitor2 = paddingLineBetweenStatementsRule.create(context2);
-
-        visitor2.Program(program2);
-
-        if (reports2.length !== 0) {
-          throw new Error('Expected padding-line-between-statements to be idempotent for const/const.');
-        }
       }
 
       if (mode === 'const-fn') {
         const a = makeIdentifier(rng, 3, 8);
         const f = makeIdentifier(rng, 3, 8);
-        const stmtA = `const ${a} = 1;`;
-        const stmtB = `function ${f}() {}`;
         const hasBlank = rng.bool(0.4);
-        const { text, program } = buildTwoStatementProgram(
-          stmtA,
-          stmtB,
+
+        assertStatementGroupIdempotent(
+          paddingLineBetweenStatementsRule,
+          `const ${a} = 1;`,
+          `function ${f}() {}`,
           hasBlank ? `${nl}${nl}` : nl,
           { type: 'VariableDeclaration', kind: 'const', declarations: [] },
           { type: 'FunctionDeclaration' },
+          'Expected padding-line-between-statements to be idempotent for const/function.',
         );
-        const sourceCode = createSourceCode(text, null, null, []);
-        const { context, reports } = createRuleContext(sourceCode, []);
-        const visitor = paddingLineBetweenStatementsRule.create(context);
-
-        visitor.Program(program);
-
-        const fixed = applyFixes(text, reports);
-        const bStart2 = fixed.indexOf(stmtB);
-        const program2: AstNode = {
-          type: 'Program',
-          body: [
-            { type: 'VariableDeclaration', kind: 'const', declarations: [], range: [0, stmtA.length] },
-            { type: 'FunctionDeclaration', range: [bStart2, bStart2 + stmtB.length] },
-          ],
-        };
-        const sourceCode2 = createSourceCode(fixed, null, null, []);
-        const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-        const visitor2 = paddingLineBetweenStatementsRule.create(context2);
-
-        visitor2.Program(program2);
-
-        if (reports2.length !== 0) {
-          throw new Error('Expected padding-line-between-statements to be idempotent for const/function.');
-        }
       }
     }
   }
@@ -370,40 +370,17 @@ const runAutofixInvariantsFuzz = (): void => {
       const nl = newline(rng);
       const fn = makeIdentifier(rng, 3, 8);
       const v = makeIdentifier(rng, 3, 8);
-      const stmtA = `function ${fn}() {}`;
-      const stmtB = `const ${v} = 1;`;
       const hasBlank = rng.bool(0.3);
-      const { text, program } = buildTwoStatementProgram(
-        stmtA,
-        stmtB,
+
+      assertStatementGroupIdempotent(
+        blankLinesBetweenStatementGroupsRule,
+        `function ${fn}() {}`,
+        `const ${v} = 1;`,
         hasBlank ? `${nl}${nl}` : nl,
         { type: 'FunctionDeclaration' },
         { type: 'VariableDeclaration', kind: 'const', declarations: [] },
+        'Expected blank-lines-between-statement-groups to be idempotent.',
       );
-      const sourceCode = createSourceCode(text, null, null, []);
-      const { context, reports } = createRuleContext(sourceCode, []);
-      const visitor = blankLinesBetweenStatementGroupsRule.create(context);
-
-      visitor.Program(program);
-
-      const fixed = applyFixes(text, reports);
-      const bStart2 = fixed.indexOf(stmtB);
-      const program2: AstNode = {
-        type: 'Program',
-        body: [
-          { type: 'FunctionDeclaration', range: [0, stmtA.length] },
-          { type: 'VariableDeclaration', kind: 'const', declarations: [], range: [bStart2, bStart2 + stmtB.length] },
-        ],
-      };
-      const sourceCode2 = createSourceCode(fixed, null, null, []);
-      const { context: context2, reports: reports2 } = createRuleContext(sourceCode2, []);
-      const visitor2 = blankLinesBetweenStatementGroupsRule.create(context2);
-
-      visitor2.Program(program2);
-
-      if (reports2.length !== 0) {
-        throw new Error('Expected blank-lines-between-statement-groups to be idempotent.');
-      }
     }
   }
 };

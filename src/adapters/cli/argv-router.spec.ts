@@ -2,31 +2,41 @@ import { describe, expect, test } from 'bun:test';
 
 import { routeFirebatArgv } from './argv-router';
 
+interface UpdateRouteRow {
+  name: string;
+  argv: string[];
+  logLevel: string;
+  logStack: boolean;
+  subcommandArgv: string[];
+}
+
 describe('argv-router', () => {
-  test('should route to update when global flags precede command', () => {
-    // Arrange
-    const argv = ['--log-level', 'trace', 'update'];
+  const updateRouteRows: UpdateRouteRow[] = [
+    {
+      name: 'should route to update when global flags precede command',
+      argv: ['--log-level', 'trace', 'update'],
+      logLevel: 'trace',
+      logStack: false,
+      subcommandArgv: [],
+    },
+    {
+      name: 'should strip global log flags from update argv',
+      argv: ['update', '--log-level=debug', '--log-stack', '--yes'],
+      logLevel: 'debug',
+      logStack: true,
+      subcommandArgv: ['--yes'],
+    },
+  ];
+
+  test.each(updateRouteRows)('$name', ({ argv, logLevel, logStack, subcommandArgv }) => {
     // Act
     const result = routeFirebatArgv(argv);
 
     // Assert
     expect(result.subcommand).toBe('update');
-    expect(result.global.logLevel).toBe('trace');
-    expect(result.global.logStack).toBe(false);
-    expect(result.subcommandArgv).toEqual([]);
-  });
-
-  test('should strip global log flags from update argv', () => {
-    // Arrange
-    const argv = ['update', '--log-level=debug', '--log-stack', '--yes'];
-    // Act
-    const result = routeFirebatArgv(argv);
-
-    // Assert
-    expect(result.subcommand).toBe('update');
-    expect(result.global.logLevel).toBe('debug');
-    expect(result.global.logStack).toBe(true);
-    expect(result.subcommandArgv).toEqual(['--yes']);
+    expect(result.global.logLevel).toBe(logLevel);
+    expect(result.global.logStack).toBe(logStack);
+    expect(result.subcommandArgv).toEqual(subcommandArgv);
   });
 
   test('should route to scan when explicit scan appears after global flags', () => {
