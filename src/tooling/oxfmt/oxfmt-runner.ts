@@ -2,6 +2,7 @@ import type { FirebatLogger } from '../../shared/logger';
 
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
+import { detectToolFailure } from '../tool-failure';
 
 interface OxfmtRunResult {
   readonly ok: boolean;
@@ -93,17 +94,21 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
     // "tool failed" (exit non-zero, stdout empty, stderr has error text). Without
     // this guard a config-error report was treated as a successful check with zero
     // files needing format.
-    if (exitCode !== 0 && stdout.trim().length === 0) {
-      const trimmedStderr = stderr.trim();
-      const error = trimmedStderr.length > 0 ? trimmedStderr.split('\n')[0]! : `oxfmt exited with code ${exitCode}`;
+    const { looksLikeFailure, summary } = detectToolFailure({
+      tool: 'oxfmt',
+      exitCode,
+      stderr,
+      hasNoMeaningfulOutput: stdout.trim().length === 0,
+    });
 
+    if (looksLikeFailure) {
       return {
         ok: false,
         tool: 'oxfmt',
         exitCode,
         rawStdout: stdout,
         rawStderr: stderr,
-        error,
+        error: summary,
       };
     }
 

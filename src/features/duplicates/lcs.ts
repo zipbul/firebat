@@ -8,6 +8,8 @@
  * `computeLcsAlignment`는 statement 시퀀스(보통 수십 개) 대상이므로 DP O(mn) 사용.
  */
 
+import { pushToMultiMap } from '../../shared/multi-map';
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -137,14 +139,7 @@ const buildMatchIndex = (b: ReadonlyArray<string>): Map<string, number[]> => {
   const map = new Map<string, number[]>();
 
   for (let j = 0; j < b.length; j++) {
-    const key = b[j]!;
-    const list = map.get(key);
-
-    if (list === undefined) {
-      map.set(key, [j]);
-    } else {
-      list.push(j);
-    }
+    pushToMultiMap(map, b[j]!, j);
   }
 
   return map;

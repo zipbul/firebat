@@ -5,6 +5,7 @@ import type { SourceSpan } from '../../types';
 
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
+import { detectToolFailure } from '../tool-failure';
 
 interface OxlintDiagnostic {
   readonly filePath?: string;
@@ -188,9 +189,12 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   // when oxlint exits non-zero AND we could not parse any diagnostics from stdout/stderr,
   // something went wrong (typically a config error printed to stderr as plain text).
   // Report ok:false so analyzers surface the failure instead of silently returning [].
-  const looksLikeFailure = exitCode !== 0 && diagnostics.length === 0;
-  const trimmedStderr = stderr.trim();
-  const stderrSummary = trimmedStderr.length > 0 ? trimmedStderr.split('\n')[0]! : `oxlint exited with code ${exitCode}`;
+  const { looksLikeFailure, summary } = detectToolFailure({
+    tool: 'oxlint',
+    exitCode,
+    stderr,
+    hasNoMeaningfulOutput: diagnostics.length === 0,
+  });
 
   if (looksLikeFailure) {
     return {
@@ -200,7 +204,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
       rawStdout: stdout,
       rawStderr: stderr,
       diagnostics,
-      error: stderrSummary,
+      error: summary,
     };
   }
 

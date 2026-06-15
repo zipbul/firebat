@@ -5,6 +5,7 @@ import type { AstNode, RuleContext } from '../types';
 import { getContextFilename } from '../utils/context-filename';
 import { fileExists } from '../utils/context-fs';
 import { isAstNodeValue } from '../utils/is-ast-node-value';
+import { getProgramBody } from '../utils/program-body';
 
 function isUnitSpecFile(filePath: string): boolean {
   return filePath.endsWith('.spec.ts');
@@ -20,16 +21,6 @@ function isE2ETestFile(filePath: string): boolean {
 
 function isTypeDeclaration(node: AstNode): boolean {
   return node.type === 'TSTypeAliasDeclaration';
-}
-
-function getProgramBody(program: AstNode): AstNode[] {
-  const body = program.body;
-
-  if (Array.isArray(body)) {
-    return body;
-  }
-
-  return [];
 }
 
 function isLogicful(program: AstNode): boolean {

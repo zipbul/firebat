@@ -28,6 +28,7 @@ import {
   createOxcFingerprintShape,
 } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
+import { pushToMultiMap } from '../../shared/multi-map';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
 import { getItemKind, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
 import { detectFragmentClones } from './fragment-detector';
@@ -235,13 +236,8 @@ const detectDataTableClones = (files: ReadonlyArray<ParsedFile>, minSize: number
         span: resolveSpan(file.sourceText, decl),
         size,
       };
-      const list = map.get(hash);
 
-      if (list === undefined) {
-        map.set(hash, [item]);
-      } else {
-        list.push(item);
-      }
+      pushToMultiMap(map, hash, item);
     }
   }
 
@@ -336,13 +332,8 @@ const groupByHash = (
         span,
         size,
       };
-      const list = map.get(hash);
 
-      if (list === undefined) {
-        map.set(hash, [item]);
-      } else {
-        list.push(item);
-      }
+      pushToMultiMap(map, hash, item);
     }
   }
 

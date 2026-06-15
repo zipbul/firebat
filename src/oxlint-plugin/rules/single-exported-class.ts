@@ -1,6 +1,7 @@
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
 
 import { isAstNodeValue } from '../utils/is-ast-node-value';
+import { getProgramBody } from '../utils/program-body';
 
 function isIdentifier(node: AstNode | null | undefined): node is AstNode {
   return node?.type === 'Identifier' && typeof node.name === 'string';
@@ -30,16 +31,6 @@ function getExportedNameFromSpecifier(specifier: AstNode): string | null {
   }
 
   return null;
-}
-
-function getProgramBody(program: AstNode): AstNode[] {
-  const body = program.body;
-
-  if (Array.isArray(body)) {
-    return body;
-  }
-
-  return [];
 }
 
 function isTypeOnlyDeclaration(node: AstNode): boolean {

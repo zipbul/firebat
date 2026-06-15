@@ -157,6 +157,25 @@ export class OxcCFGBuilder {
     return this.visitStatement(body, [bodyEntry], nextLoopStack, null);
   }
 
+  /**
+   * 루프 본문을 방문하고, 본문 tail을 back-edge 타깃으로 되돌린 뒤 afterLoop로 빠져나간다.
+   * continue 타깃과 back-edge 타깃이 같은 루프(while/for-of/for-in)가 공유하는 epilogue.
+   */
+  private visitLoopBodyAndExit(
+    body: Node,
+    bodyEntry: NodeId,
+    afterLoop: NodeId,
+    backEdgeTarget: NodeId,
+    loopStack: readonly LoopTargets[],
+    currentLabel: string | null,
+  ): NodeId[] {
+    const bodyTails = this.visitLoopBody(body, bodyEntry, afterLoop, backEdgeTarget, loopStack, currentLabel);
+
+    this.connect(bodyTails, backEdgeTarget, EdgeType.Normal);
+
+    return [afterLoop];
+  }
+
   private resolveLoopTarget(loopStack: readonly LoopTargets[], label: string | null, useBreakTarget: boolean): NodeId | null {
     for (let index = loopStack.length - 1; index >= 0; index -= 1) {
       const entry = loopStack[index];
@@ -398,11 +417,7 @@ export class OxcCFGBuilder {
       return [afterLoop];
     }
 
-    const bodyTails = this.visitLoopBody(whileNode.body, bodyEntry, afterLoop, conditionNode, loopStack, currentLabel);
-
-    this.connect(bodyTails, conditionNode, EdgeType.Normal);
-
-    return [afterLoop];
+    return this.visitLoopBodyAndExit(whileNode.body, bodyEntry, afterLoop, conditionNode, loopStack, currentLabel);
   }
 
   private visitDoWhileStatement(
@@ -445,11 +460,7 @@ export class OxcCFGBuilder {
     this.cfg.addEdge(headerNode, afterLoop, EdgeType.Normal);
     this.cfg.addEdge(headerNode, bodyEntry, EdgeType.Normal);
 
-    const bodyTails = this.visitLoopBody(forOfInNode.body, bodyEntry, afterLoop, headerNode, loopStack, currentLabel);
-
-    this.connect(bodyTails, headerNode, EdgeType.Normal);
-
-    return [afterLoop];
+    return this.visitLoopBodyAndExit(forOfInNode.body, bodyEntry, afterLoop, headerNode, loopStack, currentLabel);
   }
 
   private visitReturnStatement(returnNode_node: ReturnStatement, incoming: readonly NodeId[]): NodeId[] {
