@@ -5,10 +5,8 @@ import * as path from 'node:path';
 
 import type { ParsedFile } from '../../engine/types';
 
-import { parseSource } from '../../engine/ast/parse-source';
+import { parseFileAs as toFile } from '../../../test/integration/shared/test-kit';
 import { analyzeBarrel, createEmptyBarrel } from './analyzer';
-
-const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
 let tmpDir: string;
 

@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../engine/ast/parse-source';
+import { parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
 describe('analyzeCollapsibleIf', () => {
-  const parse = (source: string) => [parseSource('/virtual/test.ts', source)];
 
   it('analyzeCollapsibleIf - empty files array - returns empty', () => {
     // Arrange & Act

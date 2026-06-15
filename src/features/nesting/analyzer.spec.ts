@@ -2,10 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from '../../engine/types';
 
-import { parseSource } from '../../engine/ast/parse-source';
+import { parseFileAs as toFile } from '../../../test/integration/shared/test-kit';
 import { analyzeNesting, createEmptyNesting } from './analyzer';
-
-const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
 describe('features/nesting/analyzer — createEmptyNesting', () => {
   it('returns empty array', () => {

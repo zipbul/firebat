@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../engine/ast/parse-source';
+import { parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
 describe('analyzeCollapsibleIf - false negative / false positive scenarios', () => {
-  const parse = (source: string) => [parseSource('/virtual/test.ts', source)];
 
   // ── 거짓 음성 후보 (감지되어야 하는 것) ──────────────────────────────────
 

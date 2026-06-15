@@ -97,6 +97,20 @@ export const createProgramFromMap = (sources: Map<string, string>): ParsedFile[]
   return files;
 };
 
+// ---------------------------------------------------------------------------
+// parseSource wrappers — re-declared identically across many feature specs.
+// Hoisted here so the parse-fixture shape lives in one place.
+// ---------------------------------------------------------------------------
+
+/** Parse `sourceText` under a `/p/<relPath>` virtual path. */
+export const parsePFile = (relPath: string, sourceText: string): ParsedFile => parseSource(`/p/${relPath}`, sourceText);
+
+/** Parse `code` under the given path, asserting the `ParsedFile` shape. */
+export const parseFileAs = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
+
+/** Parse `source` under `/virtual/test.ts` and wrap it in a single-file program. */
+export const parseProgram = (source: string): ParsedFile[] => [parseSource('/virtual/test.ts', source)];
+
 export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): string[] => {
   const signatures: string[] = [];
 

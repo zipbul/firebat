@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseSource } from '../../engine/ast/parse-source';
+import { parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeEarlyReturn, __testing__ } from './analyzer';
 
 const { countConsecutiveTrailingIfs, countStatements, endsWithReturnOrThrow, isExitBlock, isExitStatement, isLoopGuardBlock } =
@@ -440,7 +440,6 @@ describe('early-return/analyzer helpers', () => {
 });
 
 describe('analyzeEarlyReturn', () => {
-  const parse = (source: string) => [parseSource('/virtual/test.ts', source)];
 
   it('analyzeEarlyReturn - empty function - returns no findings', () => {
     // Arrange

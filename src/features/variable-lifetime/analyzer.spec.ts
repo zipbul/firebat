@@ -8,6 +8,7 @@ import type {
 } from '../../types';
 
 import { parseSource } from '../../engine/ast/parse-source';
+import { parsePFile as file } from '../../../test/integration/shared/test-kit';
 import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } from './analyzer';
 
 const { isPureInitializer } = __testing__;
@@ -28,7 +29,6 @@ const mutationOnly = (
   findings: ReadonlyArray<VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding>,
 ): ReadonlyArray<MutationDensityFinding> => findings.filter((f): f is MutationDensityFinding => f.kind === 'mutation-density');
 
-const file = (relPath: string, sourceText: string) => parseSource(`/p/${relPath}`, sourceText);
 
 const fileWithErrors = (relPath: string, sourceText: string) => {
   const parsed = file(relPath, sourceText);
