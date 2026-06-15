@@ -30,7 +30,13 @@ const DEFAULT_NESTING_OPTIONS: AnalyzeNestingOptions = {
 const createEmptyNesting = (): ReadonlyArray<NestingItem> => [];
 
 /**
- * SonarQube cognitive complexity — increments without depth bonus.
+ * SonarJS cognitive-complexity structural constructs (S3776).
+ *
+ * The single set of node types that BOTH (a) receive a complexity increment
+ * (+1 plus the nesting bonus) and (b) increase the nesting depth that feeds
+ * that bonus. In SonarJS these two roles share one structural set — it is the
+ * same decision, expressed once here. (Logical-operator and labeled
+ * break/continue increments are handled separately.)
  *
  * Note: SonarSource whitepaper specifies +1 for direct recursive calls,
  * but the SonarJS JS/TS reference implementation (eslint-plugin-sonarjs S3776)
@@ -38,26 +44,12 @@ const createEmptyNesting = (): ReadonlyArray<NestingItem> => [];
  * functions, closures, and dynamic `this` binding in JavaScript/TypeScript.
  * This implementation follows SonarJS parity. (detekt, gocognit, complexipy
  * implement recursion for their respective languages where named functions dominate.)
+ *
+ * Differs from the shared CFG `shouldIncreaseDepth`, which drives raw
+ * control-flow depth (includes Try/With, excludes the ternary); SonarJS
+ * cognitive nesting is the inverse — the ternary nests, but try/with do not.
  */
-const isDecisionPoint = (nodeType: string): boolean => {
-  return (
-    nodeType === 'IfStatement' ||
-    nodeType === 'ForStatement' ||
-    nodeType === 'ForInStatement' ||
-    nodeType === 'ForOfStatement' ||
-    nodeType === 'WhileStatement' ||
-    nodeType === 'DoWhileStatement' ||
-    nodeType === 'SwitchStatement' ||
-    nodeType === 'ConditionalExpression' ||
-    nodeType === 'CatchClause'
-  );
-};
-
-/**
- * Nesting-specific depth function: same as shared shouldIncreaseDepth
- * but excludes TryStatement (SonarQube does not nest-penalize try).
- */
-const shouldIncreaseNestingDepth = (nodeType: string): boolean => {
+const isNestingStructure = (nodeType: string): boolean => {
   return (
     nodeType === 'IfStatement' ||
     nodeType === 'ForStatement' ||
@@ -691,7 +683,7 @@ const analyzeFunctionNode = (
       }
     }
 
-    const nextDepth = shouldIncreaseNestingDepth(nodeType) ? depth + 1 : depth;
+    const nextDepth = isNestingStructure(nodeType) ? depth + 1 : depth;
 
     if (nextDepth > maxDepth) {
       maxDepth = nextDepth;
@@ -699,7 +691,7 @@ const analyzeFunctionNode = (
 
     // Decision point: +1 (inherent) + depth (nesting bonus)
     // IfStatement and LogicalExpression are handled above
-    if (isDecisionPoint(nodeType)) {
+    if (isNestingStructure(nodeType)) {
       cognitiveComplexity += 1 + depth;
     }
 
