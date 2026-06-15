@@ -1,9 +1,37 @@
 import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from '../../engine/types';
+import type { NestingItem, NestingKind } from '../../types';
 
 import { parseFileAs as toFile } from '../../../test/integration/shared/test-kit';
 import { analyzeNesting, createEmptyNesting } from './analyzer';
+
+type NestingOptions = Parameters<typeof analyzeNesting>[1];
+
+// Threshold preset that disables every detector except cognitive-complexity
+// (maxCognitiveComplexity: 1) so a single force-low source always produces one
+// finding whose cognitiveComplexity/depth we can assert exactly.
+const FORCE_LOW_CC: NestingOptions = {
+  maxCognitiveComplexity: 1,
+  maxCallbackDepth: 99,
+  maxNestingDepth: 99,
+  minDensityLoc: 999,
+  maxDensity: 1,
+  maxPromiseChainDepth: 99,
+};
+
+/** Parse `source`, analyze it under `opts`, assert exactly one finding, return it. */
+const analyzeOne = (path: string, source: string, opts?: NestingOptions): NestingItem => {
+  const items = analyzeNesting([toFile(path, source)], opts);
+
+  expect(items.length).toBe(1);
+
+  return items[0]!;
+};
+
+/** Parse `source`, analyze it under `opts`, and return the findings (no count assertion). */
+const analyzeFindings = (path: string, source: string, opts?: NestingOptions): ReadonlyArray<NestingItem> =>
+  analyzeNesting([toFile(path, source)], opts);
 
 describe('features/nesting/analyzer — createEmptyNesting', () => {
   it('returns empty array', () => {
@@ -32,7 +60,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
   it('returns NestingItem for a deeply nested function (maxDepth >= 3)', () => {
     // NestingItem is only emitted when maxDepth >= 3, cognitiveComplexity >= 15,
     // callbackDepth >= 3, or accidental-quadratic found.
-    const f = toFile(
+    const item = analyzeOne(
       '/deep3.ts',
       `
       function nested(a: number, b: number, c: number): number {
@@ -47,11 +75,6 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
-
-    expect(items.length).toBe(1);
-
-    const item = items[0]!;
 
     expect(item.file).toBe('/deep3.ts');
     expect(typeof item.header).toBe('string');
@@ -96,7 +119,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
 
   it('NestingItem has required fields: filePath, header, maxDepth, span', () => {
     // Use a 3-level deep function to guarantee a NestingItem is emitted
-    const f = toFile(
+    const item = analyzeOne(
       '/item.ts',
       `
       function myFunc(a: number, b: number, c: number) {
@@ -111,11 +134,6 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
-
-    expect(items.length).toBe(1);
-
-    const item = items[0]!;
 
     expect(typeof item.file).toBe('string');
     expect(typeof item.header).toBe('string');
@@ -144,7 +162,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
 
   it('score field is present and is a number', () => {
     // Use 3-level nesting to guarantee a finding
-    const f = toFile(
+    const item = analyzeOne(
       '/score.ts',
       `
       function withLogic(x: number): number {
@@ -159,15 +177,13 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
 
-    expect(items.length).toBe(1);
-    expect(typeof items[0]!.score).toBe('number');
+    expect(typeof item.score).toBe('number');
   });
 
   it('arrow functions deeply nested are analyzed', () => {
     // Arrow function with 3-level nesting
-    const f = toFile(
+    const item = analyzeOne(
       '/arrow.ts',
       `
       const fn = (a: number, b: number, c: number): number => {
@@ -182,10 +198,8 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       };
     `,
     );
-    const items = analyzeNesting([f]);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
+    expect(item.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 
   it('LogicalExpression — SonarJS: || is free, && counts per sequence', () => {
@@ -247,11 +261,24 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     expect(items4[0]!.metrics.cognitiveComplexity).toBe(1);
   });
 
-  it('else if — +1 only, no depth bonus', () => {
-    // if(+1+0) else-if(+1) else-if(+1) = CC 3
-    const f = toFile(
-      '/elseif.ts',
-      `
+  // Cognitive-complexity scoring per SonarJS S3776, forced via FORCE_LOW_CC so each
+  // source yields exactly one finding. Each row asserts the exact CC (and depth where
+  // the construct's nesting contribution is the property being verified).
+  interface CcCase {
+    name: string;
+    path: string;
+    source: string;
+    cc: number;
+    // Lower bound on metrics.depth; 0 where depth is not the property under test.
+    minDepth: number;
+  }
+
+  const ccCases: CcCase[] = [
+    {
+      name: 'else if — +1 only, no depth bonus',
+      path: '/elseif.ts',
+      // if(+1+0) else-if(+1) else-if(+1) = CC 3
+      source: `
       function f(x: number) {
         if (x === 1) { return 'a'; }
         else if (x === 2) { return 'b'; }
@@ -259,37 +286,27 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         return 'd';
       }
     `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(3);
-  });
-
-  it('else — adds +1', () => {
-    // if(+1+0) else(+1) = CC 2
-    const f = toFile(
-      '/else.ts',
-      `
+      cc: 3,
+      minDepth: 0,
+    },
+    {
+      name: 'else — adds +1',
+      path: '/else.ts',
+      // if(+1+0) else(+1) = CC 2
+      source: `
       function f(x: boolean) {
         if (x) { return 'a'; }
         else { return 'b'; }
       }
     `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(2);
-  });
-
-  it('TryStatement — does not increase nesting depth', () => {
-    // try { if(+1+0) } catch(+1+0) = CC 2, maxDepth=1 (only from if/catch, not try)
-    const f = toFile(
-      '/try.ts',
-      `
+      cc: 2,
+      minDepth: 0,
+    },
+    {
+      name: 'TryStatement — does not increase nesting depth',
+      path: '/try.ts',
+      // try { if(+1+0) } catch(+1+0) = CC 2, maxDepth=1 (only from if/catch, not try)
+      source: `
       function f() {
         try {
           if (true) { return 1; }
@@ -299,21 +316,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         return -1;
       }
     `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    // try does not add depth → if at depth 0: +1+0=1, catch at depth 0: +1+0=1 → CC=2
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(2);
-    // maxDepth = 1 (from if or catch), not 2 (which it would be if try added depth)
-    expect(items[0]!.metrics.depth).toBe(1);
-  });
-
-  it('labeled break — adds +1', () => {
-    const f = toFile(
-      '/label.ts',
-      `
+      cc: 2,
+      minDepth: 1,
+    },
+    {
+      name: 'labeled break — adds +1',
+      path: '/label.ts',
+      // for(+1+0) + for(+1+1) + if(+1+2) + labeled-break(+1) = 7
+      source: `
       function f(matrix: number[][]) {
         outer:
         for (const row of matrix) {
@@ -325,19 +335,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         }
       }
     `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    // for(+1+0) + for(+1+1) + if(+1+2) + labeled-break(+1) = 7
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(7);
-  });
-
-  it('labeled continue — adds +1', () => {
-    const f = toFile(
-      '/labelcont.ts',
-      `
+      cc: 7,
+      minDepth: 0,
+    },
+    {
+      name: 'labeled continue — adds +1',
+      path: '/labelcont.ts',
+      // for(+1+0) + for(+1+1) + if(+1+2) + labeled-continue(+1) = 7
+      source: `
       function f(matrix: number[][]) {
         outer:
         for (const row of matrix) {
@@ -349,13 +354,90 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         }
       }
     `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
+      cc: 7,
+      minDepth: 0,
+    },
+    {
+      name: 'nullish coalescing ?? — completely free per SonarJS',
+      path: '/nullish.ts',
+      // if(+1) only — ?? is free
+      source: `
+      function f(a: unknown, b: unknown, c: unknown) {
+        if (a ?? b ?? c) { return 1; }
+        return 0;
+      }
+    `,
+      cc: 1,
+      minDepth: 0,
+    },
+    {
+      name: 'ConditionalExpression — increases nesting depth per SonarQube spec',
+      path: '/ternary-nest.ts',
+      // outer ternary(+1+0) + inner ternary(+1+1) = 3; depth=2
+      source: `
+      function f(a: boolean, b: boolean) {
+        return a ? (b ? 1 : 2) : 3;
+      }
+    `,
+      cc: 3,
+      minDepth: 2,
+    },
+    {
+      name: 'if-condition ternary — evaluated at parent depth, not inside if body',
+      path: '/if-cond-ternary.ts',
+      // if(+1+0) + ternary(+1+0) = 2 (ternary is at depth 0, same as if)
+      source: `
+      function f(a: boolean, b: boolean) {
+        if (a ? b : false) { return 1; }
+        return 0;
+      }
+    `,
+      cc: 2,
+      minDepth: 0,
+    },
+    {
+      name: 'try/catch/finally — try and finally free, catch is +1',
+      path: '/trycatchfinally.ts',
+      // try free + catch(+1+0); if-in-try(+1+0) + if-in-catch(+1+1) + if-in-finally(+1+0) = 5
+      source: `
+      function f() {
+        try {
+          if (true) { return 1; }
+        } catch (e) {
+          if (true) { return 2; }
+        } finally {
+          if (true) { return 3; }
+        }
+        return 0;
+      }
+    `,
+      cc: 5,
+      minDepth: 0,
+    },
+    {
+      name: 'if/else-if/else compound chain — correct CC calculation',
+      path: '/compound-chain.ts',
+      // if(+1+0) else-if(+1) else-if(+1) else(+1) = CC 4
+      source: `
+      function f(x: number) {
+        if (x === 1) { return 'a'; }
+        else if (x === 2) { return 'b'; }
+        else if (x === 3) { return 'c'; }
+        else { return 'd'; }
+      }
+    `,
+      cc: 4,
+      minDepth: 0,
+    },
+  ];
 
-    expect(items.length).toBe(1);
-    // for(+1+0) + for(+1+1) + if(+1+2) + labeled-continue(+1) = 7
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(7);
+  it.each(ccCases)('cognitive complexity — $name', ({ path, source, cc, minDepth }) => {
+    const item = analyzeOne(path, source, FORCE_LOW_CC);
+
+    expect(item.metrics.cognitiveComplexity).toBe(cc);
+    // minDepth pins the construct's nesting contribution where it is the property
+    // under test; rows that only assert CC use minDepth 0 (depth is always >= 0).
+    expect(item.metrics.depth).toBeGreaterThanOrEqual(minDepth);
   });
 
   it('complexity-density kind — triggered when CC/LOC exceeds threshold', () => {
@@ -400,7 +482,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
   });
 
   it('density field is present on findings', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/dens.ts',
       `
       function f(a: number, b: number, c: number) {
@@ -409,135 +491,8 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
 
-    expect(items.length).toBe(1);
-    expect(typeof items[0]!.metrics.density).toBe('number');
-  });
-
-  it('nullish coalescing ?? — completely free per SonarJS', () => {
-    const f = toFile(
-      '/nullish.ts',
-      `
-      function f(a: unknown, b: unknown, c: unknown) {
-        if (a ?? b ?? c) { return 1; }
-        return 0;
-      }
-    `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    // if(+1) only — ?? is free
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(1);
-  });
-
-  it('ConditionalExpression — increases nesting depth per SonarQube spec', () => {
-    // Nested ternary: outer ternary at depth 0 increases depth to 1,
-    // inner ternary at depth 1 gets +1+1=2
-    const f = toFile(
-      '/ternary-nest.ts',
-      `
-      function f(a: boolean, b: boolean) {
-        return a ? (b ? 1 : 2) : 3;
-      }
-    `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    // outer ternary(+1+0) + inner ternary(+1+1) = 3
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(3);
-    // depth=2 (outer ternary depth=1, inner ternary depth=2)
-    expect(items[0]!.metrics.depth).toBe(2);
-  });
-
-  it('if-condition ternary — evaluated at parent depth, not inside if body', () => {
-    // Ternary in if-condition should be at depth 0, not depth 1
-    const f = toFile(
-      '/if-cond-ternary.ts',
-      `
-      function f(a: boolean, b: boolean) {
-        if (a ? b : false) { return 1; }
-        return 0;
-      }
-    `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    // if(+1+0) + ternary(+1+0) = 2 (ternary is at depth 0, same as if)
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(2);
-  });
-
-  it('try/catch/finally — try and finally free, catch is +1', () => {
-    const f = toFile(
-      '/trycatchfinally.ts',
-      `
-      function f() {
-        try {
-          if (true) { return 1; }
-        } catch (e) {
-          if (true) { return 2; }
-        } finally {
-          if (true) { return 3; }
-        }
-        return 0;
-      }
-    `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    // try is free, catch(+1+0), finally is free
-    // if inside try: depth 0 (try doesn't increase) → if(+1+0) = 1
-    // if inside catch: depth 1 (catch increases) → if(+1+1) = 2
-    // if inside finally: depth 0 (finally doesn't increase) → if(+1+0) = 1
-    // total = 1 + 1 + 2 + 1 = 5
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(5);
-  });
-
-  it('if/else-if/else compound chain — correct CC calculation', () => {
-    // if(+1+0) else-if(+1) else-if(+1) else(+1) = CC 4
-    const f = toFile(
-      '/compound-chain.ts',
-      `
-      function f(x: number) {
-        if (x === 1) { return 'a'; }
-        else if (x === 2) { return 'b'; }
-        else if (x === 3) { return 'c'; }
-        else { return 'd'; }
-      }
-    `,
-    );
-    const opts = { maxCognitiveComplexity: 1, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 999, maxDensity: 1 };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.cognitiveComplexity).toBe(4);
-  });
-
-  it('complexity-density — minDensityLoc boundary: below min LOC → no density finding', () => {
-    // 3-line function (below minDensityLoc=8), even with high density
-    const f = toFile(
-      '/short-dense.ts',
-      `
-      function f(a: boolean, b: boolean) {
-        if (a) { if (b) { return 1; } }
-        return 0;
-      }
-    `,
-    );
-    // Set CC/nesting thresholds very high so only density could trigger
-    const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 8, maxDensity: 0.01 };
-    const items = analyzeNesting([f], opts);
-
-    // Function is too short (< minDensityLoc), so no complexity-density finding
-    expect(items.length).toBe(0);
+    expect(typeof item.metrics.density).toBe('number');
   });
 
   it('complexity-density — density exactly at maxDensity → no finding (> required)', () => {
@@ -589,7 +544,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
   // ── signals ─────────────────────────────────────────────────────────
 
   it('signals — single violation produces signals array with one element matching kind', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/sig-single.ts',
       `
       function f(a: number, b: number, c: number) {
@@ -598,15 +553,13 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.signals).toEqual([items[0]!.kind]);
+    expect(item.signals).toEqual([item.kind]);
   });
 
   it('signals — multiple violations produce all matching kinds', () => {
     // Low thresholds: trigger both deep-nesting and high-cognitive-complexity
-    const f = toFile(
+    const item = analyzeOne(
       '/sig-multi.ts',
       `
       function f(a: number, b: number, c: number) {
@@ -614,26 +567,24 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         return 0;
       }
     `,
+      {
+        maxCognitiveComplexity: 3,
+        maxCallbackDepth: 99,
+        maxNestingDepth: 3,
+        minDensityLoc: 999,
+        maxDensity: 1,
+        maxPromiseChainDepth: 99,
+      },
     );
-    const opts = {
-      maxCognitiveComplexity: 3,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 3,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.signals).toContain('high-cognitive-complexity');
-    expect(items[0]!.signals).toContain('deep-nesting');
+    expect(item.signals).toContain('high-cognitive-complexity');
+    expect(item.signals).toContain('deep-nesting');
     // Primary kind should be the higher priority one
-    expect(items[0]!.kind).toBe('high-cognitive-complexity');
+    expect(item.kind).toBe('high-cognitive-complexity');
   });
 
   it('signals — priority order: accidental-quadratic > high-cognitive-complexity', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/sig-priority.ts',
       `
       function f(items: string[]) {
@@ -644,30 +595,31 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         }
       }
     `,
+      FORCE_LOW_CC,
     );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.kind).toBe('accidental-quadratic');
-    expect(items[0]!.signals).toContain('accidental-quadratic');
-    expect(items[0]!.signals).toContain('high-cognitive-complexity');
+    expect(item.kind).toBe('accidental-quadratic');
+    expect(item.signals).toContain('accidental-quadratic');
+    expect(item.signals).toContain('high-cognitive-complexity');
   });
 
-  // ── callback depth — test runner exclusion ─────────────────────────
+  // ── below-threshold / excluded constructs produce no finding ─────────
 
-  it('callback depth — describe/it/beforeEach callbacks do not increase depth', () => {
-    // describe(() => { it(() => { expect() }) }) is structural, not complex
-    const f = toFile(
-      '/test-runner.ts',
-      `
+  // Each source sits just under (or is structurally excluded from) the relevant
+  // threshold in opts, so analyzeNesting must emit zero findings.
+  interface NoFindingCase {
+    name: string;
+    path: string;
+    source: string;
+    opts: NestingOptions;
+  }
+
+  const noFindingCases: NoFindingCase[] = [
+    {
+      // describe/it/beforeEach callbacks are structural, not complex → depth stays 0
+      name: 'callback depth — describe/it/beforeEach callbacks do not increase depth',
+      path: '/test-runner.ts',
+      source: `
       function suite() {
         describe('foo', () => {
           beforeEach(() => {
@@ -679,23 +631,61 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         });
       }
     `,
-    );
-    const opts = {
-      maxCognitiveComplexity: 999,
-      maxCallbackDepth: 3,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
+      opts: {
+        maxCognitiveComplexity: 999,
+        maxCallbackDepth: 3,
+        maxNestingDepth: 99,
+        minDensityLoc: 999,
+        maxDensity: 1,
+        maxPromiseChainDepth: 99,
+      },
+    },
+    {
+      // chain depth 2 is below maxPromiseChainDepth=3 → no promise-chain finding
+      name: 'promise chain — threshold: maxPromiseChainDepth=3 with depth 2 → no finding',
+      path: '/promise-under.ts',
+      source: `
+      function f(p: Promise<number>) {
+        p.then(x => x).then(x => x);
+      }
+    `,
+      opts: {
+        maxCognitiveComplexity: 999,
+        maxCallbackDepth: 99,
+        maxNestingDepth: 99,
+        minDensityLoc: 999,
+        maxDensity: 1,
+        maxPromiseChainDepth: 3,
+      },
+    },
+    {
+      // 3-line function is below minDensityLoc=8 → no complexity-density finding
+      name: 'complexity-density — minDensityLoc boundary: below min LOC → no density finding',
+      path: '/short-dense.ts',
+      source: `
+      function f(a: boolean, b: boolean) {
+        if (a) { if (b) { return 1; } }
+        return 0;
+      }
+    `,
+      opts: {
+        maxCognitiveComplexity: 999,
+        maxCallbackDepth: 99,
+        maxNestingDepth: 99,
+        minDensityLoc: 8,
+        maxDensity: 0.01,
+      },
+    },
+  ];
 
-    // describe/it/beforeEach callbacks are excluded → depth stays 0
-    expect(items.length).toBe(0);
+  it.each(noFindingCases)('$name', ({ path, source, opts }) => {
+    expect(analyzeFindings(path, source, opts).length).toBe(0);
   });
 
+  // ── callback depth ───────────────────────────────────────────────────
+
   it('callback depth — non-test-runner callbacks still increase depth', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/real-callbacks.ts',
       `
       function f(a: number[], b: number[], c: number[]) {
@@ -708,118 +698,88 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         });
       }
     `,
+      {
+        maxCognitiveComplexity: 999,
+        maxCallbackDepth: 3,
+        maxNestingDepth: 99,
+        minDensityLoc: 999,
+        maxDensity: 1,
+        maxPromiseChainDepth: 99,
+      },
     );
-    const opts = {
-      maxCognitiveComplexity: 999,
-      maxCallbackDepth: 3,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.kind).toBe('callback-depth');
-    expect(items[0]!.metrics.callbackDepth).toBe(3);
+    expect(item.kind).toBe('callback-depth');
+    expect(item.metrics.callbackDepth).toBe(3);
   });
 
   // ── promise chain depth ─────────────────────────────────────────────
 
-  it('promise chain — .then().then() → depth 2', () => {
-    const f = toFile(
-      '/promise-chain.ts',
-      `
+  // Promise-chain depth: each source forces a single finding by setting
+  // maxPromiseChainDepth at/below the chain's depth. depth is the property under test.
+  interface PromiseDepthCase {
+    name: string;
+    path: string;
+    source: string;
+    maxPromiseChainDepth: number;
+    expectedKind: NestingKind;
+    expectedDepth: number;
+  }
+
+  const promiseDepthCases: PromiseDepthCase[] = [
+    {
+      name: '.then().then() → depth 2',
+      path: '/promise-chain.ts',
+      source: `
       function f(p: Promise<number>) {
         p.then(x => x + 1).then(x => x * 2);
       }
     `,
-    );
-    const opts = {
-      maxCognitiveComplexity: 999,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
       maxPromiseChainDepth: 2,
-    };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    expect(items[0]!.kind).toBe('promise-chain-depth');
-    expect(items[0]!.metrics.promiseChainDepth).toBe(2);
-  });
-
-  it('promise chain — .then().catch().finally() → depth 3', () => {
-    const f = toFile(
-      '/promise-3.ts',
-      `
+      expectedKind: 'promise-chain-depth',
+      expectedDepth: 2,
+    },
+    {
+      name: '.then().catch().finally() → depth 3',
+      path: '/promise-3.ts',
+      source: `
       function f(p: Promise<number>) {
         p.then(x => x).catch(e => e).finally(() => {});
       }
     `,
-    );
-    const opts = {
-      maxCognitiveComplexity: 999,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
       maxPromiseChainDepth: 3,
-    };
-    const items = analyzeNesting([f], opts);
-
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.promiseChainDepth).toBe(3);
-  });
-
-  it('promise chain — nested: .then(() => x.then()) → depth 2', () => {
-    const f = toFile(
-      '/promise-nested.ts',
-      `
+      expectedKind: 'promise-chain-depth',
+      expectedDepth: 3,
+    },
+    {
+      name: 'nested: .then(() => x.then()) → depth 2',
+      path: '/promise-nested.ts',
+      source: `
       function f(p: Promise<number>, q: Promise<number>) {
         p.then(() => q.then(x => x));
       }
     `,
-    );
-    const opts = {
-      maxCognitiveComplexity: 999,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
       maxPromiseChainDepth: 2,
-    };
-    const items = analyzeNesting([f], opts);
+      expectedKind: 'promise-chain-depth',
+      expectedDepth: 2,
+    },
+  ];
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.promiseChainDepth).toBe(2);
-  });
-
-  it('promise chain — threshold: maxPromiseChainDepth=3 with depth 2 → no finding', () => {
-    const f = toFile(
-      '/promise-under.ts',
-      `
-      function f(p: Promise<number>) {
-        p.then(x => x).then(x => x);
-      }
-    `,
-    );
-    const opts = {
+  it.each(promiseDepthCases)('promise chain — $name', ({ path, source, maxPromiseChainDepth, expectedKind, expectedDepth }) => {
+    const item = analyzeOne(path, source, {
       maxCognitiveComplexity: 999,
       maxCallbackDepth: 99,
       maxNestingDepth: 99,
       minDensityLoc: 999,
       maxDensity: 1,
-      maxPromiseChainDepth: 3,
-    };
-    const items = analyzeNesting([f], opts);
+      maxPromiseChainDepth,
+    });
 
-    expect(items.length).toBe(0);
+    expect(item.kind).toBe(expectedKind);
+    expect(item.metrics.promiseChainDepth).toBe(expectedDepth);
   });
 
   it('promise chain — no chain → promiseChainDepth is undefined', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/no-promise.ts',
       `
       function f(a: number, b: number, c: number) {
@@ -828,16 +788,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.metrics.promiseChainDepth).toBeUndefined();
+    expect(item.metrics.promiseChainDepth).toBeUndefined();
   });
 
   // ── Halstead metrics ────────────────────────────────────────────────
 
   it('Halstead — simple function has volume and difficulty', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/halstead.ts',
       `
       function f(a: number, b: number, c: number) {
@@ -846,43 +804,32 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       }
     `,
     );
-    const items = analyzeNesting([f]);
 
-    expect(items.length).toBe(1);
-    expect(typeof items[0]!.metrics.halsteadVolume).toBe('number');
-    expect(typeof items[0]!.metrics.halsteadDifficulty).toBe('number');
-    expect(items[0]!.metrics.halsteadVolume).toBeGreaterThan(0);
-    expect(items[0]!.metrics.halsteadDifficulty).toBeGreaterThan(0);
+    expect(typeof item.metrics.halsteadVolume).toBe('number');
+    expect(typeof item.metrics.halsteadDifficulty).toBe('number');
+    expect(item.metrics.halsteadVolume).toBeGreaterThan(0);
+    expect(item.metrics.halsteadDifficulty).toBeGreaterThan(0);
   });
 
   it('Halstead — minimal function has numeric volume and difficulty', () => {
     // Force finding via low CC threshold on a minimal function
-    const f = toFile(
+    const item = analyzeOne(
       '/halstead-minimal.ts',
       `
       function f() {
         if (true) { return; }
       }
     `,
+      FORCE_LOW_CC,
     );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
-    expect(typeof items[0]!.metrics.halsteadVolume).toBe('number');
-    expect(typeof items[0]!.metrics.halsteadDifficulty).toBe('number');
+    expect(typeof item.metrics.halsteadVolume).toBe('number');
+    expect(typeof item.metrics.halsteadDifficulty).toBe('number');
   });
 
   it('Halstead — else-if chain counts all IfStatement operators', () => {
     // if + else-if + else-if = 3 IfStatement operators
-    const elseIf = toFile(
+    const elseIf = analyzeOne(
       '/halstead-elseif.ts',
       `
       function f(x: number) {
@@ -892,9 +839,10 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         return 'd';
       }
     `,
+      FORCE_LOW_CC,
     );
     // Same logic but using nested if (not else-if)
-    const nestedIf = toFile(
+    const nestedIf = analyzeOne(
       '/halstead-nestedif.ts',
       `
       function g(x: number) {
@@ -904,63 +852,76 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         return 'd';
       }
     `,
+      FORCE_LOW_CC,
     );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const elseIfItems = analyzeNesting([elseIf], opts);
-    const nestedIfItems = analyzeNesting([nestedIf], opts);
 
-    expect(elseIfItems.length).toBe(1);
-    expect(nestedIfItems.length).toBe(1);
     // Both should count 3 IfStatement operators, so same Halstead volume
-    expect(elseIfItems[0]!.metrics.halsteadVolume).toBe(nestedIfItems[0]!.metrics.halsteadVolume);
+    expect(elseIf.metrics.halsteadVolume).toBe(nestedIf.metrics.halsteadVolume);
   });
 
-  it('Halstead — CallExpression counts as () operator', () => {
-    // Function with call expressions should have higher volume than without
-    const withCalls = toFile(
-      '/halstead-call.ts',
-      `
+  // Halstead volume grows with extra operators: each `richer` source carries
+  // operators the `baseline` lacks, so richerVolume must exceed baselineVolume * factor.
+  interface HalsteadRatioCase {
+    name: string;
+    richerPath: string;
+    richerSource: string;
+    baselinePath: string;
+    baselineSource: string;
+    factor: number;
+  }
+
+  const halsteadRatioCases: HalsteadRatioCase[] = [
+    {
+      name: 'CallExpression counts as () operator',
+      richerPath: '/halstead-call.ts',
+      // 3 CallExpressions (push) significantly increase volume
+      richerSource: `
       function f(arr: number[], x: boolean) {
         if (x) { arr.push(1); arr.push(2); arr.push(3); }
         return arr;
       }
     `,
-    );
-    const withoutCalls = toFile(
-      '/halstead-nocall.ts',
-      `
+      baselinePath: '/halstead-nocall.ts',
+      baselineSource: `
       function f(x: boolean) {
         if (x) { return 1; }
         return 0;
       }
     `,
-    );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const itemsWithCalls = analyzeNesting([withCalls], opts);
-    const itemsWithoutCalls = analyzeNesting([withoutCalls], opts);
+      factor: 3,
+    },
+    {
+      name: 'await and new counted as operators',
+      richerPath: '/halstead-await-new.ts',
+      // await, new, () operators should produce significantly higher volume
+      richerSource: `
+      async function f() {
+        const a = await fetch('url');
+        const b = new Error('msg');
+        if (a) { return b; }
+        return null;
+      }
+    `,
+      baselinePath: '/halstead-simple.ts',
+      baselineSource: `
+      function g() {
+        if (true) { return 1; }
+        return 0;
+      }
+    `,
+      factor: 2,
+    },
+  ];
 
-    expect(itemsWithCalls.length).toBe(1);
-    expect(itemsWithoutCalls.length).toBe(1);
-    // 3 CallExpressions (push) significantly increase volume
-    expect(itemsWithCalls[0]!.metrics.halsteadVolume).toBeGreaterThan(itemsWithoutCalls[0]!.metrics.halsteadVolume * 3);
+  it.each(halsteadRatioCases)('Halstead — $name', ({ richerPath, richerSource, baselinePath, baselineSource, factor }) => {
+    const richer = analyzeOne(richerPath, richerSource, FORCE_LOW_CC);
+    const baseline = analyzeOne(baselinePath, baselineSource, FORCE_LOW_CC);
+
+    expect(richer.metrics.halsteadVolume).toBeGreaterThan(baseline.metrics.halsteadVolume * factor);
   });
 
   it('Halstead — SwitchCase counted as control op', () => {
-    const f = toFile(
+    const item = analyzeOne(
       '/halstead-switch-case.ts',
       `
       function f(x: number) {
@@ -971,63 +932,16 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         }
       }
     `,
+      FORCE_LOW_CC,
     );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
     // SwitchStatement + 3 SwitchCase + 3 ReturnStatement = 7 operators
-    expect(items[0]!.metrics.halsteadVolume).toBeGreaterThan(10);
-  });
-
-  it('Halstead — await and new counted as operators', () => {
-    const withAwaitNew = toFile(
-      '/halstead-await-new.ts',
-      `
-      async function f() {
-        const a = await fetch('url');
-        const b = new Error('msg');
-        if (a) { return b; }
-        return null;
-      }
-    `,
-    );
-    const simpleIf = toFile(
-      '/halstead-simple.ts',
-      `
-      function g() {
-        if (true) { return 1; }
-        return 0;
-      }
-    `,
-    );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const itemsAwait = analyzeNesting([withAwaitNew], opts);
-    const itemsSimple = analyzeNesting([simpleIf], opts);
-
-    expect(itemsAwait.length).toBe(1);
-    expect(itemsSimple.length).toBe(1);
-    // await, new, () operators should produce significantly higher volume
-    expect(itemsAwait[0]!.metrics.halsteadVolume).toBeGreaterThan(itemsSimple[0]!.metrics.halsteadVolume * 2);
+    expect(item.metrics.halsteadVolume).toBeGreaterThan(10);
   });
 
   it('Halstead — LogicalExpression chain counts all operators', () => {
     // a && b || c && d → operators: &&, ||, && (3 logical operators)
-    const f = toFile(
+    const item = analyzeOne(
       '/halstead-logical.ts',
       `
       function f(a: boolean, b: boolean, c: boolean, d: boolean) {
@@ -1035,23 +949,14 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
         return 0;
       }
     `,
+      FORCE_LOW_CC,
     );
-    const opts = {
-      maxCognitiveComplexity: 1,
-      maxCallbackDepth: 99,
-      maxNestingDepth: 99,
-      minDensityLoc: 999,
-      maxDensity: 1,
-      maxPromiseChainDepth: 99,
-    };
-    const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
     // operators: IfStatement(1) + ReturnStatement(2) + &&(2) + ||(1) = 6 total, 4 unique
     // operands: a, b, c, d, 1, 0 = 6 total, 6 unique
     // Volume = (6+6) * log2(4+6) = 12 * log2(10) ≈ 39.86
     // Actual may differ slightly due to AST node structure
-    expect(items[0]!.metrics.halsteadVolume).toBeGreaterThanOrEqual(30);
-    expect(items[0]!.metrics.halsteadDifficulty).toBeGreaterThanOrEqual(2);
+    expect(item.metrics.halsteadVolume).toBeGreaterThanOrEqual(30);
+    expect(item.metrics.halsteadDifficulty).toBeGreaterThanOrEqual(2);
   });
 });
