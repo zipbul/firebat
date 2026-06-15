@@ -1,22 +1,12 @@
 import type { Node } from 'oxc-parser';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
 import type { ParsedFile } from '../../engine/types';
 import type { EarlyReturnItem, EarlyReturnKind, SourceSpan } from '../../types';
 
-import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
+import { spanOfNode } from '../../engine/ast/source-span';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
-import { collectFunctionItems } from '../../engine/function-items';
-
-const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
-  const offsets = buildLineOffsets(sourceText);
-
-  return {
-    start: getLineColumn(offsets, node.start),
-    end: getLineColumn(offsets, node.end),
-  };
-};
+import { buildNestingReductionItem, collectFunctionItems } from '../../engine/function-items';
 
 const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 
@@ -97,25 +87,13 @@ const countStatements = (node: Node): number => {
   return Array.isArray(body) ? body.length : 0;
 };
 
-const endsWithReturnOrThrow = (node: Node): boolean => {
-  if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
-    return true;
-  }
-
-  if (node.type !== 'BlockStatement') {
-    return false;
-  }
-
-  const body = node.body;
-
-  if (!Array.isArray(body) || body.length === 0) {
-    return false;
-  }
-
-  const last = body[body.length - 1]!;
-
-  return isExitStatement(last);
-};
+/**
+ * Whether a block (or bare statement) ends with return/throw.
+ * Identical decision to {@link isExitBlock} — kept as a named alias so the two
+ * call-site vocabularies ("isExit…" guard checks vs "endsWith…" tail checks)
+ * read naturally while sharing a single source of truth.
+ */
+const endsWithReturnOrThrow = isExitBlock;
 
 /** Check if the last statement of a block is a continue or break. */
 const endsWithLoopExit = (node: Node): boolean => {
@@ -222,7 +200,7 @@ const detectWrappingIf = (bodyStatements: ReadonlyArray<Node>, sourceText: strin
 
   return {
     kind: 'wrapping-if',
-    span: nodeSpan(last, sourceText),
+    span: spanOfNode(last, sourceText),
     depthReduction: 1,
     statementsAffected: stmtCount,
   };
@@ -294,7 +272,7 @@ const detectImplicitElse = (
 
     results.push({
       kind: 'implicit-else',
-      span: nodeSpan(stmt, sourceText),
+      span: spanOfNode(stmt, sourceText),
       depthReduction: 1,
       statementsAffected: consequentCount,
     });
@@ -377,7 +355,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
 
     return {
       kind: 'cascade-guard',
-      span: nodeSpan(ifNode, sourceText),
+      span: spanOfNode(ifNode, sourceText),
       depthReduction: 1,
       statementsAffected: totalConsequentCount,
     };
@@ -396,7 +374,7 @@ const detectCascadeGuard = (ifNode: Node, insideLoop: boolean, sourceText: strin
 
   return {
     kind: 'cascade-guard',
-    span: nodeSpan(ifNode, sourceText),
+    span: spanOfNode(ifNode, sourceText),
     depthReduction: chainLength,
     statementsAffected: finalCount,
   };
@@ -486,7 +464,7 @@ const analyzeFunctionNode = (
               if (shortCount <= 3 && shortExits && longCount >= shortCount * 2) {
                 opportunities.push({
                   kind: 'invertible-if-else',
-                  span: nodeSpan(node, sourceText),
+                  span: spanOfNode(node, sourceText),
                   depthReduction: 1,
                   statementsAffected: longCount,
                 });
@@ -554,30 +532,7 @@ const analyzeFunctionNode = (
     return null;
   }
 
-  // kind = highest impact opportunity
-  const primaryOpportunity = opportunities.reduce((best, o) =>
-    o.depthReduction * o.statementsAffected > best.depthReduction * best.statementsAffected ? o : best,
-  );
-  const header = getNodeHeader(functionNode, parent);
-  const lineOffsets = buildLineOffsets(sourceText);
-  const span: SourceSpan = {
-    start: getLineColumn(lineOffsets, functionNode.start),
-    end: getLineColumn(lineOffsets, functionNode.end),
-  };
-
-  return {
-    kind: primaryOpportunity.kind,
-    file: filePath,
-    header,
-    span,
-    ...(opportunities.length > 0 ? { opportunitySpans: opportunities.map(o => o.span) } : {}),
-    metrics: {
-      maxDepth,
-      depthReduction: opportunities.reduce((sum, o) => sum + o.depthReduction, 0),
-      statementsAffected: opportunities.reduce((sum, o) => sum + o.statementsAffected, 0),
-    },
-    score: totalScore,
-  };
+  return buildNestingReductionItem(functionNode, filePath, sourceText, parent, opportunities, maxDepth, totalScore);
 };
 
 const analyzeEarlyReturn = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<EarlyReturnItem> => {

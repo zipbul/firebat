@@ -21,6 +21,34 @@ import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../.
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { resolveSpan } from './clone-targets';
 
+/**
+ * 노드의 각 visitorKey에 매달린 자식 노드를 방문한다 (단일 노드·노드 배열 모두).
+ * 여러 walk 클로저가 같은 자식 디스패치를 복제하던 것을 한 곳으로 모은다.
+ * `onChild`가 false를 반환하면 해당 key의 자식을 건너뛴다 (필터용).
+ */
+const visitChildNodes = (node: Node, onChild: (child: Node, key: string) => boolean | void): void => {
+  const rec = node as unknown as Record<string, unknown>;
+  const keys = visitorKeys[node.type];
+
+  if (keys === undefined) {
+    return;
+  }
+
+  for (const key of keys) {
+    const value = rec[key];
+
+    if (isOxcNode(value)) {
+      onChild(value, key);
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        if (isOxcNode(item)) {
+          onChild(item, key);
+        }
+      }
+    }
+  }
+};
+
 // ─── 내부 모델 ───────────────────────────────────────────────────────────────
 
 interface BlockInfo {
@@ -251,26 +279,9 @@ const addBlockTree = (
       pushBlock((n as Node & { readonly consequent: ReadonlyArray<Node> }).consequent);
     }
 
-    const rec = n as unknown as Record<string, unknown>;
-    const keys = visitorKeys[n.type];
-
-    if (keys === undefined) {
-      return;
-    }
-
-    for (const key of keys) {
-      const value = rec[key];
-
-      if (isOxcNode(value)) {
-        walk(value);
-      } else if (Array.isArray(value)) {
-        for (const item of value) {
-          if (isOxcNode(item)) {
-            walk(item);
-          }
-        }
-      }
-    }
+    visitChildNodes(n, child => {
+      walk(child);
+    });
   };
 
   if (fnBody !== null) {
@@ -388,26 +399,9 @@ const referencesThis = (node: Node): boolean => {
       return;
     }
 
-    const rec = n as unknown as Record<string, unknown>;
-    const keys = visitorKeys[n.type];
-
-    if (keys === undefined) {
-      return;
-    }
-
-    for (const key of keys) {
-      const value = rec[key];
-
-      if (isOxcNode(value)) {
-        walk(value);
-      } else if (Array.isArray(value)) {
-        for (const item of value) {
-          if (isOxcNode(item)) {
-            walk(item);
-          }
-        }
-      }
-    }
+    visitChildNodes(n, child => {
+      walk(child);
+    });
   };
 
   walk(node);
@@ -494,26 +488,10 @@ const hasControlEscape = (node: Node): boolean => {
 
     const nextLoop = LOOP_TYPES.has(n.type) ? loopDepth + 1 : loopDepth;
     const nextSwitch = n.type === 'SwitchStatement' ? switchDepth + 1 : switchDepth;
-    const rec = n as unknown as Record<string, unknown>;
-    const keys = visitorKeys[n.type];
 
-    if (keys === undefined) {
-      return;
-    }
-
-    for (const key of keys) {
-      const value = rec[key];
-
-      if (isOxcNode(value)) {
-        walk(value, nextLoop, nextSwitch);
-      } else if (Array.isArray(value)) {
-        for (const item of value) {
-          if (isOxcNode(item)) {
-            walk(item, nextLoop, nextSwitch);
-          }
-        }
-      }
-    }
+    visitChildNodes(n, child => {
+      walk(child, nextLoop, nextSwitch);
+    });
   };
 
   walk(node, 0, 0);
@@ -532,33 +510,17 @@ const collectReferencedNames = (nodes: ReadonlyArray<Node>): ReadonlySet<string>
       names.add((n as Node & { readonly name: string }).name);
     }
 
-    const keys = visitorKeys[n.type];
-
-    if (keys === undefined) {
-      return;
-    }
-
-    for (const key of keys) {
+    visitChildNodes(n, (child, key) => {
       // member property / object key 는 참조가 아님 → skip
       if (
         (n.type === 'MemberExpression' && key === 'property' && rec.computed !== true) ||
         (n.type === 'Property' && key === 'key' && rec.computed !== true)
       ) {
-        continue;
+        return;
       }
 
-      const value = rec[key];
-
-      if (isOxcNode(value)) {
-        walk(value);
-      } else if (Array.isArray(value)) {
-        for (const item of value) {
-          if (isOxcNode(item)) {
-            walk(item);
-          }
-        }
-      }
-    }
+      walk(child);
+    });
   };
 
   for (const node of nodes) {

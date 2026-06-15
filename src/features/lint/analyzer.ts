@@ -1,4 +1,4 @@
-import type { FirebatLogger } from '../../shared/logger';
+import type { ToolAnalysisInput } from '../../shared/tool-analysis-input';
 import type { LintDiagnostic } from '../../types';
 
 import { createNoopLogger } from '../../shared/logger';
@@ -14,14 +14,7 @@ const normalizeSeverity = (severity: 'error' | 'warning' | 'info'): 'error' | nu
   return 'error';
 };
 
-interface AnalyzeLintInput {
-  readonly targets: ReadonlyArray<string>;
-  readonly fix: boolean;
-  readonly configPath?: string;
-  readonly cwd?: string;
-  readonly resolveMode?: 'default' | 'project-only';
-  readonly logger?: FirebatLogger;
-}
+type AnalyzeLintInput = ToolAnalysisInput;
 
 export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArray<LintDiagnostic>> => {
   const logger = input.logger ?? createNoopLogger();

@@ -8,4 +8,5 @@ export { resolveFirebatRootFromCwd } from './root-resolver';
 export { resolveRuntimeContextFromCwd } from './runtime-context';
 export { createFirebatProgram } from './ts-program';
 export { computeToolVersion } from './tool-version';
+export type { ToolAnalysisInput } from './tool-analysis-input';
 export { asRecord, createWorkspacePackageMap, readJsoncFile } from './workspace-packages';

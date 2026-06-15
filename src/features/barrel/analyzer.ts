@@ -283,6 +283,26 @@ const toAllowedBarrelSpecifier = (
   return rel;
 };
 
+/** Emit a deep-import finding with a suggested barrel specifier (when one can be computed). */
+const pushDeepImportFinding = (
+  findings: BarrelFinding[],
+  kind: 'deep-import' | 'index-deep-import',
+  filePath: string,
+  span: SourceSpan,
+  importerAbs: string,
+  targetDirAbs: string,
+  workspacePackages: ReadonlyMap<string, string>,
+): void => {
+  const suggested = toAllowedBarrelSpecifier(importerAbs, targetDirAbs, workspacePackages);
+
+  findings.push({
+    kind,
+    file: filePath,
+    span,
+    ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
+  });
+};
+
 // ─── cross-module-reexport detection ─────────────────────────────────────────
 
 interface ImportedBinding {
@@ -574,28 +594,22 @@ const checkDeepImports = async (
 
       // If this import resolves to an index file, it must be imported via directory (not /index).
       if (isIndexFile(targetAbs) && isExplicitIndexSpecifier(entry.specifier)) {
-        const suggested = toAllowedBarrelSpecifier(importerAbs, targetDirAbs, workspacePackages);
-
-        findings.push({
-          kind: 'index-deep-import',
-          file: file.filePath,
-          span: entry.span,
-          ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
-        });
+        pushDeepImportFinding(
+          findings,
+          'index-deep-import',
+          file.filePath,
+          entry.span,
+          importerAbs,
+          targetDirAbs,
+          workspacePackages,
+        );
 
         continue;
       }
 
       // If it resolves to a non-index file across directories, it is a deep import.
       if (!isIndexFile(targetAbs)) {
-        const suggested = toAllowedBarrelSpecifier(importerAbs, targetDirAbs, workspacePackages);
-
-        findings.push({
-          kind: 'deep-import',
-          file: file.filePath,
-          span: entry.span,
-          ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
-        });
+        pushDeepImportFinding(findings, 'deep-import', file.filePath, entry.span, importerAbs, targetDirAbs, workspacePackages);
       }
     }
   }

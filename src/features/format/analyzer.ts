@@ -1,18 +1,11 @@
-import type { FirebatLogger } from '../../shared/logger';
+import type { ToolAnalysisInput } from '../../shared/tool-analysis-input';
 
 import { createNoopLogger } from '../../shared/logger';
 import { runOxfmt } from '../../tooling/oxfmt/oxfmt-runner';
 
 const createEmptyFormat = (): ReadonlyArray<string> => [];
 
-interface AnalyzeFormatInput {
-  readonly targets: ReadonlyArray<string>;
-  readonly fix: boolean;
-  readonly configPath?: string;
-  readonly cwd?: string;
-  readonly resolveMode?: 'default' | 'project-only';
-  readonly logger?: FirebatLogger;
-}
+type AnalyzeFormatInput = ToolAnalysisInput;
 
 const parseOxfmtFiles = (rawStdout: unknown): ReadonlyArray<string> => {
   if (typeof rawStdout !== 'string') {

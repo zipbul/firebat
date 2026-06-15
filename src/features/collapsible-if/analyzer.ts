@@ -1,22 +1,12 @@
 import type { Node } from 'oxc-parser';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
 import type { ParsedFile } from '../../engine/types';
 import type { CollapsibleIfItem, SourceSpan } from '../../types';
 
-import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
+import { spanOfNode } from '../../engine/ast/source-span';
 import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
-import { collectFunctionItems } from '../../engine/function-items';
-
-const nodeSpan = (node: Node, sourceText: string): SourceSpan => {
-  const offsets = buildLineOffsets(sourceText);
-
-  return {
-    start: getLineColumn(offsets, node.start),
-    end: getLineColumn(offsets, node.end),
-  };
-};
+import { buildNestingReductionItem, collectFunctionItems } from '../../engine/function-items';
 
 const createEmptyCollapsibleIf = (): ReadonlyArray<CollapsibleIfItem> => [];
 
@@ -92,7 +82,7 @@ const detectCollapsibleIf = (ifNode: Node, sourceText: string): Opportunity | nu
 
   return {
     kind: 'collapsible-if',
-    span: nodeSpan(ifNode, sourceText),
+    span: spanOfNode(ifNode, sourceText),
     depthReduction: 1,
     statementsAffected: innerCount,
   };
@@ -150,7 +140,7 @@ const detectCollapsibleElseIf = (ifNode: Node, sourceText: string): Opportunity 
 
   return {
     kind: 'collapsible-else-if',
-    span: nodeSpan(ifNode, sourceText),
+    span: spanOfNode(ifNode, sourceText),
     depthReduction: 1,
     statementsAffected,
   };
@@ -212,30 +202,7 @@ const analyzeFunctionNode = (
     return null;
   }
 
-  // kind = highest impact opportunity
-  const primaryOpportunity = opportunities.reduce((best, o) =>
-    o.depthReduction * o.statementsAffected > best.depthReduction * best.statementsAffected ? o : best,
-  );
-  const header = getNodeHeader(functionNode, parent);
-  const lineOffsets = buildLineOffsets(sourceText);
-  const span: SourceSpan = {
-    start: getLineColumn(lineOffsets, functionNode.start),
-    end: getLineColumn(lineOffsets, functionNode.end),
-  };
-
-  return {
-    kind: primaryOpportunity.kind,
-    file: filePath,
-    header,
-    span,
-    ...(opportunities.length > 0 ? { opportunitySpans: opportunities.map(o => o.span) } : {}),
-    metrics: {
-      maxDepth,
-      depthReduction: opportunities.reduce((sum, o) => sum + o.depthReduction, 0),
-      statementsAffected: opportunities.reduce((sum, o) => sum + o.statementsAffected, 0),
-    },
-    score: totalScore,
-  };
+  return buildNestingReductionItem(functionNode, filePath, sourceText, parent, opportunities, maxDepth, totalScore);
 };
 
 const analyzeCollapsibleIf = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<CollapsibleIfItem> => {

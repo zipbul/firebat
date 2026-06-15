@@ -20,3 +20,4 @@ export { createOxcFingerprintExact, createOxcFingerprintNormalized, createOxcFin
 export { normalizeForFingerprint } from './ast-normalizer';
 export { countOxcSize } from './oxc-size-count';
 export { parseSource } from './parse-source';
+export { spanOfNode } from './source-span';

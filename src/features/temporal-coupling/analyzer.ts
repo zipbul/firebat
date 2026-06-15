@@ -407,44 +407,33 @@ const collectStateProperties = (bodyItems: ReadonlyArray<unknown>): Array<{ name
   return stateProps;
 };
 
+/** Whether `expr` is a `this.<propName>` member access. */
+const isThisPropertyAccess = (expr: unknown, propName: string): boolean => {
+  if (!isOxcNode(expr) || expr.type !== 'MemberExpression') {
+    return false;
+  }
+
+  const obj = expr.object;
+  const prop = expr.property;
+
+  return isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(prop) && getNodeName(prop) === propName;
+};
+
 const classifyMethodAccess = (methodBody: Node, propName: string): { hasWrite: boolean; hasRead: boolean } => {
   let hasWrite = false;
   let hasRead = false;
 
   walkOxcTree(methodBody, node => {
-    if (node.type === 'MemberExpression') {
-      const object = node.object;
-      const property = node.property;
-
-      if (isOxcNode(object) && object.type === 'ThisExpression' && isOxcNode(property) && getNodeName(property) === propName) {
-        hasRead = true;
-      }
+    if (node.type === 'MemberExpression' && isThisPropertyAccess(node, propName)) {
+      hasRead = true;
     }
 
-    if (node.type === 'AssignmentExpression') {
-      const left = node.left;
-
-      if (isOxcNode(left) && left.type === 'MemberExpression') {
-        const obj = left.object;
-        const p = left.property;
-
-        if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
-          hasWrite = true;
-        }
-      }
+    if (node.type === 'AssignmentExpression' && isThisPropertyAccess(node.left, propName)) {
+      hasWrite = true;
     }
 
-    if (node.type === 'UpdateExpression') {
-      const argument = node.argument;
-
-      if (isOxcNode(argument) && argument.type === 'MemberExpression') {
-        const obj = argument.object;
-        const p = argument.property;
-
-        if (isOxcNode(obj) && obj.type === 'ThisExpression' && isOxcNode(p) && getNodeName(p) === propName) {
-          hasWrite = true;
-        }
-      }
+    if (node.type === 'UpdateExpression' && isThisPropertyAccess(node.argument, propName)) {
+      hasWrite = true;
     }
 
     return true;

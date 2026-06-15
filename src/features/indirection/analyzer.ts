@@ -2,7 +2,6 @@ import type { Gildash } from '@zipbul/gildash';
 import type { Function as OxcFunction, Node, Program } from 'oxc-parser';
 
 import { GildashError, normalizePath } from '@zipbul/gildash';
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import * as path from 'node:path';
 import { Visitor } from 'oxc-parser';
 
@@ -10,6 +9,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
 import { getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
+import { spanOfNode } from '../../engine/ast/source-span';
 
 /* ------------------------------------------------------------------ */
 /*  Path utilities                                                     */
@@ -87,15 +87,6 @@ const collectArityProtectiveArrows = (program: Node): Set<number> => {
 };
 
 const createEmptyIndirection = (): ReadonlyArray<IndirectionFinding> => [];
-
-const getSpan = (node: Node, sourceText: string) => {
-  const offsets = buildLineOffsets(sourceText);
-
-  return {
-    start: getLineColumn(offsets, node.start),
-    end: getLineColumn(offsets, node.end),
-  };
-};
 
 const getAwaitedCallExpression = (node: Node): Node | null => {
   if (node.type !== 'AwaitExpression') {
@@ -473,7 +464,7 @@ const addFinding = (
   findings.push({
     kind,
     filePath,
-    span: getSpan(node, sourceText),
+    span: spanOfNode(node, sourceText),
     header,
     depth,
     evidence,

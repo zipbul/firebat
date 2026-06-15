@@ -1,27 +1,17 @@
 import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
-import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
-
 import type { ParsedFile } from '../../engine/types';
 import type { TypeOracle } from './type-oracle';
-import type { ErrorFlowFinding, ErrorFlowFindingKind, SourceSpan } from './types';
+import type { ErrorFlowFinding, ErrorFlowFindingKind } from './types';
 
 import { forEachChildNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { spanOfNode } from '../../engine/ast/source-span';
 import { createTypeOracle } from './type-oracle';
 
 interface AnalyzeErrorFlowInput {
   readonly gildash?: Gildash;
 }
-
-const getSpan = (node: Node, sourceText: string): SourceSpan => {
-  const offsets = buildLineOffsets(sourceText);
-
-  return {
-    start: getLineColumn(offsets, node.start),
-    end: getLineColumn(offsets, node.end),
-  };
-};
 
 interface PushFindingInput {
   readonly kind: ErrorFlowFindingKind;
@@ -37,7 +27,7 @@ const pushFinding = (findings: ErrorFlowFinding[], input: PushFindingInput): voi
   findings.push({
     kind: input.kind,
     file: input.filePath,
-    span: getSpan(input.node, input.sourceText),
+    span: spanOfNode(input.node, input.sourceText),
     evidence,
   });
 };
