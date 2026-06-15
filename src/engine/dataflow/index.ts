@@ -7,5 +7,5 @@ export {
   collectParameterBindings,
   extractBindingNames,
 } from './reaching-defs';
-export type { BindingName } from './reaching-defs';
+export type { AnalyzeFunctionBodyOptions, BindingName } from './reaching-defs';
 export { collectVariables } from './variable-collector';

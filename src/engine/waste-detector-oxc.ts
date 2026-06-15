@@ -7,6 +7,7 @@ import type { BitSet, DefMeta, ParsedFile } from './types';
 
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode } from './ast';
 import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables } from './dataflow';
+import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import { buildDeclScopeMap } from './dataflow/variable-collector';
 
 interface NestedFunctionContext {
@@ -1436,6 +1437,21 @@ const collectRhsIdentifierNames = (rhs: Node): Set<string> => {
 // none of its source identifiers is ever reassigned: a same-scope reassignment after the
 // use, or one observed at a deferred call of a capturing closure, would change the value.
 // (A plain call cannot reassign a caller's binding, so only explicit writes matter.)
+// Whether an assignment-like *left* (an `AssignmentExpression.left` or a non-declaration
+// `for-in/of` left) writes one of `names`: a bare identifier target (`name = …`) or any
+// identifier inside a destructuring target (`({ name } = …)`, `[name] = …`).
+const leftTargetsName = (left: Node, names: ReadonlySet<string>): boolean => {
+  if (left.type === 'Identifier') {
+    return names.has((left as { name: string }).name);
+  }
+
+  if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+    return identifierAppearsIn(left, names);
+  }
+
+  return false;
+};
+
 const hasReassignmentOfNames = (bodyNodes: ReadonlyArray<Node>, names: ReadonlySet<string>): boolean => {
   let found = false;
 
@@ -1449,18 +1465,8 @@ const hasReassignmentOfNames = (bodyNodes: ReadonlyArray<Node>, names: ReadonlyS
         }
 
         if (node.type === 'AssignmentExpression') {
-          const left = (node as { left: Node }).left;
-
-          // Identifier target (`name = …`) or a destructuring target (`({ name } = …)`,
-          // `[name] = …`) — for a pattern, any identifier inside it may be a write target.
-          if (left.type === 'Identifier') {
-            if (names.has((left as { name: string }).name)) {
-              found = true;
-            }
-          } else if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
-            if (identifierAppearsIn(left, names)) {
-              found = true;
-            }
+          if (leftTargetsName((node as { left: Node }).left, names)) {
+            found = true;
           }
         } else if (node.type === 'UpdateExpression') {
           const arg = (node as { argument: Node }).argument;
@@ -1471,16 +1477,8 @@ const hasReassignmentOfNames = (bodyNodes: ReadonlyArray<Node>, names: ReadonlyS
         } else if (node.type === 'ForInStatement' || node.type === 'ForOfStatement') {
           // `for (existing of …)` / `for ({ existing } of …)` — a non-declaration left
           // reassigns an outer binding each iteration.
-          const left = (node as { left: Node }).left;
-
-          if (left.type === 'Identifier') {
-            if (names.has((left as { name: string }).name)) {
-              found = true;
-            }
-          } else if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
-            if (identifierAppearsIn(left, names)) {
-              found = true;
-            }
+          if (leftTargetsName((node as { left: Node }).left, names)) {
+            found = true;
           }
         }
       },
@@ -1910,6 +1908,113 @@ const declarationPrecededByTsDirective = (location: number, sourceText: string, 
   return false;
 };
 
+// Dead-read elimination policy shared by the function-body and module-body
+// collectors: only propagate dead-ness through a REASSIGNMENT whose value is
+// dead (an overwrite chain like `x = 1; x += 2; x = 5`). A `declaration` binding
+// that is "dead" is use-zero — no-unused-vars territory (비대상) — so its reads
+// (e.g. an observably-evaluated destructuring default that matters for TS
+// definite-assignment) must NOT be eliminated. A closure-captured variable has
+// useCount 0 in the enclosing straight-line flow even though a nested function
+// observes it, so the fixpoint must never treat it as dead nor eliminate its
+// reads. `closureCapturedVarIndexes` and `defCtxByLocation` are scope-specific,
+// so each caller supplies its own.
+const makeCanEliminateDeadDefReads = (
+  closureCapturedVarIndexes: ReadonlySet<number>,
+  defCtxByLocation: ReadonlyMap<number, IdentifierContext>,
+): NonNullable<AnalyzeFunctionBodyOptions['canEliminateDeadDefReads']> =>
+  ({ defId, meta, defs, reachingInByNode, defNodeIdByDefId }) => {
+    if (meta.writeKind === 'declaration' || meta.writeKind === undefined) {
+      return false;
+    }
+
+    if (closureCapturedVarIndexes.has(meta.varIndex)) {
+      return false;
+    }
+
+    const defCtx = defCtxByLocation.get(meta.location);
+    const rhs = defCtx === undefined ? null : findDefRhs(defCtx);
+
+    return (
+      rhs !== null &&
+      !defRhsCarriesSideEffect(rhs) &&
+      !containsMemberExpression(rhs) &&
+      !containsClosureOrEvalReference(rhs) &&
+      !compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)
+    );
+  };
+
+interface FreshDefSets {
+  /** varIndexes all of whose value-writing defs are fresh allocations. */
+  readonly varHasOnlyFreshDefs: Set<number>;
+  /** varIndexes whose init defines a user method/getter/setter (shadows the
+   *  built-in mutation receiver → case 6/7 must be disabled for them). */
+  readonly varHasUserDefinedAccessor: Set<number>;
+}
+
+// "all defs fresh" gate shared by the function-body and module-body collectors.
+// Required so `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the
+// fresh def at either scope.
+const computeFreshDefSets = (
+  defs: ReadonlyArray<DefMeta | undefined>,
+  defCtxByLocation: ReadonlyMap<number, IdentifierContext>,
+): FreshDefSets => {
+  const varHasOnlyFreshDefs = new Set<number>();
+  const varHasUserDefinedAccessor = new Set<number>();
+  const seenVarIndexes = new Set<number>();
+
+  for (const def of defs) {
+    if (def === undefined) {
+      continue;
+    }
+
+    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
+      continue;
+    }
+
+    seenVarIndexes.add(def.varIndex);
+  }
+
+  for (const varIndex of seenVarIndexes) {
+    let allFresh = true;
+
+    for (const def of defs) {
+      if (def === undefined || def.varIndex !== varIndex) {
+        continue;
+      }
+
+      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
+        continue;
+      }
+
+      // Binding-only declarations (`let c;`) write no value, so they don't introduce
+      // a non-fresh alias — ignore them for the "all defs fresh" check.
+      if (def.writeKind === 'declaration' && def.hasInit === false) {
+        continue;
+      }
+
+      const ctx = defCtxByLocation.get(def.location);
+
+      if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
+        allFresh = false;
+
+        break;
+      }
+
+      const init = resolveDeclarationInit(ctx);
+
+      if (init !== null && objectInitDefinesMethodOrAccessor(unwrapValueWrappers(init))) {
+        varHasUserDefinedAccessor.add(varIndex);
+      }
+    }
+
+    if (allFresh) {
+      varHasOnlyFreshDefs.add(varIndex);
+    }
+  }
+
+  return { varHasOnlyFreshDefs, varHasUserDefinedAccessor };
+};
+
 const collectWasteFindingsForFunction = (
   node: Node,
   functionBodyNode: Node | ReadonlyArray<Node>,
@@ -1954,38 +2059,7 @@ const collectWasteFindingsForFunction = (
     declScopeByIdLocation,
     {
       inlineSyncIifes: true,
-      canEliminateDeadDefReads: ({ defId, meta, defs, reachingInByNode, defNodeIdByDefId }) => {
-        // Only propagate dead-ness through a REASSIGNMENT whose value is dead
-        // (an overwrite chain like `x = 1; x += 2; x = 5`). A `declaration`
-        // binding that is "dead" is use-zero — that is no-unused-vars territory
-        // (비대상), so its reads (e.g. a destructuring default `{ a = value }`
-        // that is observably evaluated, and matters for TS definite-assignment)
-        // must NOT be eliminated. Restricting to non-declaration reassignments
-        // also keeps the eliminated read in the same scope as a real dead store.
-        if (meta.writeKind === 'declaration' || meta.writeKind === undefined) {
-          return false;
-        }
-
-        // A closure-captured variable has useCount 0 in the enclosing
-        // straight-line flow even though a nested function observes it. The
-        // fixpoint must not treat such a def as dead nor eliminate its reads
-        // (e.g. `const LABELS = { a: helper }` read only inside a function →
-        // `helper`'s read must stay live).
-        if (closureCapturedVarIndexes.has(meta.varIndex)) {
-          return false;
-        }
-
-        const defCtx = defCtxByLocation.get(meta.location);
-        const rhs = defCtx === undefined ? null : findDefRhs(defCtx);
-
-        return (
-          rhs !== null &&
-          !defRhsCarriesSideEffect(rhs) &&
-          !containsMemberExpression(rhs) &&
-          !containsClosureOrEvalReference(rhs) &&
-          !compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)
-        );
-      },
+      canEliminateDeadDefReads: makeCanEliminateDeadDefReads(closureCapturedVarIndexes, defCtxByLocation),
     },
   );
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
@@ -2095,63 +2169,7 @@ const collectWasteFindingsForFunction = (
   // aliases an outer reference, the mutation site (`c.push(...)`) reaches both, so
   // dropping the fresh-allocation def would not actually eliminate the observable
   // mutation on the aliased path. Compute the "all defs fresh" predicate per varIndex.
-  const varHasOnlyFreshDefs = new Set<number>();
-  const seenVarIndexes = new Set<number>();
-
-  for (const def of defs) {
-    if (def === undefined) {
-      continue;
-    }
-
-    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
-      continue;
-    }
-
-    seenVarIndexes.add(def.varIndex);
-  }
-
-  // A variable whose init defines a user method/getter/setter shadows the built-in
-  // mutation receiver — same name match would invoke the user's code with arbitrary
-  // side-effects. Disable case 6/7 entirely for these variables.
-  const varHasUserDefinedAccessor = new Set<number>();
-
-  for (const varIndex of seenVarIndexes) {
-    let allFresh = true;
-
-    for (const def of defs) {
-      if (def === undefined || def.varIndex !== varIndex) {
-        continue;
-      }
-
-      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
-        continue;
-      }
-
-      // Binding-only declarations (`let c;`) write no value, so they don't introduce
-      // a non-fresh alias — ignore them for the "all defs fresh" check.
-      if (def.writeKind === 'declaration' && def.hasInit === false) {
-        continue;
-      }
-
-      const ctx = defCtxByLocation.get(def.location);
-
-      if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
-        allFresh = false;
-
-        break;
-      }
-
-      const init = resolveDeclarationInit(ctx);
-
-      if (init !== null && objectInitDefinesMethodOrAccessor(unwrapValueWrappers(init))) {
-        varHasUserDefinedAccessor.add(varIndex);
-      }
-    }
-
-    if (allFresh) {
-      varHasOnlyFreshDefs.add(varIndex);
-    }
-  }
+  const { varHasOnlyFreshDefs, varHasUserDefinedAccessor } = computeFreshDefSets(defs, defCtxByLocation);
 
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
@@ -2336,20 +2354,22 @@ interface ExportExemption {
   readonly names: Set<string>;
 }
 
+// Collect the source offsets of every binding identifier introduced by `idNode`
+// into `target`: a bare `Identifier` is one binding; a destructuring pattern
+// (`{ a, b }`, `[a, b]`) contributes each identifier inside it.
+const recordBindingIdOffsets = (idNode: Node, target: Set<number>): void => {
+  if (idNode.type === 'Identifier') {
+    target.add(idNode.start);
+
+    return;
+  }
+
+  forEachChildNode(idNode, child => recordBindingIdOffsets(child, target));
+};
+
 const collectExportExemption = (programBody: ReadonlyArray<Node>): ExportExemption => {
   const locations = new Set<number>();
   const names = new Set<string>();
-
-  const recordBindingLocations = (idNode: Node): void => {
-    if (idNode.type === 'Identifier') {
-      locations.add(idNode.start);
-
-      return;
-    }
-
-    // Destructure patterns inside an export declaration — recurse into each binding.
-    forEachChildNode(idNode, child => recordBindingLocations(child));
-  };
 
   for (const stmt of programBody) {
     if (stmt.type !== 'ExportNamedDeclaration' && stmt.type !== 'ExportDefaultDeclaration') {
@@ -2378,7 +2398,7 @@ const collectExportExemption = (programBody: ReadonlyArray<Node>): ExportExempti
 
     if (decl.type === 'VariableDeclaration') {
       for (const declarator of (decl as { declarations: ReadonlyArray<{ id: Node }> }).declarations) {
-        recordBindingLocations(declarator.id);
+        recordBindingIdOffsets(declarator.id, locations);
       }
     }
 
@@ -2402,16 +2422,6 @@ const collectExportExemption = (programBody: ReadonlyArray<Node>): ExportExempti
 const collectNamespaceMemberLocations = (programBody: ReadonlyArray<Node>): Set<number> => {
   const out = new Set<number>();
 
-  const recordBindingIds = (idNode: Node): void => {
-    if (idNode.type === 'Identifier') {
-      out.add(idNode.start);
-
-      return;
-    }
-
-    forEachChildNode(idNode, child => recordBindingIds(child));
-  };
-
   const visit = (node: Node, inNamespaceDirect: boolean): void => {
     if (isFunctionNode(node)) {
       // Function boundary: its locals are not namespace members.
@@ -2428,7 +2438,7 @@ const collectNamespaceMemberLocations = (programBody: ReadonlyArray<Node>): Set<
 
     if (inNamespaceDirect && node.type === 'VariableDeclaration') {
       for (const declarator of (node as { declarations: ReadonlyArray<{ id: Node }> }).declarations) {
-        recordBindingIds(declarator.id);
+        recordBindingIdOffsets(declarator.id, out);
       }
     }
 
@@ -2468,30 +2478,7 @@ const collectWasteFindingsForModule = (
   const closureCapturedVarIndexes = collectClosureCapturedVarIndexes(programBody, localIndexByName, declScopeByIdLocation);
   const analysis = analyzeFunctionBody(programBody, localIndexByName, [], [], declScopeByIdLocation, {
     inlineSyncIifes: true,
-    canEliminateDeadDefReads: ({ defId, meta, defs, reachingInByNode, defNodeIdByDefId }) => {
-      // Same guards as the function path: only propagate through dead
-      // REASSIGNMENTS (not declarations / use-zero), and never through a
-      // closure-captured variable (useCount 0 in module flow but observed by a
-      // nested function — e.g. a label table read only inside a function).
-      if (meta.writeKind === 'declaration' || meta.writeKind === undefined) {
-        return false;
-      }
-
-      if (closureCapturedVarIndexes.has(meta.varIndex)) {
-        return false;
-      }
-
-      const defCtx = defCtxByLocation.get(meta.location);
-      const rhs = defCtx === undefined ? null : findDefRhs(defCtx);
-
-      return (
-        rhs !== null &&
-        !defRhsCarriesSideEffect(rhs) &&
-        !containsMemberExpression(rhs) &&
-        !containsClosureOrEvalReference(rhs) &&
-        !compoundAssignmentMayCoerceObject(defId, meta, defs, reachingInByNode, defNodeIdByDefId, defCtxByLocation)
-      );
-    },
+    canEliminateDeadDefReads: makeCanEliminateDeadDefReads(closureCapturedVarIndexes, defCtxByLocation),
   });
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
   const syntacticReads = programBody
@@ -2564,63 +2551,7 @@ const collectWasteFindingsForModule = (
   const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation, varInitKind);
   // Same "all defs fresh" gate as the function path — required so module-scope
   // `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the fresh def.
-  const varHasOnlyFreshDefs = new Set<number>();
-  const seenVarIndexes = new Set<number>();
-
-  for (const def of defs) {
-    if (def === undefined) {
-      continue;
-    }
-
-    if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
-      continue;
-    }
-
-    seenVarIndexes.add(def.varIndex);
-  }
-
-  // A variable whose init defines a user method/getter/setter shadows the built-in
-  // mutation receiver — same name match would invoke the user's code with arbitrary
-  // side-effects. Disable case 6/7 entirely for these variables.
-  const varHasUserDefinedAccessor = new Set<number>();
-
-  for (const varIndex of seenVarIndexes) {
-    let allFresh = true;
-
-    for (const def of defs) {
-      if (def === undefined || def.varIndex !== varIndex) {
-        continue;
-      }
-
-      if (def.writeKind !== 'declaration' && def.writeKind !== 'assignment' && def.writeKind !== 'logical-assignment') {
-        continue;
-      }
-
-      // Binding-only declarations (`let c;`) write no value, so they don't introduce
-      // a non-fresh alias — ignore them for the "all defs fresh" check.
-      if (def.writeKind === 'declaration' && def.hasInit === false) {
-        continue;
-      }
-
-      const ctx = defCtxByLocation.get(def.location);
-
-      if (ctx === undefined || !isDeclarationFreshAllocation(ctx)) {
-        allFresh = false;
-
-        break;
-      }
-
-      const init = resolveDeclarationInit(ctx);
-
-      if (init !== null && objectInitDefinesMethodOrAccessor(unwrapValueWrappers(init))) {
-        varHasUserDefinedAccessor.add(varIndex);
-      }
-    }
-
-    if (allFresh) {
-      varHasOnlyFreshDefs.add(varIndex);
-    }
-  }
+  const { varHasOnlyFreshDefs, varHasUserDefinedAccessor } = computeFreshDefSets(defs, defCtxByLocation);
 
   const emittedKeys = new Set<string>();
 
