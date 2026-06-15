@@ -137,6 +137,26 @@ export class OxcCFGBuilder {
     return useBreakTarget ? entry.breakTarget : entry.continueTarget;
   }
 
+  /**
+   * Push a loop scope (break/continue targets + label) onto the loop stack and
+   * visit the loop body within it. Centralizes the single decision shared by
+   * every loop visitor — how a loop registers its jump targets — so the
+   * `LoopTargets` shape and stack-extension convention have one source of truth.
+   * Returns the body's tail nodes; per-loop back-edge wiring stays in the caller.
+   */
+  private visitLoopBody(
+    body: Node,
+    bodyEntry: NodeId,
+    breakTarget: NodeId,
+    continueTarget: NodeId,
+    loopStack: readonly LoopTargets[],
+    currentLabel: string | null,
+  ): NodeId[] {
+    const nextLoopStack: LoopTargets[] = [...loopStack, { breakTarget, continueTarget, label: currentLabel }];
+
+    return this.visitStatement(body, [bodyEntry], nextLoopStack, null);
+  }
+
   private resolveLoopTarget(loopStack: readonly LoopTargets[], label: string | null, useBreakTarget: boolean): NodeId | null {
     for (let index = loopStack.length - 1; index >= 0; index -= 1) {
       const entry = loopStack[index];
@@ -345,8 +365,7 @@ export class OxcCFGBuilder {
       return [afterLoop];
     }
 
-    const nextLoopStack: LoopTargets[] = [...loopStack, { breakTarget: afterLoop, continueTarget, label: currentLabel }];
-    const bodyTails = this.visitStatement(forNode.body, [bodyEntry], nextLoopStack, null);
+    const bodyTails = this.visitLoopBody(forNode.body, bodyEntry, afterLoop, continueTarget, loopStack, currentLabel);
 
     if (updateNode !== null) {
       this.connect(bodyTails, updateNode, EdgeType.Normal);
@@ -379,11 +398,7 @@ export class OxcCFGBuilder {
       return [afterLoop];
     }
 
-    const nextLoopStack: LoopTargets[] = [
-      ...loopStack,
-      { breakTarget: afterLoop, continueTarget: conditionNode, label: currentLabel },
-    ];
-    const bodyTails = this.visitStatement(whileNode.body, [bodyEntry], nextLoopStack, null);
+    const bodyTails = this.visitLoopBody(whileNode.body, bodyEntry, afterLoop, conditionNode, loopStack, currentLabel);
 
     this.connect(bodyTails, conditionNode, EdgeType.Normal);
 
@@ -403,11 +418,7 @@ export class OxcCFGBuilder {
     this.connect(incoming, bodyEntry, EdgeType.Normal);
     this.addExceptionEdgeIfInTry(conditionNode);
 
-    const nextLoopStack: LoopTargets[] = [
-      ...loopStack,
-      { breakTarget: afterLoop, continueTarget: conditionNode, label: currentLabel },
-    ];
-    const bodyTails = this.visitStatement(doWhileNode.body, [bodyEntry], nextLoopStack, null);
+    const bodyTails = this.visitLoopBody(doWhileNode.body, bodyEntry, afterLoop, conditionNode, loopStack, currentLabel);
 
     this.connect(bodyTails, conditionNode, EdgeType.Normal);
 
@@ -434,11 +445,7 @@ export class OxcCFGBuilder {
     this.cfg.addEdge(headerNode, afterLoop, EdgeType.Normal);
     this.cfg.addEdge(headerNode, bodyEntry, EdgeType.Normal);
 
-    const nextLoopStack: LoopTargets[] = [
-      ...loopStack,
-      { breakTarget: afterLoop, continueTarget: headerNode, label: currentLabel },
-    ];
-    const bodyTails = this.visitStatement(forOfInNode.body, [bodyEntry], nextLoopStack, null);
+    const bodyTails = this.visitLoopBody(forOfInNode.body, bodyEntry, afterLoop, headerNode, loopStack, currentLabel);
 
     this.connect(bodyTails, headerNode, EdgeType.Normal);
 

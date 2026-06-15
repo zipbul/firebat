@@ -6,6 +6,16 @@ import { blankLinesBetweenStatementGroupsRule } from '../../../../src/test-api';
 import { noBracketNotationRule } from '../../../../src/test-api';
 import { paddingLineBetweenStatementsRule } from '../../../../src/test-api';
 import { unusedImportsRule } from '../../../../src/test-api';
+
+import {
+  buildUniqueIdentifiers,
+  getRange as getRangeTuple,
+  makeIdentifier,
+  makeUnsafeKey,
+  mulberry32,
+  newline,
+  whitespace,
+} from './fuzz-rng';
 import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
 import { buildCommaTokens } from './token-utils';
 
@@ -34,13 +44,6 @@ interface RuleModule {
   create(context: RuleContext): Visitor;
 }
 
-interface Rng {
-  nextU32(): number;
-  int(min: number, maxInclusive: number): number;
-  bool(pTrue: number): boolean;
-  pick<T>(items: readonly T[]): T;
-}
-
 interface RuleRunResult {
   reports: ReturnType<typeof createRuleContext>['reports'];
   fixed: string;
@@ -50,80 +53,7 @@ interface AstNodeShape {
   type?: string;
 }
 
-const mulberry32 = (seed: number): Rng => {
-  let t = seed >>> 0;
-
-  const nextU32 = (): number => {
-    t += 0x6d2b79f5;
-
-    let x = t;
-
-    x = Math.imul(x ^ (x >>> 15), x | 1);
-
-    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
-
-    return (x ^ (x >>> 14)) >>> 0;
-  };
-
-  return {
-    nextU32,
-    int(min: number, maxInclusive: number): number {
-      if (maxInclusive < min) {
-        throw new Error('invalid int range');
-      }
-
-      return min + (nextU32() % (maxInclusive - min + 1));
-    },
-    bool(pTrue: number): boolean {
-      const threshold = Math.max(0, Math.min(1, pTrue));
-      const x = nextU32() / 0x1_0000_0000;
-
-      return x < threshold;
-    },
-    pick<T>(items: readonly T[]): T {
-      if (items.length === 0) {
-        throw new Error('cannot pick from empty list');
-      }
-
-      const item = items[nextU32() % items.length];
-
-      if (item === undefined) {
-        throw new Error('random pick failed');
-      }
-
-      return item;
-    },
-  };
-};
-
-const makeIdentifier = (rng: Rng, minLen = 1, maxLen = 10): string => {
-  const firstChars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_$';
-  const len = rng.int(minLen, maxLen);
-  let out = rng.pick(firstChars.split(''));
-
-  for (let i = 1; i < len; i += 1) {
-    out += rng.pick((firstChars + '0123456789').split(''));
-  }
-
-  return out;
-};
-
-const makeUnsafeKey = (rng: Rng): string => {
-  const parts = ['not-valid', 'with space', 'kebab-case', 'has.dot', '0starts', 'x-y', 'a:b'];
-  const base = rng.pick(parts);
-
-  if (rng.bool(0.5)) {
-    return `${base}-${rng.int(0, 9)}`;
-  }
-
-  return base;
-};
-
-const whitespace = (rng: Rng): string => rng.pick(['', ' ', '  ', '\t']);
-
-const newline = (rng: Rng): string => (rng.bool(0.5) ? '\n' : '\r\n');
-
-const isAstNode = (value: AstNodeValue | AstNodeShape | Program | null | undefined): value is AstNode => {
+const isAstNode =(value: AstNodeValue | AstNodeShape | Program | null | undefined): value is AstNode => {
   if (value === null || value === undefined) {
     return false;
   }
@@ -251,21 +181,6 @@ const traverseAndVisit = (root: AstNodeValue | null | undefined, visitor: Visito
   };
 
   walk(root);
-};
-
-const getRangeTuple = (node: AstNode | null | undefined): [number, number] | null => {
-  if (!node || !Array.isArray(node.range) || node.range.length !== 2) {
-    return null;
-  }
-
-  const start = node.range[0];
-  const end = node.range[1];
-
-  if (typeof start !== 'number' || typeof end !== 'number') {
-    return null;
-  }
-
-  return [start, end];
 };
 
 const collectIdentifierUsages = (
@@ -397,16 +312,7 @@ const runParserAutofixInvariantsFuzz = (): void => {
 
     for (let i = 0; i < 140; i += 1) {
       const count = rng.int(1, 4);
-      const names: string[] = [];
-
-      while (names.length < count) {
-        const candidate = makeIdentifier(rng, 1, 8);
-
-        if (!names.includes(candidate)) {
-          names.push(candidate);
-        }
-      }
-
+      const names = buildUniqueIdentifiers(rng, count);
       const importKind = rng.bool(0.1) ? 'type' : null;
       const multiline = rng.bool(0.15);
       const ws1 = whitespace(rng);
