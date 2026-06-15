@@ -1,0 +1,40 @@
+[
+  {
+    "cloneType": "normalized",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/trailing-return-dead/a.ts",
+        "header": "setup",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 6
+          },
+          "start": {
+            "column": 7,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/trailing-return-dead/b.ts",
+        "header": "setup",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 7,
+            "line": 1
+          }
+        }
+      }
+    ],
+    "severity": 60,
+    "size": 30
+  }
+]

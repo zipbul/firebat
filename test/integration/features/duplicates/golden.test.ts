@@ -28,6 +28,7 @@ describe('golden/duplicates', () => {
   rg('three-members-dead'); // 사본 3개 = 하나의 그룹 (분리 금지)
   rg('many-members-no-split-dead'); // 동일 정규형 N멤버 → 통계적 분리 없이 한 그룹
   rg('exported-pair-dead'); // export 여부는 로직 중복 판정과 무관
+  rg('trailing-return-dead'); // 말미 무조건 return; 유무만 다른 함수 (정규화)
   rg('delegation-plus-logic-dead'); // 위임+로직 1줄 = 골격 아님 → W (골격 경계 가드)
 
   // ════════════════════════════════════════════════════════════════════════

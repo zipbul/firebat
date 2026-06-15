@@ -133,4 +133,19 @@ describe('engine/ast/ast-normalizer', () => {
       expectDifferentNormalized('export function f(a) { return a + 1; }', 'export function f(a) { return a - 1; }');
     });
   });
+  // ── 말미 무조건 return; 정규화 (#16, 함수 끝 fall-off와 동일) ──
+  it('should treat a trailing value-less return as equivalent to falling off the function', () => {
+    expectSameNormalized('function f() { a(); b(); return; }', 'function g() { a(); b(); }');
+  });
+
+  it('should NOT strip a value-carrying trailing return', () => {
+    expectDifferentNormalized('function f() { a(); return 1; }', 'function g() { a(); }');
+  });
+
+  it('should NOT strip a non-terminal (mid-body) return', () => {
+    expectDifferentNormalized(
+      'function f(c: boolean) { if (c) return; work(); }',
+      'function g(c: boolean) { if (c) {} work(); }',
+    );
+  });
 });

@@ -849,7 +849,54 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
 
 let normalizationCache = new WeakMap<Node, NormalizedValue>();
 
+const FUNCTION_LIKE_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+
+/**
+ * 함수 본문 말미의 값 없는 `return;`을 제거한다 — 함수 끝에서 떨어지는 것과 동일(둘 다 undefined 반환).
+ * 함수 body 블록의 *마지막* 문장이고 argument가 없을 때만. (루프·if 본문의 return은 제어흐름이라 제외)
+ * 건전성: 함수 말미 무조건 return;은 관찰 가능 동작이 fall-off와 같다 (generator·async 포함).
+ */
+const normalizeTrailingReturn = (node: AnyNode): NodeValue | null => {
+  if (!FUNCTION_LIKE_TYPES.has(node.type)) {
+    return null;
+  }
+
+  const body = (node as unknown as { body?: NodeValue }).body;
+
+  if (!isNodeRecord(body) || (body as AnyNode).type !== 'BlockStatement') {
+    return null;
+  }
+
+  const stmts = (body as unknown as { body?: NodeValue }).body;
+
+  if (!Array.isArray(stmts) || stmts.length === 0) {
+    return null;
+  }
+
+  const last = stmts[stmts.length - 1] as Node | undefined;
+
+  if (last === undefined || !isNodeRecord(last) || (last as AnyNode).type !== 'ReturnStatement') {
+    return null;
+  }
+
+  const arg = (last as unknown as { argument?: NodeValue }).argument;
+
+  if (arg !== null && arg !== undefined) {
+    return null;
+  }
+
+  const rec = node as unknown as Record<string, unknown>;
+
+  return withType(node.type, { ...rec, body: block(stmts.slice(0, -1) as ReadonlyArray<Node>) });
+};
+
 const applyLocalRewrites = (normalized: AnyNode, functionDepth: number): NormalizedValue | null => {
+  const trailingReturn = normalizeTrailingReturn(normalized);
+
+  if (trailingReturn !== null) {
+    return normalizeForFingerprintInternal(trailingReturn, functionDepth);
+  }
+
   const ternaryInversion = normalizeTernaryInversion(normalized);
 
   if (ternaryInversion !== null) {
