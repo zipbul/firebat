@@ -1,6 +1,8 @@
 import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
+import { asRecord, readJsoncFile } from '../../shared/workspace-packages';
+
 type TsconfigPaths = Record<string, ReadonlyArray<string>>;
 
 interface TsconfigResolveOptions {
@@ -26,34 +28,10 @@ interface StarMatch {
   readonly star: string;
 }
 
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-};
-
 const isWithinRoot = (rootAbs: string, fileAbs: string): boolean => {
   const rel = path.relative(rootAbs, fileAbs);
 
   return rel.length === 0 || (!rel.startsWith('..') && !path.isAbsolute(rel));
-};
-
-const readJsoncFile = async (filePathAbs: string): Promise<unknown | null> => {
-  try {
-    const file = Bun.file(filePathAbs);
-
-    if (!(await file.exists())) {
-      return null;
-    }
-
-    const text = await file.text();
-
-    return Bun.JSONC.parse(text);
-  } catch {
-    return null;
-  }
 };
 
 const resolveExtendsPath = (fromDirAbs: string, extendsValue: string): string | null => {

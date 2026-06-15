@@ -46,6 +46,14 @@ const parseNumber = (value: string, label: string): number => {
   return parsed;
 };
 
+const parseClampedIntArg = (value: string | undefined, flag: string, floor: number): number => {
+  if (typeof value !== 'string') {
+    throw new Error(`[firebat] Missing value for ${flag}`);
+  }
+
+  return Math.max(floor, Math.round(parseNumber(value, flag)));
+};
+
 const parseMinSize = (value: string): MinSizeOption => {
   if (value === 'auto') {
     return 'auto';
@@ -198,13 +206,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     }
 
     if (arg === '--max-forward-depth') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --max-forward-depth');
-      }
-
-      maxForwardDepth = Math.max(0, Math.round(parseNumber(value, '--max-forward-depth')));
+      maxForwardDepth = parseClampedIntArg(argv[i + 1], '--max-forward-depth', 0);
       explicit.maxForwardDepth = true;
 
       i += 1;
@@ -213,13 +215,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     }
 
     if (arg === '--cross-file-min-depth') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --cross-file-min-depth');
-      }
-
-      crossFileMinDepth = Math.max(1, Math.round(parseNumber(value, '--cross-file-min-depth')));
+      crossFileMinDepth = parseClampedIntArg(argv[i + 1], '--cross-file-min-depth', 1);
       explicit.crossFileMinDepth = true;
 
       i += 1;

@@ -564,6 +564,14 @@ interface InsertionContext {
   readonly newline: string;
 }
 
+const renderMissingKeyLines = (ctx: InsertionContext, indent: string): string[] => {
+  return ctx.missingKeys.map(k => {
+    const v = ctx.templateObject[k] as JsonValue;
+
+    return renderInsertedProperty({ key: k, value: v, indent, newline: ctx.newline }) + ',';
+  });
+};
+
 const buildInsertionsBeforeFirstProp = (ctx: InsertionContext): Edit[] => {
   const first = ctx.keptProps[0];
 
@@ -573,11 +581,7 @@ const buildInsertionsBeforeFirstProp = (ctx: InsertionContext): Edit[] => {
 
   const firstLineStart = lineStartAt(ctx.userText, first.keyStart);
   const indent = ctx.userText.slice(firstLineStart, first.keyStart);
-  const blockLines = ctx.missingKeys.map(k => {
-    const v = ctx.templateObject[k] as JsonValue;
-
-    return renderInsertedProperty({ key: k, value: v, indent, newline: ctx.newline }) + ',';
-  });
+  const blockLines = renderMissingKeyLines(ctx, indent);
   const block = blockLines.join(ctx.newline) + ctx.newline;
 
   return [{ start: firstLineStart, end: firstLineStart, text: block }];
@@ -588,11 +592,7 @@ const buildInsertionsIntoEmptyObject = (ctx: InsertionContext): Edit[] => {
   const closeLineStart = lineStartAt(ctx.userText, closeBrace);
   const baseIndent = ctx.userText.slice(closeLineStart, closeBrace);
   const indent = baseIndent + '  ';
-  const blockLines = ctx.missingKeys.map(k => {
-    const v = ctx.templateObject[k] as JsonValue;
-
-    return renderInsertedProperty({ key: k, value: v, indent, newline: ctx.newline }) + ',';
-  });
+  const blockLines = renderMissingKeyLines(ctx, indent);
   const block = ctx.newline + blockLines.join(ctx.newline) + ctx.newline + baseIndent;
 
   return [{ start: closeBrace, end: closeBrace, text: block }];
