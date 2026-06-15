@@ -2,6 +2,8 @@ import { describe, it, expect } from 'bun:test';
 
 import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
 
+interface EqualsBitSetCase { name: string; aBits: number[]; bBits: number[]; equal: boolean }
+
 describe('createBitSet', () => {
   it('creates an empty bit set', () => {
     const bs = createBitSet();
@@ -80,25 +82,24 @@ describe('subtractBitSet', () => {
 });
 
 describe('equalsBitSet', () => {
-  it('returns true for two empty sets', () => {
-    expect(equalsBitSet(createBitSet(), createBitSet())).toBe(true);
-  });
+  const cases: EqualsBitSetCase[] = [
+    { name: 'returns true for two empty sets', aBits: [], bBits: [], equal: true },
+    { name: 'returns true for sets with same bits', aBits: [5], bBits: [5], equal: true },
+    { name: 'returns false for sets with different bits', aBits: [1], bBits: [2], equal: false },
+  ];
 
-  it('returns true for sets with same bits', () => {
+  it.each(cases)('$name', ({ aBits, bBits, equal }) => {
     const a = createBitSet();
     const b = createBitSet();
 
-    a.add(5);
-    b.add(5);
-    expect(equalsBitSet(a, b)).toBe(true);
-  });
+    for (const bit of aBits) {
+      a.add(bit);
+    }
 
-  it('returns false for sets with different bits', () => {
-    const a = createBitSet();
-    const b = createBitSet();
+    for (const bit of bBits) {
+      b.add(bit);
+    }
 
-    a.add(1);
-    b.add(2);
-    expect(equalsBitSet(a, b)).toBe(false);
+    expect(equalsBitSet(a, b)).toBe(equal);
   });
 });

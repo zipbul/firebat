@@ -8,6 +8,8 @@ import { isOxcNode } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
 import { collectVariables } from './variable-collector';
 
+interface ReadCountCase { name: string; lines: string[]; statementIndex: number }
+
 const getFunctionBodyStatement = (sourceText: string, statementIndex: number): Node => {
   const parsed = parseSource('/virtual/variable-collector.spec.ts', sourceText);
   const program = parsed.program;
@@ -50,64 +52,52 @@ const getReadCount = (usages: ReadonlyArray<VariableUsage>, name: string): numbe
 };
 
 describe('variable-collector', () => {
-  it('should not count reads when a statically never-executed && branch exists', () => {
-    // Arrange
-    const statement = getFunctionBodyStatement(['function f() {', '  let value = 1;', '  false && value;', '}'].join('\n'), 1);
-    // Act
+  // Rows where the static-analysis path proves `value` is never read → read count 0.
+  const zeroReadCases: ReadCountCase[] = [
+    {
+      name: 'should not count reads when a statically never-executed && branch exists',
+      lines: ['function f() {', '  let value = 1;', '  false && value;', '}'],
+      statementIndex: 1,
+    },
+    {
+      name: 'should not count reads when a conditional branch is statically unreachable',
+      lines: ['function f() {', '  let value = 1;', '  true ? 0 : value;', '}'],
+      statementIndex: 1,
+    },
+    {
+      name: 'should not count destructuring default reads when the property is statically present',
+      lines: ['function f() {', '  let value = 1;', '  let { a = value } = { a: 2 };', '}'],
+      statementIndex: 1,
+    },
+  ];
+
+  it.each(zeroReadCases)('$name', ({ lines, statementIndex }) => {
+    const statement = getFunctionBodyStatement(lines.join('\n'), statementIndex);
     const usages = collectVariables(statement, { includeNestedFunctions: false });
     const valueReads = getReadCount(usages, 'value');
 
-    // Assert
     expect(valueReads).toBe(0);
   });
 
-  it('should not count reads when a conditional branch is statically unreachable', () => {
-    // Arrange
-    const statement = getFunctionBodyStatement(['function f() {', '  let value = 1;', '  true ? 0 : value;', '}'].join('\n'), 1);
-    // Act
+  // Rows where `value` is genuinely reachable → at least one read counted.
+  const positiveReadCases: ReadCountCase[] = [
+    {
+      name: 'should count reads when inside an immediately-invoked function expression',
+      lines: ['function f() {', '  let value = 1;', '  (() => value)();', '}'],
+      statementIndex: 1,
+    },
+    {
+      name: 'should count destructuring default reads when the property is statically missing',
+      lines: ['function f() {', '  let value = 1;', '  let { a = value } = {};', '}'],
+      statementIndex: 1,
+    },
+  ];
+
+  it.each(positiveReadCases)('$name', ({ lines, statementIndex }) => {
+    const statement = getFunctionBodyStatement(lines.join('\n'), statementIndex);
     const usages = collectVariables(statement, { includeNestedFunctions: false });
     const valueReads = getReadCount(usages, 'value');
 
-    // Assert
-    expect(valueReads).toBe(0);
-  });
-
-  it('should count reads when inside an immediately-invoked function expression', () => {
-    // Arrange
-    const statement = getFunctionBodyStatement(['function f() {', '  let value = 1;', '  (() => value)();', '}'].join('\n'), 1);
-    // Act
-    const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = getReadCount(usages, 'value');
-
-    // Assert
-    expect(valueReads).toBeGreaterThan(0);
-  });
-
-  it('should not count destructuring default reads when the property is statically present', () => {
-    // Arrange
-    const statement = getFunctionBodyStatement(
-      ['function f() {', '  let value = 1;', '  let { a = value } = { a: 2 };', '}'].join('\n'),
-      1,
-    );
-    // Act
-    const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = getReadCount(usages, 'value');
-
-    // Assert
-    expect(valueReads).toBe(0);
-  });
-
-  it('should count destructuring default reads when the property is statically missing', () => {
-    // Arrange
-    const statement = getFunctionBodyStatement(
-      ['function f() {', '  let value = 1;', '  let { a = value } = {};', '}'].join('\n'),
-      1,
-    );
-    // Act
-    const usages = collectVariables(statement, { includeNestedFunctions: false });
-    const valueReads = getReadCount(usages, 'value');
-
-    // Assert
     expect(valueReads).toBeGreaterThan(0);
   });
 

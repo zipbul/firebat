@@ -16,6 +16,9 @@ import {
 } from './oxc-ast-utils';
 import { parseSource } from './parse-source';
 
+interface ChildNodeCase { name: string; source: string; nodeType: string; expected: string[] }
+interface NodeHeaderCase { name: string; source: string; nodeType: string; header: string }
+
 const prog = (src: string) => parseSource('test.ts', src).program;
 
 describe('isOxcNode', () => {
@@ -182,52 +185,63 @@ describe('collectFunctionNodesWithParent', () => {
 });
 
 describe('forEachChildNode', () => {
-  it('yields only Node children of IfStatement (test, consequent, alternate)', () => {
-    const nodes = collectOxcNodes(prog('if (true) { x; } else { y; }'), n => n.type === 'IfStatement');
+  const cases: ChildNodeCase[] = [
+    {
+      name: 'yields only Node children of IfStatement (test, consequent, alternate)',
+      source: 'if (true) { x; } else { y; }',
+      nodeType: 'IfStatement',
+      expected: ['Literal', 'BlockStatement', 'BlockStatement'],
+    },
+    {
+      name: 'yields array children (VariableDeclaration.declarations)',
+      source: 'const x = 1, y = 2;',
+      nodeType: 'VariableDeclaration',
+      expected: ['VariableDeclarator', 'VariableDeclarator'],
+    },
+    {
+      name: 'yields nothing for leaf nodes (Identifier)',
+      source: 'x;',
+      nodeType: 'Identifier',
+      expected: [],
+    },
+    {
+      name: 'skips null children (IfStatement without alternate)',
+      source: 'if (true) { x; }',
+      nodeType: 'IfStatement',
+      expected: ['Literal', 'BlockStatement'],
+    },
+  ];
+
+  it.each(cases)('$name', ({ source, nodeType, expected }) => {
+    const nodes = collectOxcNodes(prog(source), n => n.type === nodeType);
     const children: string[] = [];
 
     forEachChildNode(nodes[0]!, child => children.push(child.type));
-    expect(children).toEqual(['Literal', 'BlockStatement', 'BlockStatement']);
-  });
-
-  it('yields array children (VariableDeclaration.declarations)', () => {
-    const nodes = collectOxcNodes(prog('const x = 1, y = 2;'), n => n.type === 'VariableDeclaration');
-    const children: string[] = [];
-
-    forEachChildNode(nodes[0]!, child => children.push(child.type));
-    expect(children).toEqual(['VariableDeclarator', 'VariableDeclarator']);
-  });
-
-  it('yields nothing for leaf nodes (Identifier)', () => {
-    const nodes = collectOxcNodes(prog('x;'), n => n.type === 'Identifier');
-    const children: string[] = [];
-
-    forEachChildNode(nodes[0]!, child => children.push(child.type));
-    expect(children).toEqual([]);
-  });
-
-  it('skips null children (IfStatement without alternate)', () => {
-    const nodes = collectOxcNodes(prog('if (true) { x; }'), n => n.type === 'IfStatement');
-    const children: string[] = [];
-
-    forEachChildNode(nodes[0]!, child => children.push(child.type));
-    expect(children).toEqual(['Literal', 'BlockStatement']);
+    expect(children).toEqual(expected);
   });
 });
 
 describe('getNodeHeader', () => {
-  it('returns function name for named function declaration', () => {
-    const nodes = collectFunctionNodesWithParent(prog('function myFunc() {}'));
-    const named = nodes.find(n => n.node.type === 'FunctionDeclaration');
+  const namedCases: NodeHeaderCase[] = [
+    {
+      name: 'returns function name for named function declaration',
+      source: 'function myFunc() {}',
+      nodeType: 'FunctionDeclaration',
+      header: 'myFunc',
+    },
+    {
+      name: 'returns variable name for arrow function assigned to const',
+      source: 'const arrowFn = () => {};',
+      nodeType: 'ArrowFunctionExpression',
+      header: 'arrowFn',
+    },
+  ];
 
-    expect(getNodeHeader(named!.node, named!.parent)).toBe('myFunc');
-  });
+  it.each(namedCases)('$name', ({ source, nodeType, header }) => {
+    const nodes = collectFunctionNodesWithParent(prog(source));
+    const match = nodes.find(n => n.node.type === nodeType);
 
-  it('returns variable name for arrow function assigned to const', () => {
-    const nodes = collectFunctionNodesWithParent(prog('const arrowFn = () => {};'));
-    const arrow = nodes.find(n => n.node.type === 'ArrowFunctionExpression');
-
-    expect(getNodeHeader(arrow!.node, arrow!.parent)).toBe('arrowFn');
+    expect(getNodeHeader(match!.node, match!.parent)).toBe(header);
   });
 
   it('returns "anonymous" when no name can be determined', () => {

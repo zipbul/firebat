@@ -4,17 +4,30 @@ import { IntegerCFG } from '../cfg/cfg';
 import { EdgeType } from '../types';
 import { computeLiveness } from './liveness';
 
+// Build a CFG with `nodeCount` nodes (ids 0..nodeCount-1) wired by `edges`.
+// Hoists the repeated addNode/addEdge construction so each test keeps only its
+// distinct topology + use/write data + assertions.
+const buildCfg = (nodeCount: number, edges: ReadonlyArray<readonly [number, number, EdgeType]>): IntegerCFG => {
+  const cfg = new IntegerCFG();
+
+  for (let i = 0; i < nodeCount; i++) {
+    cfg.addNode();
+  }
+
+  for (const [from, to, type] of edges) {
+    cfg.addEdge(from, to, type);
+  }
+
+  return cfg;
+};
+
 describe('liveness', () => {
   it('computeLiveness - linear CFG single var used once - maxLiveCount is 1', () => {
     // Arrange
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-    const n2 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.Normal);
-    cfg.addEdge(n1, n2, EdgeType.Normal);
-
+    const cfg = buildCfg(3, [
+      [0, 1, EdgeType.Normal],
+      [1, 2, EdgeType.Normal],
+    ]);
     const useVarIndexesByNode = [
       [], // n0: no uses
       [0], // n1: uses var0
@@ -34,12 +47,7 @@ describe('liveness', () => {
 
   it('computeLiveness - three vars alive at same point - maxLiveCount is 3', () => {
     // Arrange
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.Normal);
-
+    const cfg = buildCfg(2, [[0, 1, EdgeType.Normal]]);
     const useVarIndexesByNode = [
       [], // n0: no uses
       [0, 1, 2], // n1: uses var0, var1, var2
@@ -59,12 +67,7 @@ describe('liveness', () => {
     // Arrange: n0 defines+uses var0, n1 defines+uses var1.
     // var1 is live-through n0 (used in successor n1, not killed in n0).
     // liveIn[n1] = {var1}, liveOut[n0] = {var1}, liveIn[n0] = {var0, var1} → max = 2
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.Normal);
-
+    const cfg = buildCfg(2, [[0, 1, EdgeType.Normal]]);
     const useVarIndexesByNode = [
       [0], // n0: uses var0
       [1], // n1: uses var1
@@ -82,11 +85,7 @@ describe('liveness', () => {
 
   it('computeLiveness - no variables (varCount=0) - maxLiveCount is 0', () => {
     // Arrange
-    const cfg = new IntegerCFG();
-
-    cfg.addNode();
-    cfg.addNode();
-
+    const cfg = buildCfg(2, []);
     const useVarIndexesByNode: number[][] = [[], []];
     const writeVarIndexesByNode: number[][] = [[], []];
     // Act
@@ -102,14 +101,10 @@ describe('liveness', () => {
     // liveIn[n1]={var0}, liveIn[n2]={var1}, liveOut[n0]={var0,var1}
     // liveIn[n0] = USE[n0] union (liveOut[n0] - DEF[n0]) = {} union {} = {}
     // maxLiveCount = 1 (max of liveIn sizes: 0, 1, 1)
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-    const n2 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.True);
-    cfg.addEdge(n0, n2, EdgeType.False);
-
+    const cfg = buildCfg(3, [
+      [0, 1, EdgeType.True],
+      [0, 2, EdgeType.False],
+    ]);
     const useVarIndexesByNode = [
       [], // n0: no uses
       [0], // n1: uses var0
@@ -129,15 +124,11 @@ describe('liveness', () => {
 
   it('computeLiveness - loop back-edge - fixed-point converges', () => {
     // Arrange: n0 writes var0, n1 uses+writes var0 (loop), n1->n1 back-edge, n1->n2 exit
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-    const n2 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.Normal);
-    cfg.addEdge(n1, n1, EdgeType.Normal);
-    cfg.addEdge(n1, n2, EdgeType.Normal);
-
+    const cfg = buildCfg(3, [
+      [0, 1, EdgeType.Normal],
+      [1, 1, EdgeType.Normal],
+      [1, 2, EdgeType.Normal],
+    ]);
     const useVarIndexesByNode = [
       [], // n0: no uses
       [0], // n1: uses var0
@@ -158,7 +149,7 @@ describe('liveness', () => {
 
   it('computeLiveness - empty CFG (nodeCount=0) - returns empty result', () => {
     // Arrange
-    const cfg = new IntegerCFG();
+    const cfg = buildCfg(0, []);
     // Act
     const result = computeLiveness(cfg, [], [], 1);
 
@@ -177,17 +168,12 @@ describe('liveness', () => {
     //   liveOut[n0] = liveIn[n1] ∪ liveIn[n2] = {var0, var1}
     //   liveIn[n0] = {} ∪ ({var0,var1} - {var0,var1}) = {}  (n0 defines both → kills them)
     //   maxLiveCount = 2 (at n1, n2, or n3)
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-    const n2 = cfg.addNode();
-    const n3 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.True);
-    cfg.addEdge(n0, n2, EdgeType.False);
-    cfg.addEdge(n1, n3, EdgeType.Normal);
-    cfg.addEdge(n2, n3, EdgeType.Normal);
-
+    const cfg = buildCfg(4, [
+      [0, 1, EdgeType.True],
+      [0, 2, EdgeType.False],
+      [1, 3, EdgeType.Normal],
+      [2, 3, EdgeType.Normal],
+    ]);
     const useVarIndexesByNode = [
       [], // n0: no uses
       [0], // n1: uses var0 (true branch)
@@ -214,16 +200,11 @@ describe('liveness', () => {
     // Arrange: n0 defs var0,var1,var2 → n1 uses var0 → n2 uses var1 → n3 uses var2
     // After each use the var is no longer needed downstream, so it becomes dead.
     // liveIn[n3] = {var2}, liveIn[n2] = {var1,var2}, liveIn[n1] = {var0,var1,var2}, liveIn[n0] = {}
-    const cfg = new IntegerCFG();
-    const n0 = cfg.addNode();
-    const n1 = cfg.addNode();
-    const n2 = cfg.addNode();
-    const n3 = cfg.addNode();
-
-    cfg.addEdge(n0, n1, EdgeType.Normal);
-    cfg.addEdge(n1, n2, EdgeType.Normal);
-    cfg.addEdge(n2, n3, EdgeType.Normal);
-
+    const cfg = buildCfg(4, [
+      [0, 1, EdgeType.Normal],
+      [1, 2, EdgeType.Normal],
+      [2, 3, EdgeType.Normal],
+    ]);
     const useVarIndexesByNode = [
       [], // n0: no uses
       [0], // n1: uses var0 only (var0 dies here)

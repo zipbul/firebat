@@ -2,6 +2,8 @@ import { describe, expect, it } from 'bun:test';
 import { parseSync } from 'oxc-parser';
 
 import { collectFunctionNodes } from '../../engine/ast/oxc-ast-utils';
+import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
+
 import { antiUnify, classifyDiff } from './anti-unifier';
 
 // ─── 헬퍼 ─────────────────────────────────────────────────────────────────────
@@ -40,41 +42,39 @@ describe('antiUnify', () => {
     expect(result.sharedSize).toBe(result.rightSize);
   });
 
-  it('Identifier만 다른 두 함수 → kind="identifier" 변수만 생성', () => {
-    const [a, b] = firstTwo(`
+  it.each([
+    [
+      'Identifier만 다른 두 함수 → kind="identifier" 변수만 생성',
+      `
       function addFoo(foo: number, bar: number) {
         return foo + bar;
       }
       function addBaz(baz: number, qux: number) {
         return baz + qux;
       }
-    `);
-    const result = antiUnify(a, b);
-
-    expect(result.variables.length).toBeGreaterThan(0);
-
-    for (const v of result.variables) {
-      expect(v.kind).toBe('identifier');
-    }
-
-    expect(result.similarity).toBeGreaterThan(0.5);
-  });
-
-  it('Literal만 다른 두 함수 → kind="literal" 변수만 생성', () => {
-    const [a, b] = firstTwo(`
+    `,
+      'identifier',
+    ],
+    [
+      'Literal만 다른 두 함수 → kind="literal" 변수만 생성',
+      `
       function getVal() {
         return 42;
       }
       function getVal() {
         return 99;
       }
-    `);
+    `,
+      'literal',
+    ],
+  ] as const)('%s', (_label, source, expectedKind) => {
+    const [a, b] = firstTwo(source);
     const result = antiUnify(a, b);
 
     expect(result.variables.length).toBeGreaterThan(0);
 
     for (const v of result.variables) {
-      expect(v.kind).toBe('literal');
+      expect(v.kind).toBe(expectedKind);
     }
 
     expect(result.similarity).toBeGreaterThan(0.5);
@@ -189,8 +189,10 @@ describe('antiUnify', () => {
     expect(result.similarity).toBeGreaterThan(0.8);
   });
 
-  it('string literal만 다른 switch-case → literal-variant', () => {
-    const [a, b] = firstTwo(`
+  it.each([
+    [
+      'string literal만 다른 switch-case → literal-variant',
+      `
       function handleA(action: string) {
         switch (action) {
           case "start": return 1;
@@ -205,11 +207,30 @@ describe('antiUnify', () => {
           default: return 0;
         }
       }
-    `);
+    `,
+      'literal',
+    ],
+    [
+      '한쪽에만 키가 있는 경우 (optional property) → structural variable 생성',
+      // left는 init 있음, right는 init 없음 → 한쪽에만 존재하는 키(init)로 structural variable 생성
+      `
+      function withInit() {
+        let x = 0;
+        return x;
+      }
+      function withoutInit() {
+        let x;
+        return x;
+      }
+    `,
+      'structural',
+    ],
+  ] as const)('%s', (_label, source, expectedKind) => {
+    const [a, b] = firstTwo(source);
     const result = antiUnify(a, b);
-    const literalVars = result.variables.filter(v => v.kind === 'literal');
+    const matchingVars = result.variables.filter(v => v.kind === expectedKind);
 
-    expect(literalVars.length).toBeGreaterThan(0);
+    expect(matchingVars.length).toBeGreaterThan(0);
   });
 
   it('traverseArrayChildren bOnly (B에만 있는 노드) → structural variable 생성', () => {
@@ -233,27 +254,6 @@ describe('antiUnify', () => {
     expect(bOnlyVars.length).toBeGreaterThan(0);
   });
 
-  it('한쪽에만 키가 있는 경우 (optional property) → structural variable 생성', () => {
-    // Arrange: left는 for-in(left에 id 없음), right는 for-of (각각 다른 optional key 보유)
-    // 가장 단순한 방법: VariableDeclaration에서 한쪽만 init이 있는 경우
-    const [a, b] = firstTwo(`
-      function withInit() {
-        let x = 0;
-        return x;
-      }
-      function withoutInit() {
-        let x;
-        return x;
-      }
-    `);
-    // Act
-    const result = antiUnify(a, b);
-    // Assert: 한쪽에만 존재하는 키(init)로 인해 structural variable이 생성되어야 함
-    const structuralVars = result.variables.filter(v => v.kind === 'structural');
-
-    expect(structuralVars.length).toBeGreaterThan(0);
-  });
-
   it('이진 연산자 차이 (a + b vs a - b) → operator가 structural kind로 분류', () => {
     // Arrange: 두 BinaryExpression 노드를 직접 추출하여 비교
     // (함수를 통해 비교하면 LCS fingerprint에 operator가 포함되어 statements 자체가 비매칭됨)
@@ -273,13 +273,11 @@ describe('antiUnify', () => {
 // ─── classifyDiff ─────────────────────────────────────────────────────────────
 
 describe('classifyDiff', () => {
-  it('variables 없음 → rename-only', () => {
-    expect(classifyDiff({ sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1, variables: [] })).toBe('rename-only');
-  });
-
-  it('identifier만 → rename-only', () => {
-    expect(
-      classifyDiff({
+  it.each<[string, AntiUnificationResult, DiffClassification]>([
+    ['variables 없음 → rename-only', { sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1, variables: [] }, 'rename-only'],
+    [
+      'identifier만 → rename-only',
+      {
         sharedSize: 8,
         leftSize: 10,
         rightSize: 10,
@@ -288,25 +286,23 @@ describe('classifyDiff', () => {
           { id: 1, location: 'params[0].name', leftType: 'x', rightType: 'y', kind: 'identifier' },
           { id: 2, location: 'body.body[0].id.name', leftType: 'foo', rightType: 'bar', kind: 'identifier' },
         ],
-      }),
-    ).toBe('rename-only');
-  });
-
-  it('literal만 → literal-variant', () => {
-    expect(
-      classifyDiff({
+      },
+      'rename-only',
+    ],
+    [
+      'literal만 → literal-variant',
+      {
         sharedSize: 8,
         leftSize: 10,
         rightSize: 10,
         similarity: 0.8,
         variables: [{ id: 1, location: 'body.body[0].value', leftType: '42', rightType: '99', kind: 'literal' }],
-      }),
-    ).toBe('literal-variant');
-  });
-
-  it('structural 하나라도 → structural-diff', () => {
-    expect(
-      classifyDiff({
+      },
+      'literal-variant',
+    ],
+    [
+      'structural 하나라도 → structural-diff',
+      {
         sharedSize: 5,
         leftSize: 10,
         rightSize: 12,
@@ -315,13 +311,12 @@ describe('classifyDiff', () => {
           { id: 1, location: 'params[0].name', leftType: 'x', rightType: 'y', kind: 'identifier' },
           { id: 2, location: 'body.body[2]', leftType: 'ReturnStatement', rightType: 'missing', kind: 'structural' },
         ],
-      }),
-    ).toBe('structural-diff');
-  });
-
-  it('identifier + literal 혼합 → mixed', () => {
-    expect(
-      classifyDiff({
+      },
+      'structural-diff',
+    ],
+    [
+      'identifier + literal 혼합 → mixed',
+      {
         sharedSize: 8,
         leftSize: 10,
         rightSize: 10,
@@ -330,13 +325,12 @@ describe('classifyDiff', () => {
           { id: 1, location: 'params[0].name', leftType: 'x', rightType: 'y', kind: 'identifier' },
           { id: 2, location: 'body.body[0].value', leftType: '42', rightType: '99', kind: 'literal' },
         ],
-      }),
-    ).toBe('mixed');
-  });
-
-  it('type만 다른 변수 → type-variant', () => {
-    expect(
-      classifyDiff({
+      },
+      'mixed',
+    ],
+    [
+      'type만 다른 변수 → type-variant',
+      {
         sharedSize: 8,
         leftSize: 10,
         rightSize: 10,
@@ -350,37 +344,42 @@ describe('classifyDiff', () => {
             kind: 'type',
           },
         ],
-      }),
-    ).toBe('type-variant');
+      },
+      'type-variant',
+    ],
+  ])('%s', (_label, result, expected) => {
+    expect(classifyDiff(result)).toBe(expected);
   });
 
-  it('실제 AST 기반 classifyDiff — identifier만 다른 함수', () => {
-    const fns = parseFunctions(`
+  it.each<[string, string, DiffClassification]>([
+    [
+      '실제 AST 기반 classifyDiff — identifier만 다른 함수',
+      `
       function addX(x: number, y: number) { return x + y; }
       function addA(a: number, b: number) { return a + b; }
-    `);
-    const result = antiUnify(fns[0]!, fns[1]!);
-
-    expect(classifyDiff(result)).toBe('rename-only');
-  });
-
-  it('실제 AST 기반 classifyDiff — literal만 다른 함수', () => {
-    const fns = parseFunctions(`
+    `,
+      'rename-only',
+    ],
+    [
+      '실제 AST 기반 classifyDiff — literal만 다른 함수',
+      `
       function getConst() { return 100; }
       function getConst() { return 200; }
-    `);
-    const result = antiUnify(fns[0]!, fns[1]!);
-
-    expect(classifyDiff(result)).toBe('literal-variant');
-  });
-
-  it('실제 AST 기반 classifyDiff — statement 추가 → structural-diff', () => {
-    const fns = parseFunctions(`
+    `,
+      'literal-variant',
+    ],
+    [
+      '실제 AST 기반 classifyDiff — statement 추가 → structural-diff',
+      `
       function simple() { return 1; }
       function complex() { console.log("hi"); return 1; }
-    `);
+    `,
+      'structural-diff',
+    ],
+  ])('%s', (_label, source, expected) => {
+    const fns = parseFunctions(source);
     const result = antiUnify(fns[0]!, fns[1]!);
 
-    expect(classifyDiff(result)).toBe('structural-diff');
+    expect(classifyDiff(result)).toBe(expected);
   });
 });

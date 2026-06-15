@@ -3,6 +3,14 @@ import { describe, it, expect } from 'bun:test';
 import { IntegerCFG } from './cfg';
 import { EdgeType } from './cfg-types';
 
+interface AdjacencyCase {
+  name: string;
+  direction: 'forward' | 'backward';
+  containerNode: number;
+  neighborNode: number;
+  emptyNode: number;
+}
+
 describe('IntegerCFG', () => {
   it('[HP] starts with 0 nodes', () => {
     const cfg = new IntegerCFG();
@@ -54,30 +62,25 @@ describe('IntegerCFG', () => {
     expect(edges[2]).toBe(EdgeType.True);
   });
 
-  it('[HP] buildAdjacency forward returns successors', () => {
+  // Single edge node0→node1 (addNode returns sequential ids 0,1). Forward adjacency lists
+  // successors (adj[0] ∋ 1); backward lists predecessors (adj[1] ∋ 0). `containerNode`
+  // holds the neighbor; `emptyNode` has none.
+  const adjacencyCases: AdjacencyCase[] = [
+    { name: 'forward returns successors', direction: 'forward', containerNode: 0, neighborNode: 1, emptyNode: 1 },
+    { name: 'backward returns predecessors', direction: 'backward', containerNode: 1, neighborNode: 0, emptyNode: 0 },
+  ];
+
+  it.each(adjacencyCases)('[HP] buildAdjacency $name', ({ direction, containerNode, neighborNode, emptyNode }) => {
     const cfg = new IntegerCFG();
-    const a = cfg.addNode();
-    const b = cfg.addNode();
 
-    cfg.addEdge(a, b);
+    cfg.addNode();
+    cfg.addNode();
+    cfg.addEdge(0, 1);
 
-    const adj = cfg.buildAdjacency('forward');
+    const adj = cfg.buildAdjacency(direction);
 
-    expect(Array.from(adj[a]!)).toContain(b);
-    expect(Array.from(adj[b]!)).toHaveLength(0);
-  });
-
-  it('[HP] buildAdjacency backward returns predecessors', () => {
-    const cfg = new IntegerCFG();
-    const a = cfg.addNode();
-    const b = cfg.addNode();
-
-    cfg.addEdge(a, b);
-
-    const adj = cfg.buildAdjacency('backward');
-
-    expect(Array.from(adj[b]!)).toContain(a);
-    expect(Array.from(adj[a]!)).toHaveLength(0);
+    expect(Array.from(adj[containerNode]!)).toContain(neighborNode);
+    expect(Array.from(adj[emptyNode]!)).toHaveLength(0);
   });
 
   it('[HP] grows internal storage when capacity exceeded', () => {

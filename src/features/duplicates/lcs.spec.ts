@@ -163,34 +163,16 @@ describe('computeLcsAlignment', () => {
     expect(result.bOnly).toEqual([0, 1, 2]);
   });
 
-  it('앞에 원소 삽입 — 삽입된 인덱스만 bOnly에 포함', () => {
-    const a = ['b', 'c'];
-    const b = ['x', 'b', 'c'];
+  it.each([
+    ['앞', ['b', 'c'], ['x', 'b', 'c'], [0]],
+    ['중간', ['a', 'c'], ['a', 'x', 'c'], [1]],
+    ['뒤', ['a', 'b'], ['a', 'b', 'x'], [2]],
+  ] as const)('%s에 원소 삽입 — 삽입된 인덱스만 bOnly에 포함', (_label, a, b, expectedBOnly) => {
     const result = computeLcsAlignment(a, b);
 
     expect(result.matched).toHaveLength(2);
     expect(result.aOnly).toHaveLength(0);
-    expect(result.bOnly).toEqual([0]); // 'x' 만 bOnly
-  });
-
-  it('중간에 원소 삽입 — 삽입된 인덱스만 bOnly에 포함', () => {
-    const a = ['a', 'c'];
-    const b = ['a', 'x', 'c'];
-    const result = computeLcsAlignment(a, b);
-
-    expect(result.matched).toHaveLength(2);
-    expect(result.aOnly).toHaveLength(0);
-    expect(result.bOnly).toEqual([1]); // 'x' 만 bOnly
-  });
-
-  it('뒤에 원소 삽입 — 삽입된 인덱스만 bOnly에 포함', () => {
-    const a = ['a', 'b'];
-    const b = ['a', 'b', 'x'];
-    const result = computeLcsAlignment(a, b);
-
-    expect(result.matched).toHaveLength(2);
-    expect(result.aOnly).toHaveLength(0);
-    expect(result.bOnly).toEqual([2]); // 'x' 만 bOnly
+    expect(result.bOnly).toEqual(expectedBOnly);
   });
 
   it('matched 결과가 오름차순 정렬됨', () => {

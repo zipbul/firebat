@@ -1,6 +1,7 @@
 import { mock, afterAll, describe, it, expect, beforeEach } from 'bun:test';
 import path from 'node:path';
 
+import type { DuplicateFindingKind } from '../../types';
 import type { ParsedFile } from '../../engine/types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
 
@@ -252,100 +253,81 @@ describe('analyzeDuplicates', () => {
     expect(normalized.length).toBe(0);
   });
 
-  // ── [HP] 8. anti-unification rename-only → suggestedParams identifier ──
+  // ── [HP] 8/9/9b. anti-unification classification → suggestedParams 종류 ──
+  // classifyDiff가 rename-only/literal-variant/type-variant이면, 단일 변수가
+  // 그에 대응하는 kind의 suggestedParams로 전파되고 findingKind도 결정된다.
 
-  it('should set suggestedParams with kind identifier when all diffs are rename-only', () => {
-    classifyDiffMock.mockImplementation(() => 'rename-only');
+  it.each<
+    [
+      string,
+      DiffClassification,
+      AntiUnificationResult['variables'][number],
+      readonly [string, string],
+      'literal' | 'type' | 'identifier',
+      DuplicateFindingKind,
+    ]
+  >([
+    [
+      'rename-only → identifier',
+      'rename-only',
+      { id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' },
+      [RENAMED_PAIR_A, RENAMED_PAIR_B],
+      'identifier',
+      'structural-clone',
+    ],
+    [
+      'literal-variant → literal',
+      'literal-variant',
+      { id: 1, location: 'body.value', leftType: '1000', rightType: '5000', kind: 'literal' },
+      [LITERAL_PAIR_A, LITERAL_PAIR_B],
+      'literal',
+      'literal-variant',
+    ],
+    [
+      'type-variant → type',
+      'type-variant',
+      { id: 1, location: 'params[0].typeAnnotation', leftType: 'TSTypeReference', rightType: 'TSTypeReference', kind: 'type' },
+      [RENAMED_PAIR_A, RENAMED_PAIR_B],
+      'type',
+      'structural-clone',
+    ],
+  ])('should set suggestedParams — %s', (_label, classification, variable, [srcA, srcB], expectedKind, expectedFindingKind) => {
+    classifyDiffMock.mockImplementation(() => classification);
     antiUnifyMock.mockImplementation(() => ({
       sharedSize: 10,
       leftSize: 10,
       rightSize: 10,
       similarity: 0.9,
-      variables: [{ id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' }],
+      variables: [variable],
     }));
 
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
+    const fileA = makeFile('a.ts', srcA);
+    const fileB = makeFile('b.ts', srcB);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
     const withParams = result.filter(g => g.suggestedParams !== undefined);
 
     expect(withParams.length).toBe(1);
-    expect(withParams[0]!.suggestedParams!.kind).toBe('identifier');
+    expect(withParams[0]!.suggestedParams!.kind).toBe(expectedKind);
     expect(withParams[0]!.suggestedParams!.pairs.length).toBe(1);
+    expect(withParams[0]!.findingKind).toBe(expectedFindingKind);
   });
 
-  // ── [HP] 9. anti-unification literal-variant → suggestedParams literal ──
+  // ── [HP] 10-11. anti-unification structural-diff/mixed → no suggestedParams ─
 
-  it('should set suggestedParams with kind literal when all diffs are literal-variant', () => {
-    classifyDiffMock.mockImplementation(() => 'literal-variant');
-    antiUnifyMock.mockImplementation(() => ({
-      sharedSize: 10,
-      leftSize: 10,
-      rightSize: 10,
-      similarity: 0.9,
-      variables: [{ id: 1, location: 'body.value', leftType: '1000', rightType: '5000', kind: 'literal' }],
-    }));
+  it.each<[DiffClassification]>([['structural-diff'], ['mixed']])(
+    'should not set suggestedParams when diff classification is %s',
+    classification => {
+      classifyDiffMock.mockImplementation(() => classification);
 
-    const fileA = makeFile('a.ts', LITERAL_PAIR_A);
-    const fileB = makeFile('b.ts', LITERAL_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
-    const withParams = result.filter(g => g.suggestedParams !== undefined);
+      const fileA = makeFile('a.ts', RENAMED_PAIR_A);
+      const fileB = makeFile('b.ts', RENAMED_PAIR_B);
+      const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
 
-    expect(withParams.length).toBe(1);
-    expect(withParams[0]!.suggestedParams!.kind).toBe('literal');
-    expect(withParams[0]!.findingKind).toBe('literal-variant');
-  });
-
-  // ── [HP] 9b. anti-unification type-variant → suggestedParams type ────────
-
-  it('should set suggestedParams with kind type when all diffs are type-variant', () => {
-    classifyDiffMock.mockImplementation(() => 'type-variant');
-    antiUnifyMock.mockImplementation(() => ({
-      sharedSize: 10,
-      leftSize: 10,
-      rightSize: 10,
-      similarity: 0.9,
-      variables: [
-        { id: 1, location: 'params[0].typeAnnotation', leftType: 'TSTypeReference', rightType: 'TSTypeReference', kind: 'type' },
-      ],
-    }));
-
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
-    const withParams = result.filter(g => g.suggestedParams !== undefined);
-
-    expect(withParams.length).toBe(1);
-    expect(withParams[0]!.suggestedParams!.kind).toBe('type');
-  });
-
-  // ── [HP] 10. anti-unification structural-diff → no suggestedParams ──────
-
-  it('should not set suggestedParams when diff classification is structural-diff', () => {
-    classifyDiffMock.mockImplementation(() => 'structural-diff');
-
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
-
-    for (const group of result) {
-      expect(group.suggestedParams).toBeUndefined();
-    }
-  });
-
-  // ── [HP] 11. anti-unification mixed → no suggestedParams ───────────────
-
-  it('should not set suggestedParams when diff classification is mixed', () => {
-    classifyDiffMock.mockImplementation(() => 'mixed');
-
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
-
-    for (const group of result) {
-      expect(group.suggestedParams).toBeUndefined();
-    }
-  });
+      for (const group of result) {
+        expect(group.suggestedParams).toBeUndefined();
+      }
+    },
+  );
 
   // ── [HP] 12. anti-unification disabled → no suggestedParams ─────────────
 
@@ -373,11 +355,14 @@ describe('analyzeDuplicates', () => {
     expect(exact[0]!.items[0]!.kind).toBe('function');
   });
 
-  // ── [HP] 14. MethodDefinition → kind='method' ──────────────────────────
+  // ── [HP] 14-17. 노드 타입 → item.kind 매핑 ─────────────────────────────
+  // 클론 그룹의 item.kind가 노드 종류별로 올바르게 부여되는지. method 케이스는
+  // 클래스 구조를 다르게 만들어 Class 그룹 미생성, 동일 Method만 exact 그룹.
 
-  it('should assign kind method to MethodDefinition items', () => {
-    // 클래스 구조를 다르게 → Class 그룹 미생성, 동일 Method만 exact 그룹
-    const srcA = `
+  it.each([
+    [
+      'MethodDefinition → kind=method',
+      `
 class Alpha {
   compute(x: number): number {
     const doubled = x * 2;
@@ -385,54 +370,27 @@ class Alpha {
   }
   extra(): void { console.log('a'); }
 }
-`;
-    const srcB = `
+`,
+      `
 class Beta {
   compute(x: number): number {
     const doubled = x * 2;
     return doubled;
   }
 }
-`;
+`,
+      'method',
+    ],
+    ['ClassDeclaration → kind=type', CLASS_DECLARATION_A, CLASS_DECLARATION_B, 'type'],
+    ['TSInterfaceDeclaration → kind=interface', INTERFACE_DECLARATION_A, INTERFACE_DECLARATION_B, 'interface'],
+    ['ArrowFunctionExpression → kind=function', ARROW_FUNCTION, ARROW_FUNCTION, 'function'],
+  ] as const)('should assign item kind correctly — %s', (_label, srcA, srcB, expectedKind) => {
     const fileA = makeFile('a.ts', srcA);
     const fileB = makeFile('b.ts', srcB);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
-    const methodItems = result.flatMap(g => g.items).filter(i => i.kind === 'method');
+    const matchingItems = result.flatMap(g => g.items).filter(i => i.kind === expectedKind);
 
-    expect(methodItems.length).toBeGreaterThanOrEqual(2);
-  });
-
-  // ── [HP] 15. ClassDeclaration → kind='type' ────────────────────────────
-
-  it('should assign kind type to ClassDeclaration items', () => {
-    const fileA = makeFile('a.ts', CLASS_DECLARATION_A);
-    const fileB = makeFile('b.ts', CLASS_DECLARATION_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
-    const classItems = result.flatMap(g => g.items).filter(i => i.kind === 'type');
-
-    expect(classItems.length).toBeGreaterThanOrEqual(2);
-  });
-
-  // ── [HP] 16. TSInterfaceDeclaration → kind='interface' ─────────────────
-
-  it('should assign kind interface to TSInterfaceDeclaration items', () => {
-    const fileA = makeFile('a.ts', INTERFACE_DECLARATION_A);
-    const fileB = makeFile('b.ts', INTERFACE_DECLARATION_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
-    const ifItems = result.flatMap(g => g.items).filter(i => i.kind === 'interface');
-
-    expect(ifItems.length).toBeGreaterThanOrEqual(2);
-  });
-
-  // ── [HP] 17. fallback node type → kind='node' (N/A — 모든 target 타입이 매핑됨) ──
-
-  it('should default to function kind for ArrowFunctionExpression', () => {
-    const fileA = makeFile('a.ts', ARROW_FUNCTION);
-    const fileB = makeFile('b.ts', ARROW_FUNCTION);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
-    const arrowItems = result.flatMap(g => g.items).filter(i => i.kind === 'function');
-
-    expect(arrowItems.length).toBeGreaterThanOrEqual(2);
+    expect(matchingItems.length).toBeGreaterThanOrEqual(2);
   });
 
   // ── [HP] 19. 3개 동일 함수 → exact 그룹 items 3개 ─────────────────────
@@ -788,34 +746,30 @@ function compute(x: number, y: number): number {
     expect(groups[0]!.items.length).toBe(4);
   });
 
-  // ── [HP] 43. ClassExpression exact 탐지 ───────────────────────────────
+  // ── [HP] 43-44. ClassExpression / FunctionExpression exact 탐지 ────────
 
-  it('analyzeDuplicates - ClassExpression in two files - detects exact clone', () => {
-    const source = `
+  it.each([
+    [
+      'ClassExpression',
+      `
 export const MyClass = class {
   compute(x: number): number {
     const doubled = x * 2;
     return doubled;
   }
 };
-`;
-    const fileA = makeFile('a.ts', source);
-    const fileB = makeFile('b.ts', source);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
-    const exact = result.filter(g => g.cloneType === 'exact');
-
-    expect(exact.length).toBe(1);
-  });
-
-  // ── [HP] 44. FunctionExpression exact 탐지 ────────────────────────────
-
-  it('analyzeDuplicates - FunctionExpression in two files - detects exact clone', () => {
-    const source = `
+`,
+    ],
+    [
+      'FunctionExpression',
+      `
 export const compute = function(x: number): number {
   const doubled = x * 2;
   return doubled;
 };
-`;
+`,
+    ],
+  ] as const)('analyzeDuplicates - %s in two files - detects exact clone', (_label, source) => {
     const fileA = makeFile('a.ts', source);
     const fileB = makeFile('b.ts', source);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });

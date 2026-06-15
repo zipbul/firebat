@@ -3,6 +3,9 @@ import * as path from 'node:path';
 
 import type { ParsedFile } from './types';
 
+interface PercentileCase { name: string; fileCount: number; lowCount: number }
+interface ClampCase { name: string; sizeReturn: number; expected: number }
+
 // ── Mocks (must be set up before the SUT module is imported) ──────────────────
 
 const duplicateDetectorAbs = path.resolve(import.meta.dir, '../features/duplicates/analyzer.ts');
@@ -102,66 +105,41 @@ describe('computeAutoMinSize', () => {
     expect(result).toBe(30);
   });
 
-  it('should use percentile 0.6 when fileCount is exactly 500', async () => {
-    // Arrange
+  // Percentile boundaries: a bimodal size distribution (lowCount nodes → 15, rest → 25)
+  // sized so the chosen percentile index lands in the high (25) band, while p=0.5 would
+  // land in the low (15) band — proving the file-count→percentile mapping.
+  const percentileCases: PercentileCase[] = [
+    // p=0.6 at 500 files: index=floor(499*0.6)=299 → 25 (p=0.5 → 249 → 15)
+    { name: 'should use percentile 0.6 when fileCount is exactly 500', fileCount: 500, lowCount: 270 },
+    // p=0.75 at 1000 files: index=floor(999*0.75)=749 → 25 (p=0.5 → 499 → 15)
+    { name: 'should use percentile 0.75 when fileCount is exactly 1000', fileCount: 1000, lowCount: 500 },
+  ];
+
+  it.each(percentileCases)('$name', async ({ fileCount, lowCount }) => {
     const { computeAutoMinSize } = await import('./auto-min-size');
-    // 500 files: first 270 nodes → size=15, last 230 → size=25.
-    // sorted counts: [15 x270, 25 x230]
-    // p=0.6: index=floor(499*0.6)=299 → counts[299]=25
-    // p=0.5 would give index=249 → counts[249]=15 (distinguishable)
     let callIdx = 0;
 
-    countOxcSizeMock.mockImplementation(() => (++callIdx <= 270 ? 15 : 25));
+    countOxcSizeMock.mockImplementation(() => (++callIdx <= lowCount ? 15 : 25));
 
-    // Act
-    const result = computeAutoMinSize(makeFiles(500));
+    const result = computeAutoMinSize(makeFiles(fileCount));
 
-    // Assert
     expect(result).toBe(25);
   });
 
-  it('should use percentile 0.75 when fileCount is exactly 1000', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-    // 1000 files: first 500 → size=15, last 500 → size=25.
-    // sorted counts: [15 x500, 25 x500]
-    // p=0.75: index=floor(999*0.75)=749 → counts[749]=25
-    // p=0.5 would give index=499 → counts[499]=15 (distinguishable)
-    let callIdx = 0;
+  // Result is clamped into [10, 200] regardless of the raw percentile value.
+  const clampCases: ClampCase[] = [
+    { name: 'should clamp result to minimum 10 when computed value is below 10', sizeReturn: 1, expected: 10 },
+    { name: 'should clamp result to maximum 200 when computed value is above 200', sizeReturn: 9999, expected: 200 },
+  ];
 
-    countOxcSizeMock.mockImplementation(() => (++callIdx <= 500 ? 15 : 25));
-
-    // Act
-    const result = computeAutoMinSize(makeFiles(1000));
-
-    // Assert
-    expect(result).toBe(25);
-  });
-
-  it('should clamp result to minimum 10 when computed value is below 10', async () => {
-    // Arrange
+  it.each(clampCases)('$name', async ({ sizeReturn, expected }) => {
     const { computeAutoMinSize } = await import('./auto-min-size');
 
-    countOxcSizeMock.mockReturnValue(1); // very small sizes
+    countOxcSizeMock.mockReturnValue(sizeReturn);
 
-    // Act
     const result = computeAutoMinSize([makeFile(0)]);
 
-    // Assert
-    expect(result).toBe(10);
-  });
-
-  it('should clamp result to maximum 200 when computed value is above 200', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-
-    countOxcSizeMock.mockReturnValue(9999); // very large size
-
-    // Act
-    const result = computeAutoMinSize([makeFile(0)]);
-
-    // Assert
-    expect(result).toBe(200);
+    expect(result).toBe(expected);
   });
 
   it('should return a value within [10, 200] for normal input', async () => {

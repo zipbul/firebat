@@ -6,11 +6,20 @@ import { collectOxcNodes } from './oxc-ast-utils';
 import { createOxcFingerprintExact, createOxcFingerprintNormalized, createOxcFingerprintShape } from './oxc-fingerprint';
 import { parseSource } from './parse-source';
 
+interface DistinctContractCase { name: string; left: string; right: string }
+
 const shapeOfFirstFunction = (source: string): string => {
   const parsed = parseSource('/virtual/fp.ts', source);
   const fn = collectOxcNodes(parsed.program, (n: Node) => n.type === 'FunctionDeclaration')[0]!;
 
   return createOxcFingerprintShape(fn);
+};
+
+const normalizedOfFirstInterface = (source: string): string => {
+  const parsed = parseSource('/v/x.ts', source);
+  const node = collectOxcNodes(parsed.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
+
+  return createOxcFingerprintNormalized(node);
 };
 
 describe('engine/ast/oxc-fingerprint', () => {
@@ -108,32 +117,27 @@ describe('engine/ast/oxc-fingerprint', () => {
     expect(createOxcFingerprintNormalized(ifaceNode)).toBe(createOxcFingerprintNormalized(aliasNode));
   });
 
-  it('should distinguish contracts differing only in an optional member', () => {
-    const norm = (src: string) => {
-      const p = parseSource('/v/x.ts', src);
+  // Each row: two interface contracts that must normalize to DIFFERENT fingerprints
+  // because the distinguishing modifier/order carries a real contract decision.
+  const distinctContractCases: DistinctContractCase[] = [
+    {
+      name: 'differing only in an optional member',
+      left: 'interface X { id?: string; }',
+      right: 'interface X { id: string; }',
+    },
+    {
+      name: 'differing only in a readonly member',
+      left: 'interface X { readonly id: string; }',
+      right: 'interface X { id: string; }',
+    },
+    {
+      name: 'whose member order differs',
+      left: 'interface X { x: number; y: number; }',
+      right: 'interface X { y: number; x: number; }',
+    },
+  ];
 
-      return createOxcFingerprintNormalized(collectOxcNodes(p.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!);
-    };
-
-    expect(norm('interface X { id?: string; }')).not.toBe(norm('interface X { id: string; }'));
-  });
-
-  it('should distinguish contracts differing only in a readonly member', () => {
-    const norm = (src: string) => {
-      const p = parseSource('/v/x.ts', src);
-
-      return createOxcFingerprintNormalized(collectOxcNodes(p.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!);
-    };
-
-    expect(norm('interface X { readonly id: string; }')).not.toBe(norm('interface X { id: string; }'));
-  });
-
-  it('should distinguish contracts whose member order differs', () => {
-    const a = parseSource('/v/a.ts', 'interface X { x: number; y: number; }');
-    const b = parseSource('/v/b.ts', 'interface X { y: number; x: number; }');
-    const an = collectOxcNodes(a.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
-    const bn = collectOxcNodes(b.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
-
-    expect(createOxcFingerprintNormalized(an)).not.toBe(createOxcFingerprintNormalized(bn));
+  it.each(distinctContractCases)('should distinguish contracts $name', ({ left, right }) => {
+    expect(normalizedOfFirstInterface(left)).not.toBe(normalizedOfFirstInterface(right));
   });
 });

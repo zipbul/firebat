@@ -2,9 +2,17 @@ import { describe, expect, it, mock } from 'bun:test';
 
 import { runWithConcurrency } from './promise-pool';
 
+interface ConcurrencyCase { name: string; concurrency: number }
+
 describe('runWithConcurrency', () => {
-  it('should call the worker for every item in the array', async () => {
-    // Arrange
+  // Every item is processed exactly once regardless of the concurrency value
+  // (3 = full parallel; 0 = clamped up to 1 sequential runner).
+  const allItemsProcessedCases: ConcurrencyCase[] = [
+    { name: 'should call the worker for every item in the array', concurrency: 3 },
+    { name: 'should clamp concurrency to 1 when value is less than 1', concurrency: 0 },
+  ];
+
+  it.each(allItemsProcessedCases)('$name', async ({ concurrency }) => {
     const items = [1, 2, 3];
     const processed: number[] = [];
 
@@ -12,10 +20,8 @@ describe('runWithConcurrency', () => {
       processed.push(item);
     };
 
-    // Act
-    await runWithConcurrency(items, 3, worker);
+    await runWithConcurrency(items, concurrency, worker);
 
-    // Assert
     expect(processed.sort((a, b) => a - b)).toEqual([1, 2, 3]);
   });
 
@@ -33,22 +39,6 @@ describe('runWithConcurrency', () => {
 
     // Assert
     expect(order).toEqual([10, 20, 30]);
-  });
-
-  it('should clamp concurrency to 1 when value is less than 1', async () => {
-    // Arrange
-    const items = [1, 2, 3];
-    const calls: number[] = [];
-
-    const worker = async (item: number): Promise<void> => {
-      calls.push(item);
-    };
-
-    // Act — concurrency=0 should be clamped to 1
-    await runWithConcurrency(items, 0, worker);
-
-    // Assert — all items processed (sequential)
-    expect(calls.sort((a, b) => a - b)).toEqual([1, 2, 3]);
   });
 
   it('should not call the worker when items array is empty', async () => {
