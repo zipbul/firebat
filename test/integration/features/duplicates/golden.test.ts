@@ -75,6 +75,9 @@ describe('golden/duplicates', () => {
   rg('lookup-table-dead'); // W: 동일 규칙 테이블이 다른 이름으로 중복 (데이터 선언)
   rg('lookup-array-table-dead'); // W: 배열 룩업 테이블 중복 (ArrayExpression 경로)
   rg('lookup-template-table-dead'); // W: 보간 없는 template literal 값 테이블
+  rg('enum-dup-dead'); // W: 같은 멤버 enum이 다른 이름으로 중복 (값 보존)
+  rg('enum-diff-values-keep'); // K: enum 값이 다르면 다른 결정
+  rg('union-alias-dead'); // W: 동일 union 타입 별칭
 
   // ════════════════════════════════════════════════════════════════════════
   // 중첩 subsumption — 통째 클론 안의 fragment는 별도 보고하지 않는다

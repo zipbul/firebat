@@ -1,0 +1,38 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/enum-dup-dead.ts",
+        "header": "StatusA",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/enum-dup-dead.ts",
+        "header": "StatusB",
+        "kind": "node",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 11
+          },
+          "start": {
+            "column": 0,
+            "line": 7
+          }
+        }
+      }
+    ]
+  }
+]

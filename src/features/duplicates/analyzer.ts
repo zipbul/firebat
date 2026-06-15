@@ -187,9 +187,28 @@ const isDataTableDeclarator = (node: Node): boolean => {
   return false;
 };
 
+/** 규칙 데이터의 비교 대상 노드: 변수 테이블은 init, enum은 body(멤버 이름+값). 선언 이름은 제외. */
+const ruleDataContentNode = (node: Node): Node | null => {
+  if (isDataTableDeclarator(node)) {
+    return (node as Node & { readonly init: Node }).init;
+  }
+
+  // enum = 이름→값 매핑. 멤버 이름·값이 곧 결정이므로 body를 그대로(리터럴 보존) 비교하고
+  // enum 자신의 이름은 제외 → 같은 멤버면 이름이 달라도 W, 값이 다르면 K.
+  if (node.type === 'TSEnumDeclaration') {
+    const body = (node as Node & { readonly body: Node & { readonly members: ReadonlyArray<Node> } }).body;
+
+    return body.members.length >= 2 ? body : null;
+  }
+
+  return null;
+};
+
+const isRuleDataDeclaration = (node: Node): boolean => ruleDataContentNode(node) !== null;
+
 /**
- * 규칙 데이터(매핑·룩업 테이블)의 중복을 잡는다. 내용이 곧 결정이므로 리터럴을
- * 보존(exact)하여 비교한다 — 같은 내용이면 변수명이 달라도 W, 내용이 다르면 K.
+ * 규칙 데이터(매핑·룩업 테이블·enum)의 중복을 잡는다. 내용이 곧 결정이므로 리터럴을
+ * 보존(exact)하여 비교한다 — 같은 내용이면 선언 이름이 달라도 W, 내용이 다르면 K.
  */
 const detectDataTableClones = (files: ReadonlyArray<ParsedFile>, minSize: number): DuplicateGroup[] => {
   const map = new Map<string, InternalCloneItem[]>();
@@ -199,15 +218,15 @@ const detectDataTableClones = (files: ReadonlyArray<ParsedFile>, minSize: number
       continue;
     }
 
-    for (const decl of collectOxcNodes(file.program, isDataTableDeclarator)) {
-      const init = (decl as Node & { readonly init: Node }).init;
-      const size = countOxcSize(init);
+    for (const decl of collectOxcNodes(file.program, isRuleDataDeclaration)) {
+      const content = ruleDataContentNode(decl)!;
+      const size = countOxcSize(content);
 
       if (size < minSize) {
         continue;
       }
 
-      const hash = createOxcFingerprintExact(init);
+      const hash = createOxcFingerprintExact(content);
       const item: InternalCloneItem = {
         node: decl,
         kind: 'node',

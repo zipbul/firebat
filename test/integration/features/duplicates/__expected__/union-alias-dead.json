@@ -1,0 +1,48 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/union-alias-dead.ts",
+        "header": "LevelA",
+        "kind": "type",
+        "span": {
+          "end": {
+            "column": 50,
+            "line": 1
+          },
+          "start": {
+            "column": 0,
+            "line": 1
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/union-alias-dead.ts",
+        "header": "LevelB",
+        "kind": "type",
+        "span": {
+          "end": {
+            "column": 50,
+            "line": 2
+          },
+          "start": {
+            "column": 0,
+            "line": 2
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "LevelA",
+          "location": "id.name",
+          "right": "LevelB"
+        }
+      ]
+    }
+  }
+]
