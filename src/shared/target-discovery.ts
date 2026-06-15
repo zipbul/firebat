@@ -1,6 +1,8 @@
 import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
+import { scanGlobsToAbsolutePaths } from './glob-scan';
+
 const uniqueSorted = (values: ReadonlyArray<string>): string[] => Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 
 const toAbsolutePaths = (cwd: string, filePaths: ReadonlyArray<string>): string[] =>
@@ -60,16 +62,7 @@ const shouldIncludeSourceFile = (filePath: string): boolean => {
 };
 
 const scanDirForSources = async (dirAbs: string): Promise<string[]> => {
-  const patterns: ReadonlyArray<string> = ['**/*.ts'];
-  const out: string[] = [];
-
-  for (const pattern of patterns) {
-    const glob = new Bun.Glob(pattern);
-
-    for await (const relPath of glob.scan({ cwd: dirAbs, onlyFiles: true, followSymlinks: false })) {
-      out.push(path.resolve(dirAbs, relPath));
-    }
-  }
+  const out = await scanGlobsToAbsolutePaths(['**/*.ts'], dirAbs);
 
   return uniqueSorted(out).filter(shouldIncludeSourceFile);
 };

@@ -1,3 +1,5 @@
+import { isPlainObject } from '../../shared/json-guards';
+
 interface JsonObject {
   readonly [key: string]: JsonValue;
 }
@@ -89,10 +91,6 @@ type SyncResult = SyncSuccess | SyncFailure;
 interface ObjectKindSelector {
   readonly kind: 'object';
 }
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
 
 const detectNewline = (text: string): string => {
   return text.includes('\r\n') ? '\r\n' : '\n';

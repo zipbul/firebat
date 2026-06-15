@@ -1,12 +1,10 @@
-import type { AstNode, Fix, Fixer, JsonObject, JsonValue, NodeOrNull, RuleContext, TemplateElementValue } from '../types';
+import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, RuleContext, TemplateElementValue } from '../types';
+
+import { isJsonObject } from '../utils/json-options';
 
 interface NoBracketNotationOptions {
   allow?: string[];
 }
-
-const isJsonObject = (value: JsonValue | undefined): value is JsonObject => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
 
 const toStringList = (value: JsonValue | undefined): string[] => {
   if (!Array.isArray(value)) {

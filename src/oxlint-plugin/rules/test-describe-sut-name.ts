@@ -3,14 +3,7 @@ import { basename } from 'node:path';
 import type { AstNode, RuleContext } from '../types';
 
 import { getContextFilename } from '../utils/context-filename';
-
-function fileExists(context: RuleContext, filePath: string): boolean | null {
-  if (typeof context.fileExists === 'function') {
-    return context.fileExists(filePath);
-  }
-
-  return null;
-}
+import { fileExists } from '../utils/context-fs';
 
 function readText(context: RuleContext, filePath: string): string | null {
   if (typeof context.readFile === 'function') {

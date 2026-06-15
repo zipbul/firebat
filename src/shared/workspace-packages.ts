@@ -1,6 +1,8 @@
 import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
+import { scanGlobsToAbsolutePaths } from './glob-scan';
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object') {
     return null;
@@ -108,16 +110,9 @@ const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, s
     return new Map();
   }
 
-  const packageJsonPaths: string[] = [];
-
-  for (const pattern of patterns) {
-    const glob = new Bun.Glob(normalizePath(path.join(pattern, 'package.json')));
-
-    for await (const rel of glob.scan({ cwd: rootAbs, onlyFiles: true, followSymlinks: false })) {
-      packageJsonPaths.push(path.resolve(rootAbs, rel));
-    }
-  }
-
+  const packageJsonPaths = await scanGlobsToAbsolutePaths(patterns, rootAbs, pattern =>
+    normalizePath(path.join(pattern, 'package.json')),
+  );
   const map = new Map<string, string>();
 
   for (const p of packageJsonPaths) {

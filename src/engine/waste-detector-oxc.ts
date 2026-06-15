@@ -1155,6 +1155,18 @@ const scopeUsesDirectEval = (bodyNodes: ReadonlyArray<Node>): boolean => {
   return false;
 };
 
+// 정규형이 동일했던 read-usage 수집 결정의 단일 변경지점: 노드들을 변수 수집기로 훑어
+// (evaluateAllBranches: 구문적 read 정책) isRead 사용만 남긴다. includeNestedFunctions는
+// 호출부에 따라 다르다 (함수-본문 의미용 false, no-unused-vars 의미용 true).
+const collectReadUsages = (
+  nodes: ReadonlyArray<Node>,
+  includeNestedFunctions: boolean,
+  declScopeByIdLocation: ReadonlyMap<number, string>,
+) =>
+  nodes
+    .flatMap(n => collectVariables(n, { includeNestedFunctions, declScopeByIdLocation, evaluateAllBranches: true }))
+    .filter(u => u.isRead);
+
 const buildVarHasMeaningfulUse = (
   functionBodyNodes: ReadonlyArray<Node>,
   localIndexByName: Map<string, number>,
@@ -1166,9 +1178,7 @@ const buildVarHasMeaningfulUse = (
   // Reuse variable-collector for proper read-vs-write classification (it already filters
   // declarations, assignment targets, destructure bindings, etc.). evaluateAllBranches
   // matches the syntactic-read policy used for the use=0 exemption.
-  const reads = functionBodyNodes
-    .flatMap(n => collectVariables(n, { includeNestedFunctions: false, declScopeByIdLocation, evaluateAllBranches: true }))
-    .filter(u => u.isRead);
+  const reads = collectReadUsages(functionBodyNodes, false, declScopeByIdLocation);
 
   for (const usage of reads) {
     const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
@@ -2075,9 +2085,7 @@ const collectWasteFindingsForFunction = (
   // Syntactic read counting (ignores static dead-branch pruning) to classify
   // "사용처 0회 변수 (no-unused-vars 영역)" correctly. Includes reads inside nested
   // functions so closure captures count as syntactic uses of the outer binding.
-  const syntacticReads = functionBodyNodes
-    .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
-    .filter(u => u.isRead);
+  const syntacticReads = collectReadUsages(functionBodyNodes, true, declScopeByIdLocation);
   // Closure-capture analysis is varIndex-driven: a read inside a nested function only
   // counts as capturing an *outer* binding if `bindingKey(name, declScope)` resolves
   // to an entry in `localIndexByName` — inner same-name shadows resolve to a different
@@ -2472,9 +2480,7 @@ const collectWasteFindingsForModule = (
     canEliminateDeadDefReads: makeCanEliminateDeadDefReads(closureCapturedVarIndexes, defCtxByLocation),
   });
   const { defs, usedDefs, overwrittenDefIds, reachingInByNode, defNodeIdByDefId, nodePayloads } = analysis;
-  const syntacticReads = programBody
-    .flatMap(n => collectVariables(n, { includeNestedFunctions: true, declScopeByIdLocation, evaluateAllBranches: true }))
-    .filter(u => u.isRead);
+  const syntacticReads = collectReadUsages(programBody, true, declScopeByIdLocation);
   const nestedCtx = buildNestedFunctionContext(
     nodePayloads as ReadonlyArray<Node | ReadonlyArray<Node> | undefined>,
     localIndexByName,

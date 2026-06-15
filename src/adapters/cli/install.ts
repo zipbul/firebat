@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { FirebatLogger } from '../../shared/logger';
 
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { isPlainObject } from '../../shared/json-guards';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
@@ -47,10 +48,6 @@ const sha256Hex = async (text: string): Promise<string> => {
   const arr = Array.from(new Uint8Array(digest));
 
   return arr.map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
 const failJsonValue = (message: string): never => {

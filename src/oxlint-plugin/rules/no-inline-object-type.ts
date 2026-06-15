@@ -1,12 +1,10 @@
-import type { AstNode, JsonObject, JsonValue, RuleContext } from '../types';
+import type { AstNode, RuleContext } from '../types';
+
+import { isJsonObject } from '../utils/json-options';
 
 interface NoInlineObjectTypeOptions {
   allowEmpty?: boolean;
 }
-
-const isJsonObject = (value: JsonValue | undefined): value is JsonObject => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
 
 const noInlineObjectTypeRule = {
   create(context: RuleContext) {

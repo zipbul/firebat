@@ -3,15 +3,8 @@ import { basename } from 'node:path';
 import type { AstNode, RuleContext } from '../types';
 
 import { getContextFilename } from '../utils/context-filename';
+import { fileExists } from '../utils/context-fs';
 import { isAstNodeValue } from '../utils/is-ast-node-value';
-
-function fileExists(context: RuleContext, filePath: string): boolean | null {
-  if (typeof context.fileExists === 'function') {
-    return context.fileExists(filePath);
-  }
-
-  return null;
-}
 
 function isUnitSpecFile(filePath: string): boolean {
   return filePath.endsWith('.spec.ts');

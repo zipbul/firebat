@@ -1034,11 +1034,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
       try {
         const result = analyzeErrorFlow(program, { gildash });
-        const durationMs = nowMs() - t0;
 
-        detectorTimings['error-flow'] = durationMs;
-
-        logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
+        finishDetector(detectorRunCtx, 'error-flow', t0);
 
         return result;
       } catch (err) {
@@ -1046,11 +1043,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
         metaErrors['error-flow'] = message;
 
-        const durationMs = nowMs() - t0;
-
-        detectorTimings['error-flow'] = durationMs;
-
-        logger.debug('detector: complete', { detector: 'error-flow', durationMs: Math.round(durationMs) });
+        finishDetector(detectorRunCtx, 'error-flow', t0);
 
         const partial = (err as { partial?: unknown })?.partial;
 
