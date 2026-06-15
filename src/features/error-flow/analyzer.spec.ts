@@ -2,6 +2,8 @@ import type { Gildash } from '@zipbul/gildash';
 
 import { describe, expect, it } from 'bun:test';
 
+import type { ErrorFlowFindingKind } from './types';
+
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeErrorFlow } from './analyzer';
 
@@ -10,6 +12,12 @@ const noopGildash = {
   getExpressionTypeAtSpan: () => null,
   getContextualCallReturnsAtSpan: () => null,
 } as unknown as Gildash;
+
+type IsThenableAtSpan = (
+  filePath: string,
+  span: { start: number; end: number },
+  options?: { anyConstituent?: boolean },
+) => boolean | null;
 
 const analyzeSingle = async (filePath: string, sourceText: string) => {
   // Arrange
@@ -27,15 +35,7 @@ const analyzeSingle = async (filePath: string, sourceText: string) => {
 // `isThenableAtSpan(filePath, span, { anyConstituent })`. These unit tests stub that seam directly:
 // `mockIsThenableAtSpan` decides, for any queried expression span, whether the value is a thenable
 // (`true`), provably not (`false`), or unresolvable (`null` → treated conservatively as not).
-const analyzeWithSemantic = async (
-  filePath: string,
-  sourceText: string,
-  mockIsThenableAtSpan: (
-    filePath: string,
-    span: { start: number; end: number },
-    options?: { anyConstituent?: boolean },
-  ) => boolean | null,
-) => {
+const analyzeWithSemantic = async (filePath: string, sourceText: string, mockIsThenableAtSpan: IsThenableAtSpan) => {
   const program = [parseSource(filePath, sourceText)];
   const gildash = {
     isThenableAtSpan: mockIsThenableAtSpan,
@@ -49,6 +49,22 @@ const analyzeWithSemantic = async (
 type Findings = Awaited<ReturnType<typeof analyzeSingle>>;
 
 const kinds = (findings: Findings) => findings.map(f => f.kind);
+
+const countKind = (findings: Findings, kind: ErrorFlowFindingKind) => findings.filter(f => f.kind === kind).length;
+
+// Shared runners for the data-driven tables: parse → analyze (with the noop or a mock gildash) →
+// assert the count of one finding kind. Each table supplies only the rows that differ.
+const expectKindCount = async (source: string, kind: ErrorFlowFindingKind, expected: number) => {
+  const analysis = await analyzeSingle('/virtual/src/features/case.ts', source);
+
+  expect(countKind(analysis, kind)).toBe(expected);
+};
+
+const expectSemanticKindCount = async (source: string, mock: IsThenableAtSpan, kind: ErrorFlowFindingKind, expected: number) => {
+  const analysis = await analyzeWithSemantic('/virtual/src/features/semantic-case.ts', source, mock);
+
+  expect(countKind(analysis, kind)).toBe(expected);
+};
 
 describe('error-flow/analyzer', () => {
   it('should return no findings when input is empty', async () => {
@@ -90,732 +106,290 @@ describe('error-flow/analyzer', () => {
     expect(sample.recipes).toBeUndefined();
   });
 
-  it('should not report useless-catch for a bare rethrow (out of scope: redundancy)', async () => {
-    // Arrange — a rethrow preserves observability/propagation/cause; redundancy is lint's domain.
-    const filePath = '/virtual/src/features/useless.ts';
-    const source = ['export function f() {', '  try {', '    return 1;', '  } catch (e) {', '    throw e;', '  }', '}'].join(
-      '\n',
-    );
+  // Out-of-scope / control cases: the detector returns no findings at all. Each row keeps its own
+  // source so the distinct rationale (redundancy/style/cleanup) is still exercised end to end.
+  it.each<[string, string]>([
+    [
+      'a bare rethrow (out of scope: redundancy)',
+      ['export function f() {', '  try {', '    return 1;', '  } catch (e) {', '    throw e;', '  }', '}'].join('\n'),
+    ],
+    [
+      'a bare rethrow under a different name (out of scope: redundancy)',
+      ['export function f() {', '  try {', '    return 1;', '  } catch (err) {', '    throw err;', '  }', '}'].join('\n'),
+    ],
+    [
+      'catch logs and rethrows',
+      [
+        'export function f() {',
+        '  try {',
+        '    return 1;',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '    throw e;',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'catch rethrows a new error with cause',
+      [
+        'export function f() {',
+        '  try {',
+        '    return 1;',
+        '  } catch (e) {',
+        '    throw new Error("wrap", { cause: e });',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'catch adds context',
+      [
+        'export function f() {',
+        '  try {',
+        '    return 1;',
+        '  } catch (e) {',
+        '    throw new Error("wrap", { cause: e });',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'a second-argument rejection handler (out of scope: style)',
+      ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n'),
+    ],
+    [
+      'a downstream catch also exists (rejection fully observed)',
+      ['export function f() {', '  return Promise.resolve(1)', '    .then(() => 1, () => 0)', '    .catch(() => -1);', '}'].join(
+        '\n',
+      ),
+    ],
+    [
+      'catch is used after then',
+      ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n'),
+    ],
+    [
+      'a long control-flow then chain (out of scope: style)',
+      [
+        'export function f() {',
+        '  return Promise.resolve(1)',
+        '    .then(x => x + 1)',
+        '    .then(x => {',
+        '      if (x > 1) {',
+        '        console.log(x);',
+        '      }',
+        '      return x;',
+        '    });',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'a then chain with side effects (out of scope: style)',
+      [
+        'export function f() {',
+        '  return Promise.resolve(1)',
+        '    .then(x => x + 1)',
+        '    .then(x => {',
+        '      console.log(x);',
+        '      return x;',
+        '    });',
+        '}',
+      ].join('\n'),
+    ],
+    ['then is a short value mapping', ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n')],
+    [
+      'a short chain even if callback uses a block',
+      ['export function f() {', '  return Promise.resolve(1).then(x => {', '    return x + 1;', '  });', '}'].join('\n'),
+    ],
+    [
+      'nested bare rethrows (out of scope: redundancy)',
+      [
+        'export function f() {',
+        '  try {',
+        '    try {',
+        '      throw new Error("x");',
+        '    } catch (e) {',
+        '      throw e;',
+        '    }',
+        '  } catch (outer) {',
+        '    throw outer;',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'a single bare rethrow (out of scope: redundancy)',
+      ['export function f() {', '  try {', '    throw new Error("x");', '  } catch (e) {', '    throw e;', '  }', '}'].join('\n'),
+    ],
+    [
+      'nested try/catch complexity (out of scope: redundancy)',
+      [
+        'export function f() {',
+        '  try {',
+        '    try {',
+        '      doSomething();',
+        '    } catch (inner) {',
+        '      handleInner(inner);',
+        '    }',
+        '  } catch (outer) {',
+        '    handleOuter(outer);',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'try/finally without catch nested inside a try block',
+      [
+        'export function f() {',
+        '  try {',
+        '    try {',
+        '      doSomething();',
+        '    } finally {',
+        '      cleanup();',
+        '    }',
+        '  } catch (e) {',
+        '    handleError(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'try/catch in a catch block (cleanup pattern)',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    try {',
+        '      cleanup();',
+        '    } catch (inner) {',
+        '      console.log(inner);',
+        '    }',
+        '    throw new Error("failed", { cause: e });',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'try/catch inside a function defined in a try block',
+      [
+        'export function f() {',
+        '  try {',
+        '    const handler = () => {',
+        '      try {',
+        '        riskyOp();',
+        '      } catch (e) {',
+        '        handleError(e);',
+        '      }',
+        '    };',
+        '    handler();',
+        '  } catch (e) {',
+        '    handleOuter(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'Promise.resolve in then expression body (out of scope: style)',
+      'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));',
+    ],
+    [
+      'Promise.resolve in then block body (out of scope: style)',
+      ['export const p = Promise.resolve(1).then(x => {', '  return Promise.resolve(x + 1);', '});'].join('\n'),
+    ],
+    ['a direct value return in a then callback', 'export const p = Promise.resolve(1).then(x => x + 1);'],
+    [
+      'a then callback without return (out of scope: style)',
+      ['export const p = Promise.resolve(1).then(x => {', '  console.log(x);', '});'].join('\n'),
+    ],
+    [
+      'a then callback that returns a value',
+      ['export const p = Promise.resolve(1).then(x => {', '  return x + 1;', '});'].join('\n'),
+    ],
+    ['a then callback with an expression body', 'export const p = Promise.resolve(1).then(x => console.log(x));'],
+    [
+      'a return only in an inner function (out of scope: style)',
+      ['export const p = Promise.resolve(1).then(x => {', '  const log = () => { return x; };', '  log();', '});'].join('\n'),
+    ],
+    [
+      'Promise.reject wrapping (out of scope: style)',
+      'export const p = Promise.resolve(1).then(x => Promise.reject(new Error("fail")));',
+    ],
+  ])('should report no findings when %s', async (_label, source) => {
     // Act
-    const analysis = await analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle('/virtual/src/features/no-finding.ts', source);
 
     // Assert
     expect(analysis.length).toBe(0);
   });
 
-  it('should not report useless-catch for a bare rethrow under a different name (out of scope: redundancy)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/useless-rename.ts';
-    const source = ['export function f() {', '  try {', '    return 1;', '  } catch (err) {', '    throw err;', '  }', '}'].join(
-      '\n',
-    );
+  // Findings whose presence is asserted via `kinds(...).toContain(kind)` (other unrelated kinds may
+  // co-occur). Each row pairs a triggering source with the kind it must surface.
+  it.each<[string, string, ErrorFlowFindingKind]>([
+    ['unobserved Promise.resolve', 'export function f() { Promise.resolve(1); }', 'floating-promises'],
+    [
+      'async callback in forEach',
+      'export function f() { [1,2].forEach(async x => { await fetch(String(x)); }); }',
+      'misused-promises',
+    ],
+    ['a string literal throw', 'export function f() { throw "boom"; }', 'throw-non-error'],
+    ['a numeric literal throw', 'export function f() { throw 42; }', 'throw-non-error'],
+    ['a primitive wrapper call (String)', 'export function f() { throw String("hello"); }', 'throw-non-error'],
+    ['an object literal throw', 'export function f() { throw { code: "E_FAIL" }; }', 'throw-non-error'],
+    [
+      'a string asserted as Error (cast is a runtime lie)',
+      'export function f() { throw "boom" as unknown as Error; }',
+      'throw-non-error',
+    ],
+    ['Promise.reject with a non-Error literal', 'export function f() { return Promise.reject("boom"); }', 'throw-non-error'],
+    ['an async executor', 'export const p = new Promise(async () => { await fetch("/"); });', 'promise-constructor-hygiene'],
+    [
+      'a globalThis.Promise async executor',
+      'export const p = new globalThis.Promise(async () => { await fetch("/"); });',
+      'promise-constructor-hygiene',
+    ],
+    [
+      'a throw after settling',
+      ['export const p = new Promise((resolve) => {', '  resolve(42);', '  throw new Error("swallowed");', '});'].join('\n'),
+      'promise-constructor-hygiene',
+    ],
+    [
+      'swapped params (reject, resolve)',
+      'export const p = new Promise((reject, resolve) => { resolve(42); });',
+      'promise-constructor-hygiene',
+    ],
+  ])('should report a finding for %s', async (_label, source, kind) => {
     // Act
-    const analysis = await analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle('/virtual/src/features/report-kind.ts', source);
 
     // Assert
-    expect(analysis.length).toBe(0);
+    expect(kinds(analysis)).toContain(kind);
   });
 
-  it('should not report useless-catch when catch logs and rethrows', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/useless-logged.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '    throw e;',
-      '  }',
-      '}',
-    ].join('\n');
+  // The benefit-of-the-doubt / control cases for kind presence: the kind must be ABSENT.
+  it.each<[string, string, ErrorFlowFindingKind]>([
+    ['new Error()', 'export function f() { throw new Error("x"); }', 'throw-non-error'],
+    ['a factory call', 'export function f() { throw createError(); }', 'throw-non-error'],
+    [
+      'a member-expression throw (could hold an Error)',
+      'export function f(state: { error: Error }) { throw state.error; }',
+      'throw-non-error',
+    ],
+    ['an array-element throw (could hold an Error)', 'export function f(errs: Error[]) { throw errs[0]; }', 'throw-non-error'],
+    ['an identifier of unknown type', 'export function f() { try { risky(); } catch (e) { throw e; } }', 'throw-non-error'],
+    ['Promise.reject with a new Error', 'export function f() { return Promise.reject(new Error("x")); }', 'throw-non-error'],
+    ['Promise.reject with an identifier', 'export function f(err: unknown) { return Promise.reject(err); }', 'throw-non-error'],
+    [
+      'a sync executor with resolve',
+      'export const p = new Promise((resolve) => { resolve(42); });',
+      'promise-constructor-hygiene',
+    ],
+  ])('should not report %s', async (_label, source, kind) => {
     // Act
-    const analysis = await analyzeSingle(filePath, source);
+    const analysis = await analyzeSingle('/virtual/src/features/no-kind.ts', source);
 
     // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report useless-catch when catch rethrows a new error with cause', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/useless-wrapped.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } catch (e) {',
-      '    throw new Error("wrap", { cause: e });',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report useless-catch when catch adds context', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/context.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } catch (e) {',
-      '    throw new Error("wrap", { cause: e });',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should report unsafe-finally when finally returns and masks a throw', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-return.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } finally {',
-      '    return 1;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when finally throws and masks a return', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-throw.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return 1;',
-      '  } finally {',
-      '    throw new Error("x");',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when nested return exists inside finally', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-nested-return.ts';
-    const source = [
-      'export function f(flag: boolean) {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } finally {',
-      '    if (flag) {',
-      '      return 1;',
-      '    }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report unsafe-finally when finally only performs cleanup', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-cleanup.ts';
-    const source = [
-      'export function f() {',
-      '  let handle;',
-      '  try {',
-      '    handle = 1;',
-      '    return handle;',
-      '  } finally {',
-      '    console.log(handle);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report unsafe-finally when a .finally callback throws (masks the original rejection)', async () => {
-    // Arrange — a throw in the finally callback rejects the result, discarding the original error.
-    const filePath = '/virtual/src/features/promise-finally-throw.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).finally(() => {',
-      '    throw new Error("boom");',
-      '  });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when an unlabeled continue in finally escapes to the enclosing loop', async () => {
-    // Arrange — the continue has no loop inside the finally, so it targets the outer for, abandoning
-    // whatever the try was settling (its return/throw is discarded).
-    const filePath = '/virtual/src/features/finally-continue.ts';
-    const source = [
-      'export function f(items: number[]) {',
-      '  for (const x of items) {',
-      '    try { return x; } finally { continue; }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when a labeled break in finally targets a label outside it', async () => {
-    // Arrange — `break outer` jumps out of the finally to the labeled loop, discarding the try outcome.
-    const filePath = '/virtual/src/features/finally-labeled-break.ts';
-    const source = [
-      'export function f(items: number[]) {',
-      '  outer: for (const x of items) {',
-      '    try { return x; } finally { break outer; }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when a labeled continue in finally targets a label outside it', async () => {
-    // Arrange — `continue outer` jumps out of the finally to the labeled loop, discarding the try outcome.
-    const filePath = '/virtual/src/features/finally-labeled-continue.ts';
-    const source = [
-      'export function f(items: number[]) {',
-      '  outer: for (const x of items) {',
-      '    try { return x; } finally { continue outer; }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report unsafe-finally when a break stays inside a loop declared in the finally', async () => {
-    // Arrange — the break targets the finally-local for, so it never escapes the finally (K).
-    const filePath = '/virtual/src/features/finally-local-loop-break.ts';
-    const source = [
-      'export function f() {',
-      '  try { return 1; } finally {',
-      '    for (let i = 0; i < 3; i++) { if (i === 1) break; }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally when a break stays inside a switch declared in the finally', async () => {
-    // Arrange — the break belongs to the finally-local switch, not an escape (K).
-    const filePath = '/virtual/src/features/finally-local-switch-break.ts';
-    const source = [
-      'export function f(k: number) {',
-      '  try { return 1; } finally {',
-      '    switch (k) { case 1: break; default: break; }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally when a .finally callback returns a value (Promise.finally ignores it)', async () => {
-    // Arrange — Promise.finally discards the callback return; the original settlement passes through.
-    const filePath = '/virtual/src/features/promise-finally.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join(
-      '\n',
-    );
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally when a .finally callback has an expression body', async () => {
-    // Arrange — the returned value is ignored.
-    const filePath = '/virtual/src/features/promise-finally-expr.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally when a .finally callback throw is caught locally', async () => {
-    // Arrange — the throw is caught inside the callback, so it does not escape / mask anything.
-    const filePath = '/virtual/src/features/promise-finally-caught.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).finally(() => {',
-      '    try { risky(); } catch (e) { handle(e); }',
-      '  });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally (.finally() variant) when finally callback has no return', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/promise-finally-ok.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).finally(() => {',
-      '    console.log("cleanup");',
-      '  });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report catch-or-return when a then-chain has no catch', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/then-no-catch.ts';
-    const source = [
-      'export function f() {',
-      '  doThing().then(() => 1);',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report catch-or-return when then-chain is returned', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/then-returned.ts';
-    const source = [
-      'export function f() {',
-      '  return doThing().then(() => 1);',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report catch-or-return when then-chain is awaited', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/then-awaited.ts';
-    const source = [
-      'export async function f() {',
-      '  await doThing().then(() => 1);',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report catch-or-return when promise chain has catch', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/then-has-catch.ts';
-    const source = [
-      'export function f() {',
-      '  doThing().then(() => 1).catch(() => 0);',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report catch-or-return when then has a rejection handler (2-arg form)', async () => {
-    // Arrange — .then(onFulfilled, onRejected) handles rejection just like .catch()
-    const filePath = '/virtual/src/features/then-2arg.ts';
-    const source = [
-      'export function f() {',
-      '  doThing().then(',
-      '    (v) => v + 1,',
-      '    (e) => 0,',
-      '  );',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report catch-or-return when an earlier then in chain has rejection handler', async () => {
-    // Arrange — earlier .then(_, onRejected) handles rejection for subsequent chain
-    const filePath = '/virtual/src/features/then-2arg-chain.ts';
-    const source = [
-      'export function f() {',
-      '  doThing().then(',
-      '    (v) => v + 1,',
-      '    (e) => 0,',
-      '  ).then((v) => v * 2);',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report prefer-catch for a second-argument rejection handler (out of scope: style)', async () => {
-    // Arrange — onErr observes the upstream rejection, so the reason reaches a handler;
-    // preferring `.catch` over a second argument is a pure notation convention (lint domain).
-    const filePath = '/virtual/src/features/prefer-catch.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1, () => 0);', '}'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report prefer-catch when a downstream catch also exists (rejection fully observed)', async () => {
-    // Arrange — both the upstream rejection (onErr) and any onOk throw (downstream .catch) are
-    // observed, so nothing is lost; flagging this was a clear over-report.
-    const filePath = '/virtual/src/features/prefer-catch-and-catch.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1)',
-      '    .then(() => 1, () => 0)',
-      '    .catch(() => -1);',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report prefer-catch when catch is used', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/prefer-catch-ok.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report prefer-await-to-then for long control-flow chains (out of scope: style)', async () => {
-    // Arrange — await-vs-then is a style preference; the chain is returned, so its rejection
-    // propagates to the caller.
-    const filePath = '/virtual/src/features/prefer-await.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1)',
-      '    .then(x => x + 1)',
-      '    .then(x => {',
-      '      if (x > 1) {',
-      '        console.log(x);',
-      '      }',
-      '      return x;',
-      '    });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report prefer-await-to-then for a chain with side effects (out of scope: style)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/prefer-await-side-effect.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1)',
-      '    .then(x => x + 1)',
-      '    .then(x => {',
-      '      console.log(x);',
-      '      return x;',
-      '    });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report prefer-await-to-then when then is a short value mapping', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/prefer-await-ok.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).then(x => x + 1);', '}'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report prefer-await-to-then when chain is short even if callback uses block', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/prefer-await-short-block.ts';
-    const source = ['export function f() {', '  return Promise.resolve(1).then(x => {', '    return x + 1;', '  });', '}'].join(
-      '\n',
-    );
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  // --- floating-promises ---
-
-  it('should report floating-promises for unobserved Promise.resolve', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/floating.ts';
-    const source = 'export function f() { Promise.resolve(1); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('floating-promises');
-  });
-
-  it('should report floating-promises for unobserved dynamic import()', async () => {
-    // Arrange — `import('./mod')` returns a Promise; bare expression statement leaks rejection
-    const filePath = '/virtual/src/features/dynamic-import-floating.ts';
-    const source = 'export function f() { import("./mod"); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(1);
-  });
-
-  it('should not report floating-promises when dynamic import is voided', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/dynamic-import-voided.ts';
-    const source = 'export function f() { void import("./mod"); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert — control: voided import should NOT report floating-promises
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
-  });
-
-  it('should not report floating-promises when promise is voided', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/floating-void.ts';
-    const source = 'export function f() { void Promise.resolve(1); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'floating-promises');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report floating-promises for a bare call whose result gildash proves is a Promise', async () => {
-    // Arrange — `fetchData();` discards a Promise; its rejection is unobserved.
-    const filePath = '/virtual/src/features/floating-bare-call.ts';
-    const source = 'export function f() { fetchData(); }';
-    // Act — gildash reports the callee returns a PromiseLike.
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(1);
-  });
-
-  it('should not report floating-promises for a bare call gildash cannot prove returns a Promise', async () => {
-    // Arrange — conservative: an unresolved/non-Promise call type is never flagged.
-    const filePath = '/virtual/src/features/floating-bare-sync.ts';
-    const source = 'export function f() { syncFn(); }';
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => false);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
-  });
-
-  it('should not report floating-promises for a voided bare Promise-returning call', async () => {
-    // Arrange — `void` is an explicit discard (K), even when gildash proves a Promise.
-    const filePath = '/virtual/src/features/floating-bare-void.ts';
-    const source = 'export function f() { void fetchData(); }';
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
-  });
-
-  it('should not flag a bare call when gildash is unavailable (degraded scans never over-report)', async () => {
-    // Arrange — without the semantic layer, a bare call type is unknown → not flagged.
-    const filePath = '/virtual/src/features/floating-bare-nogildash.ts';
-    const source = 'export function f() { fetchData(); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'floating-promises').length).toBe(0);
-  });
-
-  // --- empty rejection handler (promise form of empty-catch), gildash-gated ---
-
-  it('should report empty-catch for an empty .catch(() => {}) when gildash proves the receiver is a Promise', async () => {
-    // Arrange — an empty .catch swallows the rejection just like an empty catch block.
-    const filePath = '/virtual/src/features/empty-catch-handler.ts';
-    const source = 'export function f(p: Promise<number>) { p.catch(() => {}); }';
-    // Act — gildash confirms the receiver is PromiseLike.
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(1);
-  });
-
-  it('should report empty-catch for an empty second .then(_, () => {}) handler on a Promise', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/empty-then-handler.ts';
-    const source = 'export function f(p: Promise<number>) { p.then(v => v, () => {}); }';
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(1);
-  });
-
-  it('should not report empty-catch for an empty .catch on a non-Promise fluent API', async () => {
-    // Arrange — a query builder with its own `.catch` method is not a rejection channel.
-    const filePath = '/virtual/src/features/empty-catch-nonpromise.ts';
-    const source = 'export function f(q: { catch(cb: () => void): void }) { q.catch(() => {}); }';
-    // Act — gildash reports the receiver is NOT PromiseLike.
-    const analysis = await analyzeWithSemantic(filePath, source, () => false);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
-  });
-
-  it('should not report empty-catch when the rejection handler has a body', async () => {
-    // Arrange — observing the error (logging) is not a swallow.
-    const filePath = '/virtual/src/features/nonempty-catch-handler.ts';
-    const source = 'export function f(p: Promise<number>) { p.catch((e) => { console.error(e); }); }';
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
-  });
-
-  it('should not flag an empty .catch when gildash is unavailable (degraded scans never over-report)', async () => {
-    // Arrange — without the semantic layer the receiver type is unknown → not flagged.
-    const filePath = '/virtual/src/features/empty-catch-nogildash.ts';
-    const source = 'export function f(p: Promise<number>) { p.catch(() => {}); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.filter(f => f.kind === 'empty-catch').length).toBe(0);
-  });
-
-  // --- misused-promises ---
-
-  it('should report misused-promises for async callback in forEach', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/misused.ts';
-    const source = 'export function f() { [1,2].forEach(async x => { await fetch(String(x)); }); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('misused-promises');
-  });
-
-  it('should not report misused-promises for sync callback in forEach', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/misused-sync.ts';
-    const source = 'export function f() { [1,2].forEach(x => console.log(x)); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'misused-promises');
-
-    // Assert
-    expect(hits.length).toBe(0);
+    expect(kinds(analysis)).not.toContain(kind);
   });
 
   it('should not over-report unrelated kinds when only one rule is violated', async () => {
@@ -831,956 +405,894 @@ describe('error-flow/analyzer', () => {
     expect(kinds(analysis)).not.toContain('missing-error-cause');
   });
 
-  it('should report missing-error-cause when catch throws new Error without cause', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/transform-bad.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } catch (e) {',
-      '    throw new Error("wrap");',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
+  // unsafe-finally: a finally clause that masks the try's outcome. `expected` is the number of
+  // unsafe-finally findings (1 = masked/escapes, 0 = stays local / cleanup only).
+  it.each<[string, string, number]>([
+    [
+      'finally returns and masks a throw',
+      ['export function f() {', '  try {', '    throw new Error("x");', '  } finally {', '    return 1;', '  }', '}'].join('\n'),
+      1,
+    ],
+    [
+      'finally throws and masks a return',
+      ['export function f() {', '  try {', '    return 1;', '  } finally {', '    throw new Error("x");', '  }', '}'].join('\n'),
+      1,
+    ],
+    [
+      'a nested return exists inside finally',
+      [
+        'export function f(flag: boolean) {',
+        '  try {',
+        '    throw new Error("x");',
+        '  } finally {',
+        '    if (flag) {',
+        '      return 1;',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'a .finally callback throws (masks the original rejection)',
+      ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    throw new Error("boom");', '  });', '}'].join(
+        '\n',
+      ),
+      1,
+    ],
+    [
+      'an unlabeled continue in finally escapes to the enclosing loop',
+      [
+        'export function f(items: number[]) {',
+        '  for (const x of items) {',
+        '    try { return x; } finally { continue; }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'a labeled break in finally targets a label outside it',
+      [
+        'export function f(items: number[]) {',
+        '  outer: for (const x of items) {',
+        '    try { return x; } finally { break outer; }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'a labeled continue in finally targets a label outside it',
+      [
+        'export function f(items: number[]) {',
+        '  outer: for (const x of items) {',
+        '    try { return x; } finally { continue outer; }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'finally contains break targeting an outer loop',
+      [
+        'export function f() {',
+        '  for (let i = 0; i < 10; i++) {',
+        '    try {',
+        '      doSomething();',
+        '    } finally {',
+        '      break;',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'finally contains continue targeting an outer loop',
+      [
+        'export function f() {',
+        '  for (let i = 0; i < 10; i++) {',
+        '    try {',
+        '      doSomething();',
+        '    } finally {',
+        '      continue;',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'finally only performs cleanup',
+      [
+        'export function f() {',
+        '  let handle;',
+        '  try {',
+        '    handle = 1;',
+        '    return handle;',
+        '  } finally {',
+        '    console.log(handle);',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a break stays inside a loop declared in the finally',
+      [
+        'export function f() {',
+        '  try { return 1; } finally {',
+        '    for (let i = 0; i < 3; i++) { if (i === 1) break; }',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a break stays inside a switch declared in the finally',
+      [
+        'export function f(k: number) {',
+        '  try { return 1; } finally {',
+        '    switch (k) { case 1: break; default: break; }',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a .finally callback returns a value (Promise.finally ignores it)',
+      ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    return 2;', '  });', '}'].join('\n'),
+      0,
+    ],
+    [
+      'a .finally callback has an expression body',
+      ['export function f() {', '  return Promise.resolve(1).finally(() => 1);', '}'].join('\n'),
+      0,
+    ],
+    [
+      'a .finally callback throw is caught locally',
+      [
+        'export function f() {',
+        '  return Promise.resolve(1).finally(() => {',
+        '    try { risky(); } catch (e) { handle(e); }',
+        '  });',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a .finally callback has no return',
+      ['export function f() {', '  return Promise.resolve(1).finally(() => {', '    console.log("cleanup");', '  });', '}'].join(
+        '\n',
+      ),
+      0,
+    ],
+    [
+      'break is inside a loop within finally',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } finally {',
+        '    for (let i = 0; i < 10; i++) {',
+        '      if (i === 5) break;',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'return is inside a nested function in finally',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } finally {',
+        '    const fn = () => { return 1; };',
+        '    fn();',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a labeled break targets a label inside finally',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } finally {',
+        '    outer: for (let i = 0; i < 10; i++) {',
+        '      for (let j = 0; j < 10; j++) {',
+        '        if (j === 5) break outer;',
+        '      }',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a .finally callback has a return inside a nested function',
+      [
+        'export function f() {',
+        '  return Promise.resolve(1).finally(() => {',
+        '    const cleanup = () => { return 1; };',
+        '    cleanup();',
+        '  });',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+  ])('should resolve unsafe-finally when %s', async (_label, source, expected) => {
+    await expectKindCount(source, 'unsafe-finally', expected);
+  });
+
+  // catch-or-return: a then-chain whose rejection is neither caught nor propagated.
+  it.each<[string, string, number]>([
+    [
+      'a then-chain has no catch',
+      ['export function f() {', '  doThing().then(() => 1);', '}', 'function doThing() { return Promise.resolve(1); }'].join(
+        '\n',
+      ),
+      1,
+    ],
+    [
+      'then-chain is returned',
+      [
+        'export function f() {',
+        '  return doThing().then(() => 1);',
+        '}',
+        'function doThing() { return Promise.resolve(1); }',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'then-chain is awaited',
+      [
+        'export async function f() {',
+        '  await doThing().then(() => 1);',
+        '}',
+        'function doThing() { return Promise.resolve(1); }',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'promise chain has catch',
+      [
+        'export function f() {',
+        '  doThing().then(() => 1).catch(() => 0);',
+        '}',
+        'function doThing() { return Promise.resolve(1); }',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'then has a rejection handler (2-arg form)',
+      [
+        'export function f() {',
+        '  doThing().then(',
+        '    (v) => v + 1,',
+        '    (e) => 0,',
+        '  );',
+        '}',
+        'function doThing() { return Promise.resolve(1); }',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'an earlier then in chain has a rejection handler',
+      [
+        'export function f() {',
+        '  doThing().then(',
+        '    (v) => v + 1,',
+        '    (e) => 0,',
+        '  ).then((v) => v * 2);',
+        '}',
+        'function doThing() { return Promise.resolve(1); }',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'catch comes before then',
+      [
+        'export function f() {',
+        '  doThing().catch(() => 0).then(() => 1);',
+        '}',
+        'function doThing() { return Promise.resolve(1); }',
+      ].join('\n'),
+      0,
+    ],
+  ])('should resolve catch-or-return when %s', async (_label, source, expected) => {
+    await expectKindCount(source, 'catch-or-return', expected);
+  });
+
+  // missing-error-cause: a catch that re-throws a fresh error without threading the original cause.
+  it.each<[string, string, number]>([
+    [
+      'catch throws new Error without cause',
+      [
+        'export function f() {',
+        '  try {',
+        '    throw new Error("x");',
+        '  } catch (e) {',
+        '    throw new Error("wrap");',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'the vibe pattern wraps the catch param in an Error message',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    throw new Error(String(e));',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'an optional catch binding throws a fresh Error',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch {',
+        '    throw new Error("operation failed");',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'the catch param is reassigned before throw',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    e = new Error("replaced");',
+        '    throw e;',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'an AggregateError is thrown without cause',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    throw new AggregateError([], "multiple failures");',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'the vibe pattern uses e.message',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    throw new Error(e.message);',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'the vibe pattern uses a template literal',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    throw new Error(`Failed: ${e}`);',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'an error is assigned to a variable then thrown without cause',
+      [
+        'export function f() {',
+        '  try { doSomething(); } catch (e) {',
+        '    const wrapped = new Error("failed");',
+        '    throw wrapped;',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'an error variable is declared inside a nested block in catch',
+      [
+        'export function f() {',
+        '  try { doSomething(); } catch (e) {',
+        '    if (isRetryable(e)) {',
+        '      const wrapped = new Error("retry failed");',
+        '      throw wrapped;',
+        '    }',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'cause is preserved (catch-transform variant)',
+      [
+        'export function f() {',
+        '  try {',
+        '    throw new Error("x");',
+        '  } catch (e) {',
+        '    throw new Error("wrap", { cause: e });',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'an AggregateError is thrown with cause',
+      [
+        'export function f() {',
+        '  try {',
+        '    doSomething();',
+        '  } catch (e) {',
+        '    throw new AggregateError([], "multiple failures", { cause: e });',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'catch returns without throwing',
+      [
+        'export function f() {',
+        '  try {',
+        '    return doSomething();',
+        '  } catch (e) {',
+        '    return defaultValue;',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'the error variable has cause and is thrown',
+      [
+        'export function f() {',
+        '  try { doSomething(); } catch (e) {',
+        '    const wrapped = new Error("failed", { cause: e });',
+        '    throw wrapped;',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+  ])('should resolve missing-error-cause when %s', async (_label, source, expected) => {
+    await expectKindCount(source, 'missing-error-cause', expected);
+  });
+
+  // promise-constructor-hygiene: throws inside a Promise executor after it may already be settled.
+  it.each<[string, string, number]>([
+    [
+      'a throw is inside a nested function in the executor',
+      [
+        'export const p = new Promise((resolve) => {',
+        '  setTimeout(() => { throw new Error("timeout"); }, 100);',
+        '  resolve(42);',
+        '});',
+      ].join('\n'),
+      0,
+    ],
+    [
+      'a bare throw happens before settling',
+      ['export const p = new Promise((resolve) => {', '  if (!valid) throw new Error("invalid");', '  resolve(42);', '});'].join(
+        '\n',
+      ),
+      0,
+    ],
+    [
+      'a value is returned inside a sync executor (out of scope)',
+      ['export const p = new Promise((resolve) => {', '  return 42;', '});'].join('\n'),
+      0,
+    ],
+    [
+      'a new Promise appears in an async function (out of scope: style)',
+      ['export async function f() {', '  return new Promise((resolve) => {', '    resolve(42);', '  });', '}'].join('\n'),
+      0,
+    ],
+    [
+      'a new Promise wraps a callback API',
+      [
+        'export async function f() {',
+        '  return new Promise((resolve) => {',
+        '    emitter.on("data", resolve);',
+        '  });',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+  ])('should resolve promise-constructor-hygiene when %s', async (_label, source, expected) => {
+    await expectKindCount(source, 'promise-constructor-hygiene', expected);
+  });
+
+  // floating-promises with a syntactic (non-semantic) signal: void/import discards.
+  it.each<[string, string, number]>([
+    ['an unobserved dynamic import()', 'export function f() { import("./mod"); }', 1],
+    ['a voided dynamic import', 'export function f() { void import("./mod"); }', 0],
+    ['a voided promise', 'export function f() { void Promise.resolve(1); }', 0],
+  ])('should resolve floating-promises (syntactic) when %s', async (_label, source, expected) => {
+    await expectKindCount(source, 'floating-promises', expected);
+  });
+
+  // misused-promises / no-callback-in-promise: single representative pair each.
+  it.each<[string, string, ErrorFlowFindingKind, number]>([
+    [
+      'a sync callback in forEach is not misused-promises',
+      'export function f() { [1,2].forEach(x => console.log(x)); }',
+      'misused-promises',
+      0,
+    ],
+    [
+      'a callback API used inside then is no-callback-in-promise',
+      [
+        'import * as fs from "fs";',
+        'export const p = fetch("/api").then(res => {',
+        '  fs.readFile("data.txt", (err, data) => {',
+        '    console.log(data);',
+        '  });',
+        '});',
+      ].join('\n'),
+      'no-callback-in-promise',
+      1,
+    ],
+    [
+      'no callback API is used is not no-callback-in-promise',
+      ['export const p = fetch("/api").then(res => {', '  return res.json();', '});'].join('\n'),
+      'no-callback-in-promise',
+      0,
+    ],
+  ])('should resolve %s', async (_label, source, kind, expected) => {
+    await expectKindCount(source, kind, expected);
+  });
+
+  // floating-promises / empty-catch gated by the semantic (gildash) layer. `mock` decides whether
+  // the queried span is a thenable; `expected` is the resulting finding count for `kind`.
+  it.each<[string, string, IsThenableAtSpan, ErrorFlowFindingKind, number]>([
+    ['a bare call gildash proves is a Promise', 'export function f() { fetchData(); }', () => true, 'floating-promises', 1],
+    [
+      'a bare call gildash cannot prove returns a Promise',
+      'export function f() { syncFn(); }',
+      () => false,
+      'floating-promises',
+      0,
+    ],
+    ['a voided bare Promise-returning call', 'export function f() { void fetchData(); }', () => true, 'floating-promises', 0],
+    [
+      'an empty .catch(() => {}) when gildash proves the receiver is a Promise',
+      'export function f(p: Promise<number>) { p.catch(() => {}); }',
+      () => true,
+      'empty-catch',
+      1,
+    ],
+    [
+      'an empty second .then(_, () => {}) handler on a Promise',
+      'export function f(p: Promise<number>) { p.then(v => v, () => {}); }',
+      () => true,
+      'empty-catch',
+      1,
+    ],
+    [
+      'an empty .catch on a non-Promise fluent API',
+      'export function f(q: { catch(cb: () => void): void }) { q.catch(() => {}); }',
+      () => false,
+      'empty-catch',
+      0,
+    ],
+    [
+      'the rejection handler has a body',
+      'export function f(p: Promise<number>) { p.catch((e) => { console.error(e); }); }',
+      () => true,
+      'empty-catch',
+      0,
+    ],
+  ])('should resolve a gildash-gated finding for %s', async (_label, source, mock, kind, expected) => {
+    await expectSemanticKindCount(source, mock, kind, expected);
+  });
+
+  // Degraded scans (noop gildash): a type that only the semantic layer could confirm is never
+  // flagged, so the gildash-gated kinds never over-report when the type is unknown.
+  it.each<[string, string, ErrorFlowFindingKind]>([
+    ['a bare call', 'export function f() { fetchData(); }', 'floating-promises'],
+    ['an empty .catch', 'export function f(p: Promise<number>) { p.catch(() => {}); }', 'empty-catch'],
+  ])('should not flag %s when gildash is unavailable (degraded scans never over-report)', async (_label, source, kind) => {
+    // Act — no semantic layer, so the receiver/call type is unknown.
+    const analysis = await analyzeSingle('/virtual/src/features/degraded.ts', source);
 
     // Assert
-    expect(hits.length).toBe(1);
+    expect(analysis.filter(f => f.kind === kind).length).toBe(0);
   });
 
-  it('should not report missing-error-cause (catch-transform variant) when cause is preserved', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/transform-ok.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } catch (e) {',
-      '    throw new Error("wrap", { cause: e });',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(0);
+  // return-await-in-try: a Promise-returning `return` inside a try-with-catch needs `await` so the
+  // catch can intercept the rejection. `mock` is the gildash thenable verdict for the returned value.
+  it.each<[string, string, IsThenableAtSpan, number]>([
+    [
+      'returning a call without await in a try block with catch (gildash proves a Promise)',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    handleError(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a semantic Promise CallExpression flags a finding',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a semantic Promise Identifier flags a finding',
+      [
+        'export async function f() {',
+        '  const p = fetchData();',
+        '  try {',
+        '    return p;',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a semantic union with a Promise member (CallExpression) flags a finding',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a semantic intersection with a Promise member flags a finding',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a semantic PromiseLike type flags a finding',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return getThenable();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a semantic sync CallExpression yields no finding',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return parseInt(s);',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => false,
+      0,
+    ],
+    [
+      'a semantic sync Identifier yields no finding',
+      [
+        'export async function f() {',
+        '  const val = "hello";',
+        '  try {',
+        '    return val;',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => false,
+      0,
+    ],
+    [
+      'a semantic union of all-sync members yields no finding',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return getValue();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => false,
+      0,
+    ],
+    [
+      'gildash cannot resolve the type yields no finding (conservative)',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => null,
+      0,
+    ],
+    [
+      'the semantic layer throws yields no finding (conservative)',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => {
+        throw new Error('semantic layer is not enabled');
+      },
+      0,
+    ],
+    [
+      'a NewExpression is not flagged (a constructed instance is not a thenable)',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return new MyPromise(resolve => resolve(1));',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      () => true,
+      0,
+    ],
+  ])('should resolve return-await-in-try when %s', async (_label, source, mock, expected) => {
+    await expectSemanticKindCount(source, mock, 'return-await-in-try', expected);
   });
 
-  it('should not report useless-catch for nested bare rethrows (out of scope: redundancy)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/nested-redundant.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    try {',
-      '      throw new Error("x");',
-      '    } catch (e) {',
-      '      throw e;',
-      '    }',
-      '  } catch (outer) {',
-      '    throw outer;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert — every site rethrows the original error unchanged (observability/cause preserved).
-    expect(analysis.length).toBe(0);
+  // return-await-in-try, syntactic (noop gildash): import() is statically a Promise; everything else
+  // here is provably not a flag.
+  it.each<[string, string, number]>([
+    [
+      'returning import() without await in a try block with catch',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return import("./mod");',
+        '  } catch (e) {',
+        '    return null;',
+        '  }',
+        '}',
+      ].join('\n'),
+      1,
+    ],
+    [
+      'return uses await',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return await fetchData();',
+        '  } catch (e) {',
+        '    handleError(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+    ['return is outside the try block', ['export async function f() {', '  return fetchData();', '}'].join('\n'), 0],
+    [
+      'a literal return in a try block',
+      ['export function f() {', '  try {', '    return "ok";', '  } catch (e) {', '    return "error";', '  }', '}'].join('\n'),
+      0,
+    ],
+    [
+      'try has only finally (no catch)',
+      ['export async function f() {', '  try {', '    return fetchData();', '  } finally {', '    cleanup();', '  }', '}'].join(
+        '\n',
+      ),
+      0,
+    ],
+    [
+      'a non-async function returns a call in a try block',
+      [
+        'export function f() {',
+        '  try {',
+        '    return fetch("url");',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+      0,
+    ],
+  ])('should resolve return-await-in-try (syntactic) when %s', async (_label, source, expected) => {
+    await expectKindCount(source, 'return-await-in-try', expected);
   });
 
-  it('should not report useless-catch for a single bare rethrow (out of scope: redundancy)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/nested-no-outer.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    throw new Error("x");',
-      '  } catch (e) {',
-      '    throw e;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  // --- useless-catch: nested try/catch (complexity is out of scope) ---
-
-  it('should not report useless-catch for nested try/catch complexity (out of scope: redundancy)', async () => {
-    // Arrange — nested try/catch is a complexity/redundancy smell, not an error-flow loss.
-    const filePath = '/virtual/src/features/nested-try.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    try {',
-      '      doSomething();',
-      '    } catch (inner) {',
-      '      handleInner(inner);',
-      '    }',
-      '  } catch (outer) {',
-      '    handleOuter(outer);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report useless-catch (nested variant) for try/finally without catch nested inside try block', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/nested-try-finally.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    try {',
-      '      doSomething();',
-      '    } finally {',
-      '      cleanup();',
-      '    }',
-      '  } catch (e) {',
-      '    handleError(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report useless-catch (nested variant) for try/catch in catch block (cleanup pattern)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/nested-in-catch.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    try {',
-      '      cleanup();',
-      '    } catch (inner) {',
-      '      console.log(inner);',
-      '    }',
-      '    throw new Error("failed", { cause: e });',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report useless-catch (nested variant) for try/catch inside a function defined in try block', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/nested-in-function.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    const handler = () => {',
-      '      try {',
-      '        riskyOp();',
-      '      } catch (e) {',
-      '        handleError(e);',
-      '      }',
-      '    };',
-      '    handler();',
-      '  } catch (e) {',
-      '    handleOuter(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  // --- unsafe-finally: break/continue ---
-
-  it('should report unsafe-finally when finally contains break targeting outer loop', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-break.ts';
-    const source = [
-      'export function f() {',
-      '  for (let i = 0; i < 10; i++) {',
-      '    try {',
-      '      doSomething();',
-      '    } finally {',
-      '      break;',
-      '    }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report unsafe-finally when finally contains continue targeting outer loop', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-continue.ts';
-    const source = [
-      'export function f() {',
-      '  for (let i = 0; i < 10; i++) {',
-      '    try {',
-      '      doSomething();',
-      '    } finally {',
-      '      continue;',
-      '    }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report unsafe-finally when break is inside a loop within finally', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-break-in-loop.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } finally {',
-      '    for (let i = 0; i < 10; i++) {',
-      '      if (i === 5) break;',
-      '    }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally when return is inside a nested function in finally', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-fn-return.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } finally {',
-      '    const fn = () => { return 1; };',
-      '    fn();',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally when labeled break targets a label inside finally', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-labeled-inner.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } finally {',
-      '    outer: for (let i = 0; i < 10; i++) {',
-      '      for (let j = 0; j < 10; j++) {',
-      '        if (j === 5) break outer;',
-      '      }',
-      '    }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unsafe-finally for .finally callback with return inside nested function', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/finally-cb-nested-fn.ts';
-    const source = [
-      'export function f() {',
-      '  return Promise.resolve(1).finally(() => {',
-      '    const cleanup = () => { return 1; };',
-      '    cleanup();',
-      '  });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'unsafe-finally');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  // --- missing-error-cause: extensions ---
-
-  it('should report missing-error-cause for vibe pattern — catch param in Error message', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/vibe-pattern.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    throw new Error(String(e));',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report missing-error-cause for optional catch binding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/optional-catch.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch {',
-      '    throw new Error("operation failed");',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report missing-error-cause for catch param reassignment', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/catch-reassign.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    e = new Error("replaced");',
-      '    throw e;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report missing-error-cause for AggregateError without cause', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/aggregate-error.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    throw new AggregateError([], "multiple failures");',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report missing-error-cause for AggregateError with cause', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/aggregate-error-ok.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    throw new AggregateError([], "multiple failures", { cause: e });',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report missing-error-cause for vibe pattern with e.message', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/vibe-message.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    throw new Error(e.message);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report missing-error-cause for vibe pattern with template literal', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/vibe-template.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    doSomething();',
-      '  } catch (e) {',
-      '    throw new Error(`Failed: ${e}`);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report missing-error-cause when catch returns without throwing', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/catch-return.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return doSomething();',
-      '  } catch (e) {',
-      '    return defaultValue;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  // --- throw-non-error ---
-
-  it('should report throw-non-error for string literal throw', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/throw-string.ts';
-    const source = 'export function f() { throw "boom"; }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('throw-non-error');
-  });
-
-  it('should report throw-non-error for numeric literal throw', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/throw-number.ts';
-    const source = 'export function f() { throw 42; }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('throw-non-error');
-  });
-
-  it('should report throw-non-error for primitive wrapper call (String)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/throw-wrapper.ts';
-    const source = 'export function f() { throw String("hello"); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for new Error()', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/throw-error.ts';
-    const source = 'export function f() { throw new Error("x"); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for factory call', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/throw-factory.ts';
-    const source = 'export function f() { throw createError(); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  it('should report throw-non-error for an object literal throw', async () => {
-    // Arrange — a plain object is not an Error instance (loses stack/cause).
-    const filePath = '/virtual/src/features/throw-object.ts';
-    const source = 'export function f() { throw { code: "E_FAIL" }; }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('throw-non-error');
-  });
-
-  it('should report throw-non-error for a string asserted as Error (cast is a runtime lie)', async () => {
-    // Arrange — `as unknown as Error` does not change the runtime string; stack is still lost.
-    const filePath = '/virtual/src/features/throw-cast.ts';
-    const source = 'export function f() { throw "boom" as unknown as Error; }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for a member-expression throw (could hold an Error)', async () => {
-    // Arrange — `state.error` may well be an Error; without proof it gets the benefit of doubt.
-    const filePath = '/virtual/src/features/throw-member.ts';
-    const source = 'export function f(state: { error: Error }) { throw state.error; }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for an array-element throw (could hold an Error)', async () => {
-    // Arrange — `errs[0]` may be an Error; member access is not provably non-Error.
-    const filePath = '/virtual/src/features/throw-index.ts';
-    const source = 'export function f(errs: Error[]) { throw errs[0]; }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for an identifier of unknown type', async () => {
-    // Arrange — a bare identifier (e.g. a catch binding) could be an Error → benefit of doubt.
-    const filePath = '/virtual/src/features/throw-ident.ts';
-    const source = 'export function f() { try { risky(); } catch (e) { throw e; } }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  it('should report throw-non-error for Promise.reject with a non-Error literal', async () => {
-    // Arrange — Promise.reject('x') loses the stack trace / cause like `throw 'x'`.
-    const filePath = '/virtual/src/features/reject-literal.ts';
-    const source = 'export function f() { return Promise.reject("boom"); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for Promise.reject with a new Error', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/reject-error.ts';
-    const source = 'export function f() { return Promise.reject(new Error("x")); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  it('should not report throw-non-error for Promise.reject with an identifier', async () => {
-    // Arrange — the rejected value could be an Error → benefit of the doubt.
-    const filePath = '/virtual/src/features/reject-ident.ts';
-    const source = 'export function f(err: unknown) { return Promise.reject(err); }';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('throw-non-error');
-  });
-
-  // --- return-await-in-try ---
-
-  it('should report return-await-in-try when returning a call without await in try block with catch', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-no-await.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    handleError(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — gildash proves the callee returns a Promise.
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should report return-await-in-try when returning import() without await in try block with catch', async () => {
-    // Arrange — dynamic import returns a Promise; without await, catch cannot intercept
-    const filePath = '/virtual/src/features/return-import-no-await.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return import("./mod");',
-      '  } catch (e) {',
-      '    return null;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report return-await-in-try when return uses await', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-with-await.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return await fetchData();',
-      '  } catch (e) {',
-      '    handleError(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report return-await-in-try when return is outside try block', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-outside-try.ts';
-    const source = ['export async function f() {', '  return fetchData();', '}'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report return-await-in-try for literal return in try block', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-literal-in-try.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return "ok";',
-      '  } catch (e) {',
-      '    return "error";',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report return-await-in-try when try has only finally (no catch)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-try-finally.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } finally {',
-      '    cleanup();',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - non-async function with return call in try - no finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/non-async-try.ts';
-    const source = [
-      'export function f() {',
-      '  try {',
-      '    return fetch("url");',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - semantic Promise CallExpression - flags finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-promise.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — CallExpression: target is '(...args: any[]) => PromiseLike<any>'
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - semantic sync CallExpression - no finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-sync.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return parseInt(s);',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => false);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - semantic Promise Identifier - flags finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-ident-promise.ts';
-    const source = [
-      'export async function f() {',
-      '  const p = fetchData();',
-      '  try {',
-      '    return p;',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — Identifier: target is 'PromiseLike<any>'
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - semantic sync Identifier - no finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-ident-sync.ts';
-    const source = [
-      'export async function f() {',
-      '  const val = "hello";',
-      '  try {',
-      '    return val;',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => false);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - gildash cannot resolve the type - no finding (conservative)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-null.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — gildash returns null (cannot determine); there is no flag-all fallback.
-    const analysis = await analyzeWithSemantic(filePath, source, () => null);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert — unresolved type is not flagged (zero-FP over degraded coverage).
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - semantic union with Promise member (CallExpression) - flags finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-union-promise.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — () => Promise<Response> | null is assignable to (...args: any[]) => PromiseLike<any>
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - semantic union all sync members - no finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-union-sync.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return getValue();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => false);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - semantic intersection with Promise member - flags finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-intersection-promise.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — () => Promise<Response> & Loggable is assignable to (...args: any[]) => PromiseLike<any>
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - semantic PromiseLike type - flags finding', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-promiselike.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return getThenable();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - CallExpression result span is probed with anyConstituent', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-call-target.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — the oracle queries the call-result span for thenable-ness, passing anyConstituent.
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _span, options) => {
+  // The oracle probes the value span with the `anyConstituent` option; assert that inside the mock.
+  it.each<[string, string]>([
+    [
+      'CallExpression result span is probed with anyConstituent',
+      [
+        'export async function f() {',
+        '  try {',
+        '    return fetchData();',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    [
+      'Identifier passes anyConstituent option',
+      [
+        'export async function f() {',
+        '  const p = fetchData();',
+        '  try {',
+        '    return p;',
+        '  } catch (e) {',
+        '    console.error(e);',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+  ])('return-await-in-try - %s', async (_label, source) => {
+    // Act — the oracle queries the value's span for thenable-ness, passing anyConstituent.
+    const analysis = await analyzeWithSemantic('/virtual/src/features/return-await-probe.ts', source, (_f, _span, options) => {
       expect(options).toEqual({ anyConstituent: true });
 
       return true;
@@ -1791,391 +1303,35 @@ describe('error-flow/analyzer', () => {
     expect(hits.length).toBe(1);
   });
 
-  it('return-await-in-try - Identifier passes anyConstituent option', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-id-target.ts';
-    const source = [
-      'export async function f() {',
-      '  const p = fetchData();',
-      '  try {',
-      '    return p;',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — the value's span is probed for thenable-ness, passing anyConstituent.
-    const analysis = await analyzeWithSemantic(filePath, source, (_f, _span, options) => {
-      expect(options).toEqual({ anyConstituent: true });
-
-      return true;
-    });
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('return-await-in-try - semantic layer throws - no finding (conservative)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/semantic-throw.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return fetchData();',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — mock throws (semantic layer not enabled)
-    const analysis = await analyzeWithSemantic(filePath, source, () => {
-      throw new Error('semantic layer is not enabled');
-    });
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert — a thrown semantic query is swallowed and not flagged.
-    expect(hits.length).toBe(0);
-  });
-
-  it('return-await-in-try - NewExpression is not flagged (a constructed instance is not a thenable)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-new-expr.ts';
-    const source = [
-      'export async function f() {',
-      '  try {',
-      '    return new MyPromise(resolve => resolve(1));',
-      '  } catch (e) {',
-      '    console.error(e);',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act — even with gildash, `new X()` results are not treated as promises here.
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'return-await-in-try');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  // --- promise-constructor-hygiene ---
-
-  it('should report promise-constructor-hygiene for async executor', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/async-executor.ts';
-    const source = 'export const p = new Promise(async () => { await fetch("/"); });';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
-  });
-
-  it('should report promise-constructor-hygiene for globalThis.Promise async executor', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/async-executor-global.ts';
-    const source = 'export const p = new globalThis.Promise(async () => { await fetch("/"); });';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
-  });
-
-  it('should not report promise-constructor-hygiene for sync executor with resolve', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/sync-executor.ts';
-    const source = 'export const p = new Promise((resolve) => { resolve(42); });';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).not.toContain('promise-constructor-hygiene');
-  });
-
-  it('should not report promise-constructor-hygiene for throw inside nested function in executor', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/executor-throw-nested.ts';
-    const source = [
-      'export const p = new Promise((resolve) => {',
-      '  setTimeout(() => { throw new Error("timeout"); }, 100);',
-      '  resolve(42);',
-      '});',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
-
-    // Assert — throw is inside setTimeout callback, not executor itself
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report promise-constructor-hygiene for a bare throw before settling', async () => {
-    // Arrange — a throw before resolve/reject is converted to a rejection by the Promise
-    // constructor (observable, propagated, cause preserved), so it is K.
-    const filePath = '/virtual/src/features/executor-throw.ts';
-    const source = [
-      'export const p = new Promise((resolve) => {',
-      '  if (!valid) throw new Error("invalid");',
-      '  resolve(42);',
-      '});',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report promise-constructor-hygiene for a throw after settling', async () => {
-    // Arrange — once resolve has run the promise is settled, so the later throw is swallowed.
-    const filePath = '/virtual/src/features/executor-throw-after-settle.ts';
-    const source = [
-      'export const p = new Promise((resolve) => {',
-      '  resolve(42);',
-      '  throw new Error("swallowed");',
-      '});',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
-  });
-
-  it('should not report promise-constructor-hygiene for a return inside a sync executor (out of scope)', async () => {
-    // Arrange — a value `return` in the executor is hygiene, not error propagation. (The same holds
-    // for the `return reject(err)` early-exit idiom, where the rejection is still delivered.)
-    const filePath = '/virtual/src/features/executor-return.ts';
-    const source = ['export const p = new Promise((resolve) => {', '  return 42;', '});'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report promise-constructor-hygiene for swapped params (reject, resolve)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/swapped-params.ts';
-    const source = 'export const p = new Promise((reject, resolve) => { resolve(42); });';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(kinds(analysis)).toContain('promise-constructor-hygiene');
-  });
-
-  it('should not report promise-constructor-hygiene for new Promise in an async function (out of scope: style)', async () => {
-    // Arrange — "prefer await over new Promise" is a style preference; the promise here is
-    // returned, so its rejection is fully observable/propagated.
-    const filePath = '/virtual/src/features/unnecessary-promise.ts';
-    const source = ['export async function f() {', '  return new Promise((resolve) => {', '    resolve(42);', '  });', '}'].join(
-      '\n',
-    );
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unnecessary new Promise when wrapping callback API', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/callback-wrap.ts';
-    const source = [
-      'export async function f() {',
-      '  return new Promise((resolve) => {',
-      '    emitter.on("data", resolve);',
-      '  });',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'promise-constructor-hygiene');
-
-    // Assert — callback wrapping is allowed, so no finding
-    expect(hits.length).toBe(0);
-  });
-
-  // --- no-return-wrap ---
-
-  it('should not report no-return-wrap for Promise.resolve in then expression body (out of scope: style)', async () => {
-    // Arrange — Promise.resolve wrapping is redundant style; the value still flows onward.
-    const filePath = '/virtual/src/features/return-wrap-expr.ts';
-    const source = 'export const p = Promise.resolve(1).then(x => Promise.resolve(x + 1));';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report no-return-wrap for Promise.resolve in then block body (out of scope: style)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-wrap-block.ts';
-    const source = ['export const p = Promise.resolve(1).then(x => {', '  return Promise.resolve(x + 1);', '});'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report no-return-wrap for direct value return in then callback', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/return-direct.ts';
-    const source = 'export const p = Promise.resolve(1).then(x => x + 1);';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  // --- always-return ---
-
-  it('should not report always-return for a then callback without return (out of scope: style)', async () => {
-    // Arrange — a missing return is a chain-style smell, not an error-flow loss.
-    const filePath = '/virtual/src/features/always-return.ts';
-    const source = ['export const p = Promise.resolve(1).then(x => {', '  console.log(x);', '});'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report always-return when then callback returns a value', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/always-return-ok.ts';
-    const source = ['export const p = Promise.resolve(1).then(x => {', '  return x + 1;', '});'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report always-return when then callback has expression body', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/always-return-expr.ts';
-    const source = 'export const p = Promise.resolve(1).then(x => console.log(x));';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert — expression body always returns implicitly
-    expect(analysis.length).toBe(0);
-  });
-
-  it('should not report always-return for a return only in an inner function (out of scope: style)', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/always-return-nested-fn.ts';
-    const source = [
-      'export const p = Promise.resolve(1).then(x => {',
-      '  const log = () => { return x; };',
-      '  log();',
-      '});',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  // --- no-return-wrap: additional ---
-
-  it('should not report no-return-wrap for Promise.reject wrapping (out of scope: style)', async () => {
-    // Arrange — wrapping is redundant style; the rejection still propagates down the chain.
-    const filePath = '/virtual/src/features/return-wrap-reject.ts';
-    const source = 'export const p = Promise.resolve(1).then(x => Promise.reject(new Error("fail")));';
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-
-    // Assert
-    expect(analysis.length).toBe(0);
-  });
-
-  // --- catch-or-return: additional ---
-
-  it('should not report catch-or-return when catch comes before then', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/catch-before-then.ts';
-    const source = [
-      'export function f() {',
-      '  doThing().catch(() => 0).then(() => 1);',
-      '}',
-      'function doThing() { return Promise.resolve(1); }',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'catch-or-return');
-
-    // Assert — catch is already in the chain, even if before then
-    expect(hits.length).toBe(0);
-  });
-
-  // --- no-callback-in-promise ---
-
-  it('should report no-callback-in-promise when callback API is used inside then', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/callback-in-promise.ts';
-    const source = [
-      'import * as fs from "fs";',
-      'export const p = fetch("/api").then(res => {',
-      '  fs.readFile("data.txt", (err, data) => {',
-      '    console.log(data);',
-      '  });',
-      '});',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report no-callback-in-promise when no callback API is used', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/no-callback-ok.ts';
-    const source = ['export const p = fetch("/api").then(res => {', '  return res.json();', '});'].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'no-callback-in-promise');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  // --- unobserved-variable ---
-
-  it('should report unobserved-variable when Promise call result is never awaited', async () => {
-    // Arrange — the oracle confirms the init expression's type is a thenable.
-    const filePath = '/virtual/src/features/unobserved-var.ts';
-    const source = ['export function f() {', '  const p = fetchData();', '  console.log("done");', '}'].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report unobserved-variable when non-Promise call result (gildash confirms)', async () => {
-    // Arrange — the oracle confirms the init expression's type is NOT a thenable.
-    const filePath = '/virtual/src/features/sync-var.ts';
-    const source = ['export function f() {', '  const x = getData();', '  console.log("done");', '}'].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => false);
-    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
-
-    // Assert
-    expect(hits.length).toBe(0);
+  // unobserved-variable: a Promise-typed local that is never awaited/returned. `mock` is the gildash
+  // thenable verdict for the variable's init.
+  it.each<[string, string, IsThenableAtSpan, number]>([
+    [
+      'a Promise call result is never awaited',
+      ['export function f() {', '  const p = fetchData();', '  console.log("done");', '}'].join('\n'),
+      () => true,
+      1,
+    ],
+    [
+      'a non-Promise call result (gildash confirms)',
+      ['export function f() {', '  const x = getData();', '  console.log("done");', '}'].join('\n'),
+      () => false,
+      0,
+    ],
+    [
+      'the call result is awaited',
+      ['export async function f() {', '  const p = fetchData();', '  await p;', '}'].join('\n'),
+      () => true,
+      0,
+    ],
+    [
+      'the call result is returned',
+      ['export function f() {', '  const p = fetchData();', '  return p;', '}'].join('\n'),
+      () => true,
+      0,
+    ],
+  ])('should resolve unobserved-variable when %s', async (_label, source, mock, expected) => {
+    await expectSemanticKindCount(source, mock, 'unobserved-variable', expected);
   });
 
   it('should not report unobserved-variable when gildash is unavailable (conservative fallback)', async () => {
@@ -2216,91 +1372,6 @@ describe('error-flow/analyzer', () => {
 
     // Assert
     expect(hits.length).toBe(0);
-  });
-
-  it('should not report unobserved-variable when call result is awaited', async () => {
-    // Arrange — the init is a thenable (candidate registered); the `await p` read observes it.
-    const filePath = '/virtual/src/features/observed-var.ts';
-    const source = ['export async function f() {', '  const p = fetchData();', '  await p;', '}'].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should not report unobserved-variable when call result is returned', async () => {
-    // Arrange — the init is a thenable (candidate registered); the `return p` read observes it.
-    const filePath = '/virtual/src/features/returned-var.ts';
-    const source = ['export function f() {', '  const p = fetchData();', '  return p;', '}'].join('\n');
-    // Act
-    const analysis = await analyzeWithSemantic(filePath, source, () => true);
-    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  // --- missing-error-cause: indirect throw via variable ---
-
-  it('should report missing-error-cause when error is assigned to variable then thrown without cause', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/indirect-throw.ts';
-    const source = [
-      'export function f() {',
-      '  try { doSomething(); } catch (e) {',
-      '    const wrapped = new Error("failed");',
-      '    throw wrapped;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
-  });
-
-  it('should not report missing-error-cause when error variable has cause and is thrown', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/indirect-throw-ok.ts';
-    const source = [
-      'export function f() {',
-      '  try { doSomething(); } catch (e) {',
-      '    const wrapped = new Error("failed", { cause: e });',
-      '    throw wrapped;',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(0);
-  });
-
-  it('should report missing-error-cause when error variable is declared inside nested block in catch', async () => {
-    // Arrange
-    const filePath = '/virtual/src/features/indirect-throw-nested.ts';
-    const source = [
-      'export function f() {',
-      '  try { doSomething(); } catch (e) {',
-      '    if (isRetryable(e)) {',
-      '      const wrapped = new Error("retry failed");',
-      '      throw wrapped;',
-      '    }',
-      '  }',
-      '}',
-    ].join('\n');
-    // Act
-    const analysis = await analyzeSingle(filePath, source);
-    const hits = analysis.filter(f => f.kind === 'missing-error-cause');
-
-    // Assert
-    expect(hits.length).toBe(1);
   });
 
   it('two-arg `.then(onFulfilled, onRejected)`: real handler = K, empty handler = W (non-vacuous contrast)', async () => {

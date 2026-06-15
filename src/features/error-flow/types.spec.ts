@@ -4,39 +4,72 @@ import { describe, expect, it } from 'bun:test';
 // There are no runtime values to import. We verify the module resolves without
 // errors and perform structural shape checks via plain JS objects.
 
+interface PlainPosition {
+  line: number;
+  column: number;
+}
+
+interface PlainSpan {
+  start: PlainPosition;
+  end: PlainPosition;
+}
+
+interface PlainFinding {
+  kind: string;
+  file: string;
+  span: PlainSpan;
+  evidence: string;
+}
+
+// Asserts a span's four coordinates in one place so the SourceSpan/SourcePosition shape has a single
+// expression across the structural-shape tests below.
+const expectSpan = (span: PlainSpan, startLine: number, startColumn: number, endLine: number, endColumn: number) => {
+  expect(span.start.line).toBe(startLine);
+  expect(span.start.column).toBe(startColumn);
+  expect(span.end.line).toBe(endLine);
+  expect(span.end.column).toBe(endColumn);
+};
+
+// Builds the ErrorFlowFinding-shaped object in one place so its structural shape has a single
+// expression; tests vary only the field values (and `withCode` adds the optional `code`).
+const makeFinding = (kind: string, file: string, span: PlainSpan, evidence: string): PlainFinding => ({
+  kind,
+  file,
+  span,
+  evidence,
+});
+
 describe('features/error-flow/types — structural shape', () => {
   it('ErrorFlowFinding shape satisfies expected keys', () => {
-    const finding = {
-      kind: 'empty-catch' as const,
-      file: '/src/foo.ts',
-      span: {
-        start: { line: 10, column: 2 },
-        end: { line: 10, column: 20 },
-      },
-      evidence: 'empty catch swallows the error',
-    };
+    const finding = makeFinding(
+      'empty-catch',
+      '/src/foo.ts',
+      { start: { line: 10, column: 2 }, end: { line: 10, column: 20 } },
+      'empty catch swallows the error',
+    );
 
     expect(finding.kind).toBe('empty-catch');
     expect(finding.file).toBe('/src/foo.ts');
-    expect(finding.span.start.line).toBe(10);
-    expect(finding.span.end.column).toBe(20);
+    expectSpan(finding.span, 10, 2, 10, 20);
     expect(finding.evidence).toBe('empty catch swallows the error');
   });
 
   it('optional code field can be provided or omitted', () => {
     const withCode = {
-      kind: 'throw-non-error' as const,
-      file: '/a.ts',
-      span: { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } },
-      evidence: 'throwing a string',
+      ...makeFinding(
+        'throw-non-error',
+        '/a.ts',
+        { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } },
+        'throwing a string',
+      ),
       code: 'EX-001' as unknown as import('../../types').FirebatCatalogCode,
     };
-    const withoutCode = {
-      kind: 'throw-non-error' as const,
-      file: '/b.ts',
-      span: { start: { line: 2, column: 0 }, end: { line: 2, column: 5 } },
-      evidence: 'no code provided',
-    };
+    const withoutCode = makeFinding(
+      'throw-non-error',
+      '/b.ts',
+      { start: { line: 2, column: 0 }, end: { line: 2, column: 5 } },
+      'no code provided',
+    );
 
     expect(withCode.code).toBeDefined();
     expect((withoutCode as { code?: unknown }).code).toBeUndefined();
@@ -45,10 +78,7 @@ describe('features/error-flow/types — structural shape', () => {
   it('SourceSpan start/end are SourcePosition with line and column', () => {
     const span = { start: { line: 3, column: 4 }, end: { line: 5, column: 6 } };
 
-    expect(span.start.line).toBe(3);
-    expect(span.start.column).toBe(4);
-    expect(span.end.line).toBe(5);
-    expect(span.end.column).toBe(6);
+    expectSpan(span, 3, 4, 5, 6);
   });
 
   it('ErrorFlowFindingKind union covers expected string literals', () => {
