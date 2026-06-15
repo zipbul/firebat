@@ -13,6 +13,37 @@ const sortCouplingHotspots = (items: ReadonlyArray<CouplingHotspot>): ReadonlyAr
 
 const createEmptyCoupling = (): ReadonlyArray<CouplingHotspot> => [];
 
+/**
+ * coupling signal 집합에서 대표(primary) kind를 우선순위에 따라 선택.
+ * 이 우선순위는 단일 결정이며 enrich 단계(scan.usecase)에서도 동일하게 적용되어야 하므로
+ * coupling feature가 단일 소스로 export한다.
+ */
+const pickCouplingKind = (signals: ReadonlyArray<string>): string => {
+  const s = new Set(signals);
+
+  if (s.has('god-module')) {
+    return 'god-module';
+  }
+
+  if (s.has('bidirectional-coupling')) {
+    return 'bidirectional-coupling';
+  }
+
+  if (s.has('off-main-sequence')) {
+    return 'off-main-sequence';
+  }
+
+  if (s.has('unstable-module')) {
+    return 'unstable-module';
+  }
+
+  if (s.has('rigid-module')) {
+    return 'rigid-module';
+  }
+
+  return signals[0] ?? 'coupling';
+};
+
 interface CouplingThresholds {
   readonly godModulePercent: number;
   readonly godModuleMin: number;
@@ -127,32 +158,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
     'rigid-module': 'COUPLING_RIGID',
   };
 
-  const pickKind = (signals: ReadonlyArray<string>): string => {
-    const s = new Set(signals);
-
-    if (s.has('god-module')) {
-      return 'god-module';
-    }
-
-    if (s.has('bidirectional-coupling')) {
-      return 'bidirectional-coupling';
-    }
-
-    if (s.has('off-main-sequence')) {
-      return 'off-main-sequence';
-    }
-
-    if (s.has('unstable-module')) {
-      return 'unstable-module';
-    }
-
-    if (s.has('rigid-module')) {
-      return 'rigid-module';
-    }
-
-    return signals[0] ?? 'coupling';
-  };
-
   const hotspotsRaw = modules
     .map(module => {
       const fanIn = inDegree.get(module) ?? 0;
@@ -195,7 +200,7 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
         distance: clamp01(distance),
       };
       const score = Math.round(metrics.distance * 100);
-      const kind = pickKind(signals);
+      const kind = pickCouplingKind(signals);
       const codeVal = kindToCode[kind] as import('../../types').FirebatCatalogCode | undefined;
 
       return {
@@ -214,4 +219,4 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
   return hotspots.length === 0 ? createEmptyCoupling() : hotspots;
 };
 
-export { analyzeCoupling, createEmptyCoupling };
+export { analyzeCoupling, createEmptyCoupling, pickCouplingKind };

@@ -25,7 +25,7 @@ import { computeAutoMinSize } from '../../engine';
 import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow/gildash-binding-source';
 import { analyzeBarrel, createEmptyBarrel } from '../../features/barrel';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
-import { analyzeCoupling, createEmptyCoupling } from '../../features/coupling';
+import { analyzeCoupling, createEmptyCoupling, pickCouplingKind } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
@@ -51,6 +51,65 @@ import { computeProjectInputsDigest } from './project-inputs-digest';
 
 const nowMs = (): number => {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+};
+
+interface DetectorRunCtx {
+  readonly logger: FirebatLogger;
+  readonly timings: Record<string, number>;
+}
+
+/**
+ * 단일 detector 실행의 공통 골격: 비활성 시 빈 결과 반환, 활성 시 start/complete 로깅과
+ * 소요시간 기록을 감싼다. 각 detector IIFE에 흩어져 있던 동일한 결정(타이밍·로깅 규약)의
+ * 단일 변경지점.
+ */
+// start 로깅 후 시작 시각을 돌려준다. sync/async runner 공용.
+const beginDetector = (ctx: DetectorRunCtx, detector: string): number => {
+  ctx.logger.debug('detector: start', { detector });
+
+  return nowMs();
+};
+
+// 소요시간을 기록하고 complete를 로깅한다. sync/async runner 공용.
+const finishDetector = (ctx: DetectorRunCtx, detector: string, t0: number): void => {
+  const durationMs = nowMs() - t0;
+
+  ctx.timings[detector] = durationMs;
+
+  ctx.logger.debug('detector: complete', { detector, durationMs: Math.round(durationMs) });
+};
+
+const runDetector = <T>(ctx: DetectorRunCtx, detector: string, enabled: boolean, empty: () => T, run: () => T): T => {
+  if (!enabled) {
+    return empty();
+  }
+
+  const t0 = beginDetector(ctx, detector);
+  const result = run();
+
+  finishDetector(ctx, detector, t0);
+
+  return result;
+};
+
+/** runDetector의 async 변형: run이 Promise를 반환하며 타이밍은 완료 후 기록한다. */
+const runDetectorAsync = async <T>(
+  ctx: DetectorRunCtx,
+  detector: string,
+  enabled: boolean,
+  empty: () => T,
+  run: () => Promise<T>,
+): Promise<T> => {
+  if (!enabled) {
+    return empty();
+  }
+
+  const t0 = beginDetector(ctx, detector);
+  const result = await run();
+
+  finishDetector(ctx, detector, t0);
+
+  return result;
 };
 
 const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<string | undefined> => {
@@ -344,32 +403,6 @@ const enrichIndirection = (items: ReadonlyArray<any>, toProjectRelative: ToProje
       evidence: item?.evidence,
     };
   });
-
-const pickCouplingKind = (signals: ReadonlyArray<string>): string => {
-  const s = new Set(signals);
-
-  if (s.has('god-module')) {
-    return 'god-module';
-  }
-
-  if (s.has('bidirectional-coupling')) {
-    return 'bidirectional-coupling';
-  }
-
-  if (s.has('off-main-sequence')) {
-    return 'off-main-sequence';
-  }
-
-  if (s.has('unstable-module')) {
-    return 'unstable-module';
-  }
-
-  if (s.has('rigid-module')) {
-    return 'rigid-module';
-  }
-
-  return signals[0] ?? 'coupling';
-};
 
 const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
   items.map(item => {
@@ -865,23 +898,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     logger.info('Running detectors', { detectorCount: options.detectors.length });
 
     const detectorTimings: Record<string, number> = {};
-    const waste: ReturnType<typeof detectWaste> = (() => {
-      if (!options.detectors.includes('waste')) {
-        return [];
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'waste' });
-
-      const result = detectWaste(program);
-
-      detectorTimings.waste = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'waste', durationMs: Math.round(detectorTimings.waste) });
-
-      return result;
-    })();
+    const detectorRunCtx: DetectorRunCtx = { logger, timings: detectorTimings };
+    const waste: ReturnType<typeof detectWaste> = runDetector(
+      detectorRunCtx,
+      'waste',
+      options.detectors.includes('waste'),
+      () => [],
+      () => detectWaste(program),
+    );
     const barrelPromise = options.detectors.includes('barrel')
       ? (async (): Promise<BarrelResult> => {
           const t0 = nowMs();
@@ -943,110 +967,62 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         })()
       : Promise.resolve(createEmptyTypecheck());
     const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
-    const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await (async () => {
-      if (!shouldRunDependencies) {
-        return createEmptyDependencies();
-      }
+    const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await runDetectorAsync(
+      detectorRunCtx,
+      'dependencies',
+      shouldRunDependencies,
+      createEmptyDependencies,
+      () =>
+        analyzeDependencies(gildash, {
+          rootAbs: ctx.rootAbs,
+          readFileFn: (p: string) => readFileSync(p, 'utf8'),
+          ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
+          ...(options.dependenciesAllowedDependencies !== undefined
+            ? { allowedDependencies: options.dependenciesAllowedDependencies }
+            : {}),
+        }),
+    );
+    const coupling: ReturnType<typeof analyzeCoupling> = runDetector(
+      detectorRunCtx,
+      'coupling',
+      options.detectors.includes('coupling'),
+      createEmptyCoupling,
+      () => analyzeCoupling(dependencies, options.couplingConfig),
+    );
+    const nesting: ReturnType<typeof analyzeNesting> = runDetector(
+      detectorRunCtx,
+      'nesting',
+      options.detectors.includes('nesting'),
+      createEmptyNesting,
+      () => {
+        const nestingCfg = config?.features?.nesting;
+        const nestingCfgObj = typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg : null;
+        const resolvedNestingOptions = {
+          maxCognitiveComplexity: nestingCfgObj?.maxCognitiveComplexity ?? DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
+          maxCallbackDepth: nestingCfgObj?.maxCallbackDepth ?? DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
+          maxPromiseChainDepth: nestingCfgObj?.maxPromiseChainDepth ?? DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
+          maxNestingDepth: nestingCfgObj?.maxNestingDepth ?? DEFAULT_NESTING_OPTIONS.maxNestingDepth,
+          minDensityLoc: nestingCfgObj?.minDensityLoc ?? DEFAULT_NESTING_OPTIONS.minDensityLoc,
+          maxDensity: nestingCfgObj?.maxDensity ?? DEFAULT_NESTING_OPTIONS.maxDensity,
+        };
 
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'dependencies' });
-
-      const result = await analyzeDependencies(gildash, {
-        rootAbs: ctx.rootAbs,
-        readFileFn: (p: string) => readFileSync(p, 'utf8'),
-        ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
-        ...(options.dependenciesAllowedDependencies !== undefined
-          ? { allowedDependencies: options.dependenciesAllowedDependencies }
-          : {}),
-      });
-
-      detectorTimings.dependencies = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'dependencies', durationMs: Math.round(detectorTimings.dependencies) });
-
-      return result;
-    })();
-    const coupling: ReturnType<typeof analyzeCoupling> = (() => {
-      if (!options.detectors.includes('coupling')) {
-        return createEmptyCoupling();
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'coupling' });
-
-      const result = analyzeCoupling(dependencies, options.couplingConfig);
-
-      detectorTimings.coupling = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'coupling', durationMs: Math.round(detectorTimings.coupling) });
-
-      return result;
-    })();
-    const nesting: ReturnType<typeof analyzeNesting> = (() => {
-      if (!options.detectors.includes('nesting')) {
-        return createEmptyNesting();
-      }
-
-      const nestingCfg = config?.features?.nesting;
-      const nestingCfgObj = typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg : null;
-      const resolvedNestingOptions = {
-        maxCognitiveComplexity: nestingCfgObj?.maxCognitiveComplexity ?? DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
-        maxCallbackDepth: nestingCfgObj?.maxCallbackDepth ?? DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
-        maxPromiseChainDepth: nestingCfgObj?.maxPromiseChainDepth ?? DEFAULT_NESTING_OPTIONS.maxPromiseChainDepth,
-        maxNestingDepth: nestingCfgObj?.maxNestingDepth ?? DEFAULT_NESTING_OPTIONS.maxNestingDepth,
-        minDensityLoc: nestingCfgObj?.minDensityLoc ?? DEFAULT_NESTING_OPTIONS.minDensityLoc,
-        maxDensity: nestingCfgObj?.maxDensity ?? DEFAULT_NESTING_OPTIONS.maxDensity,
-      };
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'nesting' });
-
-      const result = analyzeNesting(program, resolvedNestingOptions);
-
-      detectorTimings.nesting = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'nesting', durationMs: Math.round(detectorTimings.nesting) });
-
-      return result;
-    })();
-    const earlyReturn: ReturnType<typeof analyzeEarlyReturn> = (() => {
-      if (!options.detectors.includes('early-return')) {
-        return createEmptyEarlyReturn();
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'early-return' });
-
-      const result = analyzeEarlyReturn(program);
-      const durationMs = nowMs() - t0;
-
-      detectorTimings['early-return'] = durationMs;
-
-      logger.debug('detector: complete', { detector: 'early-return', durationMs: Math.round(durationMs) });
-
-      return result;
-    })();
-    const collapsibleIf: ReturnType<typeof analyzeCollapsibleIf> = (() => {
-      if (!options.detectors.includes('collapsible-if')) {
-        return createEmptyCollapsibleIf();
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'collapsible-if' });
-
-      const result = analyzeCollapsibleIf(program);
-      const durationMs = nowMs() - t0;
-
-      detectorTimings['collapsible-if'] = durationMs;
-
-      logger.debug('detector: complete', { detector: 'collapsible-if', durationMs: Math.round(durationMs) });
-
-      return result;
-    })();
+        return analyzeNesting(program, resolvedNestingOptions);
+      },
+    );
+    const earlyReturn: ReturnType<typeof analyzeEarlyReturn> = runDetector(
+      detectorRunCtx,
+      'early-return',
+      options.detectors.includes('early-return'),
+      createEmptyEarlyReturn,
+      () => analyzeEarlyReturn(program),
+    );
+    const collapsibleIf: ReturnType<typeof analyzeCollapsibleIf> = runDetector(
+      detectorRunCtx,
+      'collapsible-if',
+      options.detectors.includes('collapsible-if'),
+      createEmptyCollapsibleIf,
+      () => analyzeCollapsibleIf(program),
+    );
     const errorFlow: Awaited<ReturnType<typeof analyzeErrorFlow>> = await (async () => {
       if (!options.detectors.includes('error-flow')) {
         return createEmptyErrorFlow();
@@ -1083,118 +1059,69 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           : createEmptyErrorFlow();
       }
     })();
-    const indirection: Awaited<ReturnType<typeof analyzeIndirection>> = await (async () => {
-      if (!options.detectors.includes('indirection')) {
-        return createEmptyIndirection();
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'indirection' });
-
-      const result = await analyzeIndirection(
-        gildash,
-        program,
-        { maxForwardDepth: options.maxForwardDepth, crossFileMinDepth: options.crossFileMinDepth ?? 2 },
-        ctx.rootAbs,
-      );
-
-      detectorTimings.indirection = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'indirection', durationMs: Math.round(detectorTimings.indirection) });
-
-      return result;
-    })();
+    const indirection: Awaited<ReturnType<typeof analyzeIndirection>> = await runDetectorAsync(
+      detectorRunCtx,
+      'indirection',
+      options.detectors.includes('indirection'),
+      createEmptyIndirection,
+      () =>
+        analyzeIndirection(
+          gildash,
+          program,
+          { maxForwardDepth: options.maxForwardDepth, crossFileMinDepth: options.crossFileMinDepth ?? 2 },
+          ctx.rootAbs,
+        ),
+    );
     const [barrel, typecheck] = await Promise.all([barrelPromise, typecheckPromise]);
     const lint = fixedLint;
     const format = fixedFormat;
 
     logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 
-    const giantFile: ReturnType<typeof analyzeGiantFile> = (() => {
-      if (!options.detectors.includes('giant-file')) {
-        return createEmptyGiantFile();
-      }
+    const giantFile: ReturnType<typeof analyzeGiantFile> = runDetector(
+      detectorRunCtx,
+      'giant-file',
+      options.detectors.includes('giant-file'),
+      createEmptyGiantFile,
+      () => {
+        const { 'giant-file': giantFileCfg } = config?.features ?? {};
+        const resolvedGiantFileMaxLines =
+          (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
 
-      const { 'giant-file': giantFileCfg } = config?.features ?? {};
-      const resolvedGiantFileMaxLines =
-        (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
-      const t0 = nowMs();
+        return analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
+      },
+    );
+    const variableLifetime: ReturnType<typeof analyzeVariableLifetime> = runDetector(
+      detectorRunCtx,
+      'variable-lifetime',
+      options.detectors.includes('variable-lifetime'),
+      createEmptyVariableLifetime,
+      () => {
+        const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
+        const vlCfgObj = typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg : null;
 
-      logger.debug('detector: start', { detector: 'giant-file' });
-
-      const result = analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
-
-      detectorTimings['giant-file'] = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'giant-file', durationMs: Math.round(detectorTimings['giant-file'] ?? 0) });
-
-      return result;
-    })();
-    const variableLifetime: ReturnType<typeof analyzeVariableLifetime> = (() => {
-      if (!options.detectors.includes('variable-lifetime')) {
-        return createEmptyVariableLifetime();
-      }
-
-      const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
-      const vlCfgObj = typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg : null;
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'variable-lifetime' });
-
-      const result = analyzeVariableLifetime(program, {
-        maxLifetimeLines: Number(vlCfgObj?.maxLifetimeLines ?? 30),
-        maxLiveVariables: Number(vlCfgObj?.maxLiveVariables ?? 7),
-        minFunctionLines: Number(vlCfgObj?.minFunctionLines ?? 40),
-        maxMutationCount: vlCfgObj?.maxMutationCount ?? Infinity,
-      });
-
-      detectorTimings['variable-lifetime'] = nowMs() - t0;
-
-      logger.debug('detector: complete', {
-        detector: 'variable-lifetime',
-        durationMs: Math.round(detectorTimings['variable-lifetime'] ?? 0),
-      });
-
-      return result;
-    })();
-    const temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = (() => {
-      if (!options.detectors.includes('temporal-coupling')) {
-        return createEmptyTemporalCoupling();
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'temporal-coupling' });
-
-      const result = analyzeTemporalCoupling(program, { gildash });
-
-      detectorTimings['temporal-coupling'] = nowMs() - t0;
-
-      logger.debug('detector: complete', {
-        detector: 'temporal-coupling',
-        durationMs: Math.round(detectorTimings['temporal-coupling'] ?? 0),
-      });
-
-      return result;
-    })();
-    const duplicatesUnified: ReturnType<typeof analyzeDuplicates> = (() => {
-      if (!options.detectors.includes('duplicates')) {
-        return createEmptyDuplicates();
-      }
-
-      const t0 = nowMs();
-
-      logger.debug('detector: start', { detector: 'duplicates' });
-
-      const result = analyzeDuplicates(program, { minSize: resolvedMinSize });
-
-      detectorTimings.duplicates = nowMs() - t0;
-
-      logger.debug('detector: complete', { detector: 'duplicates', durationMs: Math.round(detectorTimings.duplicates ?? 0) });
-
-      return result;
-    })();
+        return analyzeVariableLifetime(program, {
+          maxLifetimeLines: Number(vlCfgObj?.maxLifetimeLines ?? 30),
+          maxLiveVariables: Number(vlCfgObj?.maxLiveVariables ?? 7),
+          minFunctionLines: Number(vlCfgObj?.minFunctionLines ?? 40),
+          maxMutationCount: vlCfgObj?.maxMutationCount ?? Infinity,
+        });
+      },
+    );
+    const temporalCoupling: ReturnType<typeof analyzeTemporalCoupling> = runDetector(
+      detectorRunCtx,
+      'temporal-coupling',
+      options.detectors.includes('temporal-coupling'),
+      createEmptyTemporalCoupling,
+      () => analyzeTemporalCoupling(program, { gildash }),
+    );
+    const duplicatesUnified: ReturnType<typeof analyzeDuplicates> = runDetector(
+      detectorRunCtx,
+      'duplicates',
+      options.detectors.includes('duplicates'),
+      createEmptyDuplicates,
+      () => analyzeDuplicates(program, { minSize: resolvedMinSize }),
+    );
     const selectedDetectors = new Set(options.detectors);
 
     const toProjectRelative = (filePath: string): string => {

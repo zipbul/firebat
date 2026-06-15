@@ -1,1 +1,1 @@
-export { analyzeCoupling, createEmptyCoupling } from './analyzer';
+export { analyzeCoupling, createEmptyCoupling, pickCouplingKind } from './analyzer';

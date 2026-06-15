@@ -169,19 +169,19 @@ const labelNesting: LabelFn = (f, _fn) => {
   return header || String(f.kind ?? 'nesting');
 };
 
-const labelEarlyReturn: LabelFn = (f, _fn) => {
-  const header = String(f.header ?? '');
-  const kind = String(f.kind ?? 'early-return');
+// kind + header 조합 라벨 ("<kind> in <header>"). defaultKind만 카테고리별로 다름.
+const headerKindLabel =
+  (defaultKind: string): LabelFn =>
+  (f, _fn) => {
+    const header = String(f.header ?? '');
+    const kind = String(f.kind ?? defaultKind);
 
-  return header ? `${kind} in ${header}` : kind;
-};
+    return header ? `${kind} in ${header}` : kind;
+  };
 
-const labelCollapsibleIf: LabelFn = (f, _fn) => {
-  const header = String(f.header ?? '');
-  const kind = String(f.kind ?? 'collapsible-if');
+const labelEarlyReturn: LabelFn = headerKindLabel('early-return');
 
-  return header ? `${kind} in ${header}` : kind;
-};
+const labelCollapsibleIf: LabelFn = headerKindLabel('collapsible-if');
 
 const labelErrorFlow: LabelFn = (f, fn) => {
   const evidence = String(f.evidence ?? '');
@@ -284,19 +284,19 @@ const labelGiantFile: LabelFn = (f, _fn) => {
   return 'giant-file';
 };
 
-const labelLint: LabelFn = (f, _fn) => {
-  const msg = String(f.msg ?? '');
-  const code = f.code ? String(f.code) : '';
+// tool 진단 라벨 ("[<code>] <msg>"). fallback 라벨만 카테고리별로 다름.
+const diagnosticLabel =
+  (fallback: string): LabelFn =>
+  (f, _fn) => {
+    const msg = String(f.msg ?? '');
+    const code = f.code ? String(f.code) : '';
 
-  return code ? `[${code}] ${msg}` : msg || 'lint';
-};
+    return code ? `[${code}] ${msg}` : msg || fallback;
+  };
 
-const labelTypecheck: LabelFn = (f, _fn) => {
-  const msg = String(f.msg ?? '');
-  const code = f.code ? String(f.code) : '';
+const labelLint: LabelFn = diagnosticLabel('lint');
 
-  return code ? `[${code}] ${msg}` : msg || 'typecheck';
-};
+const labelTypecheck: LabelFn = diagnosticLabel('typecheck');
 
 const labelFormat: LabelFn = (_f, _fn) => 'needs-formatting';
 
