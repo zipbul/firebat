@@ -115,6 +115,126 @@ const mkTypeRef = (
   ...(isReExport ? { meta: { isReExport: true } } : {}),
 });
 
+interface UnusedDepExpectation {
+  kind: 'unused-dependency' | 'unlisted-dependency';
+  packageName: string;
+}
+
+interface UnresolvedExpectation {
+  specifier: string;
+  module: string;
+}
+
+interface ImportClassificationCase {
+  name: string;
+  imports: ReadonlyArray<StoredCodeRelation>;
+  pkgJson: Record<string, unknown>;
+  ignoreDependencies?: ReadonlyArray<string>;
+  expectedUnusedDeps: ReadonlyArray<UnusedDepExpectation>;
+  expectedUnresolved: ReadonlyArray<UnresolvedExpectation>;
+}
+
+interface ExportStatsCase {
+  name: string;
+  exported: ReadonlyArray<SymbolSearchResult>;
+  module: string;
+  expectedTotal: number;
+  expectedAbstract: number;
+}
+
+interface LayerViolationExpectation {
+  fromLayer: string;
+  toLayer: string;
+}
+
+interface DependencyLayer {
+  name: string;
+  glob: string;
+}
+
+interface LayerViolationCase {
+  name: string;
+  graph: Map<string, string[]>;
+  layers: ReadonlyArray<DependencyLayer>;
+  allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
+  expectedViolations: ReadonlyArray<LayerViolationExpectation>;
+}
+
+interface NoDuplicateExportCase {
+  name: string;
+  exported: ReadonlyArray<SymbolSearchResult>;
+}
+
+interface UnusedFilesCase {
+  name: string;
+  graph: Map<string, string[]>;
+  main: string;
+  expectedUnusedFileModules: ReadonlyArray<string>;
+}
+
+interface MemberDetectionCase {
+  name: string;
+  container: SymbolSearchResult;
+  containerFile: string;
+  importName: string;
+  calledMembers: ReadonlyArray<string>;
+  members: ReadonlyArray<MemberSymbolRow>;
+  expectedKind: string;
+  expectedUnusedMemberNames: ReadonlyArray<string>;
+}
+
+const mkCall = (srcFilePath: string, dstFilePath: string, dstSymbolName: string): StoredCodeRelation => ({
+  type: 'calls' as StoredCodeRelation['type'],
+  srcFilePath,
+  srcSymbolName: null,
+  dstFilePath,
+  dstSymbolName,
+  dstProject: null,
+  isExternal: false,
+  specifier: null,
+});
+
+/** A `searchSymbols` mock that returns `exported` only for the `isExported` query. */
+const exportedSymbols =
+  (exported: ReadonlyArray<SymbolSearchResult>) =>
+  (q: unknown): SymbolSearchResult[] =>
+    (q as { isExported?: boolean }).isExported === true ? [...exported] : [];
+
+/**
+ * A `resolveSymbol` mock where symbols named `sharedName` all resolve to the single
+ * `origin` file (a shared re-export origin), and every other symbol resolves to itself.
+ */
+const resolveSymbolToOrigin =
+  (sharedName: string, origin: string) =>
+  (name: string, filePath: string) => ({
+    originalName: name,
+    originalFilePath: name === sharedName ? origin : filePath,
+    reExportChain: [],
+    circular: false,
+  });
+
+/** A `searchRelations` mock that returns `rels` only for queries of the given `type`. */
+const relationsOfType =
+  (type: StoredCodeRelation['type'], rels: ReadonlyArray<StoredCodeRelation>) =>
+  (q: unknown): StoredCodeRelation[] =>
+    (q as { type?: string }).type === type ? [...rels] : [];
+
+/** A `searchRelations` mock that dispatches on query `type` via a `type → relations` map. */
+const relationsByType =
+  (byType: Readonly<Record<string, ReadonlyArray<StoredCodeRelation>>>) =>
+  (q: unknown): StoredCodeRelation[] => {
+    const rels = byType[(q as { type?: string }).type ?? ''];
+
+    return rels === undefined ? [] : [...rels];
+  };
+
+interface MemberSymbolRow {
+  kind: string;
+  name: string;
+  memberName: string | null;
+  isExported: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /*  createEmptyDependencies                                            */
 /* ------------------------------------------------------------------ */
@@ -150,6 +270,95 @@ describe('features/dependencies/analyzer — createEmptyDependencies', () => {
 
 describe('features/dependencies/analyzer — analyzeDependencies', () => {
   const ROOT = '/project';
+
+  /**
+   * Build a mock gildash whose only file is `src/index.ts`, whose `searchRelations`
+   * returns the given `imports` for `type: 'imports'`, and run the analyzer against a
+   * package.json produced from `pkgJson`. Collapses the shared mock-construction shared
+   * by the unused/unlisted-dependency and unresolved-import tests.
+   */
+  const analyzeImports = async (
+    imports: ReadonlyArray<StoredCodeRelation>,
+    pkgJson: Record<string, unknown>,
+    ignoreDependencies: ReadonlyArray<string> | undefined = [],
+  ): Promise<Awaited<ReturnType<typeof analyzeDependencies>>> => {
+    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [...imports] : []),
+    });
+
+    return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify(pkgJson), ignoreDependencies });
+  };
+
+  /**
+   * Build a mock gildash for the enum/namespace member-usage tests: `index.ts`
+   * imports `container` (an enum or namespace) from `containerFile`, optionally
+   * marking one member used via a `calls` relation, with `members` exposed through
+   * `getSymbolsByFile`. Collapses the shared mock-construction across the
+   * enum/namespace member detection tests.
+   */
+  const analyzeMembers = async (params: {
+    container: SymbolSearchResult;
+    containerFile: string;
+    importName: string;
+    calledMembers: ReadonlyArray<string>;
+    members: ReadonlyArray<MemberSymbolRow>;
+  }): Promise<Awaited<ReturnType<typeof analyzeDependencies>>> => {
+    const relFile = params.containerFile.replace('/project/', '');
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', [params.containerFile]],
+      [params.containerFile, []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: exportedSymbols([params.container]),
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'imports') {
+          return [mkImport('/project/src/index.ts', params.containerFile, params.importName)];
+        }
+
+        if (query.type === 'calls') {
+          return params.calledMembers.map(m => mkCall('/project/src/index.ts', params.containerFile, m));
+        }
+
+        return [];
+      },
+      getSymbolsByFile: (filePath: string) => (filePath === relFile ? [...params.members] : []),
+    });
+
+    return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+  };
+
+  /**
+   * Build a mock gildash whose `searchSymbols` returns `exported` for the `isExported`
+   * query (and `[]` otherwise) over the given `graph`, with caller-supplied relation /
+   * resolution overrides, then run the analyzer. Collapses the `getImportGraph` +
+   * exported-`searchSymbols` mock skeleton shared by the dead-export / duplicate-export
+   * tests while each caller keeps its own relations, resolution and assertions.
+   */
+  const analyzeWithExports = async (params: {
+    graph: Map<string, string[]>;
+    exported: ReadonlyArray<SymbolSearchResult>;
+    searchRelations?: (q: unknown) => StoredCodeRelation[];
+    resolveSymbol?: MockGildashOverrides['resolveSymbol'];
+    pkgJson?: Record<string, unknown>;
+  }): Promise<Awaited<ReturnType<typeof analyzeDependencies>>> => {
+    const g = createMockGildash({
+      getImportGraph: async () => params.graph,
+      searchSymbols: exportedSymbols(params.exported),
+      searchRelations: params.searchRelations ?? (() => []),
+      ...(params.resolveSymbol === undefined ? {} : { resolveSymbol: params.resolveSymbol }),
+    });
+
+    return analyzeDependencies(g, {
+      rootAbs: ROOT,
+      ...(params.pkgJson === undefined ? {} : { readFileFn: () => JSON.stringify(params.pkgJson) }),
+    });
+  };
 
   /* ---------- HP: Happy Path ---------- */
 
@@ -230,78 +439,71 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.cycles[0]!.path).toEqual(['a.ts', 'b.ts', 'a.ts']);
   });
 
-  it('should detect layer violations when dependency not allowed', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/ui/comp.ts', ['/project/src/domain/svc.ts']],
-      ['/project/src/domain/svc.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
+  const layerViolationCases: LayerViolationCase[] = [
+    {
+      name: 'detects layer violation when ui→domain dependency not allowed',
+      graph: new Map([
+        ['/project/src/ui/comp.ts', ['/project/src/domain/svc.ts']],
+        ['/project/src/domain/svc.ts', []],
+      ]),
       layers: [
         { name: 'ui', glob: 'src/ui/**' },
         { name: 'domain', glob: 'src/domain/**' },
       ],
       allowedDependencies: {},
-    });
-
-    expect(result.layerViolations.length).toBe(1);
-    expect(result.layerViolations[0]!.fromLayer).toBe('ui');
-    expect(result.layerViolations[0]!.toLayer).toBe('domain');
-  });
-
-  it('should NOT detect layer violation when dependency is allowed', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/ui/comp.ts', ['/project/src/domain/svc.ts']],
-      ['/project/src/domain/svc.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
+      expectedViolations: [{ fromLayer: 'ui', toLayer: 'domain' }],
+    },
+    {
+      name: 'does not flag ui→domain when allowedDependencies permits it',
+      graph: new Map([
+        ['/project/src/ui/comp.ts', ['/project/src/domain/svc.ts']],
+        ['/project/src/domain/svc.ts', []],
+      ]),
       layers: [
         { name: 'ui', glob: 'src/ui/**' },
         { name: 'domain', glob: 'src/domain/**' },
       ],
       allowedDependencies: { ui: ['domain'] },
-    });
-
-    expect(result.layerViolations.length).toBe(0);
-  });
-
-  it('should skip same-layer imports for layer violations', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/ui/a.ts', ['/project/src/ui/b.ts']],
-      ['/project/src/ui/b.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
+      expectedViolations: [],
+    },
+    {
+      name: 'skips same-layer imports for layer violations',
+      graph: new Map([
+        ['/project/src/ui/a.ts', ['/project/src/ui/b.ts']],
+        ['/project/src/ui/b.ts', []],
+      ]),
       layers: [{ name: 'ui', glob: 'src/ui/**' }],
       allowedDependencies: {},
-    });
+      expectedViolations: [],
+    },
+    {
+      name: 'skips files outside all layers for violation check',
+      graph: new Map([
+        ['/project/scripts/build.ts', ['/project/src/domain/svc.ts']],
+        ['/project/src/domain/svc.ts', []],
+      ]),
+      layers: [{ name: 'domain', glob: 'src/domain/**' }],
+      allowedDependencies: {},
+      expectedViolations: [],
+    },
+  ];
 
-    expect(result.layerViolations.length).toBe(0);
+  it.each(layerViolationCases)('$name', async ({ graph, layers, allowedDependencies, expectedViolations }) => {
+    const g = createMockGildash({ getImportGraph: async () => graph });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, layers, allowedDependencies });
+    const actual = result.layerViolations.map(v => ({ fromLayer: v.fromLayer, toLayer: v.toLayer }));
+
+    expect(actual).toEqual([...expectedViolations]);
   });
 
   it('should detect dead exports for unreachable non-imported symbols', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/main.ts', ['/project/src/orphan.ts']],
-      ['/project/src/orphan.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/main.ts' }),
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', ['/project/src/orphan.ts']],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')],
+      pkgJson: { main: './src/main.ts' },
     });
 
     expect(result.deadExports.length).toBe(1);
@@ -311,24 +513,13 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should report unreachable files as unused-file instead of dead-export', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/main.ts', []],
-      ['/project/src/orphan.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/main.ts' }),
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')],
+      pkgJson: { main: './src/main.ts' },
     });
 
     expect(result.unusedFiles.length).toBe(1);
@@ -337,31 +528,15 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should detect test-only exports when symbol only imported by test files', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/main.ts', ['/project/src/util.ts']],
-      ['/project/src/util.ts', []],
-      ['/project/test/util.spec.ts', ['/project/src/util.ts']],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/util.ts', 'helperFn')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/main.ts' }),
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', ['/project/src/util.ts']],
+        ['/project/src/util.ts', []],
+        ['/project/test/util.spec.ts', ['/project/src/util.ts']],
+      ]),
+      exported: [mkSymbol(1, '/project/src/util.ts', 'helperFn')],
+      searchRelations: relationsOfType('imports', [mkImport('/project/test/util.spec.ts', '/project/src/util.ts', 'helperFn')]),
+      pkgJson: { main: './src/main.ts' },
     });
 
     expect(result.deadExports.length).toBe(1);
@@ -370,87 +545,51 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should not report dead export for symbols that are actually imported', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'publicFn')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', '/project/src/lib.ts', 'publicFn')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'publicFn')],
+      searchRelations: relationsOfType('imports', [mkImport('/project/src/index.ts', '/project/src/lib.ts', 'publicFn')]),
+      pkgJson: { main: './src/index.ts' },
     });
 
     expect(result.deadExports.length).toBe(0);
   });
 
-  it('should compute exportStats from searchSymbols (total + abstract)', async () => {
-    const graph = new Map<string, string[]>([['/project/src/mod.ts', []]]);
-    const exported = [
-      mkSymbol(1, '/project/src/mod.ts', 'doSomething', 'function'),
-      mkSymbol(2, '/project/src/mod.ts', 'IFoo', 'interface'),
-      mkSymbol(3, '/project/src/mod.ts', 'AbstractBase', 'class', { modifiers: ['abstract'] }),
-    ];
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return exported;
-        }
+  const exportStatsCases: ExportStatsCase[] = [
+    {
+      name: 'computes exportStats from searchSymbols (interface + abstract class counted as abstract)',
+      exported: [
+        mkSymbol(1, '/project/src/mod.ts', 'doSomething', 'function'),
+        mkSymbol(2, '/project/src/mod.ts', 'IFoo', 'interface'),
+        mkSymbol(3, '/project/src/mod.ts', 'AbstractBase', 'class', { modifiers: ['abstract'] }),
+      ],
+      module: 'src/mod.ts',
+      expectedTotal: 3,
+      expectedAbstract: 2,
+    },
+    {
+      name: 'counts type alias and interface as abstract in exportStats',
+      exported: [
+        mkSymbol(1, '/project/src/types.ts', 'UserId', 'type'),
+        mkSymbol(2, '/project/src/types.ts', 'IRepo', 'interface'),
+        mkSymbol(3, '/project/src/types.ts', 'helperFn', 'function'),
+      ],
+      module: 'src/types.ts',
+      expectedTotal: 3,
+      expectedAbstract: 2,
+    },
+  ];
 
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({}),
-    });
+  it.each(exportStatsCases)('$name', async ({ exported, module, expectedTotal, expectedAbstract }) => {
+    const graph = new Map<string, string[]>([[`/project/${module}`, []]]);
+    const g = createMockGildash({ getImportGraph: async () => graph, searchSymbols: exportedSymbols(exported) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({}) });
+    const stats = result.exportStats[module];
 
-    expect(result.exportStats['src/mod.ts']).toBeDefined();
-    expect(result.exportStats['src/mod.ts']!.total).toBe(3);
-    expect(result.exportStats['src/mod.ts']!.abstract).toBe(2);
-  });
-
-  it('should count type alias as abstract in exportStats', async () => {
-    const graph = new Map<string, string[]>([['/project/src/types.ts', []]]);
-    const exported = [
-      mkSymbol(1, '/project/src/types.ts', 'UserId', 'type'),
-      mkSymbol(2, '/project/src/types.ts', 'IRepo', 'interface'),
-      mkSymbol(3, '/project/src/types.ts', 'helperFn', 'function'),
-    ];
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return exported;
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({}),
-    });
-
-    expect(result.exportStats['src/types.ts']).toBeDefined();
-    expect(result.exportStats['src/types.ts']!.total).toBe(3);
-    expect(result.exportStats['src/types.ts']!.abstract).toBe(2);
+    expect(stats).toEqual({ total: expectedTotal, abstract: expectedAbstract });
   });
 
   it('should generate edge cut hints for cycles using outDegree', async () => {
@@ -472,112 +611,48 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should skip dead export check when module has namespace import (usesAll)', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/consumer.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        // import * as Lib from './lib' → dstSymbolName = '*'
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', '*')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({}),
+    // import * as Lib from './lib' → dstSymbolName = '*' → usesAll.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/consumer.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')],
+      searchRelations: relationsOfType('imports', [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', '*')]),
+      pkgJson: {},
     });
 
     expect(result.deadExports.length).toBe(0);
   });
 
   it('should not treat side-effect import (null dstSymbolName) as usesAll', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/main.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        // import './lib' → dstSymbolName = null (side-effect)
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/main.ts', '/project/src/lib.ts', null)];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/main.ts' }),
+    // import './lib' → dstSymbolName = null (side-effect) → does NOT mark usesAll → export is dead.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')],
+      searchRelations: relationsOfType('imports', [mkImport('/project/src/main.ts', '/project/src/lib.ts', null)]),
+      pkgJson: { main: './src/main.ts' },
     });
 
-    // Side-effect import does NOT mark module as usesAll → export is dead
     expect(result.deadExports.length).toBe(1);
     expect(result.deadExports[0]!.name).toBe('unusedFn');
   });
 
   it('should not flag symbol as dead when re-exported', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/barrel.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 're-exports') {
-          return [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({}),
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/barrel.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'sharedFn')],
+      searchRelations: relationsOfType('re-exports', [mkReExport('/project/src/barrel.ts', '/project/src/lib.ts', 'sharedFn')]),
+      pkgJson: {},
     });
 
     expect(result.deadExports.length).toBe(0);
-  });
-
-  it('should skip files outside all layers for violation check', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/scripts/build.ts', ['/project/src/domain/svc.ts']],
-      ['/project/src/domain/svc.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      layers: [{ name: 'domain', glob: 'src/domain/**' }],
-      allowedDependencies: {},
-    });
-
-    expect(result.layerViolations.length).toBe(0);
   });
 
   it('should handle diamond dependency pattern correctly', async () => {
@@ -858,299 +933,210 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.fanOut[2]!.count).toBe(1);
   });
 
-  /* ---------- UF: Unused Files ---------- */
+  /* ---------- UF: Unused Files + EP: Entry point edge cases ---------- */
 
-  it('should report unreachable non-test files as unused-file', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/used.ts']],
-      ['/project/src/used.ts', []],
-      ['/project/src/orphan.ts', []],
-    ]);
+  const unusedFilesCases: UnusedFilesCase[] = [
+    {
+      name: 'reports unreachable non-test file as unused-file',
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/used.ts']],
+        ['/project/src/used.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      main: './src/index.ts',
+      expectedUnusedFileModules: ['src/orphan.ts'],
+    },
+    {
+      name: 'excludes test files from unused-file findings',
+      graph: new Map([
+        ['/project/src/index.ts', []],
+        ['/project/test/foo.spec.ts', []],
+      ]),
+      main: './src/index.ts',
+      expectedUnusedFileModules: [],
+    },
+    {
+      name: 'skips unused-file detection when package.json main points to non-existent file',
+      graph: new Map([
+        ['/project/src/real.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      main: './src/nonexistent.ts',
+      expectedUnusedFileModules: [],
+    },
+    {
+      name: 'returns empty unusedFiles when all files are reachable',
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/a.ts', '/project/src/b.ts']],
+        ['/project/src/a.ts', []],
+        ['/project/src/b.ts', []],
+      ]),
+      main: './src/index.ts',
+      expectedUnusedFileModules: [],
+    },
+  ];
+
+  it.each(unusedFilesCases)('$name', async ({ graph, main, expectedUnusedFileModules }) => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: () => [],
     });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main }) });
+    const actual = result.unusedFiles.map(f => f.module);
 
-    expect(result.unusedFiles.length).toBe(1);
-    expect(result.unusedFiles[0]!.module).toBe('src/orphan.ts');
+    expect(actual).toEqual([...expectedUnusedFileModules]);
   });
 
-  it('should exclude test files from unused-file findings', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', []],
-      ['/project/test/foo.spec.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
+  /* ---------- UD/UR/IG/SR/PD: external + unresolved import classification ---------- */
 
-    expect(result.unusedFiles.length).toBe(0);
-  });
-
-  /* ---------- UD: Unused / Unlisted Dependencies ---------- */
-
-  it('should detect unused dependencies declared in package.json', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' })];
-        }
-
-        return [];
+  const importCases: ImportClassificationCase[] = [
+    {
+      name: 'detects unused dependency declared in package.json',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' })],
+      pkgJson: { main: './src/index.ts', dependencies: { lodash: '^4.0.0', unused: '^1.0.0' } },
+      expectedUnusedDeps: [{ kind: 'unused-dependency', packageName: 'unused' }],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'detects unlisted dependency not in package.json',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'unlisted-pkg' })],
+      pkgJson: { main: './src/index.ts', dependencies: {} },
+      expectedUnusedDeps: [{ kind: 'unlisted-dependency', packageName: 'unlisted-pkg' }],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'skips @types/* when corresponding package is used',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'express' })],
+      pkgJson: {
+        main: './src/index.ts',
+        dependencies: { express: '^4.0.0' },
+        devDependencies: { '@types/express': '^4.0.0' },
       },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts', dependencies: { lodash: '^4.0.0', unused: '^1.0.0' } }),
-    });
-
-    expect(result.unusedDeps.length).toBe(1);
-    expect(result.unusedDeps[0]!.kind).toBe('unused-dependency');
-    expect(result.unusedDeps[0]!.packageName).toBe('unused');
-  });
-
-  it('should detect unlisted dependencies not in package.json', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'unlisted-pkg' })];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts', dependencies: {} }),
-    });
-
-    expect(result.unusedDeps.length).toBe(1);
-    expect(result.unusedDeps[0]!.kind).toBe('unlisted-dependency');
-    expect(result.unusedDeps[0]!.packageName).toBe('unlisted-pkg');
-  });
-
-  it('should skip @types/* when corresponding package is used', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'express' })];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () =>
-        JSON.stringify({
-          main: './src/index.ts',
-          dependencies: { express: '^4.0.0' },
-          devDependencies: { '@types/express': '^4.0.0' },
-        }),
-    });
-
-    expect(result.unusedDeps.length).toBe(0);
-  });
-
-  it('should skip node: and bun: builtin modules', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'node:fs' }),
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'bun:test' }),
-          ];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts', dependencies: {} }),
-    });
-
-    expect(result.unusedDeps.length).toBe(0);
-    expect(result.unresolvedImports.length).toBe(0);
-  });
-
-  it('should handle scoped package names in specifiers', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg/sub' })];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts', dependencies: { '@scope/pkg': '^1.0.0' } }),
-    });
-
-    expect(result.unusedDeps.length).toBe(0);
-  });
-
-  /* ---------- UR: Unresolved Imports ---------- */
-
-  it('should detect unresolved non-relative internal imports', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: '#config/missing' })];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-
-    expect(result.unresolvedImports.length).toBe(1);
-    expect(result.unresolvedImports[0]!.specifier).toBe('#config/missing');
-    expect(result.unresolvedImports[0]!.module).toBe('src/index.ts');
-  });
-
-  it('should report relative path unresolved imports (gildash 0.17.2 resolves dotted filenames)', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing-module' })];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-
-    expect(result.unresolvedImports.length).toBe(1);
-    expect(result.unresolvedImports[0]!.specifier).toBe('./missing-module');
-  });
-
-  /* ---------- IG: ignoreDependencies ---------- */
-
-  it('should respect ignoreDependencies glob patterns', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts', dependencies: { 'eslint-plugin-foo': '^1.0.0' } }),
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'skips node: and bun: builtin modules',
+      imports: [
+        mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'node:fs' }),
+        mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'bun:test' }),
+      ],
+      pkgJson: { main: './src/index.ts', dependencies: {} },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'handles scoped package names in specifiers',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg/sub' })],
+      pkgJson: { main: './src/index.ts', dependencies: { '@scope/pkg': '^1.0.0' } },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'detects unresolved non-relative internal import',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: '#config/missing' })],
+      pkgJson: { main: './src/index.ts' },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [{ specifier: '#config/missing', module: 'src/index.ts' }],
+    },
+    {
+      name: 'reports relative path unresolved import (gildash 0.17.2 resolves dotted filenames)',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing-module' })],
+      pkgJson: { main: './src/index.ts' },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [{ specifier: './missing-module', module: 'src/index.ts' }],
+    },
+    {
+      name: 'respects ignoreDependencies glob patterns',
+      imports: [],
+      pkgJson: { main: './src/index.ts', dependencies: { 'eslint-plugin-foo': '^1.0.0' } },
       ignoreDependencies: ['eslint-*'],
-    });
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'does not report self-referencing import as unlisted-dependency',
+      imports: [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'my-package' })],
+      pkgJson: { name: 'my-package', main: './src/index.ts', dependencies: {} },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'does not treat peerDependencies / optionalDependencies as declared deps',
+      imports: [],
+      pkgJson: {
+        main: './src/index.ts',
+        peerDependencies: { react: '^18.0.0' },
+        optionalDependencies: { fsevents: '^2.0.0' },
+      },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'returns empty unusedDeps when all declared deps are used',
+      imports: [
+        mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' }),
+        mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg' }),
+      ],
+      pkgJson: { main: './src/index.ts', dependencies: { lodash: '^4.0.0', '@scope/pkg': '^1.0.0' } },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+  ];
 
-    expect(result.unusedDeps.length).toBe(0);
+  it.each(importCases)('$name', async ({ imports, pkgJson, ignoreDependencies, expectedUnusedDeps, expectedUnresolved }) => {
+    const result = await analyzeImports(imports, pkgJson, ignoreDependencies);
+    const actualUnusedDeps = result.unusedDeps.map(d => ({ kind: d.kind, packageName: d.packageName }));
+    const actualUnresolved = result.unresolvedImports.map(u => ({ specifier: u.specifier, module: u.module }));
+
+    expect(actualUnusedDeps).toEqual([...expectedUnusedDeps]);
+    expect(actualUnresolved).toEqual([...expectedUnresolved]);
   });
 
   /* ---------- DE: Duplicate Exports ---------- */
 
   it('should detect duplicate exports pointing to same origin via resolveSymbol', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [
-            mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
-            mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
-            mkSymbol(3, '/project/src/c.ts', 'unique', 'function'),
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
-      // Both a.ts and b.ts re-export from the same original source
-      resolveSymbol: (name: string, filePath: string) => ({
-        originalName: name,
-        originalFilePath: name === 'helper' ? 'src/origin.ts' : filePath,
-        reExportChain: [],
-        circular: false,
-      }),
+    // Both a.ts and b.ts re-export 'helper' from the same original source (src/origin.ts).
+    const result = await analyzeWithExports({
+      graph: new Map([['/project/src/index.ts', []]]),
+      exported: [
+        mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
+        mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
+        mkSymbol(3, '/project/src/c.ts', 'unique', 'function'),
+      ],
+      resolveSymbol: resolveSymbolToOrigin('helper', 'src/origin.ts'),
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.duplicateExports.length).toBe(1);
     expect(result.duplicateExports[0]!.name).toBe('helper');
     expect(result.duplicateExports[0]!.modules).toEqual(['src/a.ts', 'src/b.ts']);
   });
 
-  it('should not report duplicate exports with different origins', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/a.ts', 'helper', 'function'), mkSymbol(2, '/project/src/b.ts', 'helper', 'function')];
-        }
+  // Default mock resolveSymbol: each symbol resolves to itself → distinct origins → never a duplicate,
+  // whether the two exported names collide ('helper'/'helper') or differ ('foo'/'bar').
+  const noDuplicateExportCases: NoDuplicateExportCase[] = [
+    {
+      name: 'does not report duplicate exports with same name but different origins',
+      exported: [mkSymbol(1, '/project/src/a.ts', 'helper', 'function'), mkSymbol(2, '/project/src/b.ts', 'helper', 'function')],
+    },
+    {
+      name: 'returns empty duplicateExports when no name collision exists',
+      exported: [mkSymbol(1, '/project/src/a.ts', 'foo', 'function'), mkSymbol(2, '/project/src/b.ts', 'bar', 'function')],
+    },
+  ];
 
-        return [];
-      },
-      searchRelations: () => [],
-      // Default mock: each resolves to itself (different origins)
-    });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+  it.each(noDuplicateExportCases)('$name', async ({ exported }) => {
+    const result = await analyzeWithExports({ graph: new Map([['/project/src/index.ts', []]]), exported });
 
     expect(result.duplicateExports.length).toBe(0);
   });
 
   it('should include symbolKind in dead export findings', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', ['/project/src/lib.ts']]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'MyType', 'type'), mkSymbol(2, '/project/src/lib.ts', 'MyEnum', 'enum')];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    const result = await analyzeWithExports({
+      graph: new Map([['/project/src/index.ts', ['/project/src/lib.ts']]]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'MyType', 'type'), mkSymbol(2, '/project/src/lib.ts', 'MyEnum', 'enum')],
+      pkgJson: { main: './src/index.ts' },
     });
 
     expect(result.deadExports.length).toBe(2);
@@ -1161,38 +1147,22 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   /* ---------- NS: Namespace import ---------- */
 
   it('should not report dead exports for namespace-imported modules', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/utils.ts']],
-      ['/project/src/utils.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [
-            mkSymbol(1, '/project/src/utils.ts', 'foo', 'function'),
-            mkSymbol(2, '/project/src/utils.ts', 'bar', 'function'),
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', '/project/src/utils.ts', '*', { specifier: './utils', srcSymbolName: 'Utils' }),
-          ];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    // Namespace import marks module as usesAll → no dead exports.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/utils.ts']],
+        ['/project/src/utils.ts', []],
+      ]),
+      exported: [
+        mkSymbol(1, '/project/src/utils.ts', 'foo', 'function'),
+        mkSymbol(2, '/project/src/utils.ts', 'bar', 'function'),
+      ],
+      searchRelations: relationsOfType('imports', [
+        mkImport('/project/src/index.ts', '/project/src/utils.ts', '*', { specifier: './utils', srcSymbolName: 'Utils' }),
+      ]),
+      pkgJson: { main: './src/index.ts' },
     });
 
-    // Namespace import marks module as usesAll → no dead exports
     expect(result.deadExports.length).toBe(0);
   });
 
@@ -1228,279 +1198,76 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.unusedDeps[0]!.packageName).toBe('lodash');
   });
 
-  /* ---------- UM: Unused Enum Members ---------- */
+  /* ---------- UM: Unused Enum / Namespace Members ---------- */
 
-  it('should detect unused enum members via getSymbolsByFile + calls', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/colors.ts']],
-      ['/project/src/colors.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum')];
-        }
+  const memberCases: MemberDetectionCase[] = [
+    {
+      name: 'detects unused enum members via getSymbolsByFile + calls (Color.Red used, Green/Blue not)',
+      container: mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'),
+      containerFile: '/project/src/colors.ts',
+      importName: 'Color',
+      calledMembers: ['Color.Red'],
+      members: [
+        { kind: 'enum', name: 'Color', memberName: null, isExported: true },
+        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
+        { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false },
+        { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false },
+      ],
+      expectedKind: 'unused-enum-member',
+      expectedUnusedMemberNames: ['Blue', 'Green'],
+    },
+    {
+      name: 'detects unused namespace members via getSymbolsByFile + calls (Guards.isString used, isNumber not)',
+      container: mkSymbol(1, '/project/src/guards.ts', 'Guards', 'namespace'),
+      containerFile: '/project/src/guards.ts',
+      importName: 'Guards',
+      calledMembers: ['Guards.isString'],
+      members: [
+        { kind: 'namespace', name: 'Guards', memberName: null, isExported: true },
+        { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false },
+        { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false },
+      ],
+      expectedKind: 'unused-ns-member',
+      expectedUnusedMemberNames: ['isNumber'],
+    },
+  ];
 
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
+  it.each(memberCases)('$name', async ({ container, containerFile, importName, calledMembers, members, expectedKind, expectedUnusedMemberNames }) => {
+    const result = await analyzeMembers({ container, containerFile, importName, calledMembers, members });
+    const found = result.unusedMembers.filter(m => m.kind === expectedKind);
 
-        if (query.type === 'imports') {
-          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', 'Color')];
-        }
-
-        // Color.Red is called, Color.Blue is not
-        if (query.type === 'calls') {
-          return [
-            {
-              type: 'calls' as const,
-              srcFilePath: '/project/src/index.ts',
-              srcSymbolName: null,
-              dstFilePath: '/project/src/colors.ts',
-              dstSymbolName: 'Color.Red',
-              dstProject: null,
-              isExternal: false,
-              specifier: null,
-            },
-          ];
-        }
-
-        return [];
-      },
-      getSymbolsByFile: (filePath: string) => {
-        if (filePath === 'src/colors.ts') {
-          return [
-            { kind: 'enum', name: 'Color', memberName: null, isExported: true },
-            { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
-            { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false },
-            { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false },
-          ];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-    const enumMembers = result.unusedMembers.filter(m => m.kind === 'unused-enum-member');
-
-    expect(enumMembers.length).toBe(2);
-    expect(enumMembers.map(m => m.memberName).sort()).toEqual(['Blue', 'Green']);
+    expect(found.map(m => m.memberName).sort()).toEqual([...expectedUnusedMemberNames]);
+    expect([...new Set(found.map(m => m.symbolName))]).toEqual([container.name]);
   });
 
   it('should skip all enum members when parent enum is imported with usesAll', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/colors.ts']],
-      ['/project/src/colors.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        // Namespace import → usesAll
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', '/project/src/colors.ts', '*')];
-        }
-
-        return [];
-      },
-      getSymbolsByFile: (filePath: string) => {
-        if (filePath === 'src/colors.ts') {
-          return [
-            { kind: 'enum', name: 'Color', memberName: null, isExported: true },
-            { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
-          ];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    // `import * as Color` → usesAll → every member treated as used regardless of calls.
+    const result = await analyzeMembers({
+      container: mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'),
+      containerFile: '/project/src/colors.ts',
+      importName: '*',
+      calledMembers: [],
+      members: [
+        { kind: 'enum', name: 'Color', memberName: null, isExported: true },
+        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
+      ],
     });
 
     expect(result.unusedMembers.length).toBe(0);
   });
 
-  it('should detect unused namespace members via getSymbolsByFile + calls', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/guards.ts']],
-      ['/project/src/guards.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/guards.ts', 'Guards', 'namespace')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        if (query.type === 'imports') {
-          return [mkImport('/project/src/index.ts', '/project/src/guards.ts', 'Guards')];
-        }
-
-        if (query.type === 'calls') {
-          return [
-            {
-              type: 'calls' as const,
-              srcFilePath: '/project/src/index.ts',
-              srcSymbolName: null,
-              dstFilePath: '/project/src/guards.ts',
-              dstSymbolName: 'Guards.isString',
-              dstProject: null,
-              isExternal: false,
-              specifier: null,
-            },
-          ];
-        }
-
-        return [];
-      },
-      getSymbolsByFile: (filePath: string) => {
-        if (filePath === 'src/guards.ts') {
-          return [
-            { kind: 'namespace', name: 'Guards', memberName: null, isExported: true },
-            { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false },
-            { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false },
-          ];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-    const nsMembers = result.unusedMembers.filter(m => m.kind === 'unused-ns-member');
-
-    expect(nsMembers.length).toBe(1);
-    expect(nsMembers[0]!.memberName).toBe('isNumber');
-    expect(nsMembers[0]!.symbolName).toBe('Guards');
-  });
-
-  /* ---------- EP: Entry point edge cases ---------- */
-
-  it('should skip unused-file detection when package.json main points to non-existent file', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/real.ts', []],
-      ['/project/src/orphan.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/nonexistent.ts' }),
-    });
-
-    // Entry point unresolved → entryModules empty → skip unused-file
-    expect(result.unusedFiles.length).toBe(0);
-  });
-
-  it('should return empty unusedFiles when all files are reachable', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/a.ts', '/project/src/b.ts']],
-      ['/project/src/a.ts', []],
-      ['/project/src/b.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-
-    expect(result.unusedFiles.length).toBe(0);
-  });
-
-  /* ---------- SR: Self-referencing import ---------- */
-
-  it('should not report self-referencing import as unlisted-dependency', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'my-package' })];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ name: 'my-package', main: './src/index.ts', dependencies: {} }),
-    });
-
-    expect(result.unusedDeps.length).toBe(0);
-  });
-
-  /* ---------- PD: peerDependencies / optionalDependencies ---------- */
-
-  it('should not treat peerDependencies as declared deps — unused if not imported', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () =>
-        JSON.stringify({
-          main: './src/index.ts',
-          peerDependencies: { react: '^18.0.0' },
-          optionalDependencies: { fsevents: '^2.0.0' },
-        }),
-    });
-
-    // peerDependencies and optionalDependencies are not in declared deps → not reported as unused
-    expect(result.unusedDeps.length).toBe(0);
-  });
-
   /* ---------- RS: resolveSymbol fallback ---------- */
 
   it('should use fallback origin when resolveSymbol throws for duplicate candidates', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/a.ts', 'util', 'function'), mkSymbol(2, '/project/src/b.ts', 'util', 'function')];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
+    // resolveSymbol throws → each module treated as its own origin → no duplicates.
+    const result = await analyzeWithExports({
+      graph: new Map([['/project/src/index.ts', []]]),
+      exported: [mkSymbol(1, '/project/src/a.ts', 'util', 'function'), mkSymbol(2, '/project/src/b.ts', 'util', 'function')],
       resolveSymbol: () => {
         throw new Error('resolveSymbol failed');
       },
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
-    // Each module treated as its own origin → no duplicates
     expect(result.duplicateExports.length).toBe(0);
   });
 
@@ -1509,121 +1276,41 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   /* ---------- RE: re-export usesAll ---------- */
 
   it('should treat re-export with null dstSymbolName as usesAll', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'fn', 'function')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 're-exports') {
-          return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', null)];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    // export * from './lib' → re-export with null dstSymbolName → usesAll → no dead exports.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'fn', 'function')],
+      searchRelations: relationsOfType('re-exports', [mkReExport('/project/src/index.ts', '/project/src/lib.ts', null)]),
+      pkgJson: { main: './src/index.ts' },
     });
 
-    // export * from './lib' → usesAll → no dead exports
     expect(result.deadExports.length).toBe(0);
-  });
-
-  /* ---------- NEG: All used / empty results ---------- */
-
-  it('should return empty unusedDeps when all declared deps are used', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => {
-        if ((q as { type?: string }).type === 'imports') {
-          return [
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'lodash' }),
-            mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: '@scope/pkg' }),
-          ];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts', dependencies: { lodash: '^4.0.0', '@scope/pkg': '^1.0.0' } }),
-    });
-
-    expect(result.unusedDeps.length).toBe(0);
-    expect(result.unresolvedImports.length).toBe(0);
-  });
-
-  it('should return empty duplicateExports when no name collision exists', async () => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/a.ts', 'foo', 'function'), mkSymbol(2, '/project/src/b.ts', 'bar', 'function')];
-        }
-
-        return [];
-      },
-      searchRelations: () => [],
-    });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-
-    expect(result.duplicateExports.length).toBe(0);
   });
 
   /* ---------- RX: Re-export dead detection ---------- */
 
   it('should collect re-exports from re-exports relation and detect dead ones', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [
-            mkSymbol(1, '/project/src/lib.ts', 'usedFn', 'function'),
-            mkSymbol(2, '/project/src/lib.ts', 'deadFn', 'function'),
-          ];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        const query = q as { type?: string };
-
-        // index.ts re-exports both, but only usedFn is consumed externally
-        if (query.type === 're-exports') {
-          return [
-            mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'usedFn', 'usedFn'),
-            mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'deadFn', 'deadFn'),
-          ];
-        }
-
-        if (query.type === 'imports') {
-          return [mkImport('/project/src/consumer.ts', '/project/src/index.ts', 'usedFn')];
-        }
-
-        return [];
-      },
-    });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
+    // index.ts re-exports both, but only usedFn is consumed externally → deadFn re-export is dead.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [
+        mkSymbol(1, '/project/src/lib.ts', 'usedFn', 'function'),
+        mkSymbol(2, '/project/src/lib.ts', 'deadFn', 'function'),
+      ],
+      searchRelations: relationsByType({
+        're-exports': [
+          mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'usedFn', 'usedFn'),
+          mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'deadFn', 'deadFn'),
+        ],
+        imports: [mkImport('/project/src/consumer.ts', '/project/src/index.ts', 'usedFn')],
+      }),
+      pkgJson: { main: './src/index.ts' },
     });
     const deadReExports = result.deadExports.filter(d => d.module === 'src/index.ts');
 
@@ -1632,33 +1319,18 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should collect type re-exports via meta.isReExport and detect dead ones', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/types.ts', ['/project/src/shared/config.ts']],
-      ['/project/src/shared/config.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/shared/config.ts', 'MyConfig', 'type')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        // types.ts does `export type { MyConfig } from './shared/config'`
-        if ((q as { type?: string }).type === 'type-references') {
-          return [mkTypeRef('/project/src/types.ts', '/project/src/shared/config.ts', 'MyConfig', true)];
-        }
-
-        return [];
-      },
+    // types.ts does `export type { MyConfig } from './shared/config'` but nobody imports it via types.ts → dead.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/types.ts', ['/project/src/shared/config.ts']],
+        ['/project/src/shared/config.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/shared/config.ts', 'MyConfig', 'type')],
+      searchRelations: relationsOfType('type-references', [
+        mkTypeRef('/project/src/types.ts', '/project/src/shared/config.ts', 'MyConfig', true),
+      ]),
+      pkgJson: { main: './src/types.ts' },
     });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/types.ts' }),
-    });
-    // types.ts re-exports MyConfig but nobody imports it via types.ts → dead
     const deadReExports = result.deadExports.filter(d => d.module === 'src/types.ts');
 
     expect(deadReExports.length).toBe(1);
@@ -1666,33 +1338,16 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should propagate dead through re-export chain — original also dead when only consumer is dead re-export', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/index.ts', ['/project/src/lib.ts']],
-      ['/project/src/lib.ts', []],
-    ]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/lib.ts', 'orphanFn', 'function')];
-        }
-
-        return [];
-      },
-      searchRelations: (q: unknown) => {
-        // index.ts re-exports orphanFn, but nobody imports from index.ts
-        if ((q as { type?: string }).type === 're-exports') {
-          return [mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn')];
-        }
-
-        return [];
-      },
+    // index.ts re-exports orphanFn but nobody imports from index.ts → both index.ts re-export and lib.ts original are dead.
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/index.ts', ['/project/src/lib.ts']],
+        ['/project/src/lib.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/lib.ts', 'orphanFn', 'function')],
+      searchRelations: relationsOfType('re-exports', [mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn')]),
+      pkgJson: { main: './src/index.ts' },
     });
-    const result = await analyzeDependencies(g, {
-      rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/index.ts' }),
-    });
-    // index.ts re-export is dead (no consumers) → lib.ts original also dead (only consumer was dead re-export)
     const libDead = result.deadExports.filter(d => d.module === 'src/lib.ts');
     const indexDead = result.deadExports.filter(d => d.module === 'src/index.ts');
 
