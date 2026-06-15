@@ -111,6 +111,14 @@ export const parseFileAs = (filePath: string, code: string): ParsedFile => parse
 /** Parse `source` under `/virtual/test.ts` and wrap it in a single-file program. */
 export const parseProgram = (source: string): ParsedFile[] => [parseSource('/virtual/test.ts', source)];
 
+/**
+ * Parse `source` into a single-file program and run `analyze` over it.
+ *
+ * Collapses the repeated `parse(source)` + `analyze(files)` preamble that every
+ * single-source detector spec otherwise re-states verbatim.
+ */
+export const analyzeSource = <T>(source: string, analyze: (files: ParsedFile[]) => T): T => analyze(parseProgram(source));
+
 export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): string[] => {
   const signatures: string[] = [];
 

@@ -1,7 +1,338 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parseProgram as parse } from '../../../test/integration/shared/test-kit';
+import { analyzeSource, parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
+
+interface NoFindingCase {
+  name: string;
+  source: string;
+}
+
+interface CollapsibleIfCase {
+  name: string;
+  source: string;
+  score: number;
+  depthReduction: number;
+  statementsAffected: number;
+}
+
+interface ElseIfCase {
+  name: string;
+  source: string;
+  statementsAffected: number;
+  score: number;
+}
+
+const noFindingCases: NoFindingCase[] = [
+  {
+    name: 'outer has else',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    if (b) {
+      doA();
+      doB();
+      doC();
+    }
+  } else {
+    doElse();
+  }
+}
+`,
+  },
+  {
+    name: 'inner has else',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    if (b) {
+      doA();
+      doB();
+      doC();
+    } else {
+      doElse();
+    }
+  }
+}
+`,
+  },
+  {
+    name: 'outer body has 2+ stmts',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doSetup();
+    if (b) {
+      doA();
+      doB();
+      doC();
+    }
+  }
+}
+`,
+  },
+  {
+    name: 'inner consequent has 2 stmts (below MIN_INNER_STMTS=3)',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    if (b) {
+      doA();
+      doB();
+    }
+  }
+}
+`,
+  },
+  {
+    name: 'inner consequent is single expression (no block)',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    if (b) doA();
+  }
+}
+`,
+  },
+  {
+    name: 'else block with 2+ stmts',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doA();
+  } else {
+    doSetup();
+    if (b) {
+      doB();
+    }
+  }
+}
+`,
+  },
+  {
+    name: 'already else-if: if(a){} else if(b){}',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doA();
+  } else if (b) {
+    doB();
+    doC();
+    doD();
+  }
+}
+`,
+  },
+  {
+    name: 'empty else block: else {}',
+    source: `
+export function f(a: boolean) {
+  if (a) {
+    doA();
+  } else {
+  }
+}
+`,
+  },
+  {
+    name: 'empty inner if consequent: else { if(b) {} }',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doA();
+  } else {
+    if (b) {}
+  }
+}
+`,
+  },
+  {
+    name: 'else block with non-if stmt',
+    source: `
+export function f(a: boolean) {
+  if (a) {
+    doA();
+  } else {
+    doB();
+  }
+}
+`,
+  },
+];
+
+const collapsibleIfCases: CollapsibleIfCase[] = [
+  {
+    name: 'basic: if(a) { if(b) { 3 stmts } }',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    if (b) {
+      doA();
+      doB();
+      doC();
+    }
+  }
+}
+`,
+    score: 3,
+    depthReduction: 1,
+    statementsAffected: 3,
+  },
+  {
+    name: 'score scales with inner count (5 stmts)',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    if (b) {
+      doA();
+      doB();
+      doC();
+      doD();
+      doE();
+    }
+  }
+}
+`,
+    score: 5,
+    depthReduction: 1,
+    statementsAffected: 5,
+  },
+  {
+    name: '3-level nesting: detects if(b)+if(c) pair',
+    source: `
+export function f(a: boolean, b: boolean, c: boolean) {
+  if (a) {
+    if (b) {
+      if (c) {
+        doA();
+        doB();
+        doC();
+      }
+    }
+  }
+}
+`,
+    score: 3,
+    depthReduction: 1,
+    statementsAffected: 3,
+  },
+  {
+    name: 'class method',
+    source: `
+export class Handler {
+  handle(a: boolean, b: boolean) {
+    if (a) {
+      if (b) {
+        doA();
+        doB();
+        doC();
+      }
+    }
+  }
+}
+`,
+    score: 3,
+    depthReduction: 1,
+    statementsAffected: 3,
+  },
+  {
+    name: 'inside loop',
+    source: `
+export function f(items: Array<{ a: boolean; b: boolean }>) {
+  for (const item of items) {
+    if (item.a) {
+      if (item.b) {
+        doA(item);
+        doB(item);
+        doC(item);
+      }
+    }
+  }
+}
+`,
+    score: 3,
+    depthReduction: 1,
+    statementsAffected: 3,
+  },
+  {
+    name: 'nested function boundary - isolated to inner function',
+    source: `
+export function outer() {
+  const inner = (a: boolean, b: boolean) => {
+    if (a) {
+      if (b) {
+        doA();
+        doB();
+        doC();
+      }
+    }
+  };
+  return inner;
+}
+`,
+    score: 3,
+    depthReduction: 1,
+    statementsAffected: 3,
+  },
+];
+
+const elseIfCases: ElseIfCase[] = [
+  {
+    name: 'else { if(b) { ... } }',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doA();
+  } else {
+    if (b) {
+      doB();
+    }
+  }
+}
+`,
+    statementsAffected: 3, // max(1, MIN_INNER_STMTS=3)
+    score: 3,
+  },
+  {
+    name: 'inner if has else - still detected with correct count',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doA();
+  } else {
+    if (b) {
+      doB();
+    } else {
+      doC();
+    }
+  }
+}
+`,
+    statementsAffected: 3, // max(2, MIN_INNER_STMTS=3)
+    score: 3,
+  },
+  {
+    name: 'inner if with large branches - statementsAffected reflects real count',
+    source: `
+export function f(a: boolean, b: boolean) {
+  if (a) {
+    doA();
+  } else {
+    if (b) {
+      doB();
+      doC();
+      doD();
+    } else {
+      doE();
+      doF();
+    }
+  }
+}
+`,
+    statementsAffected: 5, // 3 + 2 = 5 > MIN_INNER_STMTS
+    score: 5,
+  },
+];
 
 describe('analyzeCollapsibleIf', () => {
 
@@ -23,251 +354,43 @@ describe('analyzeCollapsibleIf', () => {
     expect(result).toEqual([]);
   });
 
-  it('analyzeCollapsibleIf - basic: if(a) { if(b) { 3 stmts } } - returns collapsible-if', () => {
-    // Arrange
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    if (b) {
-      doA();
-      doB();
-      doC();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
+  it.each(noFindingCases)('analyzeCollapsibleIf - $name - returns no findings', ({ source }) => {
+    // Arrange & Act
+    const result = analyzeSource(source, analyzeCollapsibleIf);
+
+    // Assert
+    expect(result).toEqual([]);
+  });
+
+  it.each(collapsibleIfCases)('analyzeCollapsibleIf - $name - returns collapsible-if', ({ source, score, depthReduction, statementsAffected }) => {
+    // Arrange & Act
+    const result = analyzeSource(source, analyzeCollapsibleIf);
 
     // Assert
     expect(result).toHaveLength(1);
     expect(result[0]!.kind).toBe('collapsible-if');
-    expect(result[0]!.score).toBe(3);
+    expect(result[0]!.score).toBe(score);
+    expect(result[0]!.metrics.depthReduction).toBe(depthReduction);
+    expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
+  });
+
+  // ── collapsible-else-if ─────────────────────────────────────────────
+
+  it.each(elseIfCases)('analyzeCollapsibleIf - collapsible-else-if: $name - returns collapsible-else-if', ({ source, statementsAffected, score }) => {
+    // Arrange & Act
+    const result = analyzeSource(source, analyzeCollapsibleIf);
+
+    // Assert
+    expect(result).toHaveLength(1);
+    expect(result[0]!.kind).toBe('collapsible-else-if');
     expect(result[0]!.metrics.depthReduction).toBe(1);
-    expect(result[0]!.metrics.statementsAffected).toBe(3);
-  });
-
-  it('analyzeCollapsibleIf - if(a) { if(b) { 5 stmts } } - score scales with inner count', () => {
-    // Arrange
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    if (b) {
-      doA();
-      doB();
-      doC();
-      doD();
-      doE();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.score).toBe(5);
-  });
-
-  it('analyzeCollapsibleIf - outer has else - returns no findings', () => {
-    // Arrange
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    if (b) {
-      doA();
-      doB();
-      doC();
-    }
-  } else {
-    doElse();
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - inner has else - returns no findings', () => {
-    // Arrange
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    if (b) {
-      doA();
-      doB();
-      doC();
-    } else {
-      doElse();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - outer body has 2+ stmts - returns no findings', () => {
-    // Arrange — outer body has 2 stmts, not collapsible
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doSetup();
-    if (b) {
-      doA();
-      doB();
-      doC();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - inner consequent has 2 stmts - returns no findings (below threshold)', () => {
-    // Arrange — inner only has 2 stmts, below MIN_INNER_STMTS=3
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    if (b) {
-      doA();
-      doB();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - 3-level nesting: if(a){ if(b){ if(c){ 3 stmts } } } - detects if(b)+if(c) pair', () => {
-    // Arrange — if(a) body has 1 stmt (if(b)), if(b) body has 1 stmt (if(c)), if(c) has 3 stmts
-    // Only if(b)+if(c) pair is collapsible (if(b) outer, if(c) inner with 3 stmts)
-    const files = parse(`
-export function f(a: boolean, b: boolean, c: boolean) {
-  if (a) {
-    if (b) {
-      if (c) {
-        doA();
-        doB();
-        doC();
-      }
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert — both if(a)+if(b) and if(b)+if(c) are detected since both have inner body = 1 stmt
-    // if(a)+if(b): inner if(b) has 1 stmt (if(c)), but that's 1 stmt < 3 → no
-    // if(b)+if(c): inner if(c) has 3 stmts → yes
-    expect(result).toHaveLength(1);
-    expect(result[0]!.score).toBe(3);
-  });
-
-  it('analyzeCollapsibleIf - class method - detects pattern', () => {
-    // Arrange
-    const files = parse(`
-export class Handler {
-  handle(a: boolean, b: boolean) {
-    if (a) {
-      if (b) {
-        doA();
-        doB();
-        doC();
-      }
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-if');
-  });
-
-  it('analyzeCollapsibleIf - inside loop - detects pattern', () => {
-    // Arrange
-    const files = parse(`
-export function f(items: Array<{ a: boolean; b: boolean }>) {
-  for (const item of items) {
-    if (item.a) {
-      if (item.b) {
-        doA(item);
-        doB(item);
-        doC(item);
-      }
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-if');
-  });
-
-  it('analyzeCollapsibleIf - nested function boundary - isolated', () => {
-    // Arrange — inner function's collapsible-if should not leak to outer
-    const files = parse(`
-export function outer() {
-  const inner = (a: boolean, b: boolean) => {
-    if (a) {
-      if (b) {
-        doA();
-        doB();
-        doC();
-      }
-    }
-  };
-  return inner;
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert — inner function has collapsible-if, outer does not
-    expect(result).toHaveLength(1);
-  });
-
-  it('analyzeCollapsibleIf - inner consequent is single expression (no block) - returns no findings', () => {
-    // Arrange — if(b) doA() — consequent is ExpressionStatement, not a block with 3+ stmts
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    if (b) doA();
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
+    expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
+    expect(result[0]!.score).toBe(score);
   });
 
   it('analyzeCollapsibleIf - two independent collapsible-ifs in same function - aggregated', () => {
-    // Arrange
-    const files = parse(`
+    // Arrange & Act
+    const result = analyzeSource(`
 export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
   if (a) {
     if (b) {
@@ -284,9 +407,7 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     }
   }
 }
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
+`, analyzeCollapsibleIf);
 
     // Assert — both are in same function, aggregated into one item
     expect(result).toHaveLength(1);
@@ -296,165 +417,9 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     expect(result[0]!.opportunitySpans).toHaveLength(2);
   });
 
-  // ── collapsible-else-if ─────────────────────────────────────────────
-
-  it('analyzeCollapsibleIf - collapsible-else-if: else { if(b) { ... } } - returns collapsible-else-if', () => {
-    // Arrange
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doA();
-  } else {
-    if (b) {
-      doB();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-else-if');
-    expect(result[0]!.metrics.depthReduction).toBe(1);
-    expect(result[0]!.metrics.statementsAffected).toBe(3); // max(1, MIN_INNER_STMTS=3)
-    expect(result[0]!.score).toBe(3);
-  });
-
-  it('analyzeCollapsibleIf - collapsible-else-if: inner if has else - still detected with correct count', () => {
-    // Arrange — inner if has else, matching Clippy collapsible_else_if behavior
-    // consequent: 1 stmt (doB), alternate: 1 stmt (doC) → total 2, max(2, 3) = 3
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doA();
-  } else {
-    if (b) {
-      doB();
-    } else {
-      doC();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-else-if');
-    expect(result[0]!.metrics.statementsAffected).toBe(3); // max(2, MIN_INNER_STMTS=3)
-    expect(result[0]!.score).toBe(3);
-  });
-
-  it('analyzeCollapsibleIf - collapsible-else-if: inner if with large branches - statementsAffected reflects real count', () => {
-    // Arrange — inner consequent: 3 stmts, inner alternate: 2 stmts → total 5
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doA();
-  } else {
-    if (b) {
-      doB();
-      doC();
-      doD();
-    } else {
-      doE();
-      doF();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-else-if');
-    expect(result[0]!.metrics.statementsAffected).toBe(5); // 3 + 2 = 5 > MIN_INNER_STMTS
-    expect(result[0]!.score).toBe(5);
-  });
-
-  it('analyzeCollapsibleIf - else block with 2+ stmts - returns no collapsible-else-if', () => {
-    // Arrange — else block has 2 statements, not just a single if
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doA();
-  } else {
-    doSetup();
-    if (b) {
-      doB();
-    }
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - already else-if: if(a){} else if(b){} - NOT detected as collapsible-else-if', () => {
-    // Arrange — alternate is IfStatement directly (not wrapped in BlockStatement)
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doA();
-  } else if (b) {
-    doB();
-    doC();
-    doD();
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert — else-if is already collapsed, no further collapsing possible
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - empty else block: else {} - NOT detected', () => {
-    // Arrange — else block is empty (body.length === 0)
-    const files = parse(`
-export function f(a: boolean) {
-  if (a) {
-    doA();
-  } else {
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
-  it('analyzeCollapsibleIf - empty inner if consequent: else { if(b) {} } - NOT detected', () => {
-    // Arrange — inner if has empty consequent (innerTotal === 0)
-    const files = parse(`
-export function f(a: boolean, b: boolean) {
-  if (a) {
-    doA();
-  } else {
-    if (b) {}
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert — empty inner if has no benefit from collapsing
-    expect(result).toEqual([]);
-  });
-
   it('analyzeCollapsibleIf - collapsible-if + collapsible-else-if coexist - primaryOpportunity selects higher score', () => {
-    // Arrange — collapsible-if (score=3) + collapsible-else-if (score=5) in same function
-    const files = parse(`
+    // Arrange & Act — collapsible-if (score=3) + collapsible-else-if (score=5) in same function
+    const result = analyzeSource(`
 export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
   if (a) {
     if (b) {
@@ -476,9 +441,7 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     }
   }
 }
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
+`, analyzeCollapsibleIf);
 
     // Assert — both detected, primary kind = collapsible-else-if (score=5 > 3)
     expect(result).toHaveLength(1);
@@ -487,27 +450,9 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     expect(result[0]!.opportunitySpans).toHaveLength(2);
   });
 
-  it('analyzeCollapsibleIf - else block with non-if stmt - returns no collapsible-else-if', () => {
-    // Arrange — else block has a single statement but it's not an if
-    const files = parse(`
-export function f(a: boolean) {
-  if (a) {
-    doA();
-  } else {
-    doB();
-  }
-}
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
-
-    // Assert
-    expect(result).toEqual([]);
-  });
-
   it('analyzeCollapsibleIf - maxDepth is tracked', () => {
-    // Arrange
-    const files = parse(`
+    // Arrange & Act
+    const result = analyzeSource(`
 export function f(a: boolean, b: boolean) {
   if (a) {
     if (b) {
@@ -517,9 +462,7 @@ export function f(a: boolean, b: boolean) {
     }
   }
 }
-`);
-    // Act
-    const result = analyzeCollapsibleIf(files);
+`, analyzeCollapsibleIf);
 
     // Assert
     expect(result).toHaveLength(1);
