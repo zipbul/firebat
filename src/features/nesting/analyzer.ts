@@ -229,21 +229,35 @@ const isTestRunnerCall = (callee: Node): boolean => {
   return false;
 };
 
+/**
+ * Fold the maximum of `measure(child, depth)` over a node's direct children.
+ * The "scan children, keep the deepest" step shared by the recursive
+ * depth-measuring functions below (their top-level-body branch and their
+ * default tail both reduce to this).
+ */
+const scanChildrenMaxDepth = (
+  node: Node,
+  depth: number,
+  measure: (child: Node, depth: number) => number,
+): number => {
+  let max = depth;
+
+  forEachChildNode(node, child => {
+    const d = measure(child, depth);
+
+    if (d > max) {
+      max = d;
+    }
+  });
+
+  return max;
+};
+
 const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
   // Do not descend into nested function declarations / expressions that are not callback arguments.
   if (isFunctionNode(node) && depth === 0) {
     // Top-level body — scan children normally.
-    let max = depth;
-
-    forEachChildNode(node, child => {
-      const d = measureMaxCallbackDepth(child, depth);
-
-      if (d > max) {
-        max = d;
-      }
-    });
-
-    return max;
+    return scanChildrenMaxDepth(node, depth, measureMaxCallbackDepth);
   }
 
   if (node.type === 'CallExpression') {
@@ -289,17 +303,7 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
     return depth;
   }
 
-  let max = depth;
-
-  forEachChildNode(node, child => {
-    const d = measureMaxCallbackDepth(child, depth);
-
-    if (d > max) {
-      max = d;
-    }
-  });
-
-  return max;
+  return scanChildrenMaxDepth(node, depth, measureMaxCallbackDepth);
 };
 
 const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
@@ -311,17 +315,7 @@ const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
 const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
   // Do not descend into nested function declarations (not callback arguments).
   if (isFunctionNode(node) && depth === 0) {
-    let max = depth;
-
-    forEachChildNode(node, child => {
-      const d = measurePromiseChainDepth(child, depth);
-
-      if (d > max) {
-        max = d;
-      }
-    });
-
-    return max;
+    return scanChildrenMaxDepth(node, depth, measurePromiseChainDepth);
   }
 
   if (node.type === 'CallExpression') {
@@ -379,17 +373,7 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
     return depth;
   }
 
-  let max = depth;
-
-  forEachChildNode(node, child => {
-    const d = measurePromiseChainDepth(child, depth);
-
-    if (d > max) {
-      max = d;
-    }
-  });
-
-  return max;
+  return scanChildrenMaxDepth(node, depth, measurePromiseChainDepth);
 };
 
 const analyzeFunctionNode = (
