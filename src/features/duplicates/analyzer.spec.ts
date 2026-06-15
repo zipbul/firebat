@@ -1,5 +1,3 @@
-import type { Node } from 'oxc-parser';
-
 import { mock, afterAll, describe, it, expect, beforeEach } from 'bun:test';
 import path from 'node:path';
 
@@ -710,18 +708,12 @@ class Beta {
     expect(withParams[0]!.findingKind).not.toBe('literal-variant');
   });
 
-  // ── [C-2] 40. 7멤버 1 outlier → core group + pattern-outlier group ──────────
-  // 수학적 근거: n=6 auResults에서 (n-1)개가 0, 1개가 v일 때
-  // threshold = v*(1+2*sqrt(5))/6 ≈ v*0.912 < v → outlier 탐지 가능
+  // ── [C-2] 40. 같은 정규형으로 묶인 N멤버는 통계적 분리 없이 한 그룹 ──────────
+  // (과거의 mean+2σ outlier 분리는 임계 기반이라 제거됨 — 닫힌 규칙 보장)
 
-  it('applyAntiUnification - 7 members with 1 structural outlier - creates pattern-outlier group', () => {
-    // Arrange: 5 auResults가 각 1개 변수, 1개 auResult가 100개 변수(outlier)
-    // mean = (5*1 + 100)/6 = 17.5
-    // variance = (5*(1-17.5)^2 + (100-17.5)^2) / 6 = (5*272.25 + 6806.25) / 6 = 8167.5/6 = 1361.25
-    // stdDev = 36.9
-    // threshold = 17.5 + 2*36.9 = 91.3
-    // 100 > 91.3 → outlier 탐지!
-    for (let i = 0; i < 5; i++) {
+  it('should keep all members of one normalized group together, never splitting by variable-count', () => {
+    // 5 멤버가 한 auResult는 변수 100개(구조적으로 더 다름)여도 분리되면 안 됨
+    for (let i = 0; i < 3; i++) {
       antiUnifyMock.mockImplementationOnce(() => ({
         sharedSize: 10,
         leftSize: 10,
@@ -747,7 +739,6 @@ class Beta {
     }));
     classifyDiffMock.mockImplementationOnce(() => 'structural-diff');
 
-    // 동일 함수 7개 파일 (exact 그룹 생성, rep 제외 6개 auResults)
     const source = `
 function compute(x: number, y: number): number {
   const a = x + y;
@@ -755,23 +746,18 @@ function compute(x: number, y: number): number {
   return b;
 }
 `;
-    const files = Array.from({ length: 7 }, (_, i) => makeFile(`f${i}.ts`, source));
-    // Act
-    const result = analyzeDuplicates(files, {
-      minSize: 3,
-      enableAntiUnification: true,
-    });
-    // Assert: outlier 그룹이 생성되어야 함
-    const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
+    const files = Array.from({ length: 5 }, (_, i) => makeFile(`f${i}.ts`, source));
+    const result = analyzeDuplicates(files, { minSize: 3, enableAntiUnification: true });
+    // 동일 정규형 → 정확히 하나의 그룹, 5개 멤버 전부 포함, 통계적 분리 없음
+    const groups = result.filter(g => g.items.length >= 2);
 
-    expect(outlierGroups.length).toBe(1);
-    expect(outlierGroups[0]!.items.length).toBe(1);
+    expect(groups.length).toBe(1);
+    expect(groups[0]!.items.length).toBe(5);
   });
 
-  // ── [C-2] 41. 2멤버 → outlier 판별 안함 ────────────────────────────────
+  // ── [C-2] 41. anti-unification 켜도 단일 그룹 유지 (분리 로직 부재 확인) ──────
 
-  it('applyAntiUnification - 2 members - no outlier detection applied', () => {
-    // Arrange: 2개 함수 (auResults 1개 → items.length < 3 → outlier 로직 미적용)
+  it('should not split a structurally-divergent member into a separate group', () => {
     antiUnifyMock.mockImplementation(() => ({
       sharedSize: 5,
       leftSize: 10,
@@ -794,58 +780,12 @@ function compute(x: number, y: number): number {
   return b;
 }
 `;
-    const fileA = makeFile('a.ts', source);
-    const fileB = makeFile('b.ts', source);
-    // Act
-    const result = analyzeDuplicates([fileA, fileB], {
-      minSize: 3,
-      enableAntiUnification: true,
-    });
-    // Assert: pattern-outlier 그룹이 생성되지 않아야 함 (2멤버는 outlier 미적용)
-    const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
+    const files = Array.from({ length: 4 }, (_, i) => makeFile(`f${i}.ts`, source));
+    const result = analyzeDuplicates(files, { minSize: 3, enableAntiUnification: true });
+    const groups = result.filter(g => g.items.length >= 2);
 
-    expect(outlierGroups.length).toBe(0);
-  });
-
-  // ── [C-2] 42. 3멤버 모두 유사 → outlier 없음 ───────────────────────────
-
-  it('applyAntiUnification - 3 members all similar - no outlier group created', () => {
-    // Arrange: 3 items (1 rep + 2 auResults), 모두 rename-only (변수 수 비슷)
-    antiUnifyMock.mockImplementationOnce(() => ({
-      sharedSize: 10,
-      leftSize: 10,
-      rightSize: 10,
-      similarity: 1.0,
-      variables: [{ id: 1, location: 'a', leftType: 'x', rightType: 'y', kind: 'identifier' as const }],
-    }));
-    antiUnifyMock.mockImplementationOnce(() => ({
-      sharedSize: 10,
-      leftSize: 10,
-      rightSize: 10,
-      similarity: 0.99,
-      variables: [{ id: 1, location: 'b', leftType: 'p', rightType: 'q', kind: 'identifier' as const }],
-    }));
-    classifyDiffMock.mockImplementation(() => 'rename-only');
-
-    const source = `
-function compute(x: number, y: number): number {
-  const a = x + y;
-  const b = a * 2;
-  return b;
-}
-`;
-    const fileA = makeFile('a.ts', source);
-    const fileB = makeFile('b.ts', source);
-    const fileC = makeFile('c.ts', source);
-    // Act
-    const result = analyzeDuplicates([fileA, fileB, fileC], {
-      minSize: 3,
-      enableAntiUnification: true,
-    });
-    // Assert: pattern-outlier 그룹 없음, 단일 그룹만 존재
-    const outlierGroups = result.filter(g => g.findingKind === 'pattern-outlier');
-
-    expect(outlierGroups.length).toBe(0);
+    expect(groups.length).toBe(1);
+    expect(groups[0]!.items.length).toBe(4);
   });
 
   // ── [HP] 43. ClassExpression exact 탐지 ───────────────────────────────
@@ -897,7 +837,7 @@ export const compute = function(x: number): number {
 
     for (const group of result) {
       expect(group.findingKind).toBeDefined();
-      expect(['exact-clone', 'structural-clone', 'literal-variant', 'type-variant', 'pattern-outlier']).toContain(
+      expect(['exact-clone', 'structural-clone', 'literal-variant', 'type-variant', 'fragment-clone']).toContain(
         group.findingKind,
       );
     }

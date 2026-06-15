@@ -592,7 +592,7 @@ const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void =
     seenCodes.add(code as FirebatCatalogCode);
   }
 
-  const nested = item?.outliers ?? item?.items;
+  const nested = item?.items;
 
   if (!Array.isArray(nested)) {
     return;

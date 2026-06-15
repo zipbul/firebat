@@ -26,6 +26,7 @@ describe('golden/duplicates', () => {
   rg('arrow-fn-dead'); // arrow function도 선언 단위 대상
   rg('same-file-dead'); // "두 곳 이상"은 같은 파일 안도 포함
   rg('three-members-dead'); // 사본 3개 = 하나의 그룹 (분리 금지)
+  rg('many-members-no-split-dead'); // 동일 정규형 N멤버 → 통계적 분리 없이 한 그룹
   rg('exported-pair-dead'); // export 여부는 로직 중복 판정과 무관
   rg('delegation-plus-logic-dead'); // 위임+로직 1줄 = 골격 아님 → W (골격 경계 가드)
 

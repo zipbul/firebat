@@ -389,49 +389,8 @@ const applyAntiUnification = (group: InternalCloneGroup): DuplicateGroup[] => {
     return [toDuplicateGroup(group, undefined)];
   }
 
-  // ── Outlier detection (3+ 멤버 그룹만) ──────────────────────────────────────
-
-  if (items.length >= 3) {
-    const varCounts = auResults.map(({ result }) => result.variables.length);
-    const mean = varCounts.reduce((s, v) => s + v, 0) / varCounts.length;
-    const stdDev = Math.sqrt(varCounts.reduce((s, v) => s + (v - mean) ** 2, 0) / varCounts.length);
-    const outlierAuIndices = auResults
-      .map(({ idx, result }, auIdx) => ({ auIdx, idx, varCount: result.variables.length }))
-      .filter(({ varCount }) => varCount > mean + 2 * stdDev);
-
-    if (outlierAuIndices.length > 0 && outlierAuIndices.length < items.length - 1) {
-      const outlierItemIndices = new Set(outlierAuIndices.map(({ idx }) => idx));
-      const coreItems = items.filter((_, i) => i === repIdx || !outlierItemIndices.has(i));
-      const outlierItems = items.filter((_, i) => outlierItemIndices.has(i));
-      const results: DuplicateGroup[] = [];
-
-      // core group
-      if (coreItems.length >= 2) {
-        const coreGroup: InternalCloneGroup = { ...group, items: coreItems };
-        const coreAuResults = auResults.filter(({ idx }) => !outlierItemIndices.has(idx));
-        const coreClassifications = coreAuResults.map(({ result }) => classifyDiff(result));
-        const { params, findingKindOverride } = deriveSuggestedParams(coreClassifications, coreAuResults);
-
-        results.push(toDuplicateGroup(coreGroup, params, findingKindOverride));
-      }
-
-      // outlier group
-      if (outlierItems.length >= 1) {
-        const outlierGroup: InternalCloneGroup = {
-          cloneType: group.cloneType,
-          items: outlierItems,
-          findingKind: 'pattern-outlier',
-        };
-
-        results.push(toDuplicateGroup(outlierGroup, undefined));
-      }
-
-      return results;
-    }
-  }
-
-  // ── 기존 diff 분류 로직 ──────────────────────────────────────────────────────
-
+  // 같은 정규형(L1 해시)으로 묶인 멤버는 모두 같은 구조적 결정 → 하나의 그룹으로 보고한다.
+  // (과거의 통계적 outlier 분리(mean+2σ)는 임계 기반이라 닫힌 규칙을 위반 — 제거됨.)
   const classifications = auResults.map(({ result }) => classifyDiff(result));
   const { params: suggestedParams, findingKindOverride } = deriveSuggestedParams(classifications, auResults);
 

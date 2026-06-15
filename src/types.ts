@@ -177,13 +177,7 @@ export interface CloneDiff {
 
 export type DuplicateCloneType = 'exact' | 'shape' | 'normalized' | 'fragment';
 
-export type DuplicateFindingKind =
-  | 'exact-clone'
-  | 'structural-clone'
-  | 'literal-variant'
-  | 'type-variant'
-  | 'pattern-outlier'
-  | 'fragment-clone';
+export type DuplicateFindingKind = 'exact-clone' | 'structural-clone' | 'literal-variant' | 'type-variant' | 'fragment-clone';
 
 export interface DuplicateGroup {
   readonly cloneType: DuplicateCloneType;
