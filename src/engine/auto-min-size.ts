@@ -1,37 +1,30 @@
 import type { ParsedFile } from './types';
 
-import { isCloneTarget } from '../features/duplicates';
-import { collectOxcNodes, countOxcSize } from './ast';
+/**
+ * Duplicates min-size floor — ABSOLUTE and corpus-INDEPENDENT.
+ *
+ * The floor is a fixed property of a code unit ("is this statement-run / rule-data
+ * table a large enough decision unit?"), NOT a function of the rest of the corpus.
+ * A corpus-relative percentile made the same pair's clone verdict depend on
+ * unrelated files — breaking firebat's closed / corpus-independent identity (its
+ * differentiator vs jscpd/SonarQube) and making the reported clone count
+ * non-monotonic: removing clones shrank the corpus, lowered the median, lowered the
+ * floor, and surfaced previously-hidden clones. (See memory:
+ * project-duplicates-auto-minsize-design-flaw.)
+ *
+ * NOTE: declarations (functions/classes/types/contracts) have NO floor — a
+ * duplicated declaration is a clone at any size (see analyzer.ts). This floor
+ * applies only to statement-run fragments and rule-data tables, where a tiny
+ * run/table is genuine noise (a lone log line, a 1-entry table). Calibrated against
+ * the CLAUDE.md statement-run W/K examples (golden: stmt-run-too-small-keep).
+ */
+export const DUPLICATES_MIN_SIZE = 12;
 
-const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
-
-export const computeAutoMinSize = (files: ReadonlyArray<ParsedFile>): number => {
-  const counts: number[] = [];
-
-  for (const file of files) {
-    if (file.errors.length > 0) {
-      continue;
-    }
-
-    const targets = collectOxcNodes(file.program, isCloneTarget);
-
-    for (const node of targets) {
-      counts.push(countOxcSize(node));
-    }
-  }
-
-  if (counts.length === 0) {
-    return 60;
-  }
-
-  counts.sort((a, b) => a - b);
-
-  // Heuristic: keep recall reasonably high by default.
-  // For small/medium repos, use a median-ish threshold; for large repos, raise the percentile
-  // to avoid boilerplate dominating results.
-  const fileCount = files.length;
-  const index = Math.floor((counts.length - 1) * (fileCount >= 1000 ? 0.75 : fileCount >= 500 ? 0.6 : 0.5));
-  const selected = counts[index] ?? 60;
-
-  return clamp(Math.round(selected), 10, 200);
-};
+/**
+ * Resolve the duplicates min-size floor for the scan usecase's `'auto'` option.
+ *
+ * Kept as a function so the call site needs no change, but it is corpus-independent
+ * by construction: the corpus is accepted and ignored. The floor is the fixed
+ * policy constant above, never a statistic of the input.
+ */
+export const computeAutoMinSize = (_files: ReadonlyArray<ParsedFile>): number => DUPLICATES_MIN_SIZE;

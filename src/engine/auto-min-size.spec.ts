@@ -1,194 +1,81 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
-import * as path from 'node:path';
+import { describe, expect, it } from 'bun:test';
 
-import type { ParsedFile } from './types';
+import { parseSource } from './ast/parse-source';
 
-interface PercentileCase { name: string; fileCount: number; lowCount: number }
-interface ClampCase { name: string; sizeReturn: number; expected: number }
+/**
+ * Golden contract for the duplicates min-size floor (REDESIGN).
+ *
+ * The floor MUST be corpus-INDEPENDENT: whether two units are a clone is a closed
+ * property of those two units, never a function of the rest of the repository. The
+ * previous implementation set the floor to a PERCENTILE of the corpus's declaration
+ * sizes, which made the same pair's verdict depend on unrelated files — breaking
+ * firebat's closed/corpus-independent identity and making the reported clone count
+ * non-monotonic (removing code lowered the floor and surfaced previously-hidden
+ * clones). See memory: project-duplicates-auto-minsize-design-flaw.
+ *
+ * These tests encode the target contract and FAIL against the corpus-relative
+ * implementation (TDD red). They pass once the floor is a fixed constant.
+ */
 
-// ── Mocks (must be set up before the SUT module is imported) ──────────────────
+// ── Fixtures: two corpora that differ ONLY in unrelated surrounding code ────────
 
-const duplicateDetectorAbs = path.resolve(import.meta.dir, '../features/duplicates/analyzer.ts');
-const oxcAstUtilsAbs = path.resolve(import.meta.dir, './ast/oxc-ast-utils.ts');
-const oxcSizeCountAbs = path.resolve(import.meta.dir, './ast/oxc-size-count.ts');
-// Save original modules BEFORE any mock.module() calls (shallow snapshot to avoid live binding mutation)
-const __origDuplicateDetector = { ...require(duplicateDetectorAbs) };
-const __origOxcAstUtils = { ...require(oxcAstUtilsAbs) };
-const __origOxcSizeCount = { ...require(oxcSizeCountAbs) };
-const isCloneTargetMock = mock((_node: unknown) => true);
-const collectOxcNodesMock = mock((_program: unknown, _pred: unknown): unknown[] => []);
-const countOxcSizeMock = mock((_node: unknown): number => 50);
+const TWO_TINY_DECLS = `
+function a(): number { return 1; }
+function b(): number { return 2; }
+`;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const oneBigFn = (n: number): string => `
+function big${n}(xs: number[]): number {
+  let total = 0;
+  for (const x of xs) {
+    if (x > 0) {
+      total += x * 2;
+    } else {
+      total -= x;
+    }
+  }
+  const avg = total / xs.length;
+  return avg > 10 ? total : avg;
+}
+`;
 
-const makeFile = (errorCount = 0): ParsedFile =>
-  ({
-    filePath: 'test.ts',
-    sourceText: '',
-    program: {} as ParsedFile['program'],
-    errors: Array.from({ length: errorCount }, () => ({})),
-  }) as unknown as ParsedFile;
+// Many large declarations — under a percentile floor this drags the corpus median
+// far above the size of any small clone, hiding it. Under a fixed floor it is inert.
+const MANY_BIG_DECLS = Array.from({ length: 40 }, (_unused, i) => oneBigFn(i)).join('\n');
 
-/** Build N dummy file objects, all error-free. */
-const makeFiles = (count: number): ParsedFile[] => Array.from({ length: count }, () => makeFile(0));
+const small = [parseSource('/p/small.ts', TWO_TINY_DECLS)];
+const big = [parseSource('/p/big.ts', `${TWO_TINY_DECLS}\n${MANY_BIG_DECLS}`)];
 
-// ── computeAutoMinSize ────────────────────────────────────────────────────────
-
-describe('computeAutoMinSize', () => {
-  beforeAll(() => {
-    void mock.module(duplicateDetectorAbs, () => ({ isCloneTarget: isCloneTargetMock }));
-    void mock.module(oxcAstUtilsAbs, () => ({ collectOxcNodes: collectOxcNodesMock }));
-    void mock.module(oxcSizeCountAbs, () => ({ countOxcSize: countOxcSizeMock }));
-  });
-
-  beforeEach(() => {
-    isCloneTargetMock.mockClear();
-    // By default, each file yields one node with size 50.
-    collectOxcNodesMock.mockImplementation(() => [{}]);
-    countOxcSizeMock.mockImplementation(() => 50);
-  });
-
-  it('should return 60 when files array is empty', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-    // Act
-    const result = computeAutoMinSize([]);
-
-    // Assert
-    expect(result).toBe(60);
-  });
-
-  it('should return 60 when all files have errors', async () => {
-    // Arrange
+describe('duplicates min-size floor — corpus independence', () => {
+  it('resolves the SAME floor regardless of surrounding unrelated code', async () => {
     const { computeAutoMinSize } = await import('./auto-min-size');
 
-    collectOxcNodesMock.mockImplementation(() => []);
-
-    // Act
-    const result = computeAutoMinSize([makeFile(1), makeFile(2)]);
-
-    // Assert
-    expect(result).toBe(60);
+    // The core invariant: adding 40 large unrelated declarations must not move the floor.
+    expect(computeAutoMinSize(big)).toBe(computeAutoMinSize(small));
   });
 
-  it('should only include sizes from files without errors when mixed', async () => {
-    // Arrange
+  it('resolves a floor that does not depend on corpus size at all', async () => {
     const { computeAutoMinSize } = await import('./auto-min-size');
 
-    countOxcSizeMock.mockReturnValue(100);
+    const empty = computeAutoMinSize([]);
+    const one = computeAutoMinSize(small);
+    const many = computeAutoMinSize(big);
 
-    // error file should be skipped, healthy file contributes size=100
-    const files = [makeFile(1), makeFile(0)];
-    // Act
-    const result = computeAutoMinSize(files);
-
-    // Assert — must be inside [10,200] based on size=100
-    expect(result).toBeGreaterThanOrEqual(10);
-    expect(result).toBeLessThanOrEqual(200);
-    expect(result).toBe(100); // median of [100] is 100
+    // All three identical — the floor is a fixed policy constant, not a statistic.
+    expect(one).toBe(empty);
+    expect(many).toBe(empty);
   });
 
-  it('should use percentile 0.5 (median) when fileCount is less than 500', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-    // counts=[10,20,30,40,50], median index=2 → value=30
-    const calls = [10, 20, 30, 40, 50];
-    let i = 0;
+  it('equals the documented policy constant', async () => {
+    const mod = (await import('./auto-min-size')) as { computeAutoMinSize: (f: unknown[]) => number; DUPLICATES_MIN_SIZE: number };
 
-    collectOxcNodesMock.mockImplementation(() => [{}]);
-    countOxcSizeMock.mockImplementation(() => calls[i++ % calls.length] ?? 50);
-
-    // Act
-    const result = computeAutoMinSize(makeFiles(5));
-
-    // Assert — median (index 2 of sorted [10,20,30,40,50]) = 30
-    expect(result).toBe(30);
+    expect(typeof mod.DUPLICATES_MIN_SIZE).toBe('number');
+    expect(mod.computeAutoMinSize(small)).toBe(mod.DUPLICATES_MIN_SIZE);
   });
 
-  // Percentile boundaries: a bimodal size distribution (lowCount nodes → 15, rest → 25)
-  // sized so the chosen percentile index lands in the high (25) band, while p=0.5 would
-  // land in the low (15) band — proving the file-count→percentile mapping.
-  const percentileCases: PercentileCase[] = [
-    // p=0.6 at 500 files: index=floor(499*0.6)=299 → 25 (p=0.5 → 249 → 15)
-    { name: 'should use percentile 0.6 when fileCount is exactly 500', fileCount: 500, lowCount: 270 },
-    // p=0.75 at 1000 files: index=floor(999*0.75)=749 → 25 (p=0.5 → 499 → 15)
-    { name: 'should use percentile 0.75 when fileCount is exactly 1000', fileCount: 1000, lowCount: 500 },
-  ];
-
-  it.each(percentileCases)('$name', async ({ fileCount, lowCount }) => {
-    const { computeAutoMinSize } = await import('./auto-min-size');
-    let callIdx = 0;
-
-    countOxcSizeMock.mockImplementation(() => (++callIdx <= lowCount ? 15 : 25));
-
-    const result = computeAutoMinSize(makeFiles(fileCount));
-
-    expect(result).toBe(25);
-  });
-
-  // Result is clamped into [10, 200] regardless of the raw percentile value.
-  const clampCases: ClampCase[] = [
-    { name: 'should clamp result to minimum 10 when computed value is below 10', sizeReturn: 1, expected: 10 },
-    { name: 'should clamp result to maximum 200 when computed value is above 200', sizeReturn: 9999, expected: 200 },
-  ];
-
-  it.each(clampCases)('$name', async ({ sizeReturn, expected }) => {
+  it('is deterministic across repeated calls on the same input', async () => {
     const { computeAutoMinSize } = await import('./auto-min-size');
 
-    countOxcSizeMock.mockReturnValue(sizeReturn);
-
-    const result = computeAutoMinSize([makeFile(0)]);
-
-    expect(result).toBe(expected);
-  });
-
-  it('should return a value within [10, 200] for normal input', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-
-    countOxcSizeMock.mockReturnValue(80);
-
-    // Act
-    const result = computeAutoMinSize(makeFiles(3));
-
-    // Assert
-    expect(result).toBeGreaterThanOrEqual(10);
-    expect(result).toBeLessThanOrEqual(200);
-  });
-
-  it('should return the same result on two successive calls with the same input', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-
-    countOxcSizeMock.mockReturnValue(50);
-
-    const files = makeFiles(2);
-    // Act
-    const first = computeAutoMinSize(files);
-    const second = computeAutoMinSize(files);
-
-    // Assert
-    expect(first).toBe(second);
-  });
-
-  it('should return 60 when a file has no clone-target nodes', async () => {
-    // Arrange
-    const { computeAutoMinSize } = await import('./auto-min-size');
-
-    collectOxcNodesMock.mockReturnValue([]); // no nodes → no sizes
-
-    // Act
-    const result = computeAutoMinSize([makeFile(0)]);
-
-    // Assert
-    expect(result).toBe(60);
-  });
-
-  afterAll(() => {
-    mock.restore();
-    // Re-register original modules to prevent mock.module contamination of subsequent test files
-    void mock.module(duplicateDetectorAbs, () => __origDuplicateDetector);
-    void mock.module(oxcAstUtilsAbs, () => __origOxcAstUtils);
-    void mock.module(oxcSizeCountAbs, () => __origOxcSizeCount);
+    expect(computeAutoMinSize(small)).toBe(computeAutoMinSize(small));
   });
 });

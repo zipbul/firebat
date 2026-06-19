@@ -72,9 +72,9 @@ export const analyzeDuplicates = (
   const cachedShape = createCachedFingerprint(createOxcFingerprintShape);
   const cachedNormalized = createCachedFingerprint(createOxcFingerprintNormalized);
   // ── Level 1: Hash 기반 그룹핑 ──────────────────────────────────────────────
-  const exactGroups = groupByHash(uniqueFiles, minSize, cachedExact, 'exact');
-  const shapeGroups = groupByHash(uniqueFiles, minSize, cachedShape, 'shape');
-  const normalizedGroups = groupByHash(uniqueFiles, minSize, cachedNormalized, 'normalized');
+  const exactGroups = groupByHash(uniqueFiles, cachedExact, 'exact');
+  const shapeGroups = groupByHash(uniqueFiles, cachedShape, 'shape');
+  const normalizedGroups = groupByHash(uniqueFiles, cachedNormalized, 'normalized');
   // exact에 이미 잡힌 해시는 shape/normalized에서 제외 (중복 보고 방지)
   const exactHashes = new Set(exactGroups.map(g => cachedShape(g.items[0]!.node)));
   const filteredShape = shapeGroups.filter(g => {
@@ -300,7 +300,6 @@ const createCachedFingerprint = (fn: (node: Node) => string): ((node: Node) => s
 
 const groupByHash = (
   files: ReadonlyArray<ParsedFile>,
-  minSize: number,
   fingerprintFn: (node: Node) => string,
   cloneType: DuplicateCloneType,
 ): InternalCloneGroup[] => {
@@ -315,12 +314,10 @@ const groupByHash = (
     const nodes = collectOxcNodes(file.program, node => isCloneTarget(node) && !isDecisionlessSkeleton(node));
 
     for (const node of nodes) {
+      // 선언(함수·클래스·타입·계약)은 크기 floor가 없다 — 개념상 minSize는 문장열
+      // (fragment)에만 적용되는 결정-존재 floor이고, 선언은 크기 무관하게 중복이면 클론이다.
+      // (작은 중복 함수 false negative 방지; 사소한 위임은 위 골격 규칙이 거른다.)
       const size = countOxcSize(node);
-
-      if (size < minSize) {
-        continue;
-      }
-
       const hash = fingerprintFn(node);
       const span = resolveSpan(file.sourceText, node);
       const header = getNodeHeader(node);

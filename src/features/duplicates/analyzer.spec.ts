@@ -438,16 +438,21 @@ class Beta {
     expect(itemsFromBad).toHaveLength(0);
   });
 
-  // ── [NE] 22. 모든 함수 minSize 미만 → 빈 결과 ──────────────────────────
+  // ── [NE] 22. minSize는 선언 클론을 억제하지 않는다 (floor는 fragment 전용) ──
+  //
+  // REDESIGN: minSize는 문장열(fragment)의 결정-존재 floor일 뿐이다. 선언은 크기
+  // 무관하게 중복이면 클론이므로, 아주 작은 동일 함수도 높은 minSize에서 보고된다.
+  // (옛 동작은 corpus-상대 floor로 작은 중복 함수를 숨겼다 — false negative.)
 
-  it('should return empty array when all functions are below minSize', () => {
+  it('does not suppress declaration clones by minSize (floor is fragment-only)', () => {
     const file = makeFile('tiny.ts', TINY_FUNCTION);
     const result = analyzeDuplicates([file, makeFile('tiny2.ts', TINY_FUNCTION)], {
       minSize: 9999,
       enableAntiUnification: false,
     });
 
-    expect(result).toEqual([]);
+    expect(result.length).toBe(1);
+    expect(result[0]!.items.length).toBe(2);
   });
 
   // ── [NE] 23. 단일 함수만 존재 → 그룹 없음 ─────────────────────────────
@@ -795,5 +800,109 @@ export const compute = function(x: number): number {
         group.findingKind,
       );
     }
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// REDESIGN golden — min-size policy
+//
+// Concept (CLAUDE.md): the minSize floor is defined ONLY for statement-run
+// fragments ("결정-존재 floor") — declarations are clone targets by structure at
+// ANY size. The corpus-relative auto-minSize wrongly gated declarations too,
+// hiding genuine small duplicated functions (e.g. getProgramBody, isPlainObject).
+//
+// These tests fix the contract: declarations ignore minSize; fragments keep an
+// absolute floor; decisionless skeletons stay K via role (not size).
+// TDD red against the current implementation (analyzer.ts gates declarations by
+// `size < minSize`); green once that gate is removed for declaration targets.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Genuine small duplicated decision (the getProgramBody case): NOT a skeleton.
+const TINY_DECL_CLONE = `
+function pa(prog: { body: unknown }): unknown[] {
+  const body = prog.body;
+  if (Array.isArray(body)) {
+    return body as unknown[];
+  }
+  return [];
+}
+function pb(prog: { body: unknown }): unknown[] {
+  const body = prog.body;
+  if (Array.isArray(body)) {
+    return body as unknown[];
+  }
+  return [];
+}
+`;
+
+// Param-passthrough delegation duplicated — decisionless skeleton (K by role).
+// Free functions (not methods) so the only candidate clone is the delegation
+// itself, with no enclosing-class structural clone to confound the assertion.
+const TINY_SKELETON_CLONE = `
+function findUser(id: string) {
+  return repo.find(id);
+}
+function findOrder(id: string) {
+  return repo.find(id);
+}
+`;
+
+// Two distinct functions sharing only a tiny (<12 node) extractable statement run.
+const TINY_FRAGMENT_CLONE = `
+function ga(x: number): number {
+  const a = x;
+  console.log(a);
+  return finA(a);
+}
+function gb(x: number): number {
+  const a = x;
+  console.log(a);
+  return finB(a);
+}
+`;
+
+describe('min-size policy (redesign)', () => {
+  it('reports a genuine small duplicated declaration even at a very high minSize', () => {
+    // Declarations have NO size floor — getProgramBody-style clone must surface.
+    const result = analyzeDuplicates([makeFile('/p/tiny-decl.ts', TINY_DECL_CLONE)], {
+      minSize: 9999,
+      enableAntiUnification: false,
+    });
+
+    expect(result.length).toBe(1);
+    expect(result[0]!.items.length).toBe(2);
+    expect(result[0]!.items.map(i => i.header).sort()).toEqual(['pa', 'pb']);
+  });
+
+  it('still keeps a decisionless skeleton clone as K regardless of minSize', () => {
+    // Removing the declaration size floor must NOT make skeletons leak — the
+    // skeleton exemption is a role rule, independent of size.
+    const high = analyzeDuplicates([makeFile('/p/tiny-skel.ts', TINY_SKELETON_CLONE)], {
+      minSize: 9999,
+      enableAntiUnification: false,
+    });
+    const low = analyzeDuplicates([makeFile('/p/tiny-skel.ts', TINY_SKELETON_CLONE)], {
+      minSize: 1,
+      enableAntiUnification: false,
+    });
+
+    expect(high).toEqual([]);
+    expect(low).toEqual([]);
+  });
+
+  it('keeps an ABSOLUTE floor for statement-run fragments (not declarations)', () => {
+    // A sub-floor fragment is reported below the floor and gated at/above it —
+    // and crucially that verdict is the SAME constant regardless of corpus.
+    const reported = analyzeDuplicates([makeFile('/p/tiny-frag.ts', TINY_FRAGMENT_CLONE)], {
+      minSize: 1,
+      enableAntiUnification: false,
+    });
+    const gated = analyzeDuplicates([makeFile('/p/tiny-frag.ts', TINY_FRAGMENT_CLONE)], {
+      minSize: 12,
+      enableAntiUnification: false,
+    });
+
+    expect(reported.some(g => g.findingKind === 'fragment-clone')).toBe(true);
+    expect(gated.some(g => g.findingKind === 'fragment-clone')).toBe(false);
   });
 });

@@ -62,10 +62,12 @@ describe('integration/duplicates', () => {
     expect(groups.some(matches)).toBe(true);
   });
 
-  it('should not group functions when minSize is too high', () => {
+  // REDESIGN: minSize is a fragment-only floor — declaration clones are reported at
+  // any size (a duplicated function is a clone regardless of how small it is).
+  it('still groups identical declarations even when minSize is very high', () => {
     const groups = analyzeTwoFunctions({ name: 'alpha', value: 1 }, { name: 'alpha', value: 1 }, 500);
 
-    expect(groups.length).toBe(0);
+    expect(groups.some(g => g.items.length >= 2)).toBe(true);
   });
 
   it('should not detect exact-clone when literals differ', () => {
