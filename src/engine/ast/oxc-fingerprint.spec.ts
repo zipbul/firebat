@@ -141,3 +141,26 @@ describe('engine/ast/oxc-fingerprint', () => {
     expect(normalizedOfFirstInterface(left)).not.toBe(normalizedOfFirstInterface(right));
   });
 });
+
+describe('createOxcFingerprint — regex literals', () => {
+  const exactOfFirstFunction = (source: string): string => {
+    const parsed = parseSource('/v/rx.ts', source);
+    const fn = collectOxcNodes(parsed.program, (n: Node) => n.type === 'FunctionDeclaration')[0]!;
+
+    return createOxcFingerprintExact(fn);
+  };
+
+  // 함수명·구조 동일, 정규식 패턴만 다름 (isIdentStart vs isIdentPart 류).
+  const startRx = 'function f(c: string) { return /[A-Za-z_$]/.test(c); }';
+  const partRx = 'function f(c: string) { return /[A-Za-z0-9_$]/.test(c); }';
+
+  it('distinguishes different regex literals at the exact tier (pattern is content)', () => {
+    // 정규식 미인코딩 시 둘 다 동일해져 EXACT 오분류 — 패턴/flags를 인코딩해야 구별된다.
+    expect(exactOfFirstFunction(startRx)).not.toBe(exactOfFirstFunction(partRx));
+  });
+
+  it('substitutes regex literals at the shape tier (literal-variant clone)', () => {
+    // shape는 리터럴을 치환하므로 정규식만 다른 함수는 literal-variant로 매칭(개념상 W).
+    expect(shapeOfFirstFunction(startRx)).toBe(shapeOfFirstFunction(partRx));
+  });
+});
