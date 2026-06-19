@@ -73,6 +73,9 @@ describe('golden/duplicates', () => {
   rg('contract-method-sig-dead'); // W: 메서드 시그니처 계약 cross-kind
   rg('contract-index-sig-dead'); // W: index signature 계약 cross-kind
   rg('contract-optional-mismatch-keep'); // K: optional(?)은 계약의 일부 — id? vs id는 다른 계약
+  rg('type-alias-generic-arg-diff-keep'); // K: 타입인자가 다르면 다른 계약 (본문 타입인자 치환 금지)
+  rg('union-literals-differ-keep'); // K: union 리터럴이 다르면 다른 결정 (본문 리터럴 치환 금지)
+  rg('discriminant-interface-keep'); // K: 판별 리터럴(kind)이 다르면 다른 계약 (멤버 리터럴 치환 금지)
   rg('lookup-table-dead'); // W: 동일 규칙 테이블이 다른 이름으로 중복 (데이터 선언)
   rg('lookup-array-table-dead'); // W: 배열 룩업 테이블 중복 (ArrayExpression 경로)
   rg('lookup-template-table-dead'); // W: 보간 없는 template literal 값 테이블

@@ -361,9 +361,28 @@ const createOxcFingerprintCore = (node: Node, options: OxcFingerprintOptions): s
 /** 타입 선언은 본문 구조가 결정 그 자체 — 타입 키를 무시하면 안 된다 (CLAUDE.md duplicates 판정 절차). */
 const TYPE_DECL_TYPES = new Set(['TSTypeAliasDeclaration', 'TSInterfaceDeclaration']);
 
+// 타입 선언 본문은 결정 그 자체 — 타입 구조(annotation·parameters·arguments·returnType)와
+// 리터럴을 보존하고, 선언-로컬 바인딩(자기 이름·타입파라미터)만 치환한다. 데코레이터·수식어
+// 노이즈만 무시. typeArguments까지 무시하면 ReadonlyMap<string,A> ≡ ReadonlyMap<string,B>로
+// 무관한 별칭이 충돌(FP)한다.
 const TYPE_DECL_IGNORED_KEYS: ReadonlySet<string> = new Set(
-  [...NORMALIZED_IGNORED_KEYS].filter(k => k !== 'typeAnnotation' && k !== 'typeParameters'),
+  [...NORMALIZED_IGNORED_KEYS].filter(
+    k => k !== 'typeAnnotation' && k !== 'typeParameters' && k !== 'typeArguments' && k !== 'returnType',
+  ),
 );
+
+/**
+ * 타입 선언(별칭·인터페이스) 본문 핑거프린트.
+ * 리터럴·타입인자·멤버명·readonly/optional을 보존하고 선언-로컬 바인딩만 치환한다 —
+ * "같은 구조의 계약/이름 변경"은 잡되 "같은 바깥 형태·다른 리터럴/타입인자"는 분리한다.
+ */
+const createTypeDeclBodyFingerprint = (node: Node): string =>
+  createOxcFingerprintCore(node, {
+    includeLiteralValues: true,
+    includeIdentifierNames: false,
+    ignoredKeys: TYPE_DECL_IGNORED_KEYS,
+    boundNames: collectBindingNames(node),
+  });
 
 export const createOxcFingerprintExact = (node: Node): string =>
   createOxcFingerprintCore(node, { includeLiteralValues: true, includeIdentifierNames: true });
@@ -372,11 +391,13 @@ export const createOxcFingerprint = (node: Node): string =>
   createOxcFingerprintCore(node, { includeLiteralValues: true, includeIdentifierNames: false });
 
 export const createOxcFingerprintShape = (node: Node): string =>
-  createOxcFingerprintCore(node, {
-    includeLiteralValues: false,
-    includeIdentifierNames: false,
-    boundNames: collectBindingNames(node),
-  });
+  TYPE_DECL_TYPES.has(node.type)
+    ? createTypeDeclBodyFingerprint(node)
+    : createOxcFingerprintCore(node, {
+        includeLiteralValues: false,
+        includeIdentifierNames: false,
+        boundNames: collectBindingNames(node),
+      });
 
 /**
  * 외부에서 계산한 바인딩 집합으로 shape 핑거프린트 생성.
@@ -421,7 +442,8 @@ export const createOxcFingerprintNormalized = (node: Node): string => {
     const boundNames = collectBindingNames(node);
     const parts = members.map(member =>
       createOxcFingerprintCore(member, {
-        includeLiteralValues: false,
+        // 멤버의 판별 리터럴(kind: 'array')은 결정 — 보존해야 다른 종류가 충돌하지 않는다.
+        includeLiteralValues: true,
         includeIdentifierNames: false,
         ignoredKeys: TYPE_DECL_IGNORED_KEYS,
         boundNames,
@@ -431,12 +453,17 @@ export const createOxcFingerprintNormalized = (node: Node): string => {
     return hashString(`Contract\x00${parts.join('\x00')}`);
   }
 
+  // 타입 리터럴이 아닌 타입 별칭(union·ReadonlyMap<...> 등): 본문 리터럴·타입인자를 보존한다.
+  if (TYPE_DECL_TYPES.has(node.type)) {
+    return createTypeDeclBodyFingerprint(node);
+  }
+
   const normalized = normalizeForFingerprint(node);
 
   return createOxcFingerprintCore(normalized as Node, {
     includeLiteralValues: false,
     includeIdentifierNames: false,
-    ignoredKeys: TYPE_DECL_TYPES.has(node.type) ? TYPE_DECL_IGNORED_KEYS : NORMALIZED_IGNORED_KEYS,
+    ignoredKeys: NORMALIZED_IGNORED_KEYS,
     boundNames: collectBindingNames(node),
   });
 };
