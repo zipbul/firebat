@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from './types';
-import type { SourceSpan } from '../types';
+import type { NestingReductionMetrics, SourceSpan } from '../types';
 
 import { collectFunctionNodesWithParent } from './ast';
 import { getNodeHeader } from './ast/oxc-ast-utils';
@@ -51,12 +51,6 @@ const collectFunctionItems = <TItem>(
 interface NestingReductionOpportunity<TKind> {
   readonly kind: TKind;
   readonly span: SourceSpan;
-  readonly depthReduction: number;
-  readonly statementsAffected: number;
-}
-
-interface NestingReductionMetrics {
-  readonly maxDepth: number;
   readonly depthReduction: number;
   readonly statementsAffected: number;
 }

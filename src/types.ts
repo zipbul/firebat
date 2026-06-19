@@ -430,7 +430,8 @@ export interface NestingItem {
   readonly score: number;
 }
 
-interface EarlyReturnMetrics {
+/** Metrics shared by nesting-reduction opportunities (early-return, collapsible-if, deep-nesting reduction). */
+export interface NestingReductionMetrics {
   readonly maxDepth: number;
   readonly depthReduction: number;
   readonly statementsAffected: number;
@@ -445,14 +446,8 @@ export interface EarlyReturnItem {
   readonly header: string;
   readonly span: SourceSpan;
   readonly opportunitySpans?: ReadonlyArray<SourceSpan>;
-  readonly metrics: EarlyReturnMetrics;
+  readonly metrics: NestingReductionMetrics;
   readonly score: number;
-}
-
-interface CollapsibleIfMetrics {
-  readonly maxDepth: number;
-  readonly depthReduction: number;
-  readonly statementsAffected: number;
 }
 
 export interface CollapsibleIfItem {
@@ -462,7 +457,7 @@ export interface CollapsibleIfItem {
   readonly header: string;
   readonly span: SourceSpan;
   readonly opportunitySpans?: ReadonlyArray<SourceSpan>;
-  readonly metrics: CollapsibleIfMetrics;
+  readonly metrics: NestingReductionMetrics;
   readonly score: number;
 }
 

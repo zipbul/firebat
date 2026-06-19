@@ -127,13 +127,19 @@ const toBlock = (value: NodeValue): Node | null => {
   return block([value]);
 };
 
+/** BlockStatement로 확인된 노드의 body 문장 배열을 안전하게 읽는다 (단일 결정 지점). */
+const blockBodyStatements = (blockNode: Node): Node[] => {
+  const bs = blockNode as BlockStatement;
+
+  return Array.isArray(bs.body) ? (bs.body as Node[]) : [];
+};
+
 const appendToBlockBody = (bodyNode: Node, statement: Node): Node => {
   if (!isNodeRecord(bodyNode) || bodyNode.type !== 'BlockStatement') {
     return block([bodyNode, statement]);
   }
 
-  const bs = bodyNode as BlockStatement;
-  const body = Array.isArray(bs.body) ? (bs.body as Node[]) : [];
+  const body = blockBodyStatements(bodyNode);
 
   return block([...body, statement]);
 };
@@ -313,8 +319,7 @@ const unwrapSingleStatement = (stmt: Node): Node | null => {
     return stmt;
   }
 
-  const bs = stmt as BlockStatement;
-  const body = Array.isArray(bs.body) ? (bs.body as Node[]) : [];
+  const body = blockBodyStatements(stmt);
 
   if (body.length !== 1 || !isOxcNode(body[0])) {
     return null;
@@ -699,8 +704,7 @@ const extractForOfBodyPair = (node: AnyNode): ForOfBodyPair | null => {
     return null;
   }
 
-  const bs = bodyValue as BlockStatement;
-  const body = Array.isArray(bs.body) ? (bs.body as Node[]) : [];
+  const body = blockBodyStatements(bodyValue as Node);
 
   if (body.length !== 2) {
     return null;
@@ -769,8 +773,7 @@ const extractGuardCallArg = (guard: Node): GuardCallInfo | null => {
     return null;
   }
 
-  const onlyBs = only as BlockStatement;
-  const consequentBody = Array.isArray(onlyBs.body) ? (onlyBs.body as Node[]) : [];
+  const consequentBody = blockBodyStatements(only as Node);
 
   if (consequentBody.length !== 1 || !isOxcNode(consequentBody[0] as NodeValue) || !isNodeRecord(consequentBody[0] as Node)) {
     return null;

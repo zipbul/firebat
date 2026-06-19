@@ -7,12 +7,14 @@ import type { NodeRecord, NodeValue } from '../types';
 
 export { isFunctionNode };
 
-export const isOxcNode = (value: unknown): value is Node => typeof value === 'object' && value !== null && !Array.isArray(value);
+/** 비배열 객체 판정 — OXC Node·NodeRecord 가드의 단일 결정 지점. */
+const isNonArrayObject = (value: unknown): boolean => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+export const isOxcNode = (value: unknown): value is Node => isNonArrayObject(value);
 
 export const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> => Array.isArray(value);
 
-export const isNodeRecord = (node: unknown): node is NodeRecord =>
-  typeof node === 'object' && node !== null && !Array.isArray(node);
+export const isNodeRecord = (node: unknown): node is NodeRecord => isNonArrayObject(node);
 
 export const getNodeName = (node: Node | null | undefined): string | null => {
   if (node === null || node === undefined) {
