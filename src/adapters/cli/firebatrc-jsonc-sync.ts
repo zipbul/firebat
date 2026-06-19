@@ -1,10 +1,7 @@
+import type { JsonObject, JsonValue } from '../../shared/json-value';
+
+import { toErrorMessage } from '../../shared/error-message';
 import { isPlainObject } from '../../shared/json-guards';
-
-interface JsonObject {
-  readonly [key: string]: JsonValue;
-}
-
-type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
 interface Edit {
   readonly start: number;
@@ -695,9 +692,7 @@ export const syncJsoncTextToTemplateKeys = (input: SyncInput): SyncResult => {
       result = { ok: true, text: next, changed: next !== input.userText };
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-
-    result = { ok: false, error: msg };
+    result = { ok: false, error: toErrorMessage(err) };
   }
 
   return result;

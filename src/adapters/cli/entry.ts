@@ -6,11 +6,14 @@ import type { FirebatDetector, FirebatReport } from '../../types';
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { formatReport } from '../../report';
 import { parseArgs } from '../../shared/arg-parse';
+import { toErrorMessage } from '../../shared/error-message';
 import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../shared/firebat-config.loader';
+import { isStringArray } from '../../shared/json-guards';
 import { appendFirebatLog } from '../../shared/logger';
 import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
 import { resolveTargets } from '../../shared/target-discovery';
+import { H, hc, isTty, writeStdout } from './cli-output';
 
 interface CliLoggerInput {
   readonly level: FirebatCliOptions['logLevel'];
@@ -26,27 +29,6 @@ const createCliLogger = (input: CliLoggerInput): FirebatLogger => {
     level: input.level ?? 'info',
     includeStack: input.logStack ?? false,
   });
-};
-
-const isTty = (): boolean => {
-  return Boolean(process.stdout?.isTTY);
-};
-
-const H = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  cyan: '\x1b[36m',
-  yellow: '\x1b[33m',
-  green: '\x1b[32m',
-  gray: '\x1b[90m',
-  white: '\x1b[37m',
-} as const;
-
-const hc = (text: string, code: string, color: boolean): string => (color ? `${code}${text}${H.reset}` : text);
-
-const writeStdout = (text: string): void => {
-  process.stdout.write(text + '\n');
 };
 
 const printHelpAndExit = (): number => {
@@ -176,9 +158,7 @@ const resolveBarrelIgnoreGlobsFromFeatures = (
 
   const ignoreGlobs = (value as BarrelFeatureValue).ignoreGlobs;
 
-  return Array.isArray(ignoreGlobs) && ignoreGlobs.every((element: unknown) => typeof element === 'string')
-    ? ignoreGlobs
-    : undefined;
+  return isStringArray(ignoreGlobs) ? ignoreGlobs : undefined;
 };
 
 type DependenciesFeatureValue = {
@@ -224,7 +204,7 @@ const resolveDependenciesAllowedDependenciesFromFeatures = (
       return undefined;
     }
 
-    if (!Array.isArray(list) || !list.every(item => typeof item === 'string')) {
+    if (!isStringArray(list)) {
       return undefined;
     }
   }
@@ -400,11 +380,9 @@ const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof cre
   try {
     report = await scanUseCase(options, { logger });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
     await appendCliErrorLog(err);
 
-    logger.error('Failed', { message }, err);
+    logger.error('Failed', { message: toErrorMessage(err) }, err);
 
     return 1;
   }
@@ -439,10 +417,8 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
   try {
     options = await resolveOptions(argv, earlyLogger);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
     await appendCliErrorLog(err);
-    createPrettyConsoleLogger({ level: 'error', includeStack: false }).error(message);
+    createPrettyConsoleLogger({ level: 'error', includeStack: false }).error(toErrorMessage(err));
 
     return 1;
   }

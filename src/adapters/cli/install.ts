@@ -1,19 +1,17 @@
 import { mkdir, rename } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import type { JsonValue } from '../../shared/json-value';
 import type { FirebatLogger } from '../../shared/logger';
 
 import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { assertKnownOption } from '../../shared/arg-parse';
+import { failWithMessage, toErrorMessage } from '../../shared/error-message';
 import { isPlainObject } from '../../shared/json-guards';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { H, hc, isTty, writeStdout } from './cli-output';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';
-
-interface JsonObject {
-  readonly [key: string]: JsonValue;
-}
-
-type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject;
 
 interface AssetTemplateMeta {
   readonly sourcePath: string;
@@ -50,13 +48,9 @@ const sha256Hex = async (text: string): Promise<string> => {
   return arr.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
-const failJsonValue = (message: string): never => {
-  throw new Error(message);
-};
-
 const toJsonValue = (value: unknown): JsonValue => {
   if (value === undefined) {
-    return failJsonValue('[firebat] Invalid JSON value (undefined)');
+    return failWithMessage('[firebat] Invalid JSON value (undefined)');
   }
 
   let out: JsonValue;
@@ -76,7 +70,7 @@ const toJsonValue = (value: unknown): JsonValue => {
 
     out = obj;
   } else {
-    return failJsonValue('[firebat] Invalid JSON value (non-JSON type encountered)');
+    return failWithMessage('[firebat] Invalid JSON value (non-JSON type encountered)');
   }
 
   return out;
@@ -120,15 +114,13 @@ const writeFileAtomic = async (filePath: string, text: string): Promise<void> =>
 
 const parseJsoncOrThrow = (filePath: string, text: string): JsonValue => {
   if (text.trim().length === 0) {
-    return failJsonValue(`[firebat] Failed to parse JSONC: ${filePath}: empty input`);
+    return failWithMessage(`[firebat] Failed to parse JSONC: ${filePath}: empty input`);
   }
 
   try {
     return toJsonValue(Bun.JSONC.parse(text));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-
-    throw new Error(`[firebat] Failed to parse JSONC: ${filePath}: ${msg}`, { cause: err });
+    throw new Error(`[firebat] Failed to parse JSONC: ${filePath}: ${toErrorMessage(err)}`, { cause: err });
   }
 };
 
@@ -142,11 +134,6 @@ interface EnsureBaseSnapshotInput {
   readonly firebatDir: string;
   readonly assetFileName: string;
   readonly templateText: string;
-}
-
-interface EnsureBaseSnapshotResult {
-  sha256: string;
-  filePath: string;
 }
 
 interface BaseSnapshot {
@@ -171,6 +158,14 @@ interface BaseWrite extends PlannedWrite {
   sha256: string;
 }
 
+const parseTemplate = (tpl: LoadedTemplate): JsonValue => {
+  return parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
+};
+
+const normalizedTemplateText = (tpl: LoadedTemplate): string => {
+  return jsonText(parseTemplate(tpl));
+};
+
 const parseYesFlag = (argv: readonly string[]): ParseYesResult => {
   if (argv.length === 0) {
     return { yes: false, help: false };
@@ -192,9 +187,7 @@ const parseYesFlag = (argv: readonly string[]): ParseYesResult => {
       continue;
     }
 
-    if (arg.startsWith('-')) {
-      throw new Error(`[firebat] Unknown option: ${arg}`);
-    }
+    assertKnownOption(arg);
   }
 
   return { yes, help };
@@ -257,7 +250,7 @@ const installTextFileNoOverwrite = async (destPath: string, desiredText: string)
   return result;
 };
 
-const ensureBaseSnapshot = async (input: EnsureBaseSnapshotInput): Promise<EnsureBaseSnapshotResult> => {
+const ensureBaseSnapshot = async (input: EnsureBaseSnapshotInput): Promise<BaseSnapshot> => {
   const baseDir = path.join(input.firebatDir, 'install-bases');
 
   await mkdir(baseDir, { recursive: true });
@@ -278,27 +271,6 @@ const ensureBaseSnapshot = async (input: EnsureBaseSnapshotInput): Promise<Ensur
 interface StdoutColumns {
   readonly columns?: number;
 }
-
-const isTty = (): boolean => {
-  return Boolean(process.stdout?.isTTY);
-};
-
-const H = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  cyan: '\x1b[36m',
-  yellow: '\x1b[33m',
-  green: '\x1b[32m',
-  gray: '\x1b[90m',
-  white: '\x1b[37m',
-} as const;
-
-const hc = (text: string, code: string, color: boolean): string => (color ? `${code}${text}${H.reset}` : text);
-
-const writeStdout = (text: string): void => {
-  process.stdout.write(text + '\n');
-};
 
 const printInstallHelp = (): void => {
   const c = isTty();
@@ -503,7 +475,7 @@ const planTemplateWrite = async (input: PlanTemplateWriteInput): Promise<PlanTem
     return 1;
   }
 
-  const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
+  const nextParsed = parseTemplate(tpl);
   const destFile = Bun.file(tpl.destAbs);
   const userText = (await destFile.exists()) ? await destFile.text() : null;
   let plannedWrite: PlannedWrite | null = null;
@@ -602,8 +574,7 @@ const runUpdateMode = async (ctx: ModeContext): Promise<ModeResult | number> => 
   const assetManifest: Record<string, AssetTemplateMeta> = {};
 
   for (const tpl of loadedTemplates) {
-    const nextParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-    const nextNormalized = jsonText(nextParsed);
+    const nextNormalized = normalizedTemplateText(tpl);
 
     assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(nextNormalized) };
   }
@@ -622,8 +593,7 @@ const runInstallMode = async (ctx: ModeContext): Promise<ModeResult> => {
 
     baseSnapshots[tpl.asset] = base;
 
-    const desiredParsed = parseJsoncOrThrow(`assets/${tpl.asset}`, tpl.templateText);
-    const desiredNormalized = jsonText(desiredParsed);
+    const desiredNormalized = normalizedTemplateText(tpl);
     const desiredInstalled = tpl.templateText;
 
     assetManifest[tpl.asset] = { sourcePath: tpl.templatePath, sha256: await sha256Hex(desiredNormalized) };
@@ -784,9 +754,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
 
     return 0;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
-    logger.error(message, undefined, err);
+    logger.error(toErrorMessage(err), undefined, err);
 
     return 1;
   }

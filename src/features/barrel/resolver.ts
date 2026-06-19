@@ -1,6 +1,7 @@
 import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
+import { isStringArray } from '../../shared/json-guards';
 import { asRecord, readJsoncFile } from '../../shared/workspace-packages';
 
 type TsconfigPaths = Record<string, ReadonlyArray<string>>;
@@ -90,7 +91,7 @@ const loadTsconfigOptions = async (tsconfigPathAbs: string, seen: Set<string>): 
   const pathsValue: TsconfigPaths | undefined = rawPaths
     ? Object.fromEntries(
         Object.entries(asRecord(rawPaths) ?? {})
-          .filter(([key, value]) => typeof key === 'string' && Array.isArray(value) && value.every(v => typeof v === 'string'))
+          .filter(([key, value]) => typeof key === 'string' && isStringArray(value))
           .map(([key, value]) => [key, value as ReadonlyArray<string>]),
       )
     : undefined;

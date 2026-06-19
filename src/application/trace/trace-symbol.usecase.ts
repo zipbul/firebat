@@ -5,6 +5,7 @@ import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan } from '../../types';
 
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
+import { toErrorMessage } from '../../shared/error-message';
 import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
 import { computeToolVersion } from '../../shared/tool-version';
 import { createArtifactStore } from '../../store/artifact';
@@ -242,9 +243,7 @@ const traceSymbolUseCase = async (input: TraceSymbolInput): Promise<TraceSymbolO
 
     return output;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
-    return { ok: false, tool: 'gildash', graph: { nodes: [], edges: [] }, evidence: [], error: message };
+    return { ok: false, tool: 'gildash', graph: { nodes: [], edges: [] }, evidence: [], error: toErrorMessage(error) };
   } finally {
     await gildash.close({ cleanup: false });
   }

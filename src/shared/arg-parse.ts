@@ -117,6 +117,12 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
   return detectors;
 };
 
+const assertKnownOption = (arg: string): void => {
+  if (arg.startsWith('-')) {
+    throw new Error(`[firebat] Unknown option: ${arg}`);
+  }
+};
+
 const normalizeTarget = (raw: string): string => {
   const trimmed = raw.trim();
 
@@ -275,9 +281,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
-    if (arg.startsWith('-')) {
-      throw new Error(`[firebat] Unknown option: ${arg}`);
-    }
+    assertKnownOption(arg);
 
     targets.push(normalizeTarget(arg));
   }
@@ -296,4 +300,4 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   };
 };
 
-export { parseArgs };
+export { assertKnownOption, parseArgs };

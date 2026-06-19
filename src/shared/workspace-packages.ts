@@ -2,6 +2,7 @@ import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 import { scanGlobsToAbsolutePaths } from './glob-scan';
+import { isStringArray } from './json-guards';
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== 'object') {
@@ -90,13 +91,13 @@ const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, s
     const parsedRecord = asRecord(parsed);
     const workspacesRaw = parsedRecord?.workspaces;
 
-    if (Array.isArray(workspacesRaw) && workspacesRaw.every(v => typeof v === 'string')) {
-      patterns = workspacesRaw as string[];
+    if (isStringArray(workspacesRaw)) {
+      patterns = workspacesRaw;
     } else if (workspacesRaw && typeof workspacesRaw === 'object') {
       const packages = asRecord(workspacesRaw)?.packages;
 
-      if (Array.isArray(packages) && packages.every(v => typeof v === 'string')) {
-        patterns = packages as string[];
+      if (isStringArray(packages)) {
+        patterns = packages;
       }
     }
   }

@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 
 import { DETECTOR_ALIASES } from '../types';
+import { toErrorMessage } from './error-message';
 import { FirebatConfigSchema, type FirebatConfig } from './firebat-config';
 
 const DEFAULT_FIREBAT_RC_BASENAME = '.firebatrc.jsonc';
@@ -33,9 +34,7 @@ const loadFirebatConfigFile = async (params: LoadFirebatConfigParams): Promise<L
   try {
     parsed = Bun.JSONC.parse(raw);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
-    throw new Error(`[firebat] Failed to parse config: ${resolvedPath}\n${message}`, { cause: err });
+    throw new Error(`[firebat] Failed to parse config: ${resolvedPath}\n${toErrorMessage(err)}`, { cause: err });
   }
 
   // Apply detector alias remapping for backward compatibility (e.g. 'exception-hygiene' → 'error-flow')

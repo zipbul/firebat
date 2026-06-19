@@ -41,6 +41,7 @@ import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../feat
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createFirebatProgram, loadFirebatConfigFile, computeToolVersion, resolveRuntimeContextFromCwd } from '../../shared';
+import { toErrorMessage } from '../../shared/error-message';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
@@ -183,9 +184,7 @@ const loadConfig = async (
 
     return { config: loaded.config, configError: null };
   } catch (err) {
-    const configError = err instanceof Error ? err.message : String(err);
-
-    return { config: null, configError };
+    return { config: null, configError: toErrorMessage(err) };
   }
 };
 
@@ -843,9 +842,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
             logger,
           }).catch(err => {
-            const message = err instanceof Error ? err.message : String(err);
-
-            metaErrors.format = message;
+            metaErrors.format = toErrorMessage(err);
 
             return null;
           })
@@ -859,9 +856,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
             logger,
           }).catch(err => {
-            const message = err instanceof Error ? err.message : String(err);
-
-            metaErrors.lint = message;
+            metaErrors.lint = toErrorMessage(err);
 
             return null;
           })
@@ -952,9 +947,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           } catch (err) {
             detectorTimings.typecheck = nowMs() - t0;
 
-            const message = err instanceof Error ? err.message : String(err);
-
-            metaErrors.typecheck = message;
+            metaErrors.typecheck = toErrorMessage(err);
 
             logger.debug('detector: failed', {
               detector: detectorKey,
@@ -1039,9 +1032,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
         return result;
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-
-        metaErrors['error-flow'] = message;
+        metaErrors['error-flow'] = toErrorMessage(err);
 
         finishDetector(detectorRunCtx, 'error-flow', t0);
 

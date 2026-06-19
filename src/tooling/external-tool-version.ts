@@ -1,5 +1,7 @@
 import type { FirebatLogger } from '../shared/logger';
 
+import { toErrorMessage } from '../shared/error-message';
+
 interface ExternalToolVersionInput {
   readonly tool: string;
   readonly cmdPath: string;
@@ -84,10 +86,8 @@ export const logExternalToolVersionOnce = async (input: ExternalToolVersionInput
       });
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-
     cache.set(key, null);
 
-    input.logger.warn(`${input.tool}: failed to resolve version`, { message });
+    input.logger.warn(`${input.tool}: failed to resolve version`, { message: toErrorMessage(err) });
   }
 };

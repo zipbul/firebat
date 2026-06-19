@@ -140,11 +140,10 @@ export const routeFirebatArgv = (argv: readonly string[]): FirebatArgvRoute => {
   const subcommandIndex = findSubcommandIndex(argv);
   const subcommandToken = subcommandIndex === null ? undefined : argv[subcommandIndex];
   const subcommand = subcommandToken ? normalizeSubcommand(subcommandToken) : undefined;
+  const argvWithoutSubcommand = subcommandIndex === null ? argv : argv.filter((_, idx) => idx !== subcommandIndex);
   const scanArgv =
-    subcommandIndex !== null && normalizeSubcommand(subcommandToken ?? '') === 'scan'
-      ? argv.filter((_, idx) => idx !== subcommandIndex)
-      : argv;
-  const subcommandArgv = subcommandIndex === null ? [] : stripGlobalLogFlags(argv.filter((_, idx) => idx !== subcommandIndex));
+    subcommandIndex !== null && normalizeSubcommand(subcommandToken ?? '') === 'scan' ? argvWithoutSubcommand : argv;
+  const subcommandArgv = subcommandIndex === null ? [] : stripGlobalLogFlags(argvWithoutSubcommand);
 
   return {
     subcommand,

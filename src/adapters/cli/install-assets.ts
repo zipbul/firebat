@@ -1,5 +1,7 @@
 import * as path from 'node:path';
 
+import { failWithMessage } from '../../shared/error-message';
+
 const OXLINT_RC_JSONC = `{
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["unicorn", "typescript", "oxc", "import", "promise", "node", "jsdoc", "jest"],
@@ -147,13 +149,9 @@ interface LoadedTextFile {
   readonly text: string;
 }
 
-const failLoadText = (message: string): never => {
-  throw new Error(message);
-};
-
 const loadFirstExistingText = async (candidates: ReadonlyArray<string>): Promise<LoadedTextFile> => {
   if (candidates.length === 0) {
-    return failLoadText('[firebat] No asset candidates provided. Ensure the firebat package includes assets/.');
+    return failWithMessage('[firebat] No asset candidates provided. Ensure the firebat package includes assets/.');
   }
 
   for (const filePath of candidates) {
@@ -170,7 +168,7 @@ const loadFirstExistingText = async (candidates: ReadonlyArray<string>): Promise
     }
   }
 
-  return failLoadText('[firebat] Could not locate packaged assets/. Ensure the firebat package includes assets/.');
+  return failWithMessage('[firebat] Could not locate packaged assets/. Ensure the firebat package includes assets/.');
 };
 
 const resolveAssetCandidates = (assetFileName: string): string[] => {

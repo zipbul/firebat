@@ -1,5 +1,6 @@
 import type { FirebatLogger } from '../../shared/logger';
 
+import { toErrorMessage } from '../../shared/error-message';
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
 import { detectToolFailure } from '../tool-failure';
@@ -120,7 +121,7 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
       rawStderr: stderr,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = toErrorMessage(err);
 
     logger.error('oxfmt: spawn failed', { message }, err);
 
