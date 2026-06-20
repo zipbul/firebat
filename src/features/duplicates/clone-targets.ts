@@ -107,12 +107,43 @@ const isParamPassthroughDelegation = (fn: FunctionLikeNode): boolean => {
   return call.arguments.every(arg => isSimpleIdentifier(arg) && paramNames.has(arg.name));
 };
 
+// 단일 필드 projection: `x => x.a.b` 처럼 본문이 파라미터를 뿌리로 한 비계산 member-access
+// 체인뿐인 화살표. 분기·계산·호출이 없어 결정을 담지 않는 selector 골격(K). computed 접근·
+// 호출·블록 본문·항등(`x => x`)은 제외.
+const isSimpleParamProjection = (fn: FunctionLikeNode): boolean => {
+  const params = fn.params ?? [];
+
+  if (params.length !== 1 || !isSimpleIdentifier(params[0])) {
+    return false;
+  }
+
+  const body = fn.body;
+
+  if (body === null || body === undefined || body.type !== 'MemberExpression') {
+    return false;
+  }
+
+  let current: Node = body;
+
+  while (current.type === 'MemberExpression') {
+    const member = current as Node & { readonly computed: boolean; readonly object: Node; readonly property: Node };
+
+    if (member.computed || member.property.type !== 'Identifier') {
+      return false;
+    }
+
+    current = member.object;
+  }
+
+  return isSimpleIdentifier(current) && current.name === params[0].name;
+};
+
 const isFunctionSkeleton = (fn: FunctionLikeNode): boolean => {
   if (fn.body === null || fn.body === undefined) {
     return true;
   }
 
-  return isParamPassthroughDelegation(fn);
+  return isParamPassthroughDelegation(fn) || isSimpleParamProjection(fn);
 };
 
 export const isDecisionlessSkeleton = (node: Node): boolean => {
