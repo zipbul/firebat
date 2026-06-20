@@ -133,10 +133,25 @@ export const isDecisionlessSkeleton = (node: Node): boolean => {
   }
 
   if (t === 'TSInterfaceDeclaration' || t === 'TSTypeAliasDeclaration') {
-    // An empty contract (no members, or a non-literal type alias) is a
-    // protocol-enforcing skeleton with no decision. getContractMembers returns
-    // null for a non-literal type alias, so `?.length === 0` yields false there.
-    return getContractMembers(node)?.length === 0;
+    // An empty contract (no members) is a protocol-enforcing skeleton with no
+    // decision. getContractMembers returns null for a non-literal type alias.
+    if (getContractMembers(node)?.length === 0) {
+      return true;
+    }
+
+    // bare 별칭(synonym): 본문이 타입인자 없는 명명 타입 참조뿐인 type alias — 자기 멤버
+    // 구조가 없어 대상 타입을 따라갈 뿐, 독립적으로 드리프트할 결정이 없다 (골격).
+    if (t === 'TSTypeAliasDeclaration') {
+      const annotation = (node as Node & { readonly typeAnnotation: Node }).typeAnnotation;
+
+      if (annotation.type === 'TSTypeReference') {
+        const typeArgs = (annotation as Node & { readonly typeArguments?: (Node & { readonly params?: ReadonlyArray<Node> }) | null }).typeArguments;
+
+        return (typeArgs?.params ?? []).length === 0;
+      }
+    }
+
+    return false;
   }
 
   // 멤버가 전부 구현 없는 abstract/시그니처뿐인 클래스 = 프로토콜 강제 골격 (결정 없음)
