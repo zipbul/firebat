@@ -5,38 +5,37 @@
     "items": [
       {
         "filePath": "/virtual/stmt-run-nested-block-dead.ts",
-        "header": "1 statements",
+        "header": "5 statements",
         "kind": "node",
         "span": {
           "end": {
-            "column": 3,
-            "line": 10
+            "column": 22,
+            "line": 9
           },
           "start": {
-            "column": 2,
-            "line": 2
+            "column": 4,
+            "line": 3
           }
         }
       },
       {
         "filePath": "/virtual/stmt-run-nested-block-dead.ts",
-        "header": "1 statements",
+        "header": "5 statements",
         "kind": "node",
         "span": {
           "end": {
-            "column": 3,
-            "line": 24
+            "column": 22,
+            "line": 23
           },
           "start": {
-            "column": 2,
-            "line": 16
+            "column": 4,
+            "line": 17
           }
         }
       }
     ],
     "suggestedExtraction": {
       "params": [
-        "flag",
         "xs"
       ],
       "returns": null,

@@ -185,6 +185,12 @@ const dropOverlappingOccurrences = (occurrences: ReadonlyArray<RunOccurrence>): 
 };
 
 const classifyCandidate = (block: BlockInfo, rep: RunOccurrence, runSize: number, minSize: number): FragmentVerdict => {
+  // statement-run은 "연속된 형제 문장 덩어리"(≥2). 단일 문장의 반복은 run이 아니라 상수/표현식
+  // 중복(redundancy 영역, 비대상)이다 — 큰 단일 문장이 minSize를 넘겨도 보고하지 않는다.
+  if (rep.length < 2) {
+    return { outcome: 'rejected', reason: 'below-min-size' };
+  }
+
   if (runSize < minSize) {
     return { outcome: 'rejected', reason: 'below-min-size' };
   }

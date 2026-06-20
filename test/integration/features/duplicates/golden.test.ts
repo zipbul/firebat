@@ -65,6 +65,7 @@ describe('golden/duplicates', () => {
   rgFrag('stmt-run-nested-block-dead'); // W: if/for 등 중첩 블록 안의 공유 문장열도 대상
   rgFrag('stmt-run-leaks-binding-keep'); // K: live-out 2개 → 추출 불가
   rgFrag('stmt-run-too-small-keep'); // K: 최소 크기 미만 사소한 문장열
+  rgFrag('stmt-run-single-statement-keep'); // K: 공유가 단일 문장뿐 — run(문장 덩어리 ≥2)이 아님
   rgFrag('stmt-run-free-id-keep'); // K: 다른 함수 호출 = 다른 결정 (run 끊김)
   rgFrag('stmt-run-yield-keep'); // K: yield 포함 run은 추출 불가 (generator 프로토콜)
 
