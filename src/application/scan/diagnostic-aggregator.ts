@@ -646,14 +646,16 @@ const asArray = <T>(v: unknown): ReadonlyArray<T> => {
   return Array.isArray(v) ? (v as ReadonlyArray<T>) : [];
 };
 
+const fileOf = (item: any): string => String(item?.file ?? item?.filePath ?? '');
+
 const countGodFunctionResolves = (waste: ReadonlyArray<any>, nesting: ReadonlyArray<any>): number => {
   const hasHighCcInFile = new Set(
     nesting
       .filter((n: any) => n?.kind === 'high-cognitive-complexity')
-      .map((n: any) => String(n?.file ?? n?.filePath ?? ''))
+      .map(fileOf)
       .filter(Boolean),
   );
-  const hasWasteInFile = new Set(waste.map((w: any) => String(w?.file ?? w?.filePath ?? '')).filter(Boolean));
+  const hasWasteInFile = new Set(waste.map(fileOf).filter(Boolean));
   let count = 0;
 
   for (const f of hasHighCcInFile) {

@@ -1,22 +1,19 @@
 import * as path from 'node:path';
 
 import type { FirebatLogger } from '../../shared/logger';
+import type { JsonValue } from '../../shared/json-value';
 
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { type MemoryStore, createMemoryStore } from '../../store/memory';
 
-interface JsonObject {
-  readonly [k: string]: JsonValue;
-}
-
-type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
-
+// 프로젝트 root 컨텍스트만 필요한 입력 (list / repository 조회 공용).
 interface RootInput {
   readonly root?: string;
   readonly logger: FirebatLogger;
 }
 
-interface ReadMemoryInput {
+// 특정 memory key를 지정하는 입력 (read / delete 공용 계약).
+interface MemoryKeyInput {
   readonly root?: string;
   readonly memoryKey: string;
   readonly logger: FirebatLogger;
@@ -34,12 +31,6 @@ interface WriteMemoryInput {
   readonly logger: FirebatLogger;
 }
 
-interface DeleteMemoryInput {
-  readonly root?: string;
-  readonly memoryKey: string;
-  readonly logger: FirebatLogger;
-}
-
 const resolveProjectKey = (root: string | undefined): string => {
   const cwd = process.cwd();
 
@@ -54,12 +45,7 @@ const resolveProjectKey = (root: string | undefined): string => {
 
 const repoPromisesByProjectKey = new Map<string, Promise<MemoryStore>>();
 
-interface RepositoryInput {
-  readonly root?: string;
-  readonly logger: FirebatLogger;
-}
-
-const getRepository = async (input: RepositoryInput) => {
+const getRepository = async (input: RootInput) => {
   const projectKey = resolveProjectKey(input.root);
   const existing = repoPromisesByProjectKey.get(projectKey);
 
@@ -87,7 +73,7 @@ const listMemoriesUseCase = async (input: RootInput) => {
   return repo.listKeys({ projectKey });
 };
 
-const readMemoryUseCase = async (input: ReadMemoryInput): Promise<ReadMemoryOutput | null> => {
+const readMemoryUseCase = async (input: MemoryKeyInput): Promise<ReadMemoryOutput | null> => {
   input.logger.debug('memory:read', { memoryKey: input.memoryKey });
 
   const repoInput = input.root === undefined ? { logger: input.logger } : { root: input.root, logger: input.logger };
@@ -115,7 +101,7 @@ const writeMemoryUseCase = async (input: WriteMemoryInput): Promise<void> => {
   await repo.write({ projectKey, memoryKey: input.memoryKey, payloadJson });
 };
 
-const deleteMemoryUseCase = async (input: DeleteMemoryInput): Promise<void> => {
+const deleteMemoryUseCase = async (input: MemoryKeyInput): Promise<void> => {
   input.logger.debug('memory:delete', { memoryKey: input.memoryKey });
 
   const repoInput = input.root === undefined ? { logger: input.logger } : { root: input.root, logger: input.logger };

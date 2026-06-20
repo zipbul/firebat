@@ -16,12 +16,6 @@ import { computeInputsDigest } from '../scan/inputs-digest';
 
 type TraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
 
-interface JsonObject {
-  readonly [k: string]: JsonValue;
-}
-
-type JsonValue = null | boolean | number | string | ReadonlyArray<JsonValue> | JsonObject;
-
 interface TraceNode {
   readonly id: string;
   readonly kind: TraceNodeKind;
@@ -147,11 +141,20 @@ const collectTraceGraph = async (params: CollectTraceGraphParams): Promise<Colle
     edges.push(edge);
   };
 
+  // file node와 그 node로 향하는 references edge의 형태를 한 곳에 고정한다.
+  const addFileNode = (filePath: string): void => {
+    addNode({ id: `file:${filePath}`, kind: 'file', label: path.basename(filePath), filePath });
+  };
+
+  const addFileEdge = (from: string, filePath: string): void => {
+    addEdge({ from, to: `file:${filePath}`, kind: 'references' });
+  };
+
   const symbolNodeId = `symbol:${symbol}`;
 
   addNode({ id: symbolNodeId, kind: 'symbol', label: symbol, filePath: entryFile });
-  addNode({ id: `file:${entryFile}`, kind: 'file', label: path.basename(entryFile), filePath: entryFile });
-  addEdge({ from: symbolNodeId, to: `file:${entryFile}`, kind: 'references' });
+  addFileNode(entryFile);
+  addFileEdge(symbolNodeId, entryFile);
 
   const refs = gildash.getSemanticReferences(symbol, entryFile);
   const refsToUse = refs.slice(0, Math.max(1, maxDepth ?? 200));
@@ -167,10 +170,10 @@ const collectTraceGraph = async (params: CollectTraceGraphParams): Promise<Colle
       ? `definition:${path.basename(filePath)}:${ref.line}`
       : `${path.basename(filePath)}:${ref.line}`;
 
-    addNode({ id: `file:${filePath}`, kind: 'file', label: path.basename(filePath), filePath });
+    addFileNode(filePath);
     addNode({ id: refNodeId, kind: 'reference', label, filePath, span });
     addEdge({ from: symbolNodeId, to: refNodeId, kind: 'references', ...(ref.isDefinition ? { label: 'definition' } : {}) });
-    addEdge({ from: refNodeId, to: `file:${filePath}`, kind: 'references' });
+    addFileEdge(refNodeId, filePath);
 
     const text = await extractEvidenceText(filePath, span);
 

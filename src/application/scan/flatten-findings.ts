@@ -102,9 +102,8 @@ const findEnclosingFunction = (map: FunctionRangeMap | undefined, file: string, 
 
 const hashHex12 = (s: string): string => createHash('sha1').update(s).digest('hex').slice(0, 12);
 
-const makeFindingId = (category: string, seed: string): string => `${category}-${hashHex12(seed)}`;
-
-const makeGroupId = (category: string, seed: string): string => `${category}-${hashHex12(seed)}`;
+// finding id와 group id는 동일한 content-hash 규약(`${category}-${12hex}`)을 공유한다 — 단일 변경지점.
+const makeContentId = (category: string, seed: string): string => `${category}-${hashHex12(seed)}`;
 
 // ── Span helpers ─────────────────────────────────────────────────────────────
 
@@ -414,7 +413,7 @@ const flattenFileFinding = (
   const detail = extractDetail(finding, category);
 
   return {
-    id: makeFindingId(category, seed),
+    id: makeContentId(category, seed),
     category,
     code,
     file,
@@ -443,7 +442,7 @@ const flattenItemsFinding = (
   // Group seed: 전체 finding JSON 사용 — 같은 file 조합이지만 서로 다른 코드 블록인
   // duplicate 그룹을 구분. uniqueness 보장.
   const groupSeed = `${category}|${code}|${kind}|${JSON.stringify(finding)}`;
-  const groupId = makeGroupId(category, groupSeed);
+  const groupId = makeContentId(category, groupSeed);
   const results: Finding[] = [];
 
   for (let i = 0; i < items.length; i++) {
@@ -458,7 +457,7 @@ const flattenItemsFinding = (
     const primaryDetail = isPrimary ? extractDetail(finding, category) : null;
 
     results.push({
-      id: makeFindingId(category, itemSeed),
+      id: makeContentId(category, itemSeed),
       category,
       code,
       file,
@@ -483,6 +482,14 @@ export const flattenToFindings = (analyses: Partial<FirebatAnalyses>, functionMa
   const findings: Finding[] = [];
   const seenIds = new Set<string>();
 
+  // id 기준 중복 제거 후 수집하는 단일 규약.
+  const pushUnique = (f: Finding): void => {
+    if (!seenIds.has(f.id)) {
+      seenIds.add(f.id);
+      findings.push(f);
+    }
+  };
+
   for (const [category, items] of Object.entries(analyses)) {
     if (!Array.isArray(items)) {
       continue;
@@ -495,18 +502,10 @@ export const flattenToFindings = (analyses: Partial<FirebatAnalyses>, functionMa
 
       if (isItemsFinding(finding)) {
         for (const f of flattenItemsFinding(category, finding, labelFn, functionMap)) {
-          if (!seenIds.has(f.id)) {
-            seenIds.add(f.id);
-            findings.push(f);
-          }
+          pushUnique(f);
         }
       } else {
-        const f = flattenFileFinding(category, finding, labelFn, functionMap);
-
-        if (!seenIds.has(f.id)) {
-          seenIds.add(f.id);
-          findings.push(f);
-        }
+        pushUnique(flattenFileFinding(category, finding, labelFn, functionMap));
       }
     }
   }

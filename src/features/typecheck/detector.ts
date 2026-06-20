@@ -9,6 +9,7 @@ import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan, TypecheckItem } from '../../types';
 
 import { createNoopLogger } from '../../shared/logger';
+import { toProjectRelative } from '../../shared/to-project-relative';
 
 const createEmptySpan = (): SourceSpan => ({
   start: { line: 1, column: 1 },
@@ -46,13 +47,6 @@ const shouldIncludeDiagnostic = (category: ts.DiagnosticCategory): boolean => {
 const toSeverity = (_category: ts.DiagnosticCategory): 'error' => {
   // Policy: treat warnings as errors.
   return 'error';
-};
-
-const toProjectRelative = (rootAbs: string, filePath: string): string => {
-  const rel = path.relative(rootAbs, filePath);
-  const normalized = rel.replaceAll('\\', '/');
-
-  return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
 };
 
 const findTsconfigPath = (rootAbs: string): string | undefined => {

@@ -42,6 +42,7 @@ import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import { createFirebatProgram, loadFirebatConfigFile, computeToolVersion, resolveRuntimeContextFromCwd } from '../../shared';
 import { toErrorMessage } from '../../shared/error-message';
+import { toProjectRelative as toProjectRelativePath } from '../../shared/to-project-relative';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
@@ -306,10 +307,13 @@ const ENRICH_ZERO_SPAN = { start: { line: 0, column: 0 }, end: { line: 0, column
 const enrichFilePath = (toProjectRelative: ToProjectRelative, filePath: string): string =>
   filePath.length > 0 ? toProjectRelative(filePath) : filePath;
 
+// detector item에서 파일 경로를 꺼내는 단일 규약: filePath 우선, 없으면 file.
+const pickFilePath = (item: any): string => String(item?.filePath ?? item?.file ?? '');
+
 const enrichWaste = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
   items.map(item => {
     const kind = String(item?.kind ?? '');
-    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const filePath = pickFilePath(item);
 
     return {
       kind,
@@ -323,7 +327,7 @@ const enrichWaste = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRela
 const enrichBarrel = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
   items.map(item => {
     const kind = String(item?.kind ?? '');
-    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const filePath = pickFilePath(item);
 
     return {
       kind,
@@ -337,7 +341,7 @@ const enrichBarrel = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRel
 const enrichNesting = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
   items.map(item => {
     const kind = String(item?.kind ?? '');
-    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const filePath = pickFilePath(item);
 
     return {
       ...item,
@@ -349,7 +353,7 @@ const enrichNesting = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRe
 const enrichEarlyReturn = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
   items.map(item => {
     const kind = String(item?.kind ?? '');
-    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const filePath = pickFilePath(item);
 
     return {
       ...item,
@@ -360,7 +364,7 @@ const enrichEarlyReturn = (items: ReadonlyArray<any>, toProjectRelative: ToProje
 
 const enrichCollapsibleIf = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
   items.map(item => {
-    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const filePath = pickFilePath(item);
     const kind = String(item?.kind ?? 'collapsible-if');
     const code = COLLAPSIBLE_IF_KIND_TO_CODE[kind as keyof typeof COLLAPSIBLE_IF_KIND_TO_CODE] ?? 'COLLAPSIBLE_IF';
 
@@ -376,7 +380,7 @@ const enrichErrorFlow = (items: ReadonlyArray<any>, toProjectRelative: ToProject
     .filter((item: any) => item?.kind !== 'tool-unavailable')
     .map(item => {
       const kind = String(item?.kind ?? '');
-      const filePath = String(item?.filePath ?? item?.file ?? '');
+      const filePath = pickFilePath(item);
 
       return {
         kind,
@@ -390,7 +394,7 @@ const enrichErrorFlow = (items: ReadonlyArray<any>, toProjectRelative: ToProject
 const enrichIndirection = (items: ReadonlyArray<any>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
   items.map(item => {
     const kind = String(item?.kind ?? '');
-    const filePath = String(item?.filePath ?? item?.file ?? '');
+    const filePath = pickFilePath(item);
 
     return {
       kind,
@@ -547,7 +551,7 @@ const enrichDependencies = (value: any, toProjectRelative: ToProjectRelative): R
 };
 
 const enrichDuplicateItem = (item: any, toProjectRelative: ToProjectRelative): any => {
-  const filePath = String(item?.filePath ?? item?.file ?? '');
+  const filePath = pickFilePath(item);
 
   return {
     kind: item?.kind,
@@ -605,24 +609,23 @@ const enrichFormat = (files: ReadonlyArray<string>, toProjectRelative: ToProject
     span: ENRICH_ZERO_SPAN,
   }));
 
-const enrichLint = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
-  items.map(item => ({
-    ...item,
-    catalogCode: 'LINT' as FirebatCatalogCode,
-  }));
+// tool 진단(lint/typecheck) item에 catalogCode를 찍는 단일 변환.
+const withCatalogCode = (items: ReadonlyArray<any>, catalogCode: FirebatCatalogCode): ReadonlyArray<any> =>
+  items.map(item => ({ ...item, catalogCode }));
 
-const enrichTypecheck = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
-  items.map(item => ({
-    ...item,
-    catalogCode: 'TYPECHECK' as FirebatCatalogCode,
-  }));
+const enrichLint = (items: ReadonlyArray<any>): ReadonlyArray<any> => withCatalogCode(items, 'LINT');
+
+const enrichTypecheck = (items: ReadonlyArray<any>): ReadonlyArray<any> => withCatalogCode(items, 'TYPECHECK');
+
+// code/catalogCode 값이 알려진 카탈로그 코드면 집합에 기록하는 단일 결정.
+const addKnownCode = (value: unknown, seenCodes: Set<FirebatCatalogCode>): void => {
+  if (typeof value === 'string' && value in FIREBAT_CODE_CATALOG) {
+    seenCodes.add(value as FirebatCatalogCode);
+  }
+};
 
 const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void => {
-  const code = item?.code ?? item?.catalogCode;
-
-  if (typeof code === 'string' && code in FIREBAT_CODE_CATALOG) {
-    seenCodes.add(code as FirebatCatalogCode);
-  }
+  addKnownCode(item?.code ?? item?.catalogCode, seenCodes);
 
   const nested = item?.items;
 
@@ -631,11 +634,7 @@ const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void =
   }
 
   for (const sub of nested) {
-    const subCode = (sub as Record<string, unknown>)?.code ?? (sub as Record<string, unknown>)?.catalogCode;
-
-    if (typeof subCode === 'string' && subCode in FIREBAT_CODE_CATALOG) {
-      seenCodes.add(subCode as FirebatCatalogCode);
-    }
+    addKnownCode((sub as Record<string, unknown>)?.code ?? (sub as Record<string, unknown>)?.catalogCode, seenCodes);
   }
 };
 
@@ -1108,12 +1107,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
     );
     const selectedDetectors = new Set(options.detectors);
 
-    const toProjectRelative = (filePath: string): string => {
-      const rel = path.relative(ctx.rootAbs, filePath);
-      const normalized = rel.replaceAll('\\', '/');
-
-      return normalized.length > 0 ? normalized : filePath.replaceAll('\\', '/');
-    };
+    const toProjectRelative = (filePath: string): string => toProjectRelativePath(ctx.rootAbs, filePath);
 
     const analyses: FirebatReport['analyses'] = {
       ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste, toProjectRelative) } : {}),
