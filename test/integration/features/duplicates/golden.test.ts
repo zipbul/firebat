@@ -51,6 +51,7 @@ describe('golden/duplicates', () => {
   rg('type-alias-diff-bodies-keep'); // 타입 선언 본문은 결정 그 자체 — 치환 금지
   rg('interface-member-order-keep'); // 멤버 순서 다름 = 정규형 어긋남
   rg('lookup-table-diff-content-keep'); // 규칙 데이터의 리터럴은 결정 그 자체 — 치환 금지
+  rg('flat-constant-list-keep'); // 비대상: 평탄 스칼라 리스트는 단일 상수 값 (룩업 테이블 아님)
 
   // ════════════════════════════════════════════════════════════════════════
   // statement run — 함수 내부 연속 문장열 클론 (CLAUDE.md 닫힌 규칙)

@@ -183,7 +183,13 @@ const isDataTableDeclarator = (node: Node): boolean => {
   if (init.type === 'ArrayExpression') {
     const elements = (init as Node & { readonly elements: ReadonlyArray<Node | null> }).elements;
 
-    return elements.length >= 2 && elements.every(isStaticElement);
+    // 룩업 테이블 = 행(row)의 배열. 모든 원소가 구조화된 값(객체·배열 = 행)이어야 한다.
+    // 평탄한 스칼라 리스트(['a','b','c'])는 "단일 상수 값의 반복"(redundancy 영역, 비대상)
+    // 이지 규칙 데이터가 아니다.
+    return (
+      elements.length >= 2 &&
+      elements.every(el => el !== null && (el.type === 'ObjectExpression' || el.type === 'ArrayExpression') && isStaticElement(el))
+    );
   }
 
   return false;
