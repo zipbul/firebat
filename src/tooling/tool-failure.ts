@@ -31,4 +31,21 @@ const detectToolFailure = (input: ToolFailureInput): ToolFailureResult => {
   return { looksLikeFailure, summary };
 };
 
-export { detectToolFailure };
+interface ToolRunOutcome {
+  readonly ok: boolean;
+  readonly error?: string;
+}
+
+/**
+ * 외부 도구 실행 결과가 실패면(`ok === false`) 그 error(없으면 기본 메시지)로 throw 한다.
+ * format/lint 분석기가 공유하는 "실행 실패 → 예외" 단일 변경지점.
+ */
+const throwIfToolRunFailed = (result: ToolRunOutcome, defaultMessage: string): void => {
+  if (!result.ok) {
+    const error = result.error ?? defaultMessage;
+
+    throw new Error(error);
+  }
+};
+
+export { detectToolFailure, throwIfToolRunFailed };

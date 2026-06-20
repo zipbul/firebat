@@ -5,7 +5,7 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import type { ParsedFile } from '../../engine/types';
 import type { NestingItem, NestingKind, SourceSpan } from '../../types';
 
-import { forEachChildNode, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, getMemberPropertyName, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
 
@@ -176,8 +176,7 @@ const getIterationTarget = (node: Node): string | null => {
     }
 
     const objName = getMemberObjectIdentifier(right);
-    const prop = right.property;
-    const propName = prop.type === 'Identifier' ? prop.name : null;
+    const propName = getMemberPropertyName(right);
 
     if (objName && propName === 'length') {
       return objName;
@@ -193,8 +192,7 @@ const getIterationTarget = (node: Node): string | null => {
       return null;
     }
 
-    const prop = callee.property;
-    const propName = prop.type === 'Identifier' ? prop.name : null;
+    const propName = getMemberPropertyName(callee);
 
     if (!propName || !isIterationMethod(propName)) {
       return null;
@@ -229,6 +227,9 @@ const isTestRunnerCall = (callee: Node): boolean => {
   return false;
 };
 
+/** Keep the larger of the running maximum and a freshly measured depth. */
+const keepMaxDepth = (max: number, candidate: number): number => (candidate > max ? candidate : max);
+
 /**
  * Fold the maximum of `measure(child, depth)` over a node's direct children.
  * The "scan children, keep the deepest" step shared by the recursive
@@ -243,11 +244,7 @@ const scanChildrenMaxDepth = (
   let max = depth;
 
   forEachChildNode(node, child => {
-    const d = measure(child, depth);
-
-    if (d > max) {
-      max = d;
-    }
+    max = keepMaxDepth(max, measure(child, depth));
   });
 
   return max;
@@ -265,11 +262,8 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
     let max = depth;
     const callee = node.callee;
     const isTestRunner = isTestRunnerCall(callee);
-    const d = measureMaxCallbackDepth(callee, depth);
 
-    if (d > max) {
-      max = d;
-    }
+    max = keepMaxDepth(max, measureMaxCallbackDepth(callee, depth));
 
     for (const arg of args) {
       if (isFunctionNode(arg)) {
@@ -281,17 +275,9 @@ const measureMaxCallbackDepth = (node: Node, depth: number = 0): number => {
           continue;
         }
 
-        const d = measureMaxCallbackDepth(callbackBody, isTestRunner ? depth : depth + 1);
-
-        if (d > max) {
-          max = d;
-        }
+        max = keepMaxDepth(max, measureMaxCallbackDepth(callbackBody, isTestRunner ? depth : depth + 1));
       } else {
-        const d = measureMaxCallbackDepth(arg, depth);
-
-        if (d > max) {
-          max = d;
-        }
+        max = keepMaxDepth(max, measureMaxCallbackDepth(arg, depth));
       }
     }
 
@@ -351,17 +337,9 @@ const measurePromiseChainDepth = (node: Node, depth: number = 0): number => {
         }
 
         // Nested chains inside callbacks count from the current chain depth
-        const d = measurePromiseChainDepth(callbackBody, chainDepth);
-
-        if (d > max) {
-          max = d;
-        }
+        max = keepMaxDepth(max, measurePromiseChainDepth(callbackBody, chainDepth));
       } else {
-        const d = measurePromiseChainDepth(arg, depth);
-
-        if (d > max) {
-          max = d;
-        }
+        max = keepMaxDepth(max, measurePromiseChainDepth(arg, depth));
       }
     }
 

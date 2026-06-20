@@ -5,6 +5,8 @@ import { visitorKeys } from 'oxc-parser';
 
 import type { NodeRecord, NodeValue } from '../types';
 
+import { addNonEmptyString } from '../../shared/string-set';
+
 export { isFunctionNode };
 
 /** 비배열 객체 판정 — OXC Node·NodeRecord 가드의 단일 결정 지점. */
@@ -37,6 +39,25 @@ export const getNodeName = (node: Node | null | undefined): string | null => {
   }
 
   return null;
+};
+
+/**
+ * Node의 이름을 꺼내 비어 있지 않은 문자열이면 집합에 추가하는 단일 결정.
+ * "이름 추출 → 유효성(문자열·비어있지 않음) 검사 → 등록"의 변경지점이다.
+ */
+export const addNodeNameIfValid = (names: Set<string>, node: Node | null | undefined): void => {
+  addNonEmptyString(names, getNodeName(node));
+};
+
+/**
+ * MemberExpression의 property가 Identifier면 그 이름을, 아니면 null을 돌려준다.
+ * `obj.prop` 에서 메서드/프로퍼티 이름을 꺼내는 결정의 단일 변경지점.
+ * (호출부는 member가 MemberExpression임을 보장한다.)
+ */
+export const getMemberPropertyName = (member: Node): string | null => {
+  const prop = asRecord(member).property;
+
+  return isOxcNode(prop) && prop.type === 'Identifier' ? getNodeName(prop) : null;
 };
 
 export const getLiteralString = (node: Node | null | undefined): string | null => {

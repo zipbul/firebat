@@ -66,6 +66,13 @@ interface NestingReductionItem<TKind> {
 }
 
 /**
+ * 중첩 줄이기 기회들의 총점 = Σ(depthReduction × statementsAffected).
+ * early-return / collapsible-if 가 임계 비교에 쓰는 점수의 단일 변경지점.
+ */
+const computeNestingReductionScore = <TKind>(opportunities: ReadonlyArray<NestingReductionOpportunity<TKind>>): number =>
+  opportunities.reduce((sum, o) => sum + o.depthReduction * o.statementsAffected, 0);
+
+/**
  * 함수 단위 finding 조립: 영향도(depthReduction × statementsAffected)가 가장 큰
  * 기회의 kind를 대표 kind로 삼고, 메트릭을 합산한다.
  * `opportunities` 는 비어 있지 않다고 가정한다 (호출부에서 보장).
@@ -100,5 +107,5 @@ const buildNestingReductionItem = <TKind>(
   };
 };
 
-export { buildNestingReductionItem, collectFunctionItems };
+export { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore };
 export type { FunctionNodeAnalyzer, NestingReductionOpportunity };

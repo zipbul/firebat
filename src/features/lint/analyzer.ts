@@ -3,6 +3,7 @@ import type { LintDiagnostic } from '../../types';
 
 import { createNoopLogger } from '../../shared/logger';
 import { runOxlint } from '../../tooling/oxlint/oxlint-runner';
+import { throwIfToolRunFailed } from '../../tooling/tool-failure';
 
 const createEmptyLint = (): ReadonlyArray<LintDiagnostic> => [];
 
@@ -41,11 +42,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArra
     })
     .filter((d): d is NonNullable<typeof d> => d !== null);
 
-  if (!result.ok) {
-    const error = result.error ?? 'oxlint failed';
-
-    throw new Error(error);
-  }
+  throwIfToolRunFailed(result, 'oxlint failed');
 
   if (input.fix) {
     return [];

@@ -6,16 +6,13 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import { Visitor } from 'oxc-parser';
 
 import type { CfgNodePayload, ParsedFile } from '../../engine/types';
+import type { GildashAnalysisInput } from '../../shared/gildash-analysis-input';
 import type { TemporalCouplingFinding } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { addNodeNameIfValid, getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
 import { EdgeType } from '../../engine/cfg/cfg-types';
-
-interface AnalyzeTemporalCouplingInput {
-  readonly gildash?: Gildash;
-}
 
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];
 
@@ -38,11 +35,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
 
       if (decl !== null) {
         if (decl.type === 'FunctionDeclaration') {
-          const name = getNodeName(decl.id);
-
-          if (typeof name === 'string' && name.length > 0) {
-            names.add(name);
-          }
+          addNodeNameIfValid(names, decl.id);
         } else if (decl.type === 'VariableDeclaration') {
           for (const declarator of decl.declarations) {
             const init = declarator.init;
@@ -51,22 +44,14 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
               continue;
             }
 
-            const name = getNodeName(declarator.id);
-
-            if (typeof name === 'string' && name.length > 0) {
-              names.add(name);
-            }
+            addNodeNameIfValid(names, declarator.id);
           }
         }
       }
 
       // re-export: export { init, query }
       for (const specifier of node.specifiers) {
-        const localName = getNodeName(specifier.local);
-
-        if (typeof localName === 'string' && localName.length > 0) {
-          names.add(localName);
-        }
+        addNodeNameIfValid(names, specifier.local);
       }
     },
 
@@ -77,11 +62,7 @@ const collectExportedFunctionNames = (program: Node): Set<string> => {
         return;
       }
 
-      const name = getNodeName(decl.id);
-
-      if (typeof name === 'string' && name.length > 0) {
-        names.add(name);
-      }
+      addNodeNameIfValid(names, decl.id);
     },
   }).visit(program as Program);
 
@@ -1334,7 +1315,7 @@ const shouldSuppressByCallGraph = (
 
 const analyzeTemporalCoupling = (
   files: ReadonlyArray<ParsedFile>,
-  input?: AnalyzeTemporalCouplingInput,
+  input?: GildashAnalysisInput,
 ): ReadonlyArray<TemporalCouplingFinding> => {
   if (files.length === 0) {
     return createEmptyTemporalCoupling();

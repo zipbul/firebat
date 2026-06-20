@@ -8,15 +8,9 @@ import { Visitor } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
-import { getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
+import { getMemberPropertyName, getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
-
-/* ------------------------------------------------------------------ */
-/*  Path utilities                                                     */
-/* ------------------------------------------------------------------ */
-
-/** Ensure a path from gildash (may be project-relative) is absolute. */
-const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
+import { resolveAbs } from '../../shared/path-resolve';
 
 /* ------------------------------------------------------------------ */
 /*  AST utilities — thin-wrapper detection                             */
@@ -73,8 +67,7 @@ const collectArityProtectiveArrows = (program: Node): Set<number> => {
       return true;
     }
 
-    const property = callee.property;
-    const methodName = property.type === 'Identifier' ? property.name : null;
+    const methodName = getMemberPropertyName(callee);
 
     if (methodName !== null && ARITY_SENSITIVE_HIGH_ORDER_METHODS.has(methodName)) {
       arrowStarts.add(node.start);
@@ -706,6 +699,23 @@ interface CrossFileWrapper {
   targetKey: string | null;
 }
 
+/**
+ * Resolve a `TSTypeReference` type name to a readable string:
+ * an `Identifier` yields its name, a `TSQualifiedName` its dotted header.
+ * Returns null for any other shape. Single change-point for type-remap targets.
+ */
+const resolveTypeReferenceName = (typeName: Node): string | null => {
+  if (typeName.type === 'Identifier') {
+    return typeName.name;
+  }
+
+  if (typeName.type === 'TSQualifiedName') {
+    return getNodeHeader(typeName);
+  }
+
+  return null;
+};
+
 const analyzeIndirection = async (
   gildash: Gildash,
   files: ReadonlyArray<ParsedFile>,
@@ -857,15 +867,7 @@ const analyzeIndirection = async (
 
         if (typeArgs === null && typeParams === null) {
           const header = node.id.name;
-          const typeName = typeAnnotation.typeName;
-          let targetName = 'unknown';
-
-          if (typeName.type === 'Identifier') {
-            targetName = typeName.name;
-          } else if (typeName.type === 'TSQualifiedName') {
-            targetName = getNodeHeader(typeName);
-          }
-
+          const targetName = resolveTypeReferenceName(typeAnnotation.typeName) ?? 'unknown';
           const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
 
           addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, header, 1, evidence);
@@ -873,14 +875,7 @@ const analyzeIndirection = async (
           // Semantic verification: complex aliases (with type args/params) may still be structurally equivalent
           // e.g. type A = Readonly<B> where B is already fully readonly — bidirectional assignability confirms equivalence
           const aliasHeader = node.id.name;
-          const typeName = typeAnnotation.typeName;
-          let targetTypeName: string | null = null;
-
-          if (typeName.type === 'Identifier') {
-            targetTypeName = typeName.name;
-          } else if (typeName.type === 'TSQualifiedName') {
-            targetTypeName = getNodeHeader(typeName);
-          }
+          const targetTypeName = resolveTypeReferenceName(typeAnnotation.typeName);
 
           if (targetTypeName === null) {
             return;

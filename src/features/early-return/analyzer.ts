@@ -5,8 +5,8 @@ import type { EarlyReturnItem, EarlyReturnKind, SourceSpan } from '../../types';
 
 import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
-import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
-import { buildNestingReductionItem, collectFunctionItems } from '../../engine/function-items';
+import { countBlockStatements, resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
+import { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore } from '../../engine/function-items';
 
 const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 
@@ -69,22 +69,16 @@ const isLoopGuardBlock = (node: Node): boolean => {
 };
 
 const countStatements = (node: Node): number => {
-  if (node.type !== 'BlockStatement') {
-    // For else-if chains: when alternate is an IfStatement, recursively
-    // count all statements across the entire chain to get a true total.
-    if (node.type === 'IfStatement') {
-      const consequentCount = countStatements(node.consequent);
-      const alternateCount = node.alternate !== null ? countStatements(node.alternate) : 0;
+  // For else-if chains: when alternate is an IfStatement, recursively
+  // count all statements across the entire chain to get a true total.
+  if (node.type === 'IfStatement') {
+    const consequentCount = countStatements(node.consequent);
+    const alternateCount = node.alternate !== null ? countStatements(node.alternate) : 0;
 
-      return consequentCount + alternateCount;
-    }
-
-    return 1;
+    return consequentCount + alternateCount;
   }
 
-  const body = node.body;
-
-  return Array.isArray(body) ? body.length : 0;
+  return countBlockStatements(node);
 };
 
 /**
@@ -526,7 +520,7 @@ const analyzeFunctionNode = (
   }
 
   // score = Σ(depthReduction × statementsAffected)
-  const totalScore = opportunities.reduce((sum, o) => sum + o.depthReduction * o.statementsAffected, 0);
+  const totalScore = computeNestingReductionScore(opportunities);
 
   if (totalScore < 2) {
     return null;

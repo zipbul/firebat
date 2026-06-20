@@ -5,6 +5,7 @@ import type { FirebatDetector, MinSizeOption } from '../types';
 import type { FirebatLogLevel } from './firebat-config';
 
 import { DETECTOR_ALIASES } from '../types';
+import { splitTrimNonEmpty } from './split-lines';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
 const DEFAULT_MAX_FORWARD_DEPTH = 0;
@@ -63,10 +64,7 @@ const parseMinSize = (value: string): MinSizeOption => {
 };
 
 const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
-  const selections = value
-    .split(',')
-    .map(entry => entry.trim())
-    .filter(entry => entry.length > 0);
+  const selections = splitTrimNonEmpty(value, ',');
 
   if (selections.length === 0) {
     throw new Error('[firebat] Missing value for --only');

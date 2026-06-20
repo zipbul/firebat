@@ -2,15 +2,7 @@ import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 import { scanGlobsToAbsolutePaths } from './glob-scan';
-import { isStringArray } from './json-guards';
-
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-};
+import { asRecordOrNull as asRecord, isStringArray } from './json-guards';
 
 const readJsoncFile = async (filePathAbs: string): Promise<unknown | null> => {
   try {

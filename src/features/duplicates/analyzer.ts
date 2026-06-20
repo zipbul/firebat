@@ -143,9 +143,7 @@ const isStaticValue = (node: Node): boolean => {
   }
 
   if (node.type === 'ArrayExpression') {
-    return (node as Node & { readonly elements: ReadonlyArray<Node | null> }).elements.every(
-      el => el !== null && isStaticValue(el),
-    );
+    return (node as Node & { readonly elements: ReadonlyArray<Node | null> }).elements.every(isStaticElement);
   }
 
   return false;
@@ -160,6 +158,9 @@ const isStaticProperty = (prop: Node): boolean => {
 
   return !p.computed && isStaticValue(p.value);
 };
+
+/** An array element is static when it is present (non-hole) and itself a static value. */
+const isStaticElement = (el: Node | null): boolean => el !== null && isStaticValue(el);
 
 const isDataTableDeclarator = (node: Node): boolean => {
   if (node.type !== 'VariableDeclarator') {
@@ -182,7 +183,7 @@ const isDataTableDeclarator = (node: Node): boolean => {
   if (init.type === 'ArrayExpression') {
     const elements = (init as Node & { readonly elements: ReadonlyArray<Node | null> }).elements;
 
-    return elements.length >= 2 && elements.every(el => el !== null && isStaticValue(el));
+    return elements.length >= 2 && elements.every(isStaticElement);
   }
 
   return false;

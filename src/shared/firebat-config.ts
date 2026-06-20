@@ -1,5 +1,7 @@
 import * as z from 'zod';
 
+import type { DependencyLayerRule } from './dependency-layer-rule';
+
 const LOG_LEVELS = ['error', 'warn', 'info', 'debug', 'trace'] as const;
 
 type FirebatLogLevel = (typeof LOG_LEVELS)[number];
@@ -50,13 +52,8 @@ interface FirebatBarrelConfig {
   readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
 }
 
-interface FirebatDependencyLayerConfig {
-  readonly name: string;
-  readonly glob: string;
-}
-
 interface FirebatDependenciesConfig {
-  readonly layers: ReadonlyArray<FirebatDependencyLayerConfig>;
+  readonly layers: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
 }
 

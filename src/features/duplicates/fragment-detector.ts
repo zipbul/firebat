@@ -353,11 +353,8 @@ const collectMaximalRuns = (
 
 // ─── 추출 안전성 ──────────────────────────────────────────────────────────────
 
-/** 추출 계획: 파라미터(외부 지역변수)·반환값(단일 live-out)·this 사용 — 전부 결정적. */
-const buildExtractionPlan = (block: BlockInfo, start: number, length: number): ExtractionPlan => {
-  const run = block.statements.slice(start, start + length);
-  const after = block.statements.slice(start + length);
-
+/** 문장 런이 선언하는 모든 바인딩 이름을 모은다. */
+const collectDeclaredNames = (run: ReadonlyArray<Node>): Set<string> => {
   const declared = new Set<string>();
 
   for (const stmt of run) {
@@ -366,6 +363,14 @@ const buildExtractionPlan = (block: BlockInfo, start: number, length: number): E
     }
   }
 
+  return declared;
+};
+
+/** 추출 계획: 파라미터(외부 지역변수)·반환값(단일 live-out)·this 사용 — 전부 결정적. */
+const buildExtractionPlan = (block: BlockInfo, start: number, length: number): ExtractionPlan => {
+  const run = block.statements.slice(start, start + length);
+  const after = block.statements.slice(start + length);
+  const declared = collectDeclaredNames(run);
   const referenced = collectReferencedNames(run);
   // 파라미터 = 런이 읽지만 런 밖(둘러싼 함수)에서 선언된 지역변수. 전역·callee는 boundNames에 없어 제외.
   const params = [...referenced].filter(n => block.boundNames.has(n) && !declared.has(n)).sort();
@@ -425,13 +430,7 @@ const extractSafety = (block: BlockInfo, start: number, length: number): Extract
   }
 
   // live-out: run에서 선언한 바인딩 중 run 밖에서 쓰이는 것
-  const declared = new Set<string>();
-
-  for (const stmt of run) {
-    for (const name of collectBindingNames(stmt)) {
-      declared.add(name);
-    }
-  }
+  const declared = collectDeclaredNames(run);
 
   if (declared.size === 0) {
     return 'ok';

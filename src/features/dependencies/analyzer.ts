@@ -15,8 +15,12 @@ import type {
   DependencyDuplicateExportFinding,
   DependencyUnusedMemberFinding,
 } from '../../types';
+import type { DependencyLayerRule } from '../../shared/dependency-layer-rule';
 
 import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
+import { globToRegExp } from '../../shared/glob-regex';
+import { pushToMultiMap } from '../../shared/multi-map';
+import { resolveAbs } from '../../shared/path-resolve';
 
 const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
   return [...items].sort((left, right) => {
@@ -50,17 +54,9 @@ const createEmptyDependencies = (): DependencyAnalysis => ({
 
 const toRelativePath = (rootAbs: string, value: string): string => normalizePath(path.relative(rootAbs, value));
 
-/** Ensure a path from gildash (may be project-relative) is absolute. */
-const resolveAbs = (rootAbs: string, p: string): string => normalizePath(path.isAbsolute(p) ? p : path.resolve(rootAbs, p));
-
 /* ------------------------------------------------------------------ */
 /*  Layer matching                                                     */
 /* ------------------------------------------------------------------ */
-
-interface DependencyLayerRule {
-  readonly name: string;
-  readonly glob: string;
-}
 
 interface AnalyzeDependenciesInput {
   readonly rootAbs?: string;
@@ -72,48 +68,6 @@ interface AnalyzeDependenciesInput {
   /** Glob patterns for dependencies to ignore in unused dependency detection. */
   readonly ignoreDependencies?: ReadonlyArray<string>;
 }
-
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const globToRegExp = (pattern: string): RegExp => {
-  const normalized = normalizePath(pattern);
-  let out = '^';
-  let i = 0;
-
-  while (i < normalized.length) {
-    const ch = normalized[i] ?? '';
-
-    if (ch === '*') {
-      const next = normalized[i + 1];
-
-      if (next === '*') {
-        out += '.*';
-        i += 2;
-
-        continue;
-      }
-
-      out += '[^/]*';
-      i += 1;
-
-      continue;
-    }
-
-    if (ch === '?') {
-      out += '[^/]';
-      i += 1;
-
-      continue;
-    }
-
-    out += escapeRegex(ch);
-    i += 1;
-  }
-
-  out += '$';
-
-  return new RegExp(out);
-};
 
 const compileLayerMatchers = (
   layers: ReadonlyArray<DependencyLayerRule>,
@@ -170,10 +124,13 @@ const extractPackageName = (specifier: string): string | null => {
 
 const isBuiltinModule = (name: string): boolean => name === 'bun' || name.startsWith('node:') || name.startsWith('bun:');
 
+/** Read and JSON-parse the package.json under `rootAbs`. Callers wrap this in their own try/catch fallbacks. */
+const readPackageJson = (rootAbs: string, readFn: (p: string) => string): Record<string, unknown> =>
+  JSON.parse(readFn(path.join(rootAbs, 'package.json'))) as Record<string, unknown>;
+
 const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
   try {
-    const raw = readFn(path.join(rootAbs, 'package.json'));
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = readPackageJson(rootAbs, readFn);
     const deps = new Set<string>();
     const fields = ['dependencies', 'devDependencies'] as const;
 
@@ -196,8 +153,7 @@ const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string)
 /** Extract package names referenced in scripts (binary usage like `oxlint`, `knip`, `husky`, etc.). */
 const readScriptBinaries = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
   try {
-    const raw = readFn(path.join(rootAbs, 'package.json'));
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = readPackageJson(rootAbs, readFn);
     const scripts = parsed.scripts;
     const bins = new Set<string>();
 
@@ -237,8 +193,7 @@ const readScriptBinaries = (rootAbs: string, readFn: (p: string) => string): Set
 
 const readPackageName = (rootAbs: string, readFn: (p: string) => string): string | null => {
   try {
-    const raw = readFn(path.join(rootAbs, 'package.json'));
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = readPackageJson(rootAbs, readFn);
 
     return typeof parsed.name === 'string' ? parsed.name : null;
   } catch {
@@ -252,8 +207,7 @@ const readPackageName = (rootAbs: string, readFn: (p: string) => string): string
 
 const readPackageEntrypoints = (rootAbs: string, readFn: (p: string) => string): ReadonlyArray<string> => {
   try {
-    const raw = readFn(path.join(rootAbs, 'package.json'));
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = readPackageJson(rootAbs, readFn);
     const out: string[] = [];
 
     const collectStrings = (node: unknown): void => {
@@ -381,6 +335,43 @@ const buildEdgeCutHints = (
 /*  Main analysis function                                             */
 /* ------------------------------------------------------------------ */
 
+interface ExportEntry {
+  name: string;
+  kind: string;
+  detail: SymbolDetail;
+}
+
+type Relation = ReturnType<Gildash['searchRelations']>[number];
+
+/**
+ * Collect re-export entries from `rels` into `exportsByFile`: for each relation
+ * passing `shouldInclude` (and carrying a src symbol/file), add a re-export entry
+ * keyed by its absolute file, skipping names already recorded for that file.
+ * Single change-point for the two re-export collection passes (re-exports + type re-exports).
+ */
+const collectReExportEntries = (
+  exportsByFile: Map<string, ExportEntry[]>,
+  rootAbs: string,
+  rels: ReadonlyArray<Relation>,
+  shouldInclude?: (rel: Relation) => boolean,
+): void => {
+  for (const rel of rels) {
+    if ((shouldInclude !== undefined && !shouldInclude(rel)) || !rel.srcSymbolName || !rel.srcFilePath) {
+      continue;
+    }
+
+    const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
+    const existing = exportsByFile.get(absFilePath) ?? [];
+
+    if (existing.some(s => s.name === rel.srcSymbolName)) {
+      continue;
+    }
+
+    existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
+    exportsByFile.set(absFilePath, existing);
+  }
+};
+
 const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependenciesInput): Promise<DependencyAnalysis> => {
   const empty = createEmptyDependencies();
   const rootAbs = input?.rootAbs ?? process.cwd();
@@ -486,57 +477,27 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
   // 5. Export stats via searchSymbols
   const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
-  const exportsByFile = new Map<string, Array<{ name: string; kind: string; detail: SymbolDetail }>>();
+  const exportsByFile = new Map<string, ExportEntry[]>();
 
   try {
     const allExported = gildash.searchSymbols({ isExported: true });
 
     for (const sym of allExported) {
       const absFilePath = resolveAbs(rootAbs, sym.filePath);
-      const existing = exportsByFile.get(absFilePath) ?? [];
 
-      existing.push({ name: sym.name, kind: sym.kind, detail: sym.detail });
-      exportsByFile.set(absFilePath, existing);
+      pushToMultiMap(exportsByFile, absFilePath, { name: sym.name, kind: sym.kind, detail: sym.detail });
     }
 
     // Also collect re-exported symbols (not in searchSymbols({ isExported: true }))
-    const reExportRels = gildash.searchRelations({ type: 're-exports' });
-
-    for (const rel of reExportRels) {
-      if (!rel.srcSymbolName || !rel.srcFilePath) {
-        continue;
-      }
-
-      const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
-      const existing = exportsByFile.get(absFilePath) ?? [];
-
-      // Avoid duplicates
-      if (existing.some(s => s.name === rel.srcSymbolName)) {
-        continue;
-      }
-
-      existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
-      exportsByFile.set(absFilePath, existing);
-    }
+    collectReExportEntries(exportsByFile, rootAbs, gildash.searchRelations({ type: 're-exports' }));
 
     // `export type { X } from './mod'` → type-references with meta.isReExport: true
-    const typeRefRels = gildash.searchRelations({ type: 'type-references' });
-
-    for (const rel of typeRefRels) {
-      if (rel.meta?.isReExport !== true || !rel.srcSymbolName || !rel.srcFilePath) {
-        continue;
-      }
-
-      const absFilePath = resolveAbs(rootAbs, rel.srcFilePath);
-      const existing = exportsByFile.get(absFilePath) ?? [];
-
-      if (existing.some(s => s.name === rel.srcSymbolName)) {
-        continue;
-      }
-
-      existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
-      exportsByFile.set(absFilePath, existing);
-    }
+    collectReExportEntries(
+      exportsByFile,
+      rootAbs,
+      gildash.searchRelations({ type: 'type-references' }),
+      rel => rel.meta?.isReExport === true,
+    );
 
     for (const [filePath, symbols] of exportsByFile) {
       const total = symbols.length;
@@ -569,10 +530,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           continue;
         }
 
-        const existing = nameToEntries.get(sym.name) ?? [];
-
-        existing.push({ relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs });
-        nameToEntries.set(sym.name, existing);
+        pushToMultiMap(nameToEntries, sym.name, { relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs });
       }
     }
 
@@ -596,10 +554,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           originKey = `${entry.relModule}::${name}`;
         }
 
-        const group = originToModules.get(originKey) ?? [];
-
-        group.push(entry.relModule);
-        originToModules.set(originKey, group);
+        pushToMultiMap(originToModules, originKey, entry.relModule);
       }
 
       for (const [, modules] of originToModules) {

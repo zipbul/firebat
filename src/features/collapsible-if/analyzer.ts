@@ -5,23 +5,12 @@ import type { CollapsibleIfItem, SourceSpan } from '../../types';
 
 import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
-import { resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
-import { buildNestingReductionItem, collectFunctionItems } from '../../engine/function-items';
+import { countBlockStatements, resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
+import { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore } from '../../engine/function-items';
 
 const createEmptyCollapsibleIf = (): ReadonlyArray<CollapsibleIfItem> => [];
 
 // ── Helpers ─────────────────────────────────────────────────────────
-
-/** Count statements in a block or treat a single statement as 1. */
-const countBlockStatements = (node: Node): number => {
-  if (node.type !== 'BlockStatement') {
-    return 1;
-  }
-
-  const body = node.body;
-
-  return Array.isArray(body) ? body.length : 0;
-};
 
 // ── Detection ────────��──────────────────────────────────────────────
 
@@ -196,7 +185,7 @@ const analyzeFunctionNode = (
     return null;
   }
 
-  const totalScore = opportunities.reduce((sum, o) => sum + o.depthReduction * o.statementsAffected, 0);
+  const totalScore = computeNestingReductionScore(opportunities);
 
   if (totalScore < MIN_INNER_STMTS) {
     return null;

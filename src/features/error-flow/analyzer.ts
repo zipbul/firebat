@@ -2,16 +2,13 @@ import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
+import type { GildashAnalysisInput } from '../../shared/gildash-analysis-input';
 import type { TypeOracle } from './type-oracle';
 import type { ErrorFlowFinding, ErrorFlowFindingKind } from './types';
 
-import { forEachChildNode, forEachChildWithParent, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, forEachChildWithParent, getNodeName, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
 import { createTypeOracle } from './type-oracle';
-
-interface AnalyzeErrorFlowInput {
-  readonly gildash?: Gildash;
-}
 
 interface PushFindingInput {
   readonly kind: ErrorFlowFindingKind;
@@ -455,8 +452,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     if (node.type === 'BreakStatement') {
-      const label = node.label;
-      const labelName = label !== null ? label.name : null;
+      const labelName = getNodeName(node.label);
 
       if (labelName !== null) {
         // labeled break: unsafe only if label is defined outside finally
@@ -474,8 +470,7 @@ const findUnsafeControlFlowInFinally = (finalizer: Node): UnsafeControlFlowKind 
     }
 
     if (node.type === 'ContinueStatement') {
-      const label = node.label;
-      const labelName = label !== null ? label.name : null;
+      const labelName = getNodeName(node.label);
 
       if (labelName !== null) {
         if (!localLabels.has(labelName)) {
@@ -1502,7 +1497,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
 const createEmptyErrorFlow = (): ReadonlyArray<ErrorFlowFinding> => [];
 
-const analyzeErrorFlow = (files: ReadonlyArray<ParsedFile>, input?: AnalyzeErrorFlowInput): ReadonlyArray<ErrorFlowFinding> => {
+const analyzeErrorFlow = (files: ReadonlyArray<ParsedFile>, input?: GildashAnalysisInput): ReadonlyArray<ErrorFlowFinding> => {
   if (files.length === 0) {
     return createEmptyErrorFlow();
   }

@@ -140,6 +140,9 @@ interface TraversalContext {
 /** 메타/positional 키 — 비교에서 제외 */
 const SKIP_KEYS = new Set(['type', 'start', 'end', 'loc', 'span', 'comments', 'raw', 'directive']);
 
+/** Build a dotted child path: append `.key` to a non-empty parent path, else use `key` alone. */
+const childPathOf = (path: string, key: string): string => (path.length > 0 ? `${path}.${key}` : key);
+
 const pushVariable = (
   ctx: TraversalContext,
   location: string,
@@ -216,7 +219,7 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
 
       const leftChild = leftRec[key];
       const rightChild = rightRec[key];
-      const childPath = path.length > 0 ? `${path}.${key}` : key;
+      const childPath = childPathOf(path, key);
 
       // 한쪽에만 키가 있는 경우 (optional node properties)
       if (leftChild === undefined && rightChild !== undefined) {
@@ -277,7 +280,7 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
     }
 
     if (leftVal !== rightVal) {
-      const childPath = path.length > 0 ? `${path}.${key}` : key;
+      const childPath = childPathOf(path, key);
 
       if (key === 'name') {
         pushVariable(ctx, childPath, String(leftVal), String(rightVal), 'identifier');

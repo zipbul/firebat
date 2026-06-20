@@ -22,6 +22,7 @@ import {
   resolveVarIndex,
 } from '../../engine/dataflow/reaching-defs';
 import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
+import { isOffsetInAnyRange } from '../../shared/offset-range';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
 
@@ -603,8 +604,6 @@ const checkScopeNarrowing = (
   const { finalizerRanges, tryHandlerRanges } = collectFinalizerAndTryCatchRanges(bodyStatements);
   const allSiteOffsetsByVarIndex = collectAllSiteOffsets(analysis, localIndexByName, declScopeByIdLocation);
 
-  const isInFinalizer = (offset: number): boolean => finalizerRanges.some(r => offset >= r.start && offset < r.end);
-
   const isInTryAndCatch = (useSiteOffsets: ReadonlyArray<number>, range: TryCatchRange): boolean => {
     const inTry = useSiteOffsets.some(o => o >= range.tryStart && o < range.tryEnd);
     const inCatch = useSiteOffsets.some(o => o >= range.catchStart && o < range.catchEnd);
@@ -661,7 +660,7 @@ const checkScopeNarrowing = (
     }
 
     // Check finally exclusion
-    if (allSiteOffsets.some(o => isInFinalizer(o))) {
+    if (allSiteOffsets.some(o => isOffsetInAnyRange(o, finalizerRanges))) {
       continue;
     }
 
@@ -1033,9 +1032,6 @@ const analyzeVariableLifetime = (
       }
 
       const loopBodyRanges = collectLoopBodyRanges(bodyStatements);
-
-      const isInLoopBody = (offset: number): boolean => loopBodyRanges.some(r => offset >= r.start && offset < r.end);
-
       // Group non-declaration defs by variable name, excluding loop-body writes
       const nonDeclWriteCountByVar = new Map<string, { count: number; firstWriteOffset: number }>();
 
@@ -1058,7 +1054,7 @@ const analyzeVariableLifetime = (
         const offset = payload !== null && payload !== undefined ? payloadOffset(payload as Node | ReadonlyArray<Node>) : -1;
 
         // Skip writes whose location cannot be determined or that are inside loop bodies
-        if (offset < 0 || isInLoopBody(offset)) {
+        if (offset < 0 || isOffsetInAnyRange(offset, loopBodyRanges)) {
           continue;
         }
 

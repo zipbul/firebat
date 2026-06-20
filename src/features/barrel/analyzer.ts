@@ -11,6 +11,8 @@ import type { BarrelFinding, SourceSpan } from '../../types';
 
 import { collectLocallyUsedImportNames } from '../../engine/ast/collect-locally-used-import-names';
 import { getLiteralString, isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { globToRegExp } from '../../shared/glob-regex';
+import { asRecordOrNull } from '../../shared/json-guards';
 import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
 
 interface BarrelOptions {
@@ -44,56 +46,12 @@ const toSpan = (sourceText: string, startOffset: number, endOffset: number): Sou
   };
 };
 
-type NodeLike = Record<string, unknown>;
-
-const asNodeLike = (value: unknown): NodeLike | null => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  return value as NodeLike;
-};
-
 const toNodeSpan = (file: ParsedFile, node: unknown): SourceSpan => {
-  const nodeRecord = asNodeLike(node);
+  const nodeRecord = asRecordOrNull(node);
   const startOffset = typeof nodeRecord?.start === 'number' ? nodeRecord.start : 0;
   const endOffset = typeof nodeRecord?.end === 'number' ? nodeRecord.end : startOffset;
 
   return toSpan(file.sourceText, startOffset, endOffset);
-};
-
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const globToRegExp = (glob: string): RegExp => {
-  // Minimal glob support for ignore patterns.
-  // - ** matches any chars (including '/')
-  // - * matches any chars except '/'
-  // - ? matches one char except '/'
-  const normalized = normalizePath(glob);
-  let out = '^';
-
-  for (let i = 0; i < normalized.length; i += 1) {
-    const ch = normalized.charAt(i);
-
-    if (ch === '*') {
-      const next = normalized[i + 1];
-
-      if (next !== '*') {
-        out += '[^/]*';
-      } else {
-        out += '.*';
-        i += 1;
-      }
-    } else if (ch === '?') {
-      out += '[^/]';
-    } else {
-      out += escapeRegex(ch);
-    }
-  }
-
-  out += '$';
-
-  return new RegExp(out);
 };
 
 const compileIgnoreMatchers = (globs: ReadonlyArray<string>): ReadonlyArray<RegExp> => {
@@ -401,7 +359,7 @@ const checkCrossModuleReexport = async (
     // gildash가 이 파일에 cross-module re-export 없다고 판단하면 구문 A 건너뛰기
     // (구문 B/C는 import+export 패턴이라 gildash re-export relation에 안 잡힐 수 있으므로 유지)
     const skipPatternA = crossModuleFiles !== null && !crossModuleFiles.has(fileAbs);
-    const body = asNodeLike(file.program)?.body;
+    const body = asRecordOrNull(file.program)?.body;
 
     if (!Array.isArray(body)) {
       continue;

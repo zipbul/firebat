@@ -1,5 +1,6 @@
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
 
+import { addNonEmptyString } from '../../shared/string-set';
 import { isAstNodeValue } from '../utils/is-ast-node-value';
 import { getProgramBody } from '../utils/program-body';
 
@@ -63,11 +64,7 @@ const singleExportedClassRule = {
             continue;
           }
 
-          const className = getClassDeclarationName(stmt);
-
-          if (typeof className === 'string' && className.length > 0) {
-            classDeclarations.add(className);
-          }
+          addNonEmptyString(classDeclarations, getClassDeclarationName(stmt));
         }
 
         const exportedClassNames: string[] = [];

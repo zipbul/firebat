@@ -1,7 +1,9 @@
 import type { ToolAnalysisInput } from '../../shared/tool-analysis-input';
 
 import { createNoopLogger } from '../../shared/logger';
+import { splitTrimNonEmpty } from '../../shared/split-lines';
 import { runOxfmt } from '../../tooling/oxfmt/oxfmt-runner';
+import { throwIfToolRunFailed } from '../../tooling/tool-failure';
 
 const createEmptyFormat = (): ReadonlyArray<string> => [];
 
@@ -18,10 +20,7 @@ const parseOxfmtFiles = (rawStdout: unknown): ReadonlyArray<string> => {
     return [];
   }
 
-  const lines = text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+  const lines = splitTrimNonEmpty(text, '\n');
 
   const looksLikePath = (value: string): boolean => {
     if (value.includes('/') || value.includes('\\')) {
@@ -51,11 +50,7 @@ export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<Readonly
     logger,
   });
 
-  if (!result.ok) {
-    const error = result.error ?? 'oxfmt failed';
-
-    throw new Error(error);
-  }
+  throwIfToolRunFailed(result, 'oxfmt failed');
 
   if (!input.fix) {
     const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 0;

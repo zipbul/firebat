@@ -1,5 +1,7 @@
 import type { AstNode, AstNodeValue, NodeOrNull, RuleContext } from '../types';
 
+import { addNonEmptyString } from '../../shared/string-set';
+
 const isAstNode = (value: AstNodeValue): value is AstNode => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return false;
@@ -66,11 +68,7 @@ const noUnmodifiedLoopConditionRule = {
       seen.add(node);
 
       if (node.type === 'Identifier') {
-        const name = node.name;
-
-        if (typeof name === 'string' && name.length > 0) {
-          out.add(name);
-        }
+        addNonEmptyString(out, node.name);
 
         return;
       }

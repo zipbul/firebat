@@ -2,6 +2,7 @@ import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
 import { scanGlobsToAbsolutePaths } from './glob-scan';
+import { splitTrimNonEmpty } from './split-lines';
 
 const uniqueSorted = (values: ReadonlyArray<string>): string[] => Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 
@@ -26,10 +27,7 @@ const runGitLsFiles = (cwd: string, patterns?: ReadonlyArray<string>): string[] 
     return [];
   }
 
-  return output
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+  return splitTrimNonEmpty(output, '\n');
 };
 
 const scanWithGlob = async (cwd: string, patterns: ReadonlyArray<string>): Promise<string[]> => {
