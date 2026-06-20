@@ -16,6 +16,7 @@ import { visitorKeys } from 'oxc-parser';
 import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
+import { isNonNull } from '../../shared/non-null';
 import { computeLcsAlignment } from './lcs';
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
@@ -304,8 +305,8 @@ const traverseArrayChildren = (
   path: string,
 ): void => {
   // Filter out null entries (e.g. ArrayPattern.elements may contain null for holes)
-  const leftFiltered = leftArr.filter((n): n is Node => n !== null);
-  const rightFiltered = rightArr.filter((n): n is Node => n !== null);
+  const leftFiltered = leftArr.filter(isNonNull);
+  const rightFiltered = rightArr.filter(isNonNull);
   // fingerprint로 LCS 정렬
   const leftFps = leftFiltered.map(n => createOxcFingerprintShapeWithBindings(n, ctx.boundNames));
   const rightFps = rightFiltered.map(n => createOxcFingerprintShapeWithBindings(n, ctx.boundNames));

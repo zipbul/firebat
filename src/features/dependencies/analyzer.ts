@@ -19,7 +19,7 @@ import type { DependencyLayerRule } from '../../shared/dependency-layer-rule';
 
 import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
 import { globToRegExp } from '../../shared/glob-regex';
-import { pushToMultiMap } from '../../shared/multi-map';
+import { addToSetMap, pushToMultiMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';
 
 const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
@@ -653,15 +653,8 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         if (rel.dstSymbolName === '*' || (rel.type === 're-exports' && !rel.dstSymbolName)) {
           state.usesAll = true;
         } else if (rel.dstSymbolName) {
-          const consumers = state.names.get(rel.dstSymbolName) ?? new Set<string>();
-
-          consumers.add(consumer);
-          state.names.set(rel.dstSymbolName, consumers);
-
-          const prev = state.perNameConsumerKinds.get(rel.dstSymbolName) ?? new Set<'test' | 'prod'>();
-
-          prev.add(kind);
-          state.perNameConsumerKinds.set(rel.dstSymbolName, prev);
+          addToSetMap(state.names, rel.dstSymbolName, consumer);
+          addToSetMap(state.perNameConsumerKinds, rel.dstSymbolName, kind);
         }
         // else: null/undefined dstSymbolName on non-re-export → side-effect import, skip
 
@@ -907,10 +900,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           const pkgName = extractPackageName(rel.specifier!);
 
           if (pkgName && !isBuiltinModule(pkgName)) {
-            const files = externalPackages.get(pkgName) ?? new Set<string>();
-
-            files.add(toRelativePath(rootAbs, rel.srcFilePath));
-            externalPackages.set(pkgName, files);
+            addToSetMap(externalPackages, pkgName, toRelativePath(rootAbs, rel.srcFilePath));
           }
         }
       }

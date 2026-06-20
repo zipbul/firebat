@@ -7,6 +7,7 @@ import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils
 import { spanOfNode } from '../../engine/ast/source-span';
 import { countBlockStatements, resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore } from '../../engine/function-items';
+import { isNonNull } from '../../shared/non-null';
 
 const createEmptyCollapsibleIf = (): ReadonlyArray<CollapsibleIfItem> => [];
 
@@ -199,7 +200,7 @@ const analyzeCollapsibleIf = (files: ReadonlyArray<ParsedFile>): ReadonlyArray<C
     return createEmptyCollapsibleIf();
   }
 
-  return collectFunctionItems(files, analyzeFunctionNode).filter((item): item is CollapsibleIfItem => item !== null);
+  return collectFunctionItems(files, analyzeFunctionNode).filter(isNonNull);
 };
 
 export { analyzeCollapsibleIf, createEmptyCollapsibleIf };

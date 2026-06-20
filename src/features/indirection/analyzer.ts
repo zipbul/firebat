@@ -10,6 +10,7 @@ import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo 
 
 import { getMemberPropertyName, getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
+import { addToSetMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';
 
 /* ------------------------------------------------------------------ */
@@ -544,10 +545,8 @@ const buildExportIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<st
 
   for (const sym of allExported) {
     const absFile = resolveAbs(rootAbs, sym.filePath);
-    const names = index.get(absFile) ?? new Set<string>();
 
-    names.add(sym.name);
-    index.set(absFile, names);
+    addToSetMap(index, absFile, sym.name);
   }
 
   return index;

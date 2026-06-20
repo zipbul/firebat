@@ -8,6 +8,7 @@ import type { NestingItem, NestingKind, SourceSpan } from '../../types';
 import { forEachChildNode, getMemberPropertyName, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
+import { isNonNull } from '../../shared/non-null';
 
 interface AnalyzeNestingOptions {
   readonly maxCognitiveComplexity: number;
@@ -798,7 +799,7 @@ const analyzeNesting = (
 
   return collectFunctionItems(files, (node, filePath, sourceText, parent) =>
     analyzeFunctionNode(node, filePath, sourceText, parent, opts),
-  ).filter((item): item is NestingItem => item !== null);
+  ).filter(isNonNull);
 };
 
 export { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS };

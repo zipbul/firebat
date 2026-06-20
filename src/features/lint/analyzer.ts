@@ -2,6 +2,7 @@ import type { ToolAnalysisInput } from '../../shared/tool-analysis-input';
 import type { LintDiagnostic } from '../../types';
 
 import { createNoopLogger } from '../../shared/logger';
+import { isNonNull } from '../../shared/non-null';
 import { runOxlint } from '../../tooling/oxlint/oxlint-runner';
 import { throwIfToolRunFailed } from '../../tooling/tool-failure';
 
@@ -40,7 +41,7 @@ export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArra
         span: d.span,
       }) satisfies LintDiagnostic;
     })
-    .filter((d): d is NonNullable<typeof d> => d !== null);
+    .filter(isNonNull);
 
   throwIfToolRunFailed(result, 'oxlint failed');
 

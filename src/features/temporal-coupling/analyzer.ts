@@ -259,14 +259,8 @@ const collectTargetIdentifierKeys = (target: Node | null | undefined, keys: Set<
     return;
   }
 
-  if (target.type === 'Identifier') {
-    keys.add(`${target.start}:${target.end}`);
-
-    return;
-  }
-
-  if (target.type === 'MemberExpression') {
-    // e.g. `obj.prop = ...` — record the whole member expression's range.
+  // Identifier (`x = ...`) or MemberExpression (`obj.prop = ...`): record the target's own range.
+  if (target.type === 'Identifier' || target.type === 'MemberExpression') {
     keys.add(`${target.start}:${target.end}`);
 
     return;
@@ -1036,6 +1030,9 @@ const isReaderSelfProtecting = (program: Node, readerName: string, stateName: st
   return true;
 };
 
+/** Strip a `ClassName.` qualifier, yielding the bare member name (single change point for writers/readers). */
+const stripQualifier = (name: string): string => (name.includes('.') ? name.slice(name.indexOf('.') + 1) : name);
+
 /**
  * Verify caller order using CFG dominator analysis.
  *
@@ -1057,8 +1054,8 @@ const verifyCallerOrderByCfg = (
   }
 
   // Extract bare names (strip ClassName. prefix) for call-site matching
-  const writerBareNames = new Set(writerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
-  const readerBareNames = new Set(readerNames.map(n => (n.includes('.') ? n.slice(n.indexOf('.') + 1) : n)));
+  const writerBareNames = new Set(writerNames.map(stripQualifier));
+  const readerBareNames = new Set(readerNames.map(stripQualifier));
 
   for (const caller of callerKeys) {
     if (caller.srcSymbolName === null) {

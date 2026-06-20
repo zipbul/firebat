@@ -1,6 +1,8 @@
 import type { FirebatCouplingConfig } from '../../shared/firebat-config';
 import type { CouplingHotspot, DependencyAnalysis } from '../../types';
 
+import { isNonNull } from '../../shared/non-null';
+
 const sortCouplingHotspots = (items: ReadonlyArray<CouplingHotspot>): ReadonlyArray<CouplingHotspot> => {
   return [...items].sort((left, right) => {
     if (right.score !== left.score) {
@@ -213,7 +215,7 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
         suggestedRefactor: '',
       } satisfies CouplingHotspot;
     })
-    .filter((v): v is NonNullable<typeof v> => v !== null);
+    .filter(isNonNull);
   const hotspots = sortCouplingHotspots(hotspotsRaw);
 
   return hotspots.length === 0 ? createEmptyCoupling() : hotspots;

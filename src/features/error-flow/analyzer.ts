@@ -1036,6 +1036,17 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         return true;
       }
 
+      // A thrown `new Error(...)` without a preserved cause severs the chain (unless `err.cause = e`
+      // was assigned in the body). Same decision for direct (`throw new Error()`) and indirect
+      // (`const w = new Error(); throw w`) forms — single change point for both throw sites below.
+      const reportIfErrorLacksCause = (errorExpr: Node): void => {
+        const hasCause = causeAssigned || hasCausePropertyWithIdentifier(errorExpr, name);
+
+        if (!hasCause) {
+          report('missing-error-cause', node);
+        }
+      };
+
       // Indirect throw: throw <identifier> where identifier was assigned a new Error(...)
       if (arg.type === 'Identifier' && typeof arg.name === 'string') {
         const varName = arg.name;
@@ -1052,11 +1063,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
         if (newExpr !== undefined && newExpr.type === 'NewExpression') {
           if (isErrorConstructor(newExpr.callee)) {
-            const hasCause = causeAssigned || hasCausePropertyWithIdentifier(newExpr, name);
-
-            if (!hasCause) {
-              report('missing-error-cause', node);
-            }
+            reportIfErrorLacksCause(newExpr);
           }
         }
 
@@ -1069,11 +1076,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       // Prefer a specific finding for Error constructors without { cause }.
       if (isErrorConstructor(arg.callee)) {
-        const hasCause = causeAssigned || hasCausePropertyWithIdentifier(arg, name);
-
-        if (!hasCause) {
-          report('missing-error-cause', node);
-        }
+        reportIfErrorLacksCause(arg);
 
         return true;
       }
