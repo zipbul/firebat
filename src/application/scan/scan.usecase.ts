@@ -40,13 +40,20 @@ import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { createFirebatProgram, loadFirebatConfigFile, computeToolVersion, resolveRuntimeContextFromCwd } from '../../shared';
+import {
+  createFirebatProgram,
+  featureOptions,
+  loadFirebatConfigFile,
+  computeToolVersion,
+  resolveRuntimeContextFromCwd,
+} from '../../shared';
 import { toErrorMessage } from '../../shared/error-message';
 import { toProjectRelative as toProjectRelativePath } from '../../shared/to-project-relative';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
 import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
+import { itemFileString } from './finding-item-fields';
 import { buildFunctionRangeMap, flattenToFindings } from './flatten-findings';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectInputsDigest } from './project-inputs-digest';
@@ -580,7 +587,7 @@ const enrichPhase1 = <T extends { readonly file?: string; readonly filePath?: st
   toProjectRelative: ToProjectRelative,
 ): ReadonlyArray<T & { readonly code: FirebatCatalogCode; readonly file: string; readonly span: unknown }> =>
   items.map(item => {
-    const filePath = String(item.file ?? item.filePath ?? '');
+    const filePath = itemFileString(item);
 
     return {
       ...item,
@@ -987,8 +994,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       options.detectors.includes('nesting'),
       createEmptyNesting,
       () => {
-        const nestingCfg = config?.features?.nesting;
-        const nestingCfgObj = typeof nestingCfg === 'object' && nestingCfg !== null ? nestingCfg : null;
+        const nestingCfgObj = featureOptions(config?.features?.nesting);
         const resolvedNestingOptions = {
           maxCognitiveComplexity: nestingCfgObj?.maxCognitiveComplexity ?? DEFAULT_NESTING_OPTIONS.maxCognitiveComplexity,
           maxCallbackDepth: nestingCfgObj?.maxCallbackDepth ?? DEFAULT_NESTING_OPTIONS.maxCallbackDepth,
@@ -1068,8 +1074,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       createEmptyGiantFile,
       () => {
         const { 'giant-file': giantFileCfg } = config?.features ?? {};
-        const resolvedGiantFileMaxLines =
-          (typeof giantFileCfg === 'object' && giantFileCfg !== null ? giantFileCfg.maxLines : undefined) ?? 1000;
+        const resolvedGiantFileMaxLines = featureOptions(giantFileCfg)?.maxLines ?? 1000;
 
         return analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
       },
@@ -1081,7 +1086,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       createEmptyVariableLifetime,
       () => {
         const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
-        const vlCfgObj = typeof variableLifetimeCfg === 'object' && variableLifetimeCfg !== null ? variableLifetimeCfg : null;
+        const vlCfgObj = featureOptions(variableLifetimeCfg);
 
         return analyzeVariableLifetime(program, {
           maxLifetimeLines: Number(vlCfgObj?.maxLifetimeLines ?? 30),

@@ -1,5 +1,7 @@
 import type { FirebatCatalogCode, CatalogEntry } from '../../types';
 
+import { itemFileString } from './finding-item-fields';
+
 interface DiagnosticAggregatorInput {
   readonly analyses: Readonly<Record<string, unknown>>;
 }
@@ -646,16 +648,14 @@ const asArray = <T>(v: unknown): ReadonlyArray<T> => {
   return Array.isArray(v) ? (v as ReadonlyArray<T>) : [];
 };
 
-const fileOf = (item: any): string => String(item?.file ?? item?.filePath ?? '');
-
 const countGodFunctionResolves = (waste: ReadonlyArray<any>, nesting: ReadonlyArray<any>): number => {
   const hasHighCcInFile = new Set(
     nesting
       .filter((n: any) => n?.kind === 'high-cognitive-complexity')
-      .map(fileOf)
+      .map(itemFileString)
       .filter(Boolean),
   );
-  const hasWasteInFile = new Set(waste.map(fileOf).filter(Boolean));
+  const hasWasteInFile = new Set(waste.map(itemFileString).filter(Boolean));
   let count = 0;
 
   for (const f of hasHighCcInFile) {

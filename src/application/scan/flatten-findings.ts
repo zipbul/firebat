@@ -19,6 +19,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { Finding, FirebatAnalyses } from '../../types';
 
 import { collectFunctionNodesWithParent, getNodeHeader } from '../../engine/ast';
+import { itemFileString } from './finding-item-fields';
 
 // ── Function range map (file → enclosing function lookup) ────────────────────
 
@@ -448,7 +449,7 @@ const flattenItemsFinding = (
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
     const isPrimary = i === 0;
-    const file = String(item.file ?? item.filePath ?? '');
+    const file = itemFileString(item);
     const line = extractLine(item);
     const itemSeed = `${groupSeed}|${file}|${spanIdentity(item)}|i${i}`;
     const functionName = findEnclosingFunction(functionMap, file, line);

@@ -1,6 +1,6 @@
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
 
-import { addNonEmptyString } from '../../shared/string-set';
+import { addNonEmptyString, isNonEmptyString } from '../../shared/string-set';
 import { isAstNodeValue } from '../utils/is-ast-node-value';
 import { getProgramBody } from '../utils/program-body';
 
@@ -103,9 +103,7 @@ const singleExportedClassRule = {
             const specifiers = stmt.specifiers;
 
             if (Array.isArray(specifiers) && specifiers.length > 0) {
-              const exportedNames = specifiers
-                .map(getExportedNameFromSpecifier)
-                .filter((name): name is string => typeof name === 'string' && name.length > 0);
+              const exportedNames = specifiers.map(getExportedNameFromSpecifier).filter(isNonEmptyString);
               const onlyExportedName = exportedNames[0];
 
               if (exportedNames.length === 1 && typeof onlyExportedName === 'string' && classDeclarations.has(onlyExportedName)) {

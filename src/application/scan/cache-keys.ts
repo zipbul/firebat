@@ -3,6 +3,10 @@ import { normalizePath } from '@zipbul/gildash';
 import { hashString } from '../../engine/hasher';
 import { CACHE_SCHEMA_VERSION } from './cache-namespace';
 
+// Object.entries 결과를 키(첫 원소) 기준으로 정렬하는 단일 비교자.
+// 캐시 키 직렬화의 결정성을 위한 "엔트리 키 정렬" 변경지점.
+const byEntryKey = (a: readonly [string, unknown], b: readonly [string, unknown]): number => a[0].localeCompare(b[0]);
+
 interface ComputeProjectKeyInput {
   readonly toolVersion: string;
   readonly cwd?: string;
@@ -35,7 +39,7 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
   const normalizedAllowedDepsEntries = input.dependenciesAllowedDependencies
     ? Object.entries(input.dependenciesAllowedDependencies)
         .map(([key, value]) => [key, [...value].sort()] as const)
-        .sort((a, b) => a[0].localeCompare(b[0]))
+        .sort(byEntryKey)
     : [];
 
   return hashString(
@@ -47,7 +51,7 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `barrelIgnoreGlobs=${normalizedBarrelIgnoreGlobs.join(',')}`,
       `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
       `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,
-      `couplingConfig=${input.couplingConfig ? JSON.stringify(Object.entries(input.couplingConfig).sort((a, b) => a[0].localeCompare(b[0]))) : ''}`,
+      `couplingConfig=${input.couplingConfig ? JSON.stringify(Object.entries(input.couplingConfig).sort(byEntryKey)) : ''}`,
     ].join('|'),
   );
 };

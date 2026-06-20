@@ -8,6 +8,13 @@ type FirebatLogLevel = (typeof LOG_LEVELS)[number];
 
 type FeatureToggle<TOptions> = false | true | TOptions;
 
+/**
+ * Feature 토글(`false | true | Options`)에서 옵션 객체 형태만 뽑아낸다.
+ * boolean/undefined면 null. detector별 옵션 해석이 공유하는 "토글을 옵션으로" 단일 결정.
+ */
+const featureOptions = <TOptions>(toggle: FeatureToggle<TOptions> | undefined): TOptions | null =>
+  typeof toggle === 'object' && toggle !== null ? toggle : null;
+
 interface FirebatDuplicatesConfig {
   readonly minSize?: number | 'auto' | undefined;
 }
@@ -221,4 +228,4 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
 
 export type { FirebatConfig, FirebatCouplingConfig, FirebatLogLevel };
 
-export { FirebatConfigSchema };
+export { featureOptions, FirebatConfigSchema };

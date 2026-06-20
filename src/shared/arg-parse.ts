@@ -47,13 +47,20 @@ const parseNumber = (value: string, label: string): number => {
   return parsed;
 };
 
-const parseClampedIntArg = (value: string | undefined, flag: string, floor: number): number => {
+/**
+ * 플래그 인자값이 반드시 존재(문자열)해야 함을 강제한다. 없으면 "Missing value" throw.
+ * 모든 값-요구 플래그 파싱이 공유하는 "인자값 필수" 단일 결정.
+ */
+const requireArgValue = (value: string | undefined, flag: string): string => {
   if (typeof value !== 'string') {
     throw new Error(`[firebat] Missing value for ${flag}`);
   }
 
-  return Math.max(floor, Math.round(parseNumber(value, flag)));
+  return value;
 };
+
+const parseClampedIntArg = (value: string | undefined, flag: string, floor: number): number =>
+  Math.max(floor, Math.round(parseNumber(requireArgValue(value, flag), flag)));
 
 const parseMinSize = (value: string): MinSizeOption => {
   if (value === 'auto') {
@@ -195,11 +202,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     }
 
     if (arg === '--min-size') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --min-size');
-      }
+      const value = requireArgValue(argv[i + 1], '--min-size');
 
       minSize = parseMinSize(value);
       explicit.minSize = true;
@@ -228,11 +231,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     }
 
     if (arg === '--only') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --only');
-      }
+      const value = requireArgValue(argv[i + 1], '--only');
 
       detectors = parseDetectors(value);
       explicit.detectors = true;
@@ -243,11 +242,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     }
 
     if (arg === '--config') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --config');
-      }
+      const value = requireArgValue(argv[i + 1], '--config');
 
       configPath = path.resolve(value);
       explicit.configPath = true;
@@ -258,11 +253,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     }
 
     if (arg === '--log-level') {
-      const value = argv[i + 1];
-
-      if (typeof value !== 'string') {
-        throw new Error('[firebat] Missing value for --log-level');
-      }
+      const value = requireArgValue(argv[i + 1], '--log-level');
 
       logLevel = parseLogLevel(value);
       explicit.logLevel = true;

@@ -5,7 +5,7 @@ import type { SourceSpan } from '../../types';
 
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
-import { detectToolFailure } from '../tool-failure';
+import { detectToolFailure, reportBinUnavailable } from '../tool-failure';
 
 interface OxlintDiagnostic {
   readonly filePath?: string;
@@ -104,13 +104,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
   });
 
   if (!resolved || resolved.length === 0) {
-    logger.warn('oxlint: command not found — lint tool unavailable');
-
-    return {
-      ok: false,
-      tool: 'oxlint',
-      error: 'oxlint is not available. Install it (or use a firebat build that bundles it) to enable the lint tool.',
-    };
+    return reportBinUnavailable(logger, 'oxlint', 'lint');
   }
 
   logger.trace('oxlint: resolved command', { cmd: resolved, cwd });

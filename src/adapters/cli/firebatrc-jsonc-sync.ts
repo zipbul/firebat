@@ -1,4 +1,5 @@
 import type { JsonObject, JsonValue } from '../../shared/json-value';
+import type { OffsetRange } from '../../shared/offset-range';
 
 import { toErrorMessage } from '../../shared/error-message';
 import { isPlainObject } from '../../shared/json-guards';
@@ -9,31 +10,26 @@ interface Edit {
   readonly text: string;
 }
 
-interface NodeBase {
-  readonly start: number;
-  readonly end: number;
-}
-
-interface ObjectNode extends NodeBase {
+interface ObjectNode extends OffsetRange {
   readonly kind: 'object';
   readonly openBrace: number;
   readonly closeBrace: number;
   readonly props: readonly PropNode[];
 }
 
-interface ArrayNode extends NodeBase {
+interface ArrayNode extends OffsetRange {
   readonly kind: 'array';
 }
 
-interface StringNode extends NodeBase {
+interface StringNode extends OffsetRange {
   readonly kind: 'string';
 }
 
-interface NumberNode extends NodeBase {
+interface NumberNode extends OffsetRange {
   readonly kind: 'number';
 }
 
-interface LiteralNode extends NodeBase {
+interface LiteralNode extends OffsetRange {
   readonly kind: 'literal';
 }
 

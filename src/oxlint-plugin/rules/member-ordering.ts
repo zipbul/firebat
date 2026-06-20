@@ -1,6 +1,7 @@
 import type { AstNode, JsonValue, NodeOrNull, RuleContext } from '../types';
 
 import { isJsonObject, toStringList } from '../utils/json-options';
+import { nodeArray } from '../utils/node-array';
 
 interface MemberOrderingOptions {
   default?: string[];
@@ -142,7 +143,7 @@ const memberOrderingRule = {
 
     return {
       ClassBody(node: AstNode) {
-        const body = Array.isArray(node.body) ? node.body : [];
+        const body = nodeArray(node.body);
 
         if (body.length < 2) {
           return;

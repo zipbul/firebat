@@ -2,6 +2,7 @@ import { basename } from 'node:path';
 
 import type { AstNode, RuleContext } from '../types';
 
+import { isNonEmptyString } from '../../shared/string-set';
 import { getContextFilename } from '../utils/context-filename';
 import { fileExists } from '../utils/context-fs';
 import { getImplPathFromSpec } from '../utils/test-file-path';
@@ -92,7 +93,7 @@ function getSutFromFilename(testFilename: string): string {
 function getExportedClassNameFromText(text: string): string | null {
   const matches = Array.from(text.matchAll(/\bexport\s+class\s+([A-Za-z0-9_]+)\b/g))
     .map(m => m[1])
-    .filter((n): n is string => typeof n === 'string' && n.length > 0);
+    .filter(isNonEmptyString);
   const unique = Array.from(new Set(matches));
 
   if (unique.length !== 1) {

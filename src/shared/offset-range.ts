@@ -1,4 +1,4 @@
-interface OffsetRange {
+export interface OffsetRange {
   readonly start: number;
   readonly end: number;
 }

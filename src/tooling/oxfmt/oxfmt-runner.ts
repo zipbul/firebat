@@ -3,7 +3,7 @@ import type { FirebatLogger } from '../../shared/logger';
 import { toErrorMessage } from '../../shared/error-message';
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
-import { detectToolFailure } from '../tool-failure';
+import { detectToolFailure, reportBinUnavailable } from '../tool-failure';
 
 interface OxfmtRunResult {
   readonly ok: boolean;
@@ -38,13 +38,7 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
   });
 
   if (!resolved || resolved.length === 0) {
-    logger.warn('oxfmt: command not found — format tool unavailable');
-
-    return {
-      ok: false,
-      tool: 'oxfmt',
-      error: 'oxfmt is not available. Install it (or use a firebat build that bundles it) to enable the format tool.',
-    };
+    return reportBinUnavailable(logger, 'oxfmt', 'format');
   }
 
   logger.trace('oxfmt: resolved command', { cmd: resolved, cwd });

@@ -1,13 +1,9 @@
 import type { AstNode } from '../types';
 
+import { nodeArray } from './node-array';
+
 function getProgramBody(program: AstNode): AstNode[] {
-  const body = program.body;
-
-  if (Array.isArray(body)) {
-    return body;
-  }
-
-  return [];
+  return nodeArray(program.body);
 }
 
 export { getProgramBody };

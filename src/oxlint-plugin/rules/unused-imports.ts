@@ -1,5 +1,7 @@
 import type { AstNode, Fix, Fixer, Range, RuleContext, Variable } from '../types';
 
+import { nodeArray } from '../utils/node-array';
+
 const COMMA_TOKEN = ',';
 const unusedImportsRule = {
   create(context: RuleContext) {
@@ -43,7 +45,7 @@ const unusedImportsRule = {
         return true;
       }
 
-      const specifiers = Array.isArray(node.specifiers) ? node.specifiers : [];
+      const specifiers = nodeArray(node.specifiers);
 
       for (const spec of specifiers) {
         if (spec.importKind === 'type') {
@@ -169,7 +171,7 @@ const unusedImportsRule = {
 
     return {
       ImportDeclaration(node: AstNode) {
-        const specifiers = Array.isArray(node.specifiers) ? node.specifiers : [];
+        const specifiers = nodeArray(node.specifiers);
 
         if (specifiers.length === 0) {
           return;

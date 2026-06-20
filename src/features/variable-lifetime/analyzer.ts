@@ -22,7 +22,7 @@ import {
   resolveVarIndex,
 } from '../../engine/dataflow/reaching-defs';
 import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
-import { isOffsetInAnyRange } from '../../shared/offset-range';
+import { isOffsetInAnyRange, type OffsetRange } from '../../shared/offset-range';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
 
@@ -388,11 +388,6 @@ const collectReferencedBindings = (
 
 // ── Intervening write check ───────────────────────────────────────────────────
 
-interface FinalizerRange {
-  readonly start: number;
-  readonly end: number;
-}
-
 interface TryCatchRange {
   readonly tryStart: number;
   readonly tryEnd: number;
@@ -401,7 +396,7 @@ interface TryCatchRange {
 }
 
 interface TryCatchRangeCollection {
-  readonly finalizerRanges: ReadonlyArray<FinalizerRange>;
+  readonly finalizerRanges: ReadonlyArray<OffsetRange>;
   readonly tryHandlerRanges: ReadonlyArray<TryCatchRange>;
 }
 
@@ -484,7 +479,7 @@ const hasInterveningWrites = (
 // ── checkScopeNarrowing ───────────────────────────────────────────────────────
 
 const collectFinalizerAndTryCatchRanges = (bodyStatements: ReadonlyArray<Node>): TryCatchRangeCollection => {
-  const finalizerRanges: FinalizerRange[] = [];
+  const finalizerRanges: OffsetRange[] = [];
   const tryHandlerRanges: TryCatchRange[] = [];
 
   for (const stmt of bodyStatements) {
@@ -727,19 +722,14 @@ const checkScopeNarrowing = (
 
 // ── collectLoopBodyRanges ─────────────────────────────────────────────────────
 
-interface LoopBodyRange {
-  readonly start: number;
-  readonly end: number;
-}
-
 /**
  * Recursively collects ranges of all loop statements anywhere in the given
  * AST node list (any depth).  For ForStatement the **entire** statement range
  * is used so that init/test/update clause writes (e.g. `i++`) are also
  * suppressed.  For other loop types the body range is sufficient.
  */
-const collectLoopBodyRanges = (stmts: ReadonlyArray<Node>): ReadonlyArray<LoopBodyRange> => {
-  const ranges: LoopBodyRange[] = [];
+const collectLoopBodyRanges = (stmts: ReadonlyArray<Node>): ReadonlyArray<OffsetRange> => {
+  const ranges: OffsetRange[] = [];
 
   const visit = (node: Node): void => {
     if (node.type === 'ForStatement') {

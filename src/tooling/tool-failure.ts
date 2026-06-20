@@ -1,3 +1,5 @@
+import type { FirebatLogger } from '../shared/logger';
+
 interface ToolFailureInput {
   readonly tool: string;
   readonly exitCode: number;
@@ -48,4 +50,28 @@ const throwIfToolRunFailed = (result: ToolRunOutcome, defaultMessage: string): v
   }
 };
 
-export { detectToolFailure, throwIfToolRunFailed };
+interface BinUnavailableResult<TTool extends string> {
+  readonly ok: false;
+  readonly tool: TTool;
+  readonly error: string;
+}
+
+/**
+ * 로컬 바이너리를 찾지 못했을 때의 "도구 사용 불가" 처리: 경고 로그 + 실패 결과 반환.
+ * oxfmt/oxlint 러너가 공유하는 "bin 미발견 → 실패 결과" 단일 변경지점.
+ */
+const reportBinUnavailable = <TTool extends string>(
+  logger: FirebatLogger,
+  tool: TTool,
+  label: string,
+): BinUnavailableResult<TTool> => {
+  logger.warn(`${tool}: command not found — ${label} tool unavailable`);
+
+  return {
+    ok: false,
+    tool,
+    error: `${tool} is not available. Install it (or use a firebat build that bundles it) to enable the ${label} tool.`,
+  };
+};
+
+export { detectToolFailure, reportBinUnavailable, throwIfToolRunFailed };

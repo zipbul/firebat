@@ -1,5 +1,7 @@
 import type { AstNode } from '../types';
 
+import { nodeArray } from './node-array';
+
 type StatementBodyHandler = (body: AstNode[]) => void;
 
 type NodeVisit = (node: AstNode) => void;
@@ -17,9 +19,7 @@ interface StatementBodyVisitor {
  */
 const createStatementBodyVisitor = (checkBody: StatementBodyHandler): StatementBodyVisitor => {
   const visit = (node: AstNode): void => {
-    const body = Array.isArray(node.body) ? node.body : [];
-
-    checkBody(body);
+    checkBody(nodeArray(node.body));
   };
 
   return {

@@ -1,11 +1,13 @@
 import type { AstNode } from '../types';
 
+import { nodeArray } from './node-array';
+
 const isFunctionVariableDeclaration = (node: AstNode | null | undefined): boolean => {
   if (node?.type !== 'VariableDeclaration') {
     return false;
   }
 
-  const declarations = Array.isArray(node.declarations) ? node.declarations : [];
+  const declarations = nodeArray(node.declarations);
 
   if (declarations.length === 0) {
     return false;
