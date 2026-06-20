@@ -66,7 +66,7 @@ export class OxcCFGBuilder {
     const tails = this.visitStatement(bodyNode, [entryId], [], null);
 
     for (const tail of tails) {
-      this.cfg.addEdge(tail, this.exitId, EdgeType.Normal);
+      this.addNormalEdge(tail, this.exitId);
     }
 
     this.result = {
@@ -96,12 +96,84 @@ export class OxcCFGBuilder {
     }
   }
 
+  /**
+   * Add a CFG node for `payload` and wire every `incoming` predecessor into it
+   * with a Normal edge, returning the new node. The single "materialize a node
+   * at a join from its predecessors" decision: statement/payload nodes in the
+   * jump/return/switch visitors, and (with a null payload) the if-statement's
+   * branch-merge node.
+   */
+  private addNodeFrom(incoming: readonly NodeId[], payload: CfgNodePayload | null): NodeId {
+    const node = this.addNode(payload);
+
+    this.connect(incoming, node, EdgeType.Normal);
+
+    return node;
+  }
+
+  // Single-edge constructors: one decision point per edge type. Each is distinct
+  // (the EdgeType property is part of the decision, not a substitutable literal),
+  // so a change to how an edge of a given kind is recorded has one home.
+  private addNormalEdge(from: NodeId, to: NodeId): void {
+    this.cfg.addEdge(from, to, EdgeType.Normal);
+  }
+
+  private addTrueEdge(from: NodeId, to: NodeId): void {
+    this.cfg.addEdge(from, to, EdgeType.True);
+  }
+
+  private addFalseEdge(from: NodeId, to: NodeId): void {
+    this.cfg.addEdge(from, to, EdgeType.False);
+  }
+
+  private addExceptionEdge(from: NodeId, to: NodeId): void {
+    this.cfg.addEdge(from, to, EdgeType.Exception);
+  }
+
+  /** Branch a condition node both ways: True to `trueTarget`, False to `falseTarget`. */
+  private addBranchEdges(conditionNode: NodeId, trueTarget: NodeId, falseTarget: NodeId): void {
+    this.addTrueEdge(conditionNode, trueTarget);
+    this.addFalseEdge(conditionNode, falseTarget);
+  }
+
+  /** Innermost active catch/finalizer handler entry, or undefined if not inside a try. */
+  private currentCatchEntry(): NodeId | undefined {
+    return this.activeCatchEntryStack[this.activeCatchEntryStack.length - 1];
+  }
+
+  /** Innermost active return-redirection target (inlined IIFE / finalizer), falling back to the function exit. */
+  private currentReturnTarget(): NodeId {
+    return this.returnTargetStack[this.returnTargetStack.length - 1] ?? this.exitId;
+  }
+
   private addExceptionEdgeIfInTry(nodeId: NodeId): void {
-    const catchEntry = this.activeCatchEntryStack[this.activeCatchEntryStack.length - 1];
+    const catchEntry = this.currentCatchEntry();
 
     if (catchEntry !== undefined) {
-      this.cfg.addEdge(nodeId, catchEntry, EdgeType.Exception);
+      this.addExceptionEdge(nodeId, catchEntry);
     }
+  }
+
+  /**
+   * Wire `incoming` predecessors into an existing `node` with a Normal edge and
+   * register its in-try exception edge. The single "a node both completes
+   * normally from its predecessors and may throw" decision used by the for/while
+   * header nodes.
+   */
+  private connectInto(incoming: readonly NodeId[], node: NodeId): void {
+    this.connect(incoming, node, EdgeType.Normal);
+    this.addExceptionEdgeIfInTry(node);
+  }
+
+  /**
+   * Make `handlerEntry` the active exception handler for the try body: route a
+   * pre-statement exception edge from `tryBlockEntry` to it and push it as the
+   * innermost catch entry. The single decision shared by the catch and
+   * finally-as-handler paths. Caller pops the stack once the try body is visited.
+   */
+  private installCatchHandler(tryBlockEntry: NodeId, handlerEntry: NodeId): void {
+    this.addExceptionEdge(tryBlockEntry, handlerEntry);
+    this.activeCatchEntryStack.push(handlerEntry);
   }
 
   private addConditionalEdges(
@@ -112,25 +184,24 @@ export class OxcCFGBuilder {
     treatMissingAsTrue: boolean,
   ): void {
     if (truthiness === true) {
-      this.cfg.addEdge(conditionNode, trueTarget, EdgeType.True);
+      this.addTrueEdge(conditionNode, trueTarget);
 
       return;
     }
 
     if (truthiness === false) {
-      this.cfg.addEdge(conditionNode, falseTarget, EdgeType.False);
+      this.addFalseEdge(conditionNode, falseTarget);
 
       return;
     }
 
     if (treatMissingAsTrue) {
-      this.cfg.addEdge(conditionNode, trueTarget, EdgeType.True);
+      this.addTrueEdge(conditionNode, trueTarget);
 
       return;
     }
 
-    this.cfg.addEdge(conditionNode, trueTarget, EdgeType.True);
-    this.cfg.addEdge(conditionNode, falseTarget, EdgeType.False);
+    this.addBranchEdges(conditionNode, trueTarget, falseTarget);
   }
 
   private selectTarget(entry: LoopTargets, useBreakTarget: boolean): NodeId {
@@ -144,6 +215,16 @@ export class OxcCFGBuilder {
    * `LoopTargets` shape and stack-extension convention have one source of truth.
    * Returns the body's tail nodes; per-loop back-edge wiring stays in the caller.
    */
+  /** Push a break/continue/label scope onto the loop stack. The single jump-target registration decision shared by loops and switches. */
+  private extendLoopStack(
+    loopStack: readonly LoopTargets[],
+    breakTarget: NodeId,
+    continueTarget: NodeId,
+    currentLabel: string | null,
+  ): LoopTargets[] {
+    return [...loopStack, { breakTarget, continueTarget, label: currentLabel }];
+  }
+
   private visitLoopBody(
     body: Node,
     bodyEntry: NodeId,
@@ -152,7 +233,7 @@ export class OxcCFGBuilder {
     loopStack: readonly LoopTargets[],
     currentLabel: string | null,
   ): NodeId[] {
-    const nextLoopStack: LoopTargets[] = [...loopStack, { breakTarget, continueTarget, label: currentLabel }];
+    const nextLoopStack = this.extendLoopStack(loopStack, breakTarget, continueTarget, currentLabel);
 
     return this.visitStatement(body, [bodyEntry], nextLoopStack, null);
   }
@@ -198,18 +279,21 @@ export class OxcCFGBuilder {
     loopStack: readonly LoopTargets[],
     useBreakTarget: boolean,
   ): NodeId[] {
-    const jumpNode = this.addNode(node);
-
-    this.connect(incoming, jumpNode, EdgeType.Normal);
+    const jumpNode = this.addNodeFrom(incoming, node);
 
     const targetLabel = node.label?.name ?? null;
     const target = this.resolveLoopTarget(loopStack, targetLabel, useBreakTarget);
 
     if (target !== null) {
-      this.cfg.addEdge(jumpNode, target, EdgeType.Normal);
+      this.addNormalEdge(jumpNode, target);
     }
 
     return [];
+  }
+
+  /** Tails of an if-statement's alternate: the false entry itself when there is no `else`, otherwise the visited alternate. */
+  private visitAlternate(ifNode: IfStatement, falseEntry: NodeId, loopStack: readonly LoopTargets[]): NodeId[] {
+    return ifNode.alternate === null ? [falseEntry] : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
   }
 
   private visitIfStatement(ifNode: IfStatement, incoming: readonly NodeId[], loopStack: readonly LoopTargets[]): NodeId[] {
@@ -222,37 +306,27 @@ export class OxcCFGBuilder {
     const falseEntry = this.addNode(null);
 
     if (truthiness === true) {
-      this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
+      this.addTrueEdge(conditionNode, trueEntry);
 
       const trueTails = this.visitStatement(ifNode.consequent, [trueEntry], loopStack, null);
-      const mergeNode = this.addNode(null);
 
-      this.connect(trueTails, mergeNode, EdgeType.Normal);
-
-      return [mergeNode];
+      return [this.addNodeFrom(trueTails, null)];
     }
 
     if (truthiness === false) {
-      this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
+      this.addFalseEdge(conditionNode, falseEntry);
 
-      const falseTails =
-        ifNode.alternate === null ? [falseEntry] : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
-      const mergeNode = this.addNode(null);
+      const falseTails = this.visitAlternate(ifNode, falseEntry, loopStack);
 
-      this.connect(falseTails, mergeNode, EdgeType.Normal);
-
-      return [mergeNode];
+      return [this.addNodeFrom(falseTails, null)];
     }
 
-    this.cfg.addEdge(conditionNode, trueEntry, EdgeType.True);
-    this.cfg.addEdge(conditionNode, falseEntry, EdgeType.False);
+    this.addBranchEdges(conditionNode, trueEntry, falseEntry);
 
     const trueTails = this.visitStatement(ifNode.consequent, [trueEntry], loopStack, null);
-    const falseTails =
-      ifNode.alternate === null ? [falseEntry] : this.visitStatement(ifNode.alternate, [falseEntry], loopStack, null);
-    const mergeNode = this.addNode(null);
+    const falseTails = this.visitAlternate(ifNode, falseEntry, loopStack);
+    const mergeNode = this.addNodeFrom(trueTails, null);
 
-    this.connect(trueTails, mergeNode, EdgeType.Normal);
     this.connect(falseTails, mergeNode, EdgeType.Normal);
 
     return [mergeNode];
@@ -291,15 +365,13 @@ export class OxcCFGBuilder {
     currentLabel: string | null,
   ): NodeId[] {
     const discriminantPayload = this.buildSwitchDiscriminantPayload(switchNode);
-    const discriminantNode = this.addNode(discriminantPayload);
-
-    this.connect(incoming, discriminantNode, EdgeType.Normal);
+    const discriminantNode = this.addNodeFrom(incoming, discriminantPayload);
 
     const afterSwitch = this.addNode(null);
     const caseEntries: NodeId[] = switchNode.cases.map(() => this.addNode(null));
 
     for (const entry of caseEntries) {
-      this.cfg.addEdge(discriminantNode, entry, EdgeType.Normal);
+      this.addNormalEdge(discriminantNode, entry);
     }
 
     // No `default` clause: a discriminant matching no case falls straight through
@@ -312,13 +384,10 @@ export class OxcCFGBuilder {
     const hasDefault = switchNode.cases.some(caseNode => caseNode.test === null);
 
     if (!hasDefault) {
-      this.cfg.addEdge(discriminantNode, afterSwitch, EdgeType.Normal);
+      this.addNormalEdge(discriminantNode, afterSwitch);
     }
 
-    const nextLoopStack: LoopTargets[] = [
-      ...loopStack,
-      { breakTarget: afterSwitch, continueTarget: afterSwitch, label: currentLabel },
-    ];
+    const nextLoopStack = this.extendLoopStack(loopStack, afterSwitch, afterSwitch, currentLabel);
 
     for (let index = 0; index < switchNode.cases.length; index += 1) {
       const caseNode = switchNode.cases[index];
@@ -352,8 +421,7 @@ export class OxcCFGBuilder {
     if (forNode.init !== null) {
       const initNode = this.addNode(forNode.init);
 
-      this.connect(tails, initNode, EdgeType.Normal);
-      this.addExceptionEdgeIfInTry(initNode);
+      this.connectInto(tails, initNode);
 
       tails = [initNode];
     }
@@ -361,8 +429,7 @@ export class OxcCFGBuilder {
     const testNode = this.addNode(forNode.test);
     const truthiness = evalStaticTruthiness(forNode.test ?? undefined);
 
-    this.connect(tails, testNode, EdgeType.Normal);
-    this.addExceptionEdgeIfInTry(testNode);
+    this.connectInto(tails, testNode);
 
     const bodyEntry = this.addNode(null);
     const afterLoop = this.addNode(null);
@@ -388,7 +455,7 @@ export class OxcCFGBuilder {
 
     if (updateNode !== null) {
       this.connect(bodyTails, updateNode, EdgeType.Normal);
-      this.cfg.addEdge(updateNode, testNode, EdgeType.Normal);
+      this.addNormalEdge(updateNode, testNode);
     } else {
       this.connect(bodyTails, testNode, EdgeType.Normal);
     }
@@ -405,8 +472,7 @@ export class OxcCFGBuilder {
     const conditionNode = this.addNode(whileNode.test);
     const truthiness = evalStaticTruthiness(whileNode.test);
 
-    this.connect(incoming, conditionNode, EdgeType.Normal);
-    this.addExceptionEdgeIfInTry(conditionNode);
+    this.connectInto(incoming, conditionNode);
 
     const bodyEntry = this.addNode(null);
     const afterLoop = this.addNode(null);
@@ -437,8 +503,7 @@ export class OxcCFGBuilder {
 
     this.connect(bodyTails, conditionNode, EdgeType.Normal);
 
-    this.cfg.addEdge(conditionNode, bodyEntry, EdgeType.True);
-    this.cfg.addEdge(conditionNode, afterLoop, EdgeType.False);
+    this.addBranchEdges(conditionNode, bodyEntry, afterLoop);
 
     return [afterLoop];
   }
@@ -454,27 +519,24 @@ export class OxcCFGBuilder {
     const bodyEntry = this.addNode(null);
     const afterLoop = this.addNode(null);
 
-    this.connect(incoming, headerNode, EdgeType.Normal);
-    this.addExceptionEdgeIfInTry(headerNode);
+    this.connectInto(incoming, headerNode);
 
-    this.cfg.addEdge(headerNode, afterLoop, EdgeType.Normal);
-    this.cfg.addEdge(headerNode, bodyEntry, EdgeType.Normal);
+    this.addNormalEdge(headerNode, afterLoop);
+    this.addNormalEdge(headerNode, bodyEntry);
 
     return this.visitLoopBodyAndExit(forOfInNode.body, bodyEntry, afterLoop, headerNode, loopStack, currentLabel);
   }
 
   private visitReturnStatement(returnNode_node: ReturnStatement, incoming: readonly NodeId[]): NodeId[] {
     const returnPayload: CfgNodePayload = returnNode_node.argument ?? returnNode_node;
-    const returnNode = this.addNode(returnPayload);
-
-    this.connect(incoming, returnNode, EdgeType.Normal);
+    const returnNode = this.addNodeFrom(incoming, returnPayload);
 
     // Innermost active redirection wins: an inlined IIFE's after-call node or a
     // try's finalizer-return entry, whichever is on top. Falls back to the
     // function exit.
-    const target = this.returnTargetStack[this.returnTargetStack.length - 1] ?? this.exitId;
+    const target = this.currentReturnTarget();
 
-    this.cfg.addEdge(returnNode, target, EdgeType.Normal);
+    this.addNormalEdge(returnNode, target);
 
     return [];
   }
@@ -581,7 +643,7 @@ export class OxcCFGBuilder {
 
     const afterPayloadNode = this.addNode(afterPayload);
 
-    this.cfg.addEdge(afterCall, afterPayloadNode, EdgeType.Normal);
+    this.addNormalEdge(afterCall, afterPayloadNode);
     this.addExceptionEdgeIfInTry(afterPayloadNode);
 
     return [afterPayloadNode];
@@ -686,9 +748,8 @@ export class OxcCFGBuilder {
       }
     }
 
-    const statementNode = this.addNode(node);
+    const statementNode = this.addNodeFrom(incoming, node);
 
-    this.connect(incoming, statementNode, EdgeType.Normal);
     this.addExceptionEdgeIfInTry(statementNode);
 
     return [statementNode];
@@ -709,17 +770,15 @@ export class OxcCFGBuilder {
   }
 
   private visitThrowStatement(throwNode_node: ThrowStatement, incoming: readonly NodeId[]): NodeId[] {
-    const throwNode = this.addNode(throwNode_node.argument);
-
-    this.connect(incoming, throwNode, EdgeType.Normal);
+    const throwNode = this.addNodeFrom(incoming, throwNode_node.argument);
 
     // Route the exception edge to the innermost active catch handler, if any. Without
     // this, a `throw` inside `try { throw } catch (e) { ... }` skipped the catch block
     // entirely so reads in the handler were invisible to dataflow analysis.
-    const activeCatch = this.activeCatchEntryStack[this.activeCatchEntryStack.length - 1];
+    const activeCatch = this.currentCatchEntry();
     const exceptionTarget = activeCatch !== undefined ? activeCatch : this.exitId;
 
-    this.cfg.addEdge(throwNode, exceptionTarget, EdgeType.Exception);
+    this.addExceptionEdge(throwNode, exceptionTarget);
 
     return [];
   }
@@ -737,13 +796,11 @@ export class OxcCFGBuilder {
       this.returnTargetStack.push(finallyEntryReturn);
     }
 
-    const tryEntry = this.addNode(null);
-
-    this.connect(incoming, tryEntry, EdgeType.Normal);
+    const tryEntry = this.addNodeFrom(incoming, null);
 
     const tryBlockEntry = this.addNode(null);
 
-    this.cfg.addEdge(tryEntry, tryBlockEntry, EdgeType.Normal);
+    this.addNormalEdge(tryEntry, tryBlockEntry);
 
     const { tryTails, catchTails } = this.visitTryBlock(tryNode, tryBlockEntry, loopStack, finallyEntryException);
 
@@ -779,8 +836,7 @@ export class OxcCFGBuilder {
         // Exception before any try statement completes: pre-try state reaches the
         // finalizer's exception entry (so a `let x = init` before the try is live
         // along the throw path, not killed by an assignment that may not run).
-        this.cfg.addEdge(tryBlockEntry, finallyEntryException, EdgeType.Exception);
-        this.activeCatchEntryStack.push(finallyEntryException);
+        this.installCatchHandler(tryBlockEntry, finallyEntryException);
       }
 
       const tryTails = this.visitStatement(tryNode.block, [tryBlockEntry], loopStack, null);
@@ -800,9 +856,7 @@ export class OxcCFGBuilder {
     // be treated as if it always executes, killing the init's reach to post-try
     // uses and falsely flagging `let x = init` as a dead store — even though on
     // the throw path the init survives and is read after the try/catch.
-    this.cfg.addEdge(tryBlockEntry, catchEntry, EdgeType.Exception);
-
-    this.activeCatchEntryStack.push(catchEntry);
+    this.installCatchHandler(tryBlockEntry, catchEntry);
 
     const tryTails = this.visitStatement(tryNode.block, [tryBlockEntry], loopStack, null);
 
@@ -836,11 +890,9 @@ export class OxcCFGBuilder {
     // Return completion path: run finalizer and then complete the return to the
     // next outer target (function exit, an outer finally, or an enclosing IIFE).
     const finallyReturnTails = this.visitStatement(finalizer, [finallyEntryReturn], loopStack, null);
-    const outerReturnTarget = this.returnTargetStack[this.returnTargetStack.length - 1] ?? this.exitId;
+    const outerReturnTarget = this.currentReturnTarget();
 
-    for (const tail of finallyReturnTails) {
-      this.cfg.addEdge(tail, outerReturnTarget, EdgeType.Normal);
-    }
+    this.connect(finallyReturnTails, outerReturnTarget, EdgeType.Normal);
 
     // Exception completion path (try without catch): run the finalizer, then re-raise
     // the exception toward the next outer handler or the function exit.
@@ -849,9 +901,7 @@ export class OxcCFGBuilder {
       const outerExceptionTarget =
         this.activeCatchEntryStack.length > 0 ? this.activeCatchEntryStack[this.activeCatchEntryStack.length - 1]! : this.exitId;
 
-      for (const tail of finallyExceptionTails) {
-        this.cfg.addEdge(tail, outerExceptionTarget, EdgeType.Exception);
-      }
+      this.connect(finallyExceptionTails, outerExceptionTarget, EdgeType.Exception);
     }
 
     // (Return entry already popped at the top of this method.)

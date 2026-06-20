@@ -11,7 +11,7 @@ import type {
 } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { collectFunctionNodes, collectOxcNodes, forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
+import { collectFunctionNodes, collectOxcNodes, forEachChildNode, isFunctionNode, toNodeArray } from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
 import {
@@ -19,6 +19,7 @@ import {
   bindingKey,
   collectLocalVarIndexes,
   collectParameterBindings,
+  resolveVarIndex,
 } from '../../engine/dataflow/reaching-defs';
 import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
 
@@ -423,7 +424,7 @@ const hasInterveningWrites = (
   const nonLocalNames = new Set<string>();
 
   for (const ref of referencedBindings) {
-    const idx = localIndexByName.get(bindingKey(ref.name, ref.declScope));
+    const idx = resolveVarIndex(localIndexByName, ref);
 
     if (typeof idx === 'number') {
       localVarIndexes.add(idx);
@@ -462,7 +463,7 @@ const hasInterveningWrites = (
 
     // Check non-local variable writes via AST-based collectVariables
     if (nonLocalNames.size > 0) {
-      const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+      const payloadNodes = toNodeArray(payload);
 
       for (const payloadNode of payloadNodes) {
         const usages = collectVariables(payloadNode, { includeNestedFunctions: false });
@@ -531,13 +532,13 @@ const collectAllSiteOffsets = (
       continue;
     }
 
-    const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+    const payloadNodes = toNodeArray(payload);
 
     for (const payloadNode of payloadNodes) {
       const usages = collectVariables(payloadNode, { includeNestedFunctions: false, declScopeByIdLocation });
 
       for (const usage of usages) {
-        const varIndex = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+        const varIndex = resolveVarIndex(localIndexByName, usage);
 
         if (typeof varIndex !== 'number') {
           continue;
@@ -645,7 +646,7 @@ const checkScopeNarrowing = (
     }
 
     // Get the variable index using the def's binding scope.
-    const varIndex = localIndexByName.get(bindingKey(defMeta.name, defMeta.declScope));
+    const varIndex = resolveVarIndex(localIndexByName, defMeta);
 
     if (typeof varIndex !== 'number') {
       continue;

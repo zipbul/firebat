@@ -8,6 +8,7 @@ import type { Node } from 'oxc-parser';
 
 import type { FirebatItemKind, SourceSpan } from '../../types';
 
+import { getContractMembers } from '../../engine/ast/oxc-fingerprint';
 import { spanOfNode } from '../../engine/ast/source-span';
 
 const CLONE_TARGET_TYPES = new Set([
@@ -122,20 +123,11 @@ export const isDecisionlessSkeleton = (node: Node): boolean => {
     return isFunctionSkeleton(value as FunctionLikeNode);
   }
 
-  if (t === 'TSInterfaceDeclaration') {
-    const body = (node as Node & { readonly body: Node & { readonly body: ReadonlyArray<Node> } }).body;
-
-    return body.body.length === 0;
-  }
-
-  if (t === 'TSTypeAliasDeclaration') {
-    const annotation = (node as Node & { readonly typeAnnotation: Node }).typeAnnotation;
-
-    if (annotation.type === 'TSTypeLiteral') {
-      return (annotation as Node & { readonly members: ReadonlyArray<Node> }).members.length === 0;
-    }
-
-    return false;
+  if (t === 'TSInterfaceDeclaration' || t === 'TSTypeAliasDeclaration') {
+    // An empty contract (no members, or a non-literal type alias) is a
+    // protocol-enforcing skeleton with no decision. getContractMembers returns
+    // null for a non-literal type alias, so `?.length === 0` yields false there.
+    return getContractMembers(node)?.length === 0;
   }
 
   // 멤버가 전부 구현 없는 abstract/시그니처뿐인 클래스 = 프로토콜 강제 골격 (결정 없음)

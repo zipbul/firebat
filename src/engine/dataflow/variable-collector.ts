@@ -281,6 +281,19 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
   const declScopeByIdLocation: ReadonlyMap<number, string> = options.declScopeByIdLocation ?? new Map<number, string>();
   const evaluateAllBranches = options.evaluateAllBranches === true;
 
+  // Resolve a usage's binding scope from its identifier offset, attach it when
+  // known, then record the usage. The single "finalize and record a usage"
+  // decision shared by the value-write and binding-only declaration paths.
+  const recordUsage = (usage: VariableUsage, idStart: number): void => {
+    const declScope = declScopeByIdLocation.get(idStart);
+
+    if (declScope !== undefined) {
+      usage.declScope = declScope;
+    }
+
+    usages.push(usage);
+  };
+
   const pushIdentifierUsage = (
     current: Node,
     name: string,
@@ -303,13 +316,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
       usage.declarationKind = declarationKind;
     }
 
-    const declScope = declScopeByIdLocation.get(current.start);
-
-    if (declScope !== undefined) {
-      usage.declScope = declScope;
-    }
-
-    usages.push(usage);
+    recordUsage(usage, current.start);
   };
 
   // visit is declared with let so helper closures declared below can reference it.
@@ -419,13 +426,7 @@ export const collectVariables = (node: Node, options: VariableCollectorOptions =
           usage.declarationKind = declarationKind;
         }
 
-        const declScope = declScopeByIdLocation.get(id.start);
-
-        if (declScope !== undefined) {
-          usage.declScope = declScope;
-        }
-
-        usages.push(usage);
+        recordUsage(usage, id.start);
       }
     } else {
       visit(id, allowNestedFunctions, true, 'declaration', suppressDeclarations, declarationKind);

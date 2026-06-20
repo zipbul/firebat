@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'bun:test';
 
-import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
+import {
+  addIdsToBitSet,
+  createBitSet,
+  createBitSetArray,
+  equalsBitSet,
+  intersectBitSet,
+  subtractBitSet,
+  unionBitSet,
+  unionByIndices,
+} from './dataflow';
 
 interface EqualsBitSetCase { name: string; aBits: number[]; bBits: number[]; equal: boolean }
 
@@ -92,14 +101,64 @@ describe('equalsBitSet', () => {
     const a = createBitSet();
     const b = createBitSet();
 
-    for (const bit of aBits) {
-      a.add(bit);
-    }
-
-    for (const bit of bBits) {
-      b.add(bit);
-    }
+    addIdsToBitSet(a, aBits);
+    addIdsToBitSet(b, bBits);
 
     expect(equalsBitSet(a, b)).toBe(equal);
+  });
+});
+
+// Build an array of bit sets, one per id-list, dogfooding the helpers under test.
+const bitSetsOf = (...idLists: ReadonlyArray<ReadonlyArray<number>>) => {
+  const arr = createBitSetArray(idLists.length);
+
+  idLists.forEach((ids, index) => addIdsToBitSet(arr[index], ids));
+
+  return arr;
+};
+
+describe('createBitSetArray', () => {
+  it.each([
+    { length: 3 },
+    { length: 0 },
+  ])('allocates $length empty bit sets', ({ length }) => {
+    const arr = createBitSetArray(length);
+
+    expect(arr.length === length && arr.every(bs => bs.array().length === 0)).toBe(true);
+  });
+
+  it('allocates distinct bit sets (mutating one does not affect another)', () => {
+    const [first, second] = bitSetsOf([7], []);
+
+    expect(first!.has(7) && !second!.has(7)).toBe(true);
+  });
+});
+
+describe('addIdsToBitSet', () => {
+  it.each<{ name: string; ids: number[]; expected: number[] }>([
+    { name: 'adds every id', ids: [1, 4, 9], expected: [1, 4, 9] },
+    { name: 'is a no-op for an empty list', ids: [], expected: [] },
+  ])('$name', ({ ids, expected }) => {
+    const [bs] = bitSetsOf(ids);
+
+    // FastBitSet.array() yields indices in ascending order.
+    expect(bs!.array()).toEqual(expected);
+  });
+
+  it('does nothing when the target is undefined', () => {
+    expect(() => addIdsToBitSet(undefined, [1, 2])).not.toThrow();
+  });
+});
+
+describe('unionByIndices', () => {
+  it.each<{ name: string; indices: number[]; expected: number[] }>([
+    { name: 'unions only the selected sets', indices: [0, 2], expected: [1, 3] },
+    { name: 'returns empty for no indices', indices: [], expected: [] },
+    { name: 'skips index slots that hold no set', indices: [0, 1, 2], expected: [1, 3] },
+  ])('$name', ({ indices, expected }) => {
+    const byIndex = bitSetsOf([1], [], [3]);
+    const result = unionByIndices(createBitSet(), indices, byIndex);
+
+    expect(result.array()).toEqual(expected);
   });
 });

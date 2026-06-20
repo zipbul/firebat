@@ -16,6 +16,17 @@ export const isOxcNodeArray = (value: NodeValue): value is ReadonlyArray<Node> =
 
 export const isNodeRecord = (node: unknown): node is NodeRecord => isNonArrayObject(node);
 
+/**
+ * Node를 string-keyed 동적 레코드로 보는 단일 캐스트 지점. visitorKeys에 없는
+ * 스칼라 프로퍼티(operator·optional 등)나 타입별 자식을 동적 키로 읽을 때 쓴다.
+ * 런타임 동작은 없고 형(型) 시야만 넓힌다.
+ */
+export const asRecord = (node: unknown): Record<string, unknown> => node as Record<string, unknown>;
+
+/** CFG payload(단일 Node | Node 배열)를 ReadonlyArray<Node>로 정규화하는 단일 결정. */
+export const toNodeArray = (payload: Node | ReadonlyArray<Node>): ReadonlyArray<Node> =>
+  Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+
 export const getNodeName = (node: Node | null | undefined): string | null => {
   if (node === null || node === undefined) {
     return null;
@@ -71,6 +82,10 @@ export const forEachChildNode = (node: Node, cb: (child: Node) => void): void =>
   }
 };
 
+/** Node의 각 자식 Node를 (child, 부모=node)로 콜백에 전달. parent-aware 재귀의 단일 하강 지점. */
+export const forEachChildWithParent = (node: Node, cb: (child: Node, parent: Node) => void): void =>
+  forEachChildNode(node, child => cb(child, node));
+
 type OxcNodeWalker = (node: Node) => boolean;
 
 export const walkOxcTree = (program: Node, walker: OxcNodeWalker): void => {
@@ -97,7 +112,7 @@ export const walkOxcTreeWithParent = (root: Node, walker: OxcNodeWalkerWithParen
       return;
     }
 
-    forEachChildNode(node, child => visit(child, node));
+    forEachChildWithParent(node, visit);
   };
 
   visit(root, null);

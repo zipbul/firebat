@@ -1,7 +1,7 @@
 import type { IntegerCFG } from '../cfg';
 import type { BitSet } from '../types';
 
-import { createBitSet, equalsBitSet, subtractBitSet, unionBitSet } from './dataflow';
+import { createBitSet, createBitSetArray, equalsBitSet, subtractBitSet, unionBitSet, unionByIndices } from './dataflow';
 
 interface LivenessResult {
   readonly liveInByNode: ReadonlyArray<BitSet>;
@@ -38,22 +38,13 @@ const buildUsageAndDefSets = (
 };
 
 const computeNewOutForNode = (n: number, succ: Int32Array[], liveIn: BitSet[]): BitSet => {
-  let newOut = createBitSet();
   const successors = succ[n];
 
   if (!successors) {
-    return newOut;
+    return createBitSet();
   }
 
-  for (const s of successors) {
-    const sIn = liveIn[s];
-
-    if (sIn) {
-      newOut = unionBitSet(newOut, sIn);
-    }
-  }
-
-  return newOut;
+  return unionByIndices(createBitSet(), successors, liveIn);
 };
 
 interface NodeLivenessEntry {
@@ -132,8 +123,8 @@ const iterateLiveness = (
   useSets: BitSet[],
   defSets: BitSet[],
 ): { liveIn: BitSet[]; liveOut: BitSet[] } => {
-  const liveIn: BitSet[] = Array.from({ length: nodeCount }, createBitSet);
-  const liveOut: BitSet[] = Array.from({ length: nodeCount }, createBitSet);
+  const liveIn: BitSet[] = createBitSetArray(nodeCount);
+  const liveOut: BitSet[] = createBitSetArray(nodeCount);
 
   while (runLivenessPass(nodeCount, succ, useSets, defSets, liveIn, liveOut)) {
     // repeat until no changes

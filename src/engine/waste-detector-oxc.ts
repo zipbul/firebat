@@ -5,8 +5,8 @@ import { buildLineOffsets, getLineColumn, walk } from '@zipbul/gildash';
 import type { WasteFinding } from '..';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
-import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode } from './ast';
-import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables, densifyKeys } from './dataflow';
+import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
+import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables, densifyKeys, resolveVarIndex } from './dataflow';
 import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import { buildDeclScopeMap } from './dataflow/variable-collector';
 
@@ -69,7 +69,7 @@ const collectCapturedVarIndexesFromFunction = (
       continue;
     }
 
-    const idx = localIndexByName.get(bindingKey(u.name, u.declScope));
+    const idx = resolveVarIndex(localIndexByName, u);
 
     if (typeof idx === 'number') {
       out.add(idx);
@@ -118,7 +118,7 @@ const buildNestedFunctionContext = (
       continue;
     }
 
-    const payloadNodes: ReadonlyArray<Node> = Array.isArray(payload) ? (payload as ReadonlyArray<Node>) : [payload as Node];
+    const payloadNodes = toNodeArray(payload);
     const nested = payloadNodes.flatMap(pn => collectOxcNodes(pn, n => isFunctionNode(n)));
 
     if (nested.length === 0) {
@@ -280,6 +280,28 @@ const mutationMethodCategory = (name: string): MutationMethodCategory | null => 
 };
 
 type FreshAllocationKind = 'array' | 'object' | 'class' | 'regex';
+
+/**
+ * Merge a fresh-allocation `kind` for `varIndex`: record it on first sight, but if
+ * a different kind was already recorded, mark the var as mixed-fresh and drop its
+ * single-kind entry. The single decision shared by the function-body and
+ * module-body init-kind collectors.
+ */
+const mergeFreshKind = (
+  varInitKind: Map<number, FreshAllocationKind>,
+  varHasMixedFreshKinds: Set<number>,
+  varIndex: number,
+  kind: FreshAllocationKind,
+): void => {
+  const existing = varInitKind.get(varIndex);
+
+  if (existing === undefined) {
+    varInitKind.set(varIndex, kind);
+  } else if (existing !== kind) {
+    varHasMixedFreshKinds.add(varIndex);
+    varInitKind.delete(varIndex);
+  }
+};
 
 const freshAllocationKindOf = (init: Node): FreshAllocationKind | null => {
   const unwrapped = unwrapValueWrappers(init);
@@ -1181,7 +1203,7 @@ const buildVarHasMeaningfulUse = (
   const reads = collectReadUsages(functionBodyNodes, false, declScopeByIdLocation);
 
   for (const usage of reads) {
-    const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+    const idx = resolveVarIndex(localIndexByName, usage);
 
     if (typeof idx !== 'number') {
       continue;
@@ -1690,7 +1712,7 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
   const usesByVar = new Map<number, { real: IdentifierContext[]; closureRead: boolean; otherKind: boolean }>();
 
   for (const usage of syntacticReads) {
-    const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+    const idx = resolveVarIndex(localIndexByName, usage);
 
     if (typeof idx !== 'number') {
       continue;
@@ -2056,9 +2078,7 @@ const collectWasteFindingsForFunction = (
   // visible to the in-body walks (`ScopeTracker.getDeclaration` cannot resolve
   // parameters when the walk starts at the body).
   const declScopeByIdLocation = buildDeclScopeMap(node, filePath, sourceText);
-  const functionBodyNodes: ReadonlyArray<Node> = Array.isArray(functionBodyNode)
-    ? (functionBodyNode as ReadonlyArray<Node>)
-    : [functionBodyNode as Node];
+  const functionBodyNodes = toNodeArray(functionBodyNode);
   const defCtxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
   const closureCapturedVarIndexes = collectClosureCapturedVarIndexes(functionBodyNodes, localIndexByName, declScopeByIdLocation);
   const analysis = analyzeFunctionBody(
@@ -2102,7 +2122,7 @@ const collectWasteFindingsForFunction = (
   const varHasAnyRead = new Set<number>();
 
   for (const usage of syntacticReads) {
-    const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+    const idx = resolveVarIndex(localIndexByName, usage);
 
     if (typeof idx === 'number') {
       varHasAnyRead.add(idx);
@@ -2157,14 +2177,7 @@ const collectWasteFindingsForFunction = (
       continue;
     }
 
-    const existing = varInitKind.get(def.varIndex);
-
-    if (existing === undefined) {
-      varInitKind.set(def.varIndex, kind);
-    } else if (existing !== kind) {
-      varHasMixedFreshKinds.add(def.varIndex);
-      varInitKind.delete(def.varIndex);
-    }
+    mergeFreshKind(varInitKind, varHasMixedFreshKinds, def.varIndex, kind);
   }
 
   // Case 6/7: a binding whose only uses are local mutation (`v.push(...)`) or property
@@ -2489,7 +2502,7 @@ const collectWasteFindingsForModule = (
   const varHasAnyRead = new Set<number>();
 
   for (const usage of syntacticReads) {
-    const idx = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+    const idx = resolveVarIndex(localIndexByName, usage);
 
     if (typeof idx === 'number') {
       varHasAnyRead.add(idx);
@@ -2535,14 +2548,7 @@ const collectWasteFindingsForModule = (
       continue;
     }
 
-    const existing = varInitKind.get(def.varIndex);
-
-    if (existing === undefined) {
-      varInitKind.set(def.varIndex, kind);
-    } else if (existing !== kind) {
-      varHasMixedFreshKinds.add(def.varIndex);
-      varInitKind.delete(def.varIndex);
-    }
+    mergeFreshKind(varInitKind, varHasMixedFreshKinds, def.varIndex, kind);
   }
 
   const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation, varInitKind);

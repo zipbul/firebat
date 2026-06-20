@@ -13,7 +13,7 @@ import type { Node } from 'oxc-parser';
 
 import { visitorKeys } from 'oxc-parser';
 
-import { isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { computeLcsAlignment } from './lcs';
@@ -203,8 +203,8 @@ const traverse = (ctx: TraversalContext, left: Node, right: Node, path: string):
     return;
   }
 
-  const leftRec = left as unknown as Record<string, unknown>;
-  const rightRec = right as unknown as Record<string, unknown>;
+  const leftRec = asRecord(left);
+  const rightRec = asRecord(right);
   // visitorKeys 기반 자식 노드 순회
   const keys = visitorKeys[left.type];
 

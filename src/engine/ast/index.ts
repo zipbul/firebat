@@ -1,10 +1,12 @@
 export { collectLocallyUsedImportNames } from './collect-locally-used-import-names';
 export { normalizeFile } from './normalize-file';
 export {
+  asRecord,
   collectFunctionNodes,
   collectFunctionNodesWithParent,
   collectOxcNodes,
   forEachChildNode,
+  forEachChildWithParent,
   getLiteralString,
   getNodeHeader,
   getNodeName,
@@ -12,6 +14,7 @@ export {
   isNodeRecord,
   isOxcNode,
   isOxcNodeArray,
+  toNodeArray,
   walkOxcTree,
   walkOxcTreeWithParent,
 } from './oxc-ast-utils';

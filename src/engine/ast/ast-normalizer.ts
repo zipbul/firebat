@@ -23,7 +23,7 @@ import type {
 
 import type { NodeValue } from '../types';
 
-import { forEachChildNode, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from './oxc-ast-utils';
+import { asRecord, forEachChildNode, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from './oxc-ast-utils';
 
 type AnyNode = Node & Record<string, unknown>;
 
@@ -64,6 +64,9 @@ const variableDeclarator = (id: Node, init?: Node): Node => withType('VariableDe
 
 const variableDeclaration = (kind: 'const' | 'let' | 'var', declarations: ReadonlyArray<Node>): Node =>
   withType('VariableDeclaration', { kind, declarations: [...declarations] });
+
+/** CallExpression의 arguments를 Node 배열로 안전하게 읽는다 (배열이 아니면 빈 배열). */
+const getCallArguments = (call: CallExpression): Node[] => (Array.isArray(call.arguments) ? (call.arguments as Node[]) : []);
 
 const hasReturnStatement = (node: NodeValue): boolean => {
   if (!isOxcNode(node)) {
@@ -566,7 +569,7 @@ const normalizeForEach = (node: AnyNode): NodeValue | null => {
 
   const call = expression as CallExpression;
   const callee = call.callee as NodeValue;
-  const args = Array.isArray(call.arguments) ? (call.arguments as Node[]) : [];
+  const args = getCallArguments(call);
   const member = isMemberNamed(callee, 'forEach');
 
   if (member === null || args.length !== 1) {
@@ -620,7 +623,7 @@ const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
 
   const outerCall = node as CallExpression;
   const callee = outerCall.callee as NodeValue;
-  const args = Array.isArray(outerCall.arguments) ? (outerCall.arguments as Node[]) : [];
+  const args = getCallArguments(outerCall);
   const filterMember = isMemberNamed(callee, 'filter');
 
   if (filterMember === null || args.length !== 1) {
@@ -639,7 +642,7 @@ const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
 
   const innerCall = mapCall as CallExpression;
   const mapCallee = innerCall.callee as NodeValue;
-  const mapArgs = Array.isArray(innerCall.arguments) ? (innerCall.arguments as Node[]) : [];
+  const mapArgs = getCallArguments(innerCall);
   const mapMember = isMemberNamed(mapCallee, 'map');
 
   if (mapMember === null || mapArgs.length !== 1) {
@@ -792,7 +795,7 @@ const extractGuardCallArg = (guard: Node): GuardCallInfo | null => {
   }
 
   const callExpr = expr as CallExpression;
-  const callArgs = Array.isArray(callExpr.arguments) ? (callExpr.arguments as Node[]) : [];
+  const callArgs = getCallArguments(callExpr);
 
   if (callArgs.length !== 1 || callArgs[0]?.type !== 'Identifier') {
     return null;
@@ -888,7 +891,7 @@ const normalizeTrailingReturn = (node: AnyNode): NodeValue | null => {
     return null;
   }
 
-  const rec = node as unknown as Record<string, unknown>;
+  const rec = asRecord(node);
 
   return withType(node.type, { ...rec, body: block(stmts.slice(0, -1) as ReadonlyArray<Node>) });
 };

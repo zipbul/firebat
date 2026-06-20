@@ -5,7 +5,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { TypeOracle } from './type-oracle';
 import type { ErrorFlowFinding, ErrorFlowFindingKind } from './types';
 
-import { forEachChildNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
+import { forEachChildNode, forEachChildWithParent, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
 import { createTypeOracle } from './type-oracle';
 
@@ -1390,7 +1390,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
       pushUnobservedScope(collectParamBindingNames(node.params));
 
-      forEachChildNode(node, child => visit(child, node));
+      descend(node);
 
       popUnobservedScope();
 
@@ -1476,7 +1476,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     if (isBranchConstruct(node)) {
       branchDepth++;
 
-      forEachChildNode(node, child => visit(child, node));
+      descend(node);
 
       branchDepth--;
 
@@ -1484,8 +1484,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
 
     // Fall back to generic traversal (parentheses are already normalized away upstream).
-    forEachChildNode(node, child => visit(child, node));
+    descend(node);
   };
+
+  // Recurse into a node's children, threading the node as their parent. The single
+  // "descend with parent" step the stateful visitor repeats at every recursion point.
+  const descend = (node: Node): void => forEachChildWithParent(node, visit);
 
   // Single-pass traversal: all rules handled in visit().
   // Top-level program body gets an unobserved-variable scope (no parameters at module scope).

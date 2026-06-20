@@ -16,7 +16,7 @@ import { visitorKeys } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { DuplicateGroup, DuplicateItem, ExtractionPlan, SourceSpan } from '../../types';
 
-import { collectOxcNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { asRecord, collectOxcNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { resolveSpan } from './clone-targets';
@@ -27,7 +27,7 @@ import { resolveSpan } from './clone-targets';
  * `onChild`가 false를 반환하면 해당 key의 자식을 건너뛴다 (필터용).
  */
 const visitChildNodes = (node: Node, onChild: (child: Node, key: string) => boolean | void): void => {
-  const rec = node as unknown as Record<string, unknown>;
+  const rec = asRecord(node);
   const keys = visitorKeys[node.type];
 
   if (keys === undefined) {
@@ -290,7 +290,7 @@ const addBlockTree = (
 };
 
 const getFunctionBody = (fn: Node): ReadonlyArray<Node> | null => {
-  const rec = fn as unknown as Record<string, unknown>;
+  const rec = asRecord(fn);
   // MethodDefinition → value(FunctionExpression) → body
   if (fn.type === 'MethodDefinition') {
     const value = rec.value;
@@ -504,7 +504,7 @@ const collectReferencedNames = (nodes: ReadonlyArray<Node>): ReadonlySet<string>
   const names = new Set<string>();
 
   const walk = (n: Node): void => {
-    const rec = n as unknown as Record<string, unknown>;
+    const rec = asRecord(n);
 
     if (n.type === 'Identifier') {
       names.add((n as Node & { readonly name: string }).name);

@@ -3,7 +3,16 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 import type { BitSet, DefMeta, FunctionBodyAnalysis } from '../types';
 
 import { OxcCFGBuilder } from '../cfg';
-import { createBitSet, equalsBitSet, intersectBitSet, subtractBitSet, unionBitSet } from './dataflow';
+import {
+  addIdsToBitSet,
+  createBitSet,
+  createBitSetArray,
+  equalsBitSet,
+  intersectBitSet,
+  subtractBitSet,
+  unionBitSet,
+  unionByIndices,
+} from './dataflow';
 import { buildDeclScopeMap, collectVariables } from './variable-collector';
 
 export interface BindingName {
@@ -82,6 +91,15 @@ export const collectParameterBindings = (functionNode: Node): ReadonlyArray<Bind
 const PARAMETER_SCOPE = '';
 
 export const bindingKey = (name: string, declScope: string | undefined): string => `${name}@${declScope ?? PARAMETER_SCOPE}`;
+
+/**
+ * 바인딩(name + declScope)을 dense 변수 인덱스로 해석한다. localIndexByName에 없으면
+ * undefined. 사용처·참조·정의 메타가 모두 같은 방식으로 var index를 찾는 단일 결정.
+ */
+export const resolveVarIndex = (
+  localIndexByName: ReadonlyMap<string, number>,
+  binding: { readonly name: string; readonly declScope?: string | undefined },
+): number | undefined => localIndexByName.get(bindingKey(binding.name, binding.declScope));
 
 /**
  * Scope key for a parameter binding. gildash assigns every identifier — including
@@ -265,7 +283,7 @@ const processNodeUsages = (
   const writeIndexes = new Set<number>();
 
   for (const usage of usages) {
-    const varIndex = localIndexByName.get(bindingKey(usage.name, usage.declScope));
+    const varIndex = resolveVarIndex(localIndexByName, usage);
 
     if (typeof varIndex !== 'number') {
       continue;
@@ -396,39 +414,23 @@ interface GenKillSets {
 }
 
 const buildKillSetForNode = (writtenVars: ReadonlyArray<number>, defsOfVar: BitSet[], genSet: BitSet): BitSet => {
-  let kill = createBitSet();
-
-  for (const varIndex of writtenVars) {
-    const defs = defsOfVar[varIndex];
-
-    if (defs) {
-      kill = unionBitSet(kill, defs);
-    }
-  }
+  const kill = unionByIndices(createBitSet(), writtenVars, defsOfVar);
 
   return subtractBitSet(kill, genSet);
 };
 
 const buildGenKillSets = (state: DefUseState, nodeCount: number, varCount: number): GenKillSets => {
   const { defsByVarIndex, genDefIdsByNode, writeVarIndexesByNode } = state;
-  const genByNode: BitSet[] = Array.from({ length: nodeCount }, createBitSet);
-  const killByNode: BitSet[] = Array.from({ length: nodeCount }, createBitSet);
-  const defsOfVar: BitSet[] = Array.from({ length: varCount }, createBitSet);
+  const genByNode: BitSet[] = createBitSetArray(nodeCount);
+  const killByNode: BitSet[] = createBitSetArray(nodeCount);
+  const defsOfVar: BitSet[] = createBitSetArray(varCount);
 
   for (let varIndex = 0; varIndex < defsByVarIndex.length; varIndex += 1) {
-    const ids = defsByVarIndex[varIndex] ?? [];
-
-    for (const defId of ids) {
-      defsOfVar[varIndex]?.add(defId);
-    }
+    addIdsToBitSet(defsOfVar[varIndex], defsByVarIndex[varIndex] ?? []);
   }
 
   for (let nodeId = 0; nodeId < nodeCount; nodeId += 1) {
-    const genIds = genDefIdsByNode[nodeId] ?? [];
-
-    for (const defId of genIds) {
-      genByNode[nodeId]?.add(defId);
-    }
+    addIdsToBitSet(genByNode[nodeId], genDefIdsByNode[nodeId] ?? []);
 
     const writtenVars = writeVarIndexesByNode[nodeId] ?? [];
 
@@ -498,8 +500,8 @@ const computeReachingDefs = (
   killByNode: BitSet[],
 ): { inByNode: BitSet[]; outByNode: BitSet[] } => {
   const empty = createBitSet();
-  const inByNode: BitSet[] = Array.from({ length: nodeCount }, createBitSet);
-  const outByNode: BitSet[] = Array.from({ length: nodeCount }, createBitSet);
+  const inByNode: BitSet[] = createBitSetArray(nodeCount);
+  const outByNode: BitSet[] = createBitSetArray(nodeCount);
 
   while (runReachingDefsPass(nodeCount, pred, genByNode, killByNode, inByNode, outByNode, empty)) {
     // repeat until no changes

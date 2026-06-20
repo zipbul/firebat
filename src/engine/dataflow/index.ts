@@ -7,6 +7,7 @@ export {
   collectParameterBindings,
   densifyKeys,
   extractBindingNames,
+  resolveVarIndex,
 } from './reaching-defs';
 export type { AnalyzeFunctionBodyOptions, BindingName } from './reaching-defs';
 export { collectVariables } from './variable-collector';
