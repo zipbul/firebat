@@ -6,6 +6,7 @@ import { getContextFilename } from '../utils/context-filename';
 import { fileExists } from '../utils/context-fs';
 import { isAstNodeValue } from '../utils/is-ast-node-value';
 import { getProgramBody } from '../utils/program-body';
+import { getImplPathFromSpec } from '../utils/test-file-path';
 
 function isUnitSpecFile(filePath: string): boolean {
   return filePath.endsWith('.spec.ts');
@@ -63,10 +64,6 @@ function isLogicful(program: AstNode): boolean {
   }
 
   return false;
-}
-
-function getImplPathFromSpec(specPath: string): string {
-  return specPath.replace(/\.spec\.ts$/, '.ts');
 }
 
 function getSpecPathFromImpl(implPath: string): string {

@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { AstNode, Variable } from '../types';
+import type { AstNode, Range, Variable } from '../types';
 
 import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../../../test/integration/oxlint-plugin/utils/token-utils';
 import { unusedImportsRule } from './unused-imports';
-
-type Range = [number, number];
 
 /** A declared variable whose identifier sits at `idRange` and whose references occupy `refRanges`. */
 function declared(idRange: Range, refRanges: Range[]): Variable {

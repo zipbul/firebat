@@ -1,9 +1,9 @@
 import type { AstNode, NodeOrNull, RuleContext } from '../types';
 
+import { isIdentifierNamed } from '../utils/identifier';
+
 const noGlobalThisMutationRule = {
   create(context: RuleContext) {
-    const isIdentifierNamed = (node: NodeOrNull, name: string): boolean => node?.type === 'Identifier' && node.name === name;
-
     const isGlobalThisMember = (node: NodeOrNull): boolean => {
       if (node?.type !== 'MemberExpression') {
         return false;

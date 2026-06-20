@@ -75,8 +75,7 @@ const singleExportedClassRule = {
 
         for (const stmt of body) {
           if (stmt.type === 'ExportNamedDeclaration') {
-            const declaration = stmt.declaration;
-            const declarationNode = getDeclarationNode(declaration);
+            const declarationNode = getDeclarationNode(stmt.declaration);
 
             if (declarationNode) {
               if (declarationNode.type === 'ClassDeclaration') {
@@ -119,8 +118,7 @@ const singleExportedClassRule = {
               }
             }
           } else if (stmt.type === 'ExportDefaultDeclaration') {
-            const declaration = stmt.declaration;
-            const declarationNode = getDeclarationNode(declaration);
+            const declarationNode = getDeclarationNode(stmt.declaration);
 
             if (declarationNode) {
               if (declarationNode.type === 'ClassDeclaration') {

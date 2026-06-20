@@ -1,53 +1,14 @@
-import type { AstNode, Fix, Fixer, NodeOrNull, Range, RuleContext, SourceCode } from '../types';
+import type { AstNode, NodeOrNull, RuleContext } from '../types';
 
+import { hasBlankLineBetween, insertBlankLine } from '../utils/blank-line';
 import { matchExpressionStatement } from '../utils/expression-statement';
+import { isIdentifierNamed } from '../utils/identifier';
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration';
 import { createStatementBodyVisitor } from '../utils/statement-body-visitor';
-
-const insertBlankLine = (sourceCode: SourceCode, prev: AstNode, next: AstNode, fixer: Fixer): Fix | null => {
-  const prevEnd = prev.range?.[1];
-  const nextStart = next.range?.[0];
-
-  if (typeof prevEnd !== 'number' || typeof nextStart !== 'number') {
-    return null;
-  }
-
-  const range: Range = [prevEnd, nextStart];
-  const textBetween = sourceCode.text.slice(range[0], range[1]);
-
-  if (!textBetween.includes('\n')) {
-    return null;
-  }
-
-  // Preserve CRLF vs LF by duplicating the first line break sequence.
-  const fixed = textBetween.replace(/(\r?\n)/, '$1$1');
-
-  return fixer.replaceTextRange(range, fixed);
-};
 
 const blankLinesBetweenStatementGroupsRule = {
   create(context: RuleContext) {
     const sourceCode = context.getSourceCode();
-
-    const hasBlankLineBetweenStatements = (prev: NodeOrNull, next: NodeOrNull): boolean => {
-      const prevEnd = prev?.range?.[1];
-      const nextStart = next?.range?.[0];
-
-      if (typeof prevEnd !== 'number' || typeof nextStart !== 'number') {
-        return false;
-      }
-
-      const betweenText = sourceCode.text.slice(prevEnd, nextStart);
-      const lines = betweenText.split(/\r?\n/);
-
-      if (lines.length < 3) {
-        return false;
-      }
-
-      const middleLines = lines.slice(1, -1);
-
-      return middleLines.some(line => line.trim() === '');
-    };
 
     const unwrapExpression = (expr: NodeOrNull): NodeOrNull => {
       let current = expr;
@@ -76,8 +37,6 @@ const blankLinesBetweenStatementGroupsRule = {
 
       return current;
     };
-
-    const isIdentifierNamed = (node: NodeOrNull, name: string): boolean => node?.type === 'Identifier' && node.name === name;
 
     const isTestBlockCallExpressionStatement = (node: NodeOrNull): boolean => {
       if (node?.type !== 'ExpressionStatement') {
@@ -339,7 +298,7 @@ const blankLinesBetweenStatementGroupsRule = {
 
         const prevGroup = statementGroupId(prev);
         const nextGroup = statementGroupId(next);
-        const hasBlankLine = hasBlankLineBetweenStatements(prev, next);
+        const hasBlankLine = hasBlankLineBetween(sourceCode, prev, next);
         const needBlankLine = prevGroup !== nextGroup || (prevGroup === nextGroup && requiresBlankLineEvenWithinGroup(prevGroup));
 
         if (!needBlankLine) {

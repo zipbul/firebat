@@ -4,6 +4,7 @@ import type { AstNode, RuleContext } from '../types';
 
 import { getContextFilename } from '../utils/context-filename';
 import { fileExists } from '../utils/context-fs';
+import { getImplPathFromSpec } from '../utils/test-file-path';
 
 function readText(context: RuleContext, filePath: string): string | null {
   if (typeof context.readFile === 'function') {
@@ -86,10 +87,6 @@ function getSutFromFilename(testFilename: string): string {
   const base = basename(testFilename);
 
   return base.replace(/\.spec\.ts$/, '').replace(/\.ts$/, '');
-}
-
-function getImplPathFromSpec(specPath: string): string {
-  return specPath.replace(/\.spec\.ts$/, '.ts');
 }
 
 function getExportedClassNameFromText(text: string): string | null {

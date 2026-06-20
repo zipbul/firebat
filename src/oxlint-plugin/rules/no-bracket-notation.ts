@@ -1,26 +1,11 @@
 import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, RuleContext, TemplateElementValue } from '../types';
 
-import { isJsonObject } from '../utils/json-options';
+import { isJsonObject, toStringList } from '../utils/json-options';
+import { getSourceText } from '../utils/source-text';
 
 interface NoBracketNotationOptions {
   allow?: string[];
 }
-
-const toStringList = (value: JsonValue | undefined): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const out: string[] = [];
-
-  for (const item of value) {
-    if (typeof item === 'string') {
-      out.push(item);
-    }
-  }
-
-  return out;
-};
 
 const readOptions = (raw: JsonValue | undefined): NoBracketNotationOptions => {
   if (!isJsonObject(raw)) {
@@ -28,7 +13,7 @@ const readOptions = (raw: JsonValue | undefined): NoBracketNotationOptions => {
   }
 
   return {
-    allow: toStringList(raw.allow),
+    allow: toStringList(raw.allow) ?? [],
   };
 };
 
@@ -109,7 +94,7 @@ const noBracketNotationRule = {
             }
 
             // Avoid fixing multiline patterns (formatting/comments become ambiguous).
-            const text = typeof sourceCode.getText === 'function' ? sourceCode.getText() : sourceCode.text;
+            const text = getSourceText(sourceCode);
             const original = new Set(text.slice(range[0], range[1]));
 
             if (original.has('\n') || original.has('\r')) {

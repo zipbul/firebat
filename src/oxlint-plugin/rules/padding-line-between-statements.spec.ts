@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { AstNode } from '../types';
+import type { AstNode, Range } from '../types';
 
 import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
-
-type Range = [number, number];
 
 /** const declaration node with an optional source location (line span). */
 function constDecl(range: Range, lines?: [number, number]): AstNode {

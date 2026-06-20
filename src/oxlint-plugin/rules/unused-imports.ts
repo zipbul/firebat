@@ -36,6 +36,8 @@ const unusedImportsRule = {
 
     const isVariableUsed = (variable: Variable): boolean => Array.isArray(variable?.references) && variable.references.length > 0;
 
+    const getSpecifierName = (specifier: AstNode): string => specifier.local?.name ?? 'import';
+
     const isTypeOnlyImport = (node: AstNode): boolean => {
       if (node.importKind === 'type') {
         return true;
@@ -149,13 +151,10 @@ const unusedImportsRule = {
     };
 
     const reportUnusedSpecifier = (specifier: AstNode): void => {
-      const local = specifier.local;
-      const name = local?.name ?? 'import';
-
       context.report({
         node: specifier,
         messageId: 'unusedImport',
-        data: { name },
+        data: { name: getSpecifierName(specifier) },
         fix(fixer: Fixer): Fix | null {
           const range = buildSpecifierRemovalRange(specifier);
 
@@ -239,13 +238,10 @@ const unusedImportsRule = {
         }
 
         for (const specifier of unusedSpecifiers) {
-          const local = specifier.local;
-          const name = local?.name ?? 'import';
-
           context.report({
             node: specifier,
             messageId: 'unusedImport',
-            data: { name },
+            data: { name: getSpecifierName(specifier) },
           });
         }
       },

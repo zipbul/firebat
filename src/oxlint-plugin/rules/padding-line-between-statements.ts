@@ -1,5 +1,6 @@
 import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types.js';
 
+import { hasBlankLineBetween, insertBlankLine } from '../utils/blank-line.js';
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
 import { isJsonObject, toStringOrStringList } from '../utils/json-options.js';
 import { createStatementBodyVisitor } from '../utils/statement-body-visitor.js';
@@ -7,43 +8,6 @@ import { createStatementBodyVisitor } from '../utils/statement-body-visitor.js';
 const paddingLineBetweenStatementsRule = {
   create(context: RuleContext) {
     const sourceCode = context.getSourceCode();
-
-    const hasBlankLineBetween = (prev: NodeOrNull, next: NodeOrNull): boolean => {
-      const prevEnd = prev?.range?.[1];
-      const nextStart = next?.range?.[0];
-
-      if (typeof prevEnd !== 'number' || typeof nextStart !== 'number') {
-        return false;
-      }
-
-      const between = sourceCode.text.slice(prevEnd, nextStart);
-      const lines = between.split(/\r?\n/);
-
-      if (lines.length < 3) {
-        return false;
-      }
-
-      return lines.slice(1, -1).some(line => line.trim() === '');
-    };
-
-    const insertBlankLine = (prev: NodeOrNull, next: NodeOrNull, fixer: Fixer): Fix | null => {
-      const prevEnd = prev?.range?.[1];
-      const nextStart = next?.range?.[0];
-
-      if (typeof prevEnd !== 'number' || typeof nextStart !== 'number') {
-        return null;
-      }
-
-      const betweenText = sourceCode.text.slice(prevEnd, nextStart);
-
-      if (!betweenText.includes('\n')) {
-        return null;
-      }
-
-      const fixed = betweenText.replace(/(\r?\n)/, '$1$1');
-
-      return fixer.replaceTextRange([prevEnd, nextStart], fixed);
-    };
 
     const removeBlankLines = (prev: NodeOrNull, next: NodeOrNull, fixer: Fixer): Fix | null => {
       const prevEnd = prev?.range?.[1];
@@ -224,7 +188,7 @@ const paddingLineBetweenStatementsRule = {
           continue;
         }
 
-        const hasBlank = hasBlankLineBetween(prev, next);
+        const hasBlank = hasBlankLineBetween(sourceCode, prev, next);
         const mode = getBlankLineMode(prev, next);
 
         if (mode === 'always' && !hasBlank) {
@@ -232,7 +196,7 @@ const paddingLineBetweenStatementsRule = {
             messageId: 'expectedBlankLine',
             node: next,
             fix(fixer) {
-              return insertBlankLine(prev, next, fixer);
+              return insertBlankLine(sourceCode, prev, next, fixer);
             },
           });
         }
