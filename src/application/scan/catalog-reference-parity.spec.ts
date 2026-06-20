@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
+import type { CatalogEntry } from '../../types';
+
 import { FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
 
 /**
@@ -19,10 +21,9 @@ const PREFIX_TO_FILE: ReadonlyArray<readonly [string, string]> = [
   ['EF_', 'error-flow.md'],
 ];
 
-interface RefSection {
-  readonly cause: string;
-  readonly think: ReadonlyArray<string>;
-}
+// A parsed reference section IS the catalog-entry contract (same cause + think
+// shape); we import CatalogEntry rather than redeclare it so the parity test
+// stays the single expression of that contract.
 
 const normalize = (text: string): string =>
   text
@@ -30,8 +31,8 @@ const normalize = (text: string): string =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const parseReferenceFile = (markdown: string): ReadonlyMap<string, RefSection> => {
-  const sections = new Map<string, RefSection>();
+const parseReferenceFile = (markdown: string): ReadonlyMap<string, CatalogEntry> => {
+  const sections = new Map<string, CatalogEntry>();
 
   for (const block of markdown.split(/^## /m).slice(1)) {
     const code = (block.split('\n', 1)[0] ?? '').trim();
@@ -60,9 +61,9 @@ const fileFor = (code: string): string | null => {
 };
 
 describe('catalog ↔ reference parity (waste + error-flow)', () => {
-  const refCache = new Map<string, ReadonlyMap<string, RefSection>>();
+  const refCache = new Map<string, ReadonlyMap<string, CatalogEntry>>();
 
-  const loadRef = (file: string): ReadonlyMap<string, RefSection> => {
+  const loadRef = (file: string): ReadonlyMap<string, CatalogEntry> => {
     const cached = refCache.get(file);
 
     if (cached) {

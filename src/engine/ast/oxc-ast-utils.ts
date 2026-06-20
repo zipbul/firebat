@@ -107,9 +107,14 @@ export const forEachChildNode = (node: Node, cb: (child: Node) => void): void =>
 export const forEachChildWithParent = (node: Node, cb: (child: Node, parent: Node) => void): void =>
   forEachChildNode(node, child => cb(child, node));
 
-type OxcNodeWalker = (node: Node) => boolean;
+/**
+ * `(node) => boolean` 콜백 — walkOxcTree에서는 "자식으로 내려갈지", collectOxcNodes에서는
+ * "이 노드가 매칭인지"를 뜻한다(역할은 호출처 의미, 계약은 동일). 같은 함수 계약을 두 이름으로
+ * 중복 선언하지 않도록 단일 별칭으로 둔다.
+ */
+type OxcNodePredicate = (node: Node) => boolean;
 
-export const walkOxcTree = (program: Node, walker: OxcNodeWalker): void => {
+export const walkOxcTree = (program: Node, walker: OxcNodePredicate): void => {
   const visit = (node: Node): void => {
     const shouldVisitChildren = walker(node);
 
@@ -138,8 +143,6 @@ export const walkOxcTreeWithParent = (root: Node, walker: OxcNodeWalkerWithParen
 
   visit(root, null);
 };
-
-type OxcNodePredicate = (node: Node) => boolean;
 
 export const collectOxcNodes = (program: Node, predicate: OxcNodePredicate): Node[] => {
   const nodes: Node[] = [];

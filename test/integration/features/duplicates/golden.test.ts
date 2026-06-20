@@ -39,6 +39,8 @@ describe('golden/duplicates', () => {
   rg('delegating-wrapper-keep'); // 골격: 파라미터 무변형 단일 호출 반환
   rg('void-delegation-keep'); // 골격: 파라미터 무변형 void 단일 호출 (`x => { f(x); }`)
   rg('projection-arrow-keep'); // 골격: 단일 필드 projection 화살표 (`u => u.isRead`) — 결정 없음
+  rg('identity-arrow-keep'); // 골격: 항등 화살표 (`x => x`) — no-op 변환, 결정 없음
+  rg('nullary-literal-factory-keep'); // 골격: 무인자 seed factory (`() => []`/`() => undefined`) — 상수 thunk
   rg('overload-signatures-keep'); // 비대상: overload 시그니처(TSDeclareFunction)는 수집 대상 아님
   rg('empty-marker-interface-keep'); // 골격: 빈 marker 타입
   rg('type-alias-synonym-keep'); // 골격: 명명 타입 bare 별칭(synonym) — 멤버 구조 없음

@@ -1,6 +1,7 @@
 import type { FirebatLogger } from '../../shared/logger';
 
 import { toErrorMessage } from '../../shared/error-message';
+import { configArgs } from '../config-args';
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
 import { detectToolFailure, reportBinUnavailable } from '../tool-failure';
@@ -52,11 +53,7 @@ const runOxfmt = async (input: RunOxfmtInput): Promise<OxfmtRunResult> => {
     logger,
   });
 
-  const args: string[] = [];
-
-  if (input.configPath !== undefined && input.configPath.trim().length > 0) {
-    args.push('--config', input.configPath);
-  }
+  const args: string[] = configArgs(input.configPath);
 
   if (input.mode === 'check') {
     args.push('--check');

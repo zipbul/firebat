@@ -1,6 +1,6 @@
 import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types.js';
 
-import { hasBlankLineBetween, insertBlankLine } from '../utils/blank-line.js';
+import { blankLineFix, hasBlankLineBetween } from '../utils/blank-line.js';
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
 import { isJsonObject, toStringOrStringList } from '../utils/json-options.js';
 import { createStatementBodyVisitor } from '../utils/statement-body-visitor.js';
@@ -195,9 +195,7 @@ const paddingLineBetweenStatementsRule = {
           context.report({
             messageId: 'expectedBlankLine',
             node: next,
-            fix(fixer) {
-              return insertBlankLine(sourceCode, prev, next, fixer);
-            },
+            fix: blankLineFix(sourceCode, prev, next),
           });
         }
 

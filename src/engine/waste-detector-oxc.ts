@@ -49,6 +49,23 @@ interface NestedFunctionContext {
 }
 
 /**
+ * Resolve a binding to its varIndex and, when it maps to a real local, add it to
+ * `target`. The "resolve, then add if in-range" step is the same decision wherever
+ * usages are folded into a read-set, so it lives in one place.
+ */
+const addResolvedVarIndex = (
+  target: Set<number>,
+  localIndexByName: ReadonlyMap<string, number>,
+  binding: Parameters<typeof resolveVarIndex>[1],
+): void => {
+  const idx = resolveVarIndex(localIndexByName, binding);
+
+  if (typeof idx === 'number') {
+    target.add(idx);
+  }
+};
+
+/**
  * Collect outer-binding varIndexes that this nested function captures by reading.
  *
  * "Outer" is decided by varIndex membership in `localIndexByName`, which is keyed
@@ -69,11 +86,7 @@ const collectCapturedVarIndexesFromFunction = (
       continue;
     }
 
-    const idx = resolveVarIndex(localIndexByName, u);
-
-    if (typeof idx === 'number') {
-      out.add(idx);
-    }
+    addResolvedVarIndex(out, localIndexByName, u);
   }
 };
 
@@ -2122,11 +2135,7 @@ const collectWasteFindingsForFunction = (
   const varHasAnyRead = new Set<number>();
 
   for (const usage of syntacticReads) {
-    const idx = resolveVarIndex(localIndexByName, usage);
-
-    if (typeof idx === 'number') {
-      varHasAnyRead.add(idx);
-    }
+    addResolvedVarIndex(varHasAnyRead, localIndexByName, usage);
   }
 
   // Case 6/7: a binding whose only uses are local mutation (`v.push(...)`) or property
@@ -2502,11 +2511,7 @@ const collectWasteFindingsForModule = (
   const varHasAnyRead = new Set<number>();
 
   for (const usage of syntacticReads) {
-    const idx = resolveVarIndex(localIndexByName, usage);
-
-    if (typeof idx === 'number') {
-      varHasAnyRead.add(idx);
-    }
+    addResolvedVarIndex(varHasAnyRead, localIndexByName, usage);
   }
 
   // Direct eval at module scope — same dynamic-read barrier as function path.

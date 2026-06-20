@@ -1,6 +1,6 @@
 import type { AstNode, NodeOrNull, RuleContext } from '../types';
 
-import { hasBlankLineBetween, insertBlankLine } from '../utils/blank-line';
+import { blankLineFix, hasBlankLineBetween } from '../utils/blank-line';
 import { matchExpressionStatement } from '../utils/expression-statement';
 import { isIdentifierNamed } from '../utils/identifier';
 import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration';
@@ -309,9 +309,7 @@ const blankLinesBetweenStatementGroupsRule = {
 
         if (!hasBlankLine) {
           context.report({
-            fix(fixer) {
-              return insertBlankLine(sourceCode, prev, next, fixer);
-            },
+            fix: blankLineFix(sourceCode, prev, next),
             messageId: 'expectedBlankLine',
             node: next,
           });

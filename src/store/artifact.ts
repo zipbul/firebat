@@ -1,5 +1,7 @@
 import { Database } from 'bun:sqlite';
 
+import { ensureSchema } from './sqlite-schema';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -52,12 +54,7 @@ const cacheKey = (input: GetArtifactInput): string =>
   `${input.projectKey}\0${input.kind}\0${input.artifactKey}\0${input.inputsDigest}`;
 
 export const createArtifactStore = (db: Database): ArtifactStore => {
-  // Ensure schema
-  db.run(ENSURE_TABLE);
-
-  for (const ddl of ENSURE_INDEXES) {
-    db.run(ddl);
-  }
+  ensureSchema(db, ENSURE_TABLE, ENSURE_INDEXES);
 
   // Prepared statements
   const getStmt = db.prepare<{ payloadJson: string }, [string, string, string, string]>(

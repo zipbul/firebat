@@ -519,8 +519,10 @@ const analyzeClassTemporalCoupling = (
       if (writerMethods.size > 0 && readerMethods.size > 0) {
         // gildash 억제 검사: named class만 대상 (anonymous class 제외)
         if (gildash !== undefined && className !== null) {
-          const qualifiedWriters = [...writerMethods].map(m => `${className}.${m}`);
-          const qualifiedReaders = [...readerMethods].map(m => `${className}.${m}`);
+          const qualify = (m: string) => `${className}.${m}`;
+
+          const qualifiedWriters = [...writerMethods].map(qualify);
+          const qualifiedReaders = [...readerMethods].map(qualify);
 
           try {
             if (shouldSuppressByCallGraph(gildash, rel, qualifiedWriters, qualifiedReaders)) {

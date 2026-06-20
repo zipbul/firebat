@@ -1,5 +1,7 @@
 import { Database } from 'bun:sqlite';
 
+import { ensureSchema } from './sqlite-schema';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -48,12 +50,7 @@ const ENSURE_INDEXES = [
 // ---------------------------------------------------------------------------
 
 export const createMemoryStore = (db: Database): MemoryStore => {
-  // Ensure schema
-  db.run(ENSURE_TABLE);
-
-  for (const ddl of ENSURE_INDEXES) {
-    db.run(ddl);
-  }
+  ensureSchema(db, ENSURE_TABLE, ENSURE_INDEXES);
 
   // Prepared statements
   const listKeysStmt = db.prepare<{ memoryKey: string; updatedAt: number }, [string]>(

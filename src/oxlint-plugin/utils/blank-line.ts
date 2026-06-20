@@ -48,4 +48,14 @@ const insertBlankLine = (sourceCode: SourceCode, prev: NodeOrNull, next: NodeOrN
   return fixer.replaceTextRange([prevEnd, nextStart], fixed);
 };
 
-export { hasBlankLineBetween, insertBlankLine };
+/**
+ * The `ReportDescriptor.fix` callback that inserts one blank line between `prev`
+ * and `next`. Shared by the blank-line layout rules so the fix wiring has a
+ * single expression instead of an identical inline `fix(fixer)` in each rule.
+ */
+const blankLineFix =
+  (sourceCode: SourceCode, prev: NodeOrNull, next: NodeOrNull) =>
+  (fixer: Fixer): Fix | null =>
+    insertBlankLine(sourceCode, prev, next, fixer);
+
+export { blankLineFix, hasBlankLineBetween, insertBlankLine };

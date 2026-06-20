@@ -8,6 +8,7 @@ import type { Node } from 'oxc-parser';
 
 import type { FirebatItemKind, SourceSpan } from '../../types';
 
+import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { getContractMembers } from '../../engine/ast/oxc-fingerprint';
 import { spanOfNode } from '../../engine/ast/source-span';
 
@@ -138,12 +139,78 @@ const isSimpleParamProjection = (fn: FunctionLikeNode): boolean => {
   return isSimpleIdentifier(current) && current.name === params[0].name;
 };
 
+// 항등 화살표: `x => x` — 파라미터를 그대로 반환한다. 분기·계산·호출·member-access가
+// 전혀 없어 결정을 담지 않는 no-op 변환 골격(K). projection의 빈-체인 극한이며,
+// 기본값 transform(`f = x => x`) 등으로 쓰이는 categorical identity.
+const isIdentityArrow = (fn: FunctionLikeNode): boolean => {
+  const params = fn.params ?? [];
+
+  if (params.length !== 1 || !isSimpleIdentifier(params[0])) {
+    return false;
+  }
+
+  const body = fn.body;
+
+  return body !== null && body !== undefined && isSimpleIdentifier(body) && body.name === params[0].name;
+};
+
+const isEmptyList = (value: unknown): boolean => Array.isArray(value) && value.length === 0;
+
+// 본문이 단일 seed 리터럴인 노드인가: bare Literal(`null`/`false`/`0`/`''` 등), 식별자
+// `undefined`, 빈 배열·객체 리터럴. "어떤 값인가"라는 결정이 없는 zero-information seed.
+// 비어있지 않은 배열·객체(룩업 테이블 후보)는 제외한다.
+const isSeedLiteral = (node: Node): boolean => {
+  if (node.type === 'ParenthesizedExpression') {
+    const inner = asRecord(node).expression;
+
+    return isOxcNode(inner) && isSeedLiteral(inner);
+  }
+
+  if (node.type === 'Literal') {
+    return true;
+  }
+
+  if (isSimpleIdentifier(node)) {
+    return node.name === 'undefined';
+  }
+
+  if (node.type === 'ArrayExpression') {
+    return isEmptyList(asRecord(node).elements);
+  }
+
+  if (node.type === 'ObjectExpression') {
+    return isEmptyList(asRecord(node).properties);
+  }
+
+  return false;
+};
+
+// 무인자 seed factory: `() => []`, `() => false`, `() => undefined` 처럼 파라미터 없이
+// 단일 seed 리터럴을 돌려주는 화살표/함수. 입력→출력 관계도 분기도 없는 thunk이며,
+// 돌려주는 상수값의 반복은 CLAUDE.md상 "단일 리터럴·상수 값의 반복" = redundancy(상수
+// 추출) 영역이라 duplicates의 결정-중복 대상이 아니다 → 골격(K). 인자가 있으면(값이
+// 인자에 의존) 제외.
+const isNullaryLiteralFactory = (fn: FunctionLikeNode): boolean => {
+  if ((fn.params ?? []).length !== 0) {
+    return false;
+  }
+
+  const body = fn.body;
+
+  return body !== null && body !== undefined && isSeedLiteral(body);
+};
+
 const isFunctionSkeleton = (fn: FunctionLikeNode): boolean => {
   if (fn.body === null || fn.body === undefined) {
     return true;
   }
 
-  return isParamPassthroughDelegation(fn) || isSimpleParamProjection(fn);
+  return (
+    isParamPassthroughDelegation(fn) ||
+    isSimpleParamProjection(fn) ||
+    isIdentityArrow(fn) ||
+    isNullaryLiteralFactory(fn)
+  );
 };
 
 export const isDecisionlessSkeleton = (node: Node): boolean => {

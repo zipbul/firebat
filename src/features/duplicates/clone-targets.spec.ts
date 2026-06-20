@@ -84,6 +84,96 @@ describe('isDecisionlessSkeleton', () => {
     expect(isDecisionlessSkeleton(node)).toBe(false);
   });
 
+  // ── 골격: 항등 화살표 (`x => x`) ──────────────────────────────────────────
+
+  it('should classify an identity arrow as skeleton', () => {
+    const node = firstNodeOfType(`const f = (x: number) => x;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should not classify a free-identifier-returning arrow as identity skeleton', () => {
+    const node = firstNodeOfType(`const f = (x: number) => y;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  it('should not classify a two-param arrow returning one param as skeleton', () => {
+    const node = firstNodeOfType(`const f = (a: number, b: number) => a;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  // ── 골격: 무인자 seed factory (`() => []`, `() => false`) ──────────────────
+
+  it('should classify a nullary empty-array factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => [];`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should classify a nullary empty-object factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => ({});`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should classify a nullary undefined factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => undefined;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should classify a nullary boolean-literal factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => false;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should classify a nullary numeric-literal factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => 0;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should classify a nullary async empty-array factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = async () => [];`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(true);
+  });
+
+  it('should not classify a nullary non-empty-array factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => [1];`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  it('should not classify a nullary non-empty-object factory as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => ({ a: 1 });`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  it('should not classify a nullary factory returning a computation as skeleton', () => {
+    const node = firstNodeOfType(`const f = () => 1 + 1;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  it('should not classify a nullary factory returning a call with a free-id arg as seed skeleton', () => {
+    // `() => make(SEED)` is not a seed literal, and not a passthrough delegation
+    // (the argument is a free identifier, not a param) → carries a decision.
+    const node = firstNodeOfType(`const f = () => make(SEED);`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
+  it('should not classify a one-param literal-returning arrow as nullary factory', () => {
+    const node = firstNodeOfType(`const f = (x: number) => 0;`, 'ArrowFunctionExpression');
+
+    expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+
   // ── 골격: 빈 marker 타입 ──────────────────────────────────────────────────
 
   it('should classify an empty interface as skeleton', () => {

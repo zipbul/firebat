@@ -3,6 +3,7 @@ import * as z from 'zod';
 import type { FirebatLogger } from '../../shared/logger';
 import type { SourceSpan } from '../../types';
 
+import { configArgs } from '../config-args';
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';
 import { detectToolFailure, reportBinUnavailable } from '../tool-failure';
@@ -118,11 +119,7 @@ const runOxlint = async (input: RunOxlintInput): Promise<OxlintRunResult> => {
     logger,
   });
 
-  const args: string[] = [];
-
-  if (input.configPath !== undefined && input.configPath.trim().length > 0) {
-    args.push('--config', input.configPath);
-  }
+  const args: string[] = configArgs(input.configPath);
 
   // Machine-readable diagnostics.
   args.push('-f', 'json');

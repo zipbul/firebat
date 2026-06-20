@@ -390,14 +390,16 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     return empty;
   }
 
+  // rootAbs에 고정한 경로 변환 — 같은 부분적용이 여러 map에 흩어지지 않도록 한곳에 둔다.
+  const toAbs = (value: string) => resolveAbs(rootAbs, value);
+
+  const toRel = (value: string) => toRelativePath(rootAbs, value);
+
   // Normalise gildash paths (may be project-relative) to absolute
   const absGraph = new Map<string, string[]>();
 
   for (const [from, targets] of graph) {
-    absGraph.set(
-      resolveAbs(rootAbs, from),
-      targets.map(t => resolveAbs(rootAbs, t)),
-    );
+    absGraph.set(resolveAbs(rootAbs, from), targets.map(toAbs));
   }
 
   // 2. Adjacency & fan metrics
@@ -409,7 +411,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     // Dedupe edges: multiple import declarations to the same target count as one edge.
     const uniqueTargets = Array.from(new Set(targets));
 
-    adjacencyOut[toRelativePath(rootAbs, from)] = uniqueTargets.map(t => toRelativePath(rootAbs, t));
+    adjacencyOut[toRelativePath(rootAbs, from)] = uniqueTargets.map(toRel);
 
     outDegree.set(from, uniqueTargets.length);
 
@@ -432,14 +434,14 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
   try {
     const cycleResult = await gildash.getCyclePaths(undefined, { maxCycles: 100 });
 
-    cyclePaths = (cycleResult as string[][]).map(p => p.map(e => resolveAbs(rootAbs, e)));
+    cyclePaths = (cycleResult as string[][]).map(p => p.map(toAbs));
   } catch (e) {
     if (!(e instanceof GildashError)) {
       throw e;
     }
   }
 
-  const cycles = cyclePaths.map(p => ({ path: p.map(entry => toRelativePath(rootAbs, entry)) }));
+  const cycles = cyclePaths.map(p => ({ path: p.map(toRel) }));
   const cuts = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
   // 4. Layer violations
   const layerViolations: DependencyLayerViolation[] = [];

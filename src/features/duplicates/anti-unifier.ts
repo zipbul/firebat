@@ -307,9 +307,12 @@ const traverseArrayChildren = (
   // Filter out null entries (e.g. ArrayPattern.elements may contain null for holes)
   const leftFiltered = leftArr.filter(isNonNull);
   const rightFiltered = rightArr.filter(isNonNull);
+
   // fingerprint로 LCS 정렬
-  const leftFps = leftFiltered.map(n => createOxcFingerprintShapeWithBindings(n, ctx.boundNames));
-  const rightFps = rightFiltered.map(n => createOxcFingerprintShapeWithBindings(n, ctx.boundNames));
+  const fingerprintOf = (n: Node) => createOxcFingerprintShapeWithBindings(n, ctx.boundNames);
+
+  const leftFps = leftFiltered.map(fingerprintOf);
+  const rightFps = rightFiltered.map(fingerprintOf);
   const alignment = computeLcsAlignment(leftFps, rightFps);
 
   // 매칭된 쌍 → 재귀
