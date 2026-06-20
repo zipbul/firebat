@@ -46,7 +46,9 @@ export const createFirebatProgram = async (
   try {
     const { parsed } = await gildash.batchParse(eligible);
 
-    return Array.from(parsed.values());
+    // gildash.batchParse는 병렬 Map 채움이라 .values() 순서가 동일 입력에도 run마다 다르다.
+    // 모든 detector가 결정적 결과를 내도록 filePath로 정규 정렬한다 (재현 가능한 출력의 근본 보장).
+    return Array.from(parsed.values()).sort((a, b) => (a.filePath < b.filePath ? -1 : a.filePath > b.filePath ? 1 : 0));
   } finally {
     if (ownsGildash) {
       await gildash.close({ cleanup: false });
