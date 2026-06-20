@@ -201,14 +201,15 @@ describe('analyzeDuplicates', () => {
 
   // ── [HP] 3. 리터럴만 다른 함수 2개 → shape 그룹 (shape는 literal도 strip) ────
 
-  it('should return a shape group when two functions differ only in literals', () => {
+  it('should NOT group two functions that differ only in literals (literals never substituted)', () => {
     const fileA = makeFile('a.ts', LITERAL_PAIR_A);
     const fileB = makeFile('b.ts', LITERAL_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
-    // shape fingerprint strips both identifiers and literals → same shape
-    const shape = result.filter(g => g.cloneType === 'shape');
+    // 리터럴은 어느 tier에서도 치환하지 않는다 → 리터럴만 다른 함수는 정규형이 어긋나 비매칭
+    // (모호한 literal-variant 비탐지, zero-FP). exact/shape/normalized 모두 그룹 없음.
+    const grouped = result.filter(g => g.cloneType === 'shape' || g.cloneType === 'normalized' || g.cloneType === 'exact');
 
-    expect(shape.length).toBe(1);
+    expect(grouped.length).toBe(0);
   });
 
   // ── [HP] 4. shape 그룹이 exact에서 이미 잡힌 해시 → 필터링 ───────────
@@ -275,14 +276,8 @@ describe('analyzeDuplicates', () => {
       'identifier',
       'structural-clone',
     ],
-    [
-      'literal-variant → literal',
-      'literal-variant',
-      { id: 1, location: 'body.value', leftType: '1000', rightType: '5000', kind: 'literal' },
-      [LITERAL_PAIR_A, LITERAL_PAIR_B],
-      'literal',
-      'literal-variant',
-    ],
+    // NOTE: literal-variant 분류는 개념에서 제거됨(리터럴 비치환) — 리터럴만 다른 함수는
+    // 애초에 그룹화되지 않으므로 anti-unify 전파 케이스가 성립하지 않는다.
     [
       'type-variant → type',
       'type-variant',

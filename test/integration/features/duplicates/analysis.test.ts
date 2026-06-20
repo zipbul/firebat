@@ -41,17 +41,11 @@ describe('integration/duplicates', () => {
       matches: g => g.items.length >= 2,
     },
     {
-      // Shape fingerprint strips both identifiers and literals → same shape → shape group
-      title: 'should detect shape group when functions have same name but different literals',
+      // REDESIGN: 리터럴은 치환하지 않으므로 "이름만 다르고 리터럴은 같은" rename 클론만 구조 매칭된다.
+      // (리터럴만 다른 경우는 비탐지 — literal-variant 제거.)
+      title: 'should detect structural-clone groups when functions differ only by name (rename)',
       one: { name: 'alpha', value: 1 },
-      two: { name: 'alpha', value: 2 },
-      matches: g => g.items.length >= 2 && g.cloneType === 'shape',
-    },
-    {
-      // Same shape, different function name + value → structural duplicate
-      title: 'should detect structural-clone groups when structures match but literals differ',
-      one: { name: 'alpha', value: 1 },
-      two: { name: 'beta', value: 2 },
+      two: { name: 'beta', value: 1 },
       matches: g => g.items.length >= 2 && g.findingKind !== 'exact-clone',
     },
   ];

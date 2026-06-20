@@ -17,10 +17,11 @@ describe('golden/duplicates', () => {
 
   rg('exact-identical-fn-dead'); // Type-1: 동일 함수
   rg('rename-bound-vars-dead'); // 바인딩(파라미터·지역) 치환 → 정규형 일치
-  rg('literal-variant-dead'); // 리터럴 치환 → 정규형 일치
+  rgFrag('literal-variant-keep'); // K: 리터럴 비치환 — 리터럴만 다르면 다른 결정 (literal-variant 비탐지). realistic floor에서 판정
   rg('type-variant-dead'); // 타입 주석 치환 → 정규형 일치
   rg('type-param-rename-dead'); // 타입파라미터 치환 → 정규형 일치
-  rg('mixed-id-literal-dead'); // 바인딩+리터럴 동시 치환 합성도 W
+  rgFrag('mixed-id-literal-keep'); // K: 바인딩은 치환해도 리터럴은 보존 — 리터럴 다르면 다른 결정
+  rgFrag('discriminant-predicate-keep'); // K: 판별 리터럴만 다른 서로 다른 술어 (literal-variant FP 제거)
   rg('identical-class-dead'); // 동일 클래스 → 단일 그룹 (메서드 subsume)
   rg('method-across-classes-dead'); // 클래스는 달라도 메서드 단위 중복은 W
   rg('arrow-fn-dead'); // arrow function도 선언 단위 대상

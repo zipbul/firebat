@@ -159,8 +159,9 @@ describe('createOxcFingerprint — regex literals', () => {
     expect(exactOfFirstFunction(startRx)).not.toBe(exactOfFirstFunction(partRx));
   });
 
-  it('substitutes regex literals at the shape tier (literal-variant clone)', () => {
-    // shape는 리터럴을 치환하므로 정규식만 다른 함수는 literal-variant로 매칭(개념상 W).
-    expect(shapeOfFirstFunction(startRx)).toBe(shapeOfFirstFunction(partRx));
+  it('also distinguishes different regex literals at the shape tier (literals never substituted)', () => {
+    // 리터럴은 어느 tier에서도 치환하지 않는다(내용=결정). 정규식만 다른 함수는 shape에서도
+    // 정규형이 어긋나 매칭되지 않는다 — 모호한 literal-variant 비탐지(zero-FP).
+    expect(shapeOfFirstFunction(startRx)).not.toBe(shapeOfFirstFunction(partRx));
   });
 });

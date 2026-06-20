@@ -55,18 +55,8 @@ describe('antiUnify', () => {
     `,
       'identifier',
     ],
-    [
-      'Literal만 다른 두 함수 → kind="literal" 변수만 생성',
-      `
-      function getVal() {
-        return 42;
-      }
-      function getVal() {
-        return 99;
-      }
-    `,
-      'literal',
-    ],
+    // NOTE: 'Literal만 다른' 케이스 제거 — 리터럴 비치환(개념 변경)으로 literal-variant 비탐지.
+    // antiUnify는 리터럴이 다른 트리를 더 이상 정렬해 literal 변수로 분류하지 않는다.
   ] as const)('%s', (_label, source, expectedKind) => {
     const [a, b] = firstTwo(source);
     const result = antiUnify(a, b);
@@ -190,26 +180,7 @@ describe('antiUnify', () => {
   });
 
   it.each([
-    [
-      'string literal만 다른 switch-case → literal-variant',
-      `
-      function handleA(action: string) {
-        switch (action) {
-          case "start": return 1;
-          case "stop": return 2;
-          default: return 0;
-        }
-      }
-      function handleB(action: string) {
-        switch (action) {
-          case "begin": return 1;
-          case "end": return 2;
-          default: return 0;
-        }
-      }
-    `,
-      'literal',
-    ],
+    // NOTE: 'string literal만 다른 switch-case' 케이스 제거 — 리터럴 비치환으로 literal-variant 비탐지.
     [
       '한쪽에만 키가 있는 경우 (optional property) → structural variable 생성',
       // left는 init 있음, right는 init 없음 → 한쪽에만 존재하는 키(init)로 structural variable 생성
@@ -360,14 +331,8 @@ describe('classifyDiff', () => {
     `,
       'rename-only',
     ],
-    [
-      '실제 AST 기반 classifyDiff — literal만 다른 함수',
-      `
-      function getConst() { return 100; }
-      function getConst() { return 200; }
-    `,
-      'literal-variant',
-    ],
+    // NOTE: '실제 AST literal만 다른 함수' 케이스 제거 — 리터럴 비치환으로 antiUnify가
+    // 리터럴 차이를 literal-variant로 분류하지 않는다 (개념 변경).
     [
       '실제 AST 기반 classifyDiff — statement 추가 → structural-diff',
       `

@@ -5,12 +5,12 @@
     "items": [
       {
         "filePath": "/virtual/fragment-three-sites-dead.ts",
-        "header": "4 statements",
+        "header": "3 statements",
         "kind": "node",
         "span": {
           "end": {
-            "column": 18,
-            "line": 8
+            "column": 24,
+            "line": 7
           },
           "start": {
             "column": 2,
@@ -20,12 +20,12 @@
       },
       {
         "filePath": "/virtual/fragment-three-sites-dead.ts",
-        "header": "4 statements",
+        "header": "3 statements",
         "kind": "node",
         "span": {
           "end": {
-            "column": 18,
-            "line": 19
+            "column": 24,
+            "line": 18
           },
           "start": {
             "column": 2,
@@ -35,12 +35,12 @@
       },
       {
         "filePath": "/virtual/fragment-three-sites-dead.ts",
-        "header": "4 statements",
+        "header": "3 statements",
         "kind": "node",
         "span": {
           "end": {
-            "column": 18,
-            "line": 29
+            "column": 24,
+            "line": 28
           },
           "start": {
             "column": 2,
@@ -53,7 +53,7 @@
       "params": [
         "xs"
       ],
-      "returns": null,
+      "returns": "size",
       "usesThis": false
     }
   }
