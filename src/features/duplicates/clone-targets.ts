@@ -76,11 +76,20 @@ const isParamPassthroughDelegation = (fn: FunctionLikeNode): boolean => {
   if (body.type === 'BlockStatement') {
     const statements = (body as Node & { readonly body: ReadonlyArray<Node> }).body;
 
-    if (statements.length !== 1 || statements[0]!.type !== 'ReturnStatement') {
+    if (statements.length !== 1) {
       return false;
     }
 
-    callNode = (statements[0] as Node & { readonly argument: Node | null }).argument;
+    const only = statements[0]!;
+
+    if (only.type === 'ReturnStatement') {
+      callNode = (only as Node & { readonly argument: Node | null }).argument;
+    } else if (only.type === 'ExpressionStatement') {
+      // void 위임: `x => { f(x); }` — 반환값을 버리는 단일 호출도 결정 없는 위임이다.
+      callNode = (only as Node & { readonly expression: Node }).expression;
+    } else {
+      return false;
+    }
   } else {
     callNode = body;
   }

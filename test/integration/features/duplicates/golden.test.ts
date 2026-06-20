@@ -36,6 +36,7 @@ describe('golden/duplicates', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   rg('delegating-wrapper-keep'); // 골격: 파라미터 무변형 단일 호출 반환
+  rg('void-delegation-keep'); // 골격: 파라미터 무변형 void 단일 호출 (`x => { f(x); }`)
   rg('overload-signatures-keep'); // 비대상: overload 시그니처(TSDeclareFunction)는 수집 대상 아님
   rg('empty-marker-interface-keep'); // 골격: 빈 marker 타입
   rg('abstract-class-skeleton-keep'); // 골격: 멤버가 전부 abstract인 프로토콜 클래스
