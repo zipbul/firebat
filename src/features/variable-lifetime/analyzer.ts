@@ -2,7 +2,7 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 
-import type { BitSet, FunctionBodyAnalysis, ParsedFile } from '../../engine/types';
+import type { BitSet, FunctionBodyAnalysis, ParsedFile, VariableUsage } from '../../engine/types';
 import type {
   LivenessPressureFinding,
   MutationDensityFinding,
@@ -16,15 +16,24 @@ import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
 import {
   analyzeFunctionBody,
+  type BindingName,
   bindingKey,
   collectLocalVarIndexes,
   collectParameterBindings,
   resolveVarIndex,
 } from '../../engine/dataflow/reaching-defs';
 import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
+import { keepMapBound } from '../../shared/multi-map';
 import { isOffsetInAnyRange, type OffsetRange } from '../../shared/offset-range';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
+
+/** The single `name@location` identity-key format for a named binding/usage. */
+const nameLocationKey = (item: BindingName): string => `${item.name}@${item.location}`;
+
+/** `name@location` key set of the usages matching `pred` — the read/write outer-usage key decision. */
+const usageKeySet = (usages: ReadonlyArray<VariableUsage>, pred: (u: VariableUsage) => boolean): Set<string> =>
+  new Set(usages.filter(pred).map(nameLocationKey));
 
 const createEmptyVariableLifetime = (): ReadonlyArray<
   VariableLifetimeFinding | ScopeNarrowingFinding | LivenessPressureFinding | MutationDensityFinding
@@ -835,30 +844,21 @@ const analyzeVariableLifetime = (
           const defIds = reachingDefs.array();
 
           for (const defId of defIds) {
-            const existingLast = lastUseOffsetByDefId.get(defId);
-
-            if (existingLast === undefined || useOffset > existingLast) {
-              lastUseOffsetByDefId.set(defId, useOffset);
-            }
-
-            const existingFirst = firstUseOffsetByDefId.get(defId);
-
-            if (existingFirst === undefined || useOffset < existingFirst) {
-              firstUseOffsetByDefId.set(defId, useOffset);
-            }
+            keepMapBound(lastUseOffsetByDefId, defId, useOffset, (next, prev) => next > prev);
+            keepMapBound(firstUseOffsetByDefId, defId, useOffset, (next, prev) => next < prev);
           }
         }
       }
 
       // Build parameter location set for filtering.
-      const paramLocationSet = new Set(paramBindings.map(b => `${b.name}@${b.location}`));
+      const paramLocationSet = new Set(paramBindings.map(nameLocationKey));
       // Collect nested function definitions with their captured variable names.
       // Each entry: { startOffset, capturedNames } — used to check if moving a declaration
       // past a closure definition would break capture semantics.
       const nestedFunctions: Array<{ readonly startOffset: number; readonly capturedNames: Set<string> }> = [];
       const outerUsages = collectVariables(bodyNode, { includeNestedFunctions: false, declScopeByIdLocation });
-      const outerReadKeys = new Set(outerUsages.filter(u => u.isRead).map(u => `${u.name}@${u.location}`));
-      const outerWriteKeys = new Set(outerUsages.filter(u => u.isWrite).map(u => `${u.name}@${u.location}`));
+      const outerReadKeys = usageKeySet(outerUsages, u => u.isRead);
+      const outerWriteKeys = usageKeySet(outerUsages, u => u.isWrite);
       const nestedFnNodes = collectOxcNodes(bodyNode, n => isFunctionNode(n));
 
       for (const nfn of nestedFnNodes) {

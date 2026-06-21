@@ -48,6 +48,7 @@ import {
   resolveRuntimeContextFromCwd,
 } from '../../shared';
 import { toErrorMessage } from '../../shared/error-message';
+import { ZERO_SPAN } from '../../shared/source-span';
 import { toProjectRelative as toProjectRelativePath } from '../../shared/to-project-relative';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
@@ -309,7 +310,6 @@ const VARIABLE_LIFETIME_KIND_TO_CODE: Readonly<Record<string, FirebatCatalogCode
   'liveness-pressure': 'LIFETIME_LIVENESS_PRESSURE',
   'mutation-density': 'LIFETIME_MUTATION_DENSITY',
 };
-const ENRICH_ZERO_SPAN = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
 
 const enrichFilePath = (toProjectRelative: ToProjectRelative, filePath: string): string =>
   filePath.length > 0 ? toProjectRelative(filePath) : filePath;
@@ -424,7 +424,7 @@ const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
       kind,
       code: (COUPLING_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
       file: module,
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       module,
       score: item?.score,
       signals,
@@ -440,7 +440,7 @@ const mapLayerViolations = (layerViolations: any[]): any[] =>
       kind: 'layer-violation',
       code: 'DEP_LAYER_VIOLATION',
       file: from,
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       from,
       to: String(v?.to ?? ''),
       fromLayer: String(v?.fromLayer ?? ''),
@@ -457,7 +457,7 @@ const mapDeadExports = (deadExports: any[]): any[] =>
       kind,
       code: kind === 'test-only-export' ? 'DEP_TEST_ONLY_EXPORT' : 'DEP_DEAD_EXPORT',
       file: module,
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       module,
       name: String(d?.exportName ?? d?.name ?? ''),
     };
@@ -472,7 +472,7 @@ const mapCycles = (cycles: any[], cuts: any[], toProjectRelative: ToProjectRelat
       {
         kind: `circular-dependency`,
         code: `DIAG_CIRCULAR_DEPENDENCY`,
-        items: pathModules.map((mod: string) => ({ file: toProjectRelative(mod), span: ENRICH_ZERO_SPAN })),
+        items: pathModules.map((mod: string) => ({ file: toProjectRelative(mod), span: ZERO_SPAN })),
       },
       bestCut ? { cut: { from: bestCut.from, to: bestCut.to, score: bestCut.score } } : {},
     );
@@ -482,7 +482,7 @@ const mapUnusedFiles = (unusedFiles: any[]): any[] =>
   unusedFiles.map((u: any) => {
     const module = String(u?.module ?? '');
 
-    return { kind: 'unused-file', code: 'DEP_UNUSED_FILE', file: module, span: ENRICH_ZERO_SPAN, module };
+    return { kind: 'unused-file', code: 'DEP_UNUSED_FILE', file: module, span: ZERO_SPAN, module };
   });
 
 const mapUnusedDeps = (unusedDeps: any[]): any[] =>
@@ -493,7 +493,7 @@ const mapUnusedDeps = (unusedDeps: any[]): any[] =>
       kind,
       code: kind === 'unlisted-dependency' ? 'DEP_UNLISTED_DEPENDENCY' : 'DEP_UNUSED_DEPENDENCY',
       file: String(u?.files?.[0] ?? ''),
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       packageName: String(u?.packageName ?? ''),
       files: Array.isArray(u?.files) ? u.files : [],
     };
@@ -507,7 +507,7 @@ const mapUnresolvedImports = (unresolvedImports: any[]): any[] =>
       kind: 'unresolved-import',
       code: 'DEP_UNRESOLVED_IMPORT',
       file: module,
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       module,
       specifier: String(u?.specifier ?? ''),
     };
@@ -521,7 +521,7 @@ const mapDuplicateExports = (duplicateExports: any[]): any[] =>
       kind: 'duplicate-export',
       code: 'DEP_DUPLICATE_EXPORT',
       file: String(modules[0] ?? ''),
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       name: String(d?.name ?? ''),
       modules,
     };
@@ -535,7 +535,7 @@ const mapUnusedMembers = (unusedMembers: any[]): any[] =>
       kind,
       code: DEP_MEMBER_KIND_TO_CODE[kind] ?? 'DEP_UNUSED_ENUM_MEMBER',
       file: String(m?.module ?? ''),
-      span: ENRICH_ZERO_SPAN,
+      span: ZERO_SPAN,
       module: String(m?.module ?? ''),
       symbolName: String(m?.symbolName ?? ''),
       memberName: String(m?.memberName ?? ''),
@@ -593,7 +593,7 @@ const enrichPhase1 = <T extends { readonly file?: string; readonly filePath?: st
       ...item,
       code,
       file: enrichFilePath(toProjectRelative, filePath),
-      span: item.span ?? ENRICH_ZERO_SPAN,
+      span: item.span ?? ZERO_SPAN,
     };
   });
 
@@ -613,7 +613,7 @@ const enrichFormat = (files: ReadonlyArray<string>, toProjectRelative: ToProject
     kind: 'needs-formatting' as const,
     code: 'FORMAT' as FirebatCatalogCode,
     file: enrichFilePath(toProjectRelative, filePath),
-    span: ENRICH_ZERO_SPAN,
+    span: ZERO_SPAN,
   }));
 
 // tool 진단(lint/typecheck) item에 catalogCode를 찍는 단일 변환.

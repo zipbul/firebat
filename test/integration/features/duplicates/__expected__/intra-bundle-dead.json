@@ -1,0 +1,48 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/intra-bundle-dead/src/oxlint-plugin/rules/a.ts",
+        "header": "RuleSpan",
+        "kind": "interface",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 7,
+            "line": 2
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/intra-bundle-dead/src/oxlint-plugin/rules/b.ts",
+        "header": "NodeSpan",
+        "kind": "interface",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 7
+          },
+          "start": {
+            "column": 7,
+            "line": 2
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "RuleSpan",
+          "location": "id.name",
+          "right": "NodeSpan"
+        }
+      ]
+    }
+  }
+]

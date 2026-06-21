@@ -3,6 +3,7 @@ import { describe, it, expect } from 'bun:test';
 import type { FirebatAnalyses } from '../../types';
 
 import { parseSource } from '../../engine/ast/parse-source';
+import { ZERO_SPAN } from '../../shared/source-span';
 import { buildFunctionRangeMap, flattenToFindings, type FunctionRangeMap } from './flatten-findings';
 
 // ── Test helpers ────────────────────────────────────────────────────────────
@@ -11,8 +12,6 @@ const span = (line = 1, col = 0) => ({
   start: { line, column: col },
   end: { line: line + 1, column: 0 },
 });
-
-const ZERO_SPAN = { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } };
 
 const firstFinding = (analyses: Partial<FirebatAnalyses>, map?: FunctionRangeMap) => {
   const findings = flattenToFindings(analyses, map);

@@ -101,6 +101,21 @@ type VisitFn = (
   suppressDeclarations?: boolean,
 ) => void;
 
+/**
+ * Visit the unconditionally-evaluated discriminating operand, then return its static
+ * truthiness — the shared "evaluate-then-decide-short-circuit" step of && / || and ?: .
+ */
+const visitAndGetTruthiness = (
+  node: Node,
+  allowNestedFunctions: boolean,
+  suppressDeclarations: boolean,
+  visit: VisitFn,
+): boolean | null => {
+  visit(node, allowNestedFunctions, false, undefined, suppressDeclarations);
+
+  return evalStaticTruthiness(node);
+};
+
 const visitLogicalExpression = (
   current: LogicalExpression,
   allowNestedFunctions: boolean,
@@ -108,11 +123,8 @@ const visitLogicalExpression = (
   visit: VisitFn,
 ): void => {
   const { operator, left, right } = current;
-
-  // Left is always evaluated.
-  visit(left, allowNestedFunctions, false, undefined, suppressDeclarations);
-
-  const leftTruthiness = evalStaticTruthiness(left);
+  // Left is always evaluated (inside visitAndGetTruthiness).
+  const leftTruthiness = visitAndGetTruthiness(left, allowNestedFunctions, suppressDeclarations, visit);
 
   if (operator === '&&') {
     if (leftTruthiness !== false) {
@@ -150,10 +162,7 @@ const visitConditionalExpression = (
   visit: VisitFn,
 ): void => {
   const { test, consequent, alternate } = current;
-
-  visit(test, allowNestedFunctions, false, undefined, suppressDeclarations);
-
-  const truthiness = evalStaticTruthiness(test);
+  const truthiness = visitAndGetTruthiness(test, allowNestedFunctions, suppressDeclarations, visit);
 
   if (truthiness === true) {
     visit(consequent, allowNestedFunctions, false, undefined, suppressDeclarations);

@@ -5,6 +5,7 @@ import { buildLineOffsets, getLineColumn, walk } from '@zipbul/gildash';
 import type { WasteFinding } from '..';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
+import { keepMapBound } from '../shared/multi-map';
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
 import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables, densifyKeys, resolveVarIndex } from './dataflow';
 import type { AnalyzeFunctionBodyOptions } from './dataflow';
@@ -155,11 +156,7 @@ const buildNestedFunctionContext = (
         const start = nestedFunction.start;
 
         for (const idx of captured) {
-          const prev = captureMinStartByVar.get(idx);
-
-          if (prev === undefined || start < prev) {
-            captureMinStartByVar.set(idx, start);
-          }
+          keepMapBound(captureMinStartByVar, idx, start, (next, prev) => next < prev);
         }
       }
     }

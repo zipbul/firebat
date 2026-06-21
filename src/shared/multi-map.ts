@@ -23,4 +23,17 @@ const addToSetMap = <K, V>(map: Map<K, Set<V>>, key: K, value: V): void => {
   map.set(key, set);
 };
 
-export { addToSetMap, pushToMultiMap };
+/**
+ * key의 현재 값과 `value`를 `isBetter`로 비교해, 항목이 없거나 `value`가 더 나으면 갱신한다.
+ * `const cur = map.get(k); if (cur === undefined || cmp) map.set(k, value)` (min/max 추적)을
+ * 복제하던 곳의 단일 변경지점. min은 `(next, cur) => next < cur`, max는 `next > cur`를 넘긴다.
+ */
+const keepMapBound = <K, V>(map: Map<K, V>, key: K, value: V, isBetter: (next: V, current: V) => boolean): void => {
+  const current = map.get(key);
+
+  if (current === undefined || isBetter(value, current)) {
+    map.set(key, value);
+  }
+};
+
+export { addToSetMap, keepMapBound, pushToMultiMap };

@@ -116,8 +116,41 @@ export const analyzeDuplicates = (
   // ── 규칙 데이터(매핑·룩업 테이블) 클론 ──────────────────────────────────────
   result.push(...detectDataTableClones(uniqueFiles, minSize));
 
-  return filterSubsumedGroups(result);
+  return filterCrossBundleGroups(filterSubsumedGroups(result));
 };
+
+// ─── Cross-bundle 제외 (CLAUDE.md 비대상: export 표면의 cross-module 중복) ──────
+//
+// oxlint-plugin은 `oxlint-plugin.ts` → `dist/oxlint-plugin.js`로 독립 번들된다.
+// 그 번들의 소스(`src/oxlint-plugin/**` 중 테스트 아닌 파일)는 CLI 번들(`index.ts`
+// 트리)에서 import할 수 없는 *비공개 어휘*다 — 두 번들 경계를 가로지르는 정규형
+// 일치는 같은 결정의 드리프트가 아니라 보편 형태(`{line,column}`·primitive union 등)의
+// 우연한 일치이고, 단일 변경지점으로 합칠 수도 없다(번들 경계 = cross-module).
+// 따라서 ① 플러그인 번들 파일과 ② 그 경계 밖 파일을 함께 담은 그룹은 비대상이다.
+// 이는 경로 형태로 판정하는 *닫힌 규칙*이지 유사도 판단이 아니다.
+//
+// 플러그인 번들 내부끼리의 중복(번들-vs-번들), 플러그인 테스트끼리의 중복
+// (`src/oxlint-plugin/**.spec.ts` — 테스트 코퍼스 내부)은 그대로 보고한다.
+
+const isTestFilePath = (filePath: string): boolean => filePath.endsWith('.spec.ts') || filePath.endsWith('.test.ts');
+
+/** 플러그인 번들 소스: `src/oxlint-plugin/` 경로의 비-테스트 파일 (oxlint-plugin.ts에서 도달 가능). */
+const isPluginBundleFile = (filePath: string): boolean => {
+  const normalized = filePath.replaceAll('\\', '/');
+
+  return normalized.includes('/src/oxlint-plugin/') && !isTestFilePath(normalized);
+};
+
+/** 플러그인 영역(번들 소스 + 그 자체 테스트) 밖의 파일. */
+const isOutsidePluginArea = (filePath: string): boolean => !filePath.replaceAll('\\', '/').includes('/src/oxlint-plugin/');
+
+const filterCrossBundleGroups = (groups: DuplicateGroup[]): DuplicateGroup[] =>
+  groups.filter(group => {
+    const hasBundleItem = group.items.some(item => isPluginBundleFile(item.filePath));
+    const hasOutsideItem = group.items.some(item => isOutsidePluginArea(item.filePath));
+
+    return !(hasBundleItem && hasOutsideItem);
+  });
 
 // ─── 규칙 데이터 클론 ─────────────────────────────────────────────────────────
 

@@ -96,4 +96,12 @@ describe('golden/duplicates', () => {
   // ════════════════════════════════════════════════════════════════════════
 
   rgFrag('fragment-subsumed-dead'); // 선언 클론만 보고, 내부 fragment는 subsume
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Cross-bundle 제외 — oxlint-plugin 번들 경계를 가로지르는 그룹은 비대상
+  // (CLAUDE.md: export 표면의 cross-module 중복 = dependencies 영역)
+  // ════════════════════════════════════════════════════════════════════════
+
+  rg('cross-bundle-keep'); // K: 플러그인 번들 소스 vs 경계 밖 파일 → cross-module 비대상
+  rg('intra-bundle-dead'); // W: 두 파일 모두 플러그인 번들 내부 → 정규형 일치는 그대로 보고
 });
