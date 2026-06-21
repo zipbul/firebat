@@ -20,7 +20,6 @@ describe('integration/early-return/loop-guard-clause', () => {
       '  return total;',
       '}',
     ].join('\n');
-
     // Act
     const item = findItemByHeader(source, 'process');
 

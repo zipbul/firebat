@@ -33,10 +33,7 @@ export interface TempGildashOptions {
  *
  * @param stripPrefix  Path prefix to strip from source keys (default `/virtual/`).
  */
-export const createTempGildash = async (
-  sources: GildashSources,
-  options?: TempGildashOptions,
-): Promise<TempGildash> => {
+export const createTempGildash = async (sources: GildashSources, options?: TempGildashOptions): Promise<TempGildash> => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'firebat-int-test-'));
   const prefix = options?.stripPrefix ?? '/virtual/';
 

@@ -17,7 +17,11 @@ import type { ParsedFile } from '../../engine/types';
 import type { DuplicateGroup, DuplicateItem, ExtractionPlan, SourceSpan } from '../../types';
 
 import { asRecord, collectOxcNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
-import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
+import {
+  collectBindingNames,
+  createOxcFingerprintRun,
+  createOxcFingerprintShapeWithBindings,
+} from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { resolveSpan } from './clone-targets';
 
@@ -252,7 +256,6 @@ const addBlockTree = (
   boundNames: ReadonlySet<string>,
 ): void => {
   const seenBodies = new Set<ReadonlyArray<Node>>();
-
   const fnBody = getFunctionBody(fn);
 
   const pushBlock = (statements: ReadonlyArray<Node>): void => {
@@ -297,6 +300,7 @@ const addBlockTree = (
 
 const getFunctionBody = (fn: Node): ReadonlyArray<Node> | null => {
   const rec = asRecord(fn);
+
   // MethodDefinition → value(FunctionExpression) → body
   if (fn.type === 'MethodDefinition') {
     const value = rec.value;
@@ -349,10 +353,18 @@ const collectMaximalRuns = (
         continue;
       }
 
-      const sig = a.fps.slice(si, si + k).join('');
+      // 문장별 fps는 위치 독립 후보 필터일 뿐 — 문장 사이 바인딩 동일참조(co-reference)를
+      // 잃는다(`v;v`와 `k;i`가 문장 단위로는 동형). 런 전체에 rename 맵을 공유한 런-정규형으로
+      // 다시 비교해, 동일참조까지 일치하는 진짜 클론만 그룹화한다(거짓병합 방지).
+      const sigA = createOxcFingerprintRun(a.statements.slice(si, si + k), a.boundNames);
+      const sigB = createOxcFingerprintRun(b.statements.slice(sj, sj + k), b.boundNames);
 
-      record(sig, { blockIdx: aIdx, start: si, length: k });
-      record(sig, { blockIdx: bIdx, start: sj, length: k });
+      if (sigA !== sigB) {
+        continue;
+      }
+
+      record(sigA, { blockIdx: aIdx, start: si, length: k });
+      record(sigA, { blockIdx: bIdx, start: sj, length: k });
     }
   }
 };
@@ -380,7 +392,6 @@ const buildExtractionPlan = (block: BlockInfo, start: number, length: number): E
   const referenced = collectReferencedNames(run);
   // 파라미터 = 런이 읽지만 런 밖(둘러싼 함수)에서 선언된 지역변수. 전역·callee는 boundNames에 없어 제외.
   const params = [...referenced].filter(n => block.boundNames.has(n) && !declared.has(n)).sort();
-
   const afterRefs = collectReferencedNames(after);
   const liveOuts = [...declared].filter(n => afterRefs.has(n)).sort();
 
@@ -425,7 +436,6 @@ type ExtractSafety = 'ok' | 'multiple-live-outs' | 'control-escape';
 const extractSafety = (block: BlockInfo, start: number, length: number): ExtractSafety => {
   const run = block.statements.slice(start, start + length);
   const after = block.statements.slice(start + length);
-
   // 마지막 top-level return은 추출 가능: 헬퍼가 그 값을 반환하고 호출자가 `return helper()`.
   // 그 외 위치의 return·break·continue는 제어 이탈 → 추출 불가.
   const last = run[run.length - 1];

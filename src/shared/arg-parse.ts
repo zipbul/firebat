@@ -5,6 +5,7 @@ import type { FirebatDetector, MinSizeOption } from '../types';
 import type { FirebatLogLevel } from './firebat-config';
 
 import { DETECTOR_ALIASES } from '../types';
+import { addAndPush } from './multi-map';
 import { splitTrimNonEmpty } from './split-lines';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
@@ -111,8 +112,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       continue;
     }
 
-    seen.add(selection);
-    detectors.push(selection);
+    addAndPush(seen, detectors, selection);
   }
 
   if (detectors.length === 0) {

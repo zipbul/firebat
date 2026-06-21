@@ -142,6 +142,7 @@ function b(xs: number[]): number {
       // 어떤 fragment도 return을 포함한 run을 보고하면 안 됨 (size로도 걸러지지만 안전성 우선)
       expect(g.findingKind).toBe('fragment-clone');
     }
+
     // 핵심: 제어 이탈 run은 비보고 → for 본문 전체 run은 잡히지 않음
     expect(groups.length).toBe(0);
   });
@@ -195,6 +196,7 @@ function b(y: number): number {
   const count = seen.size;
   ${tail}
 }`;
+
     const groups = detectFragmentClones(
       [parseSource('/v/a.ts', mk('return count * 2;')), parseSource('/v/b.ts', mk('return count > 0 ? 1 : 0;'))],
       { minSize: 12 },
@@ -227,6 +229,7 @@ function b(ys: number[]): number {
   return total + 1;
 }
 `;
+
     // 아주 큰 floor → 모든 run이 걸러짐 (K)
     expect(run(src, 10_000)).toEqual([]);
     // floor 1 → run 보고 (W)

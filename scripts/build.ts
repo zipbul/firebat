@@ -102,11 +102,6 @@ interface ThirdPartyNotices {
   apache20Text: string | null;
 }
 
-interface FormatThirdPartyNoticesInput {
-  packages: ThirdPartyPackageInfo[];
-  apache20Text: string | null;
-}
-
 interface RootPackageJson {
   dependencies?: Record<string, string>;
 }
@@ -255,7 +250,14 @@ const collectThirdPartyNotices = async (): Promise<ThirdPartyNotices> => {
   return { packages, apache20Text: await getApache20TextFromInstalledDeps() };
 };
 
-const formatThirdPartyNotices = async (input: FormatThirdPartyNoticesInput): Promise<string> => {
+// 헤더 줄 + 본문(trailing 공백 제거) + 빈 줄을 덧붙이는 단일 변경지점.
+const pushFileBlock = (lines: string[], header: string, body: string): void => {
+  lines.push(header);
+  lines.push(body.trimEnd());
+  lines.push('');
+};
+
+const formatThirdPartyNotices = async (input: ThirdPartyNotices): Promise<string> => {
   const lines: string[] = [];
 
   lines.push('THIRD-PARTY NOTICES');
@@ -282,9 +284,7 @@ const formatThirdPartyNotices = async (input: FormatThirdPartyNoticesInput): Pro
     const licenseText = await tryReadText(pkg.licenseFilePath);
 
     if (licenseText) {
-      lines.push(`LICENSE FILE: ${pkg.licenseFilePath}`);
-      lines.push(licenseText.trimEnd());
-      lines.push('');
+      pushFileBlock(lines, `LICENSE FILE: ${pkg.licenseFilePath}`, licenseText);
     } else if ((pkg.declaredLicense ?? '').toUpperCase() === 'APACHE-2.0') {
       if (!input.apache20Text) {
         throw new Error(
@@ -293,9 +293,7 @@ const formatThirdPartyNotices = async (input: FormatThirdPartyNoticesInput): Pro
         );
       }
 
-      lines.push('LICENSE FILE: <missing in package; using Apache-2.0 text from installed deps>');
-      lines.push(input.apache20Text.trimEnd());
-      lines.push('');
+      pushFileBlock(lines, 'LICENSE FILE: <missing in package; using Apache-2.0 text from installed deps>', input.apache20Text);
     } else {
       throw new Error(
         `Missing LICENSE file for dependency ${pkg.name} (declared license: ${pkg.declaredLicense ?? '<missing>'}).`,
@@ -305,9 +303,7 @@ const formatThirdPartyNotices = async (input: FormatThirdPartyNoticesInput): Pro
     const noticeText = await tryReadText(pkg.noticeFilePath);
 
     if (noticeText) {
-      lines.push(`NOTICE FILE: ${pkg.noticeFilePath}`);
-      lines.push(noticeText.trimEnd());
-      lines.push('');
+      pushFileBlock(lines, `NOTICE FILE: ${pkg.noticeFilePath}`, noticeText);
     }
   }
 

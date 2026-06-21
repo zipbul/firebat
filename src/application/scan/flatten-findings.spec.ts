@@ -793,7 +793,6 @@ describe('flattenToFindings: function name injection', () => {
       ],
     ],
   ]);
-
   const fnLabelRows: LabelRow[] = [
     {
       name: 'injects function name into waste label',

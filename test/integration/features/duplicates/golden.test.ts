@@ -7,6 +7,7 @@ describe('golden/duplicates', () => {
   // minSize 1: 크기 임계로 케이스가 공허하게 통과(vacuous pass)하는 것을 차단하고
   // 모든 판정이 개념 규칙(정규형·골격·비대상)에서만 나오도록 고정한다.
   const rg = (name: string) => runGolden(import.meta.dir, name, program => analyzeDuplicates(program, { minSize: 1 }));
+
   // statement-run 케이스는 현실적 최소 크기(noise floor)에서 판정한다 — 사소한 1~2문 run을
   // 임계로 거르고, 추출 안전성·자유식별자·중첩 규칙이 실제로 검증되도록 한다.
   const rgFrag = (name: string) => runGolden(import.meta.dir, name, program => analyzeDuplicates(program, { minSize: 12 }));
@@ -20,6 +21,11 @@ describe('golden/duplicates', () => {
   rgFrag('literal-variant-keep'); // K: 리터럴 비치환 — 리터럴만 다르면 다른 결정 (literal-variant 비탐지). realistic floor에서 판정
   rg('type-variant-dead'); // 타입 주석 치환 → 정규형 일치
   rg('type-param-rename-dead'); // 타입파라미터 치환 → 정규형 일치
+  rg('coref-binary-divergent-keep'); // K: 동일참조 다름 — a+a vs a+b는 다른 결정 (alpha-renaming)
+  rg('coref-binary-alpha-dead'); // W: 동일참조 구조 같음 — 바인딩만 다른 rename 클론은 그대로 보고
+  rgFrag('coref-fragment-divergent-keep'); // K: 런 동일참조 다름 — add(v);push(v) vs add(k);push(i)
+  rg('coref-contract-divergent-keep'); // K: 계약 멤버 동일참조 다름 — {a:T;b:T} vs {a:T;b:U}
+  rg('coref-contract-alpha-dead'); // W: 계약 멤버 동일참조 구조 같음 — 타입파라미터명만 다름
   rgFrag('mixed-id-literal-keep'); // K: 바인딩은 치환해도 리터럴은 보존 — 리터럴 다르면 다른 결정
   rgFrag('discriminant-predicate-keep'); // K: 판별 리터럴만 다른 서로 다른 술어 (literal-variant FP 제거)
   rg('identical-class-dead'); // 동일 클래스 → 단일 그룹 (메서드 subsume)

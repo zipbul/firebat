@@ -8,7 +8,6 @@ describe('integration/waste/closure-overwritten', () => {
     // the current x, which by the time it runs is the latest binding). Waste reports
     // the first def as overwritten.
     const source = ['export function example() {', '  let x = 1;', '  x = 2;', '  return () => x;', '}'].join('\n');
-
     // Act
     const xFindings = detectWasteLabelFindings('/virtual/waste/closure-overwritten.ts', source, 'x');
 

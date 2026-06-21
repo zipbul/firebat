@@ -8,7 +8,13 @@ import { Visitor } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
-import { getMemberPropertyName, getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
+import {
+  getMemberPropertyName,
+  getNodeHeader,
+  isFunctionNode,
+  isOxcNode,
+  walkOxcTreeWithParent,
+} from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
 import { addToSetMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';

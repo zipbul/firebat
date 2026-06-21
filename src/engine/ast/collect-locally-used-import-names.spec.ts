@@ -8,7 +8,7 @@ interface ImportUsageCase {
   source: string;
   importedNames: string[];
   expected: Array<[string, boolean]>;
-};
+}
 
 describe('collect-locally-used-import-names', () => {
   const cases: ImportUsageCase[] = [

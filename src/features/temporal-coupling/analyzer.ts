@@ -13,6 +13,7 @@ import { normalizeFile } from '../../engine/ast/normalize-file';
 import { addNodeNameIfValid, getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
 import { EdgeType } from '../../engine/cfg/cfg-types';
+import { addAndPush } from '../../shared/multi-map';
 
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];
 
@@ -673,8 +674,7 @@ const writerSetDominatesReader = (
         continue;
       }
 
-      visited.add(neighbor);
-      queue.push(neighbor);
+      addAndPush(visited, queue, neighbor);
     }
   }
 
@@ -742,8 +742,7 @@ const exceptionBypassExists = (
         continue;
       }
 
-      visited.add(neighbor);
-      queue.push(neighbor);
+      addAndPush(visited, queue, neighbor);
     }
   }
 
@@ -1254,8 +1253,7 @@ const isWriterReachable = (program: Node, writerName: string, stateName: string,
         continue;
       }
 
-      visited.add(neighbor);
-      queue.push(neighbor);
+      addAndPush(visited, queue, neighbor);
     }
   }
 

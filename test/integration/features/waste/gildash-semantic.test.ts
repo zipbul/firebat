@@ -37,7 +37,6 @@ const keepCases: KeepCase[] = [
     fixture: 'integration/features/waste/__fixtures__/closure-read.ts',
   },
 ];
-
 const deadCases: DeadCase[] = [
   {
     title: 'case 7 positive: no-escape-object DEAD via gildash binding',

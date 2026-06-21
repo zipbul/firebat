@@ -11,7 +11,13 @@ import type {
 } from '../../types';
 
 import { normalizeFile } from '../../engine/ast/normalize-file';
-import { collectFunctionNodes, collectOxcNodes, forEachChildNode, isFunctionNode, toNodeArray } from '../../engine/ast/oxc-ast-utils';
+import {
+  collectFunctionNodes,
+  collectOxcNodes,
+  forEachChildNode,
+  isFunctionNode,
+  toNodeArray,
+} from '../../engine/ast/oxc-ast-utils';
 import { intersectBitSet } from '../../engine/dataflow/dataflow';
 import { computeLiveness } from '../../engine/dataflow/liveness';
 import {

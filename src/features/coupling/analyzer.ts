@@ -159,7 +159,6 @@ const analyzeCoupling = (dependencies: DependencyAnalysis, config?: FirebatCoupl
     'unstable-module': 'COUPLING_UNSTABLE',
     'rigid-module': 'COUPLING_RIGID',
   };
-
   const hotspotsRaw = modules
     .map(module => {
       const fanIn = inDegree.get(module) ?? 0;

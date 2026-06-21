@@ -3,12 +3,20 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 import { buildLineOffsets, getLineColumn, walk } from '@zipbul/gildash';
 
 import type { WasteFinding } from '..';
+import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
 import { keepMapBound } from '../shared/multi-map';
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
-import { analyzeFunctionBody, bindingKey, collectLocalVarIndexes, collectParameterBindings, collectVariables, densifyKeys, resolveVarIndex } from './dataflow';
-import type { AnalyzeFunctionBodyOptions } from './dataflow';
+import {
+  analyzeFunctionBody,
+  bindingKey,
+  collectLocalVarIndexes,
+  collectParameterBindings,
+  collectVariables,
+  densifyKeys,
+  resolveVarIndex,
+} from './dataflow';
 import { buildDeclScopeMap } from './dataflow/variable-collector';
 
 interface NestedFunctionContext {
@@ -1960,10 +1968,11 @@ const declarationPrecededByTsDirective = (location: number, sourceText: string, 
 // observes it, so the fixpoint must never treat it as dead nor eliminate its
 // reads. `closureCapturedVarIndexes` and `defCtxByLocation` are scope-specific,
 // so each caller supplies its own.
-const makeCanEliminateDeadDefReads = (
-  closureCapturedVarIndexes: ReadonlySet<number>,
-  defCtxByLocation: ReadonlyMap<number, IdentifierContext>,
-): NonNullable<AnalyzeFunctionBodyOptions['canEliminateDeadDefReads']> =>
+const makeCanEliminateDeadDefReads =
+  (
+    closureCapturedVarIndexes: ReadonlySet<number>,
+    defCtxByLocation: ReadonlyMap<number, IdentifierContext>,
+  ): NonNullable<AnalyzeFunctionBodyOptions['canEliminateDeadDefReads']> =>
   ({ defId, meta, defs, reachingInByNode, defNodeIdByDefId }) => {
     if (meta.writeKind === 'declaration' || meta.writeKind === undefined) {
       return false;
@@ -2197,7 +2206,6 @@ const collectWasteFindingsForFunction = (
   // dropping the fresh-allocation def would not actually eliminate the observable
   // mutation on the aliased path. Compute the "all defs fresh" predicate per varIndex.
   const { varHasOnlyFreshDefs, varHasUserDefinedAccessor } = computeFreshDefSets(defs, defCtxByLocation);
-
   // Deduplicate findings by (name, source location). The CFG may model the same
   // source-level write more than once (e.g. finally bodies are duplicated for the
   // normal- and abnormal-completion paths), producing distinct defIds at the same
@@ -2557,7 +2565,6 @@ const collectWasteFindingsForModule = (
   // Same "all defs fresh" gate as the function path — required so module-scope
   // `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the fresh def.
   const { varHasOnlyFreshDefs, varHasUserDefinedAccessor } = computeFreshDefSets(defs, defCtxByLocation);
-
   const emittedKeys = new Set<string>();
 
   for (let defId = 0; defId < defs.length; defId += 1) {

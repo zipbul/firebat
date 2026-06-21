@@ -3,6 +3,7 @@ import type { Gildash, SymbolDetail } from '@zipbul/gildash';
 import { GildashError, normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
+import type { DependencyLayerRule } from '../../shared/dependency-layer-rule';
 import type {
   DependencyAnalysis,
   DependencyDeadExportFinding,
@@ -15,10 +16,9 @@ import type {
   DependencyDuplicateExportFinding,
   DependencyUnusedMemberFinding,
 } from '../../types';
-import type { DependencyLayerRule } from '../../shared/dependency-layer-rule';
 
-import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
 import { globToRegExp } from '../../shared/glob-regex';
+import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
 import { addToSetMap, pushToMultiMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';
 

@@ -293,7 +293,6 @@ export class OxcCFGBuilder {
     useBreakTarget: boolean,
   ): NodeId[] {
     const jumpNode = this.addNodeFrom(incoming, node);
-
     const targetLabel = node.label?.name ?? null;
     const target = this.resolveLoopTarget(loopStack, targetLabel, useBreakTarget);
 
@@ -377,7 +376,6 @@ export class OxcCFGBuilder {
   ): NodeId[] {
     const discriminantPayload = this.buildSwitchDiscriminantPayload(switchNode);
     const discriminantNode = this.addNodeFrom(incoming, discriminantPayload);
-
     const afterSwitch = this.addNode(null);
     const caseEntries: NodeId[] = switchNode.cases.map(() => this.addNode(null));
 
@@ -540,7 +538,6 @@ export class OxcCFGBuilder {
   private visitReturnStatement(returnNode_node: ReturnStatement, incoming: readonly NodeId[]): NodeId[] {
     const returnPayload: CfgNodePayload = returnNode_node.argument ?? returnNode_node;
     const returnNode = this.addNodeFrom(incoming, returnPayload);
-
     // Innermost active redirection wins: an inlined IIFE's after-call node or a
     // try's finalizer-return entry, whichever is on top. Falls back to the
     // function exit.
@@ -780,7 +777,6 @@ export class OxcCFGBuilder {
 
   private visitThrowStatement(throwNode_node: ThrowStatement, incoming: readonly NodeId[]): NodeId[] {
     const throwNode = this.addNodeFrom(incoming, throwNode_node.argument);
-
     // Route the exception edge to the innermost active catch handler, if any. Without
     // this, a `throw` inside `try { throw } catch (e) { ... }` skipped the catch block
     // entirely so reads in the handler were invisible to dataflow analysis.
@@ -806,7 +802,6 @@ export class OxcCFGBuilder {
     }
 
     const tryEntry = this.addNodeFrom(incoming, null);
-
     const tryBlockEntry = this.addNode(null);
 
     this.addNormalEdge(tryEntry, tryBlockEntry);

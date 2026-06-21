@@ -6,7 +6,6 @@ import { blankLinesBetweenStatementGroupsRule } from '../../../../src/test-api';
 import { noBracketNotationRule } from '../../../../src/test-api';
 import { paddingLineBetweenStatementsRule } from '../../../../src/test-api';
 import { unusedImportsRule } from '../../../../src/test-api';
-
 import { collectIdentifierUsages, ensureRangesDeep, isAstNode, traverseAndVisit, type Visitor } from './ast-walk';
 import {
   buildUniqueIdentifiers,

@@ -90,10 +90,8 @@ export const analyzeDuplicates = (
     return !exactHashes.has(cachedShape(g.items[0]!.node)) && !shapeHashes.has(hash);
   });
   const grouped: InternalCloneGroup[] = [...exactGroups, ...filteredShape, ...filteredNormalized];
-
   // ── 결정성 보장: 입력 파일 순서와 무관하게 그룹 내 항목 순서 고정 ─────────
   const allGroups = grouped.map(group => ({ ...group, items: sortItemsDeterministic(group.items) }));
-
   // ── Level 4: Anti-unification ──────────────────────────────────────────────
   const enableAntiUnification = options.enableAntiUnification ?? true;
   const result: DuplicateGroup[] = [];
@@ -221,7 +219,9 @@ const isDataTableDeclarator = (node: Node): boolean => {
     // 이지 규칙 데이터가 아니다.
     return (
       elements.length >= 2 &&
-      elements.every(el => el !== null && (el.type === 'ObjectExpression' || el.type === 'ArrayExpression') && isStaticElement(el))
+      elements.every(
+        el => el !== null && (el.type === 'ObjectExpression' || el.type === 'ArrayExpression') && isStaticElement(el),
+      )
     );
   }
 

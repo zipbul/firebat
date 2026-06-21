@@ -180,7 +180,6 @@ const headerKindLabel =
   };
 
 const labelEarlyReturn: LabelFn = headerKindLabel('early-return');
-
 const labelCollapsibleIf: LabelFn = headerKindLabel('collapsible-if');
 
 const labelErrorFlow: LabelFn = (f, fn) => {
@@ -295,7 +294,6 @@ const diagnosticLabel =
   };
 
 const labelLint: LabelFn = diagnosticLabel('lint');
-
 const labelTypecheck: LabelFn = diagnosticLabel('typecheck');
 
 const labelFormat: LabelFn = (_f, _fn) => 'needs-formatting';

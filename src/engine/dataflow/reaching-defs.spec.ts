@@ -7,8 +7,16 @@ import { parseSource } from '../ast/parse-source';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, extractBindingNames } from './reaching-defs';
 import { buildDeclScopeMap } from './variable-collector';
 
-interface NamesCase { name: string; code: string; expected: string[] }
-interface CodeOnlyCase { name: string; code: string }
+interface NamesCase {
+  name: string;
+  code: string;
+  expected: string[];
+}
+
+interface CodeOnlyCase {
+  name: string;
+  code: string;
+}
 
 // Virtual filePath for spec cases. The gildash standalone binding resolver
 // (getStandaloneFileBindings) takes filePath + source content directly, so the

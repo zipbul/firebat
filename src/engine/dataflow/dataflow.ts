@@ -51,4 +51,13 @@ const addIdsToBitSet = (target: BitSet | undefined, ids: ReadonlyArray<number>):
   }
 };
 
-export { addIdsToBitSet, createBitSet, createBitSetArray, equalsBitSet, intersectBitSet, subtractBitSet, unionByIndices, unionBitSet };
+export {
+  addIdsToBitSet,
+  createBitSet,
+  createBitSetArray,
+  equalsBitSet,
+  intersectBitSet,
+  subtractBitSet,
+  unionByIndices,
+  unionBitSet,
+};

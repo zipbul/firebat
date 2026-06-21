@@ -51,10 +51,38 @@ interface SingleFixCase {
 // One makeReport fix applied to one input → one expected output. Each row is a
 // distinct behaviour (replace / delete / replace-all / zero-length insert).
 const singleFixCases: SingleFixCase[] = [
-  { title: 'should apply a single replacement fix correctly', text: 'const foo = 1;', start: 6, end: 9, replacement: 'bar', expected: 'const bar = 1;' },
-  { title: 'should apply a single deletion fix (empty text) over a range', text: 'abcde', start: 1, end: 3, replacement: '', expected: 'ade' },
-  { title: 'should replace entire text when fix range spans [0, text.length]', text: 'oldvalue', start: 0, end: 8, replacement: 'newvalue', expected: 'newvalue' },
-  { title: 'should insert text at position when fix range is zero-length [n, n]', text: 'ac', start: 1, end: 1, replacement: 'b', expected: 'abc' },
+  {
+    title: 'should apply a single replacement fix correctly',
+    text: 'const foo = 1;',
+    start: 6,
+    end: 9,
+    replacement: 'bar',
+    expected: 'const bar = 1;',
+  },
+  {
+    title: 'should apply a single deletion fix (empty text) over a range',
+    text: 'abcde',
+    start: 1,
+    end: 3,
+    replacement: '',
+    expected: 'ade',
+  },
+  {
+    title: 'should replace entire text when fix range spans [0, text.length]',
+    text: 'oldvalue',
+    start: 0,
+    end: 8,
+    replacement: 'newvalue',
+    expected: 'newvalue',
+  },
+  {
+    title: 'should insert text at position when fix range is zero-length [n, n]',
+    text: 'ac',
+    start: 1,
+    end: 1,
+    replacement: 'b',
+    expected: 'abc',
+  },
 ];
 
 // ── applyFixes ────────────────────────────────────────────────────────────────

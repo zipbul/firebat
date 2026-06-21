@@ -1,0 +1,68 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/coref-binary-alpha-dead.ts",
+        "header": "doubleFirst",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 5
+          },
+          "start": {
+            "column": 0,
+            "line": 3
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/coref-binary-alpha-dead.ts",
+        "header": "doubleLead",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 9
+          },
+          "start": {
+            "column": 0,
+            "line": 7
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "doubleFirst",
+          "location": "id.name",
+          "right": "doubleLead"
+        },
+        {
+          "left": "a",
+          "location": "params[0].name",
+          "right": "c"
+        },
+        {
+          "left": "b",
+          "location": "params[1].name",
+          "right": "d"
+        },
+        {
+          "left": "a",
+          "location": "body.body[0].argument.left.name",
+          "right": "c"
+        },
+        {
+          "left": "a",
+          "location": "body.body[0].argument.right.name",
+          "right": "c"
+        }
+      ]
+    }
+  }
+]

@@ -39,10 +39,7 @@ describe('integration/indirection/cross-file', () => {
     {
       name: 'resolve aliased named imports when wrappers forward across modules',
       files: [
-        [
-          '/virtual/indirection-cross-alias/a.ts',
-          ["import { g as g2 } from './b';", 'export const f = (value) => g2(value);'],
-        ],
+        ['/virtual/indirection-cross-alias/a.ts', ["import { g as g2 } from './b';", 'export const f = (value) => g2(value);']],
         ['/virtual/indirection-cross-alias/b.ts', ["import { h } from './c';", 'export const g = (value) => h(value);']],
         [
           '/virtual/indirection-cross-alias/c.ts',

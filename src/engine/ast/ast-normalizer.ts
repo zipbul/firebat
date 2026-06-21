@@ -23,7 +23,15 @@ import type {
 
 import type { NodeValue } from '../types';
 
-import { asRecord, forEachChildNode, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray, walkOxcTree } from './oxc-ast-utils';
+import {
+  asRecord,
+  forEachChildNode,
+  isFunctionNode,
+  isNodeRecord,
+  isOxcNode,
+  isOxcNodeArray,
+  walkOxcTree,
+} from './oxc-ast-utils';
 
 type AnyNode = Node & Record<string, unknown>;
 
@@ -854,7 +862,6 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
 };
 
 let normalizationCache = new WeakMap<Node, NormalizedValue>();
-
 const FUNCTION_LIKE_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
 /**

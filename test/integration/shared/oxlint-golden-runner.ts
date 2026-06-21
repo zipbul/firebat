@@ -75,11 +75,7 @@ const buildGetDeclaredVariables = (program: AstNode): ((node: AstNode) => Variab
   // Build one declared Variable: its sole identifier plus every usage outside
   // the declaration's own range. Shared by all declaration kinds below so the
   // identifier+references shape lives in one place.
-  const buildVariable = (
-    name: string,
-    idRange: [number, number],
-    excludeRange: [number, number] | null,
-  ): Variable => ({
+  const buildVariable = (name: string, idRange: [number, number], excludeRange: [number, number] | null): Variable => ({
     identifiers: [{ type: 'Identifier', range: idRange, name }],
     references: collectIdentifierUsages(program, name, excludeRange, getRangeTuple),
   });

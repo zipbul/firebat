@@ -2,7 +2,10 @@ import { describe, expect, it, mock } from 'bun:test';
 
 import { runWithConcurrency } from './promise-pool';
 
-interface ConcurrencyCase { name: string; concurrency: number }
+interface ConcurrencyCase {
+  name: string;
+  concurrency: number;
+}
 
 describe('runWithConcurrency', () => {
   // Every item is processed exactly once regardless of the concurrency value

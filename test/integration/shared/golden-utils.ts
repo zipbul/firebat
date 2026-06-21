@@ -86,7 +86,9 @@ export const compareGolden = (expectedDir: string, name: string, actual: unknown
   if (expectedJson === null) {
     writeExpected(expectedDir, name, actualJson);
 
-    throw new Error(`[golden] Created new expected file for "${name}". Review ${path.join(expectedDir, `${name}.json`)} and re-run.`);
+    throw new Error(
+      `[golden] Created new expected file for "${name}". Review ${path.join(expectedDir, `${name}.json`)} and re-run.`,
+    );
   }
 
   const expectedParsed = JSON.parse(expectedJson.trim()) as unknown;

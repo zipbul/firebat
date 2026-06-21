@@ -204,14 +204,12 @@ const exportedSymbols =
  * A `resolveSymbol` mock where symbols named `sharedName` all resolve to the single
  * `origin` file (a shared re-export origin), and every other symbol resolves to itself.
  */
-const resolveSymbolToOrigin =
-  (sharedName: string, origin: string) =>
-  (name: string, filePath: string) => ({
-    originalName: name,
-    originalFilePath: name === sharedName ? origin : filePath,
-    reExportChain: [],
-    circular: false,
-  });
+const resolveSymbolToOrigin = (sharedName: string, origin: string) => (name: string, filePath: string) => ({
+  originalName: name,
+  originalFilePath: name === sharedName ? origin : filePath,
+  reExportChain: [],
+  circular: false,
+});
 
 /** A `searchRelations` mock that returns `rels` only for queries of the given `type`. */
 const relationsOfType =
@@ -1232,13 +1230,16 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     },
   ];
 
-  it.each(memberCases)('$name', async ({ container, containerFile, importName, calledMembers, members, expectedKind, expectedUnusedMemberNames }) => {
-    const result = await analyzeMembers({ container, containerFile, importName, calledMembers, members });
-    const found = result.unusedMembers.filter(m => m.kind === expectedKind);
+  it.each(memberCases)(
+    '$name',
+    async ({ container, containerFile, importName, calledMembers, members, expectedKind, expectedUnusedMemberNames }) => {
+      const result = await analyzeMembers({ container, containerFile, importName, calledMembers, members });
+      const found = result.unusedMembers.filter(m => m.kind === expectedKind);
 
-    expect(found.map(m => m.memberName).sort()).toEqual([...expectedUnusedMemberNames]);
-    expect([...new Set(found.map(m => m.symbolName))]).toEqual([container.name]);
-  });
+      expect(found.map(m => m.memberName).sort()).toEqual([...expectedUnusedMemberNames]);
+      expect([...new Set(found.map(m => m.symbolName))]).toEqual([container.name]);
+    },
+  );
 
   it('should skip all enum members when parent enum is imported with usesAll', async () => {
     // `import * as Color` → usesAll → every member treated as used regardless of calls.
@@ -1345,7 +1346,9 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         ['/project/src/lib.ts', []],
       ]),
       exported: [mkSymbol(1, '/project/src/lib.ts', 'orphanFn', 'function')],
-      searchRelations: relationsOfType('re-exports', [mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn')]),
+      searchRelations: relationsOfType('re-exports', [
+        mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn'),
+      ]),
       pkgJson: { main: './src/index.ts' },
     });
     const libDead = result.deadExports.filter(d => d.module === 'src/lib.ts');

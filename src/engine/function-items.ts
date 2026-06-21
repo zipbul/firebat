@@ -1,7 +1,7 @@
 import type { Node } from 'oxc-parser';
 
-import type { ParsedFile } from './types';
 import type { NestingReductionMetrics, SourceSpan } from '../types';
+import type { ParsedFile } from './types';
 
 import { collectFunctionNodesWithParent } from './ast';
 import { getNodeHeader } from './ast/oxc-ast-utils';

@@ -149,13 +149,7 @@ const cases: WasteCase[] = [
   {
     name: 'should not report a dead-store finding when destructuring reads a bound value',
     fileName: '/virtual/destructure.ts',
-    source: [
-      'function destructureRead() {',
-      '  let obj = { value: 1 };',
-      '  let { value } = obj;',
-      '  return value;',
-      '}',
-    ],
+    source: ['function destructureRead() {', '  let obj = { value: 1 };', '  let { value } = obj;', '  return value;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: false }],
   },
   {
@@ -186,13 +180,7 @@ const cases: WasteCase[] = [
   {
     name: 'should not report a dead-store finding when a value is referenced in a destructuring default that is statically evaluated',
     fileName: '/virtual/destructure-default-evaluated.ts',
-    source: [
-      'function destructureDefaultEvaluated() {',
-      '  let value = 1;',
-      '  let { a = value } = {};',
-      '  return 0;',
-      '}',
-    ],
+    source: ['function destructureDefaultEvaluated() {', '  let value = 1;', '  let { a = value } = {};', '  return 0;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: false }],
   },
   {
@@ -213,15 +201,7 @@ const cases: WasteCase[] = [
   {
     name: 'should report a dead-store finding when a value is read only inside a statically-unreachable loop body',
     fileName: '/virtual/unreachable-loop.ts',
-    source: [
-      'function unreachableLoop() {',
-      '  let value = 0;',
-      '  while (false) {',
-      '    value;',
-      '  }',
-      '  return 0;',
-      '}',
-    ],
+    source: ['function unreachableLoop() {', '  let value = 0;', '  while (false) {', '    value;', '  }', '  return 0;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: true }],
   },
   {
@@ -370,15 +350,7 @@ const cases: WasteCase[] = [
   {
     name: 'should report a dead-store finding when a value is only referenced in an unreachable if branch',
     fileName: '/virtual/if-unreachable.ts',
-    source: [
-      'function ifUnreachable() {',
-      '  let value = 1;',
-      '  if (false) {',
-      '    value;',
-      '  }',
-      '  return 0;',
-      '}',
-    ],
+    source: ['function ifUnreachable() {', '  let value = 1;', '  if (false) {', '    value;', '  }', '  return 0;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: true }],
   },
   {
@@ -390,29 +362,13 @@ const cases: WasteCase[] = [
   {
     name: 'should report a dead-store finding when a value is only referenced in an unreachable branch guarded by 0',
     fileName: '/virtual/if-zero-unreachable.ts',
-    source: [
-      'function ifZeroUnreachable() {',
-      '  let value = 1;',
-      '  if (0) {',
-      '    value;',
-      '  }',
-      '  return 0;',
-      '}',
-    ],
+    source: ['function ifZeroUnreachable() {', '  let value = 1;', '  if (0) {', '    value;', '  }', '  return 0;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: true }],
   },
   {
     name: 'should report a dead-store finding when a value is only referenced in an unreachable branch guarded by an empty string',
     fileName: '/virtual/if-empty-string-unreachable.ts',
-    source: [
-      'function ifEmptyStringUnreachable() {',
-      '  let value = 1;',
-      "  if ('') {",
-      '    value;',
-      '  }',
-      '  return 0;',
-      '}',
-    ],
+    source: ['function ifEmptyStringUnreachable() {', '  let value = 1;', "  if ('') {", '    value;', '  }', '  return 0;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: true }],
   },
   {
@@ -424,15 +380,7 @@ const cases: WasteCase[] = [
   {
     name: 'should report a dead-store finding when a value is only referenced in an unreachable branch guarded by 0n',
     fileName: '/virtual/if-bigint-zero-unreachable.ts',
-    source: [
-      'function ifBigintZeroUnreachable() {',
-      '  let value = 1;',
-      '  if (0n) {',
-      '    value;',
-      '  }',
-      '  return 0;',
-      '}',
-    ],
+    source: ['function ifBigintZeroUnreachable() {', '  let value = 1;', '  if (0n) {', '    value;', '  }', '  return 0;', '}'],
     expectations: [{ kind: 'dead-store', snippet: 'value', present: true }],
   },
   {

@@ -51,9 +51,14 @@ describe('integration/variable-lifetime', () => {
   it('should report context burden when multiple long-lived variables exist', async () => {
     // Act
     const list = await scanDetectorFindings('p1-var-life-2', 'variable-lifetime', {
-      'src/a.ts': ['export function f() {', '  const a = 1;', '  const b = 2;', fillerConsts(60, 'x'), '  return a + b;', '}'].join(
-        '\n',
-      ),
+      'src/a.ts': [
+        'export function f() {',
+        '  const a = 1;',
+        '  const b = 2;',
+        fillerConsts(60, 'x'),
+        '  return a + b;',
+        '}',
+      ].join('\n'),
     });
 
     // Assert
@@ -66,9 +71,14 @@ describe('integration/variable-lifetime', () => {
   it('should report multiple variables when several lifetimes exceed the threshold', async () => {
     // Act
     const list = await scanDetectorFindings('p1-var-life-3', 'variable-lifetime', {
-      'src/a.ts': ['export function f() {', '  const a = 1;', '  const b = 2;', fillerConsts(80, 'y'), '  return a + b;', '}'].join(
-        '\n',
-      ),
+      'src/a.ts': [
+        'export function f() {',
+        '  const a = 1;',
+        '  const b = 2;',
+        fillerConsts(80, 'y'),
+        '  return a + b;',
+        '}',
+      ].join('\n'),
     });
 
     // Assert
@@ -126,7 +136,6 @@ describe('integration/variable-lifetime', () => {
         '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 999, "maxLiveVariables": 7, "minFunctionLines": 10 } }\n}',
       'src/a.ts': eightLiveVarsSource('bigFn'),
     });
-
     // Assert
     const pressureFindings = list.filter((item: any) => item.kind === 'liveness-pressure');
 
@@ -144,7 +153,6 @@ describe('integration/variable-lifetime', () => {
         '{\n  "features": { "variable-lifetime": { "maxLifetimeLines": 999, "maxLiveVariables": 999, "minFunctionLines": 10 } }\n}',
       'src/a.ts': eightLiveVarsSource('bigFnHighThreshold'),
     });
-
     // Assert — no liveness-pressure because maxLiveVariables threshold (999) is above actual live count
     const pressureFindings = list.filter((item: any) => item.kind === 'liveness-pressure');
 

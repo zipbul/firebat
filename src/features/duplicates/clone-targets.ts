@@ -236,12 +236,7 @@ const isFunctionSkeleton = (fn: FunctionLikeNode): boolean => {
     return true;
   }
 
-  return (
-    isParamPassthroughDelegation(fn) ||
-    isSimpleParamProjection(fn) ||
-    isIdentityArrow(fn) ||
-    isNullaryLiteralFactory(fn)
-  );
+  return isParamPassthroughDelegation(fn) || isSimpleParamProjection(fn) || isIdentityArrow(fn) || isNullaryLiteralFactory(fn);
 };
 
 export const isDecisionlessSkeleton = (node: Node): boolean => {
@@ -274,7 +269,9 @@ export const isDecisionlessSkeleton = (node: Node): boolean => {
       const annotation = (node as Node & { readonly typeAnnotation: Node }).typeAnnotation;
 
       if (annotation.type === 'TSTypeReference') {
-        const typeArgs = (annotation as Node & { readonly typeArguments?: (Node & { readonly params?: ReadonlyArray<Node> }) | null }).typeArguments;
+        const typeArgs = (
+          annotation as Node & { readonly typeArguments?: (Node & { readonly params?: ReadonlyArray<Node> }) | null }
+        ).typeArguments;
 
         return (typeArgs?.params ?? []).length === 0;
       }

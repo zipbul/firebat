@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import { parseSync } from 'oxc-parser';
 
-import { collectFunctionNodes } from '../../engine/ast/oxc-ast-utils';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
 
+import { collectFunctionNodes } from '../../engine/ast/oxc-ast-utils';
 import { antiUnify, classifyDiff } from './anti-unifier';
 
 // ─── 헬퍼 ─────────────────────────────────────────────────────────────────────
@@ -245,7 +245,11 @@ describe('antiUnify', () => {
 
 describe('classifyDiff', () => {
   it.each<[string, AntiUnificationResult, DiffClassification]>([
-    ['variables 없음 → rename-only', { sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1, variables: [] }, 'rename-only'],
+    [
+      'variables 없음 → rename-only',
+      { sharedSize: 10, leftSize: 10, rightSize: 10, similarity: 1, variables: [] },
+      'rename-only',
+    ],
     [
       'identifier만 → rename-only',
       {

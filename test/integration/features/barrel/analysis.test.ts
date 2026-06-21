@@ -56,7 +56,9 @@ const crossDirFiles = (importPath: string): Readonly<Record<string, string>> => 
     '/virtual/pkg/a/index.ts': "export { internal } from './internal';\n",
     '/virtual/pkg/a/internal.ts': 'export const internal = 1;\n',
     '/virtual/pkg/b/index.ts': "export { consume } from './consumer';\n",
-    '/virtual/pkg/b/consumer.ts': [`import { internal } from '${importPath}';`, 'export const consume = internal + 1;'].join('\n'),
+    '/virtual/pkg/b/consumer.ts': [`import { internal } from '${importPath}';`, 'export const consume = internal + 1;'].join(
+      '\n',
+    ),
   };
 };
 
@@ -85,7 +87,6 @@ describe('integration/barrel', () => {
   it('should ignore dist/** by default', async () => {
     // Arrange: would normally trigger missing-index, but should be ignored by default.
     const sources = sourcesOf({ '/virtual/dist/dir/a.ts': 'export const a = 1;\n' });
-
     // Act
     const analysis = await runBarrel(sources);
 

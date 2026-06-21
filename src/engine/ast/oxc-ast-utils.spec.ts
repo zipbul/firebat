@@ -16,8 +16,19 @@ import {
 } from './oxc-ast-utils';
 import { parseSource } from './parse-source';
 
-interface ChildNodeCase { name: string; source: string; nodeType: string; expected: string[] }
-interface NodeHeaderCase { name: string; source: string; nodeType: string; header: string }
+interface ChildNodeCase {
+  name: string;
+  source: string;
+  nodeType: string;
+  expected: string[];
+}
+
+interface NodeHeaderCase {
+  name: string;
+  source: string;
+  nodeType: string;
+  header: string;
+}
 
 const prog = (src: string) => parseSource('test.ts', src).program;
 

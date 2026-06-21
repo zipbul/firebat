@@ -23,7 +23,11 @@ interface CountCase {
 
 describe('unobserved-variable — reassignment chain (W)', () => {
   const cases: CountCase[] = [
-    { name: 'flags the overwritten promise: `let p = a(); p = b(); await p`', body: ['let p = a();', 'p = b();', 'await p;'], count: 1 },
+    {
+      name: 'flags the overwritten promise: `let p = a(); p = b(); await p`',
+      body: ['let p = a();', 'p = b();', 'await p;'],
+      count: 1,
+    },
     {
       name: 'flags the overwritten promise when reassigned to a non-thenable: `let p = a(); p = 0 as any;`',
       body: ['let p: unknown = a();', 'p = 0;', 'use(p);'],

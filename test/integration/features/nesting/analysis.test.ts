@@ -104,7 +104,6 @@ describe('integration/nesting', () => {
       '  return 0;',
       '}',
     ].join('\n');
-
     // Act
     const nesting = analyzeSource(source, analyzeNesting);
     const item = nesting.find(entry => entry.header === 'c');
@@ -123,7 +122,6 @@ describe('integration/nesting', () => {
       '  });',
       '}',
     ].join('\n');
-
     // Act
     const nesting = analyzeSource(source, analyzeNesting);
     const item = nesting.find(entry => entry.header === 'q');

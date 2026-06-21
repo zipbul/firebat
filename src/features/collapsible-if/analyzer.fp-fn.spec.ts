@@ -44,7 +44,6 @@ export const f = (a: boolean, b: boolean) => {
 `,
   },
 ];
-
 // ── 거짓 양성 후보 (감지되면 안 되는 것) ──────────────────────────────────
 const noDetectCases: NoDetectCase[] = [
   {
@@ -75,7 +74,6 @@ export function f(a: boolean, b: boolean) {
 ];
 
 describe('analyzeCollapsibleIf - false negative / false positive scenarios', () => {
-
   it.each(detectCases)('analyzeCollapsibleIf - $name - 감지', ({ source }) => {
     // Arrange & Act
     const result = analyzeSource(source, analyzeCollapsibleIf);

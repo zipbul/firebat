@@ -159,7 +159,6 @@ export function f(a: boolean) {
 `,
   },
 ];
-
 const collapsibleIfCases: CollapsibleIfCase[] = [
   {
     name: 'basic: if(a) { if(b) { 3 stmts } }',
@@ -275,7 +274,6 @@ export function outer() {
     statementsAffected: 3,
   },
 ];
-
 const elseIfCases: ElseIfCase[] = [
   {
     name: 'else { if(b) { ... } }',
@@ -335,7 +333,6 @@ export function f(a: boolean, b: boolean) {
 ];
 
 describe('analyzeCollapsibleIf', () => {
-
   it('analyzeCollapsibleIf - empty files array - returns empty', () => {
     // Arrange & Act
     const result = analyzeCollapsibleIf([]);
@@ -362,35 +359,42 @@ describe('analyzeCollapsibleIf', () => {
     expect(result).toEqual([]);
   });
 
-  it.each(collapsibleIfCases)('analyzeCollapsibleIf - $name - returns collapsible-if', ({ source, score, depthReduction, statementsAffected }) => {
-    // Arrange & Act
-    const result = analyzeSource(source, analyzeCollapsibleIf);
+  it.each(collapsibleIfCases)(
+    'analyzeCollapsibleIf - $name - returns collapsible-if',
+    ({ source, score, depthReduction, statementsAffected }) => {
+      // Arrange & Act
+      const result = analyzeSource(source, analyzeCollapsibleIf);
 
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-if');
-    expect(result[0]!.score).toBe(score);
-    expect(result[0]!.metrics.depthReduction).toBe(depthReduction);
-    expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
-  });
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]!.kind).toBe('collapsible-if');
+      expect(result[0]!.score).toBe(score);
+      expect(result[0]!.metrics.depthReduction).toBe(depthReduction);
+      expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
+    },
+  );
 
   // ── collapsible-else-if ─────────────────────────────────────────────
 
-  it.each(elseIfCases)('analyzeCollapsibleIf - collapsible-else-if: $name - returns collapsible-else-if', ({ source, statementsAffected, score }) => {
-    // Arrange & Act
-    const result = analyzeSource(source, analyzeCollapsibleIf);
+  it.each(elseIfCases)(
+    'analyzeCollapsibleIf - collapsible-else-if: $name - returns collapsible-else-if',
+    ({ source, statementsAffected, score }) => {
+      // Arrange & Act
+      const result = analyzeSource(source, analyzeCollapsibleIf);
 
-    // Assert
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-else-if');
-    expect(result[0]!.metrics.depthReduction).toBe(1);
-    expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
-    expect(result[0]!.score).toBe(score);
-  });
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]!.kind).toBe('collapsible-else-if');
+      expect(result[0]!.metrics.depthReduction).toBe(1);
+      expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
+      expect(result[0]!.score).toBe(score);
+    },
+  );
 
   it('analyzeCollapsibleIf - two independent collapsible-ifs in same function - aggregated', () => {
     // Arrange & Act
-    const result = analyzeSource(`
+    const result = analyzeSource(
+      `
 export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
   if (a) {
     if (b) {
@@ -407,7 +411,9 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     }
   }
 }
-`, analyzeCollapsibleIf);
+`,
+      analyzeCollapsibleIf,
+    );
 
     // Assert — both are in same function, aggregated into one item
     expect(result).toHaveLength(1);
@@ -419,7 +425,8 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
 
   it('analyzeCollapsibleIf - collapsible-if + collapsible-else-if coexist - primaryOpportunity selects higher score', () => {
     // Arrange & Act — collapsible-if (score=3) + collapsible-else-if (score=5) in same function
-    const result = analyzeSource(`
+    const result = analyzeSource(
+      `
 export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
   if (a) {
     if (b) {
@@ -441,7 +448,9 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     }
   }
 }
-`, analyzeCollapsibleIf);
+`,
+      analyzeCollapsibleIf,
+    );
 
     // Assert — both detected, primary kind = collapsible-else-if (score=5 > 3)
     expect(result).toHaveLength(1);
@@ -452,7 +461,8 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
 
   it('analyzeCollapsibleIf - maxDepth is tracked', () => {
     // Arrange & Act
-    const result = analyzeSource(`
+    const result = analyzeSource(
+      `
 export function f(a: boolean, b: boolean) {
   if (a) {
     if (b) {
@@ -462,7 +472,9 @@ export function f(a: boolean, b: boolean) {
     }
   }
 }
-`, analyzeCollapsibleIf);
+`,
+      analyzeCollapsibleIf,
+    );
 
     // Assert
     expect(result).toHaveLength(1);

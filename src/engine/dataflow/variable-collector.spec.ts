@@ -8,7 +8,11 @@ import { isOxcNode } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
 import { collectVariables } from './variable-collector';
 
-interface ReadCountCase { name: string; lines: string[]; statementIndex: number }
+interface ReadCountCase {
+  name: string;
+  lines: string[];
+  statementIndex: number;
+}
 
 const getFunctionBodyStatement = (sourceText: string, statementIndex: number): Node => {
   const parsed = parseSource('/virtual/variable-collector.spec.ts', sourceText);

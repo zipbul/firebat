@@ -42,7 +42,6 @@ function big${n}(xs: number[]): number {
 // Many large declarations — under a percentile floor this drags the corpus median
 // far above the size of any small clone, hiding it. Under a fixed floor it is inert.
 const MANY_BIG_DECLS = Array.from({ length: 40 }, (_unused, i) => oneBigFn(i)).join('\n');
-
 const small = [parseSource('/p/small.ts', TWO_TINY_DECLS)];
 const big = [parseSource('/p/big.ts', `${TWO_TINY_DECLS}\n${MANY_BIG_DECLS}`)];
 
@@ -56,7 +55,6 @@ describe('duplicates min-size floor — corpus independence', () => {
 
   it('resolves a floor that does not depend on corpus size at all', async () => {
     const { computeAutoMinSize } = await import('./auto-min-size');
-
     const empty = computeAutoMinSize([]);
     const one = computeAutoMinSize(small);
     const many = computeAutoMinSize(big);
@@ -67,7 +65,10 @@ describe('duplicates min-size floor — corpus independence', () => {
   });
 
   it('equals the documented policy constant', async () => {
-    const mod = (await import('./auto-min-size')) as { computeAutoMinSize: (f: unknown[]) => number; DUPLICATES_MIN_SIZE: number };
+    const mod = (await import('./auto-min-size')) as {
+      computeAutoMinSize: (f: unknown[]) => number;
+      DUPLICATES_MIN_SIZE: number;
+    };
 
     expect(typeof mod.DUPLICATES_MIN_SIZE).toBe('number');
     expect(mod.computeAutoMinSize(small)).toBe(mod.DUPLICATES_MIN_SIZE);

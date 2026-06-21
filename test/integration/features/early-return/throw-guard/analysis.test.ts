@@ -16,7 +16,6 @@ describe('integration/early-return/throw-guard', () => {
       '  return 4;',
       '}',
     ].join('\n');
-
     // Act
     const item = findItemByHeader(source, 'guarded');
 

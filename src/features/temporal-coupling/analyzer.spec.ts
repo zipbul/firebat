@@ -61,18 +61,15 @@ const initQueryRelations: CodeRelation[] = [
   { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'init' },
   { type: 'calls', srcFilePath: 'src/main.ts', srcSymbolName: 'main', dstFilePath: 'src/a.ts', dstSymbolName: 'query' },
 ];
-
 const moduleTargetSource = ['let db: any;', 'export function init() { db = 1; }', 'export function query() { return db; }'].join(
   '\n',
 );
-
 // Module-scope writer/reader source lines reused across the relation-suppression table.
 const moduleReaderSource = [
   'let db: any;',
   'export function init() { db = createDb(); }',
   'export function query() { return db; }',
 ];
-
 const classTargetSource = [
   'export class Service {',
   '  x = 0;',

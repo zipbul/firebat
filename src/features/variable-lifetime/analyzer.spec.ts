@@ -7,8 +7,8 @@ import type {
   VariableLifetimeFinding,
 } from '../../types';
 
-import { parseSource } from '../../engine/ast/parse-source';
 import { parsePFile as file } from '../../../test/integration/shared/test-kit';
+import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } from './analyzer';
 
 const { isPureInitializer } = __testing__;
@@ -633,16 +633,8 @@ describe('variable-lifetime/analyzer', () => {
         'function f(a: boolean) { const x = 1; if (a) { } else { use(x); } }',
         'if-alternate',
       ],
-      [
-        'const used only in try-block',
-        'function f() { const x = 1; try { use(x); } catch (e) { } }',
-        'try-block',
-      ],
-      [
-        'const used only in catch-block',
-        'function f() { const x = 1; try { } catch (e) { use(x); } }',
-        'catch-block',
-      ],
+      ['const used only in try-block', 'function f() { const x = 1; try { use(x); } catch (e) { } }', 'try-block'],
+      ['const used only in catch-block', 'function f() { const x = 1; try { } catch (e) { use(x); } }', 'catch-block'],
       [
         'const used only in single switch case',
         'function f(y: string) { const x = 1; switch (y) { case "a": use(x); break; } }',
@@ -698,7 +690,10 @@ describe('variable-lifetime/analyzer', () => {
         'function f(cond: boolean) { let otherVar = 1; const x = otherVar; otherVar = 999; if (cond) { use(x); } }',
       ],
       // 불순 초기화 (computed key / sequence / arrow)
-      ['object with computed key initializer', 'function f(cond: boolean) { const x = { [compute()]: 1 }; if (cond) { use(x); } }'],
+      [
+        'object with computed key initializer',
+        'function f(cond: boolean) { const x = { [compute()]: 1 }; if (cond) { use(x); } }',
+      ],
       ['sequence expression initializer', 'function f(cond: boolean) { const x = (a, b); if (cond) { use(x); } }'],
       ['arrow function initializer used only in if-block', 'function f(cond: boolean) { const x = () => 1; if (cond) { x(); } }'],
     ])('analyzeVariableLifetime - %s - no scope-narrowing finding', (_name, sourceText) => {

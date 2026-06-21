@@ -7,8 +7,9 @@ describe('integration/waste/destructured-params', () => {
     // Function parameters — including bindings inside a destructured parameter pattern —
     // are explicitly excluded from waste by CLAUDE.md. Unused parameter names belong to
     // the no-unused-vars detector domain, not waste.
-    const source = ['export function render({ title, description, unused }) {', '  return `${title}:${description}`;', '}'].join('\n');
-
+    const source = ['export function render({ title, description, unused }) {', '  return `${title}:${description}`;', '}'].join(
+      '\n',
+    );
     // Act
     const unusedFindings = detectWasteLabelFindings('/virtual/waste/destructured-params.ts', source, 'unused');
 

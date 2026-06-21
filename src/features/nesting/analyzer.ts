@@ -237,11 +237,7 @@ const keepMaxDepth = (max: number, candidate: number): number => (candidate > ma
  * depth-measuring functions below (their top-level-body branch and their
  * default tail both reduce to this).
  */
-const scanChildrenMaxDepth = (
-  node: Node,
-  depth: number,
-  measure: (child: Node, depth: number) => number,
-): number => {
+const scanChildrenMaxDepth = (node: Node, depth: number, measure: (child: Node, depth: number) => number): number => {
   let max = depth;
 
   forEachChildNode(node, child => {

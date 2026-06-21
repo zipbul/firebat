@@ -20,7 +20,6 @@ describe('integration/early-return/imbalanced-if-else', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const item = findItemByHeader(source, 'process');
 
@@ -40,7 +39,6 @@ describe('integration/early-return/imbalanced-if-else', () => {
       '  }',
       '}',
     ].join('\n');
-
     // Act
     const item = findItemByHeader(source, 'process');
 

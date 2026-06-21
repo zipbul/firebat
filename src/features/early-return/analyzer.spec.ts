@@ -59,8 +59,16 @@ describe('early-return/analyzer helpers', () => {
       value: node('BlockStatement', { body: [node('ExpressionStatement')] }),
       expected: false,
     },
-    { label: 'block body contains only ReturnStatement', value: node('BlockStatement', { body: [node('ReturnStatement')] }), expected: true },
-    { label: 'block body contains only ThrowStatement', value: node('BlockStatement', { body: [node('ThrowStatement')] }), expected: true },
+    {
+      label: 'block body contains only ReturnStatement',
+      value: node('BlockStatement', { body: [node('ReturnStatement')] }),
+      expected: true,
+    },
+    {
+      label: 'block body contains only ThrowStatement',
+      value: node('BlockStatement', { body: [node('ThrowStatement')] }),
+      expected: true,
+    },
   ];
 
   it.each(isExitBlockCases)('isExitBlock should return $expected when $label', ({ value, expected }) => {
@@ -92,8 +100,16 @@ describe('early-return/analyzer helpers', () => {
       value: node('BlockStatement', { body: [node('ExpressionStatement')] }),
       expected: false,
     },
-    { label: 'block body contains only ContinueStatement', value: node('BlockStatement', { body: [node('ContinueStatement')] }), expected: true },
-    { label: 'block body contains only BreakStatement', value: node('BlockStatement', { body: [node('BreakStatement')] }), expected: true },
+    {
+      label: 'block body contains only ContinueStatement',
+      value: node('BlockStatement', { body: [node('ContinueStatement')] }),
+      expected: true,
+    },
+    {
+      label: 'block body contains only BreakStatement',
+      value: node('BlockStatement', { body: [node('BreakStatement')] }),
+      expected: true,
+    },
   ];
 
   it.each(isLoopGuardBlockCases)('isLoopGuardBlock should return $expected when $label', ({ value, expected }) => {
@@ -106,13 +122,21 @@ describe('early-return/analyzer helpers', () => {
 
   const countConsecutiveTrailingIfsCases: CountCase[] = [
     { label: 'array is empty', stmts: [], expected: 0 },
-    { label: 'last stmt is IfStatement (no alternate) preceded by non-if', stmts: [node('ExpressionStatement'), node('IfStatement')], expected: 1 },
+    {
+      label: 'last stmt is IfStatement (no alternate) preceded by non-if',
+      stmts: [node('ExpressionStatement'), node('IfStatement')],
+      expected: 1,
+    },
     {
       label: 'last 2 stmts are IfStatement (no alternate) preceded by non-if',
       stmts: [node('ExpressionStatement'), node('IfStatement'), node('IfStatement')],
       expected: 2,
     },
-    { label: 'all 3 stmts are IfStatement (no alternate)', stmts: [node('IfStatement'), node('IfStatement'), node('IfStatement')], expected: 3 },
+    {
+      label: 'all 3 stmts are IfStatement (no alternate)',
+      stmts: [node('IfStatement'), node('IfStatement'), node('IfStatement')],
+      expected: 3,
+    },
     {
       label: 'IfStatements are non-consecutive (interrupted by ExprStmt)',
       stmts: [node('IfStatement'), node('ExpressionStatement'), node('IfStatement')],
@@ -130,13 +154,16 @@ describe('early-return/analyzer helpers', () => {
     },
   ];
 
-  it.each(countConsecutiveTrailingIfsCases)('countConsecutiveTrailingIfs should return $expected when $label', ({ stmts, expected }) => {
-    // Act
-    const result = countConsecutiveTrailingIfs(stmts as any[]);
+  it.each(countConsecutiveTrailingIfsCases)(
+    'countConsecutiveTrailingIfs should return $expected when $label',
+    ({ stmts, expected }) => {
+      // Act
+      const result = countConsecutiveTrailingIfs(stmts as any[]);
 
-    // Assert
-    expect(result).toBe(expected);
-  });
+      // Assert
+      expect(result).toBe(expected);
+    },
+  );
 
   const elseIfChainNode = node('IfStatement', {
     consequent: node('BlockStatement', { body: [node('ExpressionStatement'), node('ReturnStatement')] }),

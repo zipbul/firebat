@@ -12,9 +12,7 @@ import { createNoopLogger } from './logger';
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../store/gildash.ts')) };
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-const defaultBatchParse = async (
-  _filePaths: string[],
-): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
+const defaultBatchParse = async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
   parsed: new Map(),
   failures: [],
 });

@@ -5,15 +5,7 @@ import { blankLinesBetweenStatementGroupsRule } from '../../../../src/test-api';
 import { noBracketNotationRule } from '../../../../src/test-api';
 import { paddingLineBetweenStatementsRule } from '../../../../src/test-api';
 import { unusedImportsRule } from '../../../../src/test-api';
-import {
-  buildUniqueIdentifiers,
-  getRange,
-  makeIdentifier,
-  makeUnsafeKey,
-  mulberry32,
-  newline,
-  whitespace,
-} from './fuzz-rng';
+import { buildUniqueIdentifiers, getRange, makeIdentifier, makeUnsafeKey, mulberry32, newline, whitespace } from './fuzz-rng';
 import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
 import { buildCommaTokens } from './token-utils';
 

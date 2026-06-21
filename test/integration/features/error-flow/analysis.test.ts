@@ -240,15 +240,7 @@ describe('integration/error-flow', () => {
     {
       name: 'should not report return-await-in-try for literal return in try block',
       filePath: '/virtual/src/features/return-literal-try.ts',
-      source: lines(
-        'export function f() {',
-        '  try {',
-        '    return "ok";',
-        '  } catch (e) {',
-        '    return "error";',
-        '  }',
-        '}',
-      ),
+      source: lines('export function f() {', '  try {', '    return "ok";', '  } catch (e) {', '    return "error";', '  }', '}'),
       kind: 'return-await-in-try',
       count: 0,
     },

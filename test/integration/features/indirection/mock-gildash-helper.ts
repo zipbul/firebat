@@ -6,6 +6,8 @@
  */
 import type { Gildash, CodeRelation, SymbolSearchResult } from '@zipbul/gildash';
 
+import { addAndPush } from '../../../../src/shared/multi-map';
+
 /* ------------------------------------------------------------------ */
 /*  Internal helpers                                                   */
 /* ------------------------------------------------------------------ */
@@ -132,8 +134,7 @@ export const buildMockGildashFromSources = (sources: Map<string, string> | Recor
 
       for (const dep of reverseAdj.get(current) ?? []) {
         if (!visited.has(dep)) {
-          visited.add(dep);
-          queue.push(dep);
+          addAndPush(visited, queue, dep);
         }
       }
     }

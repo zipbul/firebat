@@ -11,7 +11,12 @@ import {
   unionByIndices,
 } from './dataflow';
 
-interface EqualsBitSetCase { name: string; aBits: number[]; bBits: number[]; equal: boolean }
+interface EqualsBitSetCase {
+  name: string;
+  aBits: number[];
+  bBits: number[];
+  equal: boolean;
+}
 
 describe('createBitSet', () => {
   it('creates an empty bit set', () => {
@@ -118,10 +123,7 @@ const bitSetsOf = (...idLists: ReadonlyArray<ReadonlyArray<number>>) => {
 };
 
 describe('createBitSetArray', () => {
-  it.each([
-    { length: 3 },
-    { length: 0 },
-  ])('allocates $length empty bit sets', ({ length }) => {
+  it.each([{ length: 3 }, { length: 0 }])('allocates $length empty bit sets', ({ length }) => {
     const arr = createBitSetArray(length);
 
     expect(arr.length === length && arr.every(bs => bs.array().length === 0)).toBe(true);

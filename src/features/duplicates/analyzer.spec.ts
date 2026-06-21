@@ -1,8 +1,8 @@
 import { mock, afterAll, describe, it, expect, beforeEach } from 'bun:test';
 import path from 'node:path';
 
-import type { DuplicateFindingKind } from '../../types';
 import type { ParsedFile } from '../../engine/types';
+import type { DuplicateFindingKind } from '../../types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
 
 import { parseSource } from '../../engine/ast/parse-source';
@@ -855,7 +855,6 @@ function pb(prog: { body: unknown }): unknown[] {
   return [];
 }
 `;
-
 // Param-passthrough delegation duplicated — decisionless skeleton (K by role).
 // Free functions (not methods) so the only candidate clone is the delegation
 // itself, with no enclosing-class structural clone to confound the assertion.
@@ -867,7 +866,6 @@ function findOrder(id: string) {
   return repo.find(id);
 }
 `;
-
 // Two distinct functions sharing only a tiny (<12 node) extractable statement run.
 const TINY_FRAGMENT_CLONE = `
 function ga(x: number): number {

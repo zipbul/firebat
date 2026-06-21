@@ -6,7 +6,11 @@ import { collectOxcNodes } from './oxc-ast-utils';
 import { createOxcFingerprintExact, createOxcFingerprintNormalized, createOxcFingerprintShape } from './oxc-fingerprint';
 import { parseSource } from './parse-source';
 
-interface DistinctContractCase { name: string; left: string; right: string }
+interface DistinctContractCase {
+  name: string;
+  left: string;
+  right: string;
+}
 
 const shapeOfFirstFunction = (source: string): string => {
   const parsed = parseSource('/virtual/fp.ts', source);
@@ -177,8 +181,8 @@ describe('createOxcFingerprint — template literal text', () => {
   // 구조 동일, 템플릿의 정적 텍스트(quasi)만 다름. TemplateElement는 visitorKeys가 비어
   // 있어 자식 순회로는 내용이 안 들어가므로, cooked 텍스트를 명시적으로 인코딩하지 않으면
   // 두 함수가 거짓 병합된다 (FP).
-  const synonym = "function f(a: string, b: string) { return `type alias ${a} is a direct synonym for ${b}`; }";
-  const equivalent = "function f(a: string, b: string) { return `type alias ${a} is structurally equivalent to ${b}`; }";
+  const synonym = 'function f(a: string, b: string) { return `type alias ${a} is a direct synonym for ${b}`; }';
+  const equivalent = 'function f(a: string, b: string) { return `type alias ${a} is structurally equivalent to ${b}`; }';
 
   it('distinguishes different template-literal text at the exact tier (static text is content)', () => {
     expect(exactOfFirstFunction(synonym)).not.toBe(exactOfFirstFunction(equivalent));

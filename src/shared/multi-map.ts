@@ -36,4 +36,13 @@ const keepMapBound = <K, V>(map: Map<K, V>, key: K, value: V, isBetter: (next: V
   }
 };
 
-export { addToSetMap, keepMapBound, pushToMultiMap };
+/**
+ * value를 set에 추가하고 list에 append한다 — "방문 표시 후 큐잉(BFS)" / "중복 표시 후 수집(dedup)"
+ * 관용구(`seen.add(x); out.push(x)`)를 복제하던 루프들의 단일 변경지점.
+ */
+const addAndPush = <T>(set: Set<T>, list: T[], value: T): void => {
+  set.add(value);
+  list.push(value);
+};
+
+export { addAndPush, addToSetMap, keepMapBound, pushToMultiMap };

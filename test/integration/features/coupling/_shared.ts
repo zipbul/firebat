@@ -1,5 +1,6 @@
-import { analyzeCoupling, analyzeDependencies } from '../../../../src/test-api';
 import type { GildashSources } from '../../shared/gildash-test-kit';
+
+import { analyzeCoupling, analyzeDependencies } from '../../../../src/test-api';
 import { withTempGildash } from '../../shared/gildash-test-kit';
 
 type Hotspot = ReturnType<typeof analyzeCoupling>[number];
