@@ -71,6 +71,7 @@ describe('golden/duplicates', () => {
   rgFrag('stmt-run-too-small-keep'); // K: 최소 크기 미만 사소한 문장열
   rgFrag('stmt-run-single-statement-keep'); // K: 공유가 단일 문장뿐 — run(문장 덩어리 ≥2)이 아님
   rgFrag('stmt-run-free-id-keep'); // K: 다른 함수 호출 = 다른 결정 (run 끊김)
+  rgFrag('local-callee-divergent-keep'); // K: run 밖 선언 callee는 verbatim — 다른 로컬 함수 호출 = 다른 결정
   rgFrag('stmt-run-yield-keep'); // K: yield 포함 run은 추출 불가 (generator 프로토콜)
 
   // ════════════════════════════════════════════════════════════════════════

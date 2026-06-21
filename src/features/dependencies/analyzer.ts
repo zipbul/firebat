@@ -687,9 +687,13 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       const reachable = new Set<string>();
       const queue: string[] = [];
 
+      const enqueueReachable = (moduleAbs: string): void => {
+        reachable.add(moduleAbs);
+        queue.push(moduleAbs);
+      };
+
       for (const entry of entryModules) {
-        reachable.add(entry);
-        queue.push(entry);
+        enqueueReachable(entry);
       }
 
       while (queue.length > 0) {
@@ -697,8 +701,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
         for (const next of absGraph.get(current) ?? []) {
           if (!reachable.has(next)) {
-            reachable.add(next);
-            queue.push(next);
+            enqueueReachable(next);
           }
         }
       }

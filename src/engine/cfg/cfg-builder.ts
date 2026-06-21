@@ -161,8 +161,23 @@ export class OxcCFGBuilder {
    * header nodes.
    */
   private connectInto(incoming: readonly NodeId[], node: NodeId): void {
-    this.connect(incoming, node, EdgeType.Normal);
-    this.addExceptionEdgeIfInTry(node);
+    this.connectIntoThrowable(incoming, node, node);
+  }
+
+  private connectIntoThrowable(incoming: readonly NodeId[], target: NodeId, throwableNode: NodeId): void {
+    this.connect(incoming, target, EdgeType.Normal);
+    this.addExceptionEdgeIfInTry(throwableNode);
+  }
+
+  private connectAndContinueWith(fromNodes: readonly NodeId[], target: NodeId, nextTail: NodeId): NodeId[] {
+    this.connect(fromNodes, target, EdgeType.Normal);
+
+    return [nextTail];
+  }
+
+  private popReturnTargetAndConnect(fromNodes: readonly NodeId[], target: NodeId): void {
+    this.returnTargetStack.pop();
+    this.connect(fromNodes, target, EdgeType.Normal);
   }
 
   /**
@@ -252,9 +267,7 @@ export class OxcCFGBuilder {
   ): NodeId[] {
     const bodyTails = this.visitLoopBody(body, bodyEntry, afterLoop, backEdgeTarget, loopStack, currentLabel);
 
-    this.connect(bodyTails, backEdgeTarget, EdgeType.Normal);
-
-    return [afterLoop];
+    return this.connectAndContinueWith(bodyTails, backEdgeTarget, afterLoop);
   }
 
   private resolveLoopTarget(loopStack: readonly LoopTargets[], label: string | null, useBreakTarget: boolean): NodeId | null {
@@ -327,9 +340,7 @@ export class OxcCFGBuilder {
     const falseTails = this.visitAlternate(ifNode, falseEntry, loopStack);
     const mergeNode = this.addNodeFrom(trueTails, null);
 
-    this.connect(falseTails, mergeNode, EdgeType.Normal);
-
-    return [mergeNode];
+    return this.connectAndContinueWith(falseTails, mergeNode, mergeNode);
   }
 
   private buildSwitchDiscriminantPayload(switchNode: SwitchStatement): Node[] {
@@ -496,8 +507,7 @@ export class OxcCFGBuilder {
     const conditionNode = this.addNode(doWhileNode.test);
     const afterLoop = this.addNode(null);
 
-    this.connect(incoming, bodyEntry, EdgeType.Normal);
-    this.addExceptionEdgeIfInTry(conditionNode);
+    this.connectIntoThrowable(incoming, bodyEntry, conditionNode);
 
     const bodyTails = this.visitLoopBody(doWhileNode.body, bodyEntry, afterLoop, conditionNode, loopStack, currentLabel);
 
@@ -634,8 +644,7 @@ export class OxcCFGBuilder {
 
     const tails = this.visitStatement(body, incoming, loopStack, null);
 
-    this.returnTargetStack.pop();
-    this.connect(tails, afterCall, EdgeType.Normal);
+    this.popReturnTargetAndConnect(tails, afterCall);
 
     if (afterPayload === null) {
       return [afterCall];
@@ -880,10 +889,9 @@ export class OxcCFGBuilder {
     // are inside the finalizer, this try's return handling is done, so the
     // finalizer's own statements (and the return-completion target) must route
     // to the NEXT OUTER target, not back to this try's own entry.
-    this.returnTargetStack.pop();
+    this.popReturnTargetAndConnect(tryTails, finallyEntryNormal);
 
     // Normal completion path.
-    this.connect(tryTails, finallyEntryNormal, EdgeType.Normal);
     this.connect(catchTails, finallyEntryNormal, EdgeType.Normal);
 
     const finallyTails = this.visitStatement(finalizer, [finallyEntryNormal], loopStack, null);
