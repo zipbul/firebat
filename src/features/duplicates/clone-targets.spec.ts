@@ -3,8 +3,9 @@ import type { Node } from 'oxc-parser';
 import { describe, expect, it } from 'bun:test';
 
 import { collectOxcNodes } from '../../engine/ast/oxc-ast-utils';
+import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { parseSource } from '../../engine/ast/parse-source';
-import { isDecisionlessSkeleton } from './clone-targets';
+import { isBelowDecisionFloor, isDecisionlessSkeleton } from './clone-targets';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -230,5 +231,78 @@ describe('isDecisionlessSkeleton', () => {
     const node = firstNodeOfType(`function f(x: number) { const y = x * 2; return repo.find(y); }`, 'FunctionDeclaration');
 
     expect(isDecisionlessSkeleton(node)).toBe(false);
+  });
+});
+
+describe('isBelowDecisionFloor', () => {
+  // 결정-존재 floor는 익명 인라인 표현식에만 적용. floor=12를 기준으로 BVA.
+
+  it('should classify a tiny numeric-comparator arrow as below the floor', () => {
+    // `(a, b) => a - b` size≈6 < 12 — 우연히 같은 비교자 (독립 결정의 동형)
+    const node = firstNodeOfType(`const z = xs.sort((a, b) => a - b);`, 'ArrowFunctionExpression');
+
+    expect(countOxcSize(node)).toBeLessThan(12);
+    expect(isBelowDecisionFloor(node, 12)).toBe(true);
+  });
+
+  it('should classify a tiny non-empty predicate arrow as below the floor', () => {
+    const node = firstNodeOfType(`const z = xs.filter(s => s.length > 0);`, 'ArrowFunctionExpression');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(true);
+  });
+
+  it('should classify a tiny single-call projection arrow as below the floor', () => {
+    const node = firstNodeOfType(`const z = xs.map(n => join(dir, n));`, 'ArrowFunctionExpression');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(true);
+  });
+
+  it('should NOT classify an arrow at exactly the floor size as below it (BVA boundary)', () => {
+    // size == minSize 는 floor 통과 (fragment 규칙과 동일: size >= minSize 이면 결정 충분).
+    const node = firstNodeOfType('const z = xs.map(u => `${u.name}@${u.location}`);', 'ArrowFunctionExpression');
+
+    expect(countOxcSize(node)).toBe(12);
+    expect(isBelowDecisionFloor(node, 12)).toBe(false);
+  });
+
+  it('should NOT classify a large anonymous arrow as below the floor', () => {
+    const node = firstNodeOfType(
+      `const z = xs.map(u => { const a = u.x + u.y; const b = a * u.z; return a + b + u.w; });`,
+      'ArrowFunctionExpression',
+    );
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(false);
+  });
+
+  it('should NOT apply the floor to a tiny NAMED function declaration', () => {
+    // 명명 선언은 작아도 주소 지정 가능한 변경지점 — floor 비대상 (false negative 방지).
+    const node = firstNodeOfType(`function add(a, b) { return a + b; }`, 'FunctionDeclaration');
+
+    expect(countOxcSize(node)).toBeLessThan(12);
+    expect(isBelowDecisionFloor(node, 12)).toBe(false);
+  });
+
+  it('should NOT apply the floor to a tiny class declaration', () => {
+    const node = firstNodeOfType(`class C { x = 1; }`, 'ClassDeclaration');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(false);
+  });
+
+  it('should NOT apply the floor to a tiny type alias', () => {
+    const node = firstNodeOfType(`type T = { a: number };`, 'TSTypeAliasDeclaration');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(false);
+  });
+
+  it('should apply the floor to a tiny anonymous function expression', () => {
+    const node = firstNodeOfType(`const z = xs.map(function (n) { return n + 1; });`, 'FunctionExpression');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(true);
+  });
+
+  it('should NOT apply the floor to a NAMED function expression (named binding is a changepoint)', () => {
+    const node = firstNodeOfType(`const z = xs.map(function inc(n) { return n + 1; });`, 'FunctionExpression');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(false);
   });
 });

@@ -30,7 +30,7 @@ import {
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { pushToMultiMap } from '../../shared/multi-map';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
-import { getItemKind, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
+import { getItemKind, isBelowDecisionFloor, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
 import { detectFragmentClones } from './fragment-detector';
 
 export { isCloneTarget };
@@ -72,9 +72,9 @@ export const analyzeDuplicates = (
   const cachedShape = createCachedFingerprint(createOxcFingerprintShape);
   const cachedNormalized = createCachedFingerprint(createOxcFingerprintNormalized);
   // ── Level 1: Hash 기반 그룹핑 ──────────────────────────────────────────────
-  const exactGroups = groupByHash(uniqueFiles, cachedExact, 'exact');
-  const shapeGroups = groupByHash(uniqueFiles, cachedShape, 'shape');
-  const normalizedGroups = groupByHash(uniqueFiles, cachedNormalized, 'normalized');
+  const exactGroups = groupByHash(uniqueFiles, cachedExact, 'exact', minSize);
+  const shapeGroups = groupByHash(uniqueFiles, cachedShape, 'shape', minSize);
+  const normalizedGroups = groupByHash(uniqueFiles, cachedNormalized, 'normalized', minSize);
   // exact에 이미 잡힌 해시는 shape/normalized에서 제외 (중복 보고 방지)
   const exactHashes = new Set(exactGroups.map(g => cachedShape(g.items[0]!.node)));
   const filteredShape = shapeGroups.filter(g => {
@@ -309,6 +309,7 @@ const groupByHash = (
   files: ReadonlyArray<ParsedFile>,
   fingerprintFn: (node: Node) => string,
   cloneType: DuplicateCloneType,
+  minSize: number,
 ): InternalCloneGroup[] => {
   const map = new Map<string, InternalCloneItem[]>();
 
@@ -317,13 +318,18 @@ const groupByHash = (
       continue;
     }
 
-    // 골격(결정 없음)은 정규형이 같아도 K — 수집 단계에서 제외 (CLAUDE.md 구조 일치 예외)
-    const nodes = collectOxcNodes(file.program, node => isCloneTarget(node) && !isDecisionlessSkeleton(node));
+    // 수집 단계 제외 (둘 다 CLAUDE.md 닫힌 규칙):
+    //  1. 골격(결정 없음) — 정규형이 같아도 K (구조 일치 예외)
+    //  2. 결정-존재 floor 미만의 익명 인라인 표현식 — 드리프트할 결정을 담기엔 너무 작음
+    const nodes = collectOxcNodes(
+      file.program,
+      node => isCloneTarget(node) && !isDecisionlessSkeleton(node) && !isBelowDecisionFloor(node, minSize),
+    );
 
     for (const node of nodes) {
-      // 선언(함수·클래스·타입·계약)은 크기 floor가 없다 — 개념상 minSize는 문장열
-      // (fragment)에만 적용되는 결정-존재 floor이고, 선언은 크기 무관하게 중복이면 클론이다.
-      // (작은 중복 함수 false negative 방지; 사소한 위임은 위 골격 규칙이 거른다.)
+      // 명명 선언(함수·클래스·타입·계약)은 크기 floor가 없다 — 작은 중복도 주소 지정
+      // 가능한 변경지점이므로 잡는다(false negative 방지). 익명 인라인 표현식의 floor는
+      // 위 isBelowDecisionFloor가 수집 단계에서 처리한다.
       const size = countOxcSize(node);
       const hash = fingerprintFn(node);
       const span = resolveSpan(file.sourceText, node);

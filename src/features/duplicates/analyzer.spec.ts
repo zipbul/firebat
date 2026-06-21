@@ -450,6 +450,32 @@ class Beta {
     expect(result[0]!.items.length).toBe(2);
   });
 
+  // ── [NE] 22b. 결정-존재 floor 미만 익명 인라인 람다는 클론으로 보고하지 않는다 ──
+  //
+  // 명명 선언과 달리 익명 인라인 표현식(arrow)은 명명된 변경지점이 아니므로 결정-존재
+  // floor(minSize)를 적용한다. 우연히 같은 사소한 람다(`(a,b)=>a-b` 등)는 독립 결정의
+  // 동형이라 비탐지(zero-FP). 같은 floor를 넘는 람다는 정상 보고된다.
+
+  it('suppresses below-floor anonymous arrow clones (decision-existence floor applies to inline lambdas)', () => {
+    // `(a, b) => a - b` (size≈6) — 두 파일에 우연히 같은 비교자. floor=12 미만 → 비탐지.
+    const a = makeFile('cmp-a.ts', `export const sorted = items.sort((a, b) => a - b);`);
+    const b = makeFile('cmp-b.ts', `export const ordered = values.sort((a, b) => a - b);`);
+    const result = analyzeDuplicates([a, b], { minSize: 12, enableAntiUnification: false });
+
+    expect(result).toEqual([]);
+  });
+
+  it('still reports an anonymous arrow clone at or above the floor size', () => {
+    // 본문이 큰 동일 화살표(size ≥ 12)는 결정을 담으므로 floor를 넘겨 정상 보고.
+    const body = 'p => { const a = p.x + p.y; const b = a * p.z; return a + b + p.w; }';
+    const a = makeFile('big-a.ts', `export const m = items.map(${body});`);
+    const b = makeFile('big-b.ts', `export const n = values.map(${body});`);
+    const result = analyzeDuplicates([a, b], { minSize: 12, enableAntiUnification: false });
+
+    expect(result.length).toBeGreaterThanOrEqual(1);
+    expect(result.some(g => g.items.length >= 2)).toBe(true);
+  });
+
   // ── [NE] 23. 단일 함수만 존재 → 그룹 없음 ─────────────────────────────
 
   it('should return empty array when only one function exists', () => {

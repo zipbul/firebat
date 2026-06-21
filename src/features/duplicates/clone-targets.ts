@@ -10,6 +10,7 @@ import type { FirebatItemKind, SourceSpan } from '../../types';
 
 import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { getContractMembers } from '../../engine/ast/oxc-fingerprint';
+import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { spanOfNode } from '../../engine/ast/source-span';
 
 const CLONE_TARGET_TYPES = new Set([
@@ -24,6 +25,36 @@ const CLONE_TARGET_TYPES = new Set([
 ]);
 
 export const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(node.type);
+
+// ─── 결정-존재 floor (익명 인라인 표현식) — CLAUDE.md duplicates 닫힌 규칙 ──────
+//
+// minSize는 "결정을 담기엔 너무 작아 K"라는 결정-존재 floor다 (CLAUDE.md: 문장열 규칙).
+// 이 floor는 **익명 함수 표현식**(arrow / 이름 없는 function expression)에도 적용한다 —
+// 익명 인라인 람다는 명명된 변경지점이 아니라 인라인 코드(문장열의 인라인 등가물)이므로,
+// 정규형 노드 수가 floor 미만이면 드리프트할 결정을 담기엔 너무 작다. 이는 유사도 임계가
+// 아니라 노드 수 floor이며 매칭 자체는 정규형 완전 일치(이진·닫힘)다.
+//
+// 형태로 판정하는 닫힌 규칙: 익명(이름 없음) 함수 표현식 ∧ size < minSize.
+//   - `(a, b) => a - b`(비교자), `x => x.length > 0`(술어), `n => f(n, k)`(투영) 등
+//     우연히 같은 사소한 인라인 람다를 거른다(독립 결정의 우연한 동형, zero-FP).
+//   - **명명** 선언(function/class/method/type)은 floor가 없다 — 작은 중복 함수도
+//     주소 지정 가능한 변경지점이므로 잡는다(false negative 방지).
+const isAnonymousFunctionExpression = (node: Node): boolean => {
+  if (node.type === 'ArrowFunctionExpression') {
+    return true;
+  }
+
+  // 이름 없는 function expression만. 이름 있는 표현식(`const x = function named(){}`)은
+  // named binding을 가지므로 floor 비대상.
+  if (node.type === 'FunctionExpression') {
+    return !isOxcNode((node as Node & { readonly id: Node | null }).id);
+  }
+
+  return false;
+};
+
+export const isBelowDecisionFloor = (node: Node, minSize: number): boolean =>
+  isAnonymousFunctionExpression(node) && countOxcSize(node) < minSize;
 
 // ─── 골격(결정 없음) 판정 — CLAUDE.md duplicates 개념의 닫힌 규칙 ────────────
 //

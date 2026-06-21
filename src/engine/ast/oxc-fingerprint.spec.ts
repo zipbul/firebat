@@ -165,3 +165,34 @@ describe('createOxcFingerprint — regex literals', () => {
     expect(shapeOfFirstFunction(startRx)).not.toBe(shapeOfFirstFunction(partRx));
   });
 });
+
+describe('createOxcFingerprint — template literal text', () => {
+  const exactOfFirstFunction = (source: string): string => {
+    const parsed = parseSource('/v/tpl.ts', source);
+    const fn = collectOxcNodes(parsed.program, (n: Node) => n.type === 'FunctionDeclaration')[0]!;
+
+    return createOxcFingerprintExact(fn);
+  };
+
+  // 구조 동일, 템플릿의 정적 텍스트(quasi)만 다름. TemplateElement는 visitorKeys가 비어
+  // 있어 자식 순회로는 내용이 안 들어가므로, cooked 텍스트를 명시적으로 인코딩하지 않으면
+  // 두 함수가 거짓 병합된다 (FP).
+  const synonym = "function f(a: string, b: string) { return `type alias ${a} is a direct synonym for ${b}`; }";
+  const equivalent = "function f(a: string, b: string) { return `type alias ${a} is structurally equivalent to ${b}`; }";
+
+  it('distinguishes different template-literal text at the exact tier (static text is content)', () => {
+    expect(exactOfFirstFunction(synonym)).not.toBe(exactOfFirstFunction(equivalent));
+  });
+
+  it('also distinguishes different template-literal text at the shape tier (literals never substituted)', () => {
+    expect(shapeOfFirstFunction(synonym)).not.toBe(shapeOfFirstFunction(equivalent));
+  });
+
+  it('still merges template literals whose only difference is a bound-identifier rename', () => {
+    // 텍스트가 같고 보간 식별자(파라미터)만 다르면 shape tier에서 rename-only로 병합돼야 한다.
+    const left = 'function f(a: string) { return `value is ${a}`; }';
+    const right = 'function f(b: string) { return `value is ${b}`; }';
+
+    expect(shapeOfFirstFunction(left)).toBe(shapeOfFirstFunction(right));
+  });
+});
