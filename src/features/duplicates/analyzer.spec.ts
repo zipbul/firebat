@@ -46,8 +46,7 @@ const analyzeAB = (
   sourceA: string,
   sourceB: string,
   options: Parameters<typeof analyzeDuplicates>[1] = DUP_OPTS,
-): ReturnType<typeof analyzeDuplicates> =>
-  analyzeDuplicates([makeFile('a.ts', sourceA), makeFile('b.ts', sourceB)], options);
+): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([makeFile('a.ts', sourceA), makeFile('b.ts', sourceB)], options);
 
 /** Assert the result has exactly `count` groups of `cloneType`. */
 const expectCloneCount = (result: ReturnType<typeof analyzeDuplicates>, cloneType: string, count: number): void => {

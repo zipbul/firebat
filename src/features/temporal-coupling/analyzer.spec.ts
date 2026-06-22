@@ -9,6 +9,19 @@ import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer
 
 const singleFile = (sourceLines: string[]) => [file('src/a.ts', sourceLines.join('\n'))];
 
+/** Analyze `files` and assert exactly `count` temporal-coupling findings. */
+const expectTcCount = (
+  files: ReadonlyArray<unknown>,
+  count: number,
+  options?: Parameters<typeof analyzeTemporalCoupling>[1],
+): ReturnType<typeof analyzeTemporalCoupling> => {
+  const result = analyzeTemporalCoupling(files as never, options as never);
+
+  expect(result.length).toBe(count);
+
+  return result;
+};
+
 const createMockGildash = (relations: CodeRelation[]) => ({
   searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
     return relations.filter(r => {
@@ -92,10 +105,7 @@ describe('temporal-coupling/analyzer', () => {
       file('src/b.ts', 'export const x = 1;'),
     ];
     // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(0);
+    expectTcCount(files, 0);
   });
 
   // --- [NE] should skip non-ts files ---
@@ -103,10 +113,7 @@ describe('temporal-coupling/analyzer', () => {
     // Arrange
     const files = [file('src/a.js', 'let db = null; export function init() { db = 1; } export function query() { return db; }')];
     // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(0);
+    expectTcCount(files, 0);
   });
 
   // --- [HP] should detect module-scope let with writer(=) and reader (canonical full shape) ---
@@ -118,10 +125,7 @@ describe('temporal-coupling/analyzer', () => {
       'export function queryUsers() { return db; }',
     ]);
     // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(1);
+    const result = expectTcCount(files, 1);
     expect(result[0]?.kind).toBe('temporal-coupling');
     expect(result[0]?.state).toBe('db');
     expect(result[0]?.writers).toBe(1);
@@ -140,10 +144,7 @@ describe('temporal-coupling/analyzer', () => {
       'declare function create(): { db: any };',
     ]);
     // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(1);
+    const result = expectTcCount(files, 1);
     expect(result[0]?.state).toBe('db');
     expect(result[0]?.writers).toBe(1);
   });
@@ -200,10 +201,7 @@ describe('temporal-coupling/analyzer', () => {
     // Arrange
     const files = singleFile(sourceLines);
     // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(1);
+    const result = expectTcCount(files, 1);
     expect(result[0]?.state).toBe(expectedState);
   });
 
@@ -218,10 +216,7 @@ describe('temporal-coupling/analyzer', () => {
       'export function q3() { return conn; }',
     ]);
     // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(3);
+    const result = expectTcCount(files, 3);
     expect(result[0]?.writers).toBe(1);
     expect(result[0]?.readers).toBe(3);
   });
@@ -552,10 +547,7 @@ describe('temporal-coupling/analyzer', () => {
       getSymbolsByFile: initQuerySymbolsForFileA,
     };
     // Act
-    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
-
-    // Assert
-    expect(result.length).toBe(1);
+    expectTcCount(files, 1, { gildash: mockGildash as any });
   });
 
   it('analyzeTemporalCoupling - gildash getSymbolsByFile empty result - falls back to AST walk', () => {
@@ -570,10 +562,7 @@ describe('temporal-coupling/analyzer', () => {
       getSymbolsByFile: () => [],
     };
     // Act
-    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
-
-    // Assert — AST fallback still detects temporal coupling
-    expect(result.length).toBe(1);
+    expectTcCount(files, 1, { gildash: mockGildash as any });
   });
 
   // --- caller-coexistence suppression via gildash relations: source + relations + outcome vary per row ---
@@ -750,10 +739,7 @@ describe('temporal-coupling/analyzer', () => {
     const files = [file('src/a.ts', moduleTargetSource)];
     const mockGildash = createMockGildashWithAst(initQueryRelations, {}); // no entry for src/main.ts → getParsedAst returns undefined
     // Act
-    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
-
-    // Assert — AST unavailable → conservative, finding kept
-    expect(result.length).toBe(1);
+    expectTcCount(files, 1, { gildash: mockGildash as any });
   });
 
   it('analyzeTemporalCoupling - caller with null srcSymbolName via CFG - keeps finding conservatively', () => {
@@ -773,10 +759,7 @@ describe('temporal-coupling/analyzer', () => {
       {},
     );
     // Act
-    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
-
-    // Assert — null srcSymbolName caller로는 writer 연결 불가 → finding 유지
-    expect(result.length).toBe(1);
+    expectTcCount(files, 1, { gildash: mockGildash as any });
   });
 
   // --- class caller AST: writer before reader via getParsedAst → suppression ---
@@ -822,9 +805,6 @@ describe('temporal-coupling/analyzer', () => {
       { [callerFilePath]: callerParsed as unknown as GildashParsedFile },
     );
     // Act
-    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
-
-    // Assert — writer before reader → suppression
-    expect(result.length).toBe(0);
+    expectTcCount(files, 0, { gildash: mockGildash as any });
   });
 });
