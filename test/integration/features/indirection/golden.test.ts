@@ -5,43 +5,19 @@ import { runGolden } from '../../shared/golden-runner';
 import { buildMockGildashFromSources } from './mock-gildash-helper';
 
 describe('golden/indirection', () => {
-  runGolden(import.meta.dir, 'thin-wrapper', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
+  const rg = (name: string, maxForwardDepth = 1) =>
+    runGolden(import.meta.dir, name, async (program, sources) =>
+      analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth, crossFileMinDepth: 2 }, '/virtual'),
+    );
 
-  runGolden(import.meta.dir, 'no-findings', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'wrapper2', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'direct-util', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'format-chain', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'chain-depth', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'param-patterns', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'type-remap', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'interface-rewrap', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual'),
-  );
-
-  runGolden(import.meta.dir, 'mixed-indirection', async (program, sources) =>
-    analyzeIndirection(buildMockGildashFromSources(sources), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual'),
-  );
+  rg('thin-wrapper');
+  rg('no-findings');
+  rg('wrapper2');
+  rg('direct-util');
+  rg('format-chain');
+  rg('chain-depth');
+  rg('param-patterns');
+  rg('type-remap', 0);
+  rg('interface-rewrap', 0);
+  rg('mixed-indirection');
 });

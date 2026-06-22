@@ -6,33 +6,12 @@ import { runGolden } from '../../shared/golden-runner';
 const { parseOxlintOutput } = __testing__;
 
 describe('golden/lint', () => {
-  runGolden(import.meta.dir, 'lint-diagnostics', (_, sources) => {
-    const rawJson = Object.values(sources)[0] ?? '';
+  const rg = (name: string) =>
+    runGolden(import.meta.dir, name, (_, sources) => parseOxlintOutput(Object.values(sources)[0] ?? ''));
 
-    return parseOxlintOutput(rawJson);
-  });
-
-  runGolden(import.meta.dir, 'lint-empty', (_, sources) => {
-    const rawJson = Object.values(sources)[0] ?? '';
-
-    return parseOxlintOutput(rawJson);
-  });
-
-  runGolden(import.meta.dir, 'lint-single-warning', (_, sources) => {
-    const rawJson = Object.values(sources)[0] ?? '';
-
-    return parseOxlintOutput(rawJson);
-  });
-
-  runGolden(import.meta.dir, 'lint-error', (_, sources) => {
-    const rawJson = Object.values(sources)[0] ?? '';
-
-    return parseOxlintOutput(rawJson);
-  });
-
-  runGolden(import.meta.dir, 'lint-multi', (_, sources) => {
-    const rawJson = Object.values(sources)[0] ?? '';
-
-    return parseOxlintOutput(rawJson);
-  });
+  rg('lint-diagnostics');
+  rg('lint-empty');
+  rg('lint-single-warning');
+  rg('lint-error');
+  rg('lint-multi');
 });

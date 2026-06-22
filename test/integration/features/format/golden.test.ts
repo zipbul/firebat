@@ -6,33 +6,12 @@ import { runGolden } from '../../shared/golden-runner';
 const { parseOxfmtFiles } = __testing__;
 
 describe('golden/format', () => {
-  runGolden(import.meta.dir, 'oxfmt-paths', (_, sources) => {
-    const rawStdout = Object.values(sources)[0] ?? '';
+  const rg = (name: string) =>
+    runGolden(import.meta.dir, name, (_, sources) => parseOxfmtFiles(Object.values(sources)[0] ?? ''));
 
-    return parseOxfmtFiles(rawStdout);
-  });
-
-  runGolden(import.meta.dir, 'oxfmt-empty', (_, sources) => {
-    const rawStdout = Object.values(sources)[0] ?? '';
-
-    return parseOxfmtFiles(rawStdout);
-  });
-
-  runGolden(import.meta.dir, 'oxfmt-single', (_, sources) => {
-    const rawStdout = Object.values(sources)[0] ?? '';
-
-    return parseOxfmtFiles(rawStdout);
-  });
-
-  runGolden(import.meta.dir, 'oxfmt-with-noise', (_, sources) => {
-    const rawStdout = Object.values(sources)[0] ?? '';
-
-    return parseOxfmtFiles(rawStdout);
-  });
-
-  runGolden(import.meta.dir, 'oxfmt-non-ts', (_, sources) => {
-    const rawStdout = Object.values(sources)[0] ?? '';
-
-    return parseOxfmtFiles(rawStdout);
-  });
+  rg('oxfmt-paths');
+  rg('oxfmt-empty');
+  rg('oxfmt-single');
+  rg('oxfmt-with-noise');
+  rg('oxfmt-non-ts');
 });
