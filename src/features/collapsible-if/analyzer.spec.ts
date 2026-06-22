@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeSource, parseProgram as parse } from '../../../test/integration/shared/test-kit';
+import { type SourceCase, analyzeSource, parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
-interface NoFindingCase {
-  name: string;
-  source: string;
-}
+type NoFindingCase = SourceCase;
 
 interface CollapsibleIfCase {
   name: string;

@@ -154,6 +154,12 @@ export const analyzeSource = <T>(source: string, analyze: (files: ParsedFile[]) 
 /** Recursively remove a temp dir (force, no-throw-on-missing) — shared teardown helper. */
 export const rmrf = (dir: string): Promise<void> => fsp.rm(dir, { recursive: true, force: true });
 
+/** A named source-snippet test case: `{ name, source }` — the common table-case shape. */
+export interface SourceCase {
+  readonly name: string;
+  readonly source: string;
+}
+
 /** A single-line `SourceSpan` (`line`→`line+1`) — shared by the report/flatten specs. */
 export const span = (line = 1, col = 0) => ({
   start: { line, column: col },

@@ -1,17 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeSource } from '../../../test/integration/shared/test-kit';
+import { type SourceCase, analyzeSource } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
-interface DetectCase {
-  name: string;
-  source: string;
-}
-
-interface NoDetectCase {
-  name: string;
-  source: string;
-}
+type DetectCase = SourceCase;
+type NoDetectCase = SourceCase;
 
 // ── 거짓 음성 후보 (감지되어야 하는 것) ──────────────────────────────────
 const detectCases: DetectCase[] = [
