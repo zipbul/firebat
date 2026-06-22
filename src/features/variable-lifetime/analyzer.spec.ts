@@ -40,6 +40,13 @@ const run = (
   filePath = 'src/a.ts',
 ): ReadonlyArray<AnyFinding> => analyzeVariableLifetime([file(filePath, sourceText)] as any, options);
 
+/** Run analysis and return all of `selector`'s findings. */
+const selectAll = <T>(
+  sourceText: string,
+  selector: (findings: ReadonlyArray<AnyFinding>) => ReadonlyArray<T>,
+  options: Parameters<typeof analyzeVariableLifetime>[1],
+): ReadonlyArray<T> => selector(run(sourceText, options));
+
 /** Run analysis and return `selector`'s findings for `variable`. */
 const selectFor = <T extends { readonly variable: string }>(
   sourceText: string,
@@ -111,9 +118,7 @@ describe('variable-lifetime/analyzer', () => {
     // Arrange
     const sourceText = ['function f() {', '  const x = 1;', filler(5), '  return x;', '}'].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 2 });
-    // Assert
-    const lt = lifetimeOnly(result);
+    const lt = selectAll(sourceText, lifetimeOnly, { maxLifetimeLines: 2 });
 
     expect(lt.length).toBe(1);
     expect(lt[0]?.lifetimeLines).toBeGreaterThan(2);
@@ -176,9 +181,7 @@ describe('variable-lifetime/analyzer', () => {
     // Arrange — x declared on line 2, used on line 3, lifetime = 1 > 0
     const sourceText = ['function f() {', '  const x = 1;', '  return x;', '}'].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 0 });
-    // Assert
-    const lt = lifetimeOnly(result);
+    const lt = selectAll(sourceText, lifetimeOnly, { maxLifetimeLines: 0 });
 
     expect(lt.filter(f => f.variable === 'x').length).toBe(1);
     expect(lt[0]?.lifetimeLines).toBe(1);
@@ -963,9 +966,7 @@ describe('variable-lifetime/analyzer', () => {
     // Arrange: 50+ line function with exactly 8 simultaneously live variables
     const sourceText = eightLiveVarFn('metaFn');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
-    // Assert
-    const lp = livenessOnly(result);
+    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
 
     expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
@@ -1057,9 +1058,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
-    // Assert
-    const lp = livenessOnly(result);
+    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
     expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
@@ -1138,9 +1137,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
-    // Assert
-    const lp = livenessOnly(result);
+    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
     expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
@@ -1158,9 +1155,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
-    // Assert: exactly one liveness-pressure finding (highPressure only)
-    const lp = livenessOnly(result);
+    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
     expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
@@ -1193,8 +1188,7 @@ describe('variable-lifetime/analyzer', () => {
     const sourceText = lines.join('\n');
     const functionLastLine = lines.length;
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
-    const lp = livenessOnly(result);
+    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
 
     // Assert
     expect(lp.length).toBe(1);
@@ -1243,8 +1237,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
-    const lp = livenessOnly(result);
+    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
 
     // Assert
     expect(lp.length).toBe(1);
@@ -1295,8 +1288,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxMutationCount: 3 });
-    const mutations = mutationOnly(result);
+    const mutations = selectAll(sourceText, mutationOnly, { maxLifetimeLines: 999, maxMutationCount: 3 });
 
     // Assert
     expect(mutations.length).toBe(1);
@@ -1345,8 +1337,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act — threshold 1: a has 2 writes (exceeds), b has 1 write (equal, no finding)
-    const result = run(sourceText, { maxLifetimeLines: 999, maxMutationCount: 1 });
-    const mutations = mutationOnly(result);
+    const mutations = selectAll(sourceText, mutationOnly, { maxLifetimeLines: 999, maxMutationCount: 1 });
 
     // Assert
     expect(mutations.length).toBe(1);

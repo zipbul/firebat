@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { parseProgramAs as createProgram } from '../../../test/integration/shared/test-kit';
 
 import type { ParsedFile } from '../../engine/types';
 import type { WasteFinding } from '../../types';
 
+import { parseProgramAs as createProgram } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { detectWaste } from './detector';
 
@@ -399,7 +399,6 @@ const cases: WasteCase[] = [
     expectations: [{ kind: 'dead-store', snippet: 'value', present: true }],
   },
 ];
-
 
 const matchesExpectation = (findings: ReadonlyArray<WasteFinding>, expectation: WasteExpectation): boolean => {
   return findings.some(finding => finding.kind === expectation.kind && finding.label.includes(expectation.snippet));

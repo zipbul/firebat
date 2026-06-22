@@ -4,6 +4,7 @@ import { type SourceCase, analyzeSource } from '../../../test/integration/shared
 import { analyzeCollapsibleIf } from './analyzer';
 
 type DetectCase = SourceCase;
+
 type NoDetectCase = SourceCase;
 
 // ── 거짓 음성 후보 (감지되어야 하는 것) ──────────────────────────────────
