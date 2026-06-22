@@ -136,6 +136,9 @@ export const parseFileAs = (filePath: string, code: string): ParsedFile => parse
 /** Parse `source` under `/virtual/test.ts` and wrap it in a single-file program. */
 export const parseProgram = (source: string): ParsedFile[] => [parseSource('/virtual/test.ts', source)];
 
+/** Parse `sourceText` under `filePath` and wrap it in a single-file program. */
+export const parseProgramAs = (filePath: string, sourceText: string): ParsedFile[] => [parseSource(filePath, sourceText)];
+
 /** Parse `relPath` under `/p/` and attach a synthetic parse error — shared by analyzer specs. */
 export const parsePFileWithErrors = (relPath: string, sourceText: string): ParsedFile =>
   ({ ...parsePFile(relPath, sourceText), errors: [{ message: 'synthetic' }] }) as unknown as ParsedFile;

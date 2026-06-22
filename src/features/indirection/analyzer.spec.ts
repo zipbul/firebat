@@ -2,6 +2,7 @@ import type { Gildash, CodeRelation, FullSymbol, SymbolSearchResult } from '@zip
 
 import { GildashError } from '@zipbul/gildash';
 import { describe, expect, it } from 'bun:test';
+import { parseProgramAs as createProgram } from '../../../test/integration/shared/test-kit';
 
 import type { ParsedFile } from '../../engine/types';
 
@@ -32,9 +33,6 @@ const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const createProgram = (filePath: string, sourceText: string): ParsedFile[] => {
-  return [parseSource(filePath, sourceText)];
-};
 
 const findKinds = (findings: Awaited<ReturnType<typeof analyzeIndirection>>, kind: string) => {
   return findings.filter(finding => finding.kind === kind);

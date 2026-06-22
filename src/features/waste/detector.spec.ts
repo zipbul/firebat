@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { parseProgramAs as createProgram } from '../../../test/integration/shared/test-kit';
 
 import type { ParsedFile } from '../../engine/types';
 import type { WasteFinding } from '../../types';
@@ -399,9 +400,6 @@ const cases: WasteCase[] = [
   },
 ];
 
-const createProgram = (fileName: string, sourceText: string): ParsedFile[] => {
-  return [parseSource(fileName, sourceText)];
-};
 
 const matchesExpectation = (findings: ReadonlyArray<WasteFinding>, expectation: WasteExpectation): boolean => {
   return findings.some(finding => finding.kind === expectation.kind && finding.label.includes(expectation.snippet));
