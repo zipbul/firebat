@@ -9,6 +9,12 @@ import { createTempGildash } from '../../shared/gildash-test-kit';
 // same `TSCONFIG` + `kindsFor` (create temp gildash -> parse -> analyze -> map kinds -> cleanup)
 // preamble verbatim; it lives here once so each spec only carries its distinct cases.
 
+/** A named error-flow case: a label + the source snippet under test. */
+export interface KindCase {
+  readonly name: string;
+  readonly code: string;
+}
+
 /** Default strict tsconfig used by the real-typed error-flow specs. */
 export const ERROR_FLOW_TSCONFIG = JSON.stringify({
   compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', lib: ['ES2022'] },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
 
 // Design-level root-cause contracts (real-typed gildash). Each block targets one root cause from
 // the perfection audit:
@@ -9,11 +9,6 @@ import { errorFlowKindsFor } from './error-flow-kit';
 //   RC5 emit discipline: at most one finding per node             (FN-E .then(f1,f2) double-emit)
 //   RC6 misused-promises: callback return-type, not async keyword (FN-F non-async promise callback)
 // Behaviour-level (code -> kinds). Regression guards keep the true-positive cases firing.
-
-interface KindCase {
-  readonly name: string;
-  readonly code: string;
-}
 
 describe('integration/error-flow — RC3 missing-error-cause: cause-check + scope', () => {
   const keptCases: KindCase[] = [

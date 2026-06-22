@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
 
 // Defects from the third triangulated review.
-
-interface KindCase {
-  readonly name: string;
-  readonly code: string;
-}
 
 describe('catch-or-return — `.then(onOk, <non-handler>)` is not a real catch', () => {
   const flaggedCases: KindCase[] = [

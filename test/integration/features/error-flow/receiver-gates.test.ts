@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
 
 // Receiver-type gates for the two syntactic fast-paths (misused-promises array methods,
 // unsafe-finally `.finally(throw)`): a method named like an Array/Promise method on a receiver that
 // gildash proves is NEITHER an Array NOR a thenable must NOT be flagged (RxJS, query builders, custom
 // disposables). Real arrays / promises still flag. (Degraded scans keep the syntactic behaviour.)
-
-interface KindCase {
-  readonly name: string;
-  readonly code: string;
-}
 
 describe('misused-promises — array fast-path receiver gate', () => {
   const flaggedCases: KindCase[] = [

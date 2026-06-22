@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
 
 // Contracts for defects found by the adversarial audit. Real-typed gildash.
-
-interface KindCase {
-  readonly name: string;
-  readonly code: string;
-}
 
 describe('audit — missing-error-cause FP: catch param passed whole into the Error subtype', () => {
   it('FP#1: does not flag when the caught error is a direct argument (cause may be preserved)', async () => {

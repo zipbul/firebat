@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
 
 // The void-callback-arg case of misused-promises (typescript-eslint no-misused-promises /
 // voidReturnArgument): an async (Promise-returning) callback passed into a parameter slot whose
 // contextual type returns void discards the rejection at the call boundary. Implemented via the
 // oracle's expectsVoidReturningCallback (gildash 0.34.0). Behaviour-level (code -> W/K): the W cases
 // flag, the K cases are the guard rails.
-
-interface KindCase {
-  readonly name: string;
-  readonly code: string;
-}
 
 describe('integration/error-flow — misused-promises void-callback-arg (real typed gildash)', () => {
   const flaggedCases: KindCase[] = [
