@@ -40,6 +40,19 @@ const run = (
   filePath = 'src/a.ts',
 ): ReadonlyArray<AnyFinding> => analyzeVariableLifetime([file(filePath, sourceText)] as any, options);
 
+/** Run analysis on `sourceText` and assert `selector` finds exactly `count` findings for `variable`. */
+const expectVarCount = (
+  sourceText: string,
+  selector: (findings: ReadonlyArray<AnyFinding>) => ReadonlyArray<{ readonly variable: string }>,
+  variable: string,
+  count: number,
+  options: Parameters<typeof analyzeVariableLifetime>[1],
+): void => {
+  const result = run(sourceText, options);
+
+  expect(selector(result).filter(f => f.variable === variable).length).toBe(count);
+};
+
 // Parse `const x = <expr>;` inside a function and return the initializer node.
 const parseInit = (expr: string) => {
   const parsed = parseSource('/p/a.ts', `function f() { const x = ${expr}; }`);
@@ -131,10 +144,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 3 });
-
-    // Assert — lifetime 3 === threshold 3, strictly greater required, so not reported
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 3 });
   });
 
   it('analyzeVariableLifetime - lifetime one above threshold - reported', () => {
@@ -149,10 +159,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 3 });
-
-    // Assert — lifetime 4 > threshold 3
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 3 });
   });
 
   it('analyzeVariableLifetime - maxLifetimeLines 0 - single line gap reports', () => {
@@ -171,10 +178,7 @@ describe('variable-lifetime/analyzer', () => {
     // Arrange — all on one line, lifetime = 0
     const sourceText = 'function f() { const x = 1; return x; }';
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 0 });
-
-    // Assert — lifetime 0 is NOT > 0, so not reported
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 0 });
   });
 
   // ── 기존 regex 버그 수정 확인 ──
@@ -212,10 +216,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert — lifetime = 2 (line 2 to line 4), within threshold
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - module-level variable - not analyzed', () => {
@@ -252,10 +253,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert — neither x exceeds threshold (both have lifetime 1)
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - nested function use - does not extend outer variable lifetime', () => {
@@ -271,10 +269,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert — x has no direct use in outer scope (only nested), so no finding
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   // ── 제어 흐름 ──
@@ -289,10 +284,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - if/else both branches use variable - uses farther branch for lifetime', () => {
@@ -309,10 +301,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert — x used in both branches, the farther one determines lifetime
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - loop body use - variable lifetime spans to loop', () => {
@@ -327,10 +316,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert
-    expect(lifetimeOnly(result).filter(f => f.variable === 'multiplier').length).toBe(1);
+    expectVarCount(sourceText, lifetimeOnly, 'multiplier', 1, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - try/catch - variable used in catch block', () => {
@@ -347,10 +333,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert
-    expect(lifetimeOnly(result).filter(f => f.variable === 'resource').length).toBe(1);
+    expectVarCount(sourceText, lifetimeOnly, 'resource', 1, { maxLifetimeLines: 5 });
   });
 
   // ── 재할당 / let ──
@@ -427,11 +410,8 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert — both a and b reported
-    expect(lifetimeOnly(result).filter(f => f.variable === 'a').length).toBe(1);
-    expect(lifetimeOnly(result).filter(f => f.variable === 'b').length).toBe(1);
+    expectVarCount(sourceText, lifetimeOnly, 'a', 1, { maxLifetimeLines: 5 });
+    expectVarCount(sourceText, lifetimeOnly, 'b', 1, { maxLifetimeLines: 5 });
   });
 
   // ── 함수 종류 ──
@@ -450,10 +430,7 @@ describe('variable-lifetime/analyzer', () => {
       close,
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-
-    // Assert
-    expect(lifetimeOnly(result).filter(f => f.variable === 'x').length).toBe(1);
+    expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
 
   // ── 사용 없는 변수 ──
@@ -462,10 +439,7 @@ describe('variable-lifetime/analyzer', () => {
     // Arrange
     const sourceText = ['function f() {', '  const unused = 42;', filler(6, 'pad'), '  return 1;', '}'].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 0 });
-
-    // Assert — unused has no use, so no lastUseOffset → no finding
-    expect(lifetimeOnly(result).filter(f => f.variable === 'unused').length).toBe(0);
+    expectVarCount(sourceText, lifetimeOnly, 'unused', 0, { maxLifetimeLines: 0 });
   });
 
   // ── Finding 형태 검증 ──
@@ -692,10 +666,7 @@ describe('variable-lifetime/analyzer', () => {
       ['arrow function initializer used only in if-block', 'function f(cond: boolean) { const x = () => 1; if (cond) { x(); } }'],
     ])('analyzeVariableLifetime - %s - no scope-narrowing finding', (_name, sourceText) => {
       // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
-
-      // Assert
-      expect(scopeOnly(result).filter(f => f.variable === 'x').length).toBe(0);
+      expectVarCount(sourceText, scopeOnly, 'x', 0, { maxLifetimeLines: 999 });
     });
 
     it('analyzeVariableLifetime - no intervening write (function call only) - detects scope-narrowing', () => {
