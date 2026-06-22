@@ -86,6 +86,24 @@ export const createScanLogger = () => {
 };
 
 /**
+ * Run `scanUseCase` for `detectors` inside the project cwd — collapses the
+ * `withCwd(rootAbs, () => scanUseCase({ targets, minSize:0, maxForwardDepth:0,
+ * detectors, help:false }, { logger }))` boilerplate repeated across scan specs.
+ */
+export const runScanReport = (
+  project: { readonly rootAbs: string; readonly srcFileAbs?: string },
+  detectors: ReadonlyArray<string>,
+  logger: ReturnType<typeof createScanLogger>,
+  targets: ReadonlyArray<string> = project.srcFileAbs === undefined ? [] : [project.srcFileAbs],
+): ReturnType<typeof scanUseCase> =>
+  withCwd(project.rootAbs, () =>
+    scanUseCase(
+      { targets: [...targets], minSize: 0, maxForwardDepth: 0, detectors: [...detectors] as never, help: false },
+      { logger },
+    ),
+  );
+
+/**
  * Assert the shared BaseFinding shape of a scan finding.
  *
  * `expectedKind` may be a single kind string, an array of allowed kinds, or

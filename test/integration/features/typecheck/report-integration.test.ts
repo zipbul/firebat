@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import type { TypecheckItem } from '../../../../src/test-api';
 
-import { createScanLogger, createScanProjectFixtureWithFiles, withCwd } from '../../shared/scan-fixture';
+import { createScanLogger, createScanProjectFixtureWithFiles, withCwd, runScanReport } from '../../shared/scan-fixture';
 
 const createTypecheckOk = (items: ReadonlyArray<TypecheckItem>): ReadonlyArray<TypecheckItem> => {
   return items;
@@ -47,18 +47,7 @@ describe('integration/typecheck/report-integration', () => {
       });
 
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['typecheck'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['typecheck'], logger, [...project.targetsAbs]);
 
       // Assert
       expect(report.meta.errors).toBeDefined();
@@ -106,18 +95,7 @@ describe('integration/typecheck/report-integration', () => {
       );
 
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['typecheck'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['typecheck'], logger, [...project.targetsAbs]);
 
       // Assert
       expect(report.analyses.typecheck).toBeDefined();

@@ -11,6 +11,7 @@ import {
   expectBareFindingShape,
   findBareFindingByKind,
   withCwd,
+  runScanReport,
 } from '../../shared/scan-fixture';
 import { expectNonEmptyString } from '../../shared/test-kit';
 
@@ -50,18 +51,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['waste'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['waste'], logger, [project.srcFileAbs]);
 
       // Assert
       expect(report).toBeDefined();
@@ -81,18 +71,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['format', 'waste'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['format', 'waste'], logger, [project.srcFileAbs]);
 
       // Assert
       expect(report.meta.errors).toBeDefined();
@@ -111,18 +90,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['lint'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['lint'], logger, [project.srcFileAbs]);
 
       // Assert
       expect(report.meta.errors).toBeDefined();
@@ -140,18 +108,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['dependencies', 'coupling'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['dependencies', 'coupling'], logger, [project.srcFileAbs]);
 
       // Assert
       expect(Array.isArray(report.analyses.coupling)).toBe(true);
@@ -170,18 +127,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['dependencies', 'coupling'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['dependencies', 'coupling'], logger, [...project.targetsAbs]);
 
       // Assert
       expect(Array.isArray(report.analyses.coupling)).toBe(true);
@@ -232,18 +178,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['dependencies'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['dependencies'], logger, [...project.targetsAbs]);
       // Assert
       const deps = report.analyses.dependencies;
 
@@ -280,18 +215,7 @@ describe('integration/scan/report-contract', () => {
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [...project.targetsAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['duplicates'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['duplicates'], logger, [...project.targetsAbs]);
 
       // Assert
       expect(Array.isArray(report.analyses['duplicates'])).toBe(true);
@@ -352,18 +276,7 @@ exit 1
 
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['lint'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['lint'], logger, [project.srcFileAbs]);
 
       // Assert
       expect(report.catalog).toBeDefined();
@@ -382,18 +295,7 @@ exit 1
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['waste'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['waste'], logger, [project.srcFileAbs]);
       // Assert
       const waste = report.analyses.waste as any[] | undefined;
 
@@ -471,18 +373,7 @@ exit 7
 
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['format', 'waste'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['format', 'waste'], logger, [project.srcFileAbs]);
 
       // Assert
       expect(report.catalog).toBeDefined();
@@ -514,18 +405,7 @@ exit 7
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['error-flow'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['error-flow'], logger, [project.srcFileAbs]);
       // Assert
       const throwNonError = findBareFindingByKind(report.analyses, 'error-flow', 'throw-non-error');
 
@@ -597,18 +477,7 @@ exit 7
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['duplicates'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['duplicates'], logger, [project.srcFileAbs]);
       // Assert
       const groups = report.analyses['duplicates'] as any;
 
@@ -674,18 +543,7 @@ exit 7
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['waste'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['waste'], logger, [project.srcFileAbs]);
       // Assert
       const entries = Object.values(report.catalog);
 
@@ -709,18 +567,7 @@ exit 7
     try {
       const logger = createLogger();
       // Act
-      const report = await withCwd(project.rootAbs, () =>
-        scanUseCase(
-          {
-            targets: [project.srcFileAbs],
-            minSize: 0,
-            maxForwardDepth: 0,
-            detectors: ['indirection'],
-            help: false,
-          },
-          { logger },
-        ),
-      );
+      const report = await runScanReport(project, ['indirection'], logger, [project.srcFileAbs]);
       // Assert
       const findings = report.analyses.indirection as any[];
 

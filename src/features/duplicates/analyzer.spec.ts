@@ -196,6 +196,7 @@ describe('analyzeDuplicates', () => {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
     const exact = expectCloneCount(result, 'exact', 1);
+
     expect(exact[0]!.items.length).toBeGreaterThanOrEqual(2);
     expect(exact[0]!.items[0]!.filePath).toBe('dup.ts');
     expect(exact[0]!.findingKind).toBe('exact-clone');
@@ -206,6 +207,7 @@ describe('analyzeDuplicates', () => {
   it('should return a shape group when two functions differ only in names', () => {
     const result = analyzeAB(RENAMED_PAIR_A, RENAMED_PAIR_B);
     const shape = expectCloneCount(result, 'shape', 1);
+
     expect(shape[0]!.findingKind).toBe('structural-clone');
 
     // exact에 없어야 함
@@ -353,6 +355,7 @@ describe('analyzeDuplicates', () => {
   it('should assign kind function to FunctionDeclaration items', () => {
     const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
     const exact = expectCloneCount(result, 'exact', 1);
+
     expect(exact[0]!.items[0]!.kind).toBe('function');
   });
 
@@ -409,6 +412,7 @@ class Beta {
     const file = makeFile('triple.ts', tripleSource);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
     const exact = expectCloneCount(result, 'exact', 1);
+
     expect(exact[0]!.items.length).toBe(3);
   });
 
@@ -515,6 +519,7 @@ class Beta {
   it('should form a group with exactly 2 identical functions (minimum group size)', () => {
     const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
     const exact = expectCloneCount(result, 'exact', 1);
+
     expect(exact[0]!.items).toHaveLength(2);
   });
 
