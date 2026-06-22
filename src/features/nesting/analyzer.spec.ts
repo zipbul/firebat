@@ -8,6 +8,12 @@ import { analyzeNesting, createEmptyNesting } from './analyzer';
 
 type NestingOptions = Parameters<typeof analyzeNesting>[1];
 
+/** Assert exactly one nesting item, of `kind`. */
+const expectSingleKind = (items: ReadonlyArray<NestingItem>, kind: NestingKind): void => {
+  expect(items.length).toBe(1);
+  expect(items[0]!.kind).toBe(kind);
+};
+
 // Threshold preset that disables every detector except cognitive-complexity
 // (maxCognitiveComplexity: 1) so a single force-low source always produces one
 // finding whose cognitiveComplexity/depth we can assert exactly.
@@ -455,8 +461,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     const opts = { maxCognitiveComplexity: 999, maxCallbackDepth: 99, maxNestingDepth: 99, minDensityLoc: 2, maxDensity: 0.1 };
     const items = analyzeNesting([f], opts);
 
-    expect(items.length).toBe(1);
-    expect(items[0]!.kind).toBe('complexity-density');
+    expectSingleKind(items, 'complexity-density');
     expect(items[0]!.metrics.density).toBeDefined();
     expect(items[0]!.metrics.density).toBeGreaterThan(0.1);
   });
