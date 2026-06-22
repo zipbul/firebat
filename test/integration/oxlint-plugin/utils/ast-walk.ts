@@ -7,7 +7,7 @@
  * module is the single source of truth for those walks so the two harnesses
  * cannot drift apart.
  */
-import type { AstNode, AstNodeValue } from '../../../../src/test-api';
+import type { AstNode, AstNodeValue, RuleContext } from '../../../../src/test-api';
 
 interface AstNodeShape {
   type?: string;
@@ -15,6 +15,11 @@ interface AstNodeShape {
 
 export interface Visitor {
   [key: string]: ((node: AstNode) => void) | undefined;
+}
+
+/** An oxlint rule module: a `create` factory returning a node Visitor. */
+export interface RuleModule {
+  create(context: RuleContext): Visitor;
 }
 
 /**

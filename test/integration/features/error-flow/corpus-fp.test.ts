@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor, itEachKeepsKind } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor, itEachKeepsKind } from './error-flow-kit';
 
 // False positives found by scanning real open-source code (ky, etc.) with a real-typed gildash.
 
-interface CauseCase {
-  readonly name: string;
-  readonly code: string;
-}
-
 describe('corpus FP — missing-error-cause: cause value behind a TS cast (ky Ky.ts:979)', () => {
-  const keptCases: CauseCase[] = [
+  const keptCases: KindCase[] = [
     {
       name: 'does NOT flag `{ cause: error as Error }` (the cast still forwards the caught error)',
       code: [

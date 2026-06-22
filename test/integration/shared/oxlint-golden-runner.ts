@@ -27,6 +27,7 @@ import {
   collectIdentifierUsages,
   ensureRangesDeep,
   isAstNode,
+  type RuleModule,
   traverseAndVisit,
   type Visitor,
 } from '../oxlint-plugin/utils/ast-walk';
@@ -37,9 +38,7 @@ import { compareGolden } from './golden-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface RuleModule {
-  create(context: RuleContext): Visitor;
-}
+export type { RuleModule } from '../oxlint-plugin/utils/ast-walk';
 
 export interface RuleGoldenOptions {
   /** Rule options array passed to createRuleContext. Defaults to []. */
