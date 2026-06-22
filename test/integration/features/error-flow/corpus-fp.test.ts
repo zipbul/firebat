@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowKindsFor } from './error-flow-kit';
+import { errorFlowKindsFor, itEachKeepsKind } from './error-flow-kit';
 
 // False positives found by scanning real open-source code (ky, etc.) with a real-typed gildash.
 
@@ -32,9 +32,7 @@ describe('corpus FP — missing-error-cause: cause value behind a TS cast (ky Ky
     },
   ];
 
-  it.each(keptCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).not.toContain('missing-error-cause');
-  });
+  itEachKeepsKind(keptCases, 'missing-error-cause');
 
   it('guard: still flags when the cause is a DERIVED value behind a cast, not the error', async () => {
     const code = [

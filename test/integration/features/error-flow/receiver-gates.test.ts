@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor, itEachFlagsKind } from './error-flow-kit';
 
 // Receiver-type gates for the two syntactic fast-paths (misused-promises array methods,
 // unsafe-finally `.finally(throw)`): a method named like an Array/Promise method on a receiver that
@@ -28,9 +28,7 @@ describe('misused-promises — array fast-path receiver gate', () => {
     expect(await errorFlowKindsFor(code)).not.toContain('misused-promises');
   });
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('misused-promises');
-  });
+  itEachFlagsKind(flaggedCases, 'misused-promises');
 });
 
 describe('unsafe-finally — promise .finally receiver gate', () => {

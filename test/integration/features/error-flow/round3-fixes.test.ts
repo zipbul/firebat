@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor, itEachFlagsKind } from './error-flow-kit';
 
 // Defects from the third triangulated review.
 
@@ -24,9 +24,7 @@ describe('catch-or-return — `.then(onOk, <non-handler>)` is not a real catch',
     },
   ];
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('catch-or-return');
-  });
+  itEachFlagsKind(flaggedCases, 'catch-or-return');
 
   it('guard: still K for a real `.then(ok, onErr)` rejection handler', async () => {
     const code = [
@@ -72,9 +70,7 @@ describe('unobserved-variable — destructured / default / rest shadowing param'
     },
   ];
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('unobserved-variable');
-  });
+  itEachFlagsKind(flaggedCases, 'unobserved-variable');
 });
 
 describe('missing-error-cause — spread forwarding of the caught error (FP guard)', () => {

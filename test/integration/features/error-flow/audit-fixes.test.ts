@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor, itEachFlagsKind, itEachKeepsKind } from './error-flow-kit';
 
 // Contracts for defects found by the adversarial audit. Real-typed gildash.
 
@@ -38,9 +38,7 @@ describe('audit — empty-catch FN: expression-bodied trivial rejection handler'
     },
   ];
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('empty-catch');
-  });
+  itEachFlagsKind(flaggedCases, 'empty-catch');
 
   it('guard: does not flag `.catch(e => recover(e))` (a real recovery/transform, not a swallow)', async () => {
     const code = [
@@ -127,7 +125,5 @@ describe('audit — missing-error-cause via return Promise.reject (async equival
     expect(await errorFlowKindsFor(code)).toContain('missing-error-cause');
   });
 
-  it.each(keptCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).not.toContain('missing-error-cause');
-  });
+  itEachKeepsKind(keptCases, 'missing-error-cause');
 });

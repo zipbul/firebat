@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor, itEachFlagsKind, itEachKeepsKind } from './error-flow-kit';
 
 // The void-callback-arg case of misused-promises (typescript-eslint no-misused-promises /
 // voidReturnArgument): an async (Promise-returning) callback passed into a parameter slot whose
@@ -95,11 +95,7 @@ describe('integration/error-flow — misused-promises void-callback-arg (real ty
     },
   ];
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('misused-promises');
-  });
+  itEachFlagsKind(flaggedCases, 'misused-promises');
 
-  it.each(keptCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).not.toContain('misused-promises');
-  });
+  itEachKeepsKind(keptCases, 'misused-promises');
 });

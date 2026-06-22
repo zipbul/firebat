@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type KindCase, errorFlowKindsFor } from './error-flow-kit';
+import { type KindCase, errorFlowKindsFor, itEachKeepsKind, itEachFlagsKind } from './error-flow-kit';
 
 // Design-level root-cause contracts (real-typed gildash). Each block targets one root cause from
 // the perfection audit:
@@ -64,13 +64,9 @@ describe('integration/error-flow — RC3 missing-error-cause: cause-check + scop
     },
   ];
 
-  it.each(keptCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).not.toContain('missing-error-cause');
-  });
+  itEachKeepsKind(keptCases, 'missing-error-cause');
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('missing-error-cause');
-  });
+  itEachFlagsKind(flaggedCases, 'missing-error-cause');
 });
 
 describe('integration/error-flow — RC4 unobserved-variable: binding visibility', () => {
@@ -124,9 +120,7 @@ describe('integration/error-flow — RC6 misused-promises: callback return type'
     },
   ];
 
-  it.each(flaggedCases)('$name', async ({ code }) => {
-    expect(await errorFlowKindsFor(code)).toContain('misused-promises');
-  });
+  itEachFlagsKind(flaggedCases, 'misused-promises');
 
   it('guard: does not flag a non-async, non-promise callback in a void slot', async () => {
     const code = [

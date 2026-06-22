@@ -1,5 +1,6 @@
 import type { Gildash } from '@zipbul/gildash';
 
+import { expect, it } from 'bun:test';
 import * as path from 'node:path';
 
 import { analyzeErrorFlow, parseSource } from '../../../../src/test-api';
@@ -14,6 +15,20 @@ export interface KindCase {
   readonly name: string;
   readonly code: string;
 }
+
+/** Register `it.each` asserting every case's analysis includes `kind`. */
+export const itEachFlagsKind = (cases: KindCase[], kind: string): void => {
+  it.each(cases)('$name', async ({ code }) => {
+    expect(await errorFlowKindsFor(code)).toContain(kind);
+  });
+};
+
+/** Register `it.each` asserting no case's analysis includes `kind`. */
+export const itEachKeepsKind = (cases: KindCase[], kind: string): void => {
+  it.each(cases)('$name', async ({ code }) => {
+    expect(await errorFlowKindsFor(code)).not.toContain(kind);
+  });
+};
 
 /** Default strict tsconfig used by the real-typed error-flow specs. */
 export const ERROR_FLOW_TSCONFIG = JSON.stringify({
