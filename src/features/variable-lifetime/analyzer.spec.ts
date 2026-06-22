@@ -40,6 +40,14 @@ const run = (
   filePath = 'src/a.ts',
 ): ReadonlyArray<AnyFinding> => analyzeVariableLifetime([file(filePath, sourceText)] as any, options);
 
+/** Run analysis and return `selector`'s findings for `variable`. */
+const selectFor = <T extends { readonly variable: string }>(
+  sourceText: string,
+  selector: (findings: ReadonlyArray<AnyFinding>) => ReadonlyArray<T>,
+  variable: string,
+  options: Parameters<typeof analyzeVariableLifetime>[1],
+): ReadonlyArray<T> => selector(run(sourceText, options)).filter(f => f.variable === variable);
+
 /** Run analysis on `sourceText` and assert `selector` finds exactly `count` findings for `variable`. */
 const expectVarCount = (
   sourceText: string,
@@ -201,9 +209,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-    // Assert — x lifetime is 7 (line 2 to line 9), reported
-    const xFindings = lifetimeOnly(result).filter(f => f.variable === 'x');
+    const xFindings = selectFor(sourceText, lifetimeOnly, 'x', { maxLifetimeLines: 5 });
 
     expect(xFindings.length).toBe(1);
     expect(xFindings[0]?.lifetimeLines).toBe(7);
@@ -359,9 +365,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-    // Assert — only def2's lifetime counted, def1 is killed
-    const xFindings = lifetimeOnly(result).filter(f => f.variable === 'x');
+    const xFindings = selectFor(sourceText, lifetimeOnly, 'x', { maxLifetimeLines: 5 });
 
     expect(xFindings.length).toBe(1);
   });
@@ -379,9 +383,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-    // Assert — two findings for x: def1 (longer lifetime) and def2 (shorter lifetime)
-    const xFindings = lifetimeOnly(result).filter(f => f.variable === 'x');
+    const xFindings = selectFor(sourceText, lifetimeOnly, 'x', { maxLifetimeLines: 5 });
 
     expect(xFindings.length).toBe(2);
 
@@ -402,9 +404,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 5 });
-    // Assert — parameters cannot be moved, so they should not be reported
-    const paramFindings = lifetimeOnly(result).filter(f => f.variable === 'param');
+    const paramFindings = selectFor(sourceText, lifetimeOnly, 'param', { maxLifetimeLines: 5 });
 
     expect(paramFindings.length).toBe(0);
   });
@@ -770,8 +770,7 @@ describe('variable-lifetime/analyzer', () => {
         '}',
       ].join('\n');
       // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
-      const findings = scopeOnly(result).filter(f => f.variable === 'x');
+      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
 
       // Assert — scope-narrowing fires for the outermost if(a) block (depth-1)
       expect(findings.length).toBe(1);
@@ -794,8 +793,7 @@ describe('variable-lifetime/analyzer', () => {
         '}',
       ].join('\n');
       // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
-      const findings = scopeOnly(result).filter(f => f.variable === 'x');
+      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
 
       // Assert — only function a emits scope-narrowing
       expect(findings.length).toBe(1);
@@ -844,8 +842,7 @@ describe('variable-lifetime/analyzer', () => {
       ],
     ])('analyzeVariableLifetime - %s - detects scope-narrowing', (_name, sourceText, blockType) => {
       // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
-      const findings = scopeOnly(result).filter(f => f.variable === 'x');
+      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
 
       // Assert
       expect(findings.length).toBe(1);
@@ -857,8 +854,7 @@ describe('variable-lifetime/analyzer', () => {
       // Arrange — variable used in finally: excluded by finalizer rule
       const sourceText = 'function f() { const x = 1; try { } catch (e) { } finally { use(x); } }';
       // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
-      const findings = scopeOnly(result).filter(f => f.variable === 'x');
+      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
 
       // Assert — finally usage blocks scope-narrowing detection
       expect(findings.length).toBe(0);

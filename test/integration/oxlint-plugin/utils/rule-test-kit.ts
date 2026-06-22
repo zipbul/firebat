@@ -13,7 +13,6 @@ import type {
   SourceToken,
   Variable,
 } from '../../../../src/test-api';
-
 import type { Visitor } from './ast-walk';
 
 interface RuleContextExtras {
