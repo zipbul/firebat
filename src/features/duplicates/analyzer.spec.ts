@@ -49,8 +49,16 @@ const analyzeAB = (
 ): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([makeFile('a.ts', sourceA), makeFile('b.ts', sourceB)], options);
 
 /** Assert the result has exactly `count` groups of `cloneType`. */
-const expectCloneCount = (result: ReturnType<typeof analyzeDuplicates>, cloneType: string, count: number): void => {
-  expect(result.filter(g => g.cloneType === cloneType).length).toBe(count);
+const expectCloneCount = (
+  result: ReturnType<typeof analyzeDuplicates>,
+  cloneType: string,
+  count: number,
+): ReturnType<typeof analyzeDuplicates> => {
+  const groups = result.filter(g => g.cloneType === cloneType);
+
+  expect(groups.length).toBe(count);
+
+  return groups;
 };
 
 // 정확히 동일한 함수 2개가 있는 파일
@@ -187,9 +195,7 @@ describe('analyzeDuplicates', () => {
   it('should return a exact group when two identical functions exist in one file', () => {
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
-    const exact = result.filter(g => g.cloneType === 'exact');
-
-    expect(exact.length).toBe(1);
+    const exact = expectCloneCount(result, 'exact', 1);
     expect(exact[0]!.items.length).toBeGreaterThanOrEqual(2);
     expect(exact[0]!.items[0]!.filePath).toBe('dup.ts');
     expect(exact[0]!.findingKind).toBe('exact-clone');
@@ -199,9 +205,7 @@ describe('analyzeDuplicates', () => {
 
   it('should return a shape group when two functions differ only in names', () => {
     const result = analyzeAB(RENAMED_PAIR_A, RENAMED_PAIR_B);
-    const shape = result.filter(g => g.cloneType === 'shape');
-
-    expect(shape.length).toBe(1);
+    const shape = expectCloneCount(result, 'shape', 1);
     expect(shape[0]!.findingKind).toBe('structural-clone');
 
     // exact에 없어야 함
@@ -259,9 +263,7 @@ describe('analyzeDuplicates', () => {
     // → normalized는 필터링되어야 함
     const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
-    const normalized = result.filter(g => g.cloneType === 'normalized');
-
-    expect(normalized.length).toBe(0);
+    const normalized = expectCloneCount(result, 'normalized', 0);
   });
 
   // ── [HP] 8/9/9b. anti-unification classification → suggestedParams 종류 ──
@@ -350,9 +352,7 @@ describe('analyzeDuplicates', () => {
 
   it('should assign kind function to FunctionDeclaration items', () => {
     const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
-    const exact = result.filter(g => g.cloneType === 'exact');
-
-    expect(exact.length).toBe(1);
+    const exact = expectCloneCount(result, 'exact', 1);
     expect(exact[0]!.items[0]!.kind).toBe('function');
   });
 
@@ -408,9 +408,7 @@ class Beta {
     `;
     const file = makeFile('triple.ts', tripleSource);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
-    const exact = result.filter(g => g.cloneType === 'exact');
-
-    expect(exact.length).toBe(1);
+    const exact = expectCloneCount(result, 'exact', 1);
     expect(exact[0]!.items.length).toBe(3);
   });
 
@@ -516,9 +514,7 @@ class Beta {
 
   it('should form a group with exactly 2 identical functions (minimum group size)', () => {
     const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
-    const exact = result.filter(g => g.cloneType === 'exact');
-
-    expect(exact.length).toBe(1);
+    const exact = expectCloneCount(result, 'exact', 1);
     expect(exact[0]!.items).toHaveLength(2);
   });
 
@@ -795,9 +791,7 @@ export const compute = function(x: number): number {
     ],
   ] as const)('analyzeDuplicates - %s in two files - detects exact clone', (_label, source) => {
     const result = analyzeAB(source, source);
-    const exact = result.filter(g => g.cloneType === 'exact');
-
-    expect(exact.length).toBe(1);
+    const exact = expectCloneCount(result, 'exact', 1);
   });
 
   // ── [HP] 37. 모든 그룹에 findingKind 존재 확인 ─────────────────────────
