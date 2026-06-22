@@ -9,10 +9,13 @@ import * as nodePath from 'node:path';
 
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/gildash.ts')) };
 const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
+
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Default impls live here once so mock() and the beforeEach restore share one source.
 const closeImpl = async (_opts?: { cleanup?: boolean }) => {};
+
 const findPatternImpl = async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => [];
+
 const resolveTargetsImpl = async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => [];
 
 const mockClose = mock(closeImpl);
@@ -21,7 +24,9 @@ const mockGildash = {
   findPattern: mockFindPattern,
   close: mockClose,
 } as unknown as Gildash;
+
 const createGildashImpl = async (_opts: unknown) => mockGildash;
+
 const mockCreateGildash = mock(createGildashImpl);
 const mockResolveTargets = mock(resolveTargetsImpl);
 

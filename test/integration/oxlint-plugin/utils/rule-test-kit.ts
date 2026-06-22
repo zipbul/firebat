@@ -250,5 +250,8 @@ function setupRule<TVisitor>(rule: RuleLike<TVisitor>, options: SetupRuleOptions
   return { visitor, reports, context, sourceCode };
 }
 
+/** Wrap statement nodes into a `Program` AstNode — shared by oxlint rule specs. */
+const createProgram = (body: AstNode[]): AstNode => ({ type: 'Program', body }) as AstNode;
+
 export type { ReportDescriptor, RuleContext, RuleContextExtras, SetupRuleOptions, SourceCode };
-export { applyFixes, createRuleContext, createSourceCode, setupRule };
+export { applyFixes, createProgram, createRuleContext, createSourceCode, setupRule };

@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeCouplingFromSources, findCouplingHotspot } from './_shared';
+import { type Hotspot, analyzeCouplingFromSources, findCouplingHotspot } from './_shared';
 
 const sharedFixture = {
   '/virtual/coupling/a.ts': `import './shared';\nexport const alpha = 1;`,
   '/virtual/coupling/b.ts': `import './shared';\nexport const beta = 2;`,
   '/virtual/coupling/shared.ts': `export const shared = 3;`,
 };
-
-type Hotspot = NonNullable<Awaited<ReturnType<typeof findCouplingHotspot>>['hotspot']>;
 
 interface SharedHotspotCase {
   title: string;

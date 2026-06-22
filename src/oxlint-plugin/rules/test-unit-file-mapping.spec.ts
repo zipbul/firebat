@@ -2,13 +2,9 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, createProgram } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testUnitFileMappingRule } from './test-unit-file-mapping';
-
-function createProgram(body: AstNode[]): AstNode {
-  return { type: 'Program', body };
-}
 
 describe('test-unit-file-mapping', () => {
   it('should report missing spec when implementation is logicful', () => {

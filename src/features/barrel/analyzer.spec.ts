@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { rmrf } from '../../../test/integration/shared/test-kit';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -14,9 +15,7 @@ beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-barrel-test-'));
 });
 
-afterEach(async () => {
-  await fs.rm(tmpDir, { recursive: true, force: true });
-});
+afterEach(() => rmrf(tmpDir));
 
 // Helper: cross-module-reexport 테스트용 — tmpDir 내 src 서브디렉토리 기준
 // src/index.ts에서 ../other.ts를 re-export하는 패턴 테스트

@@ -3,7 +3,7 @@ import type { GildashSources } from '../../shared/gildash-test-kit';
 import { analyzeCoupling, analyzeDependencies } from '../../../../src/test-api';
 import { withTempGildash } from '../../shared/gildash-test-kit';
 
-type Hotspot = ReturnType<typeof analyzeCoupling>[number];
+export type Hotspot = ReturnType<typeof analyzeCoupling>[number];
 
 /**
  * Build `count` newline-joined relative import statements targeting

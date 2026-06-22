@@ -2,12 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, createProgram } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { singleExportedClassRule } from './single-exported-class';
-
-function createProgram(body: AstNode[]): AstNode {
-  return { type: 'Program', body };
-}
 
 const exportClass = (name: string): AstNode => ({
   type: 'ExportNamedDeclaration',

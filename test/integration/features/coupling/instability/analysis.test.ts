@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { findCouplingHotspot, relativeImports } from '../_shared';
-
-type Hotspot = NonNullable<Awaited<ReturnType<typeof findCouplingHotspot>>['hotspot']>;
+import { type Hotspot, findCouplingHotspot, relativeImports } from '../_shared';
 
 const buildStableSources = (): Map<string, string> => {
   const sources = new Map<string, string>();

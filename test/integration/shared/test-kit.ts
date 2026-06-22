@@ -1,6 +1,7 @@
 import type { Gildash } from '@zipbul/gildash';
 
 import { expect } from 'bun:test';
+import * as fsp from 'node:fs/promises';
 
 import type { ParsedFile } from '../../../src/test-api';
 import type { DuplicateGroup, WasteFinding } from '../../../src/test-api';
@@ -146,6 +147,9 @@ export const parsePFileWithErrors = (relPath: string, sourceText: string): Parse
  * single-source detector spec otherwise re-states verbatim.
  */
 export const analyzeSource = <T>(source: string, analyze: (files: ParsedFile[]) => T): T => analyze(parseProgram(source));
+
+/** Recursively remove a temp dir (force, no-throw-on-missing) — shared teardown helper. */
+export const rmrf = (dir: string): Promise<void> => fsp.rm(dir, { recursive: true, force: true });
 
 /** A single-line `SourceSpan` (`line`→`line+1`) — shared by the report/flatten specs. */
 export const span = (line = 1, col = 0) => ({

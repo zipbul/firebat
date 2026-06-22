@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { rmrf } from '../../../test/integration/shared/test-kit';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -11,9 +12,7 @@ beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'firebat-resolver-test-'));
 });
 
-afterEach(async () => {
-  await fs.rm(tmpDir, { recursive: true, force: true });
-});
+afterEach(() => rmrf(tmpDir));
 
 const normPath = (p: string): string => p.replaceAll('\\', '/');
 
