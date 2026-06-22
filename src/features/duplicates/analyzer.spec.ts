@@ -41,6 +41,13 @@ const makeFile = (fileName: string, source: string): ParsedFile => parseSource(f
 
 const DUP_OPTS = { minSize: 3, enableAntiUnification: false };
 
+/** Analyze a single-file corpus. */
+const analyzeOne = (
+  source: string,
+  fileName = 'dup.ts',
+  options: Parameters<typeof analyzeDuplicates>[1] = DUP_OPTS,
+): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([makeFile(fileName, source)], options);
+
 /** Analyze a two-file (a.ts/b.ts) corpus — the dominant arrange shape in this spec. */
 const analyzeAB = (
   sourceA: string,
@@ -193,8 +200,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 1. 동일 함수 2개 → exact 그룹 반환 ───────────────────────────
 
   it('should return a exact group when two identical functions exist in one file', () => {
-    const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
-    const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeOne(IDENTICAL_FUNCTIONS);
     const exact = expectCloneCount(result, 'exact', 1);
 
     expect(exact[0]!.items.length).toBeGreaterThanOrEqual(2);
@@ -231,8 +237,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 4. shape 그룹이 exact에서 이미 잡힌 해시 → 필터링 ───────────
 
   it('should filter out shape groups that overlap with exact groups', () => {
-    const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
-    const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeOne(IDENTICAL_FUNCTIONS);
     // 정확히 동일한 함수 2개 → exact에 잡힘 → shape에 중복 보고 없음
     const exact = result.filter(g => g.cloneType === 'exact');
     const shape = result.filter(g => g.cloneType === 'shape');
@@ -263,8 +268,7 @@ describe('analyzeDuplicates', () => {
   it('should filter out normalized groups that overlap with exact/2 groups', () => {
     // 동일 함수 → exact AND shape AND normalized 모두 해시 동일
     // → normalized는 필터링되어야 함
-    const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
-    const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeOne(IDENTICAL_FUNCTIONS);
     const normalized = expectCloneCount(result, 'normalized', 0);
   });
 
@@ -554,8 +558,7 @@ class Beta {
   // ── [CO] 30. anti-unification 비활성화 → Level 1만 ────
 
   it('should only use Level 1 when anti-unification is disabled', () => {
-    const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
-    const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeOne(IDENTICAL_FUNCTIONS);
 
     expect(antiUnifyMock).not.toHaveBeenCalled();
     expect(result.length).toBe(1);
