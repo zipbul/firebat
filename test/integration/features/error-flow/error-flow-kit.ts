@@ -30,6 +30,16 @@ export const itEachKeepsKind = (cases: KindCase[], kind: string): void => {
   });
 };
 
+/** Register `it.each` asserting `countFn(body)` equals each case's expected `count`. */
+export const itEachCountCases = <B>(
+  cases: ReadonlyArray<{ readonly name: string; readonly body: B; readonly count: number }>,
+  countFn: (body: B) => Promise<number>,
+): void => {
+  it.each(cases as { name: string; body: B; count: number }[])('$name', async ({ body, count }) => {
+    expect(await countFn(body)).toBe(count);
+  });
+};
+
 /** Default strict tsconfig used by the real-typed error-flow specs. */
 export const ERROR_FLOW_TSCONFIG = JSON.stringify({
   compilerOptions: { strict: true, target: 'ES2022', module: 'ESNext', moduleResolution: 'bundler', lib: ['ES2022'] },

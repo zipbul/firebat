@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowUnobservedCount } from './error-flow-kit';
+import { errorFlowUnobservedCount, itEachCountCases } from './error-flow-kit';
 
 // unobserved-variable observation is name-keyed but must respect shadowing: a read of an inner
 // function PARAMETER that shadows an outer candidate's name is a different binding and must NOT mark
@@ -35,9 +35,7 @@ describe('unobserved-variable — shadowing parameter does not observe the outer
     },
   ];
 
-  it.each(cases)('$name', async ({ body, count }) => {
-    expect(await unobservedCount(body)).toBe(count);
-  });
+  itEachCountCases(cases, unobservedCount);
 });
 
 describe('unobserved-variable — genuine closure reads still observe (K guards)', () => {
@@ -54,7 +52,5 @@ describe('unobserved-variable — genuine closure reads still observe (K guards)
     },
   ];
 
-  it.each(cases)('$name', async ({ body, count }) => {
-    expect(await unobservedCount(body)).toBe(count);
-  });
+  itEachCountCases(cases, unobservedCount);
 });

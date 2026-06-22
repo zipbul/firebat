@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { errorFlowUnobservedCount } from './error-flow-kit';
+import { errorFlowUnobservedCount, itEachCountCases } from './error-flow-kit';
 
 // Reassignment-chain unobserved-variable: a thenable-valued variable overwritten before its value
 // is observed loses the first promise's rejection. The hard part is FP avoidance — a conditional
@@ -9,7 +9,7 @@ import { errorFlowUnobservedCount } from './error-flow-kit';
 const decls =
   'declare function a(): Promise<number>;\ndeclare function b(): Promise<number>;\ndeclare function use(x: unknown): void;\n';
 
-const unobservedCount = async (bodyLines: string[]): Promise<number> => {
+const unobservedCount = async (bodyLines: readonly string[]): Promise<number> => {
   const code = decls + ['export async function f(c: boolean): Promise<void> {', ...bodyLines.map(l => `  ${l}`), '}'].join('\n');
 
   return errorFlowUnobservedCount(code);
@@ -35,9 +35,7 @@ describe('unobserved-variable — reassignment chain (W)', () => {
     },
   ];
 
-  it.each(cases)('$name', async ({ body, count }) => {
-    expect(await unobservedCount([...body])).toBe(count);
-  });
+  itEachCountCases(cases, unobservedCount);
 });
 
 describe('unobserved-variable — reassignment chain FP guards (K)', () => {
@@ -89,9 +87,7 @@ describe('unobserved-variable — reassignment chain FP guards (K)', () => {
     },
   ];
 
-  it.each(cases)('$name', async ({ body, count }) => {
-    expect(await unobservedCount([...body])).toBe(count);
-  });
+  itEachCountCases(cases, unobservedCount);
 });
 
 describe('unobserved-variable — reassignment chain, deeper flow (precise counts)', () => {
@@ -110,7 +106,5 @@ describe('unobserved-variable — reassignment chain, deeper flow (precise count
     },
   ];
 
-  it.each(cases)('$name', async ({ body, count }) => {
-    expect(await unobservedCount([...body])).toBe(count);
-  });
+  itEachCountCases(cases, unobservedCount);
 });
