@@ -21,6 +21,21 @@ const buildCfg = (nodeCount: number, edges: ReadonlyArray<readonly [number, numb
   return cfg;
 };
 
+/** Run liveness for `numVars` and assert the resulting `maxLiveCount`. */
+const expectMaxLive = (
+  cfg: IntegerCFG,
+  useVarIndexesByNode: number[][],
+  writeVarIndexesByNode: number[][],
+  numVars: number,
+  expectedMaxLive: number,
+): ReturnType<typeof computeLiveness> => {
+  const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, numVars);
+
+  expect(result.maxLiveCount).toBe(expectedMaxLive);
+
+  return result;
+};
+
 describe('liveness', () => {
   it('computeLiveness - linear CFG single var used once - maxLiveCount is 1', () => {
     // Arrange
@@ -39,10 +54,7 @@ describe('liveness', () => {
       [], // n2: no writes
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1);
-
-    // Assert
-    expect(result.maxLiveCount).toBe(1);
+    expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1, 1);
   });
 
   it('computeLiveness - three vars alive at same point - maxLiveCount is 3', () => {
@@ -57,10 +69,7 @@ describe('liveness', () => {
       [], // n1: no writes
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3);
-
-    // Assert
-    expect(result.maxLiveCount).toBe(3);
+    expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3, 3);
   });
 
   it('computeLiveness - live-through variable from successor - maxLiveCount is 2', () => {
@@ -77,10 +86,7 @@ describe('liveness', () => {
       [1], // n1: writes var1
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2);
-
-    // Assert
-    expect(result.maxLiveCount).toBe(2);
+    expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2, 2);
   });
 
   it('computeLiveness - no variables (varCount=0) - maxLiveCount is 0', () => {
@@ -89,10 +95,7 @@ describe('liveness', () => {
     const useVarIndexesByNode: number[][] = [[], []];
     const writeVarIndexesByNode: number[][] = [[], []];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 0);
-
-    // Assert
-    expect(result.maxLiveCount).toBe(0);
+    const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 0, 0);
     expect(result.liveInByNode).toHaveLength(0);
   });
 
@@ -116,10 +119,7 @@ describe('liveness', () => {
       [], // n2: no writes
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2);
-
-    // Assert
-    expect(result.maxLiveCount).toBe(1);
+    expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2, 1);
   });
 
   it('computeLiveness - loop back-edge - fixed-point converges', () => {
@@ -140,10 +140,7 @@ describe('liveness', () => {
       [], // n2: no writes
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1);
-
-    // Assert — fixed-point must converge
-    expect(result.maxLiveCount).toBe(1);
+    const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1, 1);
     expect(result.liveInByNode).toHaveLength(3);
   });
 
@@ -187,10 +184,7 @@ describe('liveness', () => {
       [], // n3: no writes
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2);
-
-    // Assert — join point n3 and both branches have 2 live vars; entry n0 has 0 (defs kill both)
-    expect(result.maxLiveCount).toBe(2);
+    const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2, 2);
     expect(result.liveInByNode).toHaveLength(4);
     expect(result.liveInByNode[0]?.size()).toBe(0); // n0 defines var0+var1 → they are killed in liveIn
     expect(result.liveInByNode[3]?.size()).toBe(2); // n3 (merge) needs both vars
@@ -218,10 +212,7 @@ describe('liveness', () => {
       [], // n3: no writes
     ];
     // Act
-    const result = computeLiveness(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3);
-
-    // Assert — live counts: n0=0, n1=3, n2=2, n3=1  → maxLiveCount = 3 at n1
-    expect(result.maxLiveCount).toBe(3);
+    const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3, 3);
     expect(result.liveInByNode[0]?.size()).toBe(0);
     expect(result.liveInByNode[1]?.size()).toBe(3);
     expect(result.liveInByNode[2]?.size()).toBe(2);
