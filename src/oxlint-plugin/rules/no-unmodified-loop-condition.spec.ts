@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noUnmodifiedLoopConditionRule } from './no-unmodified-loop-condition';
 
 const emptyBody: AstNode = { type: 'BlockStatement', body: [] };
@@ -28,10 +28,7 @@ describe('no-unmodified-loop-condition', () => {
     const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: emptyBody };
 
     // Act
-    visitor.WhileStatement(whileNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'WhileStatement', whileNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unmodified');
   });
 
@@ -49,10 +46,7 @@ describe('no-unmodified-loop-condition', () => {
     const whileNode: AstNode = { type: 'WhileStatement', test: testNode, body: bodyNode };
 
     // Act
-    visitor.WhileStatement(whileNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'WhileStatement', whileNode, reports, 0);
   });
 
   it('should skip report when ForStatement update clause mutates', () => {
@@ -64,10 +58,7 @@ describe('no-unmodified-loop-condition', () => {
     const forNode: AstNode = { type: 'ForStatement', test: testNode, update: updateNode, body: emptyBody };
 
     // Act
-    visitor.ForStatement(forNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'ForStatement', forNode, reports, 0);
   });
 
   it('should skip report when DoWhileStatement mutates condition', () => {
@@ -82,9 +73,6 @@ describe('no-unmodified-loop-condition', () => {
     const doWhileNode: AstNode = { type: 'DoWhileStatement', test: testNode, body: bodyNode };
 
     // Act
-    visitor.DoWhileStatement(doWhileNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'DoWhileStatement', doWhileNode, reports, 0);
   });
 });

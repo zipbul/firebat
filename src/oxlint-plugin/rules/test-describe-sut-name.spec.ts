@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testDescribeSutNameRule } from './test-describe-sut-name';
 
@@ -51,10 +51,7 @@ describe('test-describe-sut-name', () => {
     const [, call] = createTopLevelDescribeCall(title);
 
     // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'CallExpression', call, reports, 0);
   });
 
   it('should ignore when file is not a unit spec', () => {
@@ -67,10 +64,7 @@ describe('test-describe-sut-name', () => {
     const [, call] = createTopLevelDescribeCall('UserService');
 
     // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'CallExpression', call, reports, 0);
   });
 
   it('should report when describe title does not match expected SUT', () => {
@@ -79,10 +73,7 @@ describe('test-describe-sut-name', () => {
     const [, call] = createTopLevelDescribeCall('user-service');
 
     // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'CallExpression', call, reports, 1);
     expect(reports[0]?.messageId).toBe('sutName');
     expect(reports[0]?.data?.expected).toBe('UserService');
   });
@@ -97,10 +88,7 @@ describe('test-describe-sut-name', () => {
     const [, call] = createTopLevelDescribeCall('UserService');
 
     // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'CallExpression', call, reports, 1);
     expect(reports[0]?.messageId).toBe('sutName');
     expect(reports[0]?.data?.expected).toBe('user-service');
   });
@@ -113,10 +101,7 @@ describe('test-describe-sut-name', () => {
 
     // Act
     visitor.CallExpression(first);
-    visitor.CallExpression(second);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'CallExpression', second, reports, 1);
     expect(reports[0]?.messageId).toBe('sutName');
     expect(reports[0]?.data?.expected).toBe('UserService');
   });
@@ -136,9 +121,6 @@ describe('test-describe-sut-name', () => {
     };
 
     // Act
-    visitor.CallExpression(call);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'CallExpression', call, reports, 0);
   });
 });

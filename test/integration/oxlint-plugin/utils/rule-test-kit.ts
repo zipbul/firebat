@@ -1,3 +1,5 @@
+import { expect } from 'bun:test';
+
 import type {
   AstRoot,
   AstNode,
@@ -11,6 +13,8 @@ import type {
   SourceToken,
   Variable,
 } from '../../../../src/test-api';
+
+import type { Visitor } from './ast-walk';
 
 interface RuleContextExtras {
   filename?: string;
@@ -253,5 +257,17 @@ function setupRule<TVisitor>(rule: RuleLike<TVisitor>, options: SetupRuleOptions
 /** Wrap statement nodes into a `Program` AstNode — shared by oxlint rule specs. */
 const createProgram = (body: AstNode[]): AstNode => ({ type: 'Program', body }) as AstNode;
 
+/** Visit `node` with the rule's `nodeType` handler, then assert `reports` has `count` entries. */
+const expectReportCount = (
+  visitor: Visitor,
+  nodeType: string,
+  node: AstNode,
+  reports: ReadonlyArray<unknown>,
+  count: number,
+): void => {
+  visitor[nodeType]?.(node);
+  expect(reports.length).toBe(count);
+};
+
 export type { ReportDescriptor, RuleContext, RuleContextExtras, SetupRuleOptions, SourceCode };
-export { applyFixes, createProgram, createRuleContext, createSourceCode, setupRule };
+export { applyFixes, createProgram, createRuleContext, createSourceCode, expectReportCount, setupRule };

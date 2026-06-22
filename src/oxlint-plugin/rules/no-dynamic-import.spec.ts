@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noDynamicImportRule } from './no-dynamic-import';
 
 describe('no-dynamic-import', () => {
@@ -12,10 +12,7 @@ describe('no-dynamic-import', () => {
     const importNode: AstNode = { type: 'ImportExpression', source: { type: 'Identifier', name: 'path' } };
 
     // Act
-    visitor.ImportExpression(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportExpression', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('dynamicImport');
   });
 
@@ -25,9 +22,6 @@ describe('no-dynamic-import', () => {
     const importNode: AstNode = { type: 'ImportExpression', source: { type: 'Literal', value: './path' } };
 
     // Act
-    visitor.ImportExpression(importNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'ImportExpression', importNode, reports, 0);
   });
 });

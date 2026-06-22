@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { memberOrderingRule } from './member-ordering';
 
 describe('member-ordering', () => {
@@ -29,10 +29,7 @@ describe('member-ordering', () => {
     const classBody: AstNode = { type: 'ClassBody', body: [firstMember, secondMember] };
 
     // Act
-    visitor.ClassBody(classBody);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ClassBody', classBody, reports, 1);
     expect(reports[0]?.messageId).toBe('invalidOrder');
   });
 
@@ -44,9 +41,6 @@ describe('member-ordering', () => {
     const classBody: AstNode = { type: 'ClassBody', body: [fieldMember, methodMember] };
 
     // Act
-    visitor.ClassBody(classBody);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'ClassBody', classBody, reports, 0);
   });
 });

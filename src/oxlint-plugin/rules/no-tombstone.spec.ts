@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noTombstoneRule } from './no-tombstone';
 
 describe('no-tombstone', () => {
@@ -19,10 +19,7 @@ describe('no-tombstone', () => {
     const programNode: AstNode = { type: 'Program', body: [] };
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'Program', programNode, reports, 1);
     expect(reports[0]?.messageId).toBe('tombstone');
     expect(reports[0]?.node?.type).toBe('Program');
   });
@@ -37,9 +34,6 @@ describe('no-tombstone', () => {
     const programNode: AstNode = { type: 'Program', body: [{ type: 'ExportNamedDeclaration' }] };
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'Program', programNode, reports, 0);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule, createProgram } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, createProgram, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { singleExportedClassRule } from './single-exported-class';
 
 const exportClass = (name: string): AstNode => ({
@@ -41,10 +41,7 @@ describe('single-exported-class', () => {
     const programNode = createProgram(body);
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'Program', programNode, reports, 0);
   });
 
   it.each<[string, AstNode[], string]>([
@@ -70,10 +67,7 @@ describe('single-exported-class', () => {
     const programNode = createProgram(body);
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'Program', programNode, reports, 1);
     expect(reports[0]?.messageId).toBe(messageId);
     expect(reports[0]?.node?.type).toBe('Program');
   });

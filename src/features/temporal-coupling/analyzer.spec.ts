@@ -104,6 +104,7 @@ describe('temporal-coupling/analyzer', () => {
       fileWithErrors('src/a.ts', 'let db: number | null = null; export function init() { db = 1; }'),
       file('src/b.ts', 'export const x = 1;'),
     ];
+
     // Act
     expectTcCount(files, 0);
   });
@@ -112,6 +113,7 @@ describe('temporal-coupling/analyzer', () => {
   it('should ignore non-ts files', () => {
     // Arrange
     const files = [file('src/a.js', 'let db = null; export function init() { db = 1; } export function query() { return db; }')];
+
     // Act
     expectTcCount(files, 0);
   });
@@ -126,6 +128,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = expectTcCount(files, 1);
+
     expect(result[0]?.kind).toBe('temporal-coupling');
     expect(result[0]?.state).toBe('db');
     expect(result[0]?.writers).toBe(1);
@@ -145,6 +148,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = expectTcCount(files, 1);
+
     expect(result[0]?.state).toBe('db');
     expect(result[0]?.writers).toBe(1);
   });
@@ -202,6 +206,7 @@ describe('temporal-coupling/analyzer', () => {
     const files = singleFile(sourceLines);
     // Act
     const result = expectTcCount(files, 1);
+
     expect(result[0]?.state).toBe(expectedState);
   });
 
@@ -217,6 +222,7 @@ describe('temporal-coupling/analyzer', () => {
     ]);
     // Act
     const result = expectTcCount(files, 3);
+
     expect(result[0]?.writers).toBe(1);
     expect(result[0]?.readers).toBe(3);
   });
@@ -546,6 +552,7 @@ describe('temporal-coupling/analyzer', () => {
       ...createMockGildash([]),
       getSymbolsByFile: initQuerySymbolsForFileA,
     };
+
     // Act
     expectTcCount(files, 1, { gildash: mockGildash as any });
   });
@@ -561,6 +568,7 @@ describe('temporal-coupling/analyzer', () => {
       ...createMockGildash([]),
       getSymbolsByFile: () => [],
     };
+
     // Act
     expectTcCount(files, 1, { gildash: mockGildash as any });
   });
@@ -738,6 +746,7 @@ describe('temporal-coupling/analyzer', () => {
     // Arrange
     const files = [file('src/a.ts', moduleTargetSource)];
     const mockGildash = createMockGildashWithAst(initQueryRelations, {}); // no entry for src/main.ts → getParsedAst returns undefined
+
     // Act
     expectTcCount(files, 1, { gildash: mockGildash as any });
   });
@@ -758,6 +767,7 @@ describe('temporal-coupling/analyzer', () => {
       ],
       {},
     );
+
     // Act
     expectTcCount(files, 1, { gildash: mockGildash as any });
   });
@@ -804,6 +814,7 @@ describe('temporal-coupling/analyzer', () => {
       ],
       { [callerFilePath]: callerParsed as unknown as GildashParsedFile },
     );
+
     // Act
     expectTcCount(files, 0, { gildash: mockGildash as any });
   });

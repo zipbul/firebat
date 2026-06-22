@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, Range, Variable } from '../types';
 
-import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyFixes, setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../../../test/integration/oxlint-plugin/utils/token-utils';
 import { unusedImportsRule } from './unused-imports';
 
@@ -42,10 +42,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unusedImportDeclaration');
   });
 
@@ -60,10 +57,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 0);
   });
 
   it('should report when one of multiple imports is unused', () => {
@@ -77,10 +71,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unusedImport');
   });
 
@@ -101,10 +92,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unusedImport');
     expect(typeof reports[0]?.fix).toBe('function');
 
@@ -128,10 +116,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor2.ImportDeclaration(importNode2);
-
-    // Assert
-    expect(reports2.length).toBe(0);
+    expectReportCount(visitor2, 'ImportDeclaration', importNode2, reports2, 0);
   });
 
   it('should autofix when import declaration is unused', () => {
@@ -149,10 +134,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unusedImportDeclaration');
     expect(typeof reports[0]?.fix).toBe('function');
 
@@ -177,10 +159,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unusedImportDeclaration');
 
     const fixed = applyFixes(text, reports);
@@ -205,10 +184,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    visitor.ImportDeclaration(importNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
     expect(reports[0]?.messageId).toBe('unusedImport');
     expect(typeof reports[0]?.fix).toBe('function');
 

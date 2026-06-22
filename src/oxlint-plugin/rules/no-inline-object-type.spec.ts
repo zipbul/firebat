@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, JsonValue } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noInlineObjectTypeRule } from './no-inline-object-type';
 
 describe('no-inline-object-type', () => {
@@ -28,10 +28,7 @@ describe('no-inline-object-type', () => {
 
     // Act
     visitor.TSTypeLiteral(firstNode);
-    visitor.TSTypeLiteral(secondNode);
-
-    // Assert
-    expect(reports.length).toBe(2);
+    expectReportCount(visitor, 'TSTypeLiteral', secondNode, reports, 2);
     expect(reports[0]?.messageId).toBe('inlineObjectType');
     expect(reports[1]?.messageId).toBe('inlineObjectType');
   });

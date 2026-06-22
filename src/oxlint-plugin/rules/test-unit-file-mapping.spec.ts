@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule, createProgram } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, createProgram, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testUnitFileMappingRule } from './test-unit-file-mapping';
 
@@ -20,10 +20,7 @@ describe('test-unit-file-mapping', () => {
     });
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'Program', programNode, reports, 1);
     expect(reports[0]?.messageId).toBe('missingSpec');
     expect(reports[0]?.data?.expected).toBe(specFile);
   });
@@ -44,10 +41,7 @@ describe('test-unit-file-mapping', () => {
     });
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'Program', programNode, reports, 0);
   });
 
   it.each<[string, string, AstNode[]]>([
@@ -87,10 +81,7 @@ describe('test-unit-file-mapping', () => {
     });
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'Program', programNode, reports, 0);
   });
 
   it('should report missing implementation when spec exists', () => {
@@ -106,10 +97,7 @@ describe('test-unit-file-mapping', () => {
     });
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(1);
+    expectReportCount(visitor, 'Program', programNode, reports, 1);
     expect(reports[0]?.messageId).toBe('missingImplementation');
     expect(reports[0]?.data?.expected).toBe(implFile);
   });
@@ -130,9 +118,6 @@ describe('test-unit-file-mapping', () => {
     });
 
     // Act
-    visitor.Program(programNode);
-
-    // Assert
-    expect(reports.length).toBe(0);
+    expectReportCount(visitor, 'Program', programNode, reports, 0);
   });
 });

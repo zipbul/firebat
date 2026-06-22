@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noUmbrellaTypesRule } from './no-umbrella-types';
 
 describe('no-umbrella-types', () => {
@@ -14,10 +14,7 @@ describe('no-umbrella-types', () => {
 
     // Act
     visitor.TSTypeReference(aliasNode);
-    visitor.TSObjectKeyword(objectNode);
-
-    // Assert
-    expect(reports.length).toBe(2);
+    expectReportCount(visitor, 'TSObjectKeyword', objectNode, reports, 2);
     expect(reports[0]?.messageId).toBe('forbiddenAlias');
     expect(reports[1]?.messageId).toBe('objectKeyword');
   });
