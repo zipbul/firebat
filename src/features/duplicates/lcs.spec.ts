@@ -2,6 +2,18 @@ import { describe, expect, it } from 'bun:test';
 
 import { computeLcsAlignment, computeLcsLength, computeSequenceSimilarity } from './lcs';
 
+/** Assert an alignment's matched length and the exact aOnly/bOnly index arrays. */
+const expectAlignment = (
+  result: ReturnType<typeof computeLcsAlignment>,
+  matchedLength: number,
+  aOnly: number[],
+  bOnly: number[],
+): void => {
+  expect(result.matched).toHaveLength(matchedLength);
+  expect(result.aOnly).toEqual(aOnly);
+  expect(result.bOnly).toEqual(bOnly);
+};
+
 // ─── computeLcsLength ─────────────────────────────────────────────────────────
 
 describe('computeLcsLength', () => {
@@ -120,25 +132,19 @@ describe('computeLcsAlignment', () => {
   it('빈 배열 × 빈 배열 → 모두 빈 결과', () => {
     const result = computeLcsAlignment([], []);
 
-    expect(result.matched).toHaveLength(0);
-    expect(result.aOnly).toHaveLength(0);
-    expect(result.bOnly).toHaveLength(0);
+    expectAlignment(result, 0, [], []);
   });
 
   it('빈 A × 비어 있지 않은 B → bOnly만 존재', () => {
     const result = computeLcsAlignment([], ['x', 'y']);
 
-    expect(result.matched).toHaveLength(0);
-    expect(result.aOnly).toHaveLength(0);
-    expect(result.bOnly).toEqual([0, 1]);
+    expectAlignment(result, 0, [], [0, 1]);
   });
 
   it('비어 있지 않은 A × 빈 B → aOnly만 존재', () => {
     const result = computeLcsAlignment(['x', 'y'], []);
 
-    expect(result.matched).toHaveLength(0);
-    expect(result.aOnly).toEqual([0, 1]);
-    expect(result.bOnly).toHaveLength(0);
+    expectAlignment(result, 0, [0, 1], []);
   });
 
   it('동일 배열 → 모두 matched, aOnly/bOnly 빈 배열', () => {
