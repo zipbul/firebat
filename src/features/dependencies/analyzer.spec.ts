@@ -5,6 +5,12 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 
+/** Assert a dependency analysis has no cycles and an empty adjacency graph. */
+const expectEmptyDepsGraph = (result: Awaited<ReturnType<typeof analyzeDependencies>>): void => {
+  expect(result.cycles.length).toBe(0);
+  expect(Object.keys(result.adjacency).length).toBe(0);
+};
+
 /* ------------------------------------------------------------------ */
 /*  Mock gildash factory                                               */
 /* ------------------------------------------------------------------ */
@@ -364,8 +370,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({ getImportGraph: async () => new Map() });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
-    expect(result.cycles.length).toBe(0);
-    expect(Object.keys(result.adjacency).length).toBe(0);
+    expectEmptyDepsGraph(result);
     expect(result.fanIn.length).toBe(0);
     expect(result.fanOut.length).toBe(0);
     expect(result.deadExports.length).toBe(0);
@@ -678,8 +683,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
-    expect(result.cycles.length).toBe(0);
-    expect(Object.keys(result.adjacency).length).toBe(0);
+    expectEmptyDepsGraph(result);
   });
 
   it('should return empty cycles when getCyclePaths returns Err', async () => {
@@ -733,8 +737,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({ getImportGraph: async () => new Map() });
     const result = await analyzeDependencies(g);
 
-    expect(result.cycles.length).toBe(0);
-    expect(Object.keys(result.adjacency).length).toBe(0);
+    expectEmptyDepsGraph(result);
   });
 
   it('should handle readPackageEntrypoints failure gracefully', async () => {
