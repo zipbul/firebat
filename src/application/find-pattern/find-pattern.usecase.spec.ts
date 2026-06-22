@@ -10,14 +10,20 @@ import * as nodePath from 'node:path';
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/gildash.ts')) };
 const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '../../shared/target-discovery.ts')) };
 // ── Mocks ─────────────────────────────────────────────────────────────────────
-const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
-const mockFindPattern = mock(async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => []);
+// Default impls live here once so mock() and the beforeEach restore share one source.
+const closeImpl = async (_opts?: { cleanup?: boolean }) => {};
+const findPatternImpl = async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => [];
+const resolveTargetsImpl = async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => [];
+
+const mockClose = mock(closeImpl);
+const mockFindPattern = mock(findPatternImpl);
 const mockGildash = {
   findPattern: mockFindPattern,
   close: mockClose,
 } as unknown as Gildash;
-const mockCreateGildash = mock(async (_opts: unknown) => mockGildash);
-const mockResolveTargets = mock(async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => []);
+const createGildashImpl = async (_opts: unknown) => mockGildash;
+const mockCreateGildash = mock(createGildashImpl);
+const mockResolveTargets = mock(resolveTargetsImpl);
 
 void mock.module('../../store/gildash', () => ({ createGildash: mockCreateGildash }));
 void mock.module('../../shared/target-discovery', () => ({ resolveTargets: mockResolveTargets }));
@@ -60,10 +66,10 @@ beforeEach(() => {
   mockResolveTargets.mockReset();
 
   // Restore default implementations
-  mockCreateGildash.mockImplementation(async (_opts: unknown) => mockGildash);
-  mockClose.mockImplementation(async (_opts?: { cleanup?: boolean }) => {});
-  mockFindPattern.mockImplementation(async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => []);
-  mockResolveTargets.mockImplementation(async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => []);
+  mockCreateGildash.mockImplementation(createGildashImpl);
+  mockClose.mockImplementation(closeImpl);
+  mockFindPattern.mockImplementation(findPatternImpl);
+  mockResolveTargets.mockImplementation(resolveTargetsImpl);
 });
 
 afterEach(() => {

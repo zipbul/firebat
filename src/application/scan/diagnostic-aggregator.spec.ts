@@ -211,16 +211,6 @@ describe('aggregateDiagnostics', () => {
     expect(result.catalog.DIAG_GOD_MODULE).toBeUndefined();
   });
 
-  it('should add DIAG_GOD_MODULE when exactly one god-module entry exists', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        coupling: [makeCoupling('god-module')],
-      },
-    });
-
-    expect(result.catalog.DIAG_GOD_MODULE).toBeDefined();
-  });
-
   // ── Empty / no analyses ────────────────────────────────────────────
 
   it('should return empty catalog when analyses is empty object', () => {

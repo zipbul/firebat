@@ -6,7 +6,14 @@ import { blankLinesBetweenStatementGroupsRule } from '../../../../src/test-api';
 import { noBracketNotationRule } from '../../../../src/test-api';
 import { paddingLineBetweenStatementsRule } from '../../../../src/test-api';
 import { unusedImportsRule } from '../../../../src/test-api';
-import { collectIdentifierUsages, ensureRangesDeep, isAstNode, traverseAndVisit, type RuleModule, type Visitor } from './ast-walk';
+import {
+  collectIdentifierUsages,
+  ensureRangesDeep,
+  isAstNode,
+  traverseAndVisit,
+  type RuleModule,
+  type Visitor,
+} from './ast-walk';
 import {
   buildUniqueIdentifiers,
   getRange as getRangeTuple,
@@ -35,7 +42,6 @@ const parseSync: ParseSync = (filename, code) => {
 
   return { program: programValue };
 };
-
 
 interface RuleRunResult {
   reports: ReturnType<typeof createRuleContext>['reports'];
