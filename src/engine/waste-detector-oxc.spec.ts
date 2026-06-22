@@ -2,8 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from './types';
 
-import { detectWasteOxc } from './waste-detector-oxc';
 import { parseFileAs as toFile } from '../../test/integration/shared/test-kit';
+import { detectWasteOxc } from './waste-detector-oxc';
 
 interface DeadStoreCase {
   name: string;

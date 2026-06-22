@@ -2,10 +2,10 @@ import { describe, it, expect } from 'bun:test';
 
 import type { FirebatAnalyses } from '../../types';
 
+import { span } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { ZERO_SPAN } from '../../shared/source-span';
 import { buildFunctionRangeMap, flattenToFindings, type FunctionRangeMap } from './flatten-findings';
-import { span } from '../../../test/integration/shared/test-kit';
 
 const firstFinding = (analyses: Partial<FirebatAnalyses>, map?: FunctionRangeMap) => {
   const findings = flattenToFindings(analyses, map);

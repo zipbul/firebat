@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'bun:test';
 
+import { expectNonEmptyString } from '../../../test/integration/shared/test-kit';
 import { computeProjectKey, computeScanArtifactKey, computeTraceArtifactKey } from './cache-keys';
 
 describe('computeProjectKey', () => {
   it('[HP] returns a non-empty hash string', () => {
     const key = computeProjectKey({ toolVersion: '1.0.0' });
 
-    expect(typeof key).toBe('string');
-    expect(key.length).toBeGreaterThan(0);
+    expectNonEmptyString(key);
   });
 
   it('[HP] different toolVersions produce different keys', () => {
@@ -38,8 +38,7 @@ describe('computeScanArtifactKey', () => {
   it('[HP] returns a non-empty hash string', () => {
     const key = computeScanArtifactKey(base);
 
-    expect(typeof key).toBe('string');
-    expect(key.length).toBeGreaterThan(0);
+    expectNonEmptyString(key);
   });
 
   it('[HP] detector order does not affect key (sorted internally)', () => {
@@ -84,8 +83,7 @@ describe('computeTraceArtifactKey', () => {
   it('[HP] returns a non-empty hash string', () => {
     const key = computeTraceArtifactKey({ entryFile: 'src/index.ts', symbol: 'myFunc' });
 
-    expect(typeof key).toBe('string');
-    expect(key.length).toBeGreaterThan(0);
+    expectNonEmptyString(key);
   });
 
   it('[HP] different symbols produce different keys', () => {

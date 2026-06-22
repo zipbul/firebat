@@ -2,9 +2,9 @@ import { describe, it, expect } from 'bun:test';
 
 import type { FirebatReport, FirebatDetector } from './types';
 
+import { span } from '../test/integration/shared/test-kit';
 import { flattenToFindings } from './application/scan/flatten-findings';
 import { formatReport } from './report';
-import { span } from '../test/integration/shared/test-kit';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

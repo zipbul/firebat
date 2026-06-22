@@ -1,5 +1,7 @@
 import type { Gildash } from '@zipbul/gildash';
 
+import { expect } from 'bun:test';
+
 import type { ParsedFile } from '../../../src/test-api';
 import type { DuplicateGroup, WasteFinding } from '../../../src/test-api';
 
@@ -150,6 +152,12 @@ export const span = (line = 1, col = 0) => ({
   start: { line, column: col },
   end: { line: line + 1, column: 0 },
 });
+
+/** Assert `value` is a non-empty string — the `typeof===string` + `.length>0` idiom. */
+export const expectNonEmptyString = (value: unknown): void => {
+  expect(typeof value).toBe('string');
+  expect((value as string).length).toBeGreaterThan(0);
+};
 
 export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): string[] => {
   const signatures: string[] = [];

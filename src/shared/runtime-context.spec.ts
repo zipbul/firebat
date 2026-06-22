@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'bun:test';
 import path from 'node:path';
 
+import { expectNonEmptyString } from '../../test/integration/shared/test-kit';
+
 // runtime-context depends on resolveFirebatRootFromCwd from root-resolver
 // Testing the public API: resolveRuntimeContextFromCwd
 
@@ -19,8 +21,7 @@ describe('resolveRuntimeContextFromCwd', () => {
   it('[HP] returns an object with rootAbs and reason properties', async () => {
     const ctx = await resolveRuntimeContextFromCwd(path.resolve(import.meta.dir, '..'));
 
-    expect(typeof ctx.rootAbs).toBe('string');
-    expect(ctx.rootAbs.length).toBeGreaterThan(0);
+    expectNonEmptyString(ctx.rootAbs);
     expect(['declared-dependency', 'self-repo']).toContain(ctx.reason);
   });
 

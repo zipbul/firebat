@@ -12,6 +12,7 @@ import {
   findBareFindingByKind,
   withCwd,
 } from '../../shared/scan-fixture';
+import { expectNonEmptyString } from '../../shared/test-kit';
 
 interface IndirectionContractRow {
   readonly title: string;
@@ -691,8 +692,7 @@ exit 7
       expect(entries.length).toBeGreaterThan(0);
 
       for (const entry of entries) {
-        expect(typeof entry.cause).toBe('string');
-        expect(entry.cause.length).toBeGreaterThan(0);
+        expectNonEmptyString(entry.cause);
         expect(Array.isArray(entry.think)).toBe(true);
         expect(entry.think.length).toBeGreaterThan(0);
         expect(typeof entry.think[0]).toBe('string');

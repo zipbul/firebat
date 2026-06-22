@@ -3,7 +3,7 @@ import type { Gildash } from '@zipbul/gildash';
 import { GildashError } from '@zipbul/gildash';
 import { describe, it, expect } from 'bun:test';
 
-import { makeFileRecord, makeGildash } from '../../../test/integration/shared/test-kit';
+import { makeFileRecord, makeGildash, expectNonEmptyString } from '../../../test/integration/shared/test-kit';
 import { computeInputsDigest } from './inputs-digest';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -20,8 +20,7 @@ describe('computeInputsDigest', () => {
       gildash,
     });
 
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expectNonEmptyString(result);
   });
 
   it('[HP] returns hash for empty targets array', async () => {
@@ -30,8 +29,7 @@ describe('computeInputsDigest', () => {
       gildash: noopGildash,
     });
 
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expectNonEmptyString(result);
   });
 
   it('[HP] different extraParts produce different digest', async () => {

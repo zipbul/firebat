@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { DuplicateGroup } from '../../../../src/test-api';
 
 import { analyzeDuplicates } from '../../../../src/test-api';
-import { createProgramFromMap } from '../../shared/test-kit';
+import { createProgramFromMap, expectNonEmptyString } from '../../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {
   return [`export function ${name}() {`, `  const localValue = ${value};`, '  return localValue + 1;', '}'].join('\n');
@@ -75,8 +75,7 @@ describe('integration/duplicates', () => {
     const groups = analyzeTwoFunctions({ name: 'alpha', value: 1 }, { name: 'alpha', value: 1 }, 1);
 
     for (const group of groups) {
-      expect(typeof group.findingKind).toBe('string');
-      expect(group.findingKind.length).toBeGreaterThan(0);
+      expectNonEmptyString(group.findingKind);
     }
   });
 

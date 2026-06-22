@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
+import { expectNonEmptyString } from '../../test/integration/shared/test-kit';
 import { tryResolveBunxCommand, tryResolveLocalBin } from './resolve-bin';
 
 describe('tryResolveBunxCommand', () => {
@@ -46,8 +47,7 @@ describe('tryResolveLocalBin', () => {
 
     // may or may not be in node_modules/.bin but as PATH fallback should be non-null
     if (result !== null) {
-      expect(typeof result).toBe('string');
-      expect(result.length).toBeGreaterThan(0);
+      expectNonEmptyString(result);
     }
     // If null: bun is not on PATH (extreme environment), still acceptable
   });

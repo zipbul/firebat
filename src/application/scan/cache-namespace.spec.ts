@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
+import { expectNonEmptyString } from '../../../test/integration/shared/test-kit';
 import { CACHE_SCHEMA_VERSION, computeCacheNamespace } from './cache-namespace';
 
 describe('CACHE_SCHEMA_VERSION', () => {
@@ -14,8 +15,7 @@ describe('computeCacheNamespace', () => {
   it('[HP] returns a non-empty hash string', async () => {
     const result = await computeCacheNamespace({ toolVersion: '1.0.0' });
 
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expectNonEmptyString(result);
   });
 
   it('[HP] different toolVersions produce different namespaces', async () => {

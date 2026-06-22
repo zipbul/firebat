@@ -1,11 +1,11 @@
 import { describe, it, expect, spyOn, afterEach } from 'bun:test';
 
+import { expectNonEmptyString } from '../../../test/integration/shared/test-kit';
 import { OXLINT_RC_JSONC, OXFMT_RC_JSONC, loadFirstExistingText, resolveAssetCandidates } from './install-assets';
 
 describe('OXLINT_RC_JSONC', () => {
   it('should be a non-empty string', () => {
-    expect(typeof OXLINT_RC_JSONC).toBe('string');
-    expect(OXLINT_RC_JSONC.length).toBeGreaterThan(0);
+    expectNonEmptyString(OXLINT_RC_JSONC);
   });
 
   it('should be valid JSON content (contains $schema)', () => {
@@ -15,8 +15,7 @@ describe('OXLINT_RC_JSONC', () => {
 
 describe('OXFMT_RC_JSONC', () => {
   it('should be a non-empty string', () => {
-    expect(typeof OXFMT_RC_JSONC).toBe('string');
-    expect(OXFMT_RC_JSONC.length).toBeGreaterThan(0);
+    expectNonEmptyString(OXFMT_RC_JSONC);
   });
 
   it('should be valid JSON content (contains $schema)', () => {

@@ -3,7 +3,7 @@ import type { Gildash } from '@zipbul/gildash';
 import { GildashError } from '@zipbul/gildash';
 import { describe, it, expect } from 'bun:test';
 
-import { makeFileRecord, makeGildash } from '../../../test/integration/shared/test-kit';
+import { makeFileRecord, makeGildash, expectNonEmptyString } from '../../../test/integration/shared/test-kit';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -19,8 +19,7 @@ describe('computeProjectInputsDigest', () => {
       gildash: noopGildash,
     });
 
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expectNonEmptyString(result);
   });
 
   it('[HP] getFileInfo returns FileRecord → uses contentHash from index', async () => {
@@ -30,8 +29,7 @@ describe('computeProjectInputsDigest', () => {
       gildash,
     });
 
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expectNonEmptyString(result);
   });
 
   it('[HP] same rootAbs produces same digest (deterministic)', async () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 
+import { expectNonEmptyString } from '../../../test/integration/shared/test-kit';
 import { FIREBAT_CODE_CATALOG, aggregateDiagnostics } from './diagnostic-aggregator';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -26,8 +27,7 @@ describe('FIREBAT_CODE_CATALOG', () => {
 
   it('should have a cause string for every entry', () => {
     for (const [_code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
-      expect(typeof entry.cause).toBe('string');
-      expect(entry.cause.length).toBeGreaterThan(0);
+      expectNonEmptyString(entry.cause);
     }
   });
 
@@ -41,8 +41,7 @@ describe('FIREBAT_CODE_CATALOG', () => {
   it('should have string elements in every think array', () => {
     for (const [_code, entry] of Object.entries(FIREBAT_CODE_CATALOG)) {
       for (const t of entry.think) {
-        expect(typeof t).toBe('string');
-        expect(t.length).toBeGreaterThan(0);
+        expectNonEmptyString(t);
       }
     }
   });

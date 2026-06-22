@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'bun:test';
 
+import { expectNonEmptyString } from '../../test/integration/shared/test-kit';
 import { computeToolVersion } from './tool-version';
 
 describe('computeToolVersion', () => {
   it('returns a non-empty string', () => {
     const version = computeToolVersion();
 
-    expect(typeof version).toBe('string');
-    expect(version.length).toBeGreaterThan(0);
+    expectNonEmptyString(version);
   });
 
   it('returns a semver-like string (x.y.z format)', () => {
