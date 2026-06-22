@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { rmrf } from '../../../test/integration/shared/test-kit';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import type { ParsedFile } from '../../engine/types';
 
+import { rmrf } from '../../../test/integration/shared/test-kit';
 import { parseFileAs as toFile } from '../../../test/integration/shared/test-kit';
 import { analyzeBarrel, createEmptyBarrel } from './analyzer';
 

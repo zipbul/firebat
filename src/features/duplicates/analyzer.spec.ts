@@ -39,6 +39,21 @@ const { analyzeDuplicates, createEmptyDuplicates } = await import('./analyzer');
 
 const makeFile = (fileName: string, source: string): ParsedFile => parseSource(fileName, source);
 
+const DUP_OPTS = { minSize: 3, enableAntiUnification: false };
+
+/** Analyze a two-file (a.ts/b.ts) corpus — the dominant arrange shape in this spec. */
+const analyzeAB = (
+  sourceA: string,
+  sourceB: string,
+  options: Parameters<typeof analyzeDuplicates>[1] = DUP_OPTS,
+): ReturnType<typeof analyzeDuplicates> =>
+  analyzeDuplicates([makeFile('a.ts', sourceA), makeFile('b.ts', sourceB)], options);
+
+/** Assert the result has exactly `count` groups of `cloneType`. */
+const expectCloneCount = (result: ReturnType<typeof analyzeDuplicates>, cloneType: string, count: number): void => {
+  expect(result.filter(g => g.cloneType === cloneType).length).toBe(count);
+};
+
 // 정확히 동일한 함수 2개가 있는 파일
 const IDENTICAL_FUNCTIONS = `
 function add(a: number, b: number): number {
@@ -184,9 +199,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 2. 이름만 다른 함수 2개 → shape 그룹 ──────────────────
 
   it('should return a shape group when two functions differ only in names', () => {
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(RENAMED_PAIR_A, RENAMED_PAIR_B);
     const shape = result.filter(g => g.cloneType === 'shape');
 
     expect(shape.length).toBe(1);
@@ -202,9 +215,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 3. 리터럴만 다른 함수 2개 → shape 그룹 (shape는 literal도 strip) ────
 
   it('should NOT group two functions that differ only in literals (literals never substituted)', () => {
-    const fileA = makeFile('a.ts', LITERAL_PAIR_A);
-    const fileB = makeFile('b.ts', LITERAL_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(LITERAL_PAIR_A, LITERAL_PAIR_B);
     // 리터럴은 어느 tier에서도 치환하지 않는다 → 리터럴만 다른 함수는 정규형이 어긋나 비매칭
     // (모호한 literal-variant 비탐지, zero-FP). exact/shape/normalized 모두 그룹 없음.
     const grouped = result.filter(g => g.cloneType === 'shape' || g.cloneType === 'normalized' || g.cloneType === 'exact');
@@ -327,9 +338,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 12. anti-unification disabled → no suggestedParams ─────────────
 
   it('should not set suggestedParams when enableAntiUnification is false', () => {
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(RENAMED_PAIR_A, RENAMED_PAIR_B);
 
     for (const group of result) {
       expect(group.suggestedParams).toBeUndefined();
@@ -341,9 +350,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 13. FunctionDeclaration → kind='function' ─────────────────────
 
   it('should assign kind function to FunctionDeclaration items', () => {
-    const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
-    const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
     const exact = result.filter(g => g.cloneType === 'exact');
 
     expect(exact.length).toBe(1);
@@ -380,9 +387,7 @@ class Beta {
     ['TSInterfaceDeclaration → kind=interface', INTERFACE_DECLARATION_A, INTERFACE_DECLARATION_B, 'interface'],
     ['ArrowFunctionExpression → kind=function', ARROW_FUNCTION, ARROW_FUNCTION, 'function'],
   ] as const)('should assign item kind correctly — %s', (_label, srcA, srcB, expectedKind) => {
-    const fileA = makeFile('a.ts', srcA);
-    const fileB = makeFile('b.ts', srcB);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(srcA, srcB);
     const matchingItems = result.flatMap(g => g.items).filter(i => i.kind === expectedKind);
 
     expect(matchingItems.length).toBeGreaterThanOrEqual(2);
@@ -511,9 +516,7 @@ class Beta {
   // ── [ED] 26. 정확히 2개 함수 → 최소 그룹 크기 ──────────────────────────
 
   it('should form a group with exactly 2 identical functions (minimum group size)', () => {
-    const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
-    const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
     const exact = result.filter(g => g.cloneType === 'exact');
 
     expect(exact.length).toBe(1);
@@ -574,9 +577,7 @@ class Beta {
   it('analyzeDuplicates - ClassDeclaration 안에 MethodDefinition 포함 시 - 내포된 Method 그룹 필터링', () => {
     // CLASS_DECLARATION_A/B: 각 파일에 Class + Method 노드 존재
     // Class 그룹이 Method 그룹을 내포하므로 Method 그룹이 제거되어야 함
-    const fileA = makeFile('a.ts', CLASS_DECLARATION_A);
-    const fileB = makeFile('b.ts', CLASS_DECLARATION_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(CLASS_DECLARATION_A, CLASS_DECLARATION_B);
     // type 그룹(ClassDeclaration)이 존재해야 함
     const classGroups = result.filter(g => g.items.some(i => i.kind === 'type'));
 
@@ -659,9 +660,7 @@ class Beta {
     // normalized은 이름+리터럴 정규화 후 같은 함수
     // 직접적으로 normalized만 생성하기는 어려우므로
     // shape에서 structural-clone 확인
-    const fileA = makeFile('a.ts', LITERAL_PAIR_A);
-    const fileB = makeFile('b.ts', LITERAL_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(LITERAL_PAIR_A, LITERAL_PAIR_B);
 
     for (const group of result) {
       if (group.cloneType === 'shape' || group.cloneType === 'normalized') {
@@ -796,9 +795,7 @@ export const compute = function(x: number): number {
 `,
     ],
   ] as const)('analyzeDuplicates - %s in two files - detects exact clone', (_label, source) => {
-    const fileA = makeFile('a.ts', source);
-    const fileB = makeFile('b.ts', source);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: false });
+    const result = analyzeAB(source, source);
     const exact = result.filter(g => g.cloneType === 'exact');
 
     expect(exact.length).toBe(1);

@@ -1,9 +1,9 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { rmrf } from '../../test/integration/shared/test-kit';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { rmrf } from '../../test/integration/shared/test-kit';
 import { appendFirebatLog, createNoopLogger, createPrettyConsoleLogger } from './logger';
 
 // ── createNoopLogger ──────────────────────────────────────────────────────────

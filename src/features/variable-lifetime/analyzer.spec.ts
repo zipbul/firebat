@@ -143,6 +143,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return x + a + b;', // line 5, lifetime = 3
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 3 });
   });
@@ -158,6 +159,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return x + a + b + c;', // line 6, lifetime = 4
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 3 });
   });
@@ -177,6 +179,7 @@ describe('variable-lifetime/analyzer', () => {
   it('analyzeVariableLifetime - same line declaration and use - lifetime 0 not reported', () => {
     // Arrange — all on one line, lifetime = 0
     const sourceText = 'function f() { const x = 1; return x; }';
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 0 });
   });
@@ -215,6 +218,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return x;', // line 4, actual last use
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
@@ -252,6 +256,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return x;',
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
@@ -268,6 +273,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return inner();', // x is NOT used here directly
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
@@ -283,6 +289,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return x;', // x lifetime is 2
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
@@ -300,6 +307,7 @@ describe('variable-lifetime/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
@@ -315,6 +323,7 @@ describe('variable-lifetime/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'multiplier', 1, { maxLifetimeLines: 5 });
   });
@@ -332,6 +341,7 @@ describe('variable-lifetime/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'resource', 1, { maxLifetimeLines: 5 });
   });
@@ -409,6 +419,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return r1 + b;', // b use, one line further
       '}',
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'a', 1, { maxLifetimeLines: 5 });
     expectVarCount(sourceText, lifetimeOnly, 'b', 1, { maxLifetimeLines: 5 });
@@ -429,6 +440,7 @@ describe('variable-lifetime/analyzer', () => {
       '  return x;', // line 9
       close,
     ].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
@@ -438,6 +450,7 @@ describe('variable-lifetime/analyzer', () => {
   it('analyzeVariableLifetime - variable declared but never used - no finding', () => {
     // Arrange
     const sourceText = ['function f() {', '  const unused = 42;', filler(6, 'pad'), '  return 1;', '}'].join('\n');
+
     // Act
     expectVarCount(sourceText, lifetimeOnly, 'unused', 0, { maxLifetimeLines: 0 });
   });
