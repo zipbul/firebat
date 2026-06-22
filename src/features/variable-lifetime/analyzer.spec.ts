@@ -7,7 +7,7 @@ import type {
   VariableLifetimeFinding,
 } from '../../types';
 
-import { parsePFile as file } from '../../../test/integration/shared/test-kit';
+import { parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } from './analyzer';
 
@@ -26,12 +26,6 @@ const livenessOnly = (findings: ReadonlyArray<AnyFinding>): ReadonlyArray<Livene
 
 const mutationOnly = (findings: ReadonlyArray<AnyFinding>): ReadonlyArray<MutationDensityFinding> =>
   findings.filter((f): f is MutationDensityFinding => f.kind === 'mutation-density');
-
-const fileWithErrors = (relPath: string, sourceText: string) => {
-  const parsed = file(relPath, sourceText);
-
-  return { ...parsed, errors: [{ message: 'synthetic' }] as any };
-};
 
 const filler = (count: number, prefix = 'x') =>
   Array.from({ length: count }, (_, i) => `  const ${prefix}${i} = ${i};`).join('\n');

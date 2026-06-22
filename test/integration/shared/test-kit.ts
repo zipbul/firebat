@@ -133,6 +133,10 @@ export const parseFileAs = (filePath: string, code: string): ParsedFile => parse
 /** Parse `source` under `/virtual/test.ts` and wrap it in a single-file program. */
 export const parseProgram = (source: string): ParsedFile[] => [parseSource('/virtual/test.ts', source)];
 
+/** Parse `relPath` under `/p/` and attach a synthetic parse error — shared by analyzer specs. */
+export const parsePFileWithErrors = (relPath: string, sourceText: string): ParsedFile =>
+  ({ ...parsePFile(relPath, sourceText), errors: [{ message: 'synthetic' }] }) as unknown as ParsedFile;
+
 /**
  * Parse `source` into a single-file program and run `analyze` over it.
  *
@@ -140,6 +144,12 @@ export const parseProgram = (source: string): ParsedFile[] => [parseSource('/vir
  * single-source detector spec otherwise re-states verbatim.
  */
 export const analyzeSource = <T>(source: string, analyze: (files: ParsedFile[]) => T): T => analyze(parseProgram(source));
+
+/** A single-line `SourceSpan` (`line`→`line+1`) — shared by the report/flatten specs. */
+export const span = (line = 1, col = 0) => ({
+  start: { line, column: col },
+  end: { line: line + 1, column: 0 },
+});
 
 export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): string[] => {
   const signatures: string[] = [];

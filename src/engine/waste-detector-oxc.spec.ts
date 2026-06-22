@@ -2,10 +2,8 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from './types';
 
-import { parseSource } from './ast/parse-source';
 import { detectWasteOxc } from './waste-detector-oxc';
-
-const toFile = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
+import { parseFileAs as toFile } from '../../test/integration/shared/test-kit';
 
 interface DeadStoreCase {
   name: string;

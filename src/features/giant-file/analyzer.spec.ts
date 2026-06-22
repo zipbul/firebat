@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parsePFile as file } from '../../../test/integration/shared/test-kit';
+import { parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
 import { analyzeGiantFile, createEmptyGiantFile } from './analyzer';
-
-const fileWithErrors = (relPath: string, sourceText: string) => {
-  const parsed = file(relPath, sourceText);
-
-  return { ...parsed, errors: [{ message: 'synthetic' }] as any };
-};
 
 describe('giant-file/analyzer', () => {
   it('should return empty result when files are empty', () => {

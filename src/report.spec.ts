@@ -4,13 +4,9 @@ import type { FirebatReport, FirebatDetector } from './types';
 
 import { flattenToFindings } from './application/scan/flatten-findings';
 import { formatReport } from './report';
+import { span } from '../test/integration/shared/test-kit';
 
 // ── Helpers ─────────────────────────────────────────────────────────
-
-const span = (line = 1, col = 0) => ({
-  start: { line, column: col },
-  end: { line: line + 1, column: 0 },
-});
 
 const testFile = `${process.cwd()}/test-file.ts`;
 

@@ -3,15 +3,9 @@ import type { CodeRelation, ParsedFile as GildashParsedFile } from '@zipbul/gild
 import { GildashError } from '@zipbul/gildash';
 import { describe, expect, it } from 'bun:test';
 
-import { parsePFile as file } from '../../../test/integration/shared/test-kit';
+import { parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer';
-
-const fileWithErrors = (relPath: string, sourceText: string) => {
-  const parsed = file(relPath, sourceText);
-
-  return { ...parsed, errors: [{ message: 'synthetic' }] as any };
-};
 
 const singleFile = (sourceLines: string[]) => [file('src/a.ts', sourceLines.join('\n'))];
 
