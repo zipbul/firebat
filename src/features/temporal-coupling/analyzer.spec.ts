@@ -22,6 +22,16 @@ const expectTcCount = (
   return result;
 };
 
+/** Assert a finding's detected `state` name and `writers` count. */
+const expectStateWriters = (
+  finding: { state?: string; writers?: number } | undefined,
+  state: string,
+  writers: number,
+): void => {
+  expect(finding?.state).toBe(state);
+  expect(finding?.writers).toBe(writers);
+};
+
 const createMockGildash = (relations: CodeRelation[]) => ({
   searchRelations: (query: { type?: string; dstFilePath?: string; dstSymbolName?: string }) => {
     return relations.filter(r => {
@@ -130,8 +140,7 @@ describe('temporal-coupling/analyzer', () => {
     const result = expectTcCount(files, 1);
 
     expect(result[0]?.kind).toBe('temporal-coupling');
-    expect(result[0]?.state).toBe('db');
-    expect(result[0]?.writers).toBe(1);
+    expectStateWriters(result[0], 'db', 1);
     expect(result[0]?.readers).toBe(1);
   });
 
@@ -149,8 +158,7 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result = expectTcCount(files, 1);
 
-    expect(result[0]?.state).toBe('db');
-    expect(result[0]?.writers).toBe(1);
+    expectStateWriters(result[0], 'db', 1);
   });
 
   // --- [HP] writer/reader scenarios that vary only by source + detected state name ---
