@@ -23,11 +23,7 @@ const expectTcCount = (
 };
 
 /** Assert a finding's detected `state` name and `writers` count. */
-const expectStateWriters = (
-  finding: { state?: string; writers?: number } | undefined,
-  state: string,
-  writers: number,
-): void => {
+const expectStateWriters = (finding: { state?: string; writers?: number } | undefined, state: string, writers: number): void => {
   expect(finding?.state).toBe(state);
   expect(finding?.writers).toBe(writers);
 };

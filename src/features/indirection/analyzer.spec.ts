@@ -37,6 +37,18 @@ const findKinds = (findings: Awaited<ReturnType<typeof analyzeIndirection>>, kin
   return findings.filter(finding => finding.kind === kind);
 };
 
+/** Assert exactly one finding of `kind`, with the given `header`. */
+const expectSingleKindHeader = (
+  findings: Awaited<ReturnType<typeof analyzeIndirection>>,
+  kind: string,
+  header: string,
+): void => {
+  const items = findKinds(findings, kind);
+
+  expect(items.length).toBe(1);
+  expect(items[0]?.header).toBe(header);
+};
+
 interface TypeRemapReportCase {
   name: string;
   source: string;
@@ -81,11 +93,7 @@ describe('analyzer', () => {
     const gildash = createMockGildash();
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-    const thinWrappers = findKinds(analysis, 'thin-wrapper');
-
-    // Assert
-    expect(thinWrappers.length).toBe(1);
-    expect(thinWrappers[0]?.header).toBe('wrapper');
+    expectSingleKindHeader(analysis, 'thin-wrapper', 'wrapper');
   });
 
   it('analyzeIndirection - overloaded and non-overloaded coexist - only non-overloaded flagged', async () => {
@@ -148,11 +156,7 @@ describe('analyzer', () => {
     });
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-    const thinWrappers = findKinds(analysis, 'thin-wrapper');
-
-    // Assert — greet (overloaded) skipped, wrapper (non-overloaded) flagged
-    expect(thinWrappers.length).toBe(1);
-    expect(thinWrappers[0]?.header).toBe('wrapper');
+    expectSingleKindHeader(analysis, 'thin-wrapper', 'wrapper');
   });
 
   it('analyzeIndirection - overloaded function with pass-through - skips wrapper', async () => {
@@ -490,11 +494,7 @@ describe('analyzer', () => {
         { maxForwardDepth: 0, crossFileMinDepth: 2 },
         '/virtual',
       );
-      const remaps = findKinds(analysis, 'type-remap');
-
-      // Assert
-      expect(remaps.length).toBe(1);
-      expect(remaps[0]?.header).toBe(header);
+      expectSingleKindHeader(analysis, 'type-remap', header);
     });
 
     // Each row is a type alias that must NOT be reported as a synonym; `filePath`
