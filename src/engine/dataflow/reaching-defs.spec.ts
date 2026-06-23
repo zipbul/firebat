@@ -42,6 +42,20 @@ const firstFunction = (code: string) => {
   return fns[0]!;
 };
 
+/** Parse `code`, extract the binding names of the first function's first parameter. */
+const extractParamNames = (code: string): string[] => {
+  const fn = firstFunction(code);
+  const out: BindingName[] = [];
+
+  extractBindingNames((fn as any).params[0], out);
+
+  return out.map(b => b.name);
+};
+
+/** Parse `code` and collect the first function's local-var index map. */
+const localVarIndexes = (code: string): ReturnType<typeof collectLocalVarIndexes> =>
+  collectLocalVarIndexes(firstFunction(code), TEST_FILE_PATH, _lastSource);
+
 const analyzeFirstFunction = (code: string) => {
   const fn = firstFunction(code);
   const localIndexByName = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
@@ -96,12 +110,7 @@ describe('engine/dataflow/reaching-defs', () => {
     ];
 
     it.each(cases)('extractBindingNames - $name', ({ code, expected }) => {
-      const fn = firstFunction(code);
-      const params = (fn as any).params as any[];
-      const out: BindingName[] = [];
-
-      extractBindingNames(params[0], out);
-      expect(out.map(b => b.name).sort()).toEqual([...expected].sort());
+      expect(extractParamNames(code).sort()).toEqual([...expected].sort());
     });
 
     it('extractBindingNames - Identifier node - location is a number', () => {
@@ -177,8 +186,7 @@ describe('engine/dataflow/reaching-defs', () => {
     ];
 
     it.each(trackedNameCases)('collectLocalVarIndexes - $name', ({ code, expected }) => {
-      const fn = firstFunction(code);
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
+      const indexes = localVarIndexes(code);
 
       expect(namesOf(indexes)).toEqual([...expected].sort());
     });
@@ -209,8 +217,7 @@ describe('engine/dataflow/reaching-defs', () => {
     ];
 
     it.each(iifeScopeCases)('collectLocalVarIndexes - $name', ({ code }) => {
-      const fn = firstFunction(code);
-      const indexes = collectLocalVarIndexes(fn, TEST_FILE_PATH, _lastSource);
+      const indexes = localVarIndexes(code);
       const xKeys = [...indexes.keys()].filter(key => key.startsWith('x@'));
 
       expect(xKeys).toEqual([]);

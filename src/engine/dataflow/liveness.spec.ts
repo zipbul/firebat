@@ -53,6 +53,7 @@ describe('liveness', () => {
       [], // n1: no writes
       [], // n2: no writes
     ];
+
     // Act
     expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1, 1);
   });
@@ -68,6 +69,7 @@ describe('liveness', () => {
       [0, 1, 2], // n0: writes var0, var1, var2
       [], // n1: no writes
     ];
+
     // Act
     expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3, 3);
   });
@@ -85,6 +87,7 @@ describe('liveness', () => {
       [0], // n0: writes var0
       [1], // n1: writes var1
     ];
+
     // Act
     expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2, 2);
   });
@@ -96,6 +99,7 @@ describe('liveness', () => {
     const writeVarIndexesByNode: number[][] = [[], []];
     // Act
     const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 0, 0);
+
     expect(result.liveInByNode).toHaveLength(0);
   });
 
@@ -118,6 +122,7 @@ describe('liveness', () => {
       [], // n1: no writes
       [], // n2: no writes
     ];
+
     // Act
     expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2, 1);
   });
@@ -141,6 +146,7 @@ describe('liveness', () => {
     ];
     // Act
     const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 1, 1);
+
     expect(result.liveInByNode).toHaveLength(3);
   });
 
@@ -185,6 +191,7 @@ describe('liveness', () => {
     ];
     // Act
     const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 2, 2);
+
     expect(result.liveInByNode).toHaveLength(4);
     expect(result.liveInByNode[0]?.size()).toBe(0); // n0 defines var0+var1 → they are killed in liveIn
     expect(result.liveInByNode[3]?.size()).toBe(2); // n3 (merge) needs both vars
@@ -213,6 +220,7 @@ describe('liveness', () => {
     ];
     // Act
     const result = expectMaxLive(cfg, useVarIndexesByNode, writeVarIndexesByNode, 3, 3);
+
     expect(result.liveInByNode[0]?.size()).toBe(0);
     expect(result.liveInByNode[1]?.size()).toBe(3);
     expect(result.liveInByNode[2]?.size()).toBe(2);
