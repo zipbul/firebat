@@ -2,6 +2,11 @@ import { describe, expect, it } from 'bun:test';
 
 import { __testing__, createEmptyFormat } from './analyzer';
 
+/** Assert `parseOxfmtFiles(raw)` yields an empty array. */
+const expectParseEmpty = (raw: unknown): void => {
+  expect(__testing__.parseOxfmtFiles(raw)).toEqual([]);
+};
+
 describe('format/analyzer', () => {
   describe('createEmptyFormat', () => {
     it('should return an empty array when called', () => {
@@ -20,20 +25,14 @@ describe('format/analyzer', () => {
       // Arrange
       const raw: unknown = { ok: true };
       // Act
-      const files = __testing__.parseOxfmtFiles(raw);
-
-      // Assert
-      expect(files).toEqual([]);
+      expectParseEmpty(raw);
     });
 
     it('should return an empty array when stdout is empty', () => {
       // Arrange
       const raw = '   \n\n  ';
       // Act
-      const files = __testing__.parseOxfmtFiles(raw);
-
-      // Assert
-      expect(files).toEqual([]);
+      expectParseEmpty(raw);
     });
 
     it('should return only path-like lines when stdout contains mixed content', () => {

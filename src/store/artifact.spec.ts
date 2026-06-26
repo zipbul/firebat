@@ -25,6 +25,11 @@ describe('createArtifactStore', () => {
     ...overrides,
   });
 
+  /** Assert a default `store.get` returns null (cache miss). */
+  const expectGetNull = (): void => {
+    expect(store.get(makeGet())).toBeNull();
+  };
+
   const makeSet = <T>(value: T, overrides?: Partial<GetArtifactInput>): SetArtifactInput<T> => ({
     ...makeGet(overrides),
     value,
@@ -54,9 +59,7 @@ describe('createArtifactStore', () => {
   });
 
   it('should return null when key does not exist in L1 or L2', () => {
-    const result = store.get(makeGet());
-
-    expect(result).toBeNull();
+    expectGetNull();
   });
 
   it('should overwrite existing value when set is called with same key', () => {
@@ -107,9 +110,7 @@ describe('createArtifactStore', () => {
       ['proj', 'ast', 'file.ts', 'abc123', 1000, 'not-valid-json'],
     );
 
-    const result = store.get(makeGet());
-
-    expect(result).toBeNull();
+    expectGetNull();
   });
 
   it('should return null when both L1 and L2 have corrupt JSON', () => {
@@ -121,9 +122,7 @@ describe('createArtifactStore', () => {
     store.get(makeGet());
 
     // Second get: L1 has corrupt → catch → delete → L2 still corrupt → null
-    const result = store.get(makeGet());
-
-    expect(result).toBeNull();
+    expectGetNull();
   });
 
   // ---------- ED ----------
@@ -181,9 +180,7 @@ describe('createArtifactStore', () => {
   it('should return null when value was set as null', () => {
     store.set(makeSet(null));
 
-    const result = store.get(makeGet());
-
-    expect(result).toBeNull();
+    expectGetNull();
   });
 
   // ---------- CO ----------
