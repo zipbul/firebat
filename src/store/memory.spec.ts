@@ -28,6 +28,12 @@ interface DeleteCase {
   readonly seeds: ReadonlyArray<WriteInput>;
 }
 
+/** Assert a record's createdAt and updatedAt both equal `ts`. */
+const expectTimestamps = (record: { readonly createdAt: number; readonly updatedAt: number } | null | undefined, ts: number): void => {
+  expect(record!.createdAt).toBe(ts);
+  expect(record!.updatedAt).toBe(ts);
+};
+
 describe('createMemoryStore', () => {
   let db: Database;
   let store: MemoryStore;
@@ -104,8 +110,7 @@ describe('createMemoryStore', () => {
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'new' });
 
-    expect(record!.createdAt).toBe(5000);
-    expect(record!.updatedAt).toBe(5000);
+    expectTimestamps(record, 5000);
   });
 
   it('should preserve original createdAt when updating existing record', () => {
@@ -162,8 +167,7 @@ describe('createMemoryStore', () => {
 
     const record = store.read({ projectKey: 'proj', memoryKey: 'k' });
 
-    expect(record!.createdAt).toBe(5000);
-    expect(record!.updatedAt).toBe(5000);
+    expectTimestamps(record, 5000);
     expect(record!.payloadJson).toBe('{"v":2}');
   });
 

@@ -26,6 +26,15 @@ const makeReport = (
   findings,
 });
 
+/** Convert `report` and assert its meta carries no `errors` key, returning the scan result. */
+const scanResultOf = (report: Parameters<typeof toScanResult>[0]): ReturnType<typeof toScanResult> => {
+  const r = toScanResult(report);
+
+  expect('errors' in r.meta).toBe(false);
+
+  return r;
+};
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('toScanResult', () => {
@@ -40,16 +49,12 @@ describe('toScanResult', () => {
     const base = makeReport();
     const { errors: _e, ...metaNoErrors } = base.meta;
     const report: FirebatReport = { ...base, meta: metaNoErrors as FirebatReport['meta'] };
-    const out = toScanResult(report);
-
-    expect('errors' in out.meta).toBe(false);
+    scanResultOf(report);
   });
 
   it('omits errors in meta when meta.errors is empty object', () => {
     const report = makeReport({ errors: {} });
-    const out = toScanResult(report);
-
-    expect('errors' in out.meta).toBe(false);
+    scanResultOf(report);
   });
 
   it('places detectors under meta from meta.detectors', () => {

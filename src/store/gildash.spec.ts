@@ -9,6 +9,13 @@ const mockOpen = mock<(options: GildashOptions) => Promise<Gildash>>(() =>
   Promise.resolve({ projectRoot: '/test' } as unknown as Gildash),
 );
 
+/** Assert `mockOpen` was called exactly once and return its first argument. */
+const firstOpenArg = (): GildashOptions => {
+  expect(mockOpen).toHaveBeenCalledTimes(1);
+
+  return mockOpen.mock.calls[0]![0]!;
+};
+
 describe('createGildash', () => {
   let openSpy: ReturnType<typeof spyOn>;
 
@@ -39,9 +46,7 @@ describe('createGildash', () => {
   it('should pass watchMode true to Gildash.open when explicitly provided', async () => {
     await createGildash({ projectRoot: '/proj', watchMode: true });
 
-    expect(mockOpen).toHaveBeenCalledTimes(1);
-
-    const calledWith = mockOpen.mock.calls[0]![0]!;
+    const calledWith = firstOpenArg();
 
     expect(calledWith.watchMode).toBe(true);
   });
@@ -55,9 +60,7 @@ describe('createGildash', () => {
 
     await createGildash(opts);
 
-    expect(mockOpen).toHaveBeenCalledTimes(1);
-
-    const calledWith = mockOpen.mock.calls[0]![0]!;
+    const calledWith = firstOpenArg();
 
     expect(calledWith.projectRoot).toBe('/proj');
     expect(calledWith.watchMode).toBe(true);
