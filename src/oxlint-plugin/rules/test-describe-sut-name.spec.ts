@@ -40,6 +40,18 @@ function setupWithImpl(implSource: string) {
   });
 }
 
+/** Run `call` through the visitor and assert a single `sutName` report expecting `expected`. */
+function expectSutNameReport(
+  visitor: Parameters<typeof expectReportCount>[0],
+  call: Parameters<typeof expectReportCount>[2],
+  reports: ReturnType<typeof setupRule>['reports'],
+  expected: string,
+): void {
+  expectReportCount(visitor, 'CallExpression', call, reports, 1);
+  expect(reports[0]?.messageId).toBe('sutName');
+  expect(reports[0]?.data?.expected).toBe(expected);
+}
+
 describe('test-describe-sut-name', () => {
   it.each<[string, string, string]>([
     ['implementation exports a class', 'export class UserService {}\n', 'UserService'],
@@ -73,9 +85,7 @@ describe('test-describe-sut-name', () => {
     const [, call] = createTopLevelDescribeCall('user-service');
 
     // Act
-    expectReportCount(visitor, 'CallExpression', call, reports, 1);
-    expect(reports[0]?.messageId).toBe('sutName');
-    expect(reports[0]?.data?.expected).toBe('UserService');
+    expectSutNameReport(visitor, call, reports, 'UserService');
   });
 
   it('should fall back to filename when implementation file is missing', () => {
@@ -88,9 +98,7 @@ describe('test-describe-sut-name', () => {
     const [, call] = createTopLevelDescribeCall('UserService');
 
     // Act
-    expectReportCount(visitor, 'CallExpression', call, reports, 1);
-    expect(reports[0]?.messageId).toBe('sutName');
-    expect(reports[0]?.data?.expected).toBe('user-service');
+    expectSutNameReport(visitor, call, reports, 'user-service');
   });
 
   it('should report when any top-level describe title mismatches', () => {
@@ -101,9 +109,7 @@ describe('test-describe-sut-name', () => {
 
     // Act
     visitor.CallExpression(first);
-    expectReportCount(visitor, 'CallExpression', second, reports, 1);
-    expect(reports[0]?.messageId).toBe('sutName');
-    expect(reports[0]?.data?.expected).toBe('UserService');
+    expectSutNameReport(visitor, second, reports, 'UserService');
   });
 
   it('should ignore nested describe calls when not top-level', () => {
