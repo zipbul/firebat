@@ -13,6 +13,12 @@ const firstFinding = (analyses: Partial<FirebatAnalyses>, map?: FunctionRangeMap
   return findings[0]!;
 };
 
+/** Assert `f` has exactly two findings with distinct ids. */
+const expectTwoUniqueIds = (f: ReadonlyArray<{ readonly id: unknown }>): void => {
+  expect(f).toHaveLength(2);
+  expect(f[0]!.id).not.toBe(f[1]!.id);
+};
+
 interface LabelRow {
   readonly name: string;
   readonly analyses: Partial<FirebatAnalyses>;
@@ -62,8 +68,7 @@ describe('flattenToFindings: core schema', () => {
     };
     const findings = flattenToFindings(analyses);
 
-    expect(findings).toHaveLength(2);
-    expect(findings[0]!.id).not.toBe(findings[1]!.id);
+    expectTwoUniqueIds(findings);
   });
 
   it('deduplicates findings with identical content', () => {
@@ -363,8 +368,7 @@ describe('flattenToFindings: ZERO_SPAN uniqueness', () => {
       ],
     });
 
-    expect(findings).toHaveLength(2);
-    expect(findings[0]!.id).not.toBe(findings[1]!.id);
+    expectTwoUniqueIds(findings);
   });
 
   it('distinguishes unused-enum-member findings differing only in memberName', () => {
@@ -391,8 +395,7 @@ describe('flattenToFindings: ZERO_SPAN uniqueness', () => {
       ],
     });
 
-    expect(findings).toHaveLength(2);
-    expect(findings[0]!.id).not.toBe(findings[1]!.id);
+    expectTwoUniqueIds(findings);
   });
 });
 
@@ -1041,8 +1044,7 @@ describe('flattenToFindings: label fallbacks', () => {
       ],
     });
 
-    expect(findings).toHaveLength(2);
-    expect(findings[0]!.id).not.toBe(findings[1]!.id);
+    expectTwoUniqueIds(findings);
   });
 });
 
