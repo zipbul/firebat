@@ -23,7 +23,7 @@ import {
   newline,
   whitespace,
 } from './fuzz-rng';
-import { applyFixes, createRuleContext, makeSourceCode } from './rule-test-kit';
+import { applyFixes, createRuleContext, createVisitor, makeSourceCode } from './rule-test-kit';
 
 interface ParseSyncResult {
   program: AstNode;
@@ -62,7 +62,7 @@ const runRuleOnParsedCode = (
 
   ensureRangesDeep(program);
 
-    const sourceCode = makeSourceCode(code);
+  const sourceCode = makeSourceCode(code);
 
   const getDeclaredVariables = (node: AstNode): Variable[] => {
     if (node.type !== 'ImportDeclaration') {
@@ -93,8 +93,7 @@ const runRuleOnParsedCode = (
     return vars;
   };
 
-  const { context, reports } = createRuleContext(sourceCode, options, getDeclaredVariables);
-  const visitor = rule.create(context);
+  const { visitor, reports } = createVisitor(rule, sourceCode, options, getDeclaredVariables);
 
   traverseAndVisit(program, visitor);
 

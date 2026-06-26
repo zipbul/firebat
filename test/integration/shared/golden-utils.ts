@@ -46,6 +46,17 @@ export const toGoldenJson = (actual: unknown): string => {
   return JSON.stringify(normalizeValue(actual), null, 2);
 };
 
+/** Resolve `${fixturesDir}/${name}.ts`, throwing if the fixture file is absent. */
+export const resolveFixturePath = (fixturesDir: string, name: string): string => {
+  const p = path.join(fixturesDir, `${name}.ts`);
+
+  if (!fs.existsSync(p)) {
+    throw new Error(`Fixture not found: ${p}`);
+  }
+
+  return p;
+};
+
 // ── Expected file I/O ────────────────────────────────────────────────────────
 
 export const readExpected = (expectedDir: string, name: string): string | null => {

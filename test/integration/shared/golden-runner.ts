@@ -21,7 +21,7 @@ import type { ParsedFile } from '../../../src/test-api';
 
 import { parseSource } from '../../../src/test-api';
 import { PartialResultError } from '../../../src/test-api';
-import { compareGolden, toGoldenJson } from './golden-utils';
+import { compareGolden, resolveFixturePath, toGoldenJson } from './golden-utils';
 
 /** Order-insensitive comparator: sort by JSON string form. */
 const byJsonString = (a: unknown, b: unknown): number => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1);
@@ -45,12 +45,7 @@ export type GoldenRunOptions = Record<string, never>;
 // ── Fixture loading ──────────────────────────────────────────────────────────
 
 const readFixture = (fixturesDir: string, name: string): FixtureSources => {
-  const fixturePath = path.join(fixturesDir, `${name}.ts`);
-
-  if (!fs.existsSync(fixturePath)) {
-    throw new Error(`Fixture not found: ${fixturePath}`);
-  }
-
+  const fixturePath = resolveFixturePath(fixturesDir, name);
   const source = fs.readFileSync(fixturePath, 'utf8');
   const virtualPath = `/virtual/${name}.ts`;
 

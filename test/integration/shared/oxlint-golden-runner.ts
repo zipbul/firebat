@@ -32,8 +32,8 @@ import {
   type Visitor,
 } from '../oxlint-plugin/utils/ast-walk';
 import { getRange as getRangeTuple } from '../oxlint-plugin/utils/fuzz-rng';
-import { applyFixes, createRuleContext, makeSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
-import { compareGolden } from './golden-utils';
+import { applyFixes, createVisitor, makeSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
+import { compareGolden, resolveFixturePath } from './golden-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ const runRuleOnSource = (fixtureSource: string, rule: RuleModule, opts: RuleGold
 
   ensureRangesDeep(programValue);
 
-    const sourceCode = makeSourceCode(fixtureSource);
+  const sourceCode = makeSourceCode(fixtureSource);
   const getDeclaredVariables = buildGetDeclaredVariables(programValue);
   const extras: import('../oxlint-plugin/utils/rule-test-kit').RuleContextExtras = {};
 
@@ -177,8 +177,7 @@ const runRuleOnSource = (fixtureSource: string, rule: RuleModule, opts: RuleGold
     extras.readFile = opts.readFile;
   }
 
-  const { context, reports } = createRuleContext(sourceCode, options, getDeclaredVariables, extras);
-  const visitor = rule.create(context);
+  const { visitor, reports } = createVisitor(rule, sourceCode, options, getDeclaredVariables, extras);
 
   traverseAndVisit(programValue, visitor);
 
@@ -209,13 +208,7 @@ const runRuleOnSource = (fixtureSource: string, rule: RuleModule, opts: RuleGold
 // ── Fixture I/O ──────────────────────────────────────────────────────────────
 
 const readFixtureSource = (fixturesDir: string, name: string): string => {
-  const p = path.join(fixturesDir, `${name}.ts`);
-
-  if (!fs.existsSync(p)) {
-    throw new Error(`Fixture not found: ${p}`);
-  }
-
-  return fs.readFileSync(p, 'utf8');
+  return fs.readFileSync(resolveFixturePath(fixturesDir, name), 'utf8');
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

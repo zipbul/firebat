@@ -267,6 +267,20 @@ function setupRule<TVisitor>(rule: RuleLike<TVisitor>, options: SetupRuleOptions
   return { visitor, reports, context, sourceCode };
 }
 
+/** Build a rule context over `sourceCode` and instantiate the rule's visitor. */
+function createVisitor<TVisitor>(
+  rule: RuleLike<TVisitor>,
+  sourceCode: ReturnType<typeof createSourceCode>,
+  options: RuleContext['options'],
+  getDeclaredVariables: (node: AstNode) => Variable[],
+  extras?: RuleContextExtras,
+): { visitor: TVisitor; reports: ReportDescriptor[] } {
+  const { context, reports } = createRuleContext(sourceCode, options, getDeclaredVariables, extras);
+  const visitor = rule.create(context);
+
+  return { visitor, reports };
+}
+
 /** Wrap statement nodes into a `Program` AstNode — shared by oxlint rule specs. */
 const createProgram = (body: AstNode[]): AstNode => ({ type: 'Program', body }) as AstNode;
 
@@ -283,4 +297,14 @@ const expectReportCount = (
 };
 
 export type { ReportDescriptor, RuleContext, RuleContextExtras, SetupRuleOptions, SourceCode };
-export { applyAutofix, applyFixes, createProgram, createRuleContext, createSourceCode, expectReportCount, makeSourceCode, setupRule };
+export {
+  applyAutofix,
+  applyFixes,
+  createProgram,
+  createRuleContext,
+  createSourceCode,
+  createVisitor,
+  expectReportCount,
+  makeSourceCode,
+  setupRule,
+};
