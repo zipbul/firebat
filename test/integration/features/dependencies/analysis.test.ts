@@ -36,6 +36,24 @@ const withDeps = async (
   });
 };
 
+/** Add a complete `moduleCount`-node strongly-connected component (each module imports every other) under `prefix`. */
+const addCompleteScc = (sources: Map<string, string>, prefix: string, moduleCount: number): void => {
+  for (let index = 0; index < moduleCount; index += 1) {
+    const imports: string[] = [];
+
+    for (let target = 0; target < moduleCount; target += 1) {
+      if (target === index) {
+        continue;
+      }
+
+      imports.push(`import './${prefix}${target}';`);
+    }
+
+    imports.push(`export const value${index} = ${index};`);
+    sources.set(`/virtual/deps/${prefix}${index}.ts`, imports.join('\n'));
+  }
+};
+
 /** The canonical a→b→c import cycle fixture, reused (and locally extended) across cycle tests. */
 const makeCycleSources = (): Map<string, string> =>
   new Map([
@@ -229,22 +247,8 @@ describe('integration/dependencies', () => {
 
   it('should cap cycle enumeration when the scc is large', async () => {
     const sources = new Map<string, string>();
-    const moduleCount = 6;
 
-    for (let index = 0; index < moduleCount; index += 1) {
-      const imports: string[] = [];
-
-      for (let target = 0; target < moduleCount; target += 1) {
-        if (target === index) {
-          continue;
-        }
-
-        imports.push(`import './m${target}';`);
-      }
-
-      imports.push(`export const value${index} = ${index};`);
-      sources.set(`/virtual/deps/m${index}.ts`, imports.join('\n'));
-    }
+    addCompleteScc(sources, 'm', 6);
 
     await withDeps(sources, dependencies => {
       // gildash getCyclePaths uses default maxCycles; verify cycles are returned
@@ -254,27 +258,9 @@ describe('integration/dependencies', () => {
 
   it('should cap cycle enumeration per scc when the graph has multiple scc components', async () => {
     const sources = new Map<string, string>();
-    const moduleCount = 6;
 
-    const addCompleteScc = (prefix: string): void => {
-      for (let index = 0; index < moduleCount; index += 1) {
-        const imports: string[] = [];
-
-        for (let target = 0; target < moduleCount; target += 1) {
-          if (target === index) {
-            continue;
-          }
-
-          imports.push(`import './${prefix}${target}';`);
-        }
-
-        imports.push(`export const value${index} = ${index};`);
-        sources.set(`/virtual/deps/${prefix}${index}.ts`, imports.join('\n'));
-      }
-    };
-
-    addCompleteScc('a');
-    addCompleteScc('b');
+    addCompleteScc(sources, 'a', 6);
+    addCompleteScc(sources, 'b', 6);
 
     await withDeps(sources, dependencies => {
       // gildash getCyclePaths uses default maxCycles; verify cycles are returned
