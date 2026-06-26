@@ -14,6 +14,11 @@ import { detectWaste, parseSource } from '../../../../src/test-api';
 
 const FIXTURES_DIR = path.join(__dirname, '__fixtures__');
 
+/** Assert the binding-source telemetry recorded at least one gildash hit. */
+const expectGildashHit = (): void => {
+  expect(getBindingSourceTelemetry().gildashHits).toBeGreaterThan(0);
+};
+
 describe('gildash binding source telemetry', () => {
   beforeEach(() => {
     resetBindingSourceTelemetry();
@@ -26,9 +31,7 @@ describe('gildash binding source telemetry', () => {
 
     expect(findings.length).toBeGreaterThan(0);
 
-    const telemetry = getBindingSourceTelemetry();
-
-    expect(telemetry.gildashHits).toBeGreaterThan(0);
+    expectGildashHit();
   });
 
   it('resolves an in-memory virtual source via standalone bindings (sourceText flows directly)', () => {
@@ -36,8 +39,6 @@ describe('gildash binding source telemetry', () => {
 
     detectWaste([parseSource('/virtual/_inmemory.ts', src)]);
 
-    const telemetry = getBindingSourceTelemetry();
-
-    expect(telemetry.gildashHits).toBeGreaterThan(0);
+    expectGildashHit();
   });
 });

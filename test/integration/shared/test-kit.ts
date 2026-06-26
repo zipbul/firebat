@@ -241,6 +241,13 @@ export const expectNonEmptyString = (value: unknown): void => {
   expect((value as string).length).toBeGreaterThan(0);
 };
 
+/** Sort `arr` in place by locale comparison and return it. */
+const sortStrings = (arr: string[]): string[] => {
+  arr.sort((left, right) => left.localeCompare(right));
+
+  return arr;
+};
+
 export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): string[] => {
   const signatures: string[] = [];
 
@@ -254,9 +261,7 @@ export const toDuplicateSignatures = (groups: ReadonlyArray<DuplicateGroup>): st
     signatures.push(itemKeys.join(';'));
   }
 
-  signatures.sort((left, right) => left.localeCompare(right));
-
-  return signatures;
+  return sortStrings(signatures);
 };
 
 export const toWasteSignatures = (findings: ReadonlyArray<WasteFinding>): string[] => {
@@ -264,9 +269,7 @@ export const toWasteSignatures = (findings: ReadonlyArray<WasteFinding>): string
     return `${finding.filePath}|${finding.kind}|${finding.label}`;
   });
 
-  keys.sort((left, right) => left.localeCompare(right));
-
-  return keys;
+  return sortStrings(keys);
 };
 
 /** Re-run waste detection on `program` and assert the normalized signatures equal `first` (determinism). */

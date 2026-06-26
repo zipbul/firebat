@@ -59,6 +59,10 @@ const getReadCount = (usages: ReadonlyArray<VariableUsage>, name: string): numbe
 const readCountOf = (statement: Node, name: string): number =>
   getReadCount(collectVariables(statement, { includeNestedFunctions: false }), name);
 
+/** Count reads of `value` in the statement at `statementIndex` of the function in `lines`. */
+const valueReadsFor = (lines: string[], statementIndex: number): number =>
+  readCountOf(getFunctionBodyStatement(lines.join('\n'), statementIndex), 'value');
+
 describe('variable-collector', () => {
   // Rows where the static-analysis path proves `value` is never read → read count 0.
   const zeroReadCases: ReadCountCase[] = [
@@ -80,8 +84,7 @@ describe('variable-collector', () => {
   ];
 
   it.each(zeroReadCases)('$name', ({ lines, statementIndex }) => {
-    const statement = getFunctionBodyStatement(lines.join('\n'), statementIndex);
-    const valueReads = readCountOf(statement, 'value');
+    const valueReads = valueReadsFor(lines, statementIndex);
 
     expect(valueReads).toBe(0);
   });
@@ -101,8 +104,7 @@ describe('variable-collector', () => {
   ];
 
   it.each(positiveReadCases)('$name', ({ lines, statementIndex }) => {
-    const statement = getFunctionBodyStatement(lines.join('\n'), statementIndex);
-    const valueReads = readCountOf(statement, 'value');
+    const valueReads = valueReadsFor(lines, statementIndex);
 
     expect(valueReads).toBeGreaterThan(0);
   });
