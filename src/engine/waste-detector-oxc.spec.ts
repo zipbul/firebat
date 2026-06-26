@@ -26,6 +26,12 @@ const expectNoWaste = (files: ParsedFile[]): void => {
   expect(detectWasteOxc(files)).toEqual([]);
 };
 
+/** Predicate: a finding is a dead-store for the variable named `label`. */
+const isDeadStore =
+  (label: string) =>
+  (r: { readonly kind: string; readonly label: string }): boolean =>
+    r.kind === 'dead-store' && r.label === label;
+
 describe('engine/waste-detector-oxc — detectWasteOxc', () => {
   it('returns empty array for non-array input (guard)', () => {
     const result = detectWasteOxc(null as unknown as ParsedFile[]);
@@ -276,7 +282,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const f = toFile(file, source);
     const result = detectWasteOxc([f]);
 
-    expect(result.some(r => r.kind === 'dead-store' && r.label === label)).toBe(reported);
+    expect(result.some(isDeadStore(label))).toBe(reported);
   });
 
   // ── overwrite/liveness cases: source → detectWasteOxc → assert (any-kind, label) presence ──
@@ -435,8 +441,8 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const r2 = detectWasteOxc([f2]);
 
     // Assert
-    expect(r1.some(r => r.kind === 'dead-store' && r.label === '_unused')).toBe(false);
-    expect(r2.some(r => r.kind === 'dead-store' && r.label === 'unused')).toBe(false);
+    expect(r1.some(isDeadStore('_unused'))).toBe(false);
+    expect(r2.some(isDeadStore('unused'))).toBe(false);
   });
 
   it('detectWasteOxc - try{read} finally{write} - emits dead-store exactly once for finally write', () => {
@@ -451,7 +457,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     // Act
     const result = detectWasteOxc([f]);
     // Assert — exactly one dead-store finding for x
-    const xFindings = result.filter(r => r.kind === 'dead-store' && r.label === 'x');
+    const xFindings = result.filter(isDeadStore('x'));
 
     expect(xFindings).toHaveLength(1);
   });
@@ -467,8 +473,8 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     const result = detectWasteOxc([f]);
 
     // Assert — x belongs to async IIFE, not outer; created is used
-    expect(result.some(r => r.kind === 'dead-store' && r.label === 'x')).toBe(false);
-    expect(result.some(r => r.kind === 'dead-store' && r.label === 'created')).toBe(false);
+    expect(result.some(isDeadStore('x'))).toBe(false);
+    expect(result.some(isDeadStore('created'))).toBe(false);
   });
 
   it('detectWasteOxc - assignment-level sync IIFE is inlined before outer declaration write', () => {
