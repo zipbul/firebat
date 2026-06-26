@@ -21,6 +21,11 @@ interface RedundantBindingCase {
   flagged: boolean;
 }
 
+/** Assert `detectWasteOxc(files)` reports no findings. */
+const expectNoWaste = (files: ParsedFile[]): void => {
+  expect(detectWasteOxc(files)).toEqual([]);
+};
+
 describe('engine/waste-detector-oxc — detectWasteOxc', () => {
   it('returns empty array for non-array input (guard)', () => {
     const result = detectWasteOxc(null as unknown as ParsedFile[]);
@@ -41,9 +46,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       sourceText: 'const x = ;',
       module: {} as never,
     };
-    const result = detectWasteOxc([badFile]);
-
-    expect(result).toEqual([]);
+    expectNoWaste([badFile]);
   });
 
   it('returns empty array for file with no wasted variables', () => {
@@ -55,9 +58,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       }
     `,
     );
-    const result = detectWasteOxc([f]);
-
-    expect(result).toEqual([]);
+    expectNoWaste([f]);
   });
 
   it('does NOT report use-zero variable (CLAUDE.md: no-unused-vars 영역 비대상)', () => {
