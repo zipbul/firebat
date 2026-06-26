@@ -36,6 +36,11 @@ const withDeps = async (
   });
 };
 
+/** withDeps check: assert at least one cycle was detected. */
+const expectHasCycles = (dependencies: Awaited<ReturnType<typeof analyzeDependencies>>): void => {
+  expect(dependencies.cycles.length).toBeGreaterThan(0);
+};
+
 /** Add a complete `moduleCount`-node strongly-connected component (each module imports every other) under `prefix`. */
 const addCompleteScc = (sources: Map<string, string>, prefix: string, moduleCount: number): void => {
   for (let index = 0; index < moduleCount; index += 1) {
@@ -250,10 +255,7 @@ describe('integration/dependencies', () => {
 
     addCompleteScc(sources, 'm', 6);
 
-    await withDeps(sources, dependencies => {
-      // gildash getCyclePaths uses default maxCycles; verify cycles are returned
-      expect(dependencies.cycles.length).toBeGreaterThan(0);
-    });
+    await withDeps(sources, expectHasCycles);
   });
 
   it('should cap cycle enumeration per scc when the graph has multiple scc components', async () => {
@@ -262,10 +264,7 @@ describe('integration/dependencies', () => {
     addCompleteScc(sources, 'a', 6);
     addCompleteScc(sources, 'b', 6);
 
-    await withDeps(sources, dependencies => {
-      // gildash getCyclePaths uses default maxCycles; verify cycles are returned
-      expect(dependencies.cycles.length).toBeGreaterThan(0);
-    });
+    await withDeps(sources, expectHasCycles);
   });
 
   it('should ignore non-relative imports when building the graph', async () => {
