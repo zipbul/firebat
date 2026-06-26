@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type SourceCase, analyzeSource, expectNoFindings, parseProgram as parse } from '../../../test/integration/shared/test-kit';
+import {
+  type SourceCase,
+  analyzeSource,
+  expectNoFindings,
+  expectSingleFindingKind,
+  parseProgram as parse,
+} from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
 /** Assert exactly one finding whose `kind` is `kind`. */
@@ -363,11 +369,7 @@ describe('analyzeCollapsibleIf', () => {
     'analyzeCollapsibleIf - $name - returns collapsible-if',
     ({ source, score, depthReduction, statementsAffected }) => {
       // Arrange & Act
-      const result = analyzeSource(source, analyzeCollapsibleIf);
-
-      // Assert
-      expect(result).toHaveLength(1);
-      expect(result[0]!.kind).toBe('collapsible-if');
+      const result = expectSingleFindingKind(source, analyzeCollapsibleIf, 'collapsible-if');
       expect(result[0]!.score).toBe(score);
       expect(result[0]!.metrics.depthReduction).toBe(depthReduction);
       expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);

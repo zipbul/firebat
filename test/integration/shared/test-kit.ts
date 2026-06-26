@@ -200,6 +200,20 @@ export const expectNoFindings = (source: string, analyze: (files: ParsedFile[]) 
   expect(analyzeSource(source, analyze)).toEqual([]);
 };
 
+/** Analyze `source`, assert exactly one finding of `kind`, and return the findings. */
+export const expectSingleFindingKind = <T extends { readonly kind: string }>(
+  source: string,
+  analyze: (files: ParsedFile[]) => ReadonlyArray<T>,
+  kind: string,
+): ReadonlyArray<T> => {
+  const result = analyzeSource(source, analyze);
+
+  expect(result).toHaveLength(1);
+  expect(result[0]!.kind).toBe(kind);
+
+  return result;
+};
+
 /** Recursively remove a temp dir (force, no-throw-on-missing) — shared teardown helper. */
 export const rmrf = (dir: string): Promise<void> => fsp.rm(dir, { recursive: true, force: true });
 
