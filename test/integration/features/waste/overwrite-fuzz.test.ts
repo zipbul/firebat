@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
+import { createPrng, createProgramFromMap, expectWasteDeterministic, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
 
 const createOverwriteChain = (functionName: string, literals: readonly number[]): string => {
   const lines: string[] = [`export function ${functionName}() {`, `  let value = ${literals[0] ?? 0};`];
@@ -46,9 +46,7 @@ describe('waste (integration fuzz)', () => {
       // Assert
       expect(hasOverwrite).toBe(true);
 
-      const signaturesAgain = toWasteSignatures(detectWaste(program));
-
-      expect(signaturesAgain).toEqual(signatures);
+      expectWasteDeterministic(program, signatures);
     }
   });
 });

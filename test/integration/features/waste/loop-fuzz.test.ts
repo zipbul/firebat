@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createPrng, createProgramFromMap, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
+import { createPrng, createProgramFromMap, expectWasteDeterministic, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
 
 const createBreakThenReturn = (functionName: string, literal: number, returned: string): string => {
   return [
@@ -65,9 +65,7 @@ describe('waste (integration fuzz)', () => {
       // Assert
       expect(hasDeadStore).toBe(shouldRead);
 
-      const signaturesAgain = toWasteSignatures(detectWaste(program));
-
-      expect(signaturesAgain).toEqual(signatures);
+      expectWasteDeterministic(program, signatures);
     }
   });
 });

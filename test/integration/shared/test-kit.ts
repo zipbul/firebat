@@ -6,7 +6,7 @@ import * as fsp from 'node:fs/promises';
 import type { ParsedFile } from '../../../src/test-api';
 import type { DuplicateGroup, WasteFinding } from '../../../src/test-api';
 
-import { parseSource } from '../../../src/test-api';
+import { detectWaste, parseSource } from '../../../src/test-api';
 
 // ---------------------------------------------------------------------------
 // Gildash mock fixtures — shared by the inputs-digest specs.
@@ -229,4 +229,9 @@ export const toWasteSignatures = (findings: ReadonlyArray<WasteFinding>): string
   keys.sort((left, right) => left.localeCompare(right));
 
   return keys;
+};
+
+/** Re-run waste detection on `program` and assert the normalized signatures equal `first` (determinism). */
+export const expectWasteDeterministic = (program: ParsedFile[], first: string[]): void => {
+  expect(toWasteSignatures(detectWaste(program))).toEqual(first);
 };
