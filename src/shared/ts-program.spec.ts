@@ -44,6 +44,13 @@ const batchParseReturnsOk =
     failures: [],
   });
 
+/** Stub `mockBatchParse` to resolve a single parsed file for `filePath`. */
+const mockParseOne = (filePath: string): void => {
+  const pf = makeParsedFile(filePath);
+
+  mockBatchParse.mockImplementation(batchParseReturnsOk([[filePath, pf]]));
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -70,9 +77,7 @@ afterAll(() => {
 describe('createFirebatProgram', () => {
   it('should return ParsedFile array when batchParse succeeds with eligible targets', async () => {
     // Arrange
-    const pf = makeParsedFile('/proj/src/a.ts');
-
-    mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
+    mockParseOne('/proj/src/a.ts');
 
     // Act
     const result = await createFirebatProgram({ targets: ['/proj/src/a.ts'], logger });
@@ -87,9 +92,7 @@ describe('createFirebatProgram', () => {
     ['a .d.ts file', '/proj/src/types.d.ts'],
   ])('should exclude %s from the batchParse call', async (_label, excludedTarget) => {
     // Arrange
-    const pf = makeParsedFile('/proj/src/a.ts');
-
-    mockBatchParse.mockImplementation(batchParseReturnsOk([['/proj/src/a.ts', pf]]));
+    mockParseOne('/proj/src/a.ts');
 
     // Act
     await createFirebatProgram({

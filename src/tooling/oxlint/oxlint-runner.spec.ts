@@ -125,13 +125,20 @@ describe('parseOxlintOutput', () => {
 
 // --- runOxlint integration tests (spawn mocked) ---
 
+/** Run oxlint over `targets`, assert ok:true, and return the result. */
+const runOxlintOk = async (targets: string[]): Promise<Awaited<ReturnType<typeof runOxlint>>> => {
+  const result = await runOxlint({ targets, logger });
+
+  expect(result.ok).toBe(true);
+
+  return result;
+};
+
 describe('runOxlint', () => {
   it('should return ok:true with exitCode 0 and empty diagnostics for clean run', async () => {
     spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc('', '', 0) as ReturnType<typeof Bun.spawn>);
 
-    const result = await runOxlint({ targets: ['/f.ts'], logger });
-
-    expect(result.ok).toBe(true);
+    const result = await runOxlintOk(['/f.ts']);
     expect(result.tool).toBe('oxlint');
     expect(result.exitCode).toBe(0);
     expect(result.diagnostics).toEqual([]);
@@ -142,9 +149,7 @@ describe('runOxlint', () => {
 
     spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc(diagnosticsJson, '', 1) as ReturnType<typeof Bun.spawn>);
 
-    const result = await runOxlint({ targets: ['/a.ts'], logger });
-
-    expect(result.ok).toBe(true);
+    const result = await runOxlintOk(['/a.ts']);
     expect(result.tool).toBe('oxlint');
     expect(result.exitCode).toBe(1);
     expect(result.diagnostics).toHaveLength(1);
@@ -156,9 +161,7 @@ describe('runOxlint', () => {
 
     spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc('not-json', diagnosticsJson, 1) as ReturnType<typeof Bun.spawn>);
 
-    const result = await runOxlint({ targets: ['/a.ts'], logger });
-
-    expect(result.ok).toBe(true);
+    const result = await runOxlintOk(['/a.ts']);
     expect(result.diagnostics).toHaveLength(1);
     expect(result.diagnostics![0]!.message).toBe('stderr-diag');
   });
@@ -166,9 +169,7 @@ describe('runOxlint', () => {
   it('should return empty diagnostics when stdout and stderr are both non-JSON', async () => {
     spawnSpy = spyOn(Bun, 'spawn').mockReturnValue(makeProc('plain text', 'plain err', 0) as ReturnType<typeof Bun.spawn>);
 
-    const result = await runOxlint({ targets: ['/a.ts'], logger });
-
-    expect(result.ok).toBe(true);
+    const result = await runOxlintOk(['/a.ts']);
     expect(result.diagnostics).toEqual([]);
   });
 

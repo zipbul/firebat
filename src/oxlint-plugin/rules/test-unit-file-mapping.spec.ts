@@ -14,6 +14,20 @@ const setupWithFs = (filename: string, virtualFs: ReturnType<typeof createVirtua
     readFile: filePath => virtualFs.readFile(filePath),
   });
 
+/** Set up the rule, run the Program visitor on `programNode`, assert `count` reports, and return them. */
+const runProgramExpect = (
+  implFile: string,
+  virtualFs: ReturnType<typeof createVirtualFs>,
+  programNode: AstNode,
+  count: number,
+): ReturnType<typeof setupRule>['reports'] => {
+  const { visitor, reports } = setupWithFs(implFile, virtualFs);
+
+  expectReportCount(visitor, 'Program', programNode, reports, count);
+
+  return reports;
+};
+
 describe('test-unit-file-mapping', () => {
   it('should report missing spec when implementation is logicful', () => {
     // Arrange
@@ -21,10 +35,7 @@ describe('test-unit-file-mapping', () => {
     const specFile = '/repo/user-service.spec.ts';
     const virtualFs = createVirtualFs([[implFile, 'export function run() {}']]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
-    const { visitor, reports } = setupWithFs(implFile, virtualFs);
-
-    // Act
-    expectReportCount(visitor, 'Program', programNode, reports, 1);
+    const reports = runProgramExpect(implFile, virtualFs, programNode, 1);
     expect(reports[0]?.messageId).toBe('missingSpec');
     expect(reports[0]?.data?.expected).toBe(specFile);
   });
@@ -38,10 +49,7 @@ describe('test-unit-file-mapping', () => {
       [specFile, "describe('UserService', () => {})"],
     ]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
-    const { visitor, reports } = setupWithFs(implFile, virtualFs);
-
-    // Act
-    expectReportCount(visitor, 'Program', programNode, reports, 0);
+    runProgramExpect(implFile, virtualFs, programNode, 0);
   });
 
   it.each<[string, string, AstNode[]]>([
@@ -90,10 +98,7 @@ describe('test-unit-file-mapping', () => {
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[specFile, "describe('UserService', () => {})"]]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const { visitor, reports } = setupWithFs(specFile, virtualFs);
-
-    // Act
-    expectReportCount(visitor, 'Program', programNode, reports, 1);
+    const reports = runProgramExpect(specFile, virtualFs, programNode, 1);
     expect(reports[0]?.messageId).toBe('missingImplementation');
     expect(reports[0]?.data?.expected).toBe(implFile);
   });
@@ -107,9 +112,6 @@ describe('test-unit-file-mapping', () => {
       [implFile, 'export class UserService {}'],
     ]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const { visitor, reports } = setupWithFs(specFile, virtualFs);
-
-    // Act
-    expectReportCount(visitor, 'Program', programNode, reports, 0);
+    runProgramExpect(specFile, virtualFs, programNode, 0);
   });
 });
