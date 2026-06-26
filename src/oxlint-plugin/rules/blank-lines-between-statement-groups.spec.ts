@@ -13,55 +13,40 @@ function funcThenConst(constRange: [number, number]): AstNode {
   return { type: 'Program', body: [prevNode, nextNode] };
 }
 
+/** Set up the rule over `text`, run the Program visitor on a func→const at `constRange`, and return the reports. */
+function runProgram(text: string, constRange: [number, number]): ReturnType<typeof setupRule>['reports'] {
+  const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
+
+  visitor.Program(funcThenConst(constRange));
+
+  return reports;
+}
+
 describe('blank-lines-between-statement-groups', () => {
   it('should report when groups change without a blank line', () => {
-    // Arrange
-    const text = 'function alpha() {}\nconst beta = 1;';
-    const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
+    const reports = runProgram('function alpha() {}\nconst beta = 1;', [20, 35]);
 
-    // Act
-    visitor.Program(funcThenConst([20, 35]));
-
-    // Assert
     expect(reports.length).toBe(1);
     expect(reports[0]?.messageId).toBe('expectedBlankLine');
   });
 
   it('should skip report when blank line exists between groups', () => {
-    // Arrange
-    const text = 'function alpha() {}\n\nconst beta = 1;';
-    const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
+    const reports = runProgram('function alpha() {}\n\nconst beta = 1;', [21, 36]);
 
-    // Act
-    visitor.Program(funcThenConst([21, 36]));
-
-    // Assert
     expect(reports.length).toBe(0);
   });
 
   it('should autofix when blank line is missing between groups', () => {
-    // Arrange
     const text = 'function alpha() {}\nconst beta = 1;';
-    const { visitor, reports } = setupRule(blankLinesBetweenStatementGroupsRule, { text });
+    const reports = runProgram(text, [20, 35]);
 
-    // Act
-    visitor.Program(funcThenConst([20, 35]));
-
-    // Assert
     expect(reports.length).toBe(1);
 
-        const fixed = applyAutofix(text, reports);
+    const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe('function alpha() {}\n\nconst beta = 1;');
 
     // Re-run on fixed input: should be clean.
-    // Arrange
-    const { visitor: visitor2, reports: reports2 } = setupRule(blankLinesBetweenStatementGroupsRule, { text: fixed });
-
-    // Act
-    visitor2.Program(funcThenConst([21, 36]));
-
-    // Assert
-    expect(reports2.length).toBe(0);
+    expect(runProgram(fixed, [21, 36]).length).toBe(0);
   });
 });
