@@ -15,6 +15,8 @@ import type {
 } from '../../../../src/test-api';
 import type { Visitor } from './ast-walk';
 
+import { buildCommaTokens } from './token-utils';
+
 interface RuleContextExtras {
   filename?: string;
   fileExists?: (filePath: string) => boolean;
@@ -117,6 +119,11 @@ function createSourceCode(text: string, ast: AstRoot | null, scope: Scope | null
   };
 
   return sourceCode;
+}
+
+/** Build a `SourceCode` for `code` with comma tokens derived from the source — the common harness shape. */
+function makeSourceCode(code: string): ReturnType<typeof createSourceCode> {
+  return createSourceCode(code, null, null, buildCommaTokens(code));
 }
 
 const createFixer = (): Fixer => {
@@ -276,4 +283,4 @@ const expectReportCount = (
 };
 
 export type { ReportDescriptor, RuleContext, RuleContextExtras, SetupRuleOptions, SourceCode };
-export { applyAutofix, applyFixes, createProgram, createRuleContext, createSourceCode, expectReportCount, setupRule };
+export { applyAutofix, applyFixes, createProgram, createRuleContext, createSourceCode, expectReportCount, makeSourceCode, setupRule };

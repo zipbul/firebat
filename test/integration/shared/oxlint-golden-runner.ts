@@ -32,8 +32,7 @@ import {
   type Visitor,
 } from '../oxlint-plugin/utils/ast-walk';
 import { getRange as getRangeTuple } from '../oxlint-plugin/utils/fuzz-rng';
-import { applyFixes, createRuleContext, createSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
-import { buildCommaTokens } from '../oxlint-plugin/utils/token-utils';
+import { applyFixes, createRuleContext, makeSourceCode } from '../oxlint-plugin/utils/rule-test-kit';
 import { compareGolden } from './golden-utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -162,8 +161,7 @@ const runRuleOnSource = (fixtureSource: string, rule: RuleModule, opts: RuleGold
 
   ensureRangesDeep(programValue);
 
-  const tokens = buildCommaTokens(fixtureSource);
-  const sourceCode = createSourceCode(fixtureSource, null, null, tokens);
+    const sourceCode = makeSourceCode(fixtureSource);
   const getDeclaredVariables = buildGetDeclaredVariables(programValue);
   const extras: import('../oxlint-plugin/utils/rule-test-kit').RuleContextExtras = {};
 

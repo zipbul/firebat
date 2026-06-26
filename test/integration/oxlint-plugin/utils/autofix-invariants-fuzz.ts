@@ -6,8 +6,7 @@ import { noBracketNotationRule } from '../../../../src/test-api';
 import { paddingLineBetweenStatementsRule } from '../../../../src/test-api';
 import { unusedImportsRule } from '../../../../src/test-api';
 import { buildUniqueIdentifiers, getRange, makeIdentifier, makeUnsafeKey, mulberry32, newline, whitespace } from './fuzz-rng';
-import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
-import { buildCommaTokens } from './token-utils';
+import { applyFixes, createRuleContext, createSourceCode, makeSourceCode } from './rule-test-kit';
 
 interface TwoStatementProgram {
   text: string;
@@ -233,8 +232,7 @@ const runAutofixInvariantsFuzz = (): void => {
 
     for (let i = 0; i < 250; i += 1) {
       const c = buildImportCase(rng);
-      const tokens = buildCommaTokens(c.text);
-      const sourceCode = createSourceCode(c.text, null, null, tokens);
+            const sourceCode = makeSourceCode(c.text);
 
       const getDeclaredVariables = () => c.variables;
 
@@ -280,8 +278,7 @@ const runAutofixInvariantsFuzz = (): void => {
           references: [{ type: 'Identifier', range: [2000, 2001] }],
         } satisfies Variable;
       });
-      const tokens2 = buildCommaTokens(fixed);
-      const sourceCode2 = createSourceCode(fixed, null, null, tokens2);
+            const sourceCode2 = makeSourceCode(fixed);
 
       const getDeclaredVariables2 = () => variables2;
 

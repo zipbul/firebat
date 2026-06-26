@@ -23,8 +23,7 @@ import {
   newline,
   whitespace,
 } from './fuzz-rng';
-import { applyFixes, createRuleContext, createSourceCode } from './rule-test-kit';
-import { buildCommaTokens } from './token-utils';
+import { applyFixes, createRuleContext, makeSourceCode } from './rule-test-kit';
 
 interface ParseSyncResult {
   program: AstNode;
@@ -63,8 +62,7 @@ const runRuleOnParsedCode = (
 
   ensureRangesDeep(program);
 
-  const tokens = buildCommaTokens(code);
-  const sourceCode = createSourceCode(code, null, null, tokens);
+    const sourceCode = makeSourceCode(code);
 
   const getDeclaredVariables = (node: AstNode): Variable[] => {
     if (node.type !== 'ImportDeclaration') {
