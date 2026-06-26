@@ -43,6 +43,15 @@ const indirectionContractCases: IndirectionContractRow[] = [
   },
 ];
 
+/** Return the first element of `arr`, asserting its `kind` field is a string. */
+const firstWithKind = <T extends { readonly kind: unknown }>(arr: ReadonlyArray<T>): T => {
+  const first = arr[0]!;
+
+  expect(typeof first.kind).toBe('string');
+
+  return first;
+};
+
 describe('integration/scan/report-contract', () => {
   it('should always include catalog field in the report', async () => {
     // Arrange
@@ -192,9 +201,8 @@ describe('integration/scan/report-contract', () => {
 
       // each element must have kind and code fields
       if (depsArr.length > 0) {
-        const finding = depsArr[0];
+        const finding = firstWithKind(depsArr);
 
-        expect(typeof finding.kind).toBe('string');
         expect(typeof finding.code).toBe('string');
         expect(finding.message).toBeUndefined();
       }
@@ -222,9 +230,8 @@ describe('integration/scan/report-contract', () => {
 
       expect(groups.length).toBeGreaterThan(0);
 
-      const group = groups[0];
+      const group = firstWithKind(groups);
 
-      expect(typeof group.kind).toBe('string');
       expect(group.cloneType).toBeUndefined();
 
       expect(Array.isArray(group.items)).toBe(true);
