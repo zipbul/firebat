@@ -5,10 +5,40 @@ import { describe, expect, it } from 'bun:test';
 
 import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 
+type Deps = Awaited<ReturnType<typeof analyzeDependencies>>;
+
 /** Assert a dependency analysis has no cycles and an empty adjacency graph. */
-const expectEmptyDepsGraph = (result: Awaited<ReturnType<typeof analyzeDependencies>>): void => {
+const expectEmptyDepsGraph = (result: Deps): void => {
   expect(result.cycles.length).toBe(0);
   expect(Object.keys(result.adjacency).length).toBe(0);
+};
+
+/** A `searchSymbols` stub that returns `results` only for `isExported` queries. */
+const searchExported =
+  <T>(results: T[]) =>
+  (q: unknown): T[] =>
+    (q as { isExported?: boolean }).isExported ? results : [];
+
+/** Assert the first fan-out entry is `module` with `count` dependents. */
+const expectFirstFanOut = (result: Deps, module: string, count: number): void => {
+  expect(result.fanOut[0]!.module).toBe(module);
+  expect(result.fanOut[0]!.count).toBe(count);
+};
+
+/** Assert exactly one dead export, tagged `dead-export`. */
+const expectSingleDeadExport = (result: Deps): void => {
+  expect(result.deadExports.length).toBe(1);
+  expect(result.deadExports[0]!.kind).toBe('dead-export');
+};
+
+/** Dead exports re-exported through `src/index.ts`. */
+const indexDeadExports = (result: Deps): Deps['deadExports'] =>
+  result.deadExports.filter(d => d.module === 'src/index.ts');
+
+/** Assert `arr` is a single entry whose `name` is `name`. */
+const expectSingleNamed = (arr: ReadonlyArray<{ readonly name: string }>, name: string): void => {
+  expect(arr.length).toBe(1);
+  expect(arr[0]!.name).toBe(name);
 };
 
 /* ------------------------------------------------------------------ */
@@ -52,6 +82,16 @@ const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
     getSymbolsByFile: overrides.getSymbolsByFile ?? (() => []),
   } as unknown as Gildash;
 };
+
+/** Mock gildash whose import graph is the canonical `src/a.ts → src/b.ts` pair. */
+const makeAbGraphGildash = (): Gildash =>
+  createMockGildash({
+    getImportGraph: async () =>
+      new Map<string, string[]>([
+        ['/project/src/a.ts', ['/project/src/b.ts']],
+        ['/project/src/b.ts', []],
+      ]),
+  });
 
 const mkSymbol = (
   id: number,
@@ -377,11 +417,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should build relative adjacency from absolute import graph', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/a.ts', ['/project/src/b.ts']],
-      ['/project/src/b.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
+    const g = makeAbGraphGildash();
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.adjacency['src/a.ts']).toEqual(['src/b.ts']);
@@ -403,8 +439,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.fanIn[0]!.count).toBe(3);
 
     expect(result.fanOut.length).toBeGreaterThanOrEqual(1);
-    expect(result.fanOut[0]!.module).toBe('a.ts');
-    expect(result.fanOut[0]!.count).toBe(2);
+    expectFirstFanOut(result, 'a.ts', 2);
   });
 
   it('should deduplicate repeated edges to the same module in adjacency and fan metrics', async () => {
@@ -509,8 +544,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       pkgJson: { main: './src/main.ts' },
     });
 
-    expect(result.deadExports.length).toBe(1);
-    expect(result.deadExports[0]!.kind).toBe('dead-export');
+    expectSingleDeadExport(result);
     expect(result.deadExports[0]!.name).toBe('unusedFn');
     expect(result.deadExports[0]!.module).toBe('src/orphan.ts');
   });
@@ -671,8 +705,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.adjacency['a.ts']).toEqual(['b.ts', 'c.ts']);
     expect(result.fanIn[0]!.module).toBe('d.ts');
     expect(result.fanIn[0]!.count).toBe(2);
-    expect(result.fanOut[0]!.module).toBe('a.ts');
-    expect(result.fanOut[0]!.count).toBe(2);
+    expectFirstFanOut(result, 'a.ts', 2);
   });
 
   /* ---------- NE: Negative / Error ---------- */
@@ -716,13 +749,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const graph = new Map<string, string[]>([['/project/src/orphan.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
-        }
-
-        return [];
-      },
+      searchSymbols: searchExported([mkSymbol(1, '/project/src/orphan.ts', 'fn')]),
       searchRelations: () => gildashThrow('relations failed'),
     });
     const result = await analyzeDependencies(g, {
@@ -744,13 +771,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const graph = new Map<string, string[]>([['/project/src/orphan.ts', []]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      searchSymbols: (q: unknown) => {
-        if ((q as { isExported?: boolean }).isExported) {
-          return [mkSymbol(1, '/project/src/orphan.ts', 'fn')];
-        }
-
-        return [];
-      },
+      searchSymbols: searchExported([mkSymbol(1, '/project/src/orphan.ts', 'fn')]),
       searchRelations: () => [],
     });
     const result = await analyzeDependencies(g, {
@@ -762,8 +783,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     // No entry points resolved → skip unused-file/dead-export analysis
     expect(result.unusedFiles.length).toBe(0);
-    expect(result.deadExports.length).toBe(1);
-    expect(result.deadExports[0]!.kind).toBe('dead-export');
+    expectSingleDeadExport(result);
   });
 
   /* ---------- ED: Edge Cases ---------- */
@@ -804,11 +824,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   });
 
   it('should handle rootAbs normalization with backslashes', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/src/a.ts', ['/project/src/b.ts']],
-      ['/project/src/b.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
+    const g = makeAbGraphGildash();
     const result = await analyzeDependencies(g, { rootAbs: '/project' });
 
     expect(result.adjacency['src/a.ts']).toBeDefined();
@@ -899,10 +915,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const dead = result.deadExports.filter(d => d.kind === 'dead-export');
     const testOnly = result.deadExports.filter(d => d.kind === 'test-only-export');
 
-    expect(dead.length).toBe(1);
-    expect(dead[0]!.name).toBe('deadFn');
-    expect(testOnly.length).toBe(1);
-    expect(testOnly[0]!.name).toBe('testOnlyFn');
+    expectSingleNamed(dead, 'deadFn');
+    expectSingleNamed(testOnly, 'testOnlyFn');
   });
 
   /* ---------- OR: Ordering ---------- */
@@ -1316,10 +1330,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       }),
       pkgJson: { main: './src/index.ts' },
     });
-    const deadReExports = result.deadExports.filter(d => d.module === 'src/index.ts');
-
-    expect(deadReExports.length).toBe(1);
-    expect(deadReExports[0]!.name).toBe('deadFn');
+    expectSingleNamed(indexDeadExports(result), 'deadFn');
   });
 
   it('should collect type re-exports via meta.isReExport and detect dead ones', async () => {
@@ -1355,11 +1366,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       pkgJson: { main: './src/index.ts' },
     });
     const libDead = result.deadExports.filter(d => d.module === 'src/lib.ts');
-    const indexDead = result.deadExports.filter(d => d.module === 'src/index.ts');
 
-    expect(indexDead.length).toBe(1);
-    expect(indexDead[0]!.name).toBe('orphanFn');
-    expect(libDead.length).toBe(1);
-    expect(libDead[0]!.name).toBe('orphanFn');
+    expectSingleNamed(indexDeadExports(result), 'orphanFn');
+    expectSingleNamed(libDead, 'orphanFn');
   });
 });
