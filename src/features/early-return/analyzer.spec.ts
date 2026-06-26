@@ -11,6 +11,15 @@ const { countConsecutiveTrailingIfs, countStatements, endsWithReturnOrThrow, isE
 
 const node = (type: string, extra: Record<string, unknown> = {}) => ({ type, ...extra });
 
+/** Analyze `files` and assert exactly one early-return finding, returning the result. */
+const analyzeOne = (files: Parameters<typeof analyzeEarlyReturn>[0]): ReturnType<typeof analyzeEarlyReturn> => {
+  const r = analyzeEarlyReturn(files);
+
+  expect(r).toHaveLength(1);
+
+  return r;
+};
+
 interface PredicateCase {
   readonly label: string;
   readonly value: unknown;
@@ -768,10 +777,8 @@ export function filterItems(items: string[]) {
 }
 `);
     // Act
-    const result = analyzeEarlyReturn(files);
+    const result = analyzeOne(files);
 
-    // Assert
-    expect(result).toHaveLength(1);
     expect(result[0]?.kind).toBe('invertible-if-else');
     expect(result[0]?.opportunitySpans).toBeDefined();
     expect(result[0]?.opportunitySpans?.length).toBeGreaterThan(0);
@@ -791,10 +798,8 @@ export function deep(x: boolean, y: boolean) {
 }
 `);
     // Act
-    const result = analyzeEarlyReturn(files);
+    const result = analyzeOne(files);
 
-    // Assert
-    expect(result).toHaveLength(1);
     expect(result[0]?.metrics.maxDepth).toBeGreaterThanOrEqual(2);
   });
 
@@ -814,11 +819,10 @@ export function f(x: boolean, y: number): string {
 }
 `);
     // Act
-    const result = analyzeEarlyReturn(files);
-
     // Assert — wrapping-if detects the outer if (3 stmts inside: tail-less-chain + doA + return)
     //          tail-less cascade-guard (depthReduction=1, statementsAffected=2, score=2)
-    expect(result).toHaveLength(1);
+    const result = analyzeOne(files);
+
     expect(result[0]?.score).toBeGreaterThanOrEqual(4);
     expect(result[0]?.metrics.depthReduction).toBeGreaterThanOrEqual(2);
   });

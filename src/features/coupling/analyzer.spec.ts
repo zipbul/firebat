@@ -34,6 +34,15 @@ const hotspotFor = (overrides: Partial<DependencyAnalysis>, module: string) => {
   return analyzeCoupling(makeDeps(overrides)).find(h => h.module === module);
 };
 
+/** Compute the hotspot for `module` from adjacency/exportStats and assert it exists. */
+const expectHotspotFor = (overrides: Partial<DependencyAnalysis>, module: string) => {
+  const h = hotspotFor(overrides, module);
+
+  expect(h).toBeDefined();
+
+  return h;
+};
+
 const range = (count: number): number[] => Array.from({ length: count }, (_, i) => i + 1);
 
 // hub imports `downstream` modules and is imported by `upstream` modules.
@@ -158,9 +167,8 @@ describe('analyzeCoupling', () => {
   ];
 
   it.each(signalPresentCases)('[HP] detects $label', ({ adjacency, exportStats, module, signal }) => {
-    const hotspot = hotspotFor({ adjacency, exportStats }, module);
+    const hotspot = expectHotspotFor({ adjacency, exportStats }, module);
 
-    expect(hotspot).toBeDefined();
     expect(hotspot?.signals).toContain(signal);
   });
 
@@ -271,9 +279,8 @@ describe('analyzeCoupling', () => {
   ];
 
   it.each(scoreCases)('[SC] $label', ({ adjacency, exportStats, module, distance, score }) => {
-    const hotspot = hotspotFor({ adjacency, exportStats }, module);
+    const hotspot = expectHotspotFor({ adjacency, exportStats }, module);
 
-    expect(hotspot).toBeDefined();
     expect(hotspot?.metrics.distance).toBe(distance);
     expect(hotspot?.score).toBe(score);
   });

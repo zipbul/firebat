@@ -551,11 +551,9 @@ describe('analyzer', () => {
         { maxForwardDepth: 0, crossFileMinDepth: 2 },
         '/virtual',
       );
-      const rewraps = findKinds(analysis, 'interface-rewrap');
 
       // Assert
-      expect(rewraps.length).toBe(1);
-      expect(rewraps[0]?.header).toBe(header);
+      expectSingleKindHeader(analysis, 'interface-rewrap', header);
     });
 
     // Each row is an interface that must NOT be reported as a re-wrap. `filePath`
