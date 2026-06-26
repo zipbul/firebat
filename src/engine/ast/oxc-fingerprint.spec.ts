@@ -19,6 +19,19 @@ const shapeOfFirstFunction = (source: string): string => {
   return createOxcFingerprintShape(fn);
 };
 
+/** Assert two parsed programs share the same shape fingerprint. */
+const expectSameShape = (a: ReturnType<typeof parseSource>, b: ReturnType<typeof parseSource>): void => {
+  expect(createOxcFingerprintShape(a.program)).toBe(createOxcFingerprintShape(b.program));
+};
+
+/** Exact fingerprint of the first FunctionDeclaration in `source` (virtual path is irrelevant). */
+const exactOfFirstFunction = (source: string): string => {
+  const parsed = parseSource('/v/fn.ts', source);
+  const fn = collectOxcNodes(parsed.program, (n: Node) => n.type === 'FunctionDeclaration')[0]!;
+
+  return createOxcFingerprintExact(fn);
+};
+
 const normalizedOfFirstInterface = (source: string): string => {
   const parsed = parseSource('/v/x.ts', source);
   const node = collectOxcNodes(parsed.program, (n: Node) => n.type === 'TSInterfaceDeclaration')[0]!;
@@ -62,11 +75,8 @@ describe('engine/ast/oxc-fingerprint', () => {
       ['export function f(x) {', '  return (x + 1) * 2;', '}'].join('\n'),
     );
     // Act
-    const fa = createOxcFingerprintShape(a.program);
-    const fb = createOxcFingerprintShape(b.program);
-
     // Assert
-    expect(fa).toBe(fb);
+    expectSameShape(a, b);
   });
 
   it('should produce the same shape fingerprint when identifier names differ', () => {
@@ -80,11 +90,8 @@ describe('engine/ast/oxc-fingerprint', () => {
       ['export function f(beta) {', '  const x = beta + 1;', '  return x;', '}'].join('\n'),
     );
     // Act
-    const fa = createOxcFingerprintShape(a.program);
-    const fb = createOxcFingerprintShape(b.program);
-
     // Assert
-    expect(fa).toBe(fb);
+    expectSameShape(a, b);
   });
 
   it('should merge bound-identifier renames at the function level', () => {
@@ -147,13 +154,6 @@ describe('engine/ast/oxc-fingerprint', () => {
 });
 
 describe('createOxcFingerprint — regex literals', () => {
-  const exactOfFirstFunction = (source: string): string => {
-    const parsed = parseSource('/v/rx.ts', source);
-    const fn = collectOxcNodes(parsed.program, (n: Node) => n.type === 'FunctionDeclaration')[0]!;
-
-    return createOxcFingerprintExact(fn);
-  };
-
   // 함수명·구조 동일, 정규식 패턴만 다름 (isIdentStart vs isIdentPart 류).
   const startRx = 'function f(c: string) { return /[A-Za-z_$]/.test(c); }';
   const partRx = 'function f(c: string) { return /[A-Za-z0-9_$]/.test(c); }';
@@ -171,13 +171,6 @@ describe('createOxcFingerprint — regex literals', () => {
 });
 
 describe('createOxcFingerprint — template literal text', () => {
-  const exactOfFirstFunction = (source: string): string => {
-    const parsed = parseSource('/v/tpl.ts', source);
-    const fn = collectOxcNodes(parsed.program, (n: Node) => n.type === 'FunctionDeclaration')[0]!;
-
-    return createOxcFingerprintExact(fn);
-  };
-
   // 구조 동일, 템플릿의 정적 텍스트(quasi)만 다름. TemplateElement는 visitorKeys가 비어
   // 있어 자식 순회로는 내용이 안 들어가므로, cooked 텍스트를 명시적으로 인코딩하지 않으면
   // 두 함수가 거짓 병합된다 (FP).

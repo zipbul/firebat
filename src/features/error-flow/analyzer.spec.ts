@@ -48,6 +48,21 @@ const analyzeWithSemantic = async (filePath: string, sourceText: string, mockIsT
 
 type Findings = Awaited<ReturnType<typeof analyzeSingle>>;
 
+const SYNC_HELPER_SRC = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
+
+/** Single-file program for the `syncHelper()` conservative-fallback scenarios. */
+const syncHelperProgram = (filePath: string) => [parseSource(filePath, SYNC_HELPER_SRC)];
+
+/** Assert `program` yields no `unobserved-variable` finding under `options`. */
+const expectNoUnobserved = (
+  program: ReturnType<typeof syncHelperProgram>,
+  options?: Parameters<typeof analyzeErrorFlow>[1],
+): void => {
+  const hits = analyzeErrorFlow(program, options).filter(f => f.kind === 'unobserved-variable');
+
+  expect(hits.length).toBe(0);
+};
+
 const kinds = (findings: Findings) => findings.map(f => f.kind);
 
 const countKind = (findings: Findings, kind: ErrorFlowFindingKind) => findings.filter(f => f.kind === kind).length;
@@ -1338,23 +1353,16 @@ describe('error-flow/analyzer', () => {
     // Arrange — without gildash, detector cannot confirm Promise-ness of the call result.
     // Fallback policy: register NO candidates (vs. the old behavior of registering ALL,
     // which re-introduced the original broad-FP regression).
-    const filePath = '/virtual/src/features/no-gildash.ts';
-    const source = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
-    const program = [parseSource(filePath, source)];
-    // Act — no gildash passed
-    const analysis = analyzeErrorFlow(program);
-    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
+    const program = syncHelperProgram('/virtual/src/features/no-gildash.ts');
 
-    // Assert
-    expect(hits.length).toBe(0);
+    // Act & Assert — no gildash passed
+    expectNoUnobserved(program);
   });
 
   it('should not report unobserved-variable when gildash throws (conservative fallback)', async () => {
     // Arrange — gildash present but its semantic methods throw.
     // Same conservative policy: don't broadcast FP for every call result.
-    const filePath = '/virtual/src/features/gildash-throws.ts';
-    const source = ['export function f() {', '  const x = syncHelper();', '  console.log("done");', '}'].join('\n');
-    const program = [parseSource(filePath, source)];
+    const program = syncHelperProgram('/virtual/src/features/gildash-throws.ts');
     const throwingGildash = {
       isThenableAtSpan: () => {
         throw new Error('semantic layer offline');
@@ -1366,12 +1374,9 @@ describe('error-flow/analyzer', () => {
         throw new Error('semantic layer offline');
       },
     } as unknown as Gildash;
-    // Act
-    const analysis = analyzeErrorFlow(program, { gildash: throwingGildash });
-    const hits = analysis.filter(f => f.kind === 'unobserved-variable');
 
-    // Assert
-    expect(hits.length).toBe(0);
+    // Act & Assert
+    expectNoUnobserved(program, { gildash: throwingGildash });
   });
 
   it('two-arg `.then(onFulfilled, onRejected)`: real handler = K, empty handler = W (non-vacuous contrast)', async () => {
