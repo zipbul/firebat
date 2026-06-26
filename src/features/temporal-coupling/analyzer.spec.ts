@@ -3,7 +3,11 @@ import type { CodeRelation, ParsedFile as GildashParsedFile } from '@zipbul/gild
 import { GildashError } from '@zipbul/gildash';
 import { describe, expect, it } from 'bun:test';
 
-import { parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
+import {
+  expectLength,
+  parsePFile as file,
+  parsePFileWithErrors as fileWithErrors,
+} from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer';
 
@@ -14,13 +18,8 @@ const expectTcCount = (
   files: ReadonlyArray<unknown>,
   count: number,
   options?: Parameters<typeof analyzeTemporalCoupling>[1],
-): ReturnType<typeof analyzeTemporalCoupling> => {
-  const result = analyzeTemporalCoupling(files as never, options as never);
-
-  expect(result.length).toBe(count);
-
-  return result;
-};
+): ReturnType<typeof analyzeTemporalCoupling> =>
+  expectLength(analyzeTemporalCoupling(files as never, options as never), count);
 
 /** Assert a finding's detected `state` name and `writers` count. */
 const expectStateWriters = (finding: { state?: string; writers?: number } | undefined, state: string, writers: number): void => {

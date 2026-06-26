@@ -146,8 +146,14 @@ export const parseProgram = (source: string): ParsedFile[] => [parseSource('/vir
 export const parseProgramAs = (filePath: string, sourceText: string): ParsedFile[] => [parseSource(filePath, sourceText)];
 
 /** Parse `src` and return the first top-level program-body node, cast to `T`. */
-export const firstBodyNode = <T>(src: string): T =>
-  (parseSource('test.ts', src).program as { body: unknown[] }).body[0] as T;
+export const firstBodyNode = <T>(src: string): T => (parseSource('test.ts', src).program as { body: unknown[] }).body[0] as T;
+
+/** Assert `arr` has exactly `count` elements and return it (lets callers keep asserting on it). */
+export const expectLength = <T>(arr: ReadonlyArray<T>, count: number): ReadonlyArray<T> => {
+  expect(arr.length).toBe(count);
+
+  return arr;
+};
 
 /** Parse `relPath` under `/p/` and attach a synthetic parse error — shared by analyzer specs. */
 export const parsePFileWithErrors = (relPath: string, sourceText: string): ParsedFile =>

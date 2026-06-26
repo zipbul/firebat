@@ -5,6 +5,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { DuplicateFindingKind } from '../../types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
 
+import { expectLength } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -60,13 +61,11 @@ const expectCloneCount = (
   result: ReturnType<typeof analyzeDuplicates>,
   cloneType: string,
   count: number,
-): ReturnType<typeof analyzeDuplicates> => {
-  const groups = result.filter(g => g.cloneType === cloneType);
-
-  expect(groups.length).toBe(count);
-
-  return groups;
-};
+): ReturnType<typeof analyzeDuplicates> =>
+  expectLength(
+    result.filter(g => g.cloneType === cloneType),
+    count,
+  );
 
 // 정확히 동일한 함수 2개가 있는 파일
 const IDENTICAL_FUNCTIONS = `

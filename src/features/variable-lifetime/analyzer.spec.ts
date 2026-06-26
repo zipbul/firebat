@@ -7,7 +7,11 @@ import type {
   VariableLifetimeFinding,
 } from '../../types';
 
-import { parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
+import {
+  expectLength,
+  parsePFile as file,
+  parsePFileWithErrors as fileWithErrors,
+} from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { analyzeVariableLifetime, createEmptyVariableLifetime, __testing__ } from './analyzer';
 
@@ -55,17 +59,48 @@ const selectFor = <T extends { readonly variable: string }>(
   options: Parameters<typeof analyzeVariableLifetime>[1],
 ): ReadonlyArray<T> => selector(run(sourceText, options)).filter(f => f.variable === variable);
 
-/** Run analysis on `sourceText` and assert `selector` finds exactly `count` findings for `variable`. */
-const expectVarCount = (
+/** Run analysis, assert `selector` finds exactly `count` findings for `variable`, and return them. */
+const selectForN = <T extends { readonly variable: string }>(
   sourceText: string,
-  selector: (findings: ReadonlyArray<AnyFinding>) => ReadonlyArray<{ readonly variable: string }>,
+  selector: (findings: ReadonlyArray<AnyFinding>) => ReadonlyArray<T>,
   variable: string,
   count: number,
   options: Parameters<typeof analyzeVariableLifetime>[1],
-): void => {
-  const result = run(sourceText, options);
+): ReadonlyArray<T> => expectLength(selectFor(sourceText, selector, variable, options), count);
 
-  expect(selector(result).filter(f => f.variable === variable).length).toBe(count);
+/** Run analysis and assert `selector` yields exactly `count` findings (whole file). */
+const expectKindCount = (
+  sourceText: string,
+  selector: (findings: ReadonlyArray<AnyFinding>) => ReadonlyArray<AnyFinding>,
+  count: number,
+  options: Parameters<typeof analyzeVariableLifetime>[1],
+): void => {
+  expect(selector(run(sourceText, options)).length).toBe(count);
+};
+
+/** Run analysis, assert exactly `count` liveness-pressure findings, and return them. */
+const expectLiveness = (
+  sourceText: string,
+  options: Parameters<typeof analyzeVariableLifetime>[1],
+  count = 1,
+): ReadonlyArray<LivenessPressureFinding> => expectLength(selectAll(sourceText, livenessOnly, options), count);
+
+/** Assert a single liveness finding whose `maxLiveVariables` is at least `atLeast`. */
+const expectMaxLive = (sourceText: string, options: Parameters<typeof analyzeVariableLifetime>[1], atLeast: number): void => {
+  expect(expectLiveness(sourceText, options)[0]?.maxLiveVariables).toBeGreaterThanOrEqual(atLeast);
+};
+
+/** Run analysis, assert a scope-narrowing finding exists for `variable`, and return it. */
+const expectScopeFor = (
+  sourceText: string,
+  variable: string,
+  options: Parameters<typeof analyzeVariableLifetime>[1],
+): ScopeNarrowingFinding => {
+  const finding = scopeOnly(run(sourceText, options)).find(f => f.variable === variable);
+
+  expect(finding).toBeDefined();
+
+  return finding as ScopeNarrowingFinding;
 };
 
 // Parse `const x = <expr>;` inside a function and return the initializer node.
@@ -158,7 +193,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 3 });
+    selectForN(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 3 });
   });
 
   it('analyzeVariableLifetime - lifetime one above threshold - reported', () => {
@@ -174,7 +209,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 3 });
+    selectForN(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 3 });
   });
 
   it('analyzeVariableLifetime - maxLifetimeLines 0 - single line gap reports', () => {
@@ -192,7 +227,7 @@ describe('variable-lifetime/analyzer', () => {
     const sourceText = 'function f() { const x = 1; return x; }';
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 0 });
+    selectForN(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 0 });
   });
 
   // ── 기존 regex 버그 수정 확인 ──
@@ -212,9 +247,8 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const xFindings = selectFor(sourceText, lifetimeOnly, 'x', { maxLifetimeLines: 5 });
+    const xFindings = selectForN(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
 
-    expect(xFindings.length).toBe(1);
     expect(xFindings[0]?.lifetimeLines).toBe(7);
   });
 
@@ -229,7 +263,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - module-level variable - not analyzed', () => {
@@ -267,7 +301,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - nested function use - does not extend outer variable lifetime', () => {
@@ -284,7 +318,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   // ── 제어 흐름 ──
@@ -300,7 +334,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'x', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - if/else both branches use variable - uses farther branch for lifetime', () => {
@@ -318,7 +352,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - loop body use - variable lifetime spans to loop', () => {
@@ -334,7 +368,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'multiplier', 1, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'multiplier', 1, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - try/catch - variable used in catch block', () => {
@@ -352,7 +386,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'resource', 1, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'resource', 1, { maxLifetimeLines: 5 });
   });
 
   // ── 재할당 / let ──
@@ -368,9 +402,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const xFindings = selectFor(sourceText, lifetimeOnly, 'x', { maxLifetimeLines: 5 });
-
-    expect(xFindings.length).toBe(1);
+    const xFindings = selectForN(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - conditional reassignment - both defs generate independent findings', () => {
@@ -386,10 +418,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const xFindings = selectFor(sourceText, lifetimeOnly, 'x', { maxLifetimeLines: 5 });
-
-    expect(xFindings.length).toBe(2);
-
+    const xFindings = selectForN(sourceText, lifetimeOnly, 'x', 2, { maxLifetimeLines: 5 });
     // def1 has longer lifetime than def2
     const lifetimes = xFindings.map(f => f.lifetimeLines).sort((a, b) => b - a);
 
@@ -407,9 +436,7 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const paramFindings = selectFor(sourceText, lifetimeOnly, 'param', { maxLifetimeLines: 5 });
-
-    expect(paramFindings.length).toBe(0);
+    const paramFindings = selectForN(sourceText, lifetimeOnly, 'param', 0, { maxLifetimeLines: 5 });
   });
 
   it('analyzeVariableLifetime - destructuring - each binding has independent lifetime', () => {
@@ -424,8 +451,8 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'a', 1, { maxLifetimeLines: 5 });
-    expectVarCount(sourceText, lifetimeOnly, 'b', 1, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'a', 1, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'b', 1, { maxLifetimeLines: 5 });
   });
 
   // ── 함수 종류 ──
@@ -445,7 +472,7 @@ describe('variable-lifetime/analyzer', () => {
     ].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
+    selectForN(sourceText, lifetimeOnly, 'x', 1, { maxLifetimeLines: 5 });
   });
 
   // ── 사용 없는 변수 ──
@@ -455,7 +482,7 @@ describe('variable-lifetime/analyzer', () => {
     const sourceText = ['function f() {', '  const unused = 42;', filler(6, 'pad'), '  return 1;', '}'].join('\n');
 
     // Act
-    expectVarCount(sourceText, lifetimeOnly, 'unused', 0, { maxLifetimeLines: 0 });
+    selectForN(sourceText, lifetimeOnly, 'unused', 0, { maxLifetimeLines: 0 });
   });
 
   // ── Finding 형태 검증 ──
@@ -626,11 +653,9 @@ describe('variable-lifetime/analyzer', () => {
       ],
     ])('analyzeVariableLifetime - %s - detects scope-narrowing', (_name, sourceText, blockType) => {
       // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
       // Assert
-      const finding = scopeOnly(result).find(f => f.variable === 'x');
+      const finding = expectScopeFor(sourceText, 'x', { maxLifetimeLines: 999 });
 
-      expect(finding).toBeDefined();
       expect((finding as any).targetBlock.type).toBe(blockType);
     });
 
@@ -682,19 +707,17 @@ describe('variable-lifetime/analyzer', () => {
       ['arrow function initializer used only in if-block', 'function f(cond: boolean) { const x = () => 1; if (cond) { x(); } }'],
     ])('analyzeVariableLifetime - %s - no scope-narrowing finding', (_name, sourceText) => {
       // Act
-      expectVarCount(sourceText, scopeOnly, 'x', 0, { maxLifetimeLines: 999 });
+      selectForN(sourceText, scopeOnly, 'x', 0, { maxLifetimeLines: 999 });
     });
 
     it('analyzeVariableLifetime - no intervening write (function call only) - detects scope-narrowing', () => {
       // Arrange: doSomething() is a call but does not directly write otherVar — FN한계, but direct write absent means safe
       const sourceText =
         'function f(cond: boolean, otherVar: number) { const x = otherVar; doSomething(); if (cond) { use(x); } }';
-      // Act
-      const result = run(sourceText, { maxLifetimeLines: 999 });
-      // Assert
-      const finding = scopeOnly(result).find(f => f.variable === 'x');
 
-      expect(finding).toBeDefined();
+      // Act
+      // Assert
+      expectScopeFor(sourceText, 'x', { maxLifetimeLines: 999 });
     });
 
     // ── Finding 형태 검증 ──
@@ -773,10 +796,9 @@ describe('variable-lifetime/analyzer', () => {
         '}',
       ].join('\n');
       // Act
-      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
-
       // Assert — scope-narrowing fires for the outermost if(a) block (depth-1)
-      expect(findings.length).toBe(1);
+      const findings = selectForN(sourceText, scopeOnly, 'x', 1, { maxLifetimeLines: 999 });
+
       expect(findings[0]!.targetBlock.type).toBe('if-consequent');
     });
 
@@ -795,11 +817,10 @@ describe('variable-lifetime/analyzer', () => {
         '  if (cond) { doSomethingElse(); }',
         '}',
       ].join('\n');
-      // Act
-      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
 
+      // Act
       // Assert — only function a emits scope-narrowing
-      expect(findings.length).toBe(1);
+      selectForN(sourceText, scopeOnly, 'x', 1, { maxLifetimeLines: 999 });
     });
 
     // 시나리오 5: 거대 파일 — 1000줄짜리 함수에서 성능 문제 없는가?
@@ -845,10 +866,9 @@ describe('variable-lifetime/analyzer', () => {
       ],
     ])('analyzeVariableLifetime - %s - detects scope-narrowing', (_name, sourceText, blockType) => {
       // Act
-      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
-
       // Assert
-      expect(findings.length).toBe(1);
+      const findings = selectForN(sourceText, scopeOnly, 'x', 1, { maxLifetimeLines: 999 });
+
       expect(findings[0]!.targetBlock.type).toBe(blockType as ScopeNarrowingFinding['targetBlock']['type']);
     });
 
@@ -856,11 +876,10 @@ describe('variable-lifetime/analyzer', () => {
     it('analyzeVariableLifetime - try-catch-finally: variable used only in finally block - no scope-narrowing finding', () => {
       // Arrange — variable used in finally: excluded by finalizer rule
       const sourceText = 'function f() { const x = 1; try { } catch (e) { } finally { use(x); } }';
-      // Act
-      const findings = selectFor(sourceText, scopeOnly, 'x', { maxLifetimeLines: 999 });
 
+      // Act
       // Assert — finally usage blocks scope-narrowing detection
-      expect(findings.length).toBe(0);
+      selectForN(sourceText, scopeOnly, 'x', 0, { maxLifetimeLines: 999 });
     });
   });
 
@@ -906,10 +925,8 @@ describe('variable-lifetime/analyzer', () => {
     ],
   ])('analyzeVariableLifetime - %s - emits liveness-pressure', (_name, sourceText) => {
     // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
-
     // Assert
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
   });
 
   it('analyzeVariableLifetime - short function with many live vars - no liveness-pressure (below minFunctionLines)', () => {
@@ -920,11 +937,10 @@ describe('variable-lifetime/analyzer', () => {
       '  return a + b + c + d + e + f + g + h;',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
 
+    // Act
     // Assert — function is too short, no liveness-pressure finding
-    expect(livenessOnly(result).length).toBe(0);
+    expectKindCount(sourceText, livenessOnly, 0, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
   });
 
   it('analyzeVariableLifetime - long function with few live vars - no liveness-pressure (below maxLiveVariables)', () => {
@@ -937,11 +953,10 @@ describe('variable-lifetime/analyzer', () => {
       '  return a + b;',
       '}',
     ].join('\n');
-    // Act — threshold is 8 live vars, function only has 2
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 8, minFunctionLines: 40 });
 
+    // Act — threshold is 8 live vars, function only has 2
     // Assert
-    expect(livenessOnly(result).length).toBe(0);
+    expectKindCount(sourceText, livenessOnly, 0, { maxLifetimeLines: 999, maxLiveVariables: 8, minFunctionLines: 40 });
   });
 
   it('analyzeVariableLifetime - maxLiveCount equals threshold - emits liveness-pressure (>= semantics)', () => {
@@ -955,20 +970,18 @@ describe('variable-lifetime/analyzer', () => {
       '  return a + b + c;',
       '}',
     ].join('\n');
-    // Act — threshold exactly matches live count
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 10 });
 
+    // Act — threshold exactly matches live count
     // Assert — >= means it should fire when equal
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 10 });
   });
 
   it('analyzeVariableLifetime - liveness-pressure finding has correct maxLiveVariables and functionLineCount', () => {
     // Arrange: 50+ line function with exactly 8 simultaneously live variables
     const sourceText = eightLiveVarFn('metaFn');
     // Act
-    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+    const lp = expectLiveness(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
 
-    expect(lp.length).toBe(1);
     expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
     expect(lp[0]?.functionLineCount).toBeGreaterThanOrEqual(40);
     expect(typeof lp[0]?.hotSpotLine).toBe('number');
@@ -985,21 +998,19 @@ describe('variable-lifetime/analyzer', () => {
       '  return a + b + c + p1 + p2 + p3 + p4 + p5;',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
 
+    // Act
     // Assert
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
   });
 
   it('analyzeVariableLifetime - maxLiveVariables zero - fires for any function with variables', () => {
     // Arrange: 50+ line function with only 1 variable; threshold 0 should fire
     const sourceText = ['function singleVarFn() {', '  const x = 1;', filler(50, 'pad'), '  return x;', '}'].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 0, minFunctionLines: 10 });
 
+    // Act
     // Assert
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 0, minFunctionLines: 10 });
   });
 
   it('analyzeVariableLifetime - minFunctionLines zero - fires even for short functions', () => {
@@ -1011,11 +1022,10 @@ describe('variable-lifetime/analyzer', () => {
       '  return a + b + c + d + e + f + g + h;',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 0 });
 
+    // Act
     // Assert
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 0 });
   });
 
   it('analyzeVariableLifetime - nested function variables - inner vars do not inflate outer liveness', () => {
@@ -1057,11 +1067,9 @@ describe('variable-lifetime/analyzer', () => {
       '  return a + b + c + d + e + f + g + h;',
       '}',
     ].join('\n');
-    // Act
-    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
-    expect(lp.length).toBe(1);
-    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+    // Act
+    expectMaxLive(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 }, 7);
   });
 
   it('analyzeVariableLifetime - for-loop inner vars combined with outer vars - emits liveness-pressure', () => {
@@ -1082,11 +1090,10 @@ describe('variable-lifetime/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
+    // Act
     // Assert
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
   });
 
   it('analyzeVariableLifetime - try-catch inner vars above threshold - emits liveness-pressure', () => {
@@ -1108,11 +1115,10 @@ describe('variable-lifetime/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
+    // Act
     // Assert
-    expect(livenessOnly(result).length).toBe(1);
+    expectKindCount(sourceText, livenessOnly, 1, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
   });
 
   it('analyzeVariableLifetime - if-branch declares all vars at top - all 8 live at entry block', () => {
@@ -1136,11 +1142,9 @@ describe('variable-lifetime/analyzer', () => {
       '  }',
       '}',
     ].join('\n');
-    // Act
-    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
-    expect(lp.length).toBe(1);
-    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+    // Act
+    expectMaxLive(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 }, 7);
   });
 
   it('analyzeVariableLifetime - two functions independently measured - only high-pressure one fires', () => {
@@ -1154,21 +1158,18 @@ describe('variable-lifetime/analyzer', () => {
       '  return x + y;',
       '}',
     ].join('\n');
-    // Act
-    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 });
 
-    expect(lp.length).toBe(1);
-    expect(lp[0]?.maxLiveVariables).toBeGreaterThanOrEqual(7);
+    // Act
+    expectMaxLive(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 10 }, 7);
   });
 
   it('analyzeVariableLifetime - no maxLiveVariables option - liveness-pressure never fires', () => {
     // Arrange: 50-line function with 8 simultaneously live vars; options omit maxLiveVariables/minFunctionLines
     const sourceText = eightLiveVarFn('bigFnNoOpt');
-    // Act — only maxLifetimeLines provided; maxLiveVariables/minFunctionLines absent → Infinity defaults
-    const result = run(sourceText, { maxLifetimeLines: 999 });
 
+    // Act — only maxLifetimeLines provided; maxLiveVariables/minFunctionLines absent → Infinity defaults
     // Assert — no liveness-pressure finding because Infinity threshold is never reached
-    expect(livenessOnly(result).length).toBe(0);
+    expectKindCount(sourceText, livenessOnly, 0, { maxLifetimeLines: 999 });
   });
 
   it('analyzeVariableLifetime - liveness-pressure hotSpotLine - points to correct line in source', () => {
@@ -1188,10 +1189,9 @@ describe('variable-lifetime/analyzer', () => {
     const sourceText = lines.join('\n');
     const functionLastLine = lines.length;
     // Act
-    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
-
     // Assert
-    expect(lp.length).toBe(1);
+    const lp = expectLiveness(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+
     expect(lp[0]!.hotSpotLine).toBeGreaterThan(0);
     expect(lp[0]!.hotSpotLine).toBeLessThanOrEqual(functionLastLine);
   });
@@ -1208,11 +1208,10 @@ describe('variable-lifetime/analyzer', () => {
       '  return x;',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
 
+    // Act
     // Assert: maxLiveCount is 2 (x + a), which is below threshold 3 → no liveness-pressure
-    expect(livenessOnly(result).length).toBe(0);
+    expectKindCount(sourceText, livenessOnly, 0, { maxLifetimeLines: 999, maxLiveVariables: 3, minFunctionLines: 40 });
   });
 
   it('analyzeVariableLifetime - class method with many live vars - emits liveness-pressure', () => {
@@ -1237,21 +1236,19 @@ describe('variable-lifetime/analyzer', () => {
       '}',
     ].join('\n');
     // Act
-    const lp = selectAll(sourceText, livenessOnly, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
-
     // Assert
-    expect(lp.length).toBe(1);
+    const lp = expectLiveness(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
+
     expect(lp[0]!.maxLiveVariables).toBeGreaterThanOrEqual(7);
   });
 
   it('analyzeVariableLifetime - two functions both exceeding threshold - emits two liveness-pressure findings', () => {
     // Arrange: functionA and functionB each have 8 vars all alive simultaneously, threshold 7
     const sourceText = [eightLiveVarFn('functionA'), eightLiveVarFn('functionB')].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
 
+    // Act
     // Assert: both functions emit liveness-pressure
-    expect(livenessOnly(result).length).toBe(2);
+    expectKindCount(sourceText, livenessOnly, 2, { maxLifetimeLines: 999, maxLiveVariables: 7, minFunctionLines: 40 });
   });
 
   // ── mutation-density ──
@@ -1268,11 +1265,10 @@ describe('variable-lifetime/analyzer', () => {
       '  return x;',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999 });
 
+    // Act
     // Assert
-    expect(mutationOnly(result).length).toBe(0);
+    expectKindCount(sourceText, mutationOnly, 0, { maxLifetimeLines: 999 });
   });
 
   it('analyzeVariableLifetime - mutations exceed maxMutationCount - emits finding', () => {
@@ -1299,11 +1295,10 @@ describe('variable-lifetime/analyzer', () => {
   it('analyzeVariableLifetime - mutations equal maxMutationCount - no finding (strict greater-than)', () => {
     // Arrange
     const sourceText = ['function f() {', '  let x = 0;', '  x = 1;', '  x = 2;', '  x = 3;', '  return x;', '}'].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxMutationCount: 3 });
 
+    // Act
     // Assert
-    expect(mutationOnly(result).length).toBe(0);
+    expectKindCount(sourceText, mutationOnly, 0, { maxLifetimeLines: 999, maxMutationCount: 3 });
   });
 
   it('analyzeVariableLifetime - loop accumulator compound-assignment - suppressed', () => {
@@ -1317,11 +1312,10 @@ describe('variable-lifetime/analyzer', () => {
       '  return sum;',
       '}',
     ].join('\n');
-    // Act
-    const result = run(sourceText, { maxLifetimeLines: 999, maxMutationCount: 0 });
 
+    // Act
     // Assert — sum += item inside loop is suppressed
-    expect(mutationOnly(result).length).toBe(0);
+    expectKindCount(sourceText, mutationOnly, 0, { maxLifetimeLines: 999, maxMutationCount: 0 });
   });
 
   it('analyzeVariableLifetime - multiple variables only exceeding ones reported', () => {
@@ -1349,10 +1343,9 @@ describe('variable-lifetime/analyzer', () => {
     const sourceText = ['function f(n: number) {', '  for (let i = 0; i < n; i++) {', '    console.log(i);', '  }', '}'].join(
       '\n',
     );
-    // Act — threshold 0 means any non-loop write triggers finding
-    const result = run(sourceText, { maxLifetimeLines: 999, maxMutationCount: 0 });
 
+    // Act — threshold 0 means any non-loop write triggers finding
     // Assert — i++ is inside ForStatement range, suppressed
-    expect(mutationOnly(result).length).toBe(0);
+    expectKindCount(sourceText, mutationOnly, 0, { maxLifetimeLines: 999, maxMutationCount: 0 });
   });
 });
