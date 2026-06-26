@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-import { parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
+import { expectLength, parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
 import { analyzeGiantFile, createEmptyGiantFile } from './analyzer';
 
 /** Analyze `files` under maxLines:3 and assert exactly one giant-file finding. */
-const analyzeOverLimit = (files: Parameters<typeof analyzeGiantFile>[0]): ReturnType<typeof analyzeGiantFile> => {
-  const r = analyzeGiantFile(files, { maxLines: 3 });
-
-  expect(r.length).toBe(1);
-
-  return r;
-};
+const analyzeOverLimit = (files: Parameters<typeof analyzeGiantFile>[0]): ReturnType<typeof analyzeGiantFile> =>
+  expectLength(analyzeGiantFile(files, { maxLines: 3 }), 1) as unknown as ReturnType<typeof analyzeGiantFile>;
 
 describe('giant-file/analyzer', () => {
   it('should return empty result when files are empty', () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ParsedFile } from './types';
 
-import { parseFileAs as toFile } from '../../test/integration/shared/test-kit';
+import { expectSpanShape, parseFileAs as toFile } from '../../test/integration/shared/test-kit';
 import { detectWasteOxc } from './waste-detector-oxc';
 
 interface DeadStoreCase {
@@ -46,6 +46,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       sourceText: 'const x = ;',
       module: {} as never,
     };
+
     expectNoWaste([badFile]);
   });
 
@@ -58,6 +59,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
       }
     `,
     );
+
     expectNoWaste([f]);
   });
 
@@ -97,8 +99,7 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     for (const finding of result) {
       expect(typeof finding.kind).toBe('string');
       expect(typeof finding.filePath).toBe('string');
-      expect(finding.span).toBeDefined();
-      expect(typeof finding.span.start.line).toBe('number');
+      expectSpanShape(finding);
     }
   });
 

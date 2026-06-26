@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { AstNode, Range } from '../types';
 
 import { applyAutofix, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { expectLength } from '../../../test/integration/shared/test-kit';
 import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
 
 /** const declaration node with an optional source location (line span). */
@@ -53,11 +54,10 @@ const SEPARATED_SRC = 'const alpha = 1;\n\nconst beta = 2;';
 
 /** Run the rule over a blank-separated const pair and assert exactly one report. */
 function reportsForSeparated(): ReturnType<typeof setupRule>['reports'] {
-  const reports = runProgram(SEPARATED_SRC, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
-
-  expect(reports.length).toBe(1);
-
-  return reports;
+  return expectLength(
+    runProgram(SEPARATED_SRC, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]),
+    1,
+  ) as unknown as ReturnType<typeof setupRule>['reports'];
 }
 
 describe('padding-line-between-statements', () => {

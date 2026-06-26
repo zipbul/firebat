@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
+import { expectLength } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 import { detectFragmentClones } from './fragment-detector';
 
@@ -8,13 +9,7 @@ import { detectFragmentClones } from './fragment-detector';
 const run = (source: string, minSize = 12) => detectFragmentClones([parseSource('/v/frag.ts', source)], { minSize });
 
 /** Run fragment detection on `src` and assert exactly one clone group, returning the groups. */
-const runExpectOne = (src: string): ReturnType<typeof run> => {
-  const g = run(src);
-
-  expect(g.length).toBe(1);
-
-  return g;
-};
+const runExpectOne = (src: string): ReturnType<typeof run> => expectLength(run(src), 1) as unknown as ReturnType<typeof run>;
 
 const kinds = (source: string, minSize = 12) => run(source, minSize).map(g => g.findingKind);
 
@@ -43,6 +38,7 @@ function b(ids: string[]): string {
 }
 `;
     const groups = runExpectOne(src);
+
     expect(groups[0]!.findingKind).toBe('fragment-clone');
     expect(groups[0]!.items.length).toBe(2);
   });
@@ -363,7 +359,6 @@ function b(ids: string[]): number {
 }
 `;
     const groups = runExpectOne(src);
-
     const plan = groups[0]!.suggestedExtraction;
 
     expect(plan).toBeDefined();
