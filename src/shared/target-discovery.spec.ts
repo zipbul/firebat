@@ -5,6 +5,15 @@ import * as path from 'node:path';
 
 import { expandTargets, resolveTargets } from './target-discovery';
 
+/** Map `result` paths relative to `tmpDir`, assert it contains `name`, and return them. */
+const relPathsContaining = (result: ReadonlyArray<string>, tmpDir: string, name: string): string[] => {
+  const rel = result.map(p => path.relative(tmpDir, p));
+
+  expect(rel).toContain(name);
+
+  return rel;
+};
+
 describe('target-discovery', () => {
   it('should expand directory targets into ts files', async () => {
     // Arrange
@@ -51,9 +60,7 @@ describe('resolveTargets - exclude', () => {
     // Act
     const result = await resolveTargets(tmpDir, [tmpDir], ['**/__fixtures__/**']);
     // Assert
-    const relResults = result.map(p => path.relative(tmpDir, p));
-
-    expect(relResults).toContain('app.ts');
+    const relResults = relPathsContaining(result, tmpDir, 'app.ts');
     expect(relResults).toContain('util.ts');
     expect(relResults).not.toContain(path.join('__fixtures__', 'fixture.ts'));
   });
@@ -74,9 +81,7 @@ describe('resolveTargets - exclude', () => {
     // Act
     const result = await resolveTargets(tmpDir, [tmpDir], exclude);
     // Assert
-    const relResults = result.map(p => path.relative(tmpDir, p));
-
-    expect(relResults).toContain('app.ts');
+    const relResults = relPathsContaining(result, tmpDir, 'app.ts');
     expect(relResults).toContain(path.join('__fixtures__', 'fixture.ts'));
   });
 });

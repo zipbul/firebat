@@ -65,6 +65,13 @@ const analyzeFirstFunction = (code: string) => {
   return analyzeFunctionBody(body, localIndexByName, paramBindings, [], buildDeclScopeMap(fn, TEST_FILE_PATH, _lastSource));
 };
 
+/** Assert `def` exists and return its index within `analysis.defs`. */
+const defIndexOf = <T>(analysis: { readonly defs: ReadonlyArray<T> }, def: T | undefined): number => {
+  expect(def).toBeDefined();
+
+  return analysis.defs.indexOf(def!);
+};
+
 describe('engine/dataflow/reaching-defs', () => {
   // ── extractBindingNames ──
 
@@ -266,9 +273,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Assert
       const unusedDef = analysis.defs.find(d => d.name === 'unused');
 
-      expect(unusedDef).toBeDefined();
-
-      const defId = analysis.defs.indexOf(unusedDef!);
+      const defId = defIndexOf(analysis, unusedDef);
 
       expect(analysis.usedDefs.has(defId)).toBe(false);
     });
@@ -323,9 +328,7 @@ describe('engine/dataflow/reaching-defs', () => {
       // Assert — the first def (x = 1) should be overwritten by (x = 2)
       const firstXDef = analysis.defs.find(d => d.name === 'x' && d.writeKind === 'declaration');
 
-      expect(firstXDef).toBeDefined();
-
-      const firstDefId = analysis.defs.indexOf(firstXDef!);
+      const firstDefId = defIndexOf(analysis, firstXDef);
 
       expect(analysis.overwrittenDefIds[firstDefId]).toBe(true);
     });
