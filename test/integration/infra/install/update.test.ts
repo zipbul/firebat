@@ -217,18 +217,7 @@ const setAtPath = (root: unknown, pathItems: readonly string[], nextValue: unkno
       return;
     }
 
-    const current = cursor[key];
-
-    if (isRecord(current)) {
-      cursor = current;
-
-      continue;
-    }
-
-    const fresh: Record<string, unknown> = {};
-
-    cursor[key] = fresh;
-    cursor = fresh;
+    cursor = ensureRecordProperty(cursor, key);
   }
 };
 
