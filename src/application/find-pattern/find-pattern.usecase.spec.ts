@@ -35,6 +35,7 @@ void mock.module('../../shared/target-discovery', () => ({ resolveTargets: mockR
 
 // ── Import after mock ─────────────────────────────────────────────────────────
 
+import { expectEmptyAndUncalled } from '../../../test/integration/shared/test-kit';
 import { createNoopLogger } from '../../shared/logger';
 import { findPatternUseCase } from './find-pattern.usecase';
 
@@ -189,8 +190,7 @@ describe('findPatternUseCase', () => {
     const result = await findPatternUseCase({ targets: [], pattern: 'x', logger });
 
     // Assert
-    expect(result).toEqual([]);
-    expect(mockCreateGildash).not.toHaveBeenCalled();
+    expectEmptyAndUncalled(result, mockCreateGildash);
   });
 
   it('should not call gildash.close when filePaths is empty (early return path)', async () => {
@@ -270,8 +270,7 @@ describe('findPatternUseCase', () => {
     const result = await findPatternUseCase({ targets: [], pattern: 'x', logger });
 
     // Assert
-    expect(result).toEqual([]);
-    expect(mockCreateGildash).not.toHaveBeenCalled();
+    expectEmptyAndUncalled(result, mockCreateGildash);
     expect(mockFindPattern).not.toHaveBeenCalled();
     expect(mockClose).not.toHaveBeenCalled();
   });

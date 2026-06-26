@@ -168,6 +168,12 @@ export const firstNonEmpty = <T>(arr: ReadonlyArray<T>): T => {
   return arr[0]!;
 };
 
+/** Assert `result` is an empty array and `mockFn` was never called. */
+export const expectEmptyAndUncalled = (result: unknown, mockFn: unknown): void => {
+  expect(result).toEqual([]);
+  expect(mockFn).not.toHaveBeenCalled();
+};
+
 /** Assert a dependency result has empty fan-in and fan-out lists. */
 export const expectNoFanInOut = (result: { readonly fanIn: { length: number }; readonly fanOut: { length: number } }): void => {
   expect(result.fanIn.length).toBe(0);

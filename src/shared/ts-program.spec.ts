@@ -5,7 +5,7 @@ import * as nodePath from 'node:path';
 
 import type { ParsedFile } from './ts-program';
 
-import { emptyBatchParse as defaultBatchParse } from '../../test/integration/shared/test-kit';
+import { emptyBatchParse as defaultBatchParse, expectEmptyAndUncalled } from '../../test/integration/shared/test-kit';
 import { createNoopLogger } from './logger';
 
 // ── Save originals before mocking ────────────────────────────────────────────
@@ -144,8 +144,7 @@ describe('createFirebatProgram', () => {
     const result = await createFirebatProgram({ targets: [], logger });
 
     // Assert
-    expect(result).toEqual([]);
-    expect(mockCreateGildash).not.toHaveBeenCalled();
+    expectEmptyAndUncalled(result, mockCreateGildash);
   });
 
   it.each<[string, string[]]>([
@@ -156,8 +155,7 @@ describe('createFirebatProgram', () => {
     const result = await createFirebatProgram({ targets, logger });
 
     // Assert
-    expect(result).toEqual([]);
-    expect(mockCreateGildash).not.toHaveBeenCalled();
+    expectEmptyAndUncalled(result, mockCreateGildash);
   });
 
   it('should propagate error when batchParse throws', async () => {
@@ -197,8 +195,7 @@ describe('createFirebatProgram', () => {
     });
 
     // Assert
-    expect(result).toEqual([]);
-    expect(mockCreateGildash).not.toHaveBeenCalled();
+    expectEmptyAndUncalled(result, mockCreateGildash);
     expect(mockBatchParse).not.toHaveBeenCalled();
     expect(mockClose).not.toHaveBeenCalled();
   });
