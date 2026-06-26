@@ -49,6 +49,11 @@ const kindCases: KindCase[] = [
   },
 ];
 
+/** Build a program from `sources` and assert waste detection reports nothing. */
+const expectNoWasteFrom = (sources: Map<string, string>): void => {
+  expect(detectWaste(createProgramFromMap(sources)).length).toBe(0);
+};
+
 describe('integration/waste', () => {
   it.each(kindCases)('should report $title', ({ filePath, source, kind, message }) => {
     // Arrange
@@ -75,21 +80,13 @@ describe('integration/waste', () => {
     sources.set('/virtual/waste/read.ts', createReadSource());
 
     // Act
-    let program = createProgramFromMap(sources);
-    let findings = detectWaste(program);
-
-    // Assert
-    expect(findings.length).toBe(0);
+    expectNoWasteFrom(sources);
   });
 
   it('should return no findings when input is empty', () => {
     // Arrange
     let sources = new Map<string, string>();
     // Act
-    let program = createProgramFromMap(sources);
-    let findings = detectWaste(program);
-
-    // Assert
-    expect(findings.length).toBe(0);
+    expectNoWasteFrom(sources);
   });
 });
