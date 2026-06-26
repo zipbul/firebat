@@ -7,6 +7,15 @@ import { detectFragmentClones } from './fragment-detector';
 
 const run = (source: string, minSize = 12) => detectFragmentClones([parseSource('/v/frag.ts', source)], { minSize });
 
+/** Run fragment detection on `src` and assert exactly one clone group, returning the groups. */
+const runExpectOne = (src: string): ReturnType<typeof run> => {
+  const g = run(src);
+
+  expect(g.length).toBe(1);
+
+  return g;
+};
+
 const kinds = (source: string, minSize = 12) => run(source, minSize).map(g => g.findingKind);
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -33,9 +42,7 @@ function b(ids: string[]): string {
   return count > 0 ? 'y' : 'n';
 }
 `;
-    const groups = run(src);
-
-    expect(groups.length).toBe(1);
+    const groups = runExpectOne(src);
     expect(groups[0]!.findingKind).toBe('fragment-clone');
     expect(groups[0]!.items.length).toBe(2);
   });
@@ -355,9 +362,7 @@ function b(ids: string[]): number {
   return count * 9;
 }
 `;
-    const groups = run(src);
-
-    expect(groups.length).toBe(1);
+    const groups = runExpectOne(src);
 
     const plan = groups[0]!.suggestedExtraction;
 
