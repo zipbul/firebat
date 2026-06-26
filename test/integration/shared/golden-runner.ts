@@ -150,17 +150,13 @@ export const runGolden = <T = unknown>(
 
       // Compare as sorted JSON strings to be insensitive to finding order.
       const sortedExpected = JSON.stringify(
-        Array.isArray(expectedParsed)
-          ? [...(expectedParsed as unknown[])].sort(byJsonString)
-          : expectedParsed,
+        Array.isArray(expectedParsed) ? [...(expectedParsed as unknown[])].sort(byJsonString) : expectedParsed,
         null,
         2,
       );
       const reversedNormalized = JSON.parse(toGoldenJson(reversedActual)) as unknown;
       const sortedReversed = JSON.stringify(
-        Array.isArray(reversedNormalized)
-          ? [...(reversedNormalized as unknown[])].sort(byJsonString)
-          : reversedNormalized,
+        Array.isArray(reversedNormalized) ? [...(reversedNormalized as unknown[])].sort(byJsonString) : reversedNormalized,
         null,
         2,
       );

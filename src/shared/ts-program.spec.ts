@@ -5,14 +5,13 @@ import * as nodePath from 'node:path';
 
 import type { ParsedFile } from './ts-program';
 
-import { createNoopLogger } from './logger';
 import { emptyBatchParse as defaultBatchParse } from '../../test/integration/shared/test-kit';
+import { createNoopLogger } from './logger';
 
 // ── Save originals before mocking ────────────────────────────────────────────
 
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../store/gildash.ts')) };
 // ── Mocks ─────────────────────────────────────────────────────────────────────
-
 const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
 const mockBatchParse = mock(defaultBatchParse);
 const mockGildash = {

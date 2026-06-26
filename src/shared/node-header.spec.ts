@@ -1,13 +1,10 @@
 import { describe, it, expect } from 'bun:test';
+import { firstBodyNode } from "../../test/integration/shared/test-kit";
 
 import { parseSource } from '../engine/ast/parse-source';
 import { getNodeHeader } from './node-header';
 
-const functionNodeOf = (src: string) => {
-  const program = parseSource('test.ts', src).program;
-
-  return (program as { body: unknown[] }).body[0] as Parameters<typeof getNodeHeader>[0];
-};
+const functionNodeOf = (src: string) => firstBodyNode<Parameters<typeof getNodeHeader>[0]>(src);
 
 describe('getNodeHeader', () => {
   it('[HP] returns kind=node for all inputs', () => {

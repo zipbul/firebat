@@ -134,15 +134,20 @@ export const parsePFile = (relPath: string, sourceText: string): ParsedFile => p
 export const parseFileAs = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
 /** A `batchParse` gildash stub that resolves to an empty parse result. */
-export const emptyBatchParse = async (
-  _filePaths: string[],
-): Promise<{ parsed: Map<string, unknown>; failures: unknown[] }> => ({ parsed: new Map(), failures: [] });
+export const emptyBatchParse = async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: unknown[] }> => ({
+  parsed: new Map(),
+  failures: [],
+});
 
 /** Parse `source` under `/virtual/test.ts` and wrap it in a single-file program. */
 export const parseProgram = (source: string): ParsedFile[] => [parseSource('/virtual/test.ts', source)];
 
 /** Parse `sourceText` under `filePath` and wrap it in a single-file program. */
 export const parseProgramAs = (filePath: string, sourceText: string): ParsedFile[] => [parseSource(filePath, sourceText)];
+
+/** Parse `src` and return the first top-level program-body node, cast to `T`. */
+export const firstBodyNode = <T>(src: string): T =>
+  (parseSource('test.ts', src).program as { body: unknown[] }).body[0] as T;
 
 /** Parse `relPath` under `/p/` and attach a synthetic parse error — shared by analyzer specs. */
 export const parsePFileWithErrors = (relPath: string, sourceText: string): ParsedFile =>

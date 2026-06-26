@@ -1,14 +1,10 @@
 import { describe, it, expect } from 'bun:test';
+import { firstBodyNode } from "../../../test/integration/shared/test-kit";
 
 import { parseSource } from '../ast/parse-source';
 import { resolveFunctionBody, shouldIncreaseDepth } from './control-flow-utils';
 
-const functionNodeOf = (src: string) => {
-  const program = parseSource('test.ts', src).program;
-
-  // program.body[0] should be the function declaration
-  return (program as { body: unknown[] }).body[0] as Parameters<typeof resolveFunctionBody>[0];
-};
+const functionNodeOf = (src: string) => firstBodyNode<Parameters<typeof resolveFunctionBody>[0]>(src);
 
 describe('shouldIncreaseDepth', () => {
   const depthIncreasingTypes = [
