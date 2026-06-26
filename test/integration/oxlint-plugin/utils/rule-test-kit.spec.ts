@@ -10,6 +10,9 @@ import { applyFixes } from './rule-test-kit';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/** Apply fixes to `text` with no reports (the empty-reports passthrough case). */
+const applyEmptyFixes = (text: string): string => applyFixes(text, []);
+
 const makeReport = (start: number, end: number, text: string): ReportDescriptor => ({
   node: { type: 'Identifier', range: [start, end] } as unknown as ReportDescriptor['node'],
   messageId: 'test',
@@ -91,9 +94,7 @@ describe('applyFixes', () => {
   it('should return original text when reports is empty', () => {
     // Arrange
     const text = 'const x = 1;';
-    const reports: ReportDescriptor[] = [];
-    // Act
-    const result = applyFixes(text, reports);
+    const result = applyEmptyFixes(text);
 
     // Assert
     expect(result).toBe(text);
@@ -211,9 +212,7 @@ describe('applyFixes', () => {
   it('should return empty string when text is empty and reports is empty', () => {
     // Arrange
     const text = '';
-    const reports: ReportDescriptor[] = [];
-    // Act
-    const result = applyFixes(text, reports);
+    const result = applyEmptyFixes(text);
 
     // Assert
     expect(result).toBe('');
