@@ -3,6 +3,12 @@ import { describe, expect, it } from 'bun:test';
 import { type SourceCase, analyzeSource, parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
+/** Assert exactly one finding whose `kind` is `kind`. */
+const expectKind = (result: ReadonlyArray<{ readonly kind: string }>, kind: string): void => {
+  expect(result).toHaveLength(1);
+  expect(result[0]!.kind).toBe(kind);
+};
+
 type NoFindingCase = SourceCase;
 
 interface CollapsibleIfCase {
@@ -380,8 +386,7 @@ describe('analyzeCollapsibleIf', () => {
       const result = analyzeSource(source, analyzeCollapsibleIf);
 
       // Assert
-      expect(result).toHaveLength(1);
-      expect(result[0]!.kind).toBe('collapsible-else-if');
+      expectKind(result, 'collapsible-else-if');
       expect(result[0]!.metrics.depthReduction).toBe(1);
       expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
       expect(result[0]!.score).toBe(score);
@@ -450,8 +455,7 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
     );
 
     // Assert — both detected, primary kind = collapsible-else-if (score=5 > 3)
-    expect(result).toHaveLength(1);
-    expect(result[0]!.kind).toBe('collapsible-else-if');
+    expectKind(result, 'collapsible-else-if');
     expect(result[0]!.score).toBe(8); // 3 + 5
     expect(result[0]!.opportunitySpans).toHaveLength(2);
   });
