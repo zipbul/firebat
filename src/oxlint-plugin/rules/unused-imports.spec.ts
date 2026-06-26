@@ -67,6 +67,15 @@ function setupAlphaBeta(text: string) {
   return { visitor, reports, importNode };
 }
 
+/** Set up the `{ alpha, beta }` import, assert one `unusedImport` report, and return the reports. */
+function setupAndExpectImport(text: string): ReturnType<typeof setupRule>['reports'] {
+  const { visitor, reports, importNode } = setupAlphaBeta(text);
+
+  expectReport(visitor, importNode, reports, 'unusedImport');
+
+  return reports;
+}
+
 describe('unused-imports', () => {
   it('should report unused import declarations when references are missing', () => {
     // Arrange
@@ -113,11 +122,7 @@ describe('unused-imports', () => {
   it('should autofix unused specifier when comma handling is required', () => {
     // Arrange
     const text = "import { alpha, beta } from 'x';";
-    const { visitor, reports, importNode } = setupAlphaBeta(text);
-
-    // Act
-    expectReport(visitor, importNode, reports, 'unusedImport');
-
+    const reports = setupAndExpectImport(text);
     const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe("import { alpha } from 'x';");
@@ -189,11 +194,7 @@ describe('unused-imports', () => {
   it('should refuse autofix when specifier removal is multiline', () => {
     // Arrange
     const text = "import { alpha,\n  beta } from 'x';";
-    const { visitor, reports, importNode } = setupAlphaBeta(text);
-
-    // Act
-    expectReport(visitor, importNode, reports, 'unusedImport');
-
+    const reports = setupAndExpectImport(text);
     const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe(text);
