@@ -36,6 +36,14 @@ const withDeps = async (
   });
 };
 
+/** The canonical a→b→c import cycle fixture, reused (and locally extended) across cycle tests. */
+const makeCycleSources = (): Map<string, string> =>
+  new Map([
+    ['/virtual/deps/a.ts', `import './b';\nexport const alpha = 1;`],
+    ['/virtual/deps/b.ts', `import './c';\nexport const beta = 2;`],
+    ['/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`],
+  ]);
+
 interface CyclePresenceCase {
   readonly title: string;
   readonly files: Readonly<Record<string, string>>;
@@ -105,14 +113,9 @@ const deadExportCases: DeadExportCase[] = [
 
 describe('integration/dependencies', () => {
   it('should detect cycles and fan stats when modules are linked', async () => {
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/deps/a.ts', `import './b';\nexport const alpha = 1;`);
-    sources.set('/virtual/deps/b.ts', `import './c';\nexport const beta = 2;`);
-    sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
+    const sources = makeCycleSources();
 
     await withDeps(sources, dependencies => {
-
       expect(dependencies.cycles.length).toBeGreaterThan(0);
       expect(dependencies.fanIn.length).toBeGreaterThan(0);
       expect(dependencies.fanOut.length).toBeGreaterThan(0);
@@ -199,11 +202,9 @@ describe('integration/dependencies', () => {
   });
 
   it('should detect all cycles when multiple paths converge', async () => {
-    const sources = new Map<string, string>();
+    const sources = makeCycleSources();
 
     sources.set('/virtual/deps/a.ts', `import './b';\nimport './d';\nexport const alpha = 1;`);
-    sources.set('/virtual/deps/b.ts', `import './c';\nexport const beta = 2;`);
-    sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
     sources.set('/virtual/deps/d.ts', `import './c';\nexport const delta = 4;`);
 
     await withDeps(sources, dependencies => {
@@ -215,11 +216,9 @@ describe('integration/dependencies', () => {
   });
 
   it('should de-duplicate identical cycles when the same circuit is discovered multiple ways', async () => {
-    const sources = new Map<string, string>();
+    const sources = makeCycleSources();
 
     sources.set('/virtual/deps/a.ts', `import './b';\nimport './c';\nexport const alpha = 1;`);
-    sources.set('/virtual/deps/b.ts', `import './c';\nexport const beta = 2;`);
-    sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
 
     await withDeps(sources, dependencies => {
       const triangleCycles = dependencies.cycles.filter(cycle => toCycleKey(cycle) === ['a.ts', 'b.ts', 'c.ts'].sort().join('|'));
