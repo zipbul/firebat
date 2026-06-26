@@ -38,22 +38,20 @@ const findKinds = (findings: Awaited<ReturnType<typeof analyzeIndirection>>, kin
 };
 
 /** Assert exactly one finding of `kind`, with the given `header`. */
-const expectSingleKindHeader = (
-  findings: Awaited<ReturnType<typeof analyzeIndirection>>,
-  kind: string,
-  header: string,
-): void => {
+const expectSingleKindHeader = (findings: Awaited<ReturnType<typeof analyzeIndirection>>, kind: string, header: string): void => {
   const items = findKinds(findings, kind);
 
   expect(items.length).toBe(1);
   expect(items[0]?.header).toBe(header);
 };
 
-interface TypeRemapReportCase {
+interface ReportCase {
   name: string;
   source: string;
   header: string;
 }
+
+type TypeRemapReportCase = ReportCase;
 
 interface TypeRemapSkipCase {
   name: string;
@@ -61,11 +59,7 @@ interface TypeRemapSkipCase {
   source: string;
 }
 
-interface InterfaceRewrapReportCase {
-  name: string;
-  source: string;
-  header: string;
-}
+type InterfaceRewrapReportCase = ReportCase;
 
 interface InterfaceRewrapSkipCase {
   name: string;
@@ -93,6 +87,7 @@ describe('analyzer', () => {
     const gildash = createMockGildash();
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
     expectSingleKindHeader(analysis, 'thin-wrapper', 'wrapper');
   });
 
@@ -156,6 +151,7 @@ describe('analyzer', () => {
     });
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
     expectSingleKindHeader(analysis, 'thin-wrapper', 'wrapper');
   });
 
@@ -494,6 +490,7 @@ describe('analyzer', () => {
         { maxForwardDepth: 0, crossFileMinDepth: 2 },
         '/virtual',
       );
+
       expectSingleKindHeader(analysis, 'type-remap', header);
     });
 

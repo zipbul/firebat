@@ -13,15 +13,13 @@ import * as path from 'node:path';
 import { getGildashSemanticContext } from '../../../../src/engine/dataflow/gildash-binding-source';
 import { detectWaste, parseSource } from '../../../../src/test-api';
 
-interface KeepCase {
+interface FixtureCase {
   readonly title: string;
   readonly fixture: string;
 }
 
-interface DeadCase {
-  readonly title: string;
-  readonly fixture: string;
-}
+type KeepCase = FixtureCase;
+type DeadCase = FixtureCase;
 
 const keepCases: KeepCase[] = [
   {
