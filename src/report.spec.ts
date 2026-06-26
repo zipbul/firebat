@@ -2,7 +2,7 @@ import { describe, it, expect } from 'bun:test';
 
 import type { FirebatReport, FirebatDetector } from './types';
 
-import { span } from '../test/integration/shared/test-kit';
+import { expectTotalOne, span } from '../test/integration/shared/test-kit';
 import { flattenToFindings } from './application/scan/flatten-findings';
 import { formatReport } from './report';
 
@@ -79,8 +79,7 @@ describe('formatReport', () => {
       ],
     });
 
-    expect(parsed.total).toBe(1);
-    expect(parsed.findings).toHaveLength(1);
+    expectTotalOne(parsed);
     expect(parsed.findings[0].category).toBe('waste');
     expect(parsed.findings[0].line).toBe(10);
   });

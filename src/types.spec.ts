@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 
 import type { FirebatReport, FirebatAnalyses } from './types';
 
+import { expectTotalOne } from '../test/integration/shared/test-kit';
 import { toScanResult } from './types';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -49,11 +50,13 @@ describe('toScanResult', () => {
     const base = makeReport();
     const { errors: _e, ...metaNoErrors } = base.meta;
     const report: FirebatReport = { ...base, meta: metaNoErrors as FirebatReport['meta'] };
+
     scanResultOf(report);
   });
 
   it('omits errors in meta when meta.errors is empty object', () => {
     const report = makeReport({ errors: {} });
+
     scanResultOf(report);
   });
 
@@ -78,8 +81,7 @@ describe('toScanResult', () => {
     ]);
     const out = toScanResult(report);
 
-    expect(out.total).toBe(1);
-    expect(out.findings).toHaveLength(1);
+    expectTotalOne(out);
   });
 
   it('does not include analyses or catalog in output', () => {

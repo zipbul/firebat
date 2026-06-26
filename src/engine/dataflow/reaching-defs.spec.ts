@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { BindingName } from './reaching-defs';
 
+import { firstNonEmpty } from '../../../test/integration/shared/test-kit';
 import { collectFunctionNodes } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
 import { analyzeFunctionBody, collectLocalVarIndexes, collectParameterBindings, extractBindingNames } from './reaching-defs';
@@ -34,13 +35,7 @@ const parseFunctions = (code: string) => {
   return collectFunctionNodes(parsed.program);
 };
 
-const firstFunction = (code: string) => {
-  const fns = parseFunctions(code);
-
-  expect(fns.length).toBeGreaterThanOrEqual(1);
-
-  return fns[0]!;
-};
+const firstFunction = (code: string) => firstNonEmpty(parseFunctions(code));
 
 /** Parse `code`, extract the binding names of the first function's first parameter. */
 const extractParamNames = (code: string): string[] => {
@@ -272,7 +267,6 @@ describe('engine/dataflow/reaching-defs', () => {
       const analysis = analyzeFirstFunction('function f() { const unused = 42; return 1; }');
       // Assert
       const unusedDef = analysis.defs.find(d => d.name === 'unused');
-
       const defId = defIndexOf(analysis, unusedDef);
 
       expect(analysis.usedDefs.has(defId)).toBe(false);
@@ -327,7 +321,6 @@ describe('engine/dataflow/reaching-defs', () => {
       const analysis = analyzeFirstFunction('function f() { let x = 1; x = 2; return x; }');
       // Assert — the first def (x = 1) should be overwritten by (x = 2)
       const firstXDef = analysis.defs.find(d => d.name === 'x' && d.writeKind === 'declaration');
-
       const firstDefId = defIndexOf(analysis, firstXDef);
 
       expect(analysis.overwrittenDefIds[firstDefId]).toBe(true);

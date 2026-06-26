@@ -2,6 +2,7 @@ import type { Node } from 'oxc-parser';
 
 import { describe, expect, it } from 'bun:test';
 
+import { firstNonEmpty } from '../../../test/integration/shared/test-kit';
 import { collectOxcNodes } from '../../engine/ast/oxc-ast-utils';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
 import { parseSource } from '../../engine/ast/parse-source';
@@ -11,11 +12,8 @@ import { isBelowDecisionFloor, isDecisionlessSkeleton } from './clone-targets';
 
 const firstNodeOfType = (source: string, type: string): Node => {
   const parsed = parseSource('spec.ts', source);
-  const nodes = collectOxcNodes(parsed.program, n => n.type === type);
 
-  expect(nodes.length).toBeGreaterThanOrEqual(1);
-
-  return nodes[0]!;
+  return firstNonEmpty(collectOxcNodes(parsed.program, n => n.type === type)) as Node;
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

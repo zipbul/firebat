@@ -1,23 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 
+import { EdgeType as CfgEdgeType } from './cfg/cfg-types';
 import { EdgeType } from './types';
 
 // Note: most exports from engine/types.ts are TypeScript interfaces/type aliases
-// that have no runtime value. We verify the re-exported runtime value (EdgeType)
-// and confirm that type-shape assertions compile.
+// that have no runtime value. The numeric values + reverse-mapping are exercised
+// by cfg-types.spec; here we only confirm the re-export resolves to the very same
+// enum object (no copy/shadow), and that type-shape assertions compile.
 
 describe('engine/types — EdgeType re-export', () => {
-  it('re-exports EdgeType numeric enum from cfg-types', () => {
-    expect(typeof EdgeType).toBe('object');
-    expect(EdgeType.Normal).toBe(0);
-    expect(EdgeType.True).toBe(1);
-    expect(EdgeType.False).toBe(2);
-  });
-
-  it('reverse-mapping works for all EdgeType values', () => {
-    expect(EdgeType[0]).toBe('Normal');
-    expect(EdgeType[1]).toBe('True');
-    expect(EdgeType[2]).toBe('False');
+  it('re-exports the same EdgeType enum object from cfg-types', () => {
+    expect(EdgeType).toBe(CfgEdgeType);
   });
 });
 

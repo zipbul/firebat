@@ -155,6 +155,19 @@ export const expectLength = <T>(arr: ReadonlyArray<T>, count: number): ReadonlyA
   return arr;
 };
 
+/** Assert a scan-style result has total 1 and a single finding. */
+export const expectTotalOne = (result: { readonly total: number; readonly findings: { readonly length: number } }): void => {
+  expect(result.total).toBe(1);
+  expect(result.findings).toHaveLength(1);
+};
+
+/** Assert `arr` is non-empty and return its first element. */
+export const firstNonEmpty = <T>(arr: ReadonlyArray<T>): T => {
+  expect(arr.length).toBeGreaterThanOrEqual(1);
+
+  return arr[0]!;
+};
+
 /** Assert a dependency result has empty fan-in and fan-out lists. */
 export const expectNoFanInOut = (result: { readonly fanIn: { length: number }; readonly fanOut: { length: number } }): void => {
   expect(result.fanIn.length).toBe(0);
