@@ -133,6 +133,11 @@ export const parsePFile = (relPath: string, sourceText: string): ParsedFile => p
 /** Parse `code` under the given path, asserting the `ParsedFile` shape. */
 export const parseFileAs = (filePath: string, code: string): ParsedFile => parseSource(filePath, code) as ParsedFile;
 
+/** A `batchParse` gildash stub that resolves to an empty parse result. */
+export const emptyBatchParse = async (
+  _filePaths: string[],
+): Promise<{ parsed: Map<string, unknown>; failures: unknown[] }> => ({ parsed: new Map(), failures: [] });
+
 /** Parse `source` under `/virtual/test.ts` and wrap it in a single-file program. */
 export const parseProgram = (source: string): ParsedFile[] => [parseSource('/virtual/test.ts', source)];
 

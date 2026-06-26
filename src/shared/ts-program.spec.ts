@@ -6,16 +6,12 @@ import * as nodePath from 'node:path';
 import type { ParsedFile } from './ts-program';
 
 import { createNoopLogger } from './logger';
+import { emptyBatchParse as defaultBatchParse } from '../../test/integration/shared/test-kit';
 
 // ── Save originals before mocking ────────────────────────────────────────────
 
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../store/gildash.ts')) };
 // ── Mocks ─────────────────────────────────────────────────────────────────────
-
-const defaultBatchParse = async (_filePaths: string[]): Promise<{ parsed: Map<string, unknown>; failures: Array<unknown> }> => ({
-  parsed: new Map(),
-  failures: [],
-});
 
 const mockClose = mock(async (_opts?: { cleanup?: boolean }) => {});
 const mockBatchParse = mock(defaultBatchParse);

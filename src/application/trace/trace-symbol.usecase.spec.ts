@@ -1,6 +1,8 @@
 import { mock, describe, it, expect, afterAll } from 'bun:test';
 import * as nodePath from 'node:path';
 
+import { emptyBatchParse } from '../../../test/integration/shared/test-kit';
+
 const __origFirebatDb = { ...require(nodePath.resolve(import.meta.dir, '../../infrastructure/sqlite/firebat.db.ts')) };
 const __origArtifactStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/artifact.ts')) };
 const __origGildashStore = { ...require(nodePath.resolve(import.meta.dir, '../../store/gildash.ts')) };
@@ -24,7 +26,7 @@ void mock.module(nodePath.resolve(import.meta.dir, '../../store/gildash.ts'), ()
     getSemanticReferences: () => [],
     getHeritageChain: async () => ({ name: 'MyClass', bases: [] }),
     close: async () => {},
-    batchParse: async (_files: string[]) => ({ parsed: new Map(), failures: [] }),
+    batchParse: emptyBatchParse,
     searchSymbols: () => [],
     searchRelations: () => [],
     getAffected: async () => [],
