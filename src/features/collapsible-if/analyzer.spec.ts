@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type SourceCase, analyzeSource, parseProgram as parse } from '../../../test/integration/shared/test-kit';
+import { type SourceCase, analyzeSource, expectNoFindings, parseProgram as parse } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
 /** Assert exactly one finding whose `kind` is `kind`. */
@@ -356,10 +356,7 @@ describe('analyzeCollapsibleIf', () => {
 
   it.each(noFindingCases)('analyzeCollapsibleIf - $name - returns no findings', ({ source }) => {
     // Arrange & Act
-    const result = analyzeSource(source, analyzeCollapsibleIf);
-
-    // Assert
-    expect(result).toEqual([]);
+    expectNoFindings(source, analyzeCollapsibleIf);
   });
 
   it.each(collapsibleIfCases)(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type SourceCase, analyzeSource } from '../../../test/integration/shared/test-kit';
+import { type SourceCase, analyzeSource, expectNoFindings } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
 type DetectCase = SourceCase;
@@ -80,9 +80,6 @@ describe('analyzeCollapsibleIf - false negative / false positive scenarios', () 
 
   it.each(noDetectCases)('analyzeCollapsibleIf - $name - 감지 안 됨', ({ source }) => {
     // Arrange & Act
-    const result = analyzeSource(source, analyzeCollapsibleIf);
-
-    // Assert — 감지 안 됨
-    expect(result).toEqual([]);
+    expectNoFindings(source, analyzeCollapsibleIf);
   });
 });

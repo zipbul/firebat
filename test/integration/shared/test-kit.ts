@@ -195,6 +195,11 @@ export const parsePFileWithErrors = (relPath: string, sourceText: string): Parse
  */
 export const analyzeSource = <T>(source: string, analyze: (files: ParsedFile[]) => T): T => analyze(parseProgram(source));
 
+/** Analyze `source` with `analyze` and assert it produces no findings (empty array). */
+export const expectNoFindings = (source: string, analyze: (files: ParsedFile[]) => ReadonlyArray<unknown>): void => {
+  expect(analyzeSource(source, analyze)).toEqual([]);
+};
+
 /** Recursively remove a temp dir (force, no-throw-on-missing) — shared teardown helper. */
 export const rmrf = (dir: string): Promise<void> => fsp.rm(dir, { recursive: true, force: true });
 
