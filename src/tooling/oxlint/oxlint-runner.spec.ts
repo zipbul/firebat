@@ -1,7 +1,7 @@
 import { mock, describe, it, expect, spyOn, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as path from 'node:path';
 
-import { makeProc, restoreToolMocks } from '../../../test/integration/shared/external-tool-test-kit';
+import { expectToolFailure, makeProc, registerToolMockTeardown } from '../../../test/integration/shared/external-tool-test-kit';
 
 // mock.module must come BEFORE importing oxlint-runner (which imports these at module level)
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxlint' as string | null };
@@ -182,12 +182,8 @@ describe('runOxlint', () => {
 
     const result = await runOxlint({ targets: ['/a.ts'], logger });
 
-    expect(result.ok).toBe(false);
-    expect(result.exitCode).toBe(1);
-    expect(result.error).toBeDefined();
+    expectToolFailure(result);
   });
 });
 
-afterAll(() => {
-  restoreToolMocks({ resolveBinPath, externalToolVersionPath, origResolveBin, origExternalToolVersion });
-});
+registerToolMockTeardown({ resolveBinPath, externalToolVersionPath, origResolveBin, origExternalToolVersion });

@@ -1,4 +1,4 @@
-import { expect, mock } from 'bun:test';
+import { afterAll, expect, mock } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -41,6 +41,20 @@ export const restoreToolMocks = (snapshot: ToolModuleSnapshot): void => {
   mock.restore();
   void mock.module(snapshot.resolveBinPath, () => snapshot.origResolveBin);
   void mock.module(snapshot.externalToolVersionPath, () => snapshot.origExternalToolVersion);
+};
+
+/** Register an `afterAll` that restores the tool-module mocks captured in `snapshot`. */
+export const registerToolMockTeardown = (snapshot: ToolModuleSnapshot): void => {
+  afterAll(() => {
+    restoreToolMocks(snapshot);
+  });
+};
+
+/** Assert a runner result is a failure: `ok:false`, `exitCode:1`, and a defined `error`. */
+export const expectToolFailure = (result: { ok: boolean; exitCode?: number; error?: unknown }): void => {
+  expect(result.ok).toBe(false);
+  expect(result.exitCode).toBe(1);
+  expect(result.error).toBeDefined();
 };
 
 export interface TempProject {

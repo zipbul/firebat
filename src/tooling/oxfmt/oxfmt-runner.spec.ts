@@ -1,7 +1,7 @@
 import { mock, describe, it, expect, spyOn, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as path from 'node:path';
 
-import { makeProc, restoreToolMocks } from '../../../test/integration/shared/external-tool-test-kit';
+import { expectToolFailure, makeProc, registerToolMockTeardown } from '../../../test/integration/shared/external-tool-test-kit';
 
 // mock.module must come BEFORE importing oxfmt-runner (which imports these at module level)
 const mockResolveBin = { tryResolveLocalBin: async (_args: unknown) => '/usr/bin/oxfmt' as string | null };
@@ -127,9 +127,7 @@ describe('runOxfmt', () => {
 
     const result = await runOxfmt({ targets: ['/f.ts'], mode: 'check', logger });
 
-    expect(result.ok).toBe(false);
-    expect(result.exitCode).toBe(1);
-    expect(result.error).toBeDefined();
+    expectToolFailure(result);
   });
 
   it('should return ok:true when exit code is non-zero but stdout lists files (check mode with diffs)', async () => {
@@ -158,6 +156,4 @@ describe('runOxfmt', () => {
   });
 });
 
-afterAll(() => {
-  restoreToolMocks({ resolveBinPath, externalToolVersionPath, origResolveBin, origExternalToolVersion });
-});
+registerToolMockTeardown({ resolveBinPath, externalToolVersionPath, origResolveBin, origExternalToolVersion });
