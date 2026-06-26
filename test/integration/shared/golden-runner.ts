@@ -23,6 +23,9 @@ import { parseSource } from '../../../src/test-api';
 import { PartialResultError } from '../../../src/test-api';
 import { compareGolden, toGoldenJson } from './golden-utils';
 
+/** Order-insensitive comparator: sort by JSON string form. */
+const byJsonString = (a: unknown, b: unknown): number => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1);
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /** A multi-file fixture: Record<virtualPath, sourceText> */
@@ -148,7 +151,7 @@ export const runGolden = <T = unknown>(
       // Compare as sorted JSON strings to be insensitive to finding order.
       const sortedExpected = JSON.stringify(
         Array.isArray(expectedParsed)
-          ? [...(expectedParsed as unknown[])].sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1))
+          ? [...(expectedParsed as unknown[])].sort(byJsonString)
           : expectedParsed,
         null,
         2,
@@ -156,7 +159,7 @@ export const runGolden = <T = unknown>(
       const reversedNormalized = JSON.parse(toGoldenJson(reversedActual)) as unknown;
       const sortedReversed = JSON.stringify(
         Array.isArray(reversedNormalized)
-          ? [...(reversedNormalized as unknown[])].sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1))
+          ? [...(reversedNormalized as unknown[])].sort(byJsonString)
           : reversedNormalized,
         null,
         2,
