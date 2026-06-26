@@ -295,11 +295,6 @@ describe('integration/dependencies', () => {
     sources.set('/virtual/deps/app.ts', `import 'react';\nexport const app = 1;`);
     sources.set('/virtual/deps/other.ts', `export const other = 2;`);
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
-      expect(dependencies.fanIn.length).toBe(0);
-      expect(dependencies.fanOut.length).toBe(0);
-    });
+    await withDeps(sources, expectNoFanInOut);
   });
 });
