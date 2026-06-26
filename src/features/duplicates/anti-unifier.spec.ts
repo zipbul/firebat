@@ -24,6 +24,15 @@ const firstTwo = (source: string) => {
   return [fns[0]!, fns[1]!] as const;
 };
 
+/** Anti-unify `a`/`b`, assert at least one variable was abstracted, and return the result. */
+const expectAuVars = (a: Parameters<typeof antiUnify>[0], b: Parameters<typeof antiUnify>[1]): ReturnType<typeof antiUnify> => {
+  const result = antiUnify(a, b);
+
+  expect(result.variables.length).toBeGreaterThan(0);
+
+  return result;
+};
+
 // ─── antiUnify ────────────────────────────────────────────────────────────────
 
 describe('antiUnify', () => {
@@ -59,9 +68,7 @@ describe('antiUnify', () => {
     // antiUnify는 리터럴이 다른 트리를 더 이상 정렬해 literal 변수로 분류하지 않는다.
   ] as const)('%s', (_label, source, expectedKind) => {
     const [a, b] = firstTwo(source);
-    const result = antiUnify(a, b);
-
-    expect(result.variables.length).toBeGreaterThan(0);
+    const result = expectAuVars(a, b);
 
     for (const v of result.variables) {
       expect(v.kind).toBe(expectedKind);
@@ -101,9 +108,7 @@ describe('antiUnify', () => {
         }
       }
     `);
-    const result = antiUnify(a, b);
-
-    expect(result.variables.length).toBeGreaterThan(0);
+    const result = expectAuVars(a, b);
     expect(result.similarity).toBeLessThan(0.5);
   });
 
@@ -122,9 +127,7 @@ describe('antiUnify', () => {
         return "non-negative";
       }
     `);
-    const result = antiUnify(a, b);
-
-    expect(result.variables.length).toBeGreaterThan(0);
+    const result = expectAuVars(a, b);
 
     // location이 비어있지 않아야 함
     for (const v of result.variables) {
