@@ -198,6 +198,13 @@ function applyAutofix(text: string, reports: ReportDescriptor[]): string {
   return applyFixes(text, reports);
 }
 
+/** Assert exactly one report, then apply its fix to `text` and return the fixed source. */
+function expectOneFix(text: string, reports: ReportDescriptor[]): string {
+  expect(reports.length).toBe(1);
+
+  return applyAutofix(text, reports);
+}
+
 // We don't export local ReportDescriptor anymore, use the one from types
 
 function createRuleContext(
@@ -304,6 +311,7 @@ export {
   createRuleContext,
   createSourceCode,
   createVisitor,
+  expectOneFix,
   expectReportCount,
   makeSourceCode,
   setupRule,
