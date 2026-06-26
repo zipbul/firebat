@@ -26,6 +26,16 @@ const expectEmptyGraphStats = (dependencies: {
   expect(dependencies.cuts.length).toBe(0);
 };
 
+/** Run dependency analysis over `sources` in a temp gildash project and pass the result to `check`. */
+const withDeps = async (
+  sources: Parameters<typeof withTempGildash>[0],
+  check: (dependencies: Awaited<ReturnType<typeof analyzeDependencies>>) => void,
+): Promise<void> => {
+  await withTempGildash(sources, async (gildash, tmpDir) => {
+    check(await analyzeDependencies(gildash, { rootAbs: tmpDir }));
+  });
+};
+
 interface CyclePresenceCase {
   readonly title: string;
   readonly files: Readonly<Record<string, string>>;
@@ -154,25 +164,17 @@ describe('integration/dependencies', () => {
   });
 
   it('should return empty stats when modules do not import each other', async () => {
-    await withTempGildash(
+    await withDeps(
       {
         '/virtual/deps/solo.ts': `export const solo = 1;`,
         '/virtual/deps/other.ts': `export const other = 2;`,
       },
-      async (gildash, tmpDir) => {
-        const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
-        expectEmptyGraphStats(dependencies);
-      },
+      expectEmptyGraphStats,
     );
   });
 
   it('should return empty stats when input is empty', async () => {
-    await withTempGildash(new Map<string, string>(), async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
-      expectEmptyGraphStats(dependencies);
-    });
+    await withDeps(new Map<string, string>(), expectEmptyGraphStats);
   });
 
   it.todo('should resolve index modules when importing a directory', () => {});
@@ -251,9 +253,7 @@ describe('integration/dependencies', () => {
       sources.set(`/virtual/deps/m${index}.ts`, imports.join('\n'));
     }
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
+    await withDeps(sources, dependencies => {
       // gildash getCyclePaths uses default maxCycles; verify cycles are returned
       expect(dependencies.cycles.length).toBeGreaterThan(0);
     });
@@ -283,9 +283,7 @@ describe('integration/dependencies', () => {
     addCompleteScc('a');
     addCompleteScc('b');
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
-
+    await withDeps(sources, dependencies => {
       // gildash getCyclePaths uses default maxCycles; verify cycles are returned
       expect(dependencies.cycles.length).toBeGreaterThan(0);
     });
