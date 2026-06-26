@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { analyzeDependencies } from '../../../../src/test-api';
 import { withTempGildash } from '../../shared/gildash-test-kit';
+import { expectNoFanInOut } from '../../shared/test-kit';
 
 const toCycleKey = (cycle: { readonly path: ReadonlyArray<string> }): string => {
   const normalized =
@@ -21,8 +22,7 @@ const expectEmptyGraphStats = (dependencies: {
   readonly cuts: ReadonlyArray<unknown>;
 }): void => {
   expect(dependencies.cycles.length).toBe(0);
-  expect(dependencies.fanIn.length).toBe(0);
-  expect(dependencies.fanOut.length).toBe(0);
+  expectNoFanInOut(dependencies);
   expect(dependencies.cuts.length).toBe(0);
 };
 

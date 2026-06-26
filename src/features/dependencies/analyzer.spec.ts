@@ -3,6 +3,7 @@ import type { Gildash, StoredCodeRelation, SymbolSearchResult } from '@zipbul/gi
 import { GildashError } from '@zipbul/gildash';
 import { describe, expect, it } from 'bun:test';
 
+import { expectNoFanInOut } from '../../../test/integration/shared/test-kit';
 import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 
 type Deps = Awaited<ReturnType<typeof analyzeDependencies>>;
@@ -32,8 +33,7 @@ const expectSingleDeadExport = (result: Deps): void => {
 };
 
 /** Dead exports re-exported through `src/index.ts`. */
-const indexDeadExports = (result: Deps): Deps['deadExports'] =>
-  result.deadExports.filter(d => d.module === 'src/index.ts');
+const indexDeadExports = (result: Deps): Deps['deadExports'] => result.deadExports.filter(d => d.module === 'src/index.ts');
 
 /** Assert `arr` is a single entry whose `name` is `name`. */
 const expectSingleNamed = (arr: ReadonlyArray<{ readonly name: string }>, name: string): void => {
@@ -411,8 +411,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expectEmptyDepsGraph(result);
-    expect(result.fanIn.length).toBe(0);
-    expect(result.fanOut.length).toBe(0);
+    expectNoFanInOut(result);
     expect(result.deadExports.length).toBe(0);
   });
 
@@ -794,8 +793,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.adjacency['src/lone.ts']).toEqual([]);
-    expect(result.fanIn.length).toBe(0);
-    expect(result.fanOut.length).toBe(0);
+    expectNoFanInOut(result);
   });
 
   it('should handle self-importing file as self-loop cycle', async () => {
@@ -819,8 +817,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const g = createMockGildash({ getImportGraph: async () => graph });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
-    expect(result.fanIn.length).toBe(0);
-    expect(result.fanOut.length).toBe(0);
+    expectNoFanInOut(result);
   });
 
   it('should handle rootAbs normalization with backslashes', async () => {
@@ -1330,6 +1327,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       }),
       pkgJson: { main: './src/index.ts' },
     });
+
     expectSingleNamed(indexDeadExports(result), 'deadFn');
   });
 
