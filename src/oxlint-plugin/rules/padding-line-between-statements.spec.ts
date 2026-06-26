@@ -42,29 +42,34 @@ function expectSingleFix(
   expect(reports.length).toBe(1);
   expect(reports[0]?.messageId).toBe(messageId);
 
-    const fixed = applyAutofix(text, reports);
+  const fixed = applyAutofix(text, reports);
 
   expect(fixed).toBe(expected);
 
   return fixed;
 }
 
+const SEPARATED_SRC = 'const alpha = 1;\n\nconst beta = 2;';
+
+/** Run the rule over a blank-separated const pair and assert exactly one report. */
+function reportsForSeparated(): ReturnType<typeof setupRule>['reports'] {
+  const reports = runProgram(SEPARATED_SRC, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
+
+  expect(reports.length).toBe(1);
+
+  return reports;
+}
+
 describe('padding-line-between-statements', () => {
   it('should report unexpected blank lines when const declarations are separated', () => {
-    const text = 'const alpha = 1;\n\nconst beta = 2;';
-    const reports = runProgram(text, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
+    const reports = reportsForSeparated();
 
-    expect(reports.length).toBe(1);
     expect(reports[0]?.messageId).toBe('unexpectedBlankLine');
   });
 
   it('should autofix unexpected blank lines when rule triggers', () => {
-    const text = 'const alpha = 1;\n\nconst beta = 2;';
-    const reports = runProgram(text, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
-
-    expect(reports.length).toBe(1);
-
-        const fixed = applyAutofix(text, reports);
+    const reports = reportsForSeparated();
+    const fixed = applyAutofix(SEPARATED_SRC, reports);
 
     expect(fixed).toBe('const alpha = 1;\nconst beta = 2;');
 
