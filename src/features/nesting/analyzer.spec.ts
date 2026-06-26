@@ -14,6 +14,24 @@ const expectSingleKind = (items: ReadonlyArray<NestingItem>, kind: NestingKind):
   expect(items[0]!.kind).toBe(kind);
 };
 
+/** Assert `item`'s header is a string and depth metric is a number. */
+const expectHeaderAndDepth = (item: NestingItem): void => {
+  expect(typeof item.header).toBe('string');
+  expect(typeof item.metrics.depth).toBe('number');
+};
+
+/** Assert `item`'s Halstead volume and difficulty metrics are numbers. */
+const expectHalsteadTypes = (item: NestingItem): void => {
+  expect(typeof item.metrics.halsteadVolume).toBe('number');
+  expect(typeof item.metrics.halsteadDifficulty).toBe('number');
+};
+
+/** Assert `none` has no findings and `one` has exactly one. */
+const expectNoneAndOne = (none: ReadonlyArray<NestingItem>, one: ReadonlyArray<NestingItem>): void => {
+  expect(none.length).toBe(0);
+  expect(one.length).toBe(1);
+};
+
 // Threshold preset that disables every detector except cognitive-complexity
 // (maxCognitiveComplexity: 1) so a single force-low source always produces one
 // finding whose cognitiveComplexity/depth we can assert exactly.
@@ -83,8 +101,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
 
     expect(item.file).toBe('/deep3.ts');
-    expect(typeof item.header).toBe('string');
-    expect(typeof item.metrics.depth).toBe('number');
+    expectHeaderAndDepth(item);
     expect(item.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 
@@ -116,10 +133,8 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     const flatItems = analyzeNesting([flat]);
     const deepItems = analyzeNesting([deep]);
 
-    // flat function should NOT be a finding
-    expect(flatItems.length).toBe(0);
-    // deep function SHOULD be a finding
-    expect(deepItems.length).toBe(1);
+    // flat function is not a finding; deep function is the only one
+    expectNoneAndOne(flatItems, deepItems);
     expect(deepItems[0]!.metrics.depth).toBeGreaterThanOrEqual(3);
   });
 
@@ -142,8 +157,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     );
 
     expect(typeof item.file).toBe('string');
-    expect(typeof item.header).toBe('string');
-    expect(typeof item.metrics.depth).toBe('number');
+    expectHeaderAndDepth(item);
     expectSpanShape(item);
   });
 
@@ -539,8 +553,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       maxDensity: actualDensity - 0.001,
     });
 
-    expect(noDensity.length).toBe(0);
-    expect(yesDensity.length).toBe(1);
+    expectNoneAndOne(noDensity, yesDensity);
     expect(yesDensity[0]!.kind).toBe('complexity-density');
   });
 
@@ -808,8 +821,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     `,
     );
 
-    expect(typeof item.metrics.halsteadVolume).toBe('number');
-    expect(typeof item.metrics.halsteadDifficulty).toBe('number');
+    expectHalsteadTypes(item);
     expect(item.metrics.halsteadVolume).toBeGreaterThan(0);
     expect(item.metrics.halsteadDifficulty).toBeGreaterThan(0);
   });
@@ -826,8 +838,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
       FORCE_LOW_CC,
     );
 
-    expect(typeof item.metrics.halsteadVolume).toBe('number');
-    expect(typeof item.metrics.halsteadDifficulty).toBe('number');
+    expectHalsteadTypes(item);
   });
 
   it('Halstead — else-if chain counts all IfStatement operators', () => {

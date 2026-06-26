@@ -13,13 +13,19 @@ import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from './analyzer
 
 const singleFile = (sourceLines: string[]) => [file('src/a.ts', sourceLines.join('\n'))];
 
+/** Analyze a single in-memory source file (no gildash). */
+const analyzeSource = (sourceLines: string[]) => analyzeTemporalCoupling(singleFile(sourceLines) as never);
+
+/** A copy of `result` sorted by `file` — order-independent comparison. */
+const byFile = <T extends { file: string }>(result: ReadonlyArray<T>): T[] =>
+  [...result].sort((a, b) => a.file.localeCompare(b.file));
+
 /** Analyze `files` and assert exactly `count` temporal-coupling findings. */
 const expectTcCount = (
   files: ReadonlyArray<unknown>,
   count: number,
   options?: Parameters<typeof analyzeTemporalCoupling>[1],
-): ReturnType<typeof analyzeTemporalCoupling> =>
-  expectLength(analyzeTemporalCoupling(files as never, options as never), count);
+): ReturnType<typeof analyzeTemporalCoupling> => expectLength(analyzeTemporalCoupling(files as never, options as never), count);
 
 /** Assert a finding's detected `state` name and `writers` count. */
 const expectStateWriters = (finding: { state?: string; writers?: number } | undefined, state: string, writers: number): void => {
@@ -272,9 +278,8 @@ describe('temporal-coupling/analyzer', () => {
     ],
   ])('should detect independent states for %s', (_label, sourceLines, expectedStates) => {
     // Arrange
-    const files = singleFile(sourceLines);
     // Act
-    const result = analyzeTemporalCoupling(files as any);
+    const result = analyzeSource(sourceLines);
     // Assert
     const states = result.map(r => r.state);
 
@@ -312,10 +317,7 @@ describe('temporal-coupling/analyzer', () => {
     const result1 = analyzeTemporalCoupling([f1, f2] as any);
     const result2 = analyzeTemporalCoupling([f2, f1] as any);
     // Assert — same findings regardless of order (sorted by file)
-    const sorted1 = [...result1].sort((a, b) => a.file.localeCompare(b.file));
-    const sorted2 = [...result2].sort((a, b) => a.file.localeCompare(b.file));
-
-    expect(sorted1).toEqual(sorted2);
+    expect(byFile(result1)).toEqual(byFile(result2));
   });
 
   // --- AST-only (no gildash) scenarios that vary only by source + expected finding count ---
@@ -511,12 +513,8 @@ describe('temporal-coupling/analyzer', () => {
     ],
   ])('should report %i finding(s) when %s', (_label, sourceLines, expectedLength) => {
     // Arrange
-    const files = singleFile(sourceLines);
-    // Act
-    const result = analyzeTemporalCoupling(files as any);
-
-    // Assert
-    expect(result.length).toBe(expectedLength);
+    // Act & Assert
+    expect(analyzeSource(sourceLines).length).toBe(expectedLength);
   });
 
   it('analyzeTemporalCoupling - reader has multiple guards for different checks - suppresses finding', () => {
@@ -651,11 +649,9 @@ describe('temporal-coupling/analyzer', () => {
     // Arrange
     const files = singleFile(sourceLines);
     const mockGildash = createMockGildash(relations);
-    // Act
-    const result = analyzeTemporalCoupling(files as any, { gildash: mockGildash as any });
 
-    // Assert
-    expect(result.length).toBe(expectedLength);
+    // Act & Assert
+    expectTcCount(files, expectedLength, { gildash: mockGildash as never });
   });
 
   // --- gildash searchRelations throws → AST-only fallback (module-scope and class) ---

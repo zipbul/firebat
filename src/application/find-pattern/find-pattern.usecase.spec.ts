@@ -62,6 +62,12 @@ const findPatternReturnsOk =
   async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> =>
     matches;
 
+/** Arrange: targets resolve to `/a.ts`, but `findPattern` rejects with a GildashError. */
+const arrangeFindThrows = (): void => {
+  mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
+  mockFindPattern.mockRejectedValue(new GildashError('search', 'fail'));
+};
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -215,8 +221,7 @@ describe('findPatternUseCase', () => {
 
   it('should return empty array when gildash.findPattern throws GildashError', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
-    mockFindPattern.mockRejectedValue(new GildashError('search', 'fail'));
+    arrangeFindThrows();
 
     // Act
     const result = await findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger });
@@ -227,8 +232,7 @@ describe('findPatternUseCase', () => {
 
   it('should call gildash.close even when gildash.findPattern throws GildashError', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
-    mockFindPattern.mockRejectedValue(new GildashError('search', 'fail'));
+    arrangeFindThrows();
 
     // Act
     await findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger });
