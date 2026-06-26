@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { restoreAndClose } from '../../test/integration/shared/test-kit';
 
+import { restoreAndClose } from '../../test/integration/shared/test-kit';
 import { type MemoryStore, createMemoryStore } from './memory';
 
 interface PayloadRoundtripCase {

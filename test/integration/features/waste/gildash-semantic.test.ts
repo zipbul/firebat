@@ -19,6 +19,7 @@ interface FixtureCase {
 }
 
 type KeepCase = FixtureCase;
+
 type DeadCase = FixtureCase;
 
 const keepCases: KeepCase[] = [

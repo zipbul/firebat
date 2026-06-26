@@ -89,6 +89,25 @@ const runReexport = async (c: ReexportCase, gildash?: unknown) => {
   return result.filter(r => r.kind === 'cross-module-reexport');
 };
 
+/** Register `it.each` asserting each reexport case's finding count. */
+const itEachReexportCount = (cases: ReexportCase[]): void => {
+  it.each(cases)('$name', async c => {
+    const findings = await runReexport(c);
+
+    expect(findings.length).toBe(c.expected);
+  });
+};
+
+/** Register `it.each` asserting each reexport case's finding count and first file. */
+const itEachReexportFile = (cases: ReexportFileCase[]): void => {
+  it.each(cases)('$name', async c => {
+    const findings = await runReexport(c);
+
+    expect(findings.length).toBe(c.expected);
+    expect(findings[0]?.file).toContain(c.fileContains);
+  });
+};
+
 describe('analyzer', () => {
   describe('createEmptyBarrel', () => {
     it('returns empty array', () => {
@@ -224,12 +243,7 @@ describe('analyzer', () => {
       },
     ];
 
-    it.each(fileCases)('$name', async c => {
-      const findings = await runReexport(c);
-
-      expect(findings.length).toBe(c.expected);
-      expect(findings[0]?.file).toContain(c.fileContains);
-    });
+    itEachReexportFile(fileCases);
 
     const cases: ReexportCase[] = [
       {
@@ -276,11 +290,7 @@ describe('analyzer', () => {
       },
     ];
 
-    it.each(cases)('$name', async c => {
-      const findings = await runReexport(c);
-
-      expect(findings.length).toBe(c.expected);
-    });
+    itEachReexportCount(cases);
   });
 
   // ─── cross-module-reexport: 구문 B (import + export) ─────────────────────
@@ -304,12 +314,7 @@ export { X };`,
       },
     ];
 
-    it.each(fileCases)('$name', async c => {
-      const findings = await runReexport(c);
-
-      expect(findings.length).toBe(c.expected);
-      expect(findings[0]?.file).toContain(c.fileContains);
-    });
+    itEachReexportFile(fileCases);
 
     const cases: ReexportCase[] = [
       {
@@ -398,11 +403,7 @@ export { X };`,
       },
     ];
 
-    it.each(cases)('$name', async c => {
-      const findings = await runReexport(c);
-
-      expect(findings.length).toBe(c.expected);
-    });
+    itEachReexportCount(cases);
   });
 
   // ─── cross-module-reexport: 구문 C (import + export default) ─────────────
@@ -464,11 +465,7 @@ export default X;`,
       },
     ];
 
-    it.each(cases)('$name', async c => {
-      const findings = await runReexport(c);
-
-      expect(findings.length).toBe(c.expected);
-    });
+    itEachReexportCount(cases);
   });
 
   // ─── gildash re-export pruning ──────────────────────────────────────────────
