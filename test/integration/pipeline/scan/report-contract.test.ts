@@ -13,7 +13,7 @@ import {
   withCwd,
   runScanReport,
 } from '../../shared/scan-fixture';
-import { expectNonEmptyString } from '../../shared/test-kit';
+import { expectNonEmptyString, expectSpanShape } from '../../shared/test-kit';
 
 interface IndirectionContractRow {
   readonly title: string;
@@ -148,9 +148,7 @@ describe('integration/scan/report-contract', () => {
         expect(allowedKinds).toContain(item.kind);
         expect(allowedCodes).toContain(item.code);
         expect(typeof item.file).toBe('string');
-        expect(item.span).toBeDefined();
-        expect(typeof item.span.start.line).toBe('number');
-        expect(typeof item.span.end.line).toBe('number');
+        expectSpanShape(item);
         expect(item.filePath).toBeUndefined();
         expect(item.why).toBeUndefined();
         expect(item.suggestedRefactor).toBeUndefined();

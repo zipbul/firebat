@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ParsedFile } from '../../engine/types';
 import type { NestingItem, NestingKind } from '../../types';
 
-import { parseFileAs as toFile } from '../../../test/integration/shared/test-kit';
+import { expectSpanShape, parseFileAs as toFile } from '../../../test/integration/shared/test-kit';
 import { analyzeNesting, createEmptyNesting } from './analyzer';
 
 type NestingOptions = Parameters<typeof analyzeNesting>[1];
@@ -144,9 +144,7 @@ describe('features/nesting/analyzer — analyzeNesting', () => {
     expect(typeof item.file).toBe('string');
     expect(typeof item.header).toBe('string');
     expect(typeof item.metrics.depth).toBe('number');
-    expect(item.span).toBeDefined();
-    expect(typeof item.span.start.line).toBe('number');
-    expect(typeof item.span.end.line).toBe('number');
+    expectSpanShape(item);
   });
 
   it('processes multiple files (only findings emitted)', () => {

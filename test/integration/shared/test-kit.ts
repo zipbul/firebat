@@ -155,6 +155,15 @@ export const expectLength = <T>(arr: ReadonlyArray<T>, count: number): ReadonlyA
   return arr;
 };
 
+/** Assert `item.span` exists and its start/end line numbers are `number`s. */
+export const expectSpanShape = (item: {
+  readonly span: { readonly start: { readonly line: unknown }; readonly end: { readonly line: unknown } };
+}): void => {
+  expect(item.span).toBeDefined();
+  expect(typeof item.span.start.line).toBe('number');
+  expect(typeof item.span.end.line).toBe('number');
+};
+
 /** Parse `relPath` under `/p/` and attach a synthetic parse error — shared by analyzer specs. */
 export const parsePFileWithErrors = (relPath: string, sourceText: string): ParsedFile =>
   ({ ...parsePFile(relPath, sourceText), errors: [{ message: 'synthetic' }] }) as unknown as ParsedFile;
