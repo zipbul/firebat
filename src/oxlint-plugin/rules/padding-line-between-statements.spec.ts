@@ -23,29 +23,46 @@ const funcDecl = (range: Range): AstNode => ({ type: 'FunctionDeclaration', rang
 
 const program = (body: AstNode[]): AstNode => ({ type: 'Program', body });
 
+/** Set up the rule over `text`, run the Program visitor on `body`, and return the reports. */
+function runProgram(text: string, body: AstNode[]): ReturnType<typeof setupRule>['reports'] {
+  const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
+
+  visitor.Program(program(body));
+
+  return reports;
+}
+
+/** Assert one report tagged `messageId` with a fix that rewrites `text` to `expected`; returns the fixed text. */
+function expectSingleFix(
+  text: string,
+  reports: ReturnType<typeof setupRule>['reports'],
+  messageId: string,
+  expected: string,
+): string {
+  expect(reports.length).toBe(1);
+  expect(reports[0]?.messageId).toBe(messageId);
+  expect(typeof reports[0]?.fix).toBe('function');
+
+  const fixed = applyFixes(text, reports);
+
+  expect(fixed).toBe(expected);
+
+  return fixed;
+}
+
 describe('padding-line-between-statements', () => {
   it('should report unexpected blank lines when const declarations are separated', () => {
-    // Arrange
     const text = 'const alpha = 1;\n\nconst beta = 2;';
-    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
+    const reports = runProgram(text, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
 
-    // Act
-    visitor.Program(program([constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]));
-
-    // Assert
     expect(reports.length).toBe(1);
     expect(reports[0]?.messageId).toBe('unexpectedBlankLine');
   });
 
   it('should autofix unexpected blank lines when rule triggers', () => {
-    // Arrange
     const text = 'const alpha = 1;\n\nconst beta = 2;';
-    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
+    const reports = runProgram(text, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
 
-    // Act
-    visitor.Program(program([constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]));
-
-    // Assert
     expect(reports.length).toBe(1);
     expect(typeof reports[0]?.fix).toBe('function');
 
@@ -54,79 +71,29 @@ describe('padding-line-between-statements', () => {
     expect(fixed).toBe('const alpha = 1;\nconst beta = 2;');
 
     // Re-run should be clean.
-    // Arrange
-    const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
-
-    // Act
-    visitor2.Program(program([constDecl([0, 16], [1, 1]), constDecl([17, 32], [2, 2])]));
-
-    // Assert
-    expect(reports2.length).toBe(0);
+    expect(runProgram(fixed, [constDecl([0, 16], [1, 1]), constDecl([17, 32], [2, 2])]).length).toBe(0);
   });
 
   it('should autofix missing blank line when required', () => {
-    // Arrange
     const text = 'const alpha = 1;\nfunction beta() {}';
-    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
+    const reports = runProgram(text, [constDecl([0, 16]), funcDecl([17, 35])]);
+    const fixed = expectSingleFix(text, reports, 'expectedBlankLine', 'const alpha = 1;\n\nfunction beta() {}');
 
-    // Act
-    visitor.Program(program([constDecl([0, 16]), funcDecl([17, 35])]));
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('expectedBlankLine');
-    expect(typeof reports[0]?.fix).toBe('function');
-
-    const fixed = applyFixes(text, reports);
-
-    expect(fixed).toBe('const alpha = 1;\n\nfunction beta() {}');
-
-    // Arrange
-    const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
-
-    // Act
-    visitor2.Program(program([constDecl([0, 16]), funcDecl([18, 36])]));
-
-    // Assert
-    expect(reports2.length).toBe(0);
+    expect(runProgram(fixed, [constDecl([0, 16]), funcDecl([18, 36])]).length).toBe(0);
   });
 
   it('should autofix missing blank line when input uses CRLF', () => {
-    // Arrange
     const text = 'const alpha = 1;\r\nfunction beta() {}';
-    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
+    const reports = runProgram(text, [constDecl([0, 16]), funcDecl([18, 36])]);
+    const fixed = expectSingleFix(text, reports, 'expectedBlankLine', 'const alpha = 1;\r\n\r\nfunction beta() {}');
 
-    // Act
-    visitor.Program(program([constDecl([0, 16]), funcDecl([18, 36])]));
-
-    // Assert
-    expect(reports.length).toBe(1);
-    expect(reports[0]?.messageId).toBe('expectedBlankLine');
-    expect(typeof reports[0]?.fix).toBe('function');
-
-    const fixed = applyFixes(text, reports);
-
-    expect(fixed).toBe('const alpha = 1;\r\n\r\nfunction beta() {}');
-
-    // Arrange
-    const { visitor: visitor2, reports: reports2 } = setupRule(paddingLineBetweenStatementsRule, { text: fixed });
-
-    // Act
-    visitor2.Program(program([constDecl([0, 16]), funcDecl([20, 38])]));
-
-    // Assert
-    expect(reports2.length).toBe(0);
+    expect(runProgram(fixed, [constDecl([0, 16]), funcDecl([20, 38])]).length).toBe(0);
   });
 
   it('should skip report when no blank line exists between const declarations', () => {
-    // Arrange
     const text = 'const alpha = 1;\nconst beta = 2;';
-    const { visitor, reports } = setupRule(paddingLineBetweenStatementsRule, { text });
+    const reports = runProgram(text, [constDecl([0, 16], [1, 1]), constDecl([17, 32], [2, 2])]);
 
-    // Act
-    visitor.Program(program([constDecl([0, 16], [1, 1]), constDecl([17, 32], [2, 2])]));
-
-    // Assert
     expect(reports.length).toBe(0);
   });
 });

@@ -30,6 +30,38 @@ function rangeOf(text: string, name: string): Range {
   return [start, start + name.length];
 }
 
+/** Run the ImportDeclaration visitor over `node`, asserting one report tagged `messageId`. */
+function expectReport(
+  visitor: Parameters<typeof expectReportCount>[0],
+  node: Parameters<typeof expectReportCount>[2],
+  reports: ReturnType<typeof setupRule>['reports'],
+  messageId: string,
+): void {
+  expectReportCount(visitor, 'ImportDeclaration', node, reports, 1);
+  expect(reports[0]?.messageId).toBe(messageId);
+}
+
+/**
+ * Set up the rule over an `{ alpha, beta }` import (alpha referenced, beta unused),
+ * the dominant autofix arrange shape. `text` decides the source layout.
+ */
+function setupAlphaBeta(text: string) {
+  const alpha = rangeOf(text, 'alpha');
+  const beta = rangeOf(text, 'beta');
+  const tokens = buildCommaTokens(text);
+
+  const getDeclaredVariables = () => [declared(alpha, [[100, 101]]), declared(beta, [])] satisfies Variable[];
+
+  const { visitor, reports } = setupRule(unusedImportsRule, { text, tokens, getDeclaredVariables });
+  const importNode: AstNode = {
+    type: 'ImportDeclaration',
+    range: [0, text.length],
+    specifiers: [spec('alpha', alpha), spec('beta', beta)],
+  };
+
+  return { visitor, reports, importNode };
+}
+
 describe('unused-imports', () => {
   it('should report unused import declarations when references are missing', () => {
     // Arrange
@@ -42,8 +74,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
-    expect(reports[0]?.messageId).toBe('unusedImportDeclaration');
+    expectReport(visitor, importNode, reports, 'unusedImportDeclaration');
   });
 
   it('should skip report when import is referenced', () => {
@@ -71,29 +102,16 @@ describe('unused-imports', () => {
     };
 
     // Act
-    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
-    expect(reports[0]?.messageId).toBe('unusedImport');
+    expectReport(visitor, importNode, reports, 'unusedImport');
   });
 
   it('should autofix unused specifier when comma handling is required', () => {
     // Arrange
     const text = "import { alpha, beta } from 'x';";
-    const alpha = rangeOf(text, 'alpha');
-    const beta = rangeOf(text, 'beta');
-    const tokens = buildCommaTokens(text);
-
-    const getDeclaredVariables = () => [declared(alpha, [[100, 101]]), declared(beta, [])] satisfies Variable[];
-
-    const { visitor, reports } = setupRule(unusedImportsRule, { text, tokens, getDeclaredVariables });
-    const importNode: AstNode = {
-      type: 'ImportDeclaration',
-      range: [0, text.length],
-      specifiers: [spec('alpha', alpha), spec('beta', beta)],
-    };
+    const { visitor, reports, importNode } = setupAlphaBeta(text);
 
     // Act
-    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
-    expect(reports[0]?.messageId).toBe('unusedImport');
+    expectReport(visitor, importNode, reports, 'unusedImport');
     expect(typeof reports[0]?.fix).toBe('function');
 
     const fixed = applyFixes(text, reports);
@@ -134,8 +152,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
-    expect(reports[0]?.messageId).toBe('unusedImportDeclaration');
+    expectReport(visitor, importNode, reports, 'unusedImportDeclaration');
     expect(typeof reports[0]?.fix).toBe('function');
 
     const fixed = applyFixes(text, reports);
@@ -159,8 +176,7 @@ describe('unused-imports', () => {
     };
 
     // Act
-    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
-    expect(reports[0]?.messageId).toBe('unusedImportDeclaration');
+    expectReport(visitor, importNode, reports, 'unusedImportDeclaration');
 
     const fixed = applyFixes(text, reports);
 
@@ -170,22 +186,10 @@ describe('unused-imports', () => {
   it('should refuse autofix when specifier removal is multiline', () => {
     // Arrange
     const text = "import { alpha,\n  beta } from 'x';";
-    const alpha = rangeOf(text, 'alpha');
-    const beta = rangeOf(text, 'beta');
-    const tokens = buildCommaTokens(text);
-
-    const getDeclaredVariables = () => [declared(alpha, [[100, 101]]), declared(beta, [])] satisfies Variable[];
-
-    const { visitor, reports } = setupRule(unusedImportsRule, { text, tokens, getDeclaredVariables });
-    const importNode: AstNode = {
-      type: 'ImportDeclaration',
-      range: [0, text.length],
-      specifiers: [spec('alpha', alpha), spec('beta', beta)],
-    };
+    const { visitor, reports, importNode } = setupAlphaBeta(text);
 
     // Act
-    expectReportCount(visitor, 'ImportDeclaration', importNode, reports, 1);
-    expect(reports[0]?.messageId).toBe('unusedImport');
+    expectReport(visitor, importNode, reports, 'unusedImport');
     expect(typeof reports[0]?.fix).toBe('function');
 
     const fixed = applyFixes(text, reports);
