@@ -9,12 +9,6 @@ import {
 } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
-/** Assert exactly one finding whose `kind` is `kind`. */
-const expectKind = (result: ReadonlyArray<{ readonly kind: string }>, kind: string): void => {
-  expect(result).toHaveLength(1);
-  expect(result[0]!.kind).toBe(kind);
-};
-
 type NoFindingCase = SourceCase;
 
 interface CollapsibleIfCase {
@@ -370,6 +364,7 @@ describe('analyzeCollapsibleIf', () => {
     ({ source, score, depthReduction, statementsAffected }) => {
       // Arrange & Act
       const result = expectSingleFindingKind(source, analyzeCollapsibleIf, 'collapsible-if');
+
       expect(result[0]!.score).toBe(score);
       expect(result[0]!.metrics.depthReduction).toBe(depthReduction);
       expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
@@ -382,10 +377,9 @@ describe('analyzeCollapsibleIf', () => {
     'analyzeCollapsibleIf - collapsible-else-if: $name - returns collapsible-else-if',
     ({ source, statementsAffected, score }) => {
       // Arrange & Act
-      const result = analyzeSource(source, analyzeCollapsibleIf);
-
       // Assert
-      expectKind(result, 'collapsible-else-if');
+      const result = expectSingleFindingKind(source, analyzeCollapsibleIf, 'collapsible-else-if');
+
       expect(result[0]!.metrics.depthReduction).toBe(1);
       expect(result[0]!.metrics.statementsAffected).toBe(statementsAffected);
       expect(result[0]!.score).toBe(score);
@@ -426,7 +420,7 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
 
   it('analyzeCollapsibleIf - collapsible-if + collapsible-else-if coexist - primaryOpportunity selects higher score', () => {
     // Arrange & Act — collapsible-if (score=3) + collapsible-else-if (score=5) in same function
-    const result = analyzeSource(
+    const result = expectSingleFindingKind(
       `
 export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
   if (a) {
@@ -451,10 +445,10 @@ export function f(a: boolean, b: boolean, c: boolean, d: boolean) {
 }
 `,
       analyzeCollapsibleIf,
+      'collapsible-else-if',
     );
 
     // Assert — both detected, primary kind = collapsible-else-if (score=5 > 3)
-    expectKind(result, 'collapsible-else-if');
     expect(result[0]!.score).toBe(8); // 3 + 5
     expect(result[0]!.opportunitySpans).toHaveLength(2);
   });
