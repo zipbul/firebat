@@ -111,8 +111,7 @@ describe('integration/dependencies', () => {
     sources.set('/virtual/deps/b.ts', `import './c';\nexport const beta = 2;`);
     sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    await withDeps(sources, dependencies => {
 
       expect(dependencies.cycles.length).toBeGreaterThan(0);
       expect(dependencies.fanIn.length).toBeGreaterThan(0);
@@ -155,8 +154,7 @@ describe('integration/dependencies', () => {
   });
 
   it.each(cyclePresenceCases)('should detect a cycle when $title', async ({ files, expectedKey }) => {
-    await withTempGildash(files, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    await withDeps(files, dependencies => {
       const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
 
       expect(cycleKeys.has([...expectedKey].sort().join('|'))).toBe(true);
@@ -185,8 +183,7 @@ describe('integration/dependencies', () => {
     sources.set('/virtual/deps/a.ts', `export async function f() { await import('./b'); }`);
     sources.set('/virtual/deps/b.ts', `export const x = 1;`);
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    await withDeps(sources, dependencies => {
       const aEdges = dependencies.adjacency['deps/a.ts'] ?? [];
 
       expect(aEdges).toContain('deps/b.ts');
@@ -194,8 +191,7 @@ describe('integration/dependencies', () => {
   });
 
   it.each(deadExportCases)('should report $kind when $title', async ({ kind, files, expectedName }) => {
-    await withTempGildash(files, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    await withDeps(files, dependencies => {
       const hits = dependencies.deadExports.filter(f => f.kind === kind);
 
       expect(hits.some(f => f.module === 'dead/a.ts' && f.name === expectedName)).toBe(true);
@@ -210,8 +206,7 @@ describe('integration/dependencies', () => {
     sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
     sources.set('/virtual/deps/d.ts', `import './c';\nexport const delta = 4;`);
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    await withDeps(sources, dependencies => {
       const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
 
       expect(cycleKeys.has(['a.ts', 'b.ts', 'c.ts'].sort().join('|'))).toBe(true);
@@ -226,8 +221,7 @@ describe('integration/dependencies', () => {
     sources.set('/virtual/deps/b.ts', `import './c';\nexport const beta = 2;`);
     sources.set('/virtual/deps/c.ts', `import './a';\nexport const gamma = 3;`);
 
-    await withTempGildash(sources, async (gildash, tmpDir) => {
-      const dependencies = await analyzeDependencies(gildash, { rootAbs: tmpDir });
+    await withDeps(sources, dependencies => {
       const triangleCycles = dependencies.cycles.filter(cycle => toCycleKey(cycle) === ['a.ts', 'b.ts', 'c.ts'].sort().join('|'));
 
       expect(triangleCycles.length).toBe(1);
