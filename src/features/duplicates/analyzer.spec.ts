@@ -41,6 +41,7 @@ const { analyzeDuplicates, createEmptyDuplicates } = await import('./analyzer');
 const makeFile = (fileName: string, source: string): ParsedFile => parseSource(fileName, source);
 
 const DUP_OPTS = { minSize: 3, enableAntiUnification: false };
+const AU_OPTS = { minSize: 3, enableAntiUnification: true };
 
 /** Analyze a single-file corpus. */
 const analyzeOne = (
@@ -65,6 +66,30 @@ const expectCloneCount = (
   expectLength(
     result.filter(g => g.cloneType === cloneType),
     count,
+  );
+
+/** Assert exactly `count` groups carry `suggestedParams` and return them. */
+const expectWithParams = (result: ReturnType<typeof analyzeDuplicates>, count = 1): ReturnType<typeof analyzeDuplicates> =>
+  expectLength(
+    result.filter(g => g.suggestedParams !== undefined),
+    count,
+  );
+
+/** Sorted `filePath:header` keys for every item across all groups — order-independent identity. */
+const itemKeys = (result: ReturnType<typeof analyzeDuplicates>): string[] =>
+  result.flatMap(g => g.items.map(i => `${i.filePath}:${i.header}`)).sort();
+
+/** Assert `groups` is exactly one group whose `items` count is `itemCount`. */
+const expectOneGroup = (groups: ReturnType<typeof analyzeDuplicates>, itemCount: number): void => {
+  expect(groups.length).toBe(1);
+  expect(groups[0]!.items.length).toBe(itemCount);
+};
+
+/** Assert exactly one multi-member group (items ≥ 2) holding exactly `memberCount` items. */
+const expectMultiGroup = (result: ReturnType<typeof analyzeDuplicates>, memberCount: number): void =>
+  expectOneGroup(
+    result.filter(g => g.items.length >= 2),
+    memberCount,
   );
 
 // 정확히 동일한 함수 2개가 있는 파일
@@ -313,12 +338,8 @@ describe('analyzeDuplicates', () => {
       variables: [variable],
     }));
 
-    const fileA = makeFile('a.ts', srcA);
-    const fileB = makeFile('b.ts', srcB);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
-    const withParams = result.filter(g => g.suggestedParams !== undefined);
+    const withParams = expectWithParams(analyzeAB(srcA, srcB, AU_OPTS));
 
-    expect(withParams.length).toBe(1);
     expect(withParams[0]!.suggestedParams!.kind).toBe(expectedKind);
     expect(withParams[0]!.suggestedParams!.pairs.length).toBe(1);
     expect(withParams[0]!.findingKind).toBe(expectedFindingKind);
@@ -331,9 +352,7 @@ describe('analyzeDuplicates', () => {
     classification => {
       classifyDiffMock.mockImplementation(() => classification);
 
-      const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-      const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-      const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
+      const result = analyzeAB(RENAMED_PAIR_A, RENAMED_PAIR_B, AU_OPTS);
 
       for (const group of result) {
         expect(group.suggestedParams).toBeUndefined();
@@ -356,8 +375,7 @@ describe('analyzeDuplicates', () => {
   // ── [HP] 13. FunctionDeclaration → kind='function' ─────────────────────
 
   it('should assign kind function to FunctionDeclaration items', () => {
-    const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
-    const exact = expectCloneCount(result, 'exact', 1);
+    const exact = expectCloneCount(analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION), 'exact', 1);
 
     expect(exact[0]!.items[0]!.kind).toBe('function');
   });
@@ -455,8 +473,7 @@ class Beta {
       enableAntiUnification: false,
     });
 
-    expect(result.length).toBe(1);
-    expect(result[0]!.items.length).toBe(2);
+    expectOneGroup(result, 2);
   });
 
   // ── [NE] 22b. 결정-존재 floor 미만 익명 인라인 람다는 클론으로 보고하지 않는다 ──
@@ -520,8 +537,7 @@ class Beta {
   // ── [ED] 26. 정확히 2개 함수 → 최소 그룹 크기 ──────────────────────────
 
   it('should form a group with exactly 2 identical functions (minimum group size)', () => {
-    const result = analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION);
-    const exact = expectCloneCount(result, 'exact', 1);
+    const exact = expectCloneCount(analyzeAB(FUNCTION_DECLARATION, FUNCTION_DECLARATION), 'exact', 1);
 
     expect(exact[0]!.items).toHaveLength(2);
   });
@@ -650,10 +666,7 @@ class Beta {
     expect(result1.length).toBe(result2.length);
 
     // 아이템 집합 동일 (순서 무관)
-    const headers1 = result1.flatMap(g => g.items.map(i => `${i.filePath}:${i.header}`)).sort();
-    const headers2 = result2.flatMap(g => g.items.map(i => `${i.filePath}:${i.header}`)).sort();
-
-    expect(headers1).toEqual(headers2);
+    expect(itemKeys(result1)).toEqual(itemKeys(result2));
   });
 
   // ── [HP] 34. findingKind: normalized → structural-clone ──────────
@@ -683,12 +696,8 @@ class Beta {
       variables: [{ id: 1, location: 'id.name', leftType: 'calcSum', rightType: 'addValues', kind: 'identifier' }],
     }));
 
-    const fileA = makeFile('a.ts', RENAMED_PAIR_A);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_B);
-    const result = analyzeDuplicates([fileA, fileB], { minSize: 3, enableAntiUnification: true });
-    const withParams = result.filter(g => g.suggestedParams !== undefined);
+    const withParams = expectWithParams(analyzeAB(RENAMED_PAIR_A, RENAMED_PAIR_B, AU_OPTS));
 
-    expect(withParams.length).toBe(1);
     // rename-only → findingKind는 cloneType 기반 기본값 (structural-clone), literal-variant 아님
     expect(withParams[0]!.findingKind).not.toBe('literal-variant');
   });
@@ -732,12 +741,9 @@ function compute(x: number, y: number): number {
 }
 `;
     const files = Array.from({ length: 5 }, (_, i) => makeFile(`f${i}.ts`, source));
-    const result = analyzeDuplicates(files, { minSize: 3, enableAntiUnification: true });
-    // 동일 정규형 → 정확히 하나의 그룹, 5개 멤버 전부 포함, 통계적 분리 없음
-    const groups = result.filter(g => g.items.length >= 2);
 
-    expect(groups.length).toBe(1);
-    expect(groups[0]!.items.length).toBe(5);
+    // 동일 정규형 → 정확히 하나의 그룹, 5개 멤버 전부 포함, 통계적 분리 없음
+    expectMultiGroup(analyzeDuplicates(files, AU_OPTS), 5);
   });
 
   // ── [C-2] 41. anti-unification 켜도 단일 그룹 유지 (분리 로직 부재 확인) ──────
@@ -766,11 +772,8 @@ function compute(x: number, y: number): number {
 }
 `;
     const files = Array.from({ length: 4 }, (_, i) => makeFile(`f${i}.ts`, source));
-    const result = analyzeDuplicates(files, { minSize: 3, enableAntiUnification: true });
-    const groups = result.filter(g => g.items.length >= 2);
 
-    expect(groups.length).toBe(1);
-    expect(groups[0]!.items.length).toBe(4);
+    expectMultiGroup(analyzeDuplicates(files, AU_OPTS), 4);
   });
 
   // ── [HP] 43-44. ClassExpression / FunctionExpression exact 탐지 ────────
@@ -885,8 +888,7 @@ describe('min-size policy (redesign)', () => {
       enableAntiUnification: false,
     });
 
-    expect(result.length).toBe(1);
-    expect(result[0]!.items.length).toBe(2);
+    expectOneGroup(result, 2);
     expect(result[0]!.items.map(i => i.header).sort()).toEqual(['pa', 'pb']);
   });
 
