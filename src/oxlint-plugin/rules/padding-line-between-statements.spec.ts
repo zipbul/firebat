@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, Range } from '../types';
 
-import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyAutofix, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { paddingLineBetweenStatementsRule } from './padding-line-between-statements';
 
 /** const declaration node with an optional source location (line span). */
@@ -41,9 +41,8 @@ function expectSingleFix(
 ): string {
   expect(reports.length).toBe(1);
   expect(reports[0]?.messageId).toBe(messageId);
-  expect(typeof reports[0]?.fix).toBe('function');
 
-  const fixed = applyFixes(text, reports);
+    const fixed = applyAutofix(text, reports);
 
   expect(fixed).toBe(expected);
 
@@ -64,9 +63,8 @@ describe('padding-line-between-statements', () => {
     const reports = runProgram(text, [constDecl([0, 16], [1, 1]), constDecl([18, 33], [3, 3])]);
 
     expect(reports.length).toBe(1);
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+        const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe('const alpha = 1;\nconst beta = 2;');
 

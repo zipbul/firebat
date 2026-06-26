@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode } from '../types';
 
-import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyAutofix, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { blankLinesBetweenStatementGroupsRule } from './blank-lines-between-statement-groups';
 
 /** Program of a function declaration followed by a const, with the const at the given range. */
@@ -49,9 +49,8 @@ describe('blank-lines-between-statement-groups', () => {
 
     // Assert
     expect(reports.length).toBe(1);
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+        const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe('function alpha() {}\n\nconst beta = 1;');
 

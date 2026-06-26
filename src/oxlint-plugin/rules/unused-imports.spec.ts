@@ -2,7 +2,12 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, Range, Variable } from '../types';
 
-import { applyFixes, setupRule, expectReportCount } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import {
+  applyAutofix,
+  applyFixes,
+  setupRule,
+  expectReportCount,
+} from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { buildCommaTokens } from '../../../test/integration/oxlint-plugin/utils/token-utils';
 import { unusedImportsRule } from './unused-imports';
 
@@ -112,9 +117,8 @@ describe('unused-imports', () => {
 
     // Act
     expectReport(visitor, importNode, reports, 'unusedImport');
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+    const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe("import { alpha } from 'x';");
 
@@ -153,9 +157,8 @@ describe('unused-imports', () => {
 
     // Act
     expectReport(visitor, importNode, reports, 'unusedImportDeclaration');
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+    const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe('');
   });
@@ -190,9 +193,8 @@ describe('unused-imports', () => {
 
     // Act
     expectReport(visitor, importNode, reports, 'unusedImport');
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+    const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe(text);
   });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { AstNode, JsonValue, TemplateElementValue } from '../types';
 
-import { applyFixes, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
+import { applyAutofix, setupRule } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
 import { noBracketNotationRule } from './no-bracket-notation';
 
 function templateLiteral(cooked: string): AstNode {
@@ -55,9 +55,8 @@ describe('no-bracket-notation', () => {
 
     // Assert
     expect(reports.length).toBe(1);
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+        const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe('obj.alpha');
 
@@ -96,9 +95,8 @@ describe('no-bracket-notation', () => {
 
     // Assert
     expect(reports.length).toBe(1);
-    expect(typeof reports[0]?.fix).toBe('function');
 
-    const fixed = applyFixes(text, reports);
+        const fixed = applyAutofix(text, reports);
 
     expect(fixed).toBe(text);
   });

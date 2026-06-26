@@ -184,6 +184,13 @@ function applyFixes(text: string, reports: ReportDescriptor[]): string {
   return out;
 }
 
+/** Assert the first report carries a fix function, then apply all fixes to `text`. */
+function applyAutofix(text: string, reports: ReportDescriptor[]): string {
+  expect(typeof reports[0]?.fix).toBe('function');
+
+  return applyFixes(text, reports);
+}
+
 // We don't export local ReportDescriptor anymore, use the one from types
 
 function createRuleContext(
@@ -269,4 +276,4 @@ const expectReportCount = (
 };
 
 export type { ReportDescriptor, RuleContext, RuleContextExtras, SetupRuleOptions, SourceCode };
-export { applyFixes, createProgram, createRuleContext, createSourceCode, expectReportCount, setupRule };
+export { applyAutofix, applyFixes, createProgram, createRuleContext, createSourceCode, expectReportCount, setupRule };
