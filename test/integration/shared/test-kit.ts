@@ -154,6 +154,12 @@ export const analyzeSource = <T>(source: string, analyze: (files: ParsedFile[]) 
 /** Recursively remove a temp dir (force, no-throw-on-missing) — shared teardown helper. */
 export const rmrf = (dir: string): Promise<void> => fsp.rm(dir, { recursive: true, force: true });
 
+/** Restore a spy and close a db handle — shared store-spec teardown. */
+export const restoreAndClose = (spy: { mockRestore: () => void }, db: { close: () => void }): void => {
+  spy.mockRestore();
+  db.close();
+};
+
 /** A named source-snippet test case: `{ name, source }` — the common table-case shape. */
 export interface SourceCase {
   readonly name: string;
