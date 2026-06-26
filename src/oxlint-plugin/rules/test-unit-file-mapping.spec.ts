@@ -6,6 +6,14 @@ import { setupRule, createProgram, expectReportCount } from '../../../test/integ
 import { createVirtualFs } from '../../../test/integration/oxlint-plugin/utils/virtual-fs';
 import { testUnitFileMappingRule } from './test-unit-file-mapping';
 
+/** Set up the rule for `filename`, wiring fileExists/readFile to `virtualFs`. */
+const setupWithFs = (filename: string, virtualFs: ReturnType<typeof createVirtualFs>) =>
+  setupRule(testUnitFileMappingRule, {
+    filename,
+    fileExists: filePath => virtualFs.fileExists(filePath),
+    readFile: filePath => virtualFs.readFile(filePath),
+  });
+
 describe('test-unit-file-mapping', () => {
   it('should report missing spec when implementation is logicful', () => {
     // Arrange
@@ -13,11 +21,7 @@ describe('test-unit-file-mapping', () => {
     const specFile = '/repo/user-service.spec.ts';
     const virtualFs = createVirtualFs([[implFile, 'export function run() {}']]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithFs(implFile, virtualFs);
 
     // Act
     expectReportCount(visitor, 'Program', programNode, reports, 1);
@@ -34,11 +38,7 @@ describe('test-unit-file-mapping', () => {
       [specFile, "describe('UserService', () => {})"],
     ]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: implFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithFs(implFile, virtualFs);
 
     // Act
     expectReportCount(visitor, 'Program', programNode, reports, 0);
@@ -90,11 +90,7 @@ describe('test-unit-file-mapping', () => {
     const implFile = '/repo/user-service.ts';
     const virtualFs = createVirtualFs([[specFile, "describe('UserService', () => {})"]]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: specFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithFs(specFile, virtualFs);
 
     // Act
     expectReportCount(visitor, 'Program', programNode, reports, 1);
@@ -111,11 +107,7 @@ describe('test-unit-file-mapping', () => {
       [implFile, 'export class UserService {}'],
     ]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
-    const { visitor, reports } = setupRule(testUnitFileMappingRule, {
-      filename: specFile,
-      fileExists: filePath => virtualFs.fileExists(filePath),
-      readFile: filePath => virtualFs.readFile(filePath),
-    });
+    const { visitor, reports } = setupWithFs(specFile, virtualFs);
 
     // Act
     expectReportCount(visitor, 'Program', programNode, reports, 0);
