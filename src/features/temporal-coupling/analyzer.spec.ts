@@ -316,6 +316,7 @@ describe('temporal-coupling/analyzer', () => {
     // Act
     const result1 = analyzeTemporalCoupling([f1, f2] as any);
     const result2 = analyzeTemporalCoupling([f2, f1] as any);
+
     // Assert — same findings regardless of order (sorted by file)
     expect(byFile(result1)).toEqual(byFile(result2));
   });

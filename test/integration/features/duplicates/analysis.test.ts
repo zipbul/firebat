@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { DuplicateGroup } from '../../../../src/test-api';
 
 import { analyzeDuplicates } from '../../../../src/test-api';
-import { createProgramFromMap, expectNonEmptyString } from '../../shared/test-kit';
+import { createProgramFromMap, expectNonEmptyString, hasTypeItem } from '../../shared/test-kit';
 
 function createFunctionSource(name: string, value: number): string {
   return [`export function ${name}() {`, `  const localValue = ${value};`, '  return localValue + 1;', '}'].join('\n');
@@ -97,7 +97,7 @@ describe('integration/duplicates', () => {
     const program = createProgramFromMap(sources);
     const groups = analyzeDuplicates(program, { minSize: 1 });
     // Class 그룹이 존재해야 함
-    const classGroups = groups.filter(g => g.items.some(i => i.kind === 'type'));
+    const classGroups = groups.filter(hasTypeItem);
 
     expect(classGroups.length).toBeGreaterThanOrEqual(1);
 

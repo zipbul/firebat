@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { firstBodyNode } from "../../test/integration/shared/test-kit";
 
+import { firstBodyNode } from '../../test/integration/shared/test-kit';
 import { parseSource } from '../engine/ast/parse-source';
 import { getNodeHeader } from './node-header';
 

@@ -36,6 +36,7 @@ describe('test-unit-file-mapping', () => {
     const virtualFs = createVirtualFs([[implFile, 'export function run() {}']]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
     const reports = runProgramExpect(implFile, virtualFs, programNode, 1);
+
     expect(reports[0]?.messageId).toBe('missingSpec');
     expect(reports[0]?.data?.expected).toBe(specFile);
   });
@@ -49,6 +50,7 @@ describe('test-unit-file-mapping', () => {
       [specFile, "describe('UserService', () => {})"],
     ]);
     const programNode = createProgram([{ type: 'FunctionDeclaration' }]);
+
     runProgramExpect(implFile, virtualFs, programNode, 0);
   });
 
@@ -99,6 +101,7 @@ describe('test-unit-file-mapping', () => {
     const virtualFs = createVirtualFs([[specFile, "describe('UserService', () => {})"]]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
     const reports = runProgramExpect(specFile, virtualFs, programNode, 1);
+
     expect(reports[0]?.messageId).toBe('missingImplementation');
     expect(reports[0]?.data?.expected).toBe(implFile);
   });
@@ -112,6 +115,7 @@ describe('test-unit-file-mapping', () => {
       [implFile, 'export class UserService {}'],
     ]);
     const programNode = createProgram([{ type: 'ExpressionStatement' }]);
+
     runProgramExpect(specFile, virtualFs, programNode, 0);
   });
 });

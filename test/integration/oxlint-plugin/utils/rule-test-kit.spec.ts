@@ -126,6 +126,7 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'abc';
     const reports: ReportDescriptor[] = [makeNotFnReport()];
+
     // Act
     expectNoFixChange(text, reports);
   });
@@ -134,6 +135,7 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'def';
     const reports: ReportDescriptor[] = [makeNoFixReport(), makeNoFixReport()];
+
     // Act
     expectNoFixChange(text, reports);
   });
@@ -142,6 +144,7 @@ describe('applyFixes', () => {
     // Arrange
     const text = 'xyz';
     const reports: ReportDescriptor[] = [makeBadRangeReport()];
+
     // Act
     expectNoFixChange(text, reports);
   });

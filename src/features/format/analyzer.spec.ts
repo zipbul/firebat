@@ -24,6 +24,7 @@ describe('format/analyzer', () => {
     it('should return an empty array when stdout is not a string', () => {
       // Arrange
       const raw: unknown = { ok: true };
+
       // Act
       expectParseEmpty(raw);
     });
@@ -31,6 +32,7 @@ describe('format/analyzer', () => {
     it('should return an empty array when stdout is empty', () => {
       // Arrange
       const raw = '   \n\n  ';
+
       // Act
       expectParseEmpty(raw);
     });

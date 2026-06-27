@@ -74,6 +74,7 @@ describe('engine/ast/oxc-fingerprint', () => {
       '/virtual/fingerprint/paren-shape-b.ts',
       ['export function f(x) {', '  return (x + 1) * 2;', '}'].join('\n'),
     );
+
     // Act
     // Assert
     expectSameShape(a, b);
@@ -89,6 +90,7 @@ describe('engine/ast/oxc-fingerprint', () => {
       '/virtual/fingerprint/shape-b.ts',
       ['export function f(beta) {', '  const x = beta + 1;', '  return x;', '}'].join('\n'),
     );
+
     // Act
     // Assert
     expectSameShape(a, b);

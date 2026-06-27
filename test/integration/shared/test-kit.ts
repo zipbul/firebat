@@ -148,6 +148,10 @@ export const parseProgramAs = (filePath: string, sourceText: string): ParsedFile
 /** Parse `src` and return the first top-level program-body node, cast to `T`. */
 export const firstBodyNode = <T>(src: string): T => (parseSource('test.ts', src).program as { body: unknown[] }).body[0] as T;
 
+/** Predicate: a duplicate group contains at least one `type`-kind item. */
+export const hasTypeItem = (g: { readonly items: ReadonlyArray<{ readonly kind: string }> }): boolean =>
+  g.items.some(i => i.kind === 'type');
+
 /** Assert `arr` has exactly `count` elements and return it (lets callers keep asserting on it). */
 export const expectLength = <T>(arr: ReadonlyArray<T>, count: number): ReadonlyArray<T> => {
   expect(arr.length).toBe(count);

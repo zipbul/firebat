@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-import { type SourceCase, analyzeSource, expectNoFindings, expectSingleFindingKind } from '../../../test/integration/shared/test-kit';
+import {
+  type SourceCase,
+  analyzeSource,
+  expectNoFindings,
+  expectSingleFindingKind,
+} from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
 type DetectCase = SourceCase;
@@ -71,6 +76,7 @@ describe('analyzeCollapsibleIf - false negative / false positive scenarios', () 
   it.each(detectCases)('analyzeCollapsibleIf - $name - 감지', ({ source }) => {
     // Arrange & Act
     const result = expectSingleFindingKind(source, analyzeCollapsibleIf, 'collapsible-if');
+
     expect(result[0]!.score).toBe(3);
   });
 

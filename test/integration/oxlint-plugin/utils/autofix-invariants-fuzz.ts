@@ -232,7 +232,7 @@ const runAutofixInvariantsFuzz = (): void => {
 
     for (let i = 0; i < 250; i += 1) {
       const c = buildImportCase(rng);
-            const sourceCode = makeSourceCode(c.text);
+      const sourceCode = makeSourceCode(c.text);
 
       const getDeclaredVariables = () => c.variables;
 
@@ -278,7 +278,7 @@ const runAutofixInvariantsFuzz = (): void => {
           references: [{ type: 'Identifier', range: [2000, 2001] }],
         } satisfies Variable;
       });
-            const sourceCode2 = makeSourceCode(fixed);
+      const sourceCode2 = makeSourceCode(fixed);
 
       const getDeclaredVariables2 = () => variables2;
 

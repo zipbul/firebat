@@ -109,6 +109,7 @@ describe('antiUnify', () => {
       }
     `);
     const result = expectAuVars(a, b);
+
     expect(result.similarity).toBeLessThan(0.5);
   });
 

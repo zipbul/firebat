@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createPrng, createProgramFromMap, expectWasteDeterministic, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
+import {
+  createPrng,
+  createProgramFromMap,
+  expectWasteDeterministic,
+  getFuzzIterations,
+  getFuzzSeed,
+  toWasteSignatures,
+} from '../../shared/test-kit';
 
 const createOverwriteChain = (functionName: string, literals: readonly number[]): string => {
   const lines: string[] = [`export function ${functionName}() {`, `  let value = ${literals[0] ?? 0};`];

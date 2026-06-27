@@ -29,7 +29,10 @@ interface DeleteCase {
 }
 
 /** Assert a record's createdAt and updatedAt both equal `ts`. */
-const expectTimestamps = (record: { readonly createdAt: number; readonly updatedAt: number } | null | undefined, ts: number): void => {
+const expectTimestamps = (
+  record: { readonly createdAt: number; readonly updatedAt: number } | null | undefined,
+  ts: number,
+): void => {
   expect(record!.createdAt).toBe(ts);
   expect(record!.updatedAt).toBe(ts);
 };

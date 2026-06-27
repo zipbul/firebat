@@ -86,6 +86,7 @@ describe('integration/waste', () => {
   it('should return no findings when input is empty', () => {
     // Arrange
     let sources = new Map<string, string>();
+
     // Act
     expectNoWasteFrom(sources);
   });

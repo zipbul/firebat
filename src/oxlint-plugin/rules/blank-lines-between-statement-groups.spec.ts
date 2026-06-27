@@ -39,7 +39,6 @@ describe('blank-lines-between-statement-groups', () => {
   it('should autofix when blank line is missing between groups', () => {
     const text = 'function alpha() {}\nconst beta = 1;';
     const reports = runProgram(text, [20, 35]);
-
     const fixed = expectOneFix(text, reports);
 
     expect(fixed).toBe('function alpha() {}\n\nconst beta = 1;');

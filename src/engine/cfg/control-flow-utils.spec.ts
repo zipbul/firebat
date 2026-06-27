@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
-import { firstBodyNode } from "../../../test/integration/shared/test-kit";
 
+import { firstBodyNode } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../ast/parse-source';
 import { resolveFunctionBody, shouldIncreaseDepth } from './control-flow-utils';
 

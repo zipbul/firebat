@@ -5,7 +5,7 @@ import type { ParsedFile } from '../../engine/types';
 import type { DuplicateFindingKind } from '../../types';
 import type { AntiUnificationResult, DiffClassification } from './anti-unifier';
 
-import { expectLength } from '../../../test/integration/shared/test-kit';
+import { expectLength, hasTypeItem } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../../engine/ast/parse-source';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -597,7 +597,7 @@ class Beta {
     // Class 그룹이 Method 그룹을 내포하므로 Method 그룹이 제거되어야 함
     const result = analyzeAB(CLASS_DECLARATION_A, CLASS_DECLARATION_B);
     // type 그룹(ClassDeclaration)이 존재해야 함
-    const classGroups = result.filter(g => g.items.some(i => i.kind === 'type'));
+    const classGroups = result.filter(hasTypeItem);
 
     expect(classGroups.length).toBe(1);
 

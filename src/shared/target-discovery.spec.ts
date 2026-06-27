@@ -61,6 +61,7 @@ describe('resolveTargets - exclude', () => {
     const result = await resolveTargets(tmpDir, [tmpDir], ['**/__fixtures__/**']);
     // Assert
     const relResults = relPathsContaining(result, tmpDir, 'app.ts');
+
     expect(relResults).toContain('util.ts');
     expect(relResults).not.toContain(path.join('__fixtures__', 'fixture.ts'));
   });
@@ -82,6 +83,7 @@ describe('resolveTargets - exclude', () => {
     const result = await resolveTargets(tmpDir, [tmpDir], exclude);
     // Assert
     const relResults = relPathsContaining(result, tmpDir, 'app.ts');
+
     expect(relResults).toContain(path.join('__fixtures__', 'fixture.ts'));
   });
 });

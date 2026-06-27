@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 
-import { expectLength, parsePFile as file, parsePFileWithErrors as fileWithErrors } from '../../../test/integration/shared/test-kit';
+import {
+  expectLength,
+  parsePFile as file,
+  parsePFileWithErrors as fileWithErrors,
+} from '../../../test/integration/shared/test-kit';
 import { analyzeGiantFile, createEmptyGiantFile } from './analyzer';
 
 /** Analyze `files` under maxLines:3 and assert exactly one giant-file finding. */
