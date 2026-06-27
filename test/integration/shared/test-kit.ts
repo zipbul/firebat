@@ -122,6 +122,9 @@ export const createProgramFromMap = (sources: Map<string, string>): ParsedFile[]
   return files;
 };
 
+/** Build a program from `sources` and run waste detection over it. */
+export const wasteFindingsOf = (sources: Map<string, string>): WasteFinding[] => detectWaste(createProgramFromMap(sources));
+
 // ---------------------------------------------------------------------------
 // parseSource wrappers — re-declared identically across many feature specs.
 // Hoisted here so the parse-fixture shape lives in one place.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createProgramFromMap } from '../../shared/test-kit';
+import { createProgramFromMap, wasteFindingsOf } from '../../shared/test-kit';
 
 interface WasteKindFinding {
   readonly kind: string;
@@ -62,8 +62,7 @@ describe('integration/waste', () => {
     sources.set(filePath, source);
 
     // Act
-    let program = createProgramFromMap(sources);
-    let findings = detectWaste(program);
+    let findings = wasteFindingsOf(sources);
 
     // Assert
     expect(hasKind(findings, kind)).toBe(true);

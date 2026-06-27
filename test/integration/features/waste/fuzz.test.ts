@@ -8,6 +8,7 @@ import {
   getFuzzIterations,
   getFuzzSeed,
   toWasteSignatures,
+  wasteFindingsOf,
 } from '../../shared/test-kit';
 
 const createNoRead = (functionName: string, literal: number): string => {
@@ -123,11 +124,9 @@ describe('integration/waste (fuzz)', () => {
     unreachableSources.set('/virtual/waste/unreachable.ts', createUnreachableReadSource());
 
     // Act
-    let reachableProgram = createProgramFromMap(reachableSources);
-    let reachableFindings = detectWaste(reachableProgram);
+    let reachableFindings = wasteFindingsOf(reachableSources);
     let reachableHasDeadStore = reachableFindings.some(finding => finding.kind === 'dead-store');
-    let unreachableProgram = createProgramFromMap(unreachableSources);
-    let unreachableFindings = detectWaste(unreachableProgram);
+    let unreachableFindings = wasteFindingsOf(unreachableSources);
     let unreachableHasDeadStore = unreachableFindings.some(finding => finding.kind === 'dead-store');
 
     // Assert
