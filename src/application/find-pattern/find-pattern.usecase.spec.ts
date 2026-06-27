@@ -12,14 +12,22 @@ const __origTargetDiscovery = { ...require(nodePath.resolve(import.meta.dir, '..
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 // Default impls live here once so mock() and the beforeEach restore share one source.
+/** A mock implementation that ignores its args and resolves to `value` — both gildash seams share this shape. */
+const asyncReturning =
+  <T>(value: T) =>
+  async (..._args: unknown[]): Promise<T> =>
+    value;
+
 const closeImpl = async (_opts?: { cleanup?: boolean }) => {};
 
-const findPatternImpl = async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> => [];
-
-const resolveTargetsImpl = async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> => [];
+// Default empty-async stub impls grouped so the two seams aren't twin const declarations.
+const stubImpls = {
+  findPattern: asyncReturning<PatternMatch[]>([]),
+  resolveTargets: asyncReturning<string[]>([]),
+};
 
 const mockClose = mock(closeImpl);
-const mockFindPattern = mock(findPatternImpl);
+const mockFindPattern = mock(stubImpls.findPattern);
 const mockGildash = {
   findPattern: mockFindPattern,
   close: mockClose,
@@ -28,7 +36,7 @@ const mockGildash = {
 const createGildashImpl = async (_opts: unknown) => mockGildash;
 
 const mockCreateGildash = mock(createGildashImpl);
-const mockResolveTargets = mock(resolveTargetsImpl);
+const mockResolveTargets = mock(stubImpls.resolveTargets);
 
 void mock.module('../../store/gildash', () => ({ createGildash: mockCreateGildash }));
 void mock.module('../../shared/target-discovery', () => ({ resolveTargets: mockResolveTargets }));
@@ -53,12 +61,6 @@ const MATCH_1: PatternMatch = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** A mock implementation that ignores its args and resolves to `value` — both gildash seams share this shape. */
-const asyncReturning =
-  <T>(value: T) =>
-  async (..._args: unknown[]): Promise<T> =>
-    value;
-
 /** Arrange: targets resolve to `/a.ts`, but `findPattern` rejects with a GildashError. */
 const arrangeFindThrows = (): void => {
   mockResolveTargets.mockImplementation(asyncReturning(['/a.ts']));
@@ -76,8 +78,8 @@ beforeEach(() => {
   // Restore default implementations
   mockCreateGildash.mockImplementation(createGildashImpl);
   mockClose.mockImplementation(closeImpl);
-  mockFindPattern.mockImplementation(findPatternImpl);
-  mockResolveTargets.mockImplementation(resolveTargetsImpl);
+  mockFindPattern.mockImplementation(stubImpls.findPattern);
+  mockResolveTargets.mockImplementation(stubImpls.resolveTargets);
 });
 
 afterEach(() => {
