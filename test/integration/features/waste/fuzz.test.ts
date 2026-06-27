@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createPrng, createProgramFromMap, expectWasteDeterministic, getFuzzIterations, getFuzzSeed, toWasteSignatures } from '../../shared/test-kit';
+import {
+  createPrng,
+  createProgramFromMap,
+  expectFlagAndWasteDeterminism,
+  getFuzzIterations,
+  getFuzzSeed,
+  toWasteSignatures,
+} from '../../shared/test-kit';
 
 const createNoRead = (functionName: string, literal: number): string => {
   return [`export function ${functionName}() {`, `  let value = ${literal};`, `  return 0;`, `}`].join('\n');
@@ -101,10 +108,7 @@ describe('integration/waste (fuzz)', () => {
       const expectedDeadStore = shouldHaveDeadStore(kind);
 
       // Assert
-      expect(foundDeadStore).toBe(expectedDeadStore);
-
-      // Determinism: running again yields identical normalized findings.
-      expectWasteDeterministic(program, findings);
+      expectFlagAndWasteDeterminism(foundDeadStore, expectedDeadStore, program, findings);
     }
   });
 

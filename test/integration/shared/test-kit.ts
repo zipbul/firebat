@@ -282,3 +282,14 @@ export const toWasteSignatures = (findings: ReadonlyArray<WasteFinding>): string
 export const expectWasteDeterministic = (program: ParsedFile[], first: string[]): void => {
   expect(toWasteSignatures(detectWaste(program))).toEqual(first);
 };
+
+/** Assert `actual === expected`, then that re-running waste detection on `program` is deterministic vs `first`. */
+export const expectFlagAndWasteDeterminism = (
+  actual: boolean,
+  expected: boolean,
+  program: ParsedFile[],
+  first: string[],
+): void => {
+  expect(actual).toBe(expected);
+  expectWasteDeterministic(program, first);
+};
