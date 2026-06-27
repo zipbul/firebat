@@ -205,6 +205,11 @@ function expectOneFix(text: string, reports: ReportDescriptor[]): string {
   return applyAutofix(text, reports);
 }
 
+/** Assert applying `reports` to `text` leaves it unchanged (no-op / refused fix). */
+function expectNoFixChange(text: string, reports: ReportDescriptor[]): void {
+  expect(applyFixes(text, reports)).toBe(text);
+}
+
 // We don't export local ReportDescriptor anymore, use the one from types
 
 function createRuleContext(
@@ -311,6 +316,7 @@ export {
   createRuleContext,
   createSourceCode,
   createVisitor,
+  expectNoFixChange,
   expectOneFix,
   expectReportCount,
   makeSourceCode,

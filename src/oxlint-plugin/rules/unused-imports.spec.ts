@@ -5,6 +5,7 @@ import type { AstNode, Range, Variable } from '../types';
 import {
   applyAutofix,
   applyFixes,
+  expectNoFixChange,
   setupRule,
   expectReportCount,
 } from '../../../test/integration/oxlint-plugin/utils/rule-test-kit';
@@ -185,9 +186,7 @@ describe('unused-imports', () => {
     // Act
     expectReport(visitor, importNode, reports, 'unusedImportDeclaration');
 
-    const fixed = applyFixes(text, reports);
-
-    expect(fixed).toBe(text);
+    expectNoFixChange(text, reports);
   });
 
   it('should refuse autofix when specifier removal is multiline', () => {
@@ -221,8 +220,6 @@ describe('unused-imports', () => {
     expect(reports.length).toBe(2);
     expect(reports.every(r => typeof r.fix !== 'function')).toBe(true);
 
-    const fixed = applyFixes(text, reports);
-
-    expect(fixed).toBe(text);
+    expectNoFixChange(text, reports);
   });
 });

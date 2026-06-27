@@ -6,7 +6,7 @@ import { describe, expect, it } from 'bun:test';
 
 import type { ReportDescriptor } from '../../../../src/test-api';
 
-import { applyFixes } from './rule-test-kit';
+import { applyFixes, expectNoFixChange } from './rule-test-kit';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -127,10 +127,7 @@ describe('applyFixes', () => {
     const text = 'abc';
     const reports: ReportDescriptor[] = [makeNotFnReport()];
     // Act
-    const result = applyFixes(text, reports);
-
-    // Assert
-    expect(result).toBe(text);
+    expectNoFixChange(text, reports);
   });
 
   it('should return original text when all reports have no fix', () => {
@@ -138,10 +135,7 @@ describe('applyFixes', () => {
     const text = 'def';
     const reports: ReportDescriptor[] = [makeNoFixReport(), makeNoFixReport()];
     // Act
-    const result = applyFixes(text, reports);
-
-    // Assert
-    expect(result).toBe(text);
+    expectNoFixChange(text, reports);
   });
 
   it('should skip a fix whose range array length is not 2', () => {
@@ -149,10 +143,7 @@ describe('applyFixes', () => {
     const text = 'xyz';
     const reports: ReportDescriptor[] = [makeBadRangeReport()];
     // Act
-    const result = applyFixes(text, reports);
-
-    // Assert
-    expect(result).toBe(text);
+    expectNoFixChange(text, reports);
   });
 
   it('should not throw when two fixes are adjacent (range1[1] === range2[0])', () => {
