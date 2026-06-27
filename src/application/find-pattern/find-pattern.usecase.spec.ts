@@ -53,19 +53,15 @@ const MATCH_1: PatternMatch = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const resolveToFiles =
-  (files: string[]) =>
-  async (_root: string, _targets?: ReadonlyArray<string>): Promise<string[]> =>
-    files;
-
-const findPatternReturnsOk =
-  (matches: PatternMatch[]) =>
-  async (_pattern: string, _opts?: { filePaths?: string[] }): Promise<PatternMatch[]> =>
-    matches;
+/** A mock implementation that ignores its args and resolves to `value` — both gildash seams share this shape. */
+const asyncReturning =
+  <T>(value: T) =>
+  async (..._args: unknown[]): Promise<T> =>
+    value;
 
 /** Arrange: targets resolve to `/a.ts`, but `findPattern` rejects with a GildashError. */
 const arrangeFindThrows = (): void => {
-  mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
+  mockResolveTargets.mockImplementation(asyncReturning(['/a.ts']));
   mockFindPattern.mockRejectedValue(new GildashError('search', 'fail'));
 };
 
@@ -97,8 +93,8 @@ afterAll(() => {
 describe('findPatternUseCase', () => {
   it('should return PatternMatch array when gildash succeeds with 1 match', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/proj/src/a.ts']));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([MATCH_1]));
+    mockResolveTargets.mockImplementation(asyncReturning(['/proj/src/a.ts']));
+    mockFindPattern.mockImplementation(asyncReturning([MATCH_1]));
 
     // Act
     const result = await findPatternUseCase({
@@ -113,8 +109,8 @@ describe('findPatternUseCase', () => {
 
   it('should return empty array when gildash succeeds with 0 matches', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/proj/src/a.ts']));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([]));
+    mockResolveTargets.mockImplementation(asyncReturning(['/proj/src/a.ts']));
+    mockFindPattern.mockImplementation(asyncReturning([]));
 
     // Act
     const result = await findPatternUseCase({
@@ -129,8 +125,8 @@ describe('findPatternUseCase', () => {
 
   it('should pass provided rootAbs to createGildash as projectRoot', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/root/a.ts']));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([]));
+    mockResolveTargets.mockImplementation(asyncReturning(['/root/a.ts']));
+    mockFindPattern.mockImplementation(asyncReturning([]));
 
     // Act
     await findPatternUseCase({ targets: ['/root/a.ts'], pattern: 'x', logger, rootAbs: '/root' });
@@ -141,8 +137,8 @@ describe('findPatternUseCase', () => {
 
   it('should use process.cwd() as projectRoot when rootAbs is not provided', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/cwd/a.ts']));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([]));
+    mockResolveTargets.mockImplementation(asyncReturning(['/cwd/a.ts']));
+    mockFindPattern.mockImplementation(asyncReturning([]));
 
     const cwdSpy = spyOn(process, 'cwd').mockReturnValue('/cwd');
 
@@ -159,8 +155,8 @@ describe('findPatternUseCase', () => {
     // Arrange
     const filePaths = ['/proj/a.ts'];
 
-    mockResolveTargets.mockImplementation(resolveToFiles(filePaths));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([]));
+    mockResolveTargets.mockImplementation(asyncReturning(filePaths));
+    mockFindPattern.mockImplementation(asyncReturning([]));
 
     // Act
     await findPatternUseCase({ targets: filePaths, pattern: 'async $F()', logger });
@@ -172,8 +168,8 @@ describe('findPatternUseCase', () => {
 
   it('should call gildash.close with cleanup true on success', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([]));
+    mockResolveTargets.mockImplementation(asyncReturning(['/a.ts']));
+    mockFindPattern.mockImplementation(asyncReturning([]));
 
     // Act
     await findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger });
@@ -184,7 +180,7 @@ describe('findPatternUseCase', () => {
 
   it('should return empty array and not create gildash when targets resolves to empty', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles([]));
+    mockResolveTargets.mockImplementation(asyncReturning([]));
 
     // Act
     const result = await findPatternUseCase({ targets: [], pattern: 'x', logger });
@@ -195,7 +191,7 @@ describe('findPatternUseCase', () => {
 
   it('should not call gildash.close when filePaths is empty (early return path)', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles([]));
+    mockResolveTargets.mockImplementation(asyncReturning([]));
 
     // Act
     await findPatternUseCase({ targets: [], pattern: 'x', logger });
@@ -206,7 +202,7 @@ describe('findPatternUseCase', () => {
 
   it('should call resolveTargets with root and undefined when targets is not provided', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles([]));
+    mockResolveTargets.mockImplementation(asyncReturning([]));
 
     const cwdSpy = spyOn(process, 'cwd').mockReturnValue('/cwd');
 
@@ -243,7 +239,7 @@ describe('findPatternUseCase', () => {
 
   it('should propagate error when createGildash throws', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
+    mockResolveTargets.mockImplementation(asyncReturning(['/a.ts']));
     mockCreateGildash.mockImplementation(async () => {
       throw new Error('open failed');
     });
@@ -264,7 +260,7 @@ describe('findPatternUseCase', () => {
 
   it('should return early with empty array and call nothing when targets=[] and rootAbs=undefined', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles([]));
+    mockResolveTargets.mockImplementation(asyncReturning([]));
 
     // Act
     const result = await findPatternUseCase({ targets: [], pattern: 'x', logger });
@@ -277,8 +273,8 @@ describe('findPatternUseCase', () => {
 
   it('should return same result on repeated calls with identical input', async () => {
     // Arrange
-    mockResolveTargets.mockImplementation(resolveToFiles(['/a.ts']));
-    mockFindPattern.mockImplementation(findPatternReturnsOk([MATCH_1]));
+    mockResolveTargets.mockImplementation(asyncReturning(['/a.ts']));
+    mockFindPattern.mockImplementation(asyncReturning([MATCH_1]));
 
     // Act
     const result1 = await findPatternUseCase({ targets: ['/a.ts'], pattern: 'x', logger });
