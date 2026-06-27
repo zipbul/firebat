@@ -33,7 +33,6 @@ describe('integration/indirection', () => {
   it('should report thin wrappers when they only forward arguments', async () => {
     // Arrange
     const sources = singleSourceMap('/virtual/indirection/forward.ts', createIndirectionSource());
-
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);
@@ -81,7 +80,6 @@ describe('integration/indirection', () => {
   it.each(destructuredForwardCases)('should report thin wrappers when $name', async ({ path, source }) => {
     // Arrange
     const sources = singleSourceMap(path, source);
-
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);
@@ -95,7 +93,6 @@ describe('integration/indirection', () => {
   it('should report chain depth when it exceeds max', async () => {
     // Arrange
     const sources = singleSourceMap('/virtual/indirection/chain.ts', createIndirectionChainSource());
-
     // Act
     const program = createProgramFromMap(sources);
     const gildash = buildMockGildashFromSources(sources);

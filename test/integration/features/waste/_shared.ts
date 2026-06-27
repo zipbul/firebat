@@ -12,7 +12,6 @@ import { createProgramFromMap, singleSourceMap } from '../../shared/test-kit';
  */
 export const detectWasteForSource = (filePath: string, source: string): WasteFinding[] => {
   const sources = singleSourceMap(filePath, source);
-
   const program = createProgramFromMap(sources);
 
   return detectWaste(program);

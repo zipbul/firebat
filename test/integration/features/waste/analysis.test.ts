@@ -58,7 +58,6 @@ describe('integration/waste', () => {
   it.each(kindCases)('should report $title', ({ filePath, source, kind, message }) => {
     // Arrange
     const sources = singleSourceMap(filePath, source);
-
     // Act
     let findings = wasteFindingsOf(sources);
 
