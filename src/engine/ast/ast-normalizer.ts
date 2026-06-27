@@ -802,8 +802,7 @@ const extractGuardCallArg = (guard: Node): GuardCallInfo | null => {
     return null;
   }
 
-  const callExpr = expr as CallExpression;
-  const callArgs = getCallArguments(callExpr);
+  const callArgs = getCallArguments(expr as CallExpression);
 
   if (callArgs.length !== 1 || callArgs[0]?.type !== 'Identifier') {
     return null;

@@ -103,7 +103,7 @@ const isParamPassthroughDelegation = (fn: FunctionLikeNode): boolean => {
     return false;
   }
 
-  let callNode: Node | null = null;
+  let callNode: Node | null;
 
   if (body.type === 'BlockStatement') {
     const statements = (body as Node & { readonly body: ReadonlyArray<Node> }).body;

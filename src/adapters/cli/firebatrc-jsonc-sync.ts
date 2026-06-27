@@ -582,8 +582,7 @@ const buildInsertionsIntoEmptyObject = (ctx: InsertionContext): Edit[] => {
   const closeBrace = ctx.userNode.closeBrace;
   const closeLineStart = lineStartAt(ctx.userText, closeBrace);
   const baseIndent = ctx.userText.slice(closeLineStart, closeBrace);
-  const indent = baseIndent + '  ';
-  const blockLines = renderMissingKeyLines(ctx, indent);
+  const blockLines = renderMissingKeyLines(ctx, baseIndent + '  ');
   const block = ctx.newline + blockLines.join(ctx.newline) + ctx.newline + baseIndent;
 
   return [{ start: closeBrace, end: closeBrace, text: block }];
