@@ -82,6 +82,12 @@ export const readText = async (filePath: string): Promise<string> => {
   return fs.readFile(filePath, 'utf8');
 };
 
+/** Assert the captured CLI args text passed `--config` followed by `configAbs`. */
+export const expectConfigArgs = (argsText: string, configAbs: string): void => {
+  expect(argsText).toContain('--config');
+  expect(argsText).toContain(configAbs);
+};
+
 /**
  * Assert that {@link resolveToolRcPath} does NOT search parent directories: an
  * rc file placed in the project root is invisible to a nested child dir.

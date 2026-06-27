@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 
 import { analyzeFormat } from '../../../../../src/test-api';
-import { createTempProject, installFakeBin, readText, writeText } from '../../../shared/external-tool-test-kit';
+import { createTempProject, expectConfigArgs, installFakeBin, readText, writeText } from '../../../shared/external-tool-test-kit';
 
 describe('integration/format/write-mode', () => {
   it('should pass --write and --config when provided', async () => {
@@ -45,8 +45,7 @@ exit 0
       const argsText = await readText(argsFileAbs);
 
       expect(argsText).toContain('--write');
-      expect(argsText).toContain('--config');
-      expect(argsText).toContain(configAbs);
+      expectConfigArgs(argsText, configAbs);
     } finally {
       await project.dispose();
     }
