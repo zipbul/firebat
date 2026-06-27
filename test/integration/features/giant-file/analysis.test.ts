@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { expectBaseFinding, scanDetectorFindings } from '../../shared/scan-fixture';
+import { expectBaseFinding, expectNoOptionalFindingFields, scanDetectorFindings } from '../../shared/scan-fixture';
 
 const repeatExports = (count: number, template: (i: number) => string): string => {
   return Array.from({ length: count }, (_, i) => template(i)).join('\n');
@@ -61,9 +61,7 @@ describe('integration/giant-file', () => {
     // Assert
     for (const item of list) {
       expectBaseFinding(item, 'giant-file');
-      expect(item.message).toBeUndefined();
-      expect(item.why).toBeUndefined();
-      expect(item.suggestedRefactor).toBeUndefined();
+      expectNoOptionalFindingFields(item);
     }
   });
 

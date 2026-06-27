@@ -128,6 +128,16 @@ export const expectBaseFinding = (
   expect(item.span).toBeDefined();
 };
 
+/** Assert a finding carries none of the optional `message`/`why`/`suggestedRefactor` fields. */
+export const expectNoOptionalFindingFields = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  item: any,
+): void => {
+  expect(item.message).toBeUndefined();
+  expect(item.why).toBeUndefined();
+  expect(item.suggestedRefactor).toBeUndefined();
+};
+
 /**
  * Assert `analyses[detector]` is a bare array, locate the finding whose `kind`
  * matches, assert it exists, and return it. Report-contract tests repeat this

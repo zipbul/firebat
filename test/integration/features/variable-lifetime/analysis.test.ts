@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { expectBaseFinding, scanDetectorFindings } from '../../shared/scan-fixture';
+import { expectBaseFinding, expectNoOptionalFindingFields, scanDetectorFindings } from '../../shared/scan-fixture';
 
 const VARIABLE_LIFETIME_KINDS: ReadonlyArray<string> = [
   'variable-lifetime',
@@ -113,9 +113,7 @@ describe('integration/variable-lifetime', () => {
     // Assert
     for (const item of list) {
       expectBaseFinding(item, VARIABLE_LIFETIME_KINDS);
-      expect(item.message).toBeUndefined();
-      expect(item.why).toBeUndefined();
-      expect(item.suggestedRefactor).toBeUndefined();
+      expectNoOptionalFindingFields(item);
     }
   });
 
