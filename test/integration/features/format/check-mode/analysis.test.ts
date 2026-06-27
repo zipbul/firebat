@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { analyzeFormat } from '../../../../../src/test-api';
 import { createTempProject, installFakeBin, writeText } from '../../../shared/external-tool-test-kit';
+import { expectSingleArray } from '../../../shared/test-kit';
 
 describe('integration/format/check-mode', () => {
   it('should return file paths when exit code is non-zero and stdout contains paths', async () => {
@@ -36,8 +37,7 @@ exit 7
         cwd: project.rootAbs,
       });
 
-      expect(Array.isArray(analysis)).toBe(true);
-      expect(analysis.length).toBe(1);
+      expectSingleArray(analysis);
       expect(analysis[0]).toBe(targetAbs);
     } finally {
       await project.dispose();

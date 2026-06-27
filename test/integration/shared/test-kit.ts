@@ -159,6 +159,12 @@ export const expectLength = <T>(arr: ReadonlyArray<T>, count: number): ReadonlyA
   return arr;
 };
 
+/** Assert `value` is an array with exactly one element. */
+export const expectSingleArray = (value: unknown): void => {
+  expect(Array.isArray(value)).toBe(true);
+  expect((value as ReadonlyArray<unknown>).length).toBe(1);
+};
+
 /** Assert a scan-style result has total 1 and a single finding. */
 export const expectTotalOne = (result: { readonly total: number; readonly findings: { readonly length: number } }): void => {
   expect(result.total).toBe(1);

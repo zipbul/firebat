@@ -13,7 +13,7 @@ import {
   withCwd,
   runScanReport,
 } from '../../shared/scan-fixture';
-import { expectNonEmptyString, expectSpanShape } from '../../shared/test-kit';
+import { expectNonEmptyString, expectSingleArray, expectSpanShape } from '../../shared/test-kit';
 
 interface IndirectionContractRow {
   readonly title: string;
@@ -576,8 +576,7 @@ exit 7
       // Assert
       const findings = report.analyses.indirection as any[];
 
-      expect(Array.isArray(findings)).toBe(true);
-      expect(findings.length).toBe(1);
+      expectSingleArray(findings);
       expect(findings[0]?.kind).toBe(kind);
       expect(findings[0]?.code).toBe(code);
       expect(typeof findings[0]?.file).toBe('string');

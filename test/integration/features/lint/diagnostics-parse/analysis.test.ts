@@ -3,6 +3,7 @@ import * as path from 'node:path';
 
 import { analyzeLint } from '../../../../../src/test-api';
 import { createTempProject, installFakeBin, writeText } from '../../../shared/external-tool-test-kit';
+import { expectSingleArray } from '../../../shared/test-kit';
 
 describe('integration/lint/diagnostics-parse', () => {
   it('should parse JSON diagnostics into a bare array (best-effort normalization)', async () => {
@@ -46,8 +47,7 @@ exit 1
         cwd: project.rootAbs,
       });
 
-      expect(Array.isArray(analysis)).toBe(true);
-      expect(analysis.length).toBe(1);
+      expectSingleArray(analysis);
 
       const diag = analysis[0] as any;
 
