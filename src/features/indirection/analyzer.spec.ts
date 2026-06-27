@@ -441,11 +441,9 @@ describe('analyzer', () => {
     const gildash = createMockGildash();
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
-    const chainFindings = findKinds(analysis, 'forward-chain');
 
     // Assert
-    expect(chainFindings.length).toBe(1);
-    expect(chainFindings[0]?.header).toBe('a');
+    expectSingleKindHeader(analysis, 'forward-chain', 'a');
   });
 
   it('analyzeIndirection - chain depth within max - skips forward-chain', async () => {
