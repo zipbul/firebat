@@ -122,6 +122,9 @@ export const createProgramFromMap = (sources: Map<string, string>): ParsedFile[]
   return files;
 };
 
+/** Build a single-entry `filePath`→`source` map — the common one-file fixture shape. */
+export const singleSourceMap = (filePath: string, source: string): Map<string, string> => new Map([[filePath, source]]);
+
 /** Build a program from `sources` and run waste detection over it. */
 export const wasteFindingsOf = (sources: Map<string, string>): WasteFinding[] => detectWaste(createProgramFromMap(sources));
 

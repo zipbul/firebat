@@ -1,7 +1,7 @@
 import type { WasteFinding } from '../../../../src/test-api';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createProgramFromMap } from '../../shared/test-kit';
+import { createProgramFromMap, singleSourceMap } from '../../shared/test-kit';
 
 /**
  * Parse a single virtual source under `filePath`, run the waste detector, and
@@ -11,9 +11,7 @@ import { createProgramFromMap } from '../../shared/test-kit';
  * that every single-source waste sibling spec otherwise restates verbatim.
  */
 export const detectWasteForSource = (filePath: string, source: string): WasteFinding[] => {
-  const sources = new Map<string, string>();
-
-  sources.set(filePath, source);
+  const sources = singleSourceMap(filePath, source);
 
   const program = createProgramFromMap(sources);
 

@@ -25,7 +25,6 @@ const stubImpls = {
   findPattern: asyncReturning<PatternMatch[]>([]),
   resolveTargets: asyncReturning<string[]>([]),
 };
-
 const mockClose = mock(closeImpl);
 const mockFindPattern = mock(stubImpls.findPattern);
 const mockGildash = {

@@ -23,6 +23,7 @@ describe('integration/early-return/imbalanced-if-else', () => {
     // Act
     // Assert
     const item = findDefinedItem(source, 'process');
+
     expect(item?.kind).toBe('invertible-if-else');
   });
 

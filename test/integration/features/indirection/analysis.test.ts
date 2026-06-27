@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { analyzeIndirection } from '../../../../src/test-api';
-import { createProgramFromMap } from '../../shared/test-kit';
+import { createProgramFromMap, singleSourceMap } from '../../shared/test-kit';
 import { buildMockGildashFromSources } from './mock-gildash-helper';
 
 const createIndirectionSource = (): string => {
@@ -32,9 +32,7 @@ const createIndirectionChainSource = (): string => {
 describe('integration/indirection', () => {
   it('should report thin wrappers when they only forward arguments', async () => {
     // Arrange
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/indirection/forward.ts', createIndirectionSource());
+    const sources = singleSourceMap('/virtual/indirection/forward.ts', createIndirectionSource());
 
     // Act
     const program = createProgramFromMap(sources);
@@ -82,9 +80,7 @@ describe('integration/indirection', () => {
 
   it.each(destructuredForwardCases)('should report thin wrappers when $name', async ({ path, source }) => {
     // Arrange
-    const sources = new Map<string, string>();
-
-    sources.set(path, source);
+    const sources = singleSourceMap(path, source);
 
     // Act
     const program = createProgramFromMap(sources);
@@ -98,9 +94,7 @@ describe('integration/indirection', () => {
 
   it('should report chain depth when it exceeds max', async () => {
     // Arrange
-    const sources = new Map<string, string>();
-
-    sources.set('/virtual/indirection/chain.ts', createIndirectionChainSource());
+    const sources = singleSourceMap('/virtual/indirection/chain.ts', createIndirectionChainSource());
 
     // Act
     const program = createProgramFromMap(sources);

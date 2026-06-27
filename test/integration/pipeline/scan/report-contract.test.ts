@@ -9,6 +9,7 @@ import {
   createScanProjectFixture,
   createScanProjectFixtureWithFiles,
   expectBareFindingShape,
+  expectNoExplanationFields,
   findBareFindingByKind,
   withCwd,
   runScanReport,
@@ -159,8 +160,7 @@ describe('integration/scan/report-contract', () => {
         expect(typeof item.file).toBe('string');
         expectSpanShape(item);
         expect(item.filePath).toBeUndefined();
-        expect(item.why).toBeUndefined();
-        expect(item.suggestedRefactor).toBeUndefined();
+        expectNoExplanationFields(item);
       }
 
       // The fixture has a deliberate 2-node cycle (a.ts ↔ b.ts) so bidirectional-coupling

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
 import { detectWaste } from '../../../../src/test-api';
-import { createProgramFromMap, wasteFindingsOf } from '../../shared/test-kit';
+import { createProgramFromMap, singleSourceMap, wasteFindingsOf } from '../../shared/test-kit';
 
 interface WasteKindFinding {
   readonly kind: string;
@@ -57,9 +57,7 @@ const expectNoWasteFrom = (sources: Map<string, string>): void => {
 describe('integration/waste', () => {
   it.each(kindCases)('should report $title', ({ filePath, source, kind, message }) => {
     // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set(filePath, source);
+    const sources = singleSourceMap(filePath, source);
 
     // Act
     let findings = wasteFindingsOf(sources);
@@ -74,9 +72,7 @@ describe('integration/waste', () => {
 
   it('should not report findings when values are read', () => {
     // Arrange
-    let sources = new Map<string, string>();
-
-    sources.set('/virtual/waste/read.ts', createReadSource());
+    const sources = singleSourceMap('/virtual/waste/read.ts', createReadSource());
 
     // Act
     expectNoWasteFrom(sources);

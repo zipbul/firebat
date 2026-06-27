@@ -23,6 +23,7 @@ describe('integration/early-return/loop-guard-clause', () => {
     // Act
     // Assert
     const item = findDefinedItem(source, 'process');
+
     expect(item?.kind).toBe('wrapping-if');
     expect(item?.metrics.statementsAffected).toBe(5);
   });
