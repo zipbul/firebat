@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { findItemByHeader } from '../../../shared/early-return-cases';
+import { findDefinedItem, findItemByHeader } from '../../../shared/early-return-cases';
 
 describe('integration/early-return/imbalanced-if-else', () => {
   it("should report 'invertible-if-else' when branches are imbalanced", () => {
@@ -21,10 +21,8 @@ describe('integration/early-return/imbalanced-if-else', () => {
       '}',
     ].join('\n');
     // Act
-    const item = findItemByHeader(source, 'process');
-
     // Assert
-    expect(item).toBeDefined();
+    const item = findDefinedItem(source, 'process');
     expect(item?.kind).toBe('invertible-if-else');
   });
 

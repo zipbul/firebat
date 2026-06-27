@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { findItemByHeader } from '../../../shared/early-return-cases';
+import { findDefinedItem } from '../../../shared/early-return-cases';
 
 describe('integration/early-return/loop-guard-clause', () => {
   it('should detect wrapping-if inside loop body with continue exit', () => {
@@ -21,10 +21,8 @@ describe('integration/early-return/loop-guard-clause', () => {
       '}',
     ].join('\n');
     // Act
-    const item = findItemByHeader(source, 'process');
-
     // Assert
-    expect(item).toBeDefined();
+    const item = findDefinedItem(source, 'process');
     expect(item?.kind).toBe('wrapping-if');
     expect(item?.metrics.statementsAffected).toBe(5);
   });

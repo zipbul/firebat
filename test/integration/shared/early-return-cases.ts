@@ -60,3 +60,12 @@ export const expectNoFinding = ({ source }: NoFindingCase): void => {
  */
 export const findItemByHeader = (source: string, header: string): EarlyReturnItem | undefined =>
   analyzeSource(source, analyzeEarlyReturn).find(entry => entry.header === header);
+
+/** Find the early-return item for `header` and assert it was reported (defined). */
+export const findDefinedItem = (source: string, header: string): EarlyReturnItem | undefined => {
+  const item = findItemByHeader(source, header);
+
+  expect(item).toBeDefined();
+
+  return item;
+};
