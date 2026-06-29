@@ -27,6 +27,7 @@ describe('golden/indirection', () => {
   rg('receiver-gate');
   rg('arg-async-gates');
   rg('class-rewrap', 0);
+  rg('interface-script', 0);
   rg('chain-boundary', 2);
   rg('overload-wrapper', 0);
   rg('cross-file-cycle', 5);
