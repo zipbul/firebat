@@ -20,4 +20,14 @@ describe('golden/indirection', () => {
   rg('type-remap', 0);
   rg('interface-rewrap', 0);
   rg('mixed-indirection');
+
+  // K-gate branches (definition coverage): reference·identity ②, receiver ③,
+  // arg/async/generator/predicate/accessor ①④⑤⑥, class, overload, BVA, cross-file cycle.
+  rg('reference-identity');
+  rg('receiver-gate');
+  rg('arg-async-gates');
+  rg('class-rewrap', 0);
+  rg('chain-boundary', 2);
+  rg('overload-wrapper', 0);
+  rg('cross-file-cycle', 5);
 });

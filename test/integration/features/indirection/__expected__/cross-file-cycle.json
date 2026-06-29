@@ -1,0 +1,36 @@
+[
+  {
+    "depth": -1,
+    "evidence": "circular forwarding chain detected",
+    "filePath": "/virtual/cross-file-cycle/b.ts",
+    "header": "b",
+    "kind": "cross-file-forwarding-chain",
+    "span": {
+      "end": {
+        "column": 44,
+        "line": 3
+      },
+      "start": {
+        "column": 17,
+        "line": 3
+      }
+    }
+  },
+  {
+    "depth": -1,
+    "evidence": "circular forwarding chain detected",
+    "filePath": "/virtual/cross-file-cycle/a.ts",
+    "header": "a",
+    "kind": "cross-file-forwarding-chain",
+    "span": {
+      "end": {
+        "column": 44,
+        "line": 3
+      },
+      "start": {
+        "column": 17,
+        "line": 3
+      }
+    }
+  }
+]
