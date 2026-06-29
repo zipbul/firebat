@@ -9,7 +9,6 @@ import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
 import {
-  getMemberPropertyName,
   getNodeHeader,
   isFunctionNode,
   isOxcNode,
@@ -20,136 +19,34 @@ import { addToSetMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';
 
 /* ------------------------------------------------------------------ */
-/*  AST utilities — thin-wrapper detection                             */
+/*  AST utilities — thin-wrapper body-form gate (①)                    */
 /* ------------------------------------------------------------------ */
-
-/**
- * Higher-order array/promise methods that pass extra arguments to their callback.
- * Inlining `xs.map(x => f(x))` → `xs.map(f)` is unsafe because `.map` passes
- * (item, index, array) — semantics differ when `f` has its own parameter handling
- * (e.g. `parseInt`). Same risk applies to .forEach/.filter/.reduce/.find/.some/.every,
- * Promise.{then,catch,finally}, etc.
- */
-const ARITY_SENSITIVE_HIGH_ORDER_METHODS = new Set<string>([
-  'forEach',
-  'map',
-  'filter',
-  'reduce',
-  'reduceRight',
-  'find',
-  'findIndex',
-  'findLast',
-  'findLastIndex',
-  'some',
-  'every',
-  'flatMap',
-  'sort',
-  'then',
-  'catch',
-  'finally',
-]);
-
-/**
- * Collect arrow function nodes that are direct arguments to a high-order method
- * call (e.g. the arrow in `xs.map(x => f(x))`). These are arity-protective: inlining
- * them changes call semantics, so they should NOT be flagged as thin wrappers.
- */
-const collectArityProtectiveArrows = (program: Node): Set<number> => {
-  const arrowStarts = new Set<number>();
-
-  walkOxcTreeWithParent(program, (node, parent) => {
-    if (
-      node.type !== 'ArrowFunctionExpression' ||
-      parent === null ||
-      parent.type !== 'CallExpression' ||
-      !Array.isArray(parent.arguments) ||
-      !parent.arguments.includes(node)
-    ) {
-      return true;
-    }
-
-    const callee = parent.callee;
-
-    if (callee.type !== 'MemberExpression') {
-      return true;
-    }
-
-    const methodName = getMemberPropertyName(callee);
-
-    if (methodName !== null && ARITY_SENSITIVE_HIGH_ORDER_METHODS.has(methodName)) {
-      arrowStarts.add(node.start);
-    }
-
-    return true;
-  });
-
-  return arrowStarts;
-};
 
 const createEmptyIndirection = (): ReadonlyArray<IndirectionFinding> => [];
 
-const getAwaitedCallExpression = (node: Node): Node | null => {
-  if (node.type !== 'AwaitExpression') {
+/**
+ * Extract a plain `CallExpression` from an expression position.
+ *
+ * Only a bare `CallExpression` qualifies. `f?.(x)` (ChainExpression) and
+ * `await f(x)` (AwaitExpression) are rejected here: optional-chain calls and
+ * awaited calls add an observable decision (short-circuit / async contract) and
+ * belong to error-flow, so they are NOT thin-wrappers (spec ①/④).
+ */
+const getPlainCall = (expression: Node | null): Node | null => {
+  if (expression === null) {
     return null;
   }
 
-  const argument = node.argument;
-
-  if (argument.type === 'CallExpression') {
-    return argument;
-  }
-
-  // `await fn?.(args)` — unwrap ChainExpression to expose the optional CallExpression.
-  if (argument.type === 'ChainExpression') {
-    const inner = argument.expression;
-
-    if (inner.type === 'CallExpression') {
-      return inner;
-    }
-  }
-
-  return null;
-};
-
-const getCallExpression = (node: Node): Node | null => {
-  if (node.type === 'CallExpression') {
-    return node;
-  }
-
-  // Optional calls (`fn?.(args)`) are wrapped in a ChainExpression. Unwrap to expose
-  // the inner CallExpression so optional-call wrappers are detected like plain ones.
-  if (node.type === 'ChainExpression') {
-    const inner = node.expression;
-
-    if (inner.type === 'CallExpression') {
-      return inner;
-    }
-  }
-
-  return getAwaitedCallExpression(node);
-};
-
-const getCallFromExpression = (expression: Node | null): Node | null => {
-  if (!expression) {
-    return null;
-  }
-
-  return getCallExpression(expression);
+  return expression.type === 'CallExpression' ? expression : null;
 };
 
 const getCallFromStatement = (statement: Node): Node | null => {
   if (statement.type === 'ReturnStatement') {
-    const argument = statement.argument;
-
-    if (!argument) {
-      return null;
-    }
-
-    return getCallFromExpression(argument);
+    return statement.argument ? getPlainCall(statement.argument) : null;
   }
 
   if (statement.type === 'ExpressionStatement') {
-    return getCallFromExpression(statement.expression);
+    return getPlainCall(statement.expression);
   }
 
   return null;
@@ -165,6 +62,14 @@ const getFunctionParams = (node: Node): ReadonlyArray<Node> | null => {
   return params as ReadonlyArray<Node>;
 };
 
+/**
+ * Collect the wrapper's parameters as plain identifier names.
+ *
+ * Returns `null` (→ not a thin-wrapper) for any param shape that is not a bare
+ * identifier or a trailing rest identifier: ObjectPattern / ArrayPattern
+ * (destructuring is an object↔positional transform — spec ①), defaults
+ * (AssignmentPattern), or a nested pattern inside rest.
+ */
 const getParams = (node: Node): IndirectionParamsInfo | null => {
   const paramsValue = getFunctionParams(node);
 
@@ -175,48 +80,25 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
   const params: string[] = [];
   let restParam: string | null = null;
 
-  for (const paramNode of paramsValue) {
-    if (paramNode.type === 'Identifier' && 'name' in paramNode && typeof paramNode.name === 'string') {
+  for (let index = 0; index < paramsValue.length; index += 1) {
+    const paramNode = paramsValue[index];
+
+    if (!paramNode) {
+      return null;
+    }
+
+    if (paramNode.type === 'Identifier' && typeof paramNode.name === 'string') {
       params.push(paramNode.name);
 
       continue;
     }
 
-    if (paramNode.type === 'ObjectPattern') {
-      const properties = paramNode.properties;
-
-      for (const prop of properties) {
-        if (prop.type === 'Property') {
-          if (prop.value.type !== 'Identifier') {
-            return null;
-          }
-
-          params.push(prop.value.name);
-
-          continue;
-        }
-
-        if (prop.type === 'RestElement') {
-          const argument = prop.argument;
-
-          if (argument.type !== 'Identifier') {
-            return null;
-          }
-
-          restParam = argument.name;
-
-          params.push(argument.name);
-
-          continue;
-        }
-
+    if (paramNode.type === 'RestElement') {
+      // Rest must be the last param and bind a plain identifier.
+      if (index !== paramsValue.length - 1) {
         return null;
       }
 
-      continue;
-    }
-
-    if (paramNode.type === 'RestElement') {
       const argument = paramNode.argument;
 
       if (argument.type !== 'Identifier') {
@@ -230,15 +112,19 @@ const getParams = (node: Node): IndirectionParamsInfo | null => {
       continue;
     }
 
+    // ObjectPattern / ArrayPattern / AssignmentPattern (default) / TSParameterProperty
+    // — all add a transform, not a bare passthrough.
     return null;
   }
 
-  return {
-    params,
-    restParam,
-  };
+  return { params, restParam };
 };
 
+/**
+ * Verify the call arguments forward the parameters 1:1 with no transform:
+ * non-rest positions must be the bare parameter Identifier (no SpreadElement,
+ * no literals, no reordering); the rest position must be `...restParam`.
+ */
 const isPassthroughArgs = (callExpression: Node, params: readonly string[], restParam: string | null): boolean => {
   if (callExpression.type !== 'CallExpression') {
     return false;
@@ -277,6 +163,8 @@ const isPassthroughArgs = (callExpression: Node, params: readonly string[], rest
       continue;
     }
 
+    // Non-rest position: bare identifier only. SpreadElement here (`f(...x)`)
+    // is a positional→spread transform (spec ①) → reject.
     if (arg.type !== 'Identifier' || arg.name !== name) {
       return false;
     }
@@ -285,7 +173,80 @@ const isPassthroughArgs = (callExpression: Node, params: readonly string[], rest
   return true;
 };
 
+/**
+ * Receiver gate (③): resolve which (if any) wrapper parameter is consumed as the
+ * call receiver.
+ *
+ * Returns:
+ *  - `{ ok: true, receiver: null }` for a free function identifier callee;
+ *  - `{ ok: true, receiver: name }` for `p.m(...)` where `p` is a wrapper param;
+ *  - `{ ok: false }` for this/super/private/import-namespace/external-object or
+ *    optional member callees (not inlinable).
+ */
+interface CalleeResolution {
+  readonly ok: boolean;
+  readonly receiver: string | null;
+}
+
+const resolveCallee = (callExpression: Node, paramNames: ReadonlySet<string>): CalleeResolution => {
+  if (callExpression.type !== 'CallExpression') {
+    return { ok: false, receiver: null };
+  }
+
+  const callee = callExpression.callee;
+
+  // Free function identifier — allowed, no receiver.
+  if (callee.type === 'Identifier') {
+    return { ok: true, receiver: null };
+  }
+
+  if (callee.type === 'MemberExpression') {
+    if (callee.optional === true) {
+      return { ok: false, receiver: null };
+    }
+
+    const object = callee.object;
+
+    // Receiver must be one of the wrapper's own parameters.
+    if (object.type === 'Identifier' && paramNames.has(object.name)) {
+      return { ok: true, receiver: object.name };
+    }
+  }
+
+  return { ok: false, receiver: null };
+};
+
+/** True if the function node is async or a generator (spec ④ → error-flow). */
+const isAsyncOrGenerator = (node: Node): boolean => {
+  const fn = node as { async?: boolean; generator?: boolean };
+
+  return fn.async === true || fn.generator === true;
+};
+
+/** True if the return type annotation is a type predicate or `asserts` (spec ⑤). */
+const hasNarrowingReturn = (node: Node): boolean => {
+  const ret = (node as { returnType?: Node | null }).returnType;
+
+  if (!ret || !isOxcNode(ret)) {
+    return false;
+  }
+
+  const annotation = (ret as { typeAnnotation?: Node }).typeAnnotation;
+
+  return isOxcNode(annotation) && annotation.type === 'TSTypePredicate';
+};
+
 const getWrapperCall = (node: Node): Node | null => {
+  // ④ async / generator delegation belongs to error-flow.
+  if (isAsyncOrGenerator(node)) {
+    return null;
+  }
+
+  // ⑤ return narrowing (type predicate / asserts).
+  if (hasNarrowingReturn(node)) {
+    return null;
+  }
+
   const paramsInfo = getParams(node);
 
   if (!paramsInfo) {
@@ -315,13 +276,26 @@ const getWrapperCall = (node: Node): Node | null => {
 
           return getCallFromStatement(statement);
         })()
-      : getCallFromExpression(body);
+      : getPlainCall(body);
 
   if (!maybeCall) {
     return null;
   }
 
-  if (!isPassthroughArgs(maybeCall, paramsInfo.params, paramsInfo.restParam)) {
+  // ③ receiver gate — also tells us which param (if any) is consumed as receiver.
+  const calleeRes = resolveCallee(maybeCall, new Set(paramsInfo.params));
+
+  if (!calleeRes.ok) {
+    return null;
+  }
+
+  // Forwarded params = declared params minus the receiver param (consumed as
+  // `this` in `p.m(...)`). The receiver param must not also appear among args.
+  const forwardedParams =
+    calleeRes.receiver === null ? paramsInfo.params : paramsInfo.params.filter(p => p !== calleeRes.receiver);
+  const effectiveRest = calleeRes.receiver !== null && calleeRes.receiver === paramsInfo.restParam ? null : paramsInfo.restParam;
+
+  if (!isPassthroughArgs(maybeCall, forwardedParams, effectiveRest)) {
     return null;
   }
 
@@ -351,7 +325,10 @@ const resolveCalleeName = (callExpression: Node): string | null => {
   return null;
 };
 
-/** Structured callee reference for cross-file import resolution via gildash. */
+/* ------------------------------------------------------------------ */
+/*  Structured callee reference for cross-file import resolution        */
+/* ------------------------------------------------------------------ */
+
 interface LocalCalleeRef {
   readonly kind: 'local';
   readonly name: string;
@@ -395,11 +372,13 @@ const getSimpleCalleeRef = (callExpression: Node): SimpleCalleeRef | null => {
 interface CollectedFunctionNames {
   readonly namesByNode: Map<Node, string>;
   readonly methodNodes: Set<Node>;
+  readonly propertyInitNodes: Set<Node>;
 }
 
 const collectFunctionNames = (program: Program): CollectedFunctionNames => {
   const namesByNode = new Map<Node, string>();
   const methodNodes = new Set<Node>();
+  const propertyInitNodes = new Set<Node>();
 
   new Visitor({
     FunctionDeclaration(node) {
@@ -428,6 +407,10 @@ const collectFunctionNames = (program: Program): CollectedFunctionNames => {
         return;
       }
 
+      // A function delegate stored in a property init — aliasing does not close
+      // on the file AST, so it is conservative K (spec ② property-init).
+      propertyInitNodes.add(valueNode);
+
       const header = getNodeHeader(node);
 
       if (header.length > 0 && header !== 'anonymous') {
@@ -439,16 +422,17 @@ const collectFunctionNames = (program: Program): CollectedFunctionNames => {
       const valueNode = node.value;
       const header = getNodeHeader(node);
 
+      methodNodes.add(valueNode);
+
       if (header.length === 0 || header === 'anonymous') {
         return;
       }
 
       namesByNode.set(valueNode, header);
-      methodNodes.add(valueNode);
     },
   }).visit(program);
 
-  return { namesByNode, methodNodes };
+  return { namesByNode, methodNodes, propertyInitNodes };
 };
 
 const addFinding = (
@@ -471,9 +455,14 @@ const addFinding = (
   });
 };
 
+/**
+ * Compute the forward-chain depth for `name`. Returns -1 to signal a same-file
+ * cycle was reached on this path (spec: same-file cycles are unreported).
+ */
 const computeChainDepth = (name: string, calleeByName: Map<string, string | null>, visited: Set<string>): number => {
   if (visited.has(name)) {
-    return 1;
+    // Same-file cycle — infinite recursion bug, not a static indirection layer.
+    return -1;
   }
 
   const nextName = calleeByName.get(name);
@@ -492,7 +481,120 @@ const computeChainDepth = (name: string, calleeByName: Map<string, string | null
 
   visited.delete(name);
 
+  if (nextDepth < 0) {
+    return -1;
+  }
+
   return 1 + nextDepth;
+};
+
+/* ------------------------------------------------------------------ */
+/*  Reference / identity gate (②)                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Build the set of identifier names that alias a thin-wrapper delegate via
+ * same-file `const a = w` rebinds (fixpoint). Seeded with the delegate's own
+ * name. Property/member rebinds are NOT followed (aliasing not closed).
+ */
+const buildAliasNames = (seedName: string, program: Program): Set<string> => {
+  const aliases = new Set<string>([seedName]);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    new Visitor({
+      VariableDeclarator(node) {
+        if (node.id.type !== 'Identifier') {
+          return;
+        }
+
+        const init = node.init;
+
+        if (init === null || init.type !== 'Identifier') {
+          return;
+        }
+
+        if (aliases.has(init.name) && !aliases.has(node.id.name)) {
+          aliases.add(node.id.name);
+          changed = true;
+        }
+      },
+    }).visit(program);
+  }
+
+  return aliases;
+};
+
+/**
+ * Scan the file for any reference of `aliasNames` that reaches a non-direct-call
+ * position. A direct call is the callee of a CallExpression (`name(...)`). Any
+ * other reach — argument, comparison operand, array element, spread, init/assign
+ * RHS, return, export, JSX attribute, default — fixes reference identity and
+ * makes the wrapper non-inlinable (spec ②). Returns true if such a reach exists.
+ */
+const hasIdentityReach = (aliasNames: ReadonlySet<string>, program: Program): boolean => {
+  let reached = false;
+
+  walkOxcTreeWithParent(program, (node, parent) => {
+    if (reached) {
+      return false;
+    }
+
+    if (node.type !== 'Identifier' || !aliasNames.has(node.name)) {
+      return true;
+    }
+
+    if (parent === null) {
+      return true;
+    }
+
+    // Direct call: `name(...)` — callee position of a CallExpression.
+    if (parent.type === 'CallExpression' && parent.callee === node) {
+      return true;
+    }
+
+    // Declaration site of the binding itself (id of declarator / function id /
+    // param / member property key) — not a use.
+    if (parent.type === 'VariableDeclarator' && parent.id === node) {
+      return true;
+    }
+
+    if (
+      (parent.type === 'FunctionDeclaration' || parent.type === 'FunctionExpression') &&
+      (parent as { id?: Node | null }).id === node
+    ) {
+      return true;
+    }
+
+    // Member property name (`x.name`) or non-computed object key — not a value
+    // reference to the binding.
+    if (parent.type === 'MemberExpression' && parent.property === node && parent.computed !== true) {
+      return true;
+    }
+
+    if (
+      (parent.type === 'Property' || parent.type === 'PropertyDefinition' || parent.type === 'MethodDefinition') &&
+      parent.key === node &&
+      (parent as { computed?: boolean }).computed !== true
+    ) {
+      return true;
+    }
+
+    // Import/export specifier local/exported names referencing the binding count
+    // as escapes (export of the value) — handled below by default reach.
+    if (parent.type === 'ImportSpecifier' || parent.type === 'ImportDefaultSpecifier' || parent.type === 'ImportNamespaceSpecifier') {
+      return true;
+    }
+
+    // Any other parent context is an identity reach.
+    reached = true;
+
+    return false;
+  });
+
+  return reached;
 };
 
 /* ------------------------------------------------------------------ */
@@ -550,6 +652,11 @@ const buildExportIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<st
   const index = new Map<string, Set<string>>();
 
   for (const sym of allExported) {
+    // Defensive: honor isExported even if the backing search ignores the filter.
+    if (sym.isExported === false) {
+      continue;
+    }
+
     const absFile = resolveAbs(rootAbs, sym.filePath);
 
     addToSetMap(index, absFile, sym.name);
@@ -616,19 +723,13 @@ const resolveCrossFileTarget = (
   }
 };
 
-interface FileOverloads {
-  readonly functions: Set<string>;
-  readonly methods: Set<string>;
-}
-
-const emptyOverloads: FileOverloads = { functions: new Set(), methods: new Set() };
-
 /**
- * Build a set of overloaded function/method names per file.
- * A name is overloaded if gildash indexes 2+ symbols with the same name in the same file.
- * Functions and methods are tracked separately to avoid false collisions.
+ * Build the set of overloaded top-level function names per file (spec ⑥ —
+ * overload forces a protocol, so the implementation is K). A name is overloaded
+ * if gildash indexes 2+ function symbols with the same name in the same file.
+ * Methods are excluded: class methods are wholesale K via the method guard.
  */
-const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, FileOverloads> => {
+const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<string>> => {
   let allSymbols: ReturnType<Gildash['searchSymbols']>;
 
   try {
@@ -640,51 +741,86 @@ const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, File
     throw e;
   }
 
-  // Count by qualified name (sym.name) to correctly group overloads.
-  // Store kind and AST-matching key (memberName ?? name) for the final sets.
-  const counts = new Map<string, Map<string, { count: number; astKey: string; kind: 'function' | 'method' }>>();
+  const counts = new Map<string, Map<string, number>>();
 
   for (const sym of allSymbols) {
-    if (sym.kind !== 'function' && sym.kind !== 'method') {
+    if (sym.kind !== 'function') {
       continue;
     }
 
     const absFile = resolveAbs(rootAbs, sym.filePath);
-    const fileCounts = counts.get(absFile) ?? new Map<string, { count: number; astKey: string; kind: 'function' | 'method' }>();
-    const existing = fileCounts.get(sym.name);
-    const astKey = sym.memberName ?? sym.name;
+    const fileCounts = counts.get(absFile) ?? new Map<string, number>();
 
-    fileCounts.set(sym.name, { count: (existing?.count ?? 0) + 1, astKey, kind: sym.kind });
+    fileCounts.set(sym.name, (fileCounts.get(sym.name) ?? 0) + 1);
     counts.set(absFile, fileCounts);
   }
 
-  // Convert to separate sets for functions and methods
-  const index = new Map<string, FileOverloads>();
+  const index = new Map<string, Set<string>>();
 
   for (const [file, fileCounts] of counts) {
-    const functions = new Set<string>();
-    const methods = new Set<string>();
+    const overloaded = new Set<string>();
 
-    for (const [, { count, astKey, kind }] of fileCounts) {
-      if (count <= 1) {
-        continue;
-      }
-
-      if (kind === 'function') {
-        functions.add(astKey);
-      } else {
-        methods.add(astKey);
+    for (const [name, count] of fileCounts) {
+      if (count > 1) {
+        overloaded.add(name);
       }
     }
 
-    if (functions.size === 0 && methods.size === 0) {
-      continue;
+    if (overloaded.size > 0) {
+      index.set(file, overloaded);
     }
-
-    index.set(file, { functions, methods });
   }
 
   return index;
+};
+
+/**
+ * gildash symbol-level K gate (spec ⑥): decorator (intentional wrapper) or
+ * `override` modifier (explicit base-class forward). Returns true if the wrapper
+ * must be skipped. Gildash unavailability is swallowed (keep AST behavior).
+ */
+const hasDecoratorOrOverride = (gildash: Gildash, header: string, filePath: string): boolean => {
+  try {
+    const symbol = gildash.getFullSymbol(header, filePath);
+
+    if (symbol === null) {
+      return false;
+    }
+
+    if (Array.isArray(symbol.decorators) && symbol.decorators.length > 0) {
+      return true;
+    }
+
+    const modifiers = symbol.detail.modifiers;
+
+    return Array.isArray(modifiers) && modifiers.includes('override');
+  } catch (e) {
+    if (!(e instanceof GildashError)) {
+      throw e;
+    }
+
+    return false;
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/*  Module-file detection (for interface-rewrap gate)                  */
+/* ------------------------------------------------------------------ */
+
+/** True if the program has any top-level import/export declaration (module, not script). */
+const isModuleFile = (program: Program): boolean => {
+  for (const stmt of program.body) {
+    if (
+      stmt.type === 'ImportDeclaration' ||
+      stmt.type === 'ExportNamedDeclaration' ||
+      stmt.type === 'ExportDefaultDeclaration' ||
+      stmt.type === 'ExportAllDeclaration'
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 /* ------------------------------------------------------------------ */
@@ -732,7 +868,7 @@ const analyzeIndirection = async (
   }
 
   const findings: IndirectionFinding[] = [];
-  // Build import/export/overload indices from gildash
+  // Build import/export indices from gildash
   const importIdx = buildImportIndex(gildash, rootAbs);
   const exportIdx = buildExportIndex(gildash, rootAbs);
   const overloadIdx = buildOverloadIndex(gildash, rootAbs);
@@ -744,17 +880,21 @@ const analyzeIndirection = async (
     }
 
     const normalizedFilePath = normalizePath(file.filePath);
-    const { namesByNode, methodNodes } = collectFunctionNames(file.program);
+    const { namesByNode, methodNodes, propertyInitNodes } = collectFunctionNames(file.program);
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
     const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
-    const fileOverloads = overloadIdx.get(normalizedFilePath) ?? emptyOverloads;
-    const arityProtectiveArrowStarts = collectArityProtectiveArrows(file.program);
+    const fileOverloads = overloadIdx.get(normalizedFilePath) ?? new Set<string>();
 
     const handleThinWrapper = (node: Node): void => {
-      // Skip arrow callbacks to .map/.filter/.then/etc. — inlining them is unsafe
-      // because the higher-order method passes extra arguments.
-      if (node.type === 'ArrowFunctionExpression' && arityProtectiveArrowStarts.has(node.start)) {
+      // ③/② Class methods: receiver is reached via instance/prototype aliasing,
+      // which does not close on the file AST — conservative K (spec method).
+      if (methodNodes.has(node)) {
+        return;
+      }
+
+      // Property-init delegate: aliasing not closed — conservative K (spec ②).
+      if (propertyInitNodes.has(node)) {
         return;
       }
 
@@ -765,67 +905,63 @@ const analyzeIndirection = async (
       }
 
       const header = namesByNode.get(node) ?? getNodeHeader(node);
-      // Overloaded functions provide type narrowing — not simple indirection
-      const overloadSet = methodNodes.has(node) ? fileOverloads.methods : fileOverloads.functions;
 
-      if (overloadSet.has(header)) {
-        return;
-      }
-
-      // Symbol-level filters: decorator (intentional wrapper), override modifier
-      // (explicit base-class method forward — semantic, not indirection).
-      // `decorators` is lifted onto FullSymbol; `modifiers` lives on the nested
-      // SymbolDetail (FullSymbol.detail).
-      try {
-        const symbol = gildash.getFullSymbol(header, file.filePath);
-
-        if (symbol !== null) {
-          if (Array.isArray(symbol.decorators) && symbol.decorators.length > 0) {
-            return;
-          }
-
-          const modifiers = symbol.detail.modifiers;
-
-          if (Array.isArray(modifiers) && modifiers.includes('override')) {
-            return;
-          }
-        }
-      } catch (e) {
-        if (!(e instanceof GildashError)) {
-          throw e;
-        }
-        // Semantic layer unavailable — keep existing thin-wrapper behavior
-      }
-
-      const calleeName = resolveCalleeName(wrapperCall);
-      const evidence = `thin wrapper forwards to ${calleeName ?? 'call'}`;
-
-      addFinding(findings, 'thin-wrapper', node, file.filePath, file.sourceText, header, 1, evidence);
-
+      // Only named change-points are thin-wrapper targets (named function decl or
+      // variable-init arrow/function expression). An anonymous inline delegate
+      // (e.g. an arrow passed directly to `.map`) is itself reached as a value in
+      // an identity position — not a named binding — so it is K (spec target #1).
       if (header.length === 0 || header === 'anonymous') {
         return;
       }
 
-      calleeByName.set(header, calleeName);
-      wrapperNodeByName.set(header, node);
-
-      // Cross-file: only track exported functions
-      if (!fileExports.has(header)) {
+      // ⑥ overload: a same-name signature-only declaration is co-present — the
+      // implementation forces a protocol and is K (incl. chain tracking).
+      if (fileOverloads.has(header)) {
         return;
       }
 
-      const calleeRef = getSimpleCalleeRef(wrapperCall);
-      const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs) : null;
-      const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
-      const key = `${normalizedFilePath}:${header}`;
+      // ⑥ decorator / override modifier — intentional/protocol forward, K.
+      if (hasDecoratorOrOverride(gildash, header, file.filePath)) {
+        return;
+      }
 
-      crossFileWrappers.set(key, {
-        node,
-        file,
-        header,
-        depth: 0,
-        targetKey,
-      });
+      const calleeName = resolveCalleeName(wrapperCall);
+
+      // Track callee for same-file forward-chain regardless of ②/export — the
+      // chain target #2/#3 does not require the reference-identity proof.
+      calleeByName.set(header, calleeName);
+      wrapperNodeByName.set(header, node);
+
+      // ② export guard: a wrapper whose uses escape the file cannot be proven
+      // identity-safe here → thin-wrapper not reportable (cross-module).
+      // Still tracked above for forward-chain.
+      if (fileExports.has(header)) {
+        // Cross-file forward-chain tracking (only exported wrappers cross files).
+        const calleeRef = getSimpleCalleeRef(wrapperCall);
+        const crossTarget = calleeRef
+          ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs)
+          : null;
+        const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
+        const key = `${normalizedFilePath}:${header}`;
+
+        // Base depth 1: a registered wrapper performs one delegation hop itself
+        // (its target counts), matching the same-file `computeChainDepth`
+        // convention where a wrapper forwarding to a non-wrapper has depth 1.
+        crossFileWrappers.set(key, { node, file, header, depth: 1, targetKey });
+
+        return;
+      }
+
+      // ② reference / identity gate — scan same-file uses (incl. fixpoint rebinds).
+      const aliasNames = buildAliasNames(header, file.program);
+
+      if (hasIdentityReach(aliasNames, file.program)) {
+        return;
+      }
+
+      const evidence = `thin wrapper forwards to ${calleeName ?? 'call'}`;
+
+      addFinding(findings, 'thin-wrapper', node, file.filePath, file.sourceText, header, 1, evidence);
     };
 
     new Visitor({
@@ -838,7 +974,8 @@ const analyzeIndirection = async (
       for (const [name, node] of wrapperNodeByName.entries()) {
         const depth = computeChainDepth(name, calleeByName, new Set<string>());
 
-        if (depth <= options.maxForwardDepth) {
+        // depth < 0 → same-file cycle on this path: unreported (spec).
+        if (depth < 0 || depth <= options.maxForwardDepth) {
           continue;
         }
 
@@ -854,7 +991,8 @@ const analyzeIndirection = async (
       continue;
     }
 
-    // type-remap: type A = B (pure synonym, no type args, no type params)
+    // type-remap: type A = B (pure synonym, no type args, no type params).
+    // typeArg/typeParam present → generic variation → always K (spec ⑦).
     new Visitor({
       TSTypeAliasDeclaration(node) {
         if (node.declare === true) {
@@ -867,53 +1005,22 @@ const analyzeIndirection = async (
           return;
         }
 
-        const typeArgs = typeAnnotation.typeArguments;
-        const typeParams = node.typeParameters;
-
-        if (typeArgs === null && typeParams === null) {
-          const header = node.id.name;
-          const targetName = resolveTypeReferenceName(typeAnnotation.typeName) ?? 'unknown';
-          const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
-
-          addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, header, 1, evidence);
-        } else {
-          // Semantic verification: complex aliases (with type args/params) may still be structurally equivalent
-          // e.g. type A = Readonly<B> where B is already fully readonly — bidirectional assignability confirms equivalence
-          const aliasHeader = node.id.name;
-          const targetTypeName = resolveTypeReferenceName(typeAnnotation.typeName);
-
-          if (targetTypeName === null) {
-            return;
-          }
-
-          try {
-            const fwd = gildash.isTypeAssignableTo(aliasHeader, file.filePath, targetTypeName, file.filePath);
-
-            if (fwd !== true) {
-              return;
-            }
-
-            const bwd = gildash.isTypeAssignableTo(targetTypeName, file.filePath, aliasHeader, file.filePath);
-
-            if (bwd !== true) {
-              return;
-            }
-
-            const evidence = `type alias ${aliasHeader} is structurally equivalent to ${targetTypeName}`;
-
-            addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, aliasHeader, 1, evidence);
-          } catch (e) {
-            if (!(e instanceof GildashError)) {
-              throw e;
-            }
-            // Semantic layer unavailable — skip this check
-          }
+        if (typeAnnotation.typeArguments !== null || node.typeParameters !== null) {
+          return;
         }
+
+        const header = node.id.name;
+        const targetName = resolveTypeReferenceName(typeAnnotation.typeName) ?? 'unknown';
+        const evidence = `type alias ${header} is a direct synonym for ${targetName}`;
+
+        addFinding(findings, 'type-remap', node, file.filePath, file.sourceText, header, 1, evidence);
       },
     }).visit(file.program);
 
-    // interface-rewrap: empty interface with at least one extends (not declare, not module augmentation, not declaration merging)
-    // Count same-name declarations for merging detection: interface+interface AND class+interface merging
+    // interface-rewrap gate (spec ⑤ target): empty body, exactly one extends,
+    // no typeParameters, heritage has no typeArguments, not declare / not module
+    // augmentation / not declaration merging, and the file is a module.
+    const fileIsModule = isModuleFile(file.program);
     const declarationNameCount = new Map<string, number>();
 
     new Visitor({
@@ -932,57 +1039,81 @@ const analyzeIndirection = async (
     }).visit(file.program);
 
     walkOxcTreeWithParent(file.program, (node, parent) => {
-      if (node.type === 'TSInterfaceDeclaration' && node.declare !== true) {
-        const extendsArr = node.extends;
-
-        if (extendsArr.length === 0) {
-          return true;
-        }
-
-        const bodyBody = node.body.body;
-
-        if (bodyBody.length > 0) {
-          return true;
-        }
-
-        // Skip module augmentation (parent is TSModuleBlock)
-        if (parent !== null && parent.type === 'TSModuleBlock') {
-          return true;
-        }
-
-        const name = node.id.name;
-
-        // Skip same-file declaration merging (interface+interface or class+interface)
-        if ((declarationNameCount.get(name) ?? 0) >= 2) {
-          return true;
-        }
-
-        // Skip cross-file declaration merging
-        try {
-          const symbols = gildash.searchSymbols({ text: name, exact: true });
-          const otherFileHasSameName = symbols.some(s => resolveAbs(rootAbs, s.filePath) !== normalizedFilePath);
-
-          if (otherFileHasSameName) {
-            return true;
-          }
-        } catch (e) {
-          if (!(e instanceof GildashError)) {
-            throw e;
-          }
-          // gildash failure: conservative — do not skip
-        }
-
-        const firstExtends = extendsArr[0];
-
-        if (!firstExtends) {
-          return true;
-        }
-
-        const baseName = getNodeHeader(firstExtends);
-        const evidence = `interface ${name} extends ${baseName} with empty body`;
-
-        addFinding(findings, 'interface-rewrap', node, file.filePath, file.sourceText, name, 1, evidence);
+      if (node.type !== 'TSInterfaceDeclaration' || node.declare === true) {
+        return true;
       }
+
+      // Script file → same-name interfaces may merge cross-file → always K.
+      if (!fileIsModule) {
+        return true;
+      }
+
+      const extendsArr = node.extends;
+
+      // Exactly one extends (0 = empty marker, multiple = composition).
+      if (extendsArr.length !== 1) {
+        return true;
+      }
+
+      // No type parameters on the interface (generic variation).
+      if (node.typeParameters !== null && node.typeParameters !== undefined) {
+        return true;
+      }
+
+      if (node.body.body.length > 0) {
+        return true;
+      }
+
+      // Skip module augmentation (parent is TSModuleBlock)
+      if (parent !== null && parent.type === 'TSModuleBlock') {
+        return true;
+      }
+
+      const name = node.id.name;
+
+      // Skip same-file declaration merging (interface+interface or class+interface)
+      if ((declarationNameCount.get(name) ?? 0) >= 2) {
+        return true;
+      }
+
+      // Skip cross-file declaration merging
+      try {
+        const symbols = gildash.searchSymbols({ text: name, exact: true });
+        const otherFileHasSameName = symbols.some(s => resolveAbs(rootAbs, s.filePath) !== normalizedFilePath);
+
+        if (otherFileHasSameName) {
+          return true;
+        }
+      } catch (e) {
+        if (!(e instanceof GildashError)) {
+          throw e;
+        }
+        // gildash failure: conservative — do not skip
+      }
+
+      const firstExtends = extendsArr[0];
+
+      if (!firstExtends) {
+        return true;
+      }
+
+      // Heritage with type arguments → generic variation → K (spec ⑦).
+      const heritageTypeArgs = (firstExtends as { typeArguments?: Node | null }).typeArguments;
+
+      if (heritageTypeArgs !== null && heritageTypeArgs !== undefined) {
+        return true;
+      }
+
+      const baseExpr = (firstExtends as { expression?: Node }).expression;
+      const baseName =
+        baseExpr && baseExpr.type === 'Identifier'
+          ? baseExpr.name
+          : baseExpr && baseExpr.type === 'TSQualifiedName'
+            ? getNodeHeader(baseExpr)
+            : 'anonymous';
+      const evidence = `interface ${name} extends ${baseName} with empty body`;
+
+      addFinding(findings, 'interface-rewrap', node, file.filePath, file.sourceText, name, 1, evidence);
 
       return true;
     });

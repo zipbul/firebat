@@ -50,6 +50,8 @@ describe('integration/indirection', () => {
     source: string;
   }
 
+  // Destructuring a pattern param and re-spreading its bindings is an object↔positional
+  // transform (spec ①) → K. The wrapper must NOT be reported.
   const destructuredForwardCases: DestructuredForwardCase[] = [
     {
       name: 'destructured params are forwarded',
@@ -58,9 +60,10 @@ describe('integration/indirection', () => {
         'function target(a, b) {',
         '  return a + b;',
         '}',
-        'export function wrapper({ a, b }) {',
+        'function wrapper({ a, b }) {',
         '  return target(a, b);',
         '}',
+        'wrapper({ a: 1, b: 2 });',
       ].join('\n'),
     },
     {
@@ -70,14 +73,15 @@ describe('integration/indirection', () => {
         'function target(a, ...rest) {',
         '  return [a, ...rest].length;',
         '}',
-        'export function wrapper({ a, ...rest }) {',
+        'function wrapper({ a, ...rest }) {',
         '  return target(a, ...rest);',
         '}',
+        'wrapper({ a: 1 });',
       ].join('\n'),
     },
   ];
 
-  it.each(destructuredForwardCases)('should report thin wrappers when $name', async ({ path, source }) => {
+  it.each(destructuredForwardCases)('should NOT report thin wrappers when $name', async ({ path, source }) => {
     // Arrange
     const sources = singleSourceMap(path, source);
     // Act
@@ -87,7 +91,7 @@ describe('integration/indirection', () => {
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
-    expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(true);
+    expect(thinWrappers.some(f => f.header === 'wrapper')).toBe(false);
   });
 
   it('should report chain depth when it exceeds max', async () => {

@@ -37,7 +37,7 @@ describe('integration/indirection/cross-file (fuzz)', () => {
 
         sources.set(
           filePath,
-          [`import * as next from '${nextRel}';`, `export const f${index} = (value) => next.f${index + 1}(value);`].join('\n'),
+          [`import { f${index + 1} } from '${nextRel}';`, `export const f${index} = (value) => f${index + 1}(value);`].join('\n'),
         );
       }
 
@@ -48,10 +48,11 @@ describe('integration/indirection/cross-file (fuzz)', () => {
       const crossFile = findings.filter(f => f.kind === 'cross-file-forwarding-chain');
       const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 
-      // Assert
-      expect(crossFile.length).toBe(chainLength - 2);
+      // Assert — wrappers f0..f(L-1) each delegate; f(L-1)→realWork is terminal
+      // (depth 1, below minDepth 2). f(L-2)..f0 have depth 2..L → L-1 reported.
+      expect(crossFile.length).toBe(chainLength - 1);
       expect(headers[0]).toBe('f0');
-      expect(headers[headers.length - 1]).toBe(`f${chainLength - 3}`);
+      expect(headers[headers.length - 1]).toBe(`f${chainLength - 2}`);
       expect(crossFile.every(f => f.depth >= 2)).toBe(true);
     }
   });

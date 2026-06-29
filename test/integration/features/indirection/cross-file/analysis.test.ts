@@ -14,8 +14,8 @@ describe('integration/indirection/cross-file', () => {
     {
       name: 'report cross-file chain depth when wrappers forward across modules',
       files: [
-        ['/virtual/indirection-cross/a.ts', ["import * as b from './b';", 'export const f = (value) => b.g(value);']],
-        ['/virtual/indirection-cross/b.ts', ["import * as c from './c';", 'export const g = (value) => c.h(value);']],
+        ['/virtual/indirection-cross/a.ts', ["import { g } from './b';", 'export const f = (value) => g(value);']],
+        ['/virtual/indirection-cross/b.ts', ["import { h } from './c';", 'export const g = (value) => h(value);']],
         [
           '/virtual/indirection-cross/c.ts',
           ['function realWork(value) {', '  return value + 1;', '}', 'export const h = (value) => realWork(value);'],
@@ -60,11 +60,13 @@ describe('integration/indirection/cross-file', () => {
     const gildash = buildMockGildashFromSources(sources);
     const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+    const headers = crossFile.map(c => c.header).sort((a, b) => a.localeCompare(b));
 
-    // Assert
-    expect(crossFile.length).toBe(1);
-    expect(crossFile[0]?.header).toBe('f');
-    expect(crossFile[0]?.depth).toBe(2);
+    // Assert — wrappers f→g→h delegate (h→realWork is terminal). Each delegating
+    // function counts: h.depth=1, g.depth=2, f.depth=3. At minDepth 2, f and g report.
+    expect(headers).toEqual(['f', 'g']);
+    expect(crossFile.find(c => c.header === 'f')?.depth).toBe(3);
+    expect(crossFile.find(c => c.header === 'g')?.depth).toBe(2);
   });
 
   it('should report intermediate wrappers when chain depth exceeds two', async () => {
@@ -73,12 +75,12 @@ describe('integration/indirection/cross-file', () => {
 
     sources.set(
       '/virtual/indirection-cross-deep/a.ts',
-      ["import * as b from './b';", 'export const f = (value) => b.g(value);'].join('\n'),
+      ["import { g } from './b';", 'export const f = (value) => g(value);'].join('\n'),
     );
 
     sources.set(
       '/virtual/indirection-cross-deep/b.ts',
-      ["import * as c from './c';", 'export const g = (value) => c.h(value);'].join('\n'),
+      ["import { h } from './c';", 'export const g = (value) => h(value);'].join('\n'),
     );
 
     sources.set(
@@ -98,10 +100,12 @@ describe('integration/indirection/cross-file', () => {
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
     const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 
-    // Assert
-    expect(headers).toEqual(['f', 'g']);
-    expect(crossFile.find(f => f.header === 'f')?.depth).toBe(3);
-    expect(crossFile.find(f => f.header === 'g')?.depth).toBe(2);
+    // Assert — wrappers f→g→h→i delegate (i→realWork terminal). i.depth=1,
+    // h.depth=2, g.depth=3, f.depth=4. At minDepth 2: f, g, h report (i below floor).
+    expect(headers).toEqual(['f', 'g', 'h']);
+    expect(crossFile.find(f => f.header === 'f')?.depth).toBe(4);
+    expect(crossFile.find(f => f.header === 'g')?.depth).toBe(3);
+    expect(crossFile.find(f => f.header === 'h')?.depth).toBe(2);
   });
 
   it('should not report cross-file chain when import cannot be resolved', async () => {
@@ -121,5 +125,30 @@ describe('integration/indirection/cross-file', () => {
 
     // Assert
     expect(crossFile.length).toBe(0);
+  });
+
+  it('should report a cross-file circular chain with depth -1 and circular evidence', async () => {
+    // Arrange — a.f → b.g → a.f forms an import-graph cycle.
+    const sources = new Map<string, string>();
+
+    sources.set(
+      '/virtual/indirection-cross-cycle/a.ts',
+      ["import { g } from './b';", 'export const f = (value) => g(value);'].join('\n'),
+    );
+    sources.set(
+      '/virtual/indirection-cross-cycle/b.ts',
+      ["import { f } from './a';", 'export const g = (value) => f(value);'].join('\n'),
+    );
+
+    // Act
+    const program = createProgramFromMap(sources);
+    const gildash = buildMockGildashFromSources(sources);
+    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
+
+    // Assert — both nodes in the cycle reported as depth -1.
+    expect(crossFile.length).toBe(2);
+    expect(crossFile.every(f => f.depth === -1)).toBe(true);
+    expect(crossFile.every(f => f.evidence.includes('circular'))).toBe(true);
   });
 });

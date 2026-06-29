@@ -68,6 +68,18 @@ interface InterfaceRewrapSkipCase {
   gildash: Gildash;
 }
 
+/** Shared B-series case shapes (single change-point — avoids duplicate-shape drift). */
+interface NameSourceCase {
+  name: string;
+  source: string;
+}
+
+interface WrapperExpectCase {
+  name: string;
+  source: string;
+  expectWrapper: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Tests                                                              */
 /* ------------------------------------------------------------------ */
@@ -308,8 +320,10 @@ describe('analyzer', () => {
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const thinWrappers = findKinds(analysis, 'thin-wrapper');
 
-    // Assert — neither is overloaded, both should be flagged as thin-wrapper
-    expect(thinWrappers.length).toBe(2);
+    // Assert — neither is overloaded; the free function `greet` is a thin-wrapper,
+    // but the class method `greet` is K (instance aliasing — ② not closed on AST).
+    expect(thinWrappers.length).toBe(1);
+    expect(thinWrappers[0]?.header).toBe('greet');
   });
 
   it('analyzeIndirection - arrow callback to .map - not flagged as thin-wrapper (arity-protective)', async () => {
@@ -352,30 +366,50 @@ describe('analyzer', () => {
     expect(thinWrappers.length).toBe(0);
   });
 
-  it('analyzeIndirection - standalone arrow wrapper (not in high-order callback) - still flagged as thin-wrapper', async () => {
-    // Arrange — control case: arrow assigned to const, not used as high-order callback
+  it('analyzeIndirection - standalone non-export arrow wrapper - flagged as thin-wrapper', async () => {
+    // Arrange — arrow assigned to const, non-export, no identity-position use → W.
     const source = [
       'function target(value: any) { return value + 1; }',
       'const wrapper = (x: any) => target(x);',
-      'export { wrapper };',
+      'wrapper(1);',
     ].join('\n');
     const program = createProgram('/virtual/standalone-arrow.ts', source);
     const gildash = createMockGildash();
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-    const thinWrappers = findKinds(analysis, 'thin-wrapper');
 
-    // Assert — standalone arrow IS a real thin-wrapper opportunity
-    expect(thinWrappers.length).toBe(1);
+    // Assert — standalone non-export arrow IS a real thin-wrapper opportunity
+    expectSingleKindHeader(analysis, 'thin-wrapper', 'wrapper');
   });
 
-  it('analyzeIndirection - wrapper calling target via optional call - reports thin-wrapper', async () => {
-    // Arrange — `wrapper(x) { return target?.(x); }` is a thin wrapper:
-    // inlining is safe (or at least the wrapper is detectable). Previously skipped
-    // because `core?.(x)` is wrapped in ChainExpression, not a bare CallExpression.
+  it('analyzeIndirection - exported standalone arrow wrapper - skipped (cross-module)', async () => {
+    // Arrange — exported wrapper: uses may be outside this file, so the
+    // reference-identity gate (②) cannot be proven here → K (cross-module).
+    const source = [
+      'function target(value: any) { return value + 1; }',
+      'export const wrapper = (x: any) => target(x);',
+    ].join('\n');
+    const program = createProgram('/virtual/exported-arrow.ts', source);
+    const gildash = createMockGildash({
+      searchSymbols: () => [
+        { name: 'wrapper', filePath: '/virtual/exported-arrow.ts', kind: 'function', isExported: true } as unknown as SymbolSearchResult,
+      ],
+    });
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const thinWrappers = findKinds(analysis, 'thin-wrapper');
+
+    // Assert
+    expect(thinWrappers.length).toBe(0);
+  });
+
+  it('analyzeIndirection - wrapper calling target via optional call - skips (spec ①)', async () => {
+    // Arrange — `wrapper(x) { return target?.(x); }`: the optional call short-circuits
+    // on a nullish callee, an observable decision the bare call lacks → K.
     const source = [
       'function target(value: any) { return value + 1; }',
       'function wrapper(value: any) { return target?.(value); }',
+      'wrapper(1);',
     ].join('\n');
     const program = createProgram('/virtual/optional-call.ts', source);
     const gildash = createMockGildash();
@@ -383,25 +417,25 @@ describe('analyzer', () => {
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const thinWrappers = findKinds(analysis, 'thin-wrapper');
 
-    // Assert — wrapper function should be flagged
-    expect(thinWrappers.length).toBeGreaterThanOrEqual(1);
-    expect(thinWrappers.some(t => t.header === 'wrapper')).toBe(true);
+    // Assert — optional-call wrapper is NOT a thin-wrapper
+    expect(thinWrappers.length).toBe(0);
   });
 
-  it('analyzeIndirection - wrapper calling target via awaited optional call - reports thin-wrapper', async () => {
-    // Arrange — `async wrapper(x) { return await target?.(x); }`
+  it('analyzeIndirection - async wrapper with await - skips (error-flow, spec ④)', async () => {
+    // Arrange — async/await delegation belongs to error-flow, not indirection.
     const source = [
       'async function target(value: any) { return value + 1; }',
-      'async function wrapper(value: any) { return await target?.(value); }',
+      'async function wrapper(value: any) { return await target(value); }',
+      'wrapper(1);',
     ].join('\n');
-    const program = createProgram('/virtual/awaited-optional.ts', source);
+    const program = createProgram('/virtual/awaited.ts', source);
     const gildash = createMockGildash();
     // Act
     const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
     const thinWrappers = findKinds(analysis, 'thin-wrapper');
 
     // Assert
-    expect(thinWrappers.some(t => t.header === 'wrapper')).toBe(true);
+    expect(thinWrappers.length).toBe(0);
   });
 
   it('analyzeIndirection - arguments are transformed - skips wrapper', async () => {
@@ -533,10 +567,10 @@ describe('analyzer', () => {
   describe('interface-rewrap', () => {
     // Each row is an empty interface that only re-wraps its base(s); `header` is
     // the reported interface name.
+    // Module marker `export {}` makes the file a module so same-name cross-file
+    // merging is excluded (spec: script files are always K).
     const reportCases: InterfaceRewrapReportCase[] = [
-      { name: 'empty interface with single extends', source: 'interface A extends B {}', header: 'A' },
-      { name: 'empty interface with multiple extends', source: 'interface A extends B, C {}', header: 'A' },
-      { name: 'empty interface extends generic base', source: 'interface A extends BaseRepo<User> {}', header: 'A' },
+      { name: 'empty interface with single extends in a module', source: 'export {};\ninterface A extends B {}', header: 'A' },
     ];
 
     it.each(reportCases)('analyzeIndirection - $name - reports interface-rewrap', async ({ source, header }) => {
@@ -559,39 +593,63 @@ describe('analyzer', () => {
     // (default mock otherwise) so the callback never needs a conditional.
     const skipCases: InterfaceRewrapSkipCase[] = [
       {
+        name: 'script file (no top-level import/export) single extends',
+        filePath: '/virtual/rewrap.ts',
+        source: 'interface A extends B {}',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'multiple extends (composition) in a module',
+        filePath: '/virtual/rewrap.ts',
+        source: 'export {};\ninterface A extends B, C {}',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'generic interface with type params in a module',
+        filePath: '/virtual/rewrap.ts',
+        source: 'export {};\ninterface Wrap<T> extends Base {}',
+        gildash: createMockGildash(),
+      },
+      {
+        name: 'heritage with type arguments in a module',
+        filePath: '/virtual/rewrap.ts',
+        source: 'export {};\ninterface NumberSet extends Set<number> {}',
+        gildash: createMockGildash(),
+      },
+      {
         name: 'interface with members',
         filePath: '/virtual/rewrap.ts',
-        source: 'interface A extends B { x: number }',
+        source: 'export {};\ninterface A extends B { x: number }',
         gildash: createMockGildash(),
       },
       {
         name: 'marker interface without extends',
         filePath: '/virtual/rewrap.ts',
-        source: 'interface A {}',
+        source: 'export {};\ninterface A {}',
         gildash: createMockGildash(),
       },
       {
         name: 'declare interface',
         filePath: '/virtual/rewrap.ts',
-        source: 'declare interface A extends B {}',
+        source: 'export {};\ndeclare interface A extends B {}',
         gildash: createMockGildash(),
       },
       {
         name: 'same-file interface declaration merging',
         filePath: '/virtual/rewrap.ts',
-        source: 'interface Foo extends Bar {}\ninterface Foo { x: number }',
+        source: 'export {};\ninterface Foo extends Bar {}\ninterface Foo { x: number }',
         gildash: createMockGildash(),
       },
       {
         name: 'class-interface declaration merging',
         filePath: '/virtual/rewrap.ts',
-        source: 'interface Table extends SQLWrapper {}\nclass Table implements SQLWrapper { static kind = "Table"; }',
+        source: 'export {};\ninterface Table extends SQLWrapper {}\nclass Table implements SQLWrapper { static kind = "Table"; }',
         gildash: createMockGildash(),
       },
       {
         name: 'cross-file declaration merging',
         filePath: '/virtual/rewrap.ts',
-        source: 'interface Express extends Base {}',
+        source: 'export {};\ninterface Express extends Base {}',
         gildash: createMockGildash({
           searchSymbols: () => [
             { name: 'Express', filePath: '/virtual/rewrap.ts', kind: 'interface' } as unknown as SymbolSearchResult,
@@ -602,7 +660,7 @@ describe('analyzer', () => {
       {
         name: 'module augmentation interface',
         filePath: '/virtual/rewrap.ts',
-        source: "declare module 'express' { interface Request extends Base {} }",
+        source: "export {};\ndeclare module 'express' { interface Request extends Base {} }",
         gildash: createMockGildash(),
       },
       {
@@ -630,11 +688,11 @@ describe('analyzer', () => {
     //   b.ts: export function bar(x) { return baz(x); }  — thin-wrapper, calls baz from c.ts
     //   c.ts: export function baz(x) { return x + 1; }   — non-wrapper (terminal, not in crossFileWrappers)
     //
-    // Depth resolution (fixpoint):
-    //   bar.targetKey = /virtual/c.ts:baz, but baz is not a wrapper → bar.depth stays 0
-    //   foo.targetKey = /virtual/b.ts:bar, bar is in crossFileWrappers (depth=0) → foo.depth = 1 + 0 = 1
+    // Depth resolution (each registered wrapper has base depth 1 — it delegates once):
+    //   bar→baz, baz is not a wrapper → bar.depth = 1
+    //   foo→bar, bar is a wrapper (depth 1) → foo.depth = 1 + 1 = 2
     //
-    // So: foo.depth=1, bar.depth=0
+    // So: foo.depth=2, bar.depth=1
     const buildCrossFileSetup = () => {
       const files = [
         parseSource('/virtual/a.ts', 'import { bar } from "./b";\nexport function foo(x: any) { return bar(x); }'),
@@ -668,117 +726,54 @@ describe('analyzer', () => {
       return { files, gildash };
     };
 
-    it('analyzeIndirection - cross-file chain depth 1 with minDepth 1 - reports foo finding', async () => {
-      // Arrange: foo.depth=1 (foo→bar, bar is a wrapper in another file)
-      const { files, gildash } = buildCrossFileSetup();
-      // Act
-      const analysis = await analyzeIndirection(gildash, files, { maxForwardDepth: 0, crossFileMinDepth: 1 }, '/virtual');
-      const crossFindings = findKinds(analysis, 'cross-file-forwarding-chain');
-
-      // Assert
-      expect(crossFindings.length).toBeGreaterThanOrEqual(1);
-      expect(crossFindings.some(f => f.header === 'foo')).toBe(true);
-    });
-
-    it('analyzeIndirection - cross-file chain depth 1 with minDepth 2 - skips', async () => {
-      // Arrange: foo.depth=1 < minDepth=2 → no findings
+    it('analyzeIndirection - cross-file chain foo.depth 2 with minDepth 2 - reports foo, skips bar', async () => {
+      // Arrange: foo.depth=2 ≥ 2 reports; bar.depth=1 < 2 skipped.
       const { files, gildash } = buildCrossFileSetup();
       // Act
       const analysis = await analyzeIndirection(gildash, files, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
       const crossFindings = findKinds(analysis, 'cross-file-forwarding-chain');
 
       // Assert
-      expect(crossFindings.length).toBe(0);
+      expect(crossFindings.map(f => f.header)).toEqual(['foo']);
+      expect(crossFindings[0]?.depth).toBe(2);
     });
 
-    it('analyzeIndirection - cross-file terminal wrapper with minDepth 0 - reports bar finding', async () => {
-      // Arrange: bar.depth=0 (bar→baz, baz is not a cross-file wrapper) → reported only when minDepth=0
+    it('analyzeIndirection - cross-file chain with minDepth 3 - skips all (max depth is 2)', async () => {
+      // Arrange: foo.depth=2 < minDepth=3 → no findings
       const { files, gildash } = buildCrossFileSetup();
       // Act
-      const analysis = await analyzeIndirection(gildash, files, { maxForwardDepth: 0, crossFileMinDepth: 0 }, '/virtual');
+      const analysis = await analyzeIndirection(gildash, files, { maxForwardDepth: 0, crossFileMinDepth: 3 }, '/virtual');
       const crossFindings = findKinds(analysis, 'cross-file-forwarding-chain');
 
       // Assert
-      expect(crossFindings.some(f => f.header === 'bar')).toBe(true);
+      expect(crossFindings.length).toBe(0);
+    });
+
+    it('analyzeIndirection - cross-file terminal wrapper with minDepth 1 - reports bar', async () => {
+      // Arrange: bar.depth=1 (bar→baz, baz is not a wrapper) → reported at minDepth ≤ 1.
+      const { files, gildash } = buildCrossFileSetup();
+      // Act
+      const analysis = await analyzeIndirection(gildash, files, { maxForwardDepth: 0, crossFileMinDepth: 1 }, '/virtual');
+      const crossFindings = findKinds(analysis, 'cross-file-forwarding-chain');
+
+      // Assert — both foo (2) and bar (1) reported at minDepth 1.
+      expect(crossFindings.some(f => f.header === 'bar' && f.depth === 1)).toBe(true);
+      expect(crossFindings.some(f => f.header === 'foo' && f.depth === 2)).toBe(true);
     });
   });
 
-  describe('type-remap semantic verification', () => {
-    it('analyzeIndirection - complex alias with bidirectional assignability - reports type-remap', async () => {
-      // Arrange: type AlreadyReadonly = Readonly<User> where User is already readonly (bidirectionally assignable)
-      const source = 'type AlreadyReadonly = Readonly<User>;';
-      const program = createProgram('/virtual/remap.ts', source);
-      const gildash = createMockGildash({
-        isTypeAssignableTo: (src, _srcFile, dst, _dstFile) => {
-          // Both directions return true — structurally equivalent
-          if (src === 'AlreadyReadonly' && dst === 'Readonly') {
-            return true;
-          }
+  describe('type-remap generic variation (always K)', () => {
+    // Generic aliases (typeArg or typeParam present) are always K — structural
+    // equivalence is a semantic-layer judgement, out of scope. No gildash path.
+    const genericAliasCases: NameSourceCase[] = [
+      { name: 'utility type with type argument', source: 'type ReadonlyUser = Readonly<User>;' },
+      { name: 'alias with type parameter', source: 'type M<T> = Array<T>;' },
+    ];
 
-          if (src === 'Readonly' && dst === 'AlreadyReadonly') {
-            return true;
-          }
-
-          return null;
-        },
-      });
-      // Act
-      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-      const remaps = findKinds(analysis, 'type-remap');
-
-      // Assert
-      expect(remaps.length).toBe(1);
-      expect(remaps[0]?.header).toBe('AlreadyReadonly');
-      expect(remaps[0]?.evidence).toContain('structurally equivalent');
-    });
-
-    it('analyzeIndirection - complex alias where only forward assignable - skips type-remap', async () => {
-      // Arrange: type Narrowed = Readonly<User> where Narrowed is NOT assignable back to Readonly<User>
-      const source = 'type Narrowed = Readonly<User>;';
-      const program = createProgram('/virtual/remap.ts', source);
-      const gildash = createMockGildash({
-        isTypeAssignableTo: (src, _srcFile, dst, _dstFile) => {
-          if (src === 'Narrowed' && dst === 'Readonly') {
-            return true;
-          }
-
-          if (src === 'Readonly' && dst === 'Narrowed') {
-            return false;
-          } // not bidirectional
-
-          return null;
-        },
-      });
-      // Act
-      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-      const remaps = findKinds(analysis, 'type-remap');
-
-      // Assert
-      expect(remaps.length).toBe(0);
-    });
-
-    it('analyzeIndirection - complex alias where semantic check throws - skips gracefully', async () => {
-      // Arrange: isTypeAssignableTo throws — should not propagate error
-      const source = 'type Safe = Readonly<User>;';
-      const program = createProgram('/virtual/remap.ts', source);
-      const gildash = createMockGildash({
-        isTypeAssignableTo: () => {
-          throw new GildashError('semantic', 'semantic layer unavailable');
-        },
-      });
-      // Act
-      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
-      const remaps = findKinds(analysis, 'type-remap');
-
-      // Assert: error is swallowed, no finding added for this complex case
-      expect(remaps.length).toBe(0);
-    });
-
-    it('analyzeIndirection - declare complex alias - skips semantic check', async () => {
-      // Arrange: declare type aliases are ambient declarations, must be skipped
-      const source = 'declare type A = Readonly<User>;';
-      const program = createProgram('/virtual/remap.ts', source);
+    it.each(genericAliasCases)('analyzeIndirection - $name - skips type-remap', async ({ source }) => {
+      // Arrange — isTypeAssignableTo must never be consulted (no semantic path).
       let called = false;
+      const program = createProgram('/virtual/remap.ts', source);
       const gildash = createMockGildash({
         isTypeAssignableTo: () => {
           called = true;
@@ -786,12 +781,217 @@ describe('analyzer', () => {
           return true;
         },
       });
-
       // Act
-      await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const remaps = findKinds(analysis, 'type-remap');
 
-      // Assert: semantic check must not be called for declare aliases
+      // Assert
+      expect(remaps.length).toBe(0);
       expect(called).toBe(false);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  B-series — spec branch coverage (closed-rule gates)              */
+  /* ---------------------------------------------------------------- */
+
+  const wrapperHeaders = async (source: string, filePath = '/virtual/b.ts'): Promise<string[]> => {
+    const program = createProgram(filePath, source);
+    const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
+
+    return findKinds(analysis, 'thin-wrapper').map(f => f.header);
+  };
+
+  describe('B1 reference / identity gate (②)', () => {
+    // `cb` is `const cb = x => f(x)`. A non-direct-call reach makes it K.
+    const cases: WrapperExpectCase[] = [
+      { name: 'direct call only', source: 'function f(x){return x;}\nconst cb = x => f(x);\ncb(1);', expectWrapper: true },
+      { name: 'CallExpression argument', source: 'function f(x){return x;}\nconst cb = x => f(x);\n[1].map(cb);', expectWrapper: false },
+      { name: 'NewExpression argument', source: 'function f(x){return x;}\nconst cb = x => f(x);\nnew Set([cb]);\ncb;', expectWrapper: false },
+      { name: '=== operand', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst g = cb;\nif (g === cb) {}', expectWrapper: false },
+      { name: 'array element', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst a = [cb];', expectWrapper: false },
+      { name: 'return value', source: 'function f(x){return x;}\nfunction make(){ const cb = x => f(x); return cb; }', expectWrapper: false },
+      { name: 'export value', source: 'function f(x){return x;}\nconst cb = x => f(x);\nexport { cb };', expectWrapper: false },
+      { name: 'spread element', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst a = [...[cb]];\ncb;', expectWrapper: false },
+      { name: 'fixpoint alias reach', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst w2 = cb;\n[1].map(w2);', expectWrapper: false },
+    ];
+
+    it.each(cases)('analyzeIndirection - $name - wrapper=$expectWrapper', async ({ source, expectWrapper }) => {
+      // Act
+      const headers = await wrapperHeaders(source);
+
+      // Assert
+      expect(headers.includes('cb')).toBe(expectWrapper);
+    });
+
+    it('analyzeIndirection - property-init delegate - skips (aliasing not closed)', async () => {
+      // Arrange
+      const source = 'function f(x){return x;}\nconst obj = { h: (x) => f(x) };\nobj.h(1);';
+      // Act
+      const headers = await wrapperHeaders(source);
+
+      // Assert
+      expect(headers.includes('h')).toBe(false);
+    });
+  });
+
+  describe('B2 receiver gate (③)', () => {
+    const cases: WrapperExpectCase[] = [
+      {
+        name: 'parameter receiver',
+        source: 'const w = (p: any, x: any) => p.method(x);\nw({} as any, 1);',
+        expectWrapper: true,
+      },
+      {
+        name: 'external object receiver',
+        source: 'declare const obj: any;\nconst w = (x: any) => obj.method(x);\nw(1);',
+        expectWrapper: false,
+      },
+      {
+        name: 'this receiver',
+        source: 'class C { m(x: any){ return x; } run = (x: any) => this.m(x); }',
+        expectWrapper: false,
+      },
+      {
+        name: 'import-namespace receiver',
+        source: "import * as ns from './ns';\nconst w = (x: any) => ns.fn(x);\nw(1);",
+        expectWrapper: false,
+      },
+    ];
+
+    it.each(cases)('analyzeIndirection - $name - wrapper=$expectWrapper', async ({ source, expectWrapper }) => {
+      // Act
+      const headers = await wrapperHeaders(source);
+
+      // Assert
+      expect(headers.includes('w')).toBe(expectWrapper);
+    });
+  });
+
+  describe('B3 argument transform (①)', () => {
+    // Every case is K: the wrapper `w` transforms arguments, so it must not appear.
+    const cases: NameSourceCase[] = [
+      { name: 'literal injection', source: 'function f(a: any, b: any){return a;}\nconst w = (x: any) => f(x, true);\nw(1);' },
+      { name: 'reordering', source: 'function f(a: any, b: any){return a;}\nconst w = (a: any, b: any) => f(b, a);\nw(1, 2);' },
+      { name: 'rest to identifier', source: 'function f(a: any){return a;}\nconst w = (...a: any[]) => f(a);\nw(1);' },
+      { name: 'non-rest to spread', source: 'function f(a: any){return a;}\nconst w = (x: any[]) => f(...x);\nw([1]);' },
+      { name: 'optional chain call', source: 'declare const f: any;\nconst w = (x: any) => f?.(x);\nw(1);' },
+      { name: 'destructuring decomposition', source: 'function f(a: any, b: any){return a;}\nconst w = ({ a, b }: any) => f(a, b);\nw({});' },
+    ];
+
+    it.each(cases)('analyzeIndirection - $name - skips wrapper', async ({ source }) => {
+      // Act
+      const headers = await wrapperHeaders(source);
+
+      // Assert
+      expect(headers.includes('w')).toBe(false);
+    });
+  });
+
+  describe('B4 narrowing / async / generator / accessor / method (④⑤⑥)', () => {
+    // Reuses ReportCase {name, source, header} — same shape, single change-point.
+    const cases: ReportCase[] = [
+      { name: 'type predicate return', source: 'declare function check(v: any): boolean;\nconst w = (v: any): v is string => check(v);\nw(1);', header: 'w' },
+      { name: 'asserts return', source: 'declare function check(v: any): void;\nfunction w(v: any): asserts v is string { return check(v); }\nw(1);', header: 'w' },
+      { name: 'generator delegation', source: 'function* f(x: any){ yield x; }\nfunction* w(x: any){ yield* f(x); }\nw(1);', header: 'w' },
+      { name: 'async await delegation', source: 'declare function f(x: any): Promise<any>;\nconst w = async (x: any) => await f(x);\nw(1);', header: 'w' },
+      { name: 'class method delegation', source: 'function f(x: any){return x;}\nclass C { m(x: any){ return f(x); } }', header: 'm' },
+      { name: 'get accessor delegation', source: 'class C { _f(){ return 1; } get x(){ return this._f(); } }', header: 'x' },
+    ];
+
+    it.each(cases)('analyzeIndirection - $name - skips', async ({ source, header }) => {
+      // Act
+      const headers = await wrapperHeaders(source);
+
+      // Assert
+      expect(headers.includes(header)).toBe(false);
+    });
+  });
+
+  describe('B5 generic variation / class (⑦)', () => {
+    interface TypeSkipCase {
+      name: string;
+      source: string;
+      kind: 'type-remap' | 'interface-rewrap';
+    }
+
+    const cases: TypeSkipCase[] = [
+      { name: 'utility type arg', source: 'type A = Readonly<B>;', kind: 'type-remap' },
+      { name: 'alias type param', source: 'type M<T> = Array<T>;', kind: 'type-remap' },
+      { name: 'generic interface', source: 'export {};\ninterface Wrap<T> extends Base {}', kind: 'interface-rewrap' },
+      { name: 'heritage type arg', source: 'export {};\ninterface NumberSet extends Set<number> {}', kind: 'interface-rewrap' },
+    ];
+
+    it.each(cases)('analyzeIndirection - $name - skips $kind', async ({ source, kind }) => {
+      // Arrange
+      const program = createProgram('/virtual/b.ts', source);
+      // Act
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
+      // Assert
+      expect(findKinds(analysis, kind).length).toBe(0);
+    });
+
+    it('analyzeIndirection - empty class extends - no class indirection kind', async () => {
+      // Arrange — class re-wrap creates runtime identity; there is no class kind.
+      const source = 'class B {}\nclass A extends B {}';
+      const program = createProgram('/virtual/b.ts', source);
+      // Act
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
+      // Assert — no finding of any kind references the class as a re-wrap.
+      expect(analysis.some(f => f.header === 'A')).toBe(false);
+    });
+  });
+
+  describe('B6 forward-chain depth boundaries (BVA)', () => {
+    const chainSource = (n: number): string => {
+      // a0 → a1 → ... → a(n-1) → target. a0.depth = n.
+      const lines: string[] = ['function target(x: any){ return x; }'];
+
+      for (let i = 0; i < n; i += 1) {
+        const next = i === n - 1 ? 'target' : `a${i + 1}`;
+
+        lines.push(`function a${i}(x: any){ return ${next}(x); }`);
+      }
+
+      lines.push('a0(1);');
+
+      return lines.join('\n');
+    };
+
+    const chainHeaders = async (n: number, maxForwardDepth: number): Promise<string[]> => {
+      const program = createProgram('/virtual/chain.ts', chainSource(n));
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth, crossFileMinDepth: 2 }, '/virtual');
+
+      return findKinds(analysis, 'forward-chain').map(f => f.header);
+    };
+
+    it('analyzeIndirection - 2 hops, maxForwardDepth 1 - reports a0 (depth 2 > 1)', async () => {
+      expect(await chainHeaders(2, 1)).toEqual(['a0']);
+    });
+
+    it('analyzeIndirection - 3 hops, maxForwardDepth 2 - reports only a0 (depth 3 > 2)', async () => {
+      expect(await chainHeaders(3, 2)).toEqual(['a0']);
+    });
+
+    it('analyzeIndirection - 2 hops, maxForwardDepth 2 - boundary equal, no report', async () => {
+      expect(await chainHeaders(2, 2)).toEqual([]);
+    });
+
+    it('analyzeIndirection - 1 hop, maxForwardDepth 1 - boundary equal, no report', async () => {
+      expect(await chainHeaders(1, 1)).toEqual([]);
+    });
+
+    it('analyzeIndirection - same-file cycle a->b->a - unreported (infinite recursion)', async () => {
+      // Arrange
+      const source = 'function a(x: any){ return b(x); }\nfunction b(x: any){ return a(x); }\na(1);';
+      const program = createProgram('/virtual/cycle.ts', source);
+      // Act
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
+
+      // Assert — same-file cycles are out of scope.
+      expect(findKinds(analysis, 'forward-chain').length).toBe(0);
     });
   });
 

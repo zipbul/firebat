@@ -37,7 +37,7 @@ const indirectionContractCases: IndirectionContractRow[] = [
   {
     title: 'indirection - empty interface with extends - reports IND_INTERFACE_REWRAP with correct code',
     prefix: 'firebat-report-contract-ind-interface-rewrap',
-    source: 'interface C extends D {}\n',
+    source: 'interface C extends D {}\nexport {};\n',
     kind: 'interface-rewrap',
     code: 'IND_INTERFACE_REWRAP',
     header: 'C',

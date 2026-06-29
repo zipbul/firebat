@@ -2,17 +2,17 @@
   {
     "depth": 1,
     "evidence": "thin wrapper forwards to core",
-    "filePath": "/virtual/thin-wrapper/wrapper.ts",
+    "filePath": "/virtual/thin-wrapper.ts",
     "header": "wrapper",
     "kind": "thin-wrapper",
     "span": {
       "end": {
-        "column": 45,
-        "line": 3
+        "column": 1,
+        "line": 9
       },
       "start": {
-        "column": 23,
-        "line": 3
+        "column": 0,
+        "line": 7
       }
     }
   }

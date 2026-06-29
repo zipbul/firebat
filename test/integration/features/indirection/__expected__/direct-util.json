@@ -2,17 +2,17 @@
   {
     "depth": 1,
     "evidence": "thin wrapper forwards to directUtil",
-    "filePath": "/virtual/direct-util/clean.ts",
+    "filePath": "/virtual/direct-util.ts",
     "header": "clean",
     "kind": "thin-wrapper",
     "span": {
       "end": {
-        "column": 49,
-        "line": 3
+        "column": 1,
+        "line": 11
       },
       "start": {
-        "column": 21,
-        "line": 3
+        "column": 0,
+        "line": 9
       }
     }
   }

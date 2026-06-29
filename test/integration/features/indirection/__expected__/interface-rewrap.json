@@ -1,35 +1,18 @@
 [
   {
     "depth": 1,
-    "evidence": "interface A extends anonymous with empty body",
+    "evidence": "interface A extends B with empty body",
     "filePath": "/virtual/interface-rewrap.ts",
     "header": "A",
     "kind": "interface-rewrap",
     "span": {
       "end": {
         "column": 24,
-        "line": 2
+        "line": 6
       },
       "start": {
         "column": 0,
-        "line": 2
-      }
-    }
-  },
-  {
-    "depth": 1,
-    "evidence": "interface Multi extends anonymous with empty body",
-    "filePath": "/virtual/interface-rewrap.ts",
-    "header": "Multi",
-    "kind": "interface-rewrap",
-    "span": {
-      "end": {
-        "column": 31,
-        "line": 3
-      },
-      "start": {
-        "column": 0,
-        "line": 3
+        "line": 6
       }
     }
   }
