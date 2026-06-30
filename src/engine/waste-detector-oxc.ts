@@ -17,7 +17,7 @@ import {
   densifyKeys,
   resolveVarIndex,
 } from './dataflow';
-import { buildDeclScopeMap } from './dataflow/variable-collector';
+import { BindingUnresolvedError, buildDeclScopeMap } from './dataflow/variable-collector';
 
 interface NestedFunctionContext {
   /**
@@ -2696,38 +2696,54 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
       continue;
     }
 
-    const lineOffsets = buildLineOffsets(file.sourceText);
+    // Per-file findings collected separately so a mid-file binding failure
+    // discards this file's partial output instead of leaking into the result.
+    const fileFindings: WasteFinding[] = [];
 
-    // Module-scope pass: CLAUDE.md says "모든 scope (module / function / block)" are
-    // in scope. Without this pass, top-level `let v=1; v=2; ...`, top-level blocks,
-    // and module-scope case 6/7 all escape detection. Function-internal blocks are
-    // already covered by the function-scope pass below.
-    collectWasteFindingsForModule(file.program, file.filePath, file.sourceText, lineOffsets, findings);
+    try {
+      const lineOffsets = buildLineOffsets(file.sourceText);
 
-    const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
-      if (Array.isArray(node)) {
-        for (const entry of node as ReadonlyArray<Node>) {
-          visit(entry);
+      // Module-scope pass: CLAUDE.md says "모든 scope (module / function / block)" are
+      // in scope. Without this pass, top-level `let v=1; v=2; ...`, top-level blocks,
+      // and module-scope case 6/7 all escape detection. Function-internal blocks are
+      // already covered by the function-scope pass below.
+      collectWasteFindingsForModule(file.program, file.filePath, file.sourceText, lineOffsets, fileFindings);
+
+      const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
+        if (Array.isArray(node)) {
+          for (const entry of node as ReadonlyArray<Node>) {
+            visit(entry);
+          }
+
+          return;
         }
 
-        return;
+        if (!isOxcNode(node)) {
+          return;
+        }
+
+        const fn = node as OxcFunction;
+        const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
+
+        if (isFunctionNode(node) && functionBodyNode !== undefined) {
+          collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, file.sourceText, lineOffsets, fileFindings);
+        }
+
+        forEachChildNode(node, child => visit(child));
+      };
+
+      visit(file.program);
+    } catch (e) {
+      // Gildash couldn't resolve this one file's bindings (e.g. framework-specific
+      // syntax) → skip it (degrade) instead of aborting the whole scan.
+      if (e instanceof BindingUnresolvedError) {
+        continue;
       }
 
-      if (!isOxcNode(node)) {
-        return;
-      }
+      throw e;
+    }
 
-      const fn = node as OxcFunction;
-      const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
-
-      if (isFunctionNode(node) && functionBodyNode !== undefined) {
-        collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, file.sourceText, lineOffsets, findings);
-      }
-
-      forEachChildNode(node, child => visit(child));
-    };
-
-    visit(file.program);
+    findings.push(...fileFindings);
   }
 
   return findings;

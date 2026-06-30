@@ -21,7 +21,7 @@ import { isFunctionNode } from '@zipbul/gildash';
 import type { VariableCollectorOptions, VariableUsage } from '../types';
 
 import { evalStaticNullish, evalStaticTruthiness, forEachChildNode, unwrapExpression } from '../ast';
-import { tryGildashDeclScopeMap } from './gildash-binding-source';
+import { getGildashSemanticContext, tryGildashDeclScopeMap } from './gildash-binding-source';
 
 /**
  * Return a map from each identifier's start offset to a synthetic binding key
@@ -42,6 +42,23 @@ import { tryGildashDeclScopeMap } from './gildash-binding-source';
  * `sourceText` is the full file source backing `root`; callers thread it from
  * the ParsedFile.
  */
+/**
+ * Thrown when Gildash IS registered but a SPECIFIC file's standalone binding
+ * resolution failed (e.g. a framework-specific syntax the throwaway single-file
+ * tsc program rejects). Per-file degradable — detector file-loops catch it and
+ * skip that one file rather than aborting the whole scan. A genuine
+ * misconfiguration (no Gildash context at all) throws a plain Error instead.
+ */
+export class BindingUnresolvedError extends Error {
+  readonly filePath: string;
+
+  constructor(filePath: string) {
+    super(`buildDeclScopeMap: gildash binding source did not resolve for filePath=${filePath}`);
+    this.name = 'BindingUnresolvedError';
+    this.filePath = filePath;
+  }
+}
+
 export const buildDeclScopeMap = (root: Node, filePath?: string, sourceText?: string): ReadonlyMap<number, string> => {
   void root;
 
@@ -49,6 +66,12 @@ export const buildDeclScopeMap = (root: Node, filePath?: string, sourceText?: st
 
   if (fromGildash !== null) {
     return fromGildash;
+  }
+
+  // Gildash registered + file present, but this file's bindings didn't resolve
+  // → per-file degradable (skip the file), not a global misconfiguration.
+  if (getGildashSemanticContext() !== null && filePath !== undefined && sourceText !== undefined) {
+    throw new BindingUnresolvedError(filePath);
   }
 
   throw new Error(

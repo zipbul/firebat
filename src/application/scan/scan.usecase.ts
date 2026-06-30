@@ -771,6 +771,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
   if (semanticAvailable) {
     setGildashSemanticContext(gildash);
+  } else {
+    const bindingDependent = ['waste', 'variable-lifetime'].filter(d => options.detectors.includes(d as never));
+
+    if (bindingDependent.length > 0) {
+      logger.warn('Semantic Gildash unavailable (AST-only); skipping binding-dependent detectors', {
+        skipped: bindingDependent.join(','),
+      });
+    }
   }
 
   // Inline try/finally (not a wrapping nested function): early `return`s inside
@@ -918,10 +926,12 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
 
     const detectorTimings: Record<string, number> = {};
     const detectorRunCtx: DetectorRunCtx = { logger, timings: detectorTimings };
+    // waste needs the gildash binding source (decl-scope). When semantic init
+    // failed (AST-only fallback), it cannot run — skip it instead of crashing.
     const waste: ReturnType<typeof detectWaste> = runDetector(
       detectorRunCtx,
       'waste',
-      options.detectors.includes('waste'),
+      options.detectors.includes('waste') && semanticAvailable,
       () => [],
       () => detectWaste(program),
     );
@@ -1097,10 +1107,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         return analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
       },
     );
+    // variable-lifetime also needs the gildash binding source — skip on AST-only.
     const variableLifetime: ReturnType<typeof analyzeVariableLifetime> = runDetector(
       detectorRunCtx,
       'variable-lifetime',
-      options.detectors.includes('variable-lifetime'),
+      options.detectors.includes('variable-lifetime') && semanticAvailable,
       createEmptyVariableLifetime,
       () => {
         const { 'variable-lifetime': variableLifetimeCfg } = config?.features ?? {};
