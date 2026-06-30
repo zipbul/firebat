@@ -15,7 +15,6 @@ import {
   walkOxcTreeWithParent,
 } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
-import { addToSetMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';
 
 /* ------------------------------------------------------------------ */
@@ -637,32 +636,59 @@ const buildImportIndex = (gildash: Gildash, rootAbs: string): Map<string, Map<st
   return index;
 };
 
-const buildExportIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<string>> => {
-  let allExported: ReturnType<Gildash['searchSymbols']>;
+/**
+ * Names exported by a file, read directly from its OWN AST.
+ *
+ * "Is this declaration exported" is a pure syntactic property — determining it
+ * from the file's AST is complete and robust, whereas gildash's project-wide
+ * export index can be partial/degraded (e.g. when dependencies aren't installed),
+ * which would silently disable the cross-module thin-wrapper guard and produce
+ * false positives for every exported wrapper.
+ */
+const collectExportedNames = (program: Program): Set<string> => {
+  const names = new Set<string>();
+  const body = (program as { body?: ReadonlyArray<Node> }).body ?? [];
 
-  try {
-    allExported = gildash.searchSymbols({ isExported: true });
-  } catch (e) {
-    if (e instanceof GildashError) {
-      return new Map();
-    }
-    throw e;
-  }
-
-  const index = new Map<string, Set<string>>();
-
-  for (const sym of allExported) {
-    // Defensive: honor isExported even if the backing search ignores the filter.
-    if (sym.isExported === false) {
+  for (const stmt of body) {
+    if (stmt.type !== 'ExportNamedDeclaration') {
       continue;
     }
 
-    const absFile = resolveAbs(rootAbs, sym.filePath);
+    const decl = (stmt as { declaration?: Node | null }).declaration;
 
-    addToSetMap(index, absFile, sym.name);
+    if (decl) {
+      if ((decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') && 'id' in decl) {
+        const id = (decl as { id?: { name?: string } | null }).id;
+
+        if (id && typeof id.name === 'string') {
+          names.add(id.name);
+        }
+      } else if (decl.type === 'VariableDeclaration') {
+        for (const d of (decl as { declarations: ReadonlyArray<{ id?: Node }> }).declarations) {
+          const id = d.id;
+
+          if (id && id.type === 'Identifier' && typeof id.name === 'string') {
+            names.add(id.name);
+          }
+        }
+      }
+    }
+
+    // `export { foo, bar as baz }` — the exported (public) name is what matters.
+    const specifiers = (stmt as { specifiers?: ReadonlyArray<{ exported?: { name?: string } }> }).specifiers;
+
+    if (Array.isArray(specifiers)) {
+      for (const spec of specifiers) {
+        const name = spec.exported?.name;
+
+        if (typeof name === 'string') {
+          names.add(name);
+        }
+      }
+    }
   }
 
-  return index;
+  return names;
 };
 
 interface CrossFileTarget {
@@ -867,9 +893,10 @@ const analyzeIndirection = async (
   }
 
   const findings: IndirectionFinding[] = [];
-  // Build import/export indices from gildash
+  // Build import/overload indices from gildash. Export status is read per-file
+  // from the AST (collectExportedNames) — robust even when gildash's project
+  // index is partial (e.g. dependencies not installed).
   const importIdx = buildImportIndex(gildash, rootAbs);
-  const exportIdx = buildExportIndex(gildash, rootAbs);
   const overloadIdx = buildOverloadIndex(gildash, rootAbs);
   const crossFileWrappers = new Map<string, CrossFileWrapper>();
 
@@ -882,7 +909,7 @@ const analyzeIndirection = async (
     const { namesByNode, methodNodes, propertyInitNodes } = collectFunctionNames(file.program);
     const calleeByName = new Map<string, string | null>();
     const wrapperNodeByName = new Map<string, Node>();
-    const fileExports = exportIdx.get(normalizedFilePath) ?? new Set<string>();
+    const fileExports = collectExportedNames(file.program);
     const fileOverloads = overloadIdx.get(normalizedFilePath) ?? new Set<string>();
 
     const handleThinWrapper = (node: Node): void => {
@@ -925,6 +952,13 @@ const analyzeIndirection = async (
       }
 
       const calleeName = resolveCalleeName(wrapperCall);
+
+      // Self-recursive wrapper (`const f = () => f()`): the callee is the wrapper
+      // itself, so there is no underlying layer to inline away — removing it would
+      // break the self-reference. Not indirection (K).
+      if (calleeName !== null && calleeName === header) {
+        return;
+      }
 
       // Track callee for same-file forward-chain regardless of ②/export — the
       // chain target #2/#3 does not require the reference-identity proof.

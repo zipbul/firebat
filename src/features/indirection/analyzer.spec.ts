@@ -103,6 +103,39 @@ describe('analyzer', () => {
     expectSingleKindHeader(analysis, 'thin-wrapper', 'wrapper');
   });
 
+  it('analyzeIndirection - exported wrapper with empty gildash export index - skips (AST export status)', async () => {
+    // Arrange — gildash returns NO exports (degraded, e.g. deps not installed),
+    // but the AST clearly shows `export function`. The export guard must rely on
+    // the AST, not the partial gildash index, or it would FP on every export.
+    const source = [
+      'function core(value) {',
+      '  return value;',
+      '}',
+      'export function exportedFn(value) {',
+      '  return core(value);',
+      '}',
+    ].join('\n');
+    const program = createProgram('/virtual/exported.ts', source);
+    const gildash = createMockGildash({ searchSymbols: () => [] });
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
+    // Assert — exported single delegation is cross-module → not a thin-wrapper.
+    expect(findKinds(analysis, 'thin-wrapper')).toHaveLength(0);
+  });
+
+  it('analyzeIndirection - self-recursive wrapper - skips (no layer to inline)', async () => {
+    // Arrange
+    const source = ['const boom = () => boom();', 'boom();'].join('\n');
+    const program = createProgram('/virtual/self-recursive.ts', source);
+    const gildash = createMockGildash();
+    // Act
+    const analysis = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+
+    // Assert — a wrapper that forwards to itself is not inlinable indirection.
+    expect(findKinds(analysis, 'thin-wrapper')).toHaveLength(0);
+  });
+
   it('analyzeIndirection - overloaded and non-overloaded coexist - only non-overloaded flagged', async () => {
     // Arrange — file has both overloaded greet and non-overloaded wrapper
     const source = [

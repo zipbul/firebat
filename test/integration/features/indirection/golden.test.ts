@@ -36,4 +36,6 @@ describe('golden/indirection', () => {
   rg('chain-boundary', 2);
   rg('overload-wrapper', 0);
   rg('cross-file-cycle', 5);
+  rg('self-recursive'); // K — self-recursive wrapper (no layer to inline)
+  rg('exported-wrapper'); // K — exported single-delegation (cross-module, AST export status)
 });
