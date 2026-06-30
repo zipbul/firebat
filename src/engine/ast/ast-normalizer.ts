@@ -35,8 +35,6 @@ import {
 
 type AnyNode = Node & Record<string, unknown>;
 
-type NormalizedValue = NodeValue;
-
 const withType = (type: string, fields: Record<string, unknown> = {}): Node => {
   return { type, start: 0, end: 0, ...fields } as unknown as Node;
 };
@@ -860,7 +858,7 @@ const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
   );
 };
 
-let normalizationCache = new WeakMap<Node, NormalizedValue>();
+let normalizationCache = new WeakMap<Node, NodeValue>();
 const FUNCTION_LIKE_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
 /**
@@ -902,7 +900,7 @@ const normalizeTrailingReturn = (node: AnyNode): NodeValue | null => {
   return withType(node.type, { ...rec, body: block(stmts.slice(0, -1) as ReadonlyArray<Node>) });
 };
 
-const applyLocalRewrites = (normalized: AnyNode, functionDepth: number): NormalizedValue | null => {
+const applyLocalRewrites = (normalized: AnyNode, functionDepth: number): NodeValue | null => {
   const trailingReturn = normalizeTrailingReturn(normalized);
 
   if (trailingReturn !== null) {
@@ -964,7 +962,7 @@ const applyLocalRewrites = (normalized: AnyNode, functionDepth: number): Normali
   return null;
 };
 
-const normalizeNode = (node: Node, functionDepth: number): NormalizedValue => {
+const normalizeNode = (node: Node, functionDepth: number): NodeValue => {
   // Memoize: if this exact node reference was already normalized at the same semantic level, reuse.
   // functionDepth only distinguishes 0 vs >0, and at >0 function nodes are returned early in the
   // caller, so caching by node alone is safe for non-function nodes.
@@ -1008,7 +1006,7 @@ const normalizeNode = (node: Node, functionDepth: number): NormalizedValue => {
   return normalized;
 };
 
-const normalizeArrayItems = (value: ReadonlyArray<Node>, functionDepth: number): NormalizedValue => {
+const normalizeArrayItems = (value: ReadonlyArray<Node>, functionDepth: number): NodeValue => {
   const items: NodeValue[] = [];
 
   for (const entry of value) {
@@ -1024,7 +1022,7 @@ const normalizeArrayItems = (value: ReadonlyArray<Node>, functionDepth: number):
   return items;
 };
 
-const normalizeForFingerprintInternal = (value: NodeValue, functionDepth: number): NormalizedValue => {
+const normalizeForFingerprintInternal = (value: NodeValue, functionDepth: number): NodeValue => {
   if (isOxcNodeArray(value)) {
     return normalizeArrayItems(value, functionDepth);
   }
@@ -1044,7 +1042,7 @@ const normalizeForFingerprintInternal = (value: NodeValue, functionDepth: number
   return normalizeNode(value, functionDepth);
 };
 
-export const normalizeForFingerprint = (value: NodeValue): NormalizedValue => {
+export const normalizeForFingerprint = (value: NodeValue): NodeValue => {
   normalizationCache = new WeakMap();
 
   return normalizeForFingerprintInternal(value, 0);

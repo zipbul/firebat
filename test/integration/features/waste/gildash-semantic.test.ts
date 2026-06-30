@@ -18,11 +18,7 @@ interface FixtureCase {
   readonly fixture: string;
 }
 
-type KeepCase = FixtureCase;
-
-type DeadCase = FixtureCase;
-
-const keepCases: KeepCase[] = [
+const keepCases: FixtureCase[] = [
   {
     title: 'var-hoist-for-init: outer ref resolves to inner var binding → KEEP',
     fixture: 'integration/features/waste/__fixtures__/var-hoist-for-init-keep.ts',
@@ -36,7 +32,7 @@ const keepCases: KeepCase[] = [
     fixture: 'integration/features/waste/__fixtures__/closure-read.ts',
   },
 ];
-const deadCases: DeadCase[] = [
+const deadCases: FixtureCase[] = [
   {
     title: 'case 7 positive: no-escape-object DEAD via gildash binding',
     fixture: 'integration/features/waste/__fixtures__/no-escape-object.ts',

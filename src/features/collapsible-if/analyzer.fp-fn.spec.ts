@@ -8,12 +8,8 @@ import {
 } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
-type DetectCase = SourceCase;
-
-type NoDetectCase = SourceCase;
-
 // ── 거짓 음성 후보 (감지되어야 하는 것) ──────────────────────────────────
-const detectCases: DetectCase[] = [
+const detectCases: SourceCase[] = [
   {
     // async는 일반 함수와 동일하게 처리: outer if(no else, 1 stmt) + inner if(no else, 3 stmts)
     name: '[FN-G] async function 안에서',
@@ -44,7 +40,7 @@ export const f = (a: boolean, b: boolean) => {
   },
 ];
 // ── 거짓 양성 후보 (감지되면 안 되는 것) ──────────────────────────────────
-const noDetectCases: NoDetectCase[] = [
+const noDetectCases: SourceCase[] = [
   {
     // outer if has alternate → detectCollapsibleIf returns null
     name: '[FP-I] 외부 if에 else 있음',

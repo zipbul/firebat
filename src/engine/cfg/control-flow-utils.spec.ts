@@ -4,8 +4,6 @@ import { firstBodyNode } from '../../../test/integration/shared/test-kit';
 import { parseSource } from '../ast/parse-source';
 import { resolveFunctionBody, shouldIncreaseDepth } from './control-flow-utils';
 
-const functionNodeOf = (src: string) => firstBodyNode<Parameters<typeof resolveFunctionBody>[0]>(src);
-
 describe('shouldIncreaseDepth', () => {
   const depthIncreasingTypes = [
     'IfStatement',
@@ -35,7 +33,7 @@ describe('shouldIncreaseDepth', () => {
 
 describe('resolveFunctionBody', () => {
   it('[HP] returns the body node for a function declaration', () => {
-    const node = functionNodeOf('function f() { return 1; }');
+    const node = firstBodyNode<Parameters<typeof resolveFunctionBody>[0]>('function f() { return 1; }');
     const body = resolveFunctionBody(node);
 
     expect(body).not.toBeNull();

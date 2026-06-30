@@ -16,10 +16,6 @@ const sha256Hex = (text: string): string => {
   return hasher.digest('hex');
 };
 
-const cloneJson = <T>(value: T): T => {
-  return structuredClone(value);
-};
-
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 };
@@ -263,12 +259,12 @@ test('should apply template changes when user matches base', async () => {
     const templateText = await Bun.file(templatePath).text();
     const templateParsed = Bun.JSONC.parse(templateText) as unknown;
     const keyToRemove = findFirstKey(templateParsed);
-    const baseParsed = cloneJson(templateParsed);
+    const baseParsed = structuredClone(templateParsed);
     const baseParsedRecord = asRecordOrThrow(baseParsed, 'Expected template JSON to be an object');
 
     delete baseParsedRecord[keyToRemove];
 
-    const userParsed = cloneJson(baseParsed);
+    const userParsed = structuredClone(baseParsed);
     const baseText = jsonText(baseParsedRecord);
     const baseSha = sha256Hex(baseText);
     const baseSnapshotPath = path.join(tmpRootAbs, '.firebat', 'install-bases', `.firebatrc.jsonc.${baseSha}.json`);
@@ -322,8 +318,8 @@ test('should not overwrite user-edited existing keys', async () => {
     const templateText = await Bun.file(templatePath).text();
     const templateParsed = Bun.JSONC.parse(templateText) as unknown;
     const leaf = requireFirstPrimitivePath(templateParsed);
-    const baseParsed = cloneJson(templateParsed);
-    const userParsed = cloneJson(templateParsed);
+    const baseParsed = structuredClone(templateParsed);
+    const userParsed = structuredClone(templateParsed);
 
     // Ensure base snapshot differs (so update still has a base file to satisfy manifest requirements).
     setAtPath(baseParsed, leaf.path, 'BASE');

@@ -7,8 +7,6 @@ import { throwIfToolRunFailed } from '../../tooling/tool-failure';
 
 const createEmptyFormat = (): ReadonlyArray<string> => [];
 
-type AnalyzeFormatInput = ToolAnalysisInput;
-
 const parseOxfmtFiles = (rawStdout: unknown): ReadonlyArray<string> => {
   if (typeof rawStdout !== 'string') {
     return [];
@@ -39,7 +37,7 @@ export const __testing__ = {
   parseOxfmtFiles,
 };
 
-export const analyzeFormat = async (input: AnalyzeFormatInput): Promise<ReadonlyArray<string>> => {
+export const analyzeFormat = async (input: ToolAnalysisInput): Promise<ReadonlyArray<string>> => {
   const logger = input.logger ?? createNoopLogger();
   const result = await runOxfmt({
     targets: input.targets,

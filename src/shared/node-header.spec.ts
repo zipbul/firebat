@@ -4,18 +4,16 @@ import { firstBodyNode } from '../../test/integration/shared/test-kit';
 import { parseSource } from '../engine/ast/parse-source';
 import { getNodeHeader } from './node-header';
 
-const functionNodeOf = (src: string) => firstBodyNode<Parameters<typeof getNodeHeader>[0]>(src);
-
 describe('getNodeHeader', () => {
   it('[HP] returns kind=node for all inputs', () => {
-    const node = functionNodeOf('function f() {}');
+    const node = firstBodyNode<Parameters<typeof getNodeHeader>[0]>('function f() {}');
     const result = getNodeHeader(node);
 
     expect(result.kind).toBe('node');
   });
 
   it('[HP] returns header string equal to function name', () => {
-    const node = functionNodeOf('function myFunc() {}');
+    const node = firstBodyNode<Parameters<typeof getNodeHeader>[0]>('function myFunc() {}');
     const result = getNodeHeader(node);
 
     expect(result.header).toBe('myFunc');

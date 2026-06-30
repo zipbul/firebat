@@ -9,8 +9,6 @@ import {
 } from '../../../test/integration/shared/test-kit';
 import { analyzeCollapsibleIf } from './analyzer';
 
-type NoFindingCase = SourceCase;
-
 interface CollapsibleIfCase {
   name: string;
   source: string;
@@ -26,7 +24,7 @@ interface ElseIfCase {
   score: number;
 }
 
-const noFindingCases: NoFindingCase[] = [
+const noFindingCases: SourceCase[] = [
   {
     name: 'outer has else',
     source: `

@@ -51,15 +51,11 @@ interface ReportCase {
   header: string;
 }
 
-type TypeRemapReportCase = ReportCase;
-
 interface TypeRemapSkipCase {
   name: string;
   filePath: string;
   source: string;
 }
-
-type InterfaceRewrapReportCase = ReportCase;
 
 interface InterfaceRewrapSkipCase {
   name: string;
@@ -539,7 +535,7 @@ describe('analyzer', () => {
   describe('type-remap', () => {
     // Each row declares a type alias that is a direct synonym; `header` is the
     // reported alias name.
-    const reportCases: TypeRemapReportCase[] = [
+    const reportCases: ReportCase[] = [
       { name: 'type alias is direct synonym', source: 'type A = B;', header: 'A' },
       { name: 'exported type alias synonym', source: 'export type A = B;', header: 'A' },
       { name: 'namespace qualified type synonym', source: 'type Node = ts.Node;', header: 'Node' },
@@ -602,7 +598,7 @@ describe('analyzer', () => {
     // the reported interface name.
     // Module marker `export {}` makes the file a module so same-name cross-file
     // merging is excluded (spec: script files are always K).
-    const reportCases: InterfaceRewrapReportCase[] = [
+    const reportCases: ReportCase[] = [
       { name: 'empty interface with single extends in a module', source: 'export {};\ninterface A extends B {}', header: 'A' },
     ];
 

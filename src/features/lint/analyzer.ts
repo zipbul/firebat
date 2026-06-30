@@ -16,9 +16,7 @@ const normalizeSeverity = (severity: 'error' | 'warning' | 'info'): 'error' | nu
   return 'error';
 };
 
-type AnalyzeLintInput = ToolAnalysisInput;
-
-export const analyzeLint = async (input: AnalyzeLintInput): Promise<ReadonlyArray<LintDiagnostic>> => {
+export const analyzeLint = async (input: ToolAnalysisInput): Promise<ReadonlyArray<LintDiagnostic>> => {
   const logger = input.logger ?? createNoopLogger();
   const result = await runOxlint({
     targets: input.targets,

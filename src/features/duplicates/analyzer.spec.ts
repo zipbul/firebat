@@ -38,8 +38,6 @@ const { analyzeDuplicates, createEmptyDuplicates } = await import('./analyzer');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const makeFile = (fileName: string, source: string): ParsedFile => parseSource(fileName, source);
-
 const DUP_OPTS = { minSize: 3, enableAntiUnification: false };
 const AU_OPTS = { minSize: 3, enableAntiUnification: true };
 
@@ -48,14 +46,14 @@ const analyzeOne = (
   source: string,
   fileName = 'dup.ts',
   options: Parameters<typeof analyzeDuplicates>[1] = DUP_OPTS,
-): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([makeFile(fileName, source)], options);
+): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([parseSource(fileName, source)], options);
 
 /** Analyze a two-file (a.ts/b.ts) corpus — the dominant arrange shape in this spec. */
 const analyzeAB = (
   sourceA: string,
   sourceB: string,
   options: Parameters<typeof analyzeDuplicates>[1] = DUP_OPTS,
-): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([makeFile('a.ts', sourceA), makeFile('b.ts', sourceB)], options);
+): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([parseSource('a.ts', sourceA), parseSource('b.ts', sourceB)], options);
 
 /** Assert the result has exactly `count` groups of `cloneType`. */
 const expectCloneCount = (
@@ -430,7 +428,7 @@ class Beta {
         return a + b;
       }
     `;
-    const file = makeFile('triple.ts', tripleSource);
+    const file = parseSource('triple.ts', tripleSource);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
     const exact = expectCloneCount(result, 'exact', 1);
 
@@ -449,7 +447,7 @@ class Beta {
 
   it('should skip files with parse errors', () => {
     const errorFile = makeErrorFile('bad.ts');
-    const goodFile = makeFile('good.ts', FUNCTION_DECLARATION);
+    const goodFile = parseSource('good.ts', FUNCTION_DECLARATION);
     const result = analyzeDuplicates([errorFile, goodFile], {
       minSize: 3,
       enableAntiUnification: false,
@@ -467,8 +465,8 @@ class Beta {
   // (옛 동작은 corpus-상대 floor로 작은 중복 함수를 숨겼다 — false negative.)
 
   it('does not suppress declaration clones by minSize (floor is fragment-only)', () => {
-    const file = makeFile('tiny.ts', TINY_FUNCTION);
-    const result = analyzeDuplicates([file, makeFile('tiny2.ts', TINY_FUNCTION)], {
+    const file = parseSource('tiny.ts', TINY_FUNCTION);
+    const result = analyzeDuplicates([file, parseSource('tiny2.ts', TINY_FUNCTION)], {
       minSize: 9999,
       enableAntiUnification: false,
     });
@@ -484,8 +482,8 @@ class Beta {
 
   it('suppresses below-floor anonymous arrow clones (decision-existence floor applies to inline lambdas)', () => {
     // `(a, b) => a - b` (size≈6) — 두 파일에 우연히 같은 비교자. floor=12 미만 → 비탐지.
-    const a = makeFile('cmp-a.ts', `export const sorted = items.sort((a, b) => a - b);`);
-    const b = makeFile('cmp-b.ts', `export const ordered = values.sort((a, b) => a - b);`);
+    const a = parseSource('cmp-a.ts', `export const sorted = items.sort((a, b) => a - b);`);
+    const b = parseSource('cmp-b.ts', `export const ordered = values.sort((a, b) => a - b);`);
     const result = analyzeDuplicates([a, b], { minSize: 12, enableAntiUnification: false });
 
     expect(result).toEqual([]);
@@ -494,8 +492,8 @@ class Beta {
   it('still reports an anonymous arrow clone at or above the floor size', () => {
     // 본문이 큰 동일 화살표(size ≥ 12)는 결정을 담으므로 floor를 넘겨 정상 보고.
     const body = 'p => { const a = p.x + p.y; const b = a * p.z; return a + b + p.w; }';
-    const a = makeFile('big-a.ts', `export const m = items.map(${body});`);
-    const b = makeFile('big-b.ts', `export const n = values.map(${body});`);
+    const a = parseSource('big-a.ts', `export const m = items.map(${body});`);
+    const b = parseSource('big-b.ts', `export const n = values.map(${body});`);
     const result = analyzeDuplicates([a, b], { minSize: 12, enableAntiUnification: false });
 
     expect(result.length).toBeGreaterThanOrEqual(1);
@@ -505,7 +503,7 @@ class Beta {
   // ── [NE] 23. 단일 함수만 존재 → 그룹 없음 ─────────────────────────────
 
   it('should return empty array when only one function exists', () => {
-    const file = makeFile('single.ts', FUNCTION_DECLARATION);
+    const file = parseSource('single.ts', FUNCTION_DECLARATION);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
 
     expect(result).toEqual([]);
@@ -519,7 +517,7 @@ class Beta {
       const y = 2;
       export { x, y };
     `;
-    const file = makeFile('vars.ts', source);
+    const file = parseSource('vars.ts', source);
     const result = analyzeDuplicates([file], { minSize: 1, enableAntiUnification: false });
 
     expect(result).toEqual([]);
@@ -528,7 +526,7 @@ class Beta {
   // ── [ED] 25. minSize=0 → 모든 함수 포함 ────────────────────────────────
 
   it('should include all functions when minSize is 0', () => {
-    const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
+    const file = parseSource('dup.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 0, enableAntiUnification: false });
 
     expect(result.length).toBe(1);
@@ -545,7 +543,7 @@ class Beta {
   // ── [ED] 28. 한 파일에만 중복이 존재 ───────────────────────────────────
 
   it('should detect duplicates within a single file', () => {
-    const file = makeFile('single.ts', IDENTICAL_FUNCTIONS);
+    const file = parseSource('single.ts', IDENTICAL_FUNCTIONS);
     const result = analyzeDuplicates([file], { minSize: 3, enableAntiUnification: false });
 
     expect(result.length).toBe(1);
@@ -556,8 +554,8 @@ class Beta {
 
   it('should process valid files and skip error files when mixed', () => {
     const errorFile = makeErrorFile('bad.ts');
-    const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
-    const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
+    const fileA = parseSource('a.ts', FUNCTION_DECLARATION);
+    const fileB = parseSource('b.ts', FUNCTION_DECLARATION);
     const result = analyzeDuplicates([errorFile, fileA, fileB], {
       minSize: 3,
       enableAntiUnification: false,
@@ -582,7 +580,7 @@ class Beta {
   // ── [ID] 32. 같은 입력 2회 호출 → 동일 결과 ────────────────────────────
 
   it('should produce identical results when called twice with the same input', () => {
-    const file = makeFile('dup.ts', IDENTICAL_FUNCTIONS);
+    const file = parseSource('dup.ts', IDENTICAL_FUNCTIONS);
     const opts = { minSize: 3, enableAntiUnification: false } as const;
     const result1 = analyzeDuplicates([file], opts);
     const result2 = analyzeDuplicates([file], opts);
@@ -637,7 +635,7 @@ class Beta {
 
   it('analyzeDuplicates - 동일 filePath 파일 중복 입력 시 - 자기 자신 그룹 미생성', () => {
     // 단일 함수가 있는 파일을 2번 넣으면 중복 그룹이 생성되면 안 됨
-    const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
+    const fileA = parseSource('a.ts', FUNCTION_DECLARATION);
     const result = analyzeDuplicates([fileA, fileA], { minSize: 3, enableAntiUnification: false });
 
     // 같은 filePath의 동일 span 아이템이 한 그룹에 2개 있으면 안 됨
@@ -656,8 +654,8 @@ class Beta {
   // ── [OR] 33. 파일 순서 변경 → 그룹 내용 동일 ───────────────────────────
 
   it('should produce same groups regardless of file order', () => {
-    const fileA = makeFile('a.ts', FUNCTION_DECLARATION);
-    const fileB = makeFile('b.ts', FUNCTION_DECLARATION);
+    const fileA = parseSource('a.ts', FUNCTION_DECLARATION);
+    const fileB = parseSource('b.ts', FUNCTION_DECLARATION);
     const opts = { minSize: 3, enableAntiUnification: false } as const;
     const result1 = analyzeDuplicates([fileA, fileB], opts);
     const result2 = analyzeDuplicates([fileB, fileA], opts);
@@ -740,7 +738,7 @@ function compute(x: number, y: number): number {
   return b;
 }
 `;
-    const files = Array.from({ length: 5 }, (_, i) => makeFile(`f${i}.ts`, source));
+    const files = Array.from({ length: 5 }, (_, i) => parseSource(`f${i}.ts`, source));
 
     // 동일 정규형 → 정확히 하나의 그룹, 5개 멤버 전부 포함, 통계적 분리 없음
     expectMultiGroup(analyzeDuplicates(files, AU_OPTS), 5);
@@ -771,7 +769,7 @@ function compute(x: number, y: number): number {
   return b;
 }
 `;
-    const files = Array.from({ length: 4 }, (_, i) => makeFile(`f${i}.ts`, source));
+    const files = Array.from({ length: 4 }, (_, i) => parseSource(`f${i}.ts`, source));
 
     expectMultiGroup(analyzeDuplicates(files, AU_OPTS), 4);
   });
@@ -807,9 +805,9 @@ export const compute = function(x: number): number {
   // ── [HP] 37. 모든 그룹에 findingKind 존재 확인 ─────────────────────────
 
   it('should assign findingKind to every returned group', () => {
-    const fileA = makeFile('a.ts', IDENTICAL_FUNCTIONS);
-    const fileB = makeFile('b.ts', RENAMED_PAIR_A);
-    const fileC = makeFile('c.ts', RENAMED_PAIR_B);
+    const fileA = parseSource('a.ts', IDENTICAL_FUNCTIONS);
+    const fileB = parseSource('b.ts', RENAMED_PAIR_A);
+    const fileC = parseSource('c.ts', RENAMED_PAIR_B);
     const result = analyzeDuplicates([fileA, fileB, fileC], {
       minSize: 3,
       enableAntiUnification: false,
@@ -883,7 +881,7 @@ function gb(x: number): number {
 describe('min-size policy (redesign)', () => {
   it('reports a genuine small duplicated declaration even at a very high minSize', () => {
     // Declarations have NO size floor — getProgramBody-style clone must surface.
-    const result = analyzeDuplicates([makeFile('/p/tiny-decl.ts', TINY_DECL_CLONE)], {
+    const result = analyzeDuplicates([parseSource('/p/tiny-decl.ts', TINY_DECL_CLONE)], {
       minSize: 9999,
       enableAntiUnification: false,
     });
@@ -895,11 +893,11 @@ describe('min-size policy (redesign)', () => {
   it('still keeps a decisionless skeleton clone as K regardless of minSize', () => {
     // Removing the declaration size floor must NOT make skeletons leak — the
     // skeleton exemption is a role rule, independent of size.
-    const high = analyzeDuplicates([makeFile('/p/tiny-skel.ts', TINY_SKELETON_CLONE)], {
+    const high = analyzeDuplicates([parseSource('/p/tiny-skel.ts', TINY_SKELETON_CLONE)], {
       minSize: 9999,
       enableAntiUnification: false,
     });
-    const low = analyzeDuplicates([makeFile('/p/tiny-skel.ts', TINY_SKELETON_CLONE)], {
+    const low = analyzeDuplicates([parseSource('/p/tiny-skel.ts', TINY_SKELETON_CLONE)], {
       minSize: 1,
       enableAntiUnification: false,
     });
@@ -911,11 +909,11 @@ describe('min-size policy (redesign)', () => {
   it('keeps an ABSOLUTE floor for statement-run fragments (not declarations)', () => {
     // A sub-floor fragment is reported below the floor and gated at/above it —
     // and crucially that verdict is the SAME constant regardless of corpus.
-    const reported = analyzeDuplicates([makeFile('/p/tiny-frag.ts', TINY_FRAGMENT_CLONE)], {
+    const reported = analyzeDuplicates([parseSource('/p/tiny-frag.ts', TINY_FRAGMENT_CLONE)], {
       minSize: 1,
       enableAntiUnification: false,
     });
-    const gated = analyzeDuplicates([makeFile('/p/tiny-frag.ts', TINY_FRAGMENT_CLONE)], {
+    const gated = analyzeDuplicates([parseSource('/p/tiny-frag.ts', TINY_FRAGMENT_CLONE)], {
       minSize: 12,
       enableAntiUnification: false,
     });

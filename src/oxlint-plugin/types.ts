@@ -23,7 +23,7 @@ export interface TemplateElementValue {
   raw?: string;
 }
 
-interface Token {
+export interface SourceToken {
   value?: string;
   range?: Range;
 }
@@ -39,8 +39,6 @@ export interface AstRoot {
 }
 
 export interface Scope {}
-
-export type SourceToken = Token;
 
 export interface Fix {
   range: Range;
@@ -116,8 +114,8 @@ export interface SourceCode {
   tokens?: SourceToken[];
   getText?: () => string;
   getLines?: () => string[];
-  getTokenBefore(node: AstNode): Token | null | undefined;
-  getTokenAfter(node: AstNode): Token | null | undefined;
+  getTokenBefore(node: AstNode): SourceToken | null | undefined;
+  getTokenAfter(node: AstNode): SourceToken | null | undefined;
   getAllComments?: () => CommentNode[];
 }
 
