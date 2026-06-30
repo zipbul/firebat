@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeIndirection } from '../../../../../src/test-api';
-import { createPrng, createProgramFromMap } from '../../../shared/test-kit';
-import { buildMockGildashFromSources } from '../mock-gildash-helper';
+import { createPrng } from '../../../shared/test-kit';
+import { analyzeIndirectionReal } from '../real-gildash';
 
 describe('integration/indirection/cross-file (fuzz)', () => {
   it('should report a cross-file chain for every wrapper with depth >= 2 when a random chain is generated', async () => {
@@ -42,9 +41,7 @@ describe('integration/indirection/cross-file (fuzz)', () => {
       }
 
       // Act
-      const program = createProgramFromMap(sources);
-      const gildash = buildMockGildashFromSources(sources);
-      const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
       const crossFile = findings.filter(f => f.kind === 'cross-file-forwarding-chain');
       const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 

@@ -14,7 +14,7 @@ import { analyzeGiantFile } from '../../../src/test-api';
 import { analyzeNesting } from '../../../src/test-api';
 import { analyzeVariableLifetime } from '../../../src/test-api';
 import { analyzeIndirection } from '../../../src/test-api';
-import { buildMockGildashFromSources } from './indirection/mock-gildash-helper';
+import { analyzeIndirectionReal } from './indirection/real-gildash';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -137,26 +137,14 @@ describe('threshold/nesting', () => {
 describe('threshold/indirection', () => {
   it('direct call without indirection → no finding', async () => {
     const src = ['export const add = (a: number, b: number) => a + b;'].join('\n');
-    const emptyGildash = buildMockGildashFromSources({});
-    const findings = await analyzeIndirection(
-      emptyGildash,
-      [parse(src)],
-      { maxForwardDepth: 1, crossFileMinDepth: 2 },
-      '/virtual',
-    );
+    const findings = await analyzeIndirectionReal({ '/virtual/sample.ts': src }, { maxForwardDepth: 1, crossFileMinDepth: 2 });
 
     expect(findings).toHaveLength(0);
   });
 
   it('two independent functions → no finding', async () => {
     const src = ['export const double = (x: number) => x * 2;', 'export const triple = (x: number) => x * 3;'].join('\n');
-    const emptyGildash = buildMockGildashFromSources({});
-    const findings = await analyzeIndirection(
-      emptyGildash,
-      [parse(src)],
-      { maxForwardDepth: 1, crossFileMinDepth: 2 },
-      '/virtual',
-    );
+    const findings = await analyzeIndirectionReal({ '/virtual/sample.ts': src }, { maxForwardDepth: 1, crossFileMinDepth: 2 });
 
     expect(findings).toHaveLength(0);
   });

@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeIndirection } from '../../../../../src/test-api';
-import { createProgramFromMap } from '../../../shared/test-kit';
-import { buildMockGildashFromSources } from '../mock-gildash-helper';
+import { analyzeIndirectionReal } from '../real-gildash';
 
 describe('integration/indirection/cross-file', () => {
   interface CrossFileChainCase {
@@ -56,9 +54,7 @@ describe('integration/indirection/cross-file', () => {
     files.forEach(([path, lines]) => sources.set(path, lines.join('\n')));
 
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
     const headers = crossFile.map(c => c.header).sort((a, b) => a.localeCompare(b));
 
@@ -94,9 +90,7 @@ describe('integration/indirection/cross-file', () => {
     );
 
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
     const headers = crossFile.map(f => f.header).sort((a, b) => a.localeCompare(b));
 
@@ -118,9 +112,7 @@ describe('integration/indirection/cross-file', () => {
     );
 
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert
@@ -141,9 +133,7 @@ describe('integration/indirection/cross-file', () => {
     );
 
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
     const crossFile = findings.filter(finding => finding.kind === 'cross-file-forwarding-chain');
 
     // Assert — both nodes in the cycle reported as depth -1.

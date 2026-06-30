@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeIndirection } from '../../../../src/test-api';
-import { createProgramFromMap, singleSourceMap } from '../../shared/test-kit';
-import { buildMockGildashFromSources } from './mock-gildash-helper';
+import { singleSourceMap } from '../../shared/test-kit';
+import { analyzeIndirectionReal } from './real-gildash';
 
 const createIndirectionSource = (): string => {
   return [
@@ -34,9 +33,7 @@ describe('integration/indirection', () => {
     // Arrange
     const sources = singleSourceMap('/virtual/indirection/forward.ts', createIndirectionSource());
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
@@ -85,9 +82,7 @@ describe('integration/indirection', () => {
     // Arrange
     const sources = singleSourceMap(path, source);
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 0, crossFileMinDepth: 2 });
     const thinWrappers = findings.filter(finding => finding.kind === 'thin-wrapper');
 
     // Assert
@@ -98,9 +93,7 @@ describe('integration/indirection', () => {
     // Arrange
     const sources = singleSourceMap('/virtual/indirection/chain.ts', createIndirectionChainSource());
     // Act
-    const program = createProgramFromMap(sources);
-    const gildash = buildMockGildashFromSources(sources);
-    const findings = await analyzeIndirection(gildash, program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
+    const findings = await analyzeIndirectionReal(sources, { maxForwardDepth: 1, crossFileMinDepth: 2 });
     const chainFindings = findings.filter(finding => finding.kind === 'forward-chain');
 
     // Assert
