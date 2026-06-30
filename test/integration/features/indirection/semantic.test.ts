@@ -53,7 +53,6 @@ const analyzeFor = async (
   }
 };
 
-const kinds = (fs: readonly Finding[]): readonly string[] => fs.map(f => f.kind);
 
 describe('integration/indirection (real typed gildash)', () => {
   it('reports a cross-file forwarding chain across three files (resolveSymbol resolution)', async () => {
@@ -64,7 +63,7 @@ describe('integration/indirection (real typed gildash)', () => {
     });
 
     // top → mid → real is a 2-deep cross-file chain (depth ≥ crossFileMinDepth=2).
-    expect(kinds(findings)).toContain('cross-file-forwarding-chain');
+    expect(findings.map((f) => f.kind)).toContain('cross-file-forwarding-chain');
     const chain = findings.find(f => f.kind === 'cross-file-forwarding-chain' && f.header === 'top');
 
     expect(chain).toBeDefined();
@@ -78,8 +77,8 @@ describe('integration/indirection (real typed gildash)', () => {
 
     // `top` is exported (its use is cross-module) → thin-wrapper gate ② cannot close
     // in-file → NOT a thin-wrapper. depth is only 1, below crossFileMinDepth → no chain either.
-    expect(kinds(findings)).not.toContain('thin-wrapper');
-    expect(kinds(findings)).not.toContain('cross-file-forwarding-chain');
+    expect(findings.map((f) => f.kind)).not.toContain('thin-wrapper');
+    expect(findings.map((f) => f.kind)).not.toContain('cross-file-forwarding-chain');
   });
 
   it('reports a non-export single-file thin-wrapper (② closes in-file)', async () => {
@@ -120,7 +119,7 @@ describe('integration/indirection (real typed gildash)', () => {
       'src/a.ts': ['interface Base { id: number; }', 'export type Alias = Base;\n'].join('\n'),
     });
 
-    expect(kinds(findings)).toContain('type-remap');
+    expect(findings.map((f) => f.kind)).toContain('type-remap');
   });
 
   it('does not report a generic type alias (type args → K)', async () => {
@@ -128,7 +127,7 @@ describe('integration/indirection (real typed gildash)', () => {
       'src/a.ts': ['interface Base<T> { v: T; }', 'export type Alias = Base<number>;\n'].join('\n'),
     });
 
-    expect(kinds(findings)).not.toContain('type-remap');
+    expect(findings.map((f) => f.kind)).not.toContain('type-remap');
   });
 
   it('reports an empty interface extends in a module file (interface-rewrap)', async () => {
@@ -136,6 +135,6 @@ describe('integration/indirection (real typed gildash)', () => {
       'src/a.ts': ['export interface Base { id: number; }', 'export interface Wrap extends Base {}\n'].join('\n'),
     });
 
-    expect(kinds(findings)).toContain('interface-rewrap');
+    expect(findings.map((f) => f.kind)).toContain('interface-rewrap');
   });
 });

@@ -775,11 +775,16 @@ const buildOverloadIndex = (gildash: Gildash, rootAbs: string): Map<string, Set<
 };
 
 /**
- * gildash symbol-level K gate (spec ⑥): decorator (intentional wrapper) or
- * `override` modifier (explicit base-class forward). Returns true if the wrapper
- * must be skipped. Gildash unavailability is swallowed (keep AST behavior).
+ * gildash symbol-level K gate (spec ⑥): decorator (intentional wrapper). Returns
+ * true if the wrapper must be skipped. Gildash unavailability is swallowed (keep
+ * AST behavior).
+ *
+ * NOTE: the `override` modifier is intentionally NOT checked here — `override`
+ * is only legal on class methods, and every method is already K via the method
+ * guard in `handleThinWrapper` (it returns before this gate is reached). An
+ * override check here would be unreachable dead code.
  */
-const hasDecoratorOrOverride = (gildash: Gildash, header: string, filePath: string): boolean => {
+const hasDecorator = (gildash: Gildash, header: string, filePath: string): boolean => {
   try {
     const symbol = gildash.getFullSymbol(header, filePath);
 
@@ -787,13 +792,7 @@ const hasDecoratorOrOverride = (gildash: Gildash, header: string, filePath: stri
       return false;
     }
 
-    if (Array.isArray(symbol.decorators) && symbol.decorators.length > 0) {
-      return true;
-    }
-
-    const modifiers = symbol.detail.modifiers;
-
-    return Array.isArray(modifiers) && modifiers.includes('override');
+    return Array.isArray(symbol.decorators) && symbol.decorators.length > 0;
   } catch (e) {
     if (!(e instanceof GildashError)) {
       throw e;
@@ -921,7 +920,7 @@ const analyzeIndirection = async (
       }
 
       // ⑥ decorator / override modifier — intentional/protocol forward, K.
-      if (hasDecoratorOrOverride(gildash, header, file.filePath)) {
+      if (hasDecorator(gildash, header, file.filePath)) {
         return;
       }
 

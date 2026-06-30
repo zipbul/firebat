@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "return new Promise((reject) => {",
+    "file": "/virtual/promise-ctor-reject-param-dead.ts",
+    "kind": "promise-constructor-hygiene",
+    "span": {
+      "end": {
+        "column": 4,
+        "line": 6
+      },
+      "start": {
+        "column": 9,
+        "line": 4
+      }
+    }
+  }
+]

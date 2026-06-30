@@ -1,0 +1,88 @@
+[
+  {
+    "cloneType": "shape",
+    "findingKind": "structural-clone",
+    "items": [
+      {
+        "filePath": "/virtual/coref-fragment-alpha-dead.ts",
+        "header": "indexValue",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 10
+          },
+          "start": {
+            "column": 0,
+            "line": 5
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/coref-fragment-alpha-dead.ts",
+        "header": "indexOther",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 1,
+            "line": 17
+          },
+          "start": {
+            "column": 0,
+            "line": 12
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": [
+        {
+          "left": "indexValue",
+          "location": "id.name",
+          "right": "indexOther"
+        },
+        {
+          "left": "set",
+          "location": "params[0].name",
+          "right": "bag"
+        },
+        {
+          "left": "list",
+          "location": "params[1].name",
+          "right": "arr"
+        },
+        {
+          "left": "value",
+          "location": "params[2].name",
+          "right": "elem"
+        },
+        {
+          "left": "list",
+          "location": "body.body[0].declarations[0].init.object.name",
+          "right": "arr"
+        },
+        {
+          "left": "set",
+          "location": "body.body[1].expression.callee.object.name",
+          "right": "bag"
+        },
+        {
+          "left": "value",
+          "location": "body.body[1].expression.arguments[0].name",
+          "right": "elem"
+        },
+        {
+          "left": "list",
+          "location": "body.body[2].expression.callee.object.name",
+          "right": "arr"
+        },
+        {
+          "left": "value",
+          "location": "body.body[2].expression.arguments[0].name",
+          "right": "elem"
+        }
+      ]
+    }
+  }
+]

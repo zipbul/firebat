@@ -21,10 +21,11 @@ function* wGen(x: number): Generator<number> { yield* [tgt(x)]; }
 // K — type-predicate return (narrowing lost on inline).
 function wPred(v: unknown): v is number { return typeof v === 'number'; }
 
-// K — get accessor (call site is property access, not a call).
+// K — get/set accessor (call site is property access, not a call).
 class Box {
   private inner = 0;
   get value(): number { return identity(this.inner); }
+  set value(n: number) { identity(n); }
 }
 
 function identity(n: number): number { return n; }

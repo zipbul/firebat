@@ -24,6 +24,7 @@ describe('golden/duplicates', () => {
   rg('coref-binary-divergent-keep'); // K: 동일참조 다름 — a+a vs a+b는 다른 결정 (alpha-renaming)
   rg('coref-binary-alpha-dead'); // W: 동일참조 구조 같음 — 바인딩만 다른 rename 클론은 그대로 보고
   rgFrag('coref-fragment-divergent-keep'); // K: 런 동일참조 다름 — add(v);push(v) vs add(k);push(i)
+  rgFrag('coref-fragment-alpha-dead'); // W: 런 동일참조 구조 같음 — add(v);push(v) vs add(w);push(w)
   rg('coref-contract-divergent-keep'); // K: 계약 멤버 동일참조 다름 — {a:T;b:T} vs {a:T;b:U}
   rg('coref-contract-alpha-dead'); // W: 계약 멤버 동일참조 구조 같음 — 타입파라미터명만 다름
   rgFrag('mixed-id-literal-keep'); // K: 바인딩은 치환해도 리터럴은 보존 — 리터럴 다르면 다른 결정

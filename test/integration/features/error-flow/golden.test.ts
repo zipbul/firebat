@@ -80,4 +80,7 @@ describe('golden/error-flow', () => {
 
   // ── floating-promises (syntactic factories): discarded import() and new Promise ──
   rg('floating-factory-dead');
+  runGolden(import.meta.dir, 'promise-ctor-reject-param-dead', program => analyzeErrorFlow(program, { gildash: noopGildash }));
+  runGolden(import.meta.dir, 'promise-finally-return-keep', program => analyzeErrorFlow(program, { gildash: noopGildash }));
+  runGolden(import.meta.dir, 'multi-then-chain-catch-keep', program => analyzeErrorFlow(program, { gildash: noopGildash }));
 });

@@ -260,4 +260,8 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-call-result-scope-limit-keep', program => detectWaste([...program]));
   // 다중사용 순수식은 spec상 W이나 식 중복이라 v1 제외 (multi-use=Phase2.1) → KEEP
   runGolden(import.meta.dir, 'redundant-multi-use-scope-limit-keep', program => detectWaste([...program]));
+  // K: yield RHS (impure — await/yield 위치 보존)
+  runGolden(import.meta.dir, 'redundant-yield-rhs-keep', program => detectWaste([...program]));
+  // K: bare-literal 명명 (정보보존 예외)
+  runGolden(import.meta.dir, 'redundant-bare-literal-name-keep', program => detectWaste([...program]));
 });
