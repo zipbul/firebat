@@ -5,8 +5,8 @@ export { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from './firebat-co
 export { isConfigLikePath, isTestLikePath } from './is-test-like-path';
 export type { FirebatLogger } from './logger';
 export { appendFirebatLog, createNoopLogger, createPrettyConsoleLogger } from './logger';
-export { resolveFirebatRootFromCwd } from './root-resolver';
-export { resolveRuntimeContextFromCwd } from './runtime-context';
+export { assertTargetsWithinRoot, isWithinRoot, resolveFirebatRootFromCwd } from './root-resolver';
+export { resolveRuntimeContextFromCwd, resolveStartDir } from './runtime-context';
 export { createFirebatProgram } from './ts-program';
 export { computeToolVersion } from './tool-version';
 export type { ToolAnalysisInput } from './tool-analysis-input';

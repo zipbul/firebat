@@ -41,11 +41,13 @@ import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../feat
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import {
+  assertTargetsWithinRoot,
   createFirebatProgram,
   featureOptions,
   loadFirebatConfigFile,
   computeToolVersion,
   resolveRuntimeContextFromCwd,
+  resolveStartDir,
 } from '../../shared';
 import { toErrorMessage } from '../../shared/error-message';
 import { ZERO_SPAN } from '../../shared/source-span';
@@ -690,9 +692,14 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
 
   const tCtx0 = nowMs();
-  const ctx = await resolveRuntimeContextFromCwd();
+  const ctx = await resolveRuntimeContextFromCwd(resolveStartDir(options.cwd));
 
   logger.trace('Runtime context resolved', { rootAbs: ctx.rootAbs, durationMs: Math.round(nowMs() - tCtx0) });
+
+  // Global correctness gate: every target must live under the resolved root so
+  // the single Gildash instance (projectRoot: rootAbs) actually indexes it.
+  // Fail fast instead of silently producing wrong results for out-of-root targets.
+  assertTargetsWithinRoot(options.targets, ctx.rootAbs);
 
   const { config, configError } = await loadConfig(ctx.rootAbs, options.configPath, logger);
 

@@ -24,6 +24,8 @@ export interface FirebatCliOptions {
   readonly exclude?: ReadonlyArray<string>;
   readonly help: boolean;
   readonly configPath?: string;
+  /** Resolution start directory (default process.cwd()); set via --cwd/-C or FIREBAT_CWD. */
+  readonly cwd?: string;
   readonly logLevel?: FirebatLogLevel;
   readonly logStack?: boolean;
   readonly explicit?: FirebatCliExplicitFlags;

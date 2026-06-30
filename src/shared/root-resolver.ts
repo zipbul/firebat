@@ -1,4 +1,5 @@
 import { normalizePath } from '@zipbul/gildash';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as z from 'zod';
 
@@ -122,6 +123,57 @@ const resolveFirebatRootFromCwd = async (startDirAbs: string = process.cwd()): P
   );
 };
 
+/** Resolve symlinks to a canonical absolute path; fall back to the input if it doesn't exist. */
+const realpathSafe = (p: string): string => {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+
+/**
+ * True when `childAbs` is `rootAbs` itself or lives underneath it. Compares
+ * canonical (realpath + normalized) paths via `path.relative` so that symlinks
+ * (`/tmp` → `/private/tmp`, pnpm `.pnpm` links) and prefix collisions
+ * (`/proj` vs `/proj-other`) are handled correctly.
+ */
+const isWithinRoot = (childAbs: string, rootAbs: string): boolean => {
+  const root = normalizePath(realpathSafe(rootAbs));
+  const child = normalizePath(realpathSafe(childAbs));
+
+  if (child === root) {
+    return true;
+  }
+
+  const rel = path.relative(root, child);
+
+  return rel.length > 0 && !rel.startsWith('..') && !path.isAbsolute(rel);
+};
+
+/**
+ * Global correctness gate: every scan target must live within `rootAbs` so that
+ * the single Gildash instance (opened with `projectRoot: rootAbs`) actually
+ * indexes them. A target outside the root would silently miss the index and
+ * corrupt every gildash-dependent detector — fail fast instead.
+ */
+const assertTargetsWithinRoot = (targetsAbs: ReadonlyArray<string>, rootAbs: string): void => {
+  const outside = targetsAbs.filter(t => !isWithinRoot(t, rootAbs));
+
+  if (outside.length === 0) {
+    return;
+  }
+
+  const sample = outside.slice(0, 3).join(', ');
+  const more = outside.length > 3 ? ` (and ${outside.length - 3} more)` : '';
+
+  throw new Error(
+    `[firebat] ${outside.length} target(s) are outside the project root ${rootAbs}: ${sample}${more}. ` +
+      'Gildash indexes only files under the root, so out-of-root targets would produce wrong results. ' +
+      'Run firebat within — or pass --cwd pointing at — the project that contains the targets.',
+  );
+};
+
 export type { ResolveFirebatRootResult };
 
-export { resolveFirebatRootFromCwd };
+export { assertTargetsWithinRoot, isWithinRoot, resolveFirebatRootFromCwd };

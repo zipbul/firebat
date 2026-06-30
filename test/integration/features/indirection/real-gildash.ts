@@ -31,10 +31,9 @@ const toVirtual = (filePath: string, tmpDir: string): string => {
   return `${VIRTUAL}${normalizedFile.slice(idx + normalizedTmp.length)}`;
 };
 
-export interface IndirectionRunOptions {
-  readonly maxForwardDepth: number;
-  readonly crossFileMinDepth: number;
-}
+// Reuse the analyzer's own options type (single source of truth) rather than
+// re-declaring an identical interface.
+export type IndirectionRunOptions = Parameters<typeof analyzeIndirection>[2];
 
 export const analyzeIndirectionReal = (
   sources: GildashSources,

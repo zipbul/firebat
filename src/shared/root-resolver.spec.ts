@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import { resolveFirebatRootFromCwd } from './root-resolver';
+import { assertTargetsWithinRoot, isWithinRoot, resolveFirebatRootFromCwd } from './root-resolver';
 
 const writeJson = async (filePath: string, value: unknown): Promise<void> => {
   await mkdir(path.dirname(filePath), { recursive: true });
@@ -44,5 +44,47 @@ describe('root-resolver', () => {
     expect(resolved).toEqual({ rootAbs: repoRoot, reason: 'self-repo' });
 
     await rm(repoRoot, { recursive: true, force: true });
+  });
+});
+
+describe('isWithinRoot', () => {
+  it('returns true for the root itself', () => {
+    expect(isWithinRoot('/proj', '/proj')).toBe(true);
+  });
+
+  it('returns true for a nested child', () => {
+    expect(isWithinRoot('/proj/src/a.ts', '/proj')).toBe(true);
+  });
+
+  it('returns false for a sibling outside the root', () => {
+    expect(isWithinRoot('/other/a.ts', '/proj')).toBe(false);
+  });
+
+  it('returns false for a prefix-collision sibling (/proj vs /proj-other)', () => {
+    expect(isWithinRoot('/proj-other/a.ts', '/proj')).toBe(false);
+  });
+
+  it('returns false for a parent directory', () => {
+    expect(isWithinRoot('/proj', '/proj/src')).toBe(false);
+  });
+});
+
+describe('assertTargetsWithinRoot', () => {
+  it('does not throw when all targets are within the root', () => {
+    expect(() => assertTargetsWithinRoot(['/proj/a.ts', '/proj/src/b.ts', '/proj'], '/proj')).not.toThrow();
+  });
+
+  it('does not throw for an empty target list', () => {
+    expect(() => assertTargetsWithinRoot([], '/proj')).not.toThrow();
+  });
+
+  it('throws naming the project root and the offending target when one is outside', () => {
+    expect(() => assertTargetsWithinRoot(['/proj/a.ts', '/other/b.ts'], '/proj')).toThrow(/outside the project root \/proj/);
+  });
+
+  it('reports a truncated count when many targets are outside', () => {
+    const outside = ['/x/1.ts', '/x/2.ts', '/x/3.ts', '/x/4.ts', '/x/5.ts'];
+
+    expect(() => assertTargetsWithinRoot(outside, '/proj')).toThrow(/and 2 more/);
   });
 });

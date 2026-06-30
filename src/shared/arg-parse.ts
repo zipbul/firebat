@@ -6,6 +6,7 @@ import type { FirebatLogLevel } from './firebat-config';
 
 import { DETECTOR_ALIASES } from '../types';
 import { addAndPush } from './multi-map';
+import { resolveStartDir } from './runtime-context';
 import { splitTrimNonEmpty } from './split-lines';
 
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
@@ -128,6 +129,9 @@ const assertKnownOption = (arg: string): void => {
   }
 };
 
+// Keep the raw (trimmed) target; absolutization is deferred until after the full
+// arg pass so relative targets resolve against the start dir (--cwd/-C → env →
+// process.cwd()) — `--cwd` may appear after the target in argv.
 const normalizeTarget = (raw: string): string => {
   const trimmed = raw.trim();
 
@@ -135,8 +139,11 @@ const normalizeTarget = (raw: string): string => {
     throw new Error('[firebat] Empty target path');
   }
 
-  return path.resolve(trimmed);
+  return trimmed;
 };
+
+/** Absolutize a raw target against `startDir` (absolute targets pass through). */
+const resolveTargetAbs = (raw: string, startDir: string): string => (path.isAbsolute(raw) ? raw : path.resolve(startDir, raw));
 
 interface ExplicitMutable {
   minSize: boolean;
@@ -155,6 +162,7 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
   let crossFileMinDepth = DEFAULT_CROSS_FILE_MIN_DEPTH;
   let detectors: ReadonlyArray<FirebatDetector> = DEFAULT_DETECTORS;
   let configPath: string | undefined;
+  let cwd: string | undefined;
   let logLevel: FirebatLogLevel | undefined;
   let logStack: boolean | undefined;
 
@@ -252,6 +260,14 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
       continue;
     }
 
+    if (arg === '--cwd' || arg === '-C') {
+      cwd = path.resolve(requireArgValue(argv[i + 1], arg));
+
+      i += 1;
+
+      continue;
+    }
+
     if (arg === '--log-level') {
       const value = requireArgValue(argv[i + 1], '--log-level');
 
@@ -275,14 +291,17 @@ const parseArgs = (argv: readonly string[]): FirebatCliOptions => {
     targets.push(normalizeTarget(arg));
   }
 
+  const startDir = resolveStartDir(cwd);
+
   return {
-    targets,
+    targets: targets.map(t => resolveTargetAbs(t, startDir)),
     minSize,
     maxForwardDepth,
     crossFileMinDepth,
     detectors,
     help: false,
     ...(configPath !== undefined ? { configPath } : {}),
+    ...(cwd !== undefined ? { cwd } : {}),
     ...(logLevel !== undefined ? { logLevel } : {}),
     ...(logStack !== undefined ? { logStack } : {}),
     explicit: toExplicitFlags(explicit),

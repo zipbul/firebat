@@ -12,6 +12,7 @@ import { isStringArray } from '../../shared/json-guards';
 import { appendFirebatLog } from '../../shared/logger';
 import { createPrettyConsoleLogger } from '../../shared/logger';
 import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
+import { resolveStartDir } from '../../shared/runtime-context';
 import { resolveTargets } from '../../shared/target-discovery';
 import { H, hc, isTty, writeStdout } from './cli-output';
 
@@ -61,6 +62,7 @@ const printHelp = (): void => {
     `    ${hc('--max-forward-depth', `${H.bold}${H.green}`, c)} ${hc('<n>', H.gray, c)}  Max thin-wrapper chain depth ${hc('(default: 0)', H.dim, c)}`,
     `    ${hc('--only', `${H.bold}${H.green}`, c)} ${hc('<list>', H.gray, c)}            Comma-separated detectors to run`,
     `    ${hc('--config', `${H.bold}${H.green}`, c)} ${hc('<path>', H.gray, c)}          Config file path ${hc('(default: <root>/.firebatrc.jsonc)', H.dim, c)}`,
+    `    ${hc('--cwd, -C', `${H.bold}${H.green}`, c)} ${hc('<dir>', H.gray, c)}         Directory to resolve the project root from ${hc('(default: process.cwd())', H.dim, c)}`,
     '',
     `  ${hc('LOG OPTIONS', `${H.bold}${H.yellow}`, c)}`,
     '',
@@ -329,7 +331,7 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
     return options;
   }
 
-  const { rootAbs } = await resolveFirebatRootFromCwd();
+  const { rootAbs } = await resolveFirebatRootFromCwd(resolveStartDir(options.cwd));
 
   logger.debug('Project root resolved', { rootAbs });
 

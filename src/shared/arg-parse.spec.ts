@@ -90,6 +90,40 @@ describe('arg-parse', () => {
     expect(result.explicit?.logStack).toBe(true);
   });
 
+  it.each([['--cwd'], ['-C']])('should parse %s and record the resolved cwd', flag => {
+    delete process.env.FIREBAT_CWD;
+
+    const result = parseArgs([flag, '/foo/bar']);
+
+    expect(result.cwd).toBe(path.resolve('/foo/bar'));
+  });
+
+  it('resolves a relative target against the --cwd start dir (not process.cwd)', () => {
+    delete process.env.FIREBAT_CWD;
+
+    // --cwd may appear after the target: resolution is deferred to the full-pass end.
+    const result = parseArgs(['src', '--cwd', '/proj']);
+
+    expect(result.cwd).toBe(path.resolve('/proj'));
+    expect(result.targets).toEqual([path.resolve('/proj', 'src')]);
+  });
+
+  it('keeps an absolute target as-is regardless of --cwd', () => {
+    delete process.env.FIREBAT_CWD;
+
+    const result = parseArgs(['--cwd', '/proj', '/elsewhere/a.ts']);
+
+    expect(result.targets).toEqual(['/elsewhere/a.ts']);
+  });
+
+  it('resolves a relative target against process.cwd() when no --cwd is given', () => {
+    delete process.env.FIREBAT_CWD;
+
+    const result = parseArgs(['src']);
+
+    expect(result.targets).toEqual([path.resolve('src')]);
+  });
+
   it('should throw a validation error when an unknown option is provided', () => {
     // Arrange
     let argv = ['--nope'];
