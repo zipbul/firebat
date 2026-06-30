@@ -322,13 +322,16 @@ const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOve
   };
 };
 
-const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): Promise<FirebatCliOptions> => {
+const resolveOptions = async (
+  argv: readonly string[],
+  logger: FirebatLogger,
+): Promise<{ options: FirebatCliOptions; rootAbs: string }> => {
   const options = parseArgs(argv);
 
   logger.trace('CLI args parsed', { targets: options.targets.length, help: options.help });
 
   if (options.help) {
-    return options;
+    return { options, rootAbs: resolveStartDir(options.cwd) };
   }
 
   const { rootAbs } = await resolveFirebatRootFromCwd(resolveStartDir(options.cwd));
@@ -373,14 +376,18 @@ const resolveOptions = async (argv: readonly string[], logger: FirebatLogger): P
   });
   const targets = await resolveExpandedTargets(rootAbs, merged, cfgExclude, logger);
 
-  return { ...merged, targets };
+  return { options: { ...merged, targets }, rootAbs };
 };
 
-const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof createCliLogger>): Promise<number> => {
+const runScan = async (
+  options: FirebatCliOptions,
+  rootAbs: string,
+  logger: ReturnType<typeof createCliLogger>,
+): Promise<number> => {
   let report: FirebatReport | null;
 
   try {
-    report = await scanUseCase(options, { logger });
+    report = await scanUseCase(options, { logger, rootAbs });
   } catch (err) {
     await appendCliErrorLog(err);
 
@@ -414,10 +421,14 @@ const runScan = async (options: FirebatCliOptions, logger: ReturnType<typeof cre
 const runCli = async (argv: readonly string[]): Promise<number> => {
   // Create early logger for resolveOptions; upgraded after options are known.
   const earlyLogger = createCliLogger({ level: undefined, logStack: undefined });
-  let options: FirebatCliOptions | null;
+  let options: FirebatCliOptions;
+  let rootAbs: string;
 
   try {
-    options = await resolveOptions(argv, earlyLogger);
+    const resolved = await resolveOptions(argv, earlyLogger);
+
+    options = resolved.options;
+    rootAbs = resolved.rootAbs;
   } catch (err) {
     await appendCliErrorLog(err);
     createPrettyConsoleLogger({ level: 'error', includeStack: false }).error(toErrorMessage(err));
@@ -436,7 +447,7 @@ const runCli = async (argv: readonly string[]): Promise<number> => {
     detectorCount: options.detectors.length,
   });
 
-  return runScan(options, logger);
+  return runScan(options, rootAbs, logger);
 };
 
 export { runCli };

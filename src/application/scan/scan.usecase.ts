@@ -678,6 +678,13 @@ const buildCatalog = (input: {
 
 interface ScanUseCaseDeps {
   readonly logger: FirebatLogger;
+  /**
+   * Project root, resolved once by the caller (CLI entry). When omitted the
+   * usecase resolves it itself (test-api / programmatic callers). Threading it
+   * avoids re-deriving the root from cwd a second time — the single source of
+   * truth that gildash's projectRoot and target resolution must share.
+   */
+  readonly rootAbs?: string;
 }
 
 const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): Promise<FirebatReport> => {
@@ -692,7 +699,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
 
   const tCtx0 = nowMs();
-  const ctx = await resolveRuntimeContextFromCwd(resolveStartDir(options.cwd));
+  // Single root resolution: prefer the root the caller already resolved (CLI
+  // entry), else derive it once here. No second independent cwd walk-up.
+  const rootAbs = deps.rootAbs ?? (await resolveRuntimeContextFromCwd(resolveStartDir(options.cwd))).rootAbs;
+  const ctx = { rootAbs };
 
   logger.trace('Runtime context resolved', { rootAbs: ctx.rootAbs, durationMs: Math.round(nowMs() - tCtx0) });
 
