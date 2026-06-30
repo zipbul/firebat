@@ -40,8 +40,11 @@ export const createFirebatProgram = async (
   logger.debug('Parsing files with gildash', { eligibleCount: eligible.length });
 
   const ownsGildash = config.gildash === undefined;
-  const root = process.cwd();
-  const gildash = config.gildash ?? (await createGildash({ projectRoot: root, watchMode: false }));
+  // When the caller injects gildash (the scan path) this fallback is never taken;
+  // for standalone callers, open gildash at the resolved root (or cwd) — never a
+  // separate raw process.cwd() that could diverge from the project root.
+  const gildash =
+    config.gildash ?? (await createGildash({ projectRoot: config.rootAbs ?? process.cwd(), watchMode: false }));
 
   try {
     const { parsed } = await gildash.batchParse(eligible);

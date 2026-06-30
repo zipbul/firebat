@@ -34,4 +34,6 @@ export interface FirebatCliOptions {
 export interface FirebatProgramConfig {
   readonly targets: readonly string[];
   readonly logger: import('./shared/logger').FirebatLogger;
+  /** Project root for an own-gildash open (standalone callers). Ignored when gildash is injected. */
+  readonly rootAbs?: string;
 }

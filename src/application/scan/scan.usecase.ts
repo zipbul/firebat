@@ -903,6 +903,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       targets: options.targets,
       logger,
       gildash,
+      rootAbs: ctx.rootAbs,
     });
 
     logger.info('Parse complete', { parsedCount: program.length, durationMs: Math.round(nowMs() - tProgram0) });
