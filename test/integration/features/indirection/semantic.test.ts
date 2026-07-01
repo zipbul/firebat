@@ -137,4 +137,52 @@ describe('integration/indirection (real typed gildash)', () => {
 
     expect(findings.map((f) => f.kind)).toContain('interface-rewrap');
   });
+
+  it('does not report a decorated forwarding method (method guard, real gildash symbols)', async () => {
+    const findings = await analyzeFor({
+      'src/a.ts': [
+        'function impl(x: number): number { return x; }',
+        'function log<T>(value: T, _ctx: unknown): T { return value; }',
+        'class C {',
+        '  @log method(x: number): number { return impl(x); }',
+        '}',
+        'new C().method(1);',
+      ].join('\n'),
+    });
+
+    // A class method is always K (method guard precedes the decorator gate).
+    expect(findings.map((f) => f.kind)).not.toContain('thin-wrapper');
+  });
+
+  it('reports both arms of a diamond cross-file chain without loop or double-count', async () => {
+    const findings = await analyzeFor({
+      'src/d.ts': 'export const leaf = (x: number): number => x + 1;\n',
+      'src/b.ts': "import { leaf } from './d';\nexport const b = (x: number): number => leaf(x);\n",
+      'src/c.ts': "import { leaf } from './d';\nexport const c = (x: number): number => leaf(x);\n",
+      'src/a.ts': [
+        "import { b } from './b';",
+        "import { c } from './c';",
+        'export const aViaB = (x: number): number => b(x);',
+        'export const aViaC = (x: number): number => c(x);',
+      ].join('\n'),
+    });
+
+    // aViaB→b→leaf and aViaC→c→leaf are both depth-2 cross-file chains.
+    const chainHeaders = findings.filter(f => f.kind === 'cross-file-forwarding-chain').map(f => f.header).sort();
+
+    expect(chainHeaders).toContain('aViaB');
+    expect(chainHeaders).toContain('aViaC');
+  });
+
+  it('follows a barrel re-export when resolving a cross-file chain', async () => {
+    const findings = await analyzeFor({
+      'src/impl.ts': 'export const real = (x: number): number => x + 1;\n',
+      'src/barrel.ts': "export { real } from './impl';\n",
+      'src/mid.ts': "import { real } from './barrel';\nexport const mid = (x: number): number => real(x);\n",
+      'src/top.ts': "import { mid } from './mid';\nexport const top = (x: number): number => mid(x);\n",
+    });
+
+    // top→mid→real(via barrel): top.depth=2 ≥ crossFileMinDepth → reported.
+    expect(findings.filter(f => f.kind === 'cross-file-forwarding-chain').map(f => f.header)).toContain('top');
+  });
 });
