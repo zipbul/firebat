@@ -336,6 +336,17 @@ describe('features/dependencies/analyzer — createEmptyDependencies', () => {
 describe('features/dependencies/analyzer — analyzeDependencies', () => {
   const ROOT = '/project';
 
+/** Path-accurate manifest mock: answers only the ROOT package.json, throws otherwise (real-FS semantics). */
+const rootOnlyRead =
+  (pkg: unknown) =>
+  (p: string): string => {
+    if (p === `${ROOT}/package.json`) {
+      return JSON.stringify(pkg);
+    }
+
+    throw new Error(`ENOENT: ${p}`);
+  };
+
   /**
    * Build a mock gildash whose only file is `src/index.ts`, whose `searchRelations`
    * returns the given `imports` for `type: 'imports'`, and run the analyzer against a
@@ -354,7 +365,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [...imports] : []),
     });
 
-    return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify(pkgJson), ignoreDependencies });
+    return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead(pkgJson), ignoreDependencies });
   };
 
   /**
@@ -395,7 +406,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       getSymbolsByFile: (filePath: string) => (filePath === relFile ? [...params.members] : []),
     });
 
-    return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+    return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/index.ts' }) });
   };
 
   /**
@@ -421,7 +432,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     return analyzeDependencies(g, {
       rootAbs: ROOT,
-      ...(params.pkgJson === undefined ? {} : { readFileFn: () => JSON.stringify(params.pkgJson) }),
+      ...(params.pkgJson === undefined ? {} : { readFileFn: rootOnlyRead(params.pkgJson) }),
     });
   };
 
@@ -643,7 +654,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   it.each(exportStatsCases)('$name', async ({ exported, module, expectedTotal, expectedAbstract }) => {
     const graph = new Map<string, string[]>([[`/project/${module}`, []]]);
     const g = createMockGildash({ getImportGraph: async () => graph, searchSymbols: exportedSymbols(exported) });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({}) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({}) });
     const stats = result.exportStats[module];
 
     expect(stats).toEqual({ total: expectedTotal, abstract: expectedAbstract });
@@ -774,7 +785,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     });
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({}),
+      readFileFn: rootOnlyRead({}),
     });
 
     expect(Array.isArray(result.deadExports)).toBe(true);
@@ -928,7 +939,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     });
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
-      readFileFn: () => JSON.stringify({ main: './src/main.ts' }),
+      readFileFn: rootOnlyRead({ main: './src/main.ts' }),
     });
     const dead = result.deadExports.filter(d => d.kind === 'dead-export');
     const testOnly = result.deadExports.filter(d => d.kind === 'test-only-export');
@@ -1015,7 +1026,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       searchSymbols: () => [],
       searchRelations: () => [],
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main }) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main }) });
     const actual = result.unusedFiles.map(f => f.module);
 
     expect(actual).toEqual([...expectedUnusedFileModules]);
@@ -1448,7 +1459,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         return [];
       },
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/main.ts' }) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/main.ts' }) });
 
     // dead-export held (would otherwise report orphan.ts::unusedFn).
     expect(result.deadExports.length).toBe(0);
@@ -1474,7 +1485,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         return [];
       },
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/index.ts' }) });
 
     expectSingleMissingUnresolved(result);
   });
@@ -1514,7 +1525,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       },
       getSymbolsByFile: guardsFileSymbols,
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/index.ts' }) });
     const unused = result.unusedMembers.filter(m => m.kind === 'unused-ns-member');
 
     expect(unused.map(m => m.memberName)).toEqual(['isString']);
@@ -1548,7 +1559,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       },
       getSymbolsByFile: guardsFileSymbols,
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/index.ts' }) });
 
     expect(result.unusedMembers.length).toBe(0);
   });
@@ -1592,7 +1603,7 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
         return [];
       },
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/barrel.ts' }) });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/barrel.ts' }) });
 
     expectSingleMissingUnresolved(result);
     expect(result.unresolvedImports[0]!.module).toBe('src/barrel.ts');

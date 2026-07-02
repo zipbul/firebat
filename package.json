@@ -28,7 +28,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@zipbul/gildash": "0.35.0",
+    "@zipbul/gildash": "0.36.0",
     "drizzle-orm": "^0.45.1",
     "fastbitset": "^0.4.1",
     "oxc-parser": "0.127.0",

@@ -390,7 +390,14 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
   const empty = createEmptyDependencies();
   const rootAbs = input?.rootAbs ?? process.cwd();
   const layerMatchers = input?.layers ? compileLayerMatchers(input.layers) : [];
-  const readFn = input?.readFileFn ?? ((_p: string) => '{}');
+  const readFn =
+    input?.readFileFn ??
+    ((p: string): string => {
+      // No fs access provided — behave like a missing file (real-FS semantics),
+      // NOT like an empty manifest: '{}' would make EVERY directory parse as a
+      // package boundary and hold all dead-export verdicts.
+      throw new Error(`ENOENT (no readFileFn): ${p}`);
+    });
   // 1. Import graph
   let graph: Map<string, string[]>;
 
@@ -574,11 +581,16 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       }
 
       for (const [, modules] of originToModules) {
-        if (modules.length > 1) {
+        // A "surface" is a module: overload signatures (or any repeated declarations)
+        // within ONE file are a single surface, not duplication — dedupe by module
+        // and require 2+ DISTINCT modules (spec: "2개 이상의 표면에 중복 노출").
+        const distinctModules = [...new Set(modules)];
+
+        if (distinctModules.length > 1) {
           duplicateExports.push({
             kind: 'duplicate-export',
             name,
-            modules,
+            modules: distinctModules,
           });
         }
       }
@@ -692,18 +704,59 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       }
 
       // Entry point reachability via BFS
-      // Entry points: package.json fields + test/config/script files in graph
+      // Entry points: package.json fields + test/config/script files in graph.
+      // Monorepos: every nested package manifest is a package boundary whose
+      // entrypoints are consumed by EXTERNAL package consumers — a sub-package's
+      // entry file is not "unused" just because the root manifest doesn't point
+      // at it. Collect manifests from every ancestor dir of graph files.
       const graphKeys = new Set(absGraph.keys());
-      const entrySpecs = readPackageEntrypoints(rootAbs, readFn);
       const entryModules = new Set<string>();
+      const manifestDirs = new Set<string>([rootAbs]);
 
-      for (const spec of entrySpecs) {
-        const resolved = resolveEntrypointToFile(rootAbs, spec, graphKeys);
+      for (const fileAbs of graphKeys) {
+        let dir = path.dirname(fileAbs);
 
-        if (resolved) {
-          entryModules.add(resolved);
+        while (dir.startsWith(rootAbs) && dir.length >= rootAbs.length) {
+          manifestDirs.add(dir);
+
+          const parent = path.dirname(dir);
+
+          if (parent === dir) {
+            break;
+          }
+
+          dir = parent;
         }
       }
+
+      const nestedPkgDirs: string[] = [];
+
+      for (const dir of manifestDirs) {
+        // Package boundary = a parseable manifest EXISTS — apps (Next 등) often have
+        // no main/exports fields but are still externally-driven package roots.
+        try {
+          readPackageJson(dir, readFn);
+        } catch {
+          continue;
+        }
+
+        if (dir !== rootAbs) {
+          nestedPkgDirs.push(`${dir}/`);
+        }
+
+        for (const spec of readPackageEntrypoints(dir, readFn)) {
+          const resolved = resolveEntrypointToFile(dir, spec, graphKeys);
+
+          if (resolved) {
+            entryModules.add(resolved);
+          }
+        }
+      }
+
+      // Files under a NESTED package boundary are consumed by external package
+      // consumers (outside the indexed graph) — unused-file cannot be proven for
+      // them from this graph, so the verdict is held (spec: 전체-인덱싱 전제).
+      const isUnderNestedPackage = (fileAbs: string): boolean => nestedPkgDirs.some(d => fileAbs.startsWith(d));
 
       // Test files, config files, and scripts are implicit entry points
       for (const fileAbs of graphKeys) {
@@ -739,7 +792,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
       if (entryModules.size > 0) {
         for (const moduleAbs of graphKeys) {
-          if (!reachable.has(moduleAbs) && !isTestLikePath(moduleAbs)) {
+          if (!reachable.has(moduleAbs) && !isTestLikePath(moduleAbs) && !isUnderNestedPackage(moduleAbs)) {
             unreachableModules.add(moduleAbs);
             unusedFiles.push({
               kind: 'unused-file',
@@ -752,7 +805,9 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // Check each module's exports (skip unreachable — already reported as unused file).
       // Held entirely when the relation index is incomplete (spec: 전체-인덱싱 전제).
       for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
-        if (symbols.length === 0 || unreachableModules.has(moduleAbs)) {
+        // Nested-package files: their symbol consumers are external package
+        // consumers (outside the indexed graph) — hold dead/test-only verdicts.
+        if (symbols.length === 0 || unreachableModules.has(moduleAbs) || isUnderNestedPackage(moduleAbs)) {
           continue;
         }
 
@@ -877,7 +932,8 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
         const memberParents = symbols.filter(s => s.kind === 'enum' || s.kind === 'namespace');
 
-        if (memberParents.length === 0) {
+        // Same external-consumer hold as dead-export for nested-package files.
+        if (memberParents.length === 0 || isUnderNestedPackage(moduleAbs)) {
           continue;
         }
 
