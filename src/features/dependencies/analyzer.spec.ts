@@ -1116,6 +1116,17 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
       expectedUnusedDeps: [],
       expectedUnresolved: [],
     },
+    {
+      name: 'skips a declared dependency used only as a package.json script binary',
+      imports: [],
+      pkgJson: {
+        main: './src/index.ts',
+        devDependencies: { oxlint: '^1.0.0' },
+        scripts: { lint: 'oxlint --fix src' },
+      },
+      expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
   ];
 
   it.each(importCases)('$name', async ({ imports, pkgJson, ignoreDependencies, expectedUnusedDeps, expectedUnresolved }) => {
@@ -1277,11 +1288,30 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
   );
 
   it('should skip all enum members when parent enum is imported with usesAll', async () => {
-    // `import * as Color` → usesAll → every member treated as used regardless of calls.
+    // `import * as Color` → usesAll. An attributed call to Color.Red exists (so the
+    // calls-0 hold does NOT fire) — the skip must come from the usesAll gate itself:
+    // the uncalled Blue member is NOT reported.
     const result = await analyzeMembers({
       container: mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'),
       containerFile: '/project/src/colors.ts',
       importName: '*',
+      calledMembers: ['Color.Red'],
+      members: [
+        { kind: 'enum', name: 'Color', memberName: null, isExported: true },
+        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
+        { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false },
+      ],
+    });
+
+    expect(result.unusedMembers.length).toBe(0);
+  });
+
+  it('should hold the member verdict when no call to any parent member is observed', async () => {
+    // calls-0 → no usage evidence for the parent at all → verdict held (no member W).
+    const result = await analyzeMembers({
+      container: mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'),
+      containerFile: '/project/src/colors.ts',
+      importName: 'Color',
       calledMembers: [],
       members: [
         { kind: 'enum', name: 'Color', memberName: null, isExported: true },

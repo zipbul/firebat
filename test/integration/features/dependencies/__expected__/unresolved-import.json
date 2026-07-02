@@ -9,14 +9,7 @@
   },
   "cuts": [],
   "cycles": [],
-  "deadExports": [
-    {
-      "kind": "dead-export",
-      "module": "unresolved-import/reexport.ts",
-      "name": "lost",
-      "symbolKind": "re-export"
-    }
-  ],
+  "deadExports": [],
   "duplicateExports": [],
   "exportStats": {
     "unresolved-import/real.ts": {

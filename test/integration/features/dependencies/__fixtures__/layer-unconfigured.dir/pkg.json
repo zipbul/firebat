@@ -1,0 +1,1 @@
+{ "name": "layer-violation-fixture", "version": "0.0.0", "main": "./layer-violation/ui/app.ts" }

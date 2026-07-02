@@ -53,4 +53,9 @@ describe('golden/dependencies', () => {
     ],
     allowedDependencies: { ui: ['domain'] },
   });
+  // K: same shape as layer-violation but layers unconfigured → whole check inactive.
+  rg('layer-unconfigured');
+  // K: no package.json main and no test/config entry files → zero entry points →
+  // unused-file judgment is held (orphan file must NOT be reported).
+  rg('unused-file-no-entry');
 });
