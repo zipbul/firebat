@@ -1,0 +1,6 @@
+{
+  "name": "unused-dependency-fixture",
+  "version": "0.0.0",
+  "main": "./unused-dependency/index.ts",
+  "dependencies": { "used-pkg": "^1.0.0", "unused-pkg": "^1.0.0" }
+}

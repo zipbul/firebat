@@ -414,14 +414,18 @@ describe('analyzer', () => {
   it('analyzeIndirection - exported standalone arrow wrapper - skipped (cross-module)', async () => {
     // Arrange — exported wrapper: uses may be outside this file, so the
     // reference-identity gate (②) cannot be proven here → K (cross-module).
-    const source = [
-      'function target(value: any) { return value + 1; }',
-      'export const wrapper = (x: any) => target(x);',
-    ].join('\n');
+    const source = ['function target(value: any) { return value + 1; }', 'export const wrapper = (x: any) => target(x);'].join(
+      '\n',
+    );
     const program = createProgram('/virtual/exported-arrow.ts', source);
     const gildash = createMockGildash({
       searchSymbols: () => [
-        { name: 'wrapper', filePath: '/virtual/exported-arrow.ts', kind: 'function', isExported: true } as unknown as SymbolSearchResult,
+        {
+          name: 'wrapper',
+          filePath: '/virtual/exported-arrow.ts',
+          kind: 'function',
+          isExported: true,
+        } as unknown as SymbolSearchResult,
       ],
     });
     // Act
@@ -826,7 +830,12 @@ describe('analyzer', () => {
 
   const wrapperHeaders = async (source: string, filePath = '/virtual/b.ts'): Promise<string[]> => {
     const program = createProgram(filePath, source);
-    const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
+    const analysis = await analyzeIndirection(
+      createMockGildash(),
+      program,
+      { maxForwardDepth: 1, crossFileMinDepth: 2 },
+      '/virtual',
+    );
 
     return findKinds(analysis, 'thin-wrapper').map(f => f.header);
   };
@@ -835,14 +844,38 @@ describe('analyzer', () => {
     // `cb` is `const cb = x => f(x)`. A non-direct-call reach makes it K.
     const cases: WrapperExpectCase[] = [
       { name: 'direct call only', source: 'function f(x){return x;}\nconst cb = x => f(x);\ncb(1);', expectWrapper: true },
-      { name: 'CallExpression argument', source: 'function f(x){return x;}\nconst cb = x => f(x);\n[1].map(cb);', expectWrapper: false },
-      { name: 'NewExpression argument', source: 'function f(x){return x;}\nconst cb = x => f(x);\nnew Set([cb]);\ncb;', expectWrapper: false },
-      { name: '=== operand', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst g = cb;\nif (g === cb) {}', expectWrapper: false },
+      {
+        name: 'CallExpression argument',
+        source: 'function f(x){return x;}\nconst cb = x => f(x);\n[1].map(cb);',
+        expectWrapper: false,
+      },
+      {
+        name: 'NewExpression argument',
+        source: 'function f(x){return x;}\nconst cb = x => f(x);\nnew Set([cb]);\ncb;',
+        expectWrapper: false,
+      },
+      {
+        name: '=== operand',
+        source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst g = cb;\nif (g === cb) {}',
+        expectWrapper: false,
+      },
       { name: 'array element', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst a = [cb];', expectWrapper: false },
-      { name: 'return value', source: 'function f(x){return x;}\nfunction make(){ const cb = x => f(x); return cb; }', expectWrapper: false },
+      {
+        name: 'return value',
+        source: 'function f(x){return x;}\nfunction make(){ const cb = x => f(x); return cb; }',
+        expectWrapper: false,
+      },
       { name: 'export value', source: 'function f(x){return x;}\nconst cb = x => f(x);\nexport { cb };', expectWrapper: false },
-      { name: 'spread element', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst a = [...[cb]];\ncb;', expectWrapper: false },
-      { name: 'fixpoint alias reach', source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst w2 = cb;\n[1].map(w2);', expectWrapper: false },
+      {
+        name: 'spread element',
+        source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst a = [...[cb]];\ncb;',
+        expectWrapper: false,
+      },
+      {
+        name: 'fixpoint alias reach',
+        source: 'function f(x){return x;}\nconst cb = x => f(x);\nconst w2 = cb;\n[1].map(w2);',
+        expectWrapper: false,
+      },
     ];
 
     it.each(cases)('analyzeIndirection - $name - wrapper=$expectWrapper', async ({ source, expectWrapper }) => {
@@ -905,7 +938,10 @@ describe('analyzer', () => {
       { name: 'rest to identifier', source: 'function f(a: any){return a;}\nconst w = (...a: any[]) => f(a);\nw(1);' },
       { name: 'non-rest to spread', source: 'function f(a: any){return a;}\nconst w = (x: any[]) => f(...x);\nw([1]);' },
       { name: 'optional chain call', source: 'declare const f: any;\nconst w = (x: any) => f?.(x);\nw(1);' },
-      { name: 'destructuring decomposition', source: 'function f(a: any, b: any){return a;}\nconst w = ({ a, b }: any) => f(a, b);\nw({});' },
+      {
+        name: 'destructuring decomposition',
+        source: 'function f(a: any, b: any){return a;}\nconst w = ({ a, b }: any) => f(a, b);\nw({});',
+      },
     ];
 
     it.each(cases)('analyzeIndirection - $name - skips wrapper', async ({ source }) => {
@@ -920,11 +956,31 @@ describe('analyzer', () => {
   describe('B4 narrowing / async / generator / accessor / method (④⑤⑥)', () => {
     // Reuses ReportCase {name, source, header} — same shape, single change-point.
     const cases: ReportCase[] = [
-      { name: 'type predicate return', source: 'declare function check(v: any): boolean;\nconst w = (v: any): v is string => check(v);\nw(1);', header: 'w' },
-      { name: 'asserts return', source: 'declare function check(v: any): void;\nfunction w(v: any): asserts v is string { return check(v); }\nw(1);', header: 'w' },
-      { name: 'generator delegation', source: 'function* f(x: any){ yield x; }\nfunction* w(x: any){ yield* f(x); }\nw(1);', header: 'w' },
-      { name: 'async await delegation', source: 'declare function f(x: any): Promise<any>;\nconst w = async (x: any) => await f(x);\nw(1);', header: 'w' },
-      { name: 'class method delegation', source: 'function f(x: any){return x;}\nclass C { m(x: any){ return f(x); } }', header: 'm' },
+      {
+        name: 'type predicate return',
+        source: 'declare function check(v: any): boolean;\nconst w = (v: any): v is string => check(v);\nw(1);',
+        header: 'w',
+      },
+      {
+        name: 'asserts return',
+        source: 'declare function check(v: any): void;\nfunction w(v: any): asserts v is string { return check(v); }\nw(1);',
+        header: 'w',
+      },
+      {
+        name: 'generator delegation',
+        source: 'function* f(x: any){ yield x; }\nfunction* w(x: any){ yield* f(x); }\nw(1);',
+        header: 'w',
+      },
+      {
+        name: 'async await delegation',
+        source: 'declare function f(x: any): Promise<any>;\nconst w = async (x: any) => await f(x);\nw(1);',
+        header: 'w',
+      },
+      {
+        name: 'class method delegation',
+        source: 'function f(x: any){return x;}\nclass C { m(x: any){ return f(x); } }',
+        header: 'm',
+      },
       { name: 'get accessor delegation', source: 'class C { _f(){ return 1; } get x(){ return this._f(); } }', header: 'x' },
     ];
 
@@ -955,7 +1011,12 @@ describe('analyzer', () => {
       // Arrange
       const program = createProgram('/virtual/b.ts', source);
       // Act
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
 
       // Assert
       expect(findKinds(analysis, kind).length).toBe(0);
@@ -966,7 +1027,12 @@ describe('analyzer', () => {
       const source = 'class B {}\nclass A extends B {}';
       const program = createProgram('/virtual/b.ts', source);
       // Act
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 0, crossFileMinDepth: 2 }, '/virtual');
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 2 },
+        '/virtual',
+      );
 
       // Assert — no finding of any kind references the class as a re-wrap.
       expect(analysis.some(f => f.header === 'A')).toBe(false);
@@ -991,7 +1057,12 @@ describe('analyzer', () => {
 
     const chainHeaders = async (n: number, maxForwardDepth: number): Promise<string[]> => {
       const program = createProgram('/virtual/chain.ts', chainSource(n));
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth, crossFileMinDepth: 2 }, '/virtual');
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth, crossFileMinDepth: 2 },
+        '/virtual',
+      );
 
       return findKinds(analysis, 'forward-chain').map(f => f.header);
     };
@@ -1017,7 +1088,12 @@ describe('analyzer', () => {
       const source = 'function a(x: any){ return b(x); }\nfunction b(x: any){ return a(x); }\na(1);';
       const program = createProgram('/virtual/cycle.ts', source);
       // Act
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 2 }, '/virtual');
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 1, crossFileMinDepth: 2 },
+        '/virtual',
+      );
 
       // Assert — same-file cycles are out of scope.
       expect(findKinds(analysis, 'forward-chain').length).toBe(0);

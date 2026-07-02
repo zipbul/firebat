@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 /**
  * Run the indirection analyzer against a REAL (production) Gildash.
  *
@@ -11,8 +13,6 @@
  * now exercises the production gildash path — no drift between test and prod.
  */
 import type { IndirectionFinding } from '../../../../src/types';
-
-import * as path from 'node:path';
 
 import { analyzeIndirection, parseSource } from '../../../../src/test-api';
 import { type GildashSources, withTempGildash } from '../../shared/gildash-test-kit';

@@ -56,7 +56,7 @@ interface MockGildashOverrides {
   searchRelations?: (q: unknown) => StoredCodeRelation[];
   getModuleInterface?: (fp: string) => unknown;
   resolveSymbol?: (name: string, filePath: string) => unknown;
-  getSymbolsByFile?: (filePath: string) => unknown[];
+  getSymbolsByFile?: (filePath: string) => ReadonlyArray<unknown>;
 }
 
 const createMockGildash = (overrides: MockGildashOverrides = {}): Gildash => {
@@ -240,6 +240,13 @@ const mkCall = (srcFilePath: string, dstFilePath: string, dstSymbolName: string)
   specifier: null,
 });
 
+/** Assert exactly one unresolved-import finding whose specifier is './missing'. */
+const expectSingleMissingUnresolved = (result: { unresolvedImports: ReadonlyArray<{ specifier: string }> }): void => {
+  expect(result.unresolvedImports.length).toBe(1);
+  expect(result.unresolvedImports[0]!.specifier).toBe('./missing');
+};
+
+
 /** A `searchSymbols` mock that returns `exported` only for the `isExported` query. */
 const exportedSymbols =
   (exported: ReadonlyArray<SymbolSearchResult>) =>
@@ -278,6 +285,20 @@ interface MemberSymbolRow {
   memberName: string | null;
   isExported: boolean;
 }
+
+/**
+ * `getSymbolsByFile` mock for the cross-file member-attribution tests: returns a
+ * `Guards` namespace with `isString` / `isNumber` members for `src/guards.ts`,
+ * and `[]` for every other file. Shared by the two B2 attribution cases.
+ */
+const guardsFileSymbols = (filePath: string): ReadonlyArray<MemberSymbolRow> =>
+  filePath === 'src/guards.ts'
+    ? [
+        { kind: 'namespace', name: 'Guards', memberName: null, isExported: true },
+        { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false },
+        { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false },
+      ]
+    : [];
 
 /* ------------------------------------------------------------------ */
 /*  createEmptyDependencies                                            */
@@ -1367,5 +1388,183 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     expectSingleNamed(indexDeadExports(result), 'orphanFn');
     expectSingleNamed(libDead, 'orphanFn');
+  });
+
+  /* ---------- DG: Relation degrade → dead-family verdicts held (B1) ---------- */
+
+  // When `imports` indexes successfully but one of the completeness relations
+  // (re-exports / type-references / calls) throws GildashError, the "usage = 0"
+  // family (dead-export / test-only-export / unused-member) must be HELD to avoid
+  // FPs from missing edges — while imports-only findings (unresolved / dep manifest)
+  // still proceed.
+  const degradedRelationTypes: ReadonlyArray<[string]> = [['re-exports'], ['type-references'], ['calls']];
+
+  it.each(degradedRelationTypes)('should hold dead-export verdict when %s relation degrades', async relType => {
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/src/main.ts', ['/project/src/orphan.ts']],
+          ['/project/src/orphan.ts', []],
+        ]),
+      searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')]),
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === relType) {
+          return gildashThrow(`${relType} relation failed`);
+        }
+
+        // imports (and the other complete relations) succeed with no edges.
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/main.ts' }) });
+
+    // dead-export held (would otherwise report orphan.ts::unusedFn).
+    expect(result.deadExports.length).toBe(0);
+  });
+
+  it('should still report unresolved import when a completeness relation degrades', async () => {
+    // imports succeeds (carrying an unresolved internal import); calls degrades.
+    // Manifest/resolution findings do not depend on relation completeness → proceed.
+    const g = createMockGildash({
+      getImportGraph: async () => new Map<string, string[]>([['/project/src/index.ts', []]]),
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './missing' })];
+        }
+
+        if (type === 'calls') {
+          return gildashThrow('calls relation failed');
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+
+    expectSingleMissingUnresolved(result);
+  });
+
+  /* ---------- CF: Cross-file qualified member attribution (B2) ---------- */
+
+  it('should attribute a cross-file qualified member call via named import (used member not flagged)', async () => {
+    // guards.ts defines namespace Guards { isString, isNumber }. consumer.ts imports
+    // { Guards } and calls Guards.isNumber(); that call is recorded on consumer.ts.
+    // It must be attributed back to guards.ts so isNumber is NOT flagged; only the
+    // truly-uncalled isString remains W.
+    const guardsFile = '/project/src/guards.ts';
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', ['/project/src/consumer.ts', guardsFile]],
+      ['/project/src/consumer.ts', [guardsFile]],
+      [guardsFile, []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: exportedSymbols([mkSymbol(1, guardsFile, 'Guards', 'namespace')]),
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [
+            mkImport('/project/src/consumer.ts', guardsFile, 'Guards'),
+            mkImport('/project/src/index.ts', guardsFile, 'Guards'),
+          ];
+        }
+
+        if (type === 'calls') {
+          // Qualified call recorded on the CONSUMER file, not on guards.ts.
+          return [mkCall('/project/src/consumer.ts', '/project/src/consumer.ts', 'Guards.isNumber')];
+        }
+
+        return [];
+      },
+      getSymbolsByFile: guardsFileSymbols,
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+    const unused = result.unusedMembers.filter(m => m.kind === 'unused-ns-member');
+
+    expect(unused.map(m => m.memberName)).toEqual(['isString']);
+  });
+
+  it('should hold the parent member verdict when a qualified call cannot be attributed to the parent module', async () => {
+    // consumer.ts calls Guards.isNumber() but did NOT import Guards from guards.ts
+    // (no attributing import edge). Attribution is not closed → the whole parent's
+    // member verdict is held (conservative K) — isNumber must NOT be flagged.
+    const guardsFile = '/project/src/guards.ts';
+    const graph = new Map<string, string[]>([
+      ['/project/src/index.ts', [guardsFile]],
+      ['/project/src/consumer.ts', []],
+      [guardsFile, []],
+    ]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: exportedSymbols([mkSymbol(1, guardsFile, 'Guards', 'namespace')]),
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [mkImport('/project/src/index.ts', guardsFile, 'Guards')];
+        }
+
+        if (type === 'calls') {
+          return [mkCall('/project/src/consumer.ts', '/project/src/consumer.ts', 'Guards.isNumber')];
+        }
+
+        return [];
+      },
+      getSymbolsByFile: guardsFileSymbols,
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/index.ts' }) });
+
+    expect(result.unusedMembers.length).toBe(0);
+  });
+
+  /* ---------- PO: peer / optional declared → not unlisted (B4) ---------- */
+
+  it('should not flag peer/optionalDependencies as unlisted when imported', async () => {
+    const result = await analyzeImports(
+      [
+        mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'react' }),
+        mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'fsevents' }),
+      ],
+      {
+        main: './src/index.ts',
+        peerDependencies: { react: '^18.0.0' },
+        optionalDependencies: { fsevents: '^2.0.0' },
+      },
+    );
+
+    expect(result.unusedDeps.filter(d => d.kind === 'unlisted-dependency').length).toBe(0);
+  });
+
+  /* ---------- UX: unresolved re-export (B3) ---------- */
+
+  it('should report an unresolved re-export (export … from missing module) as unresolved-import', async () => {
+    const g = createMockGildash({
+      getImportGraph: async () => new Map<string, string[]>([['/project/src/barrel.ts', []]]),
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [];
+        }
+
+        if (type === 're-exports') {
+          // export { lost } from './missing' → dstFilePath null, specifier present.
+          return [{ ...mkReExport('/project/src/barrel.ts', '', 'lost', 'lost'), dstFilePath: null, specifier: './missing' }];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: () => JSON.stringify({ main: './src/barrel.ts' }) });
+
+    expectSingleMissingUnresolved(result);
+    expect(result.unresolvedImports[0]!.module).toBe('src/barrel.ts');
   });
 });

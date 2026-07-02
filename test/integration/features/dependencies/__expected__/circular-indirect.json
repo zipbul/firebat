@@ -1,0 +1,78 @@
+{
+  "adjacency": {
+    "circular-indirect/a.ts": [
+      "circular-indirect/c.ts"
+    ],
+    "circular-indirect/b.ts": [
+      "circular-indirect/a.ts"
+    ],
+    "circular-indirect/c.ts": [
+      "circular-indirect/b.ts"
+    ]
+  },
+  "cuts": [
+    {
+      "from": "circular-indirect/a.ts",
+      "score": 1,
+      "to": "circular-indirect/c.ts"
+    }
+  ],
+  "cycles": [
+    {
+      "path": [
+        "circular-indirect/a.ts",
+        "circular-indirect/c.ts",
+        "circular-indirect/b.ts"
+      ]
+    }
+  ],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {
+    "circular-indirect/a.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "circular-indirect/b.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "circular-indirect/c.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "circular-indirect/a.ts"
+    },
+    {
+      "count": 1,
+      "module": "circular-indirect/b.ts"
+    },
+    {
+      "count": 1,
+      "module": "circular-indirect/c.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 1,
+      "module": "circular-indirect/a.ts"
+    },
+    {
+      "count": 1,
+      "module": "circular-indirect/b.ts"
+    },
+    {
+      "count": 1,
+      "module": "circular-indirect/c.ts"
+    }
+  ],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": [],
+  "unusedMembers": []
+}

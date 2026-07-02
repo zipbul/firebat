@@ -1,0 +1,42 @@
+{
+  "adjacency": {
+    "unused-ns-member/guards.ts": [],
+    "unused-ns-member/index.ts": [
+      "unused-ns-member/guards.ts"
+    ]
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {
+    "unused-ns-member/guards.ts": {
+      "abstract": 0,
+      "total": 2
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "unused-ns-member/guards.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 1,
+      "module": "unused-ns-member/index.ts"
+    }
+  ],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": [],
+  "unusedMembers": [
+    {
+      "kind": "unused-ns-member",
+      "memberName": "isNumber",
+      "module": "unused-ns-member/guards.ts",
+      "symbolName": "Guards"
+    }
+  ]
+}

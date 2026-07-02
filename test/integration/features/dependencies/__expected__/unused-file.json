@@ -1,0 +1,58 @@
+{
+  "adjacency": {
+    "unused-file/index.ts": [
+      "unused-file/reached.ts"
+    ],
+    "unused-file/orphan.spec.ts": [
+      "unused-file/reached.ts"
+    ],
+    "unused-file/orphan.ts": [
+      "unused-file/reached.ts"
+    ],
+    "unused-file/reached.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {
+    "unused-file/orphan.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "unused-file/reached.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 3,
+      "module": "unused-file/reached.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 1,
+      "module": "unused-file/index.ts"
+    },
+    {
+      "count": 1,
+      "module": "unused-file/orphan.spec.ts"
+    },
+    {
+      "count": 1,
+      "module": "unused-file/orphan.ts"
+    }
+  ],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": [
+    {
+      "kind": "unused-file",
+      "module": "unused-file/orphan.ts"
+    }
+  ],
+  "unusedMembers": []
+}

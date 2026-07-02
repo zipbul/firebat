@@ -1,0 +1,136 @@
+{
+  "adjacency": {
+    "dead-export/barrel.ts": [
+      "dead-export/star-reexport.ts"
+    ],
+    "dead-export/index.ts": [
+      "dead-export/lib.ts",
+      "dead-export/star-ns.ts",
+      "dead-export/barrel.ts",
+      "dead-export/self-only.ts",
+      "dead-export/prop-barrel.ts",
+      "dead-export/types.ts"
+    ],
+    "dead-export/lib.ts": [],
+    "dead-export/prop-barrel.ts": [
+      "dead-export/prop-origin.ts"
+    ],
+    "dead-export/prop-origin.ts": [],
+    "dead-export/self-only.ts": [],
+    "dead-export/star-ns.ts": [],
+    "dead-export/star-reexport.ts": [],
+    "dead-export/types.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [
+    {
+      "kind": "dead-export",
+      "module": "dead-export/lib.ts",
+      "name": "deadFn",
+      "symbolKind": "function"
+    },
+    {
+      "kind": "dead-export",
+      "module": "dead-export/self-only.ts",
+      "name": "helper",
+      "symbolKind": "function"
+    },
+    {
+      "kind": "dead-export",
+      "module": "dead-export/prop-barrel.ts",
+      "name": "h",
+      "symbolKind": "re-export"
+    },
+    {
+      "kind": "dead-export",
+      "module": "dead-export/prop-origin.ts",
+      "name": "h",
+      "symbolKind": "function"
+    }
+  ],
+  "duplicateExports": [],
+  "exportStats": {
+    "dead-export/lib.ts": {
+      "abstract": 0,
+      "total": 2
+    },
+    "dead-export/prop-barrel.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "dead-export/prop-origin.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "dead-export/self-only.ts": {
+      "abstract": 0,
+      "total": 2
+    },
+    "dead-export/star-ns.ts": {
+      "abstract": 0,
+      "total": 2
+    },
+    "dead-export/star-reexport.ts": {
+      "abstract": 0,
+      "total": 2
+    },
+    "dead-export/types.ts": {
+      "abstract": 1,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "dead-export/barrel.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/lib.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/prop-barrel.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/prop-origin.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/self-only.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/star-ns.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/star-reexport.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/types.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 6,
+      "module": "dead-export/index.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/barrel.ts"
+    },
+    {
+      "count": 1,
+      "module": "dead-export/prop-barrel.ts"
+    }
+  ],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": [],
+  "unusedMembers": []
+}

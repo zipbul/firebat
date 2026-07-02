@@ -27,10 +27,7 @@ interface Finding {
   readonly depth: number;
 }
 
-const analyzeFor = async (
-  files: Record<string, string>,
-  maxForwardDepth = 5,
-): Promise<readonly Finding[]> => {
+const analyzeFor = async (files: Record<string, string>, maxForwardDepth = 5): Promise<readonly Finding[]> => {
   const sources: Record<string, string> = { 'tsconfig.json': TSCONFIG };
 
   for (const [rel, code] of Object.entries(files)) {
@@ -53,7 +50,6 @@ const analyzeFor = async (
   }
 };
 
-
 describe('integration/indirection (real typed gildash)', () => {
   it('reports a cross-file forwarding chain across three files (resolveSymbol resolution)', async () => {
     const findings = await analyzeFor({
@@ -63,7 +59,8 @@ describe('integration/indirection (real typed gildash)', () => {
     });
 
     // top → mid → real is a 2-deep cross-file chain (depth ≥ crossFileMinDepth=2).
-    expect(findings.map((f) => f.kind)).toContain('cross-file-forwarding-chain');
+    expect(findings.map(f => f.kind)).toContain('cross-file-forwarding-chain');
+
     const chain = findings.find(f => f.kind === 'cross-file-forwarding-chain' && f.header === 'top');
 
     expect(chain).toBeDefined();
@@ -77,8 +74,8 @@ describe('integration/indirection (real typed gildash)', () => {
 
     // `top` is exported (its use is cross-module) → thin-wrapper gate ② cannot close
     // in-file → NOT a thin-wrapper. depth is only 1, below crossFileMinDepth → no chain either.
-    expect(findings.map((f) => f.kind)).not.toContain('thin-wrapper');
-    expect(findings.map((f) => f.kind)).not.toContain('cross-file-forwarding-chain');
+    expect(findings.map(f => f.kind)).not.toContain('thin-wrapper');
+    expect(findings.map(f => f.kind)).not.toContain('cross-file-forwarding-chain');
   });
 
   it('reports a non-export single-file thin-wrapper (② closes in-file)', async () => {
@@ -89,7 +86,6 @@ describe('integration/indirection (real typed gildash)', () => {
         'wrapper(1);',
       ].join('\n'),
     });
-
     const tw = findings.find(f => f.kind === 'thin-wrapper' && f.header === 'wrapper');
 
     expect(tw).toBeDefined();
@@ -119,7 +115,7 @@ describe('integration/indirection (real typed gildash)', () => {
       'src/a.ts': ['interface Base { id: number; }', 'export type Alias = Base;\n'].join('\n'),
     });
 
-    expect(findings.map((f) => f.kind)).toContain('type-remap');
+    expect(findings.map(f => f.kind)).toContain('type-remap');
   });
 
   it('does not report a generic type alias (type args → K)', async () => {
@@ -127,7 +123,7 @@ describe('integration/indirection (real typed gildash)', () => {
       'src/a.ts': ['interface Base<T> { v: T; }', 'export type Alias = Base<number>;\n'].join('\n'),
     });
 
-    expect(findings.map((f) => f.kind)).not.toContain('type-remap');
+    expect(findings.map(f => f.kind)).not.toContain('type-remap');
   });
 
   it('reports an empty interface extends in a module file (interface-rewrap)', async () => {
@@ -135,7 +131,7 @@ describe('integration/indirection (real typed gildash)', () => {
       'src/a.ts': ['export interface Base { id: number; }', 'export interface Wrap extends Base {}\n'].join('\n'),
     });
 
-    expect(findings.map((f) => f.kind)).toContain('interface-rewrap');
+    expect(findings.map(f => f.kind)).toContain('interface-rewrap');
   });
 
   it('does not report a decorated forwarding method (method guard, real gildash symbols)', async () => {
@@ -151,7 +147,7 @@ describe('integration/indirection (real typed gildash)', () => {
     });
 
     // A class method is always K (method guard precedes the decorator gate).
-    expect(findings.map((f) => f.kind)).not.toContain('thin-wrapper');
+    expect(findings.map(f => f.kind)).not.toContain('thin-wrapper');
   });
 
   it('reports both arms of a diamond cross-file chain without loop or double-count', async () => {
@@ -166,9 +162,11 @@ describe('integration/indirection (real typed gildash)', () => {
         'export const aViaC = (x: number): number => c(x);',
       ].join('\n'),
     });
-
     // aViaB→b→leaf and aViaC→c→leaf are both depth-2 cross-file chains.
-    const chainHeaders = findings.filter(f => f.kind === 'cross-file-forwarding-chain').map(f => f.header).sort();
+    const chainHeaders = findings
+      .filter(f => f.kind === 'cross-file-forwarding-chain')
+      .map(f => f.header)
+      .sort();
 
     expect(chainHeaders).toContain('aViaB');
     expect(chainHeaders).toContain('aViaC');

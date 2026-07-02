@@ -1,0 +1,21 @@
+{
+  "adjacency": {},
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {},
+  "fanIn": [],
+  "fanOut": [],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [
+    {
+      "files": [],
+      "kind": "unused-dependency",
+      "packageName": "unused-pkg"
+    }
+  ],
+  "unusedFiles": [],
+  "unusedMembers": []
+}

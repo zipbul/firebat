@@ -54,6 +54,7 @@ export class BindingUnresolvedError extends Error {
 
   constructor(filePath: string) {
     super(`buildDeclScopeMap: gildash binding source did not resolve for filePath=${filePath}`);
+
     this.name = 'BindingUnresolvedError';
     this.filePath = filePath;
   }

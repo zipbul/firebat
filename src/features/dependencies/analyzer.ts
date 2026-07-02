@@ -128,11 +128,10 @@ const isBuiltinModule = (name: string): boolean => name === 'bun' || name.starts
 const readPackageJson = (rootAbs: string, readFn: (p: string) => string): Record<string, unknown> =>
   JSON.parse(readFn(path.join(rootAbs, 'package.json'))) as Record<string, unknown>;
 
-const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
+const collectDependencyFields = (rootAbs: string, readFn: (p: string) => string, fields: ReadonlyArray<string>): Set<string> => {
   try {
     const parsed = readPackageJson(rootAbs, readFn);
     const deps = new Set<string>();
-    const fields = ['dependencies', 'devDependencies'] as const;
 
     for (const field of fields) {
       const section = parsed[field];
@@ -149,6 +148,21 @@ const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string)
     return new Set();
   }
 };
+
+/**
+ * Declared runtime/dev dependencies (unused-dependency baseline). peer/optional
+ * are excluded: a consumer installs those, so an unused peer/optional is not a W.
+ */
+const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string): Set<string> =>
+  collectDependencyFields(rootAbs, readFn, ['dependencies', 'devDependencies']);
+
+/**
+ * Every declared dependency field (unlisted-dependency baseline). npm semantics:
+ * a package declared under any of dependencies/devDependencies/peerDependencies/
+ * optionalDependencies is "declared" and must not be flagged as unlisted.
+ */
+const readDeclaredPackages = (rootAbs: string, readFn: (p: string) => string): Set<string> =>
+  collectDependencyFields(rootAbs, readFn, ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']);
 
 /** Extract package names referenced in scripts (binary usage like `oxlint`, `knip`, `husky`, etc.). */
 const readScriptBinaries = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
@@ -584,6 +598,13 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     let typeRefs: ReturnType<Gildash['searchRelations']> = [];
     let calls: ReturnType<Gildash['searchRelations']> = [];
     let hasImportData = false;
+    // Relation-completeness gates (spec: 전체-인덱싱 전제). dead·test-only·member
+    // judgments require imports + re-exports + type-references + calls to all
+    // index successfully; if any relation query degrades (GildashError), those
+    // "usage = 0" verdicts are held (보류) to avoid FPs from missing edges.
+    let hasReExportData = false;
+    let hasTypeRefData = false;
+    let hasCallData = false;
 
     try {
       imports = gildash.searchRelations({ type: 'imports' });
@@ -596,6 +617,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
     try {
       reExports = gildash.searchRelations({ type: 're-exports' });
+      hasReExportData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {
         throw e;
@@ -604,6 +626,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
     try {
       typeRefs = gildash.searchRelations({ type: 'type-references' });
+      hasTypeRefData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {
         throw e;
@@ -612,11 +635,16 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
     try {
       calls = gildash.searchRelations({ type: 'calls' });
+      hasCallData = true;
     } catch (e) {
       if (!(e instanceof GildashError)) {
         throw e;
       }
     }
+
+    // dead-export / test-only-export / unused-enum|ns-member are only sound when
+    // the full relation index is available. Missing any relation → hold verdicts.
+    const relationsComplete = hasReExportData && hasTypeRefData && hasCallData;
 
     if (hasImportData) {
       // Build usage map per module
@@ -721,8 +749,9 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         }
       }
 
-      // Check each module's exports (skip unreachable — already reported as unused file)
-      for (const [moduleAbs, symbols] of exportsByFile) {
+      // Check each module's exports (skip unreachable — already reported as unused file).
+      // Held entirely when the relation index is incomplete (spec: 전체-인덱싱 전제).
+      for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
         if (symbols.length === 0 || unreachableModules.has(moduleAbs)) {
           continue;
         }
@@ -769,7 +798,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // If an export's only consumers are files whose re-export of the same symbol is dead,
       // then the original export is also dead.
       const deadSet = new Set(deadExports.map(d => `${resolveAbs(rootAbs, d.module)}::${d.name}`));
-      let changed = true;
+      let changed = relationsComplete;
 
       while (changed) {
         changed = false;
@@ -823,10 +852,29 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         }
       }
 
+      // Named-import attribution index: consumerFileAbs → importedName → set of
+      // source module abs it was imported from. Lets a cross-file qualified call
+      // (`Guards.isNumber()` recorded on the consumer file) be attributed back to
+      // the parent's defining module via the consumer's `import { Guards }`.
+      const importedNameFrom = new Map<string, Map<string, Set<string>>>();
+
+      for (const rel of imports) {
+        if (rel.dstFilePath === null || !rel.dstSymbolName || rel.dstSymbolName === '*') {
+          continue;
+        }
+
+        const consumerAbs = resolveAbs(rootAbs, rel.srcFilePath);
+        const targetAbs = resolveAbs(rootAbs, rel.dstFilePath);
+        const byName = importedNameFrom.get(consumerAbs) ?? new Map<string, Set<string>>();
+
+        addToSetMap(byName, rel.dstSymbolName, targetAbs);
+        importedNameFrom.set(consumerAbs, byName);
+      }
+
       // Unused enum/namespace members: getSymbolsByFile returns members with memberName.
       // A member is unused if its parent is exported but the member is never referenced
       // in calls relations (e.g. Color.Red, Guards.isString).
-      for (const [moduleAbs, symbols] of exportsByFile) {
+      for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
         const memberParents = symbols.filter(s => s.kind === 'enum' || s.kind === 'namespace');
 
         if (memberParents.length === 0) {
@@ -846,21 +894,50 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         for (const parent of memberParents) {
           // Find members: memberName != null, name starts with ParentName.
           const members = fileSymbols.filter(s => s.memberName !== null && s.name.startsWith(parent.name + '.'));
-          // Build set of used member names from calls relations targeting this module
-          const memberCalls = calls.filter(
-            r =>
-              r.dstFilePath !== null &&
-              resolveAbs(rootAbs, r.dstFilePath) === moduleAbs &&
-              r.dstSymbolName !== null &&
-              r.dstSymbolName.startsWith(parent.name + '.'),
-          );
+          const prefix = parent.name + '.';
+          // Collect every qualified call to `Parent.member`, attributing it to this
+          // parent module. A call is attributed when either (a) it is recorded on
+          // the parent module itself (in-file qualified call), or (b) it is recorded
+          // on a consumer file that named-imported `Parent` from this module.
+          const attributedCalls: string[] = [];
+          let attributionUnresolved = false;
 
-          // If no calls at all, skip — can't determine member usage without semantic
-          if (memberCalls.length === 0) {
+          for (const r of calls) {
+            if (r.dstFilePath === null || r.dstSymbolName === null || !r.dstSymbolName.startsWith(prefix)) {
+              continue;
+            }
+
+            const callFileAbs = resolveAbs(rootAbs, r.dstFilePath);
+
+            if (callFileAbs === moduleAbs) {
+              attributedCalls.push(r.dstSymbolName);
+
+              continue;
+            }
+
+            const importsHere = importedNameFrom.get(callFileAbs)?.get(parent.name);
+
+            if (importsHere?.has(moduleAbs) === true) {
+              attributedCalls.push(r.dstSymbolName);
+            } else {
+              // A qualified call to this parent name that cannot be attributed to
+              // this module — attribution not closed, so hold the whole parent's
+              // member verdict (conservative K) to avoid flagging used members.
+              attributionUnresolved = true;
+            }
+          }
+
+          // If attribution is not closed, hold this parent's judgment.
+          if (attributionUnresolved) {
             continue;
           }
 
-          const usedMembers = new Set(memberCalls.map(r => r.dstSymbolName!));
+          // If no calls at all, skip — can't determine member usage without semantic
+          if (attributedCalls.length === 0) {
+            continue;
+          }
+
+          const usedMembers = new Set(attributedCalls);
           // usesAll → skip
           const moduleUsage = usageByModule.get(moduleAbs);
 
@@ -893,7 +970,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         if (rel.isExternal === false && rel.dstFilePath === null) {
           unresolvedImports.push({
             kind: 'unresolved-import',
-            module: toRelativePath(rootAbs, rel.srcFilePath),
+            module: toRel(resolveAbs(rootAbs, rel.srcFilePath)),
             specifier: rel.specifier!,
           });
 
@@ -905,9 +982,30 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           const pkgName = extractPackageName(rel.specifier!);
 
           if (pkgName && !isBuiltinModule(pkgName)) {
-            addToSetMap(externalPackages, pkgName, toRelativePath(rootAbs, rel.srcFilePath));
+            addToSetMap(externalPackages, pkgName, toRel(resolveAbs(rootAbs, rel.srcFilePath)));
           }
         }
+      }
+
+      // Unresolved re-export: `export … from './missing'` is the same "internal
+      // reference not resolving to a file" concept as an unresolved import
+      // (dstFilePath === null on a non-external re-export with a module specifier).
+      const seenUnresolved = new Set(unresolvedImports.map(u => `${u.module}::${u.specifier}`));
+
+      for (const rel of reExports) {
+        if (rel.isExternal === true || rel.dstFilePath !== null || !rel.specifier || !rel.srcFilePath) {
+          continue;
+        }
+
+        const module = toRel(resolveAbs(rootAbs, rel.srcFilePath));
+        const key = `${module}::${rel.specifier}`;
+
+        if (seenUnresolved.has(key)) {
+          continue;
+        }
+
+        seenUnresolved.add(key);
+        unresolvedImports.push({ kind: 'unresolved-import', module, specifier: rel.specifier });
       }
 
       // Compare with package.json dependencies (per workspace or root)
@@ -917,6 +1015,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
       const checkDeps = (depRoot: string, usedPackages: Map<string, Set<string>>): void => {
         const pkgDeps = readPackageDependencies(depRoot, readFn);
+        const declaredPkgs = readDeclaredPackages(depRoot, readFn);
         const selfName = readPackageName(depRoot, readFn);
         const scriptBins = readScriptBinaries(depRoot, readFn);
 
@@ -925,7 +1024,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             continue;
           }
 
-          if (!pkgDeps.has(pkgName)) {
+          if (!declaredPkgs.has(pkgName)) {
             unusedDeps.push({
               kind: 'unlisted-dependency',
               packageName: pkgName,

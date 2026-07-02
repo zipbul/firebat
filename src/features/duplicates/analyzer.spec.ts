@@ -35,9 +35,7 @@ void mock.module(path.resolve(import.meta.dir, './anti-unifier.ts'), () => ({
 // Import SUT after mocks
 
 const { analyzeDuplicates, createEmptyDuplicates } = await import('./analyzer');
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const DUP_OPTS = { minSize: 3, enableAntiUnification: false };
 const AU_OPTS = { minSize: 3, enableAntiUnification: true };
 
@@ -53,7 +51,8 @@ const analyzeAB = (
   sourceA: string,
   sourceB: string,
   options: Parameters<typeof analyzeDuplicates>[1] = DUP_OPTS,
-): ReturnType<typeof analyzeDuplicates> => analyzeDuplicates([parseSource('a.ts', sourceA), parseSource('b.ts', sourceB)], options);
+): ReturnType<typeof analyzeDuplicates> =>
+  analyzeDuplicates([parseSource('a.ts', sourceA), parseSource('b.ts', sourceB)], options);
 
 /** Assert the result has exactly `count` groups of `cloneType`. */
 const expectCloneCount = (

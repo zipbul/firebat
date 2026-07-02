@@ -1,0 +1,23 @@
+{
+  "adjacency": {},
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {},
+  "fanIn": [],
+  "fanOut": [],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [
+    {
+      "files": [
+        "unlisted-dependency/index.ts"
+      ],
+      "kind": "unlisted-dependency",
+      "packageName": "unlisted-pkg"
+    }
+  ],
+  "unusedFiles": [],
+  "unusedMembers": []
+}

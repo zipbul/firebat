@@ -1,0 +1,45 @@
+{
+  "adjacency": {
+    "duplicate-export-k/a.ts": [],
+    "duplicate-export-k/b.ts": [],
+    "duplicate-export-k/index.ts": [
+      "duplicate-export-k/a.ts",
+      "duplicate-export-k/b.ts"
+    ]
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {
+    "duplicate-export-k/a.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "duplicate-export-k/b.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "duplicate-export-k/a.ts"
+    },
+    {
+      "count": 1,
+      "module": "duplicate-export-k/b.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 2,
+      "module": "duplicate-export-k/index.ts"
+    }
+  ],
+  "layerViolations": [],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": [],
+  "unusedMembers": []
+}

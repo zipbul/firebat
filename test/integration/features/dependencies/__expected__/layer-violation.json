@@ -1,0 +1,69 @@
+{
+  "adjacency": {
+    "layer-violation/domain/service.ts": [
+      "layer-violation/ui/helper.ts"
+    ],
+    "layer-violation/ui/app.ts": [
+      "layer-violation/domain/service.ts",
+      "layer-violation/ui/widget.ts"
+    ],
+    "layer-violation/ui/helper.ts": [],
+    "layer-violation/ui/widget.ts": []
+  },
+  "cuts": [],
+  "cycles": [],
+  "deadExports": [],
+  "duplicateExports": [],
+  "exportStats": {
+    "layer-violation/domain/service.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "layer-violation/ui/helper.ts": {
+      "abstract": 0,
+      "total": 1
+    },
+    "layer-violation/ui/widget.ts": {
+      "abstract": 0,
+      "total": 1
+    }
+  },
+  "fanIn": [
+    {
+      "count": 1,
+      "module": "layer-violation/domain/service.ts"
+    },
+    {
+      "count": 1,
+      "module": "layer-violation/ui/helper.ts"
+    },
+    {
+      "count": 1,
+      "module": "layer-violation/ui/widget.ts"
+    }
+  ],
+  "fanOut": [
+    {
+      "count": 2,
+      "module": "layer-violation/ui/app.ts"
+    },
+    {
+      "count": 1,
+      "module": "layer-violation/domain/service.ts"
+    }
+  ],
+  "layerViolations": [
+    {
+      "from": "layer-violation/domain/service.ts",
+      "fromLayer": "domain",
+      "kind": "layer-violation",
+      "message": "domain → ui dependency not permitted",
+      "to": "layer-violation/ui/helper.ts",
+      "toLayer": "ui"
+    }
+  ],
+  "unresolvedImports": [],
+  "unusedDeps": [],
+  "unusedFiles": [],
+  "unusedMembers": []
+}

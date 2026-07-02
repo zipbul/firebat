@@ -8,12 +8,7 @@ import { Visitor } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo } from '../../types';
 
-import {
-  getNodeHeader,
-  isFunctionNode,
-  isOxcNode,
-  walkOxcTreeWithParent,
-} from '../../engine/ast/oxc-ast-utils';
+import { getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
 import { resolveAbs } from '../../shared/path-resolve';
 
@@ -517,6 +512,7 @@ const buildAliasNames = (seedName: string, program: Program): Set<string> => {
 
         if (aliases.has(init.name) && !aliases.has(node.id.name)) {
           aliases.add(node.id.name);
+
           changed = true;
         }
       },
@@ -583,7 +579,11 @@ const hasIdentityReach = (aliasNames: ReadonlySet<string>, program: Program): bo
 
     // Import/export specifier local/exported names referencing the binding count
     // as escapes (export of the value) — handled below by default reach.
-    if (parent.type === 'ImportSpecifier' || parent.type === 'ImportDefaultSpecifier' || parent.type === 'ImportNamespaceSpecifier') {
+    if (
+      parent.type === 'ImportSpecifier' ||
+      parent.type === 'ImportDefaultSpecifier' ||
+      parent.type === 'ImportNamespaceSpecifier'
+    ) {
       return true;
     }
 
@@ -971,9 +971,7 @@ const analyzeIndirection = async (
       if (fileExports.has(header)) {
         // Cross-file forward-chain tracking (only exported wrappers cross files).
         const calleeRef = getSimpleCalleeRef(wrapperCall);
-        const crossTarget = calleeRef
-          ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs)
-          : null;
+        const crossTarget = calleeRef ? resolveCrossFileTarget(calleeRef, normalizedFilePath, importIdx, gildash, rootAbs) : null;
         const targetKey = crossTarget ? `${crossTarget.targetFilePath}:${crossTarget.exportedName}` : null;
         const key = `${normalizedFilePath}:${header}`;
 

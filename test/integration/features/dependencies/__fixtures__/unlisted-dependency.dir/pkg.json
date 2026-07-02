@@ -1,0 +1,7 @@
+{
+  "name": "unlisted-dependency-fixture",
+  "version": "0.0.0",
+  "main": "./unlisted-dependency/index.ts",
+  "dependencies": { "declared-pkg": "^1.0.0" },
+  "peerDependencies": { "peer-pkg": "^1.0.0" }
+}

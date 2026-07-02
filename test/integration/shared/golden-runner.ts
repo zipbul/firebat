@@ -68,26 +68,38 @@ const readDirFixture = (fixturesDir: string, name: string): FixtureSources => {
 
   const sources: FixtureSources = {};
 
-  const collect = (dir: string, prefix: string): void => {
+  const collect = (dir: string, prefix: string, depth: number): void => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const fullPath = path.join(dir, entry.name);
       const virtualPath = `${prefix}/${entry.name}`;
 
       if (entry.isDirectory()) {
-        collect(fullPath, virtualPath);
+        collect(fullPath, virtualPath, depth + 1);
       } else if (entry.name.endsWith('.ts')) {
         sources[virtualPath] = fs.readFileSync(fullPath, 'utf8');
+      } else if (entry.name === 'pkg.json') {
+        // Fixture manifests are stored as `pkg.json` — NOT `package.json` — because a
+        // real nested package.json inside the repo makes gildash's workspace discovery
+        // split the repo into sub-packages and silently empties the main project's
+        // relation index (self-scan corruption). The runner maps it back to
+        // `package.json` when writing the temp project: a top-level `<name>.dir/pkg.json`
+        // becomes the tmp-project root manifest, nested ones keep their relative path.
+        const mapped = virtualPath.replace(/pkg\.json$/, 'package.json');
+
+        sources[depth === 0 ? `/virtual/package.json` : mapped] = fs.readFileSync(fullPath, 'utf8');
       }
     }
   };
 
-  collect(dirPath, `/virtual/${name}`);
+  collect(dirPath, `/virtual/${name}`, 0);
 
   return sources;
 };
 
 const buildProgram = (sources: FixtureSources): ParsedFile[] => {
-  return Object.entries(sources).map(([filePath, sourceText]) => parseSource(filePath, sourceText));
+  return Object.entries(sources)
+    .filter(([filePath]) => filePath.endsWith('.ts'))
+    .map(([filePath, sourceText]) => parseSource(filePath, sourceText));
 };
 
 // ── Core runner ──────────────────────────────────────────────────────────────
