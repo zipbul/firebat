@@ -25,6 +25,8 @@ interface ComputeScanArtifactKeyInput {
   readonly barrelIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly dependenciesEntry?: ReadonlyArray<string>;
+  readonly dependenciesIgnore?: ReadonlyArray<string>;
   readonly couplingConfig?: Record<string, unknown>;
 }
 
@@ -41,6 +43,8 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
         .map(([key, value]) => [key, [...value].sort()] as const)
         .sort(byEntryKey)
     : [];
+  const normalizedDependenciesEntry = input.dependenciesEntry ? [...input.dependenciesEntry].sort() : [];
+  const normalizedDependenciesIgnore = input.dependenciesIgnore ? [...input.dependenciesIgnore].sort() : [];
 
   return hashString(
     [
@@ -51,6 +55,8 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `barrelIgnoreGlobs=${normalizedBarrelIgnoreGlobs.join(',')}`,
       `dependenciesLayers=${JSON.stringify(normalizedDependenciesLayers)}`,
       `dependenciesAllowedDependencies=${JSON.stringify(normalizedAllowedDepsEntries)}`,
+      `dependenciesEntry=${normalizedDependenciesEntry.join(',')}`,
+      `dependenciesIgnore=${normalizedDependenciesIgnore.join(',')}`,
       `couplingConfig=${input.couplingConfig ? JSON.stringify(Object.entries(input.couplingConfig).sort(byEntryKey)) : ''}`,
     ].join('|'),
   );

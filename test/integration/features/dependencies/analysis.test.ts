@@ -123,15 +123,6 @@ const deadExportCases: DeadExportCase[] = [
       '/virtual/dead/b.ts': `import { used } from './a';\nexport const x = used;`,
     },
   },
-  {
-    title: 'an export is only imported from test files',
-    kind: 'test-only-export',
-    expectedName: 'onlyTest',
-    files: {
-      '/virtual/dead/a.ts': `export const onlyTest = 1;`,
-      '/virtual/dead/a.spec.ts': `import { onlyTest } from './a';\nexport const x = onlyTest;`,
-    },
-  },
 ];
 
 describe('integration/dependencies', () => {

@@ -62,6 +62,8 @@ interface FirebatBarrelConfig {
 interface FirebatDependenciesConfig {
   readonly layers: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly entry?: ReadonlyArray<string> | undefined;
+  readonly ignore?: ReadonlyArray<string> | undefined;
 }
 
 interface FirebatFeaturesConfig {
@@ -141,6 +143,8 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                   )
                   .nonempty(),
                 allowedDependencies: z.record(z.string(), z.array(z.string())),
+                entry: z.array(z.string()).optional(),
+                ignore: z.array(z.string()).optional(),
               })
               .strict(),
           ])

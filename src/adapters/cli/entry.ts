@@ -166,6 +166,23 @@ const resolveBarrelIgnoreGlobsFromFeatures = (
 type DependenciesFeatureValue = {
   readonly layers: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly entry?: ReadonlyArray<string>;
+  readonly ignore?: ReadonlyArray<string>;
+};
+
+const resolveDependenciesGlobsFromFeatures = (
+  features: FirebatConfig['features'] | undefined,
+  field: 'entry' | 'ignore',
+): ReadonlyArray<string> | undefined => {
+  const value = features?.dependencies;
+
+  if (!value || value === true || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const globs = (value as DependenciesFeatureValue)[field];
+
+  return isStringArray(globs) ? globs : undefined;
 };
 
 const resolveDependenciesLayersFromFeatures = (
@@ -285,6 +302,8 @@ interface ConfigOverrides {
   readonly cfgBarrelIgnoreGlobs: ReadonlyArray<string> | undefined;
   readonly cfgDependenciesLayers: ReadonlyArray<{ readonly name: string; readonly glob: string }> | undefined;
   readonly cfgDependenciesAllowedDeps: Readonly<Record<string, ReadonlyArray<string>>> | undefined;
+  readonly cfgDependenciesEntry: ReadonlyArray<string> | undefined;
+  readonly cfgDependenciesIgnore: ReadonlyArray<string> | undefined;
   readonly cfgCouplingConfig: FirebatCouplingConfig | undefined;
   readonly cfgExclude: ReadonlyArray<string> | undefined;
   readonly resolvedConfigPath: string | undefined;
@@ -316,6 +335,8 @@ const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOve
     ...(overrides.cfgDependenciesAllowedDeps !== undefined
       ? { dependenciesAllowedDependencies: overrides.cfgDependenciesAllowedDeps }
       : {}),
+    ...(overrides.cfgDependenciesEntry !== undefined ? { dependenciesEntry: overrides.cfgDependenciesEntry } : {}),
+    ...(overrides.cfgDependenciesIgnore !== undefined ? { dependenciesIgnore: overrides.cfgDependenciesIgnore } : {}),
     ...(overrides.cfgCouplingConfig !== undefined ? { couplingConfig: overrides.cfgCouplingConfig } : {}),
     ...(overrides.cfgExclude !== undefined && overrides.cfgExclude.length > 0 ? { exclude: overrides.cfgExclude } : {}),
     ...(overrides.resolvedConfigPath !== undefined ? { configPath: overrides.resolvedConfigPath } : {}),
@@ -352,6 +373,8 @@ const resolveOptions = async (
   const cfgBarrelIgnoreGlobs = resolveBarrelIgnoreGlobsFromFeatures(featuresCfg);
   const cfgDependenciesLayers = resolveDependenciesLayersFromFeatures(featuresCfg);
   const cfgDependenciesAllowedDeps = resolveDependenciesAllowedDependenciesFromFeatures(featuresCfg);
+  const cfgDependenciesEntry = resolveDependenciesGlobsFromFeatures(featuresCfg, 'entry');
+  const cfgDependenciesIgnore = resolveDependenciesGlobsFromFeatures(featuresCfg, 'ignore');
   const cfgCouplingConfig = resolveCouplingConfigFromFeatures(featuresCfg);
   const cfgExclude = config?.exclude;
 
@@ -370,6 +393,8 @@ const resolveOptions = async (
     cfgBarrelIgnoreGlobs,
     cfgDependenciesLayers,
     cfgDependenciesAllowedDeps,
+    cfgDependenciesEntry,
+    cfgDependenciesIgnore,
     cfgCouplingConfig,
     cfgExclude,
     resolvedConfigPath: loaded.resolvedPath,
@@ -457,6 +482,7 @@ export const __testing__ = {
   resolveBarrelIgnoreGlobsFromFeatures,
   resolveDependenciesLayersFromFeatures,
   resolveDependenciesAllowedDependenciesFromFeatures,
+  resolveDependenciesGlobsFromFeatures,
   resolveMinSizeFromFeatures,
   resolveMaxForwardDepthFromFeatures,
   resolveCrossFileMinDepthFromFeatures,

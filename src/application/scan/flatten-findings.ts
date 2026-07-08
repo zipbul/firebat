@@ -215,7 +215,6 @@ const labelDependency: LabelFn = (f, _fn) => {
     case 'layer-violation':
       return `${String(f.from ?? '')} → ${String(f.to ?? '')} (${String(f.fromLayer ?? '')} → ${String(f.toLayer ?? '')})`;
     case 'dead-export':
-    case 'test-only-export':
       return `${kind}: '${String(f.name ?? '')}' in ${String(f.module ?? f.file ?? '')}`;
     case 'unused-file':
       return `unused file: ${String(f.module ?? f.file ?? '')}`;

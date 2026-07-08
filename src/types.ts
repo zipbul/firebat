@@ -84,7 +84,6 @@ export type FirebatCatalogCode =
   // dependencies (11)
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
-  | 'DEP_TEST_ONLY_EXPORT'
   | 'DEP_UNUSED_FILE'
   | 'DEP_UNUSED_DEPENDENCY'
   | 'DEP_UNLISTED_DEPENDENCY'
@@ -225,7 +224,7 @@ export interface DependencyLayerViolation {
 }
 
 export interface DependencyDeadExportFinding {
-  readonly kind: 'dead-export' | 'test-only-export';
+  readonly kind: 'dead-export';
   readonly module: string;
   readonly name: string;
   /** Symbol kind from gildash (function, class, type, interface, enum, etc.) */
@@ -299,7 +298,7 @@ interface DepLayerViolationFinding {
 
 interface DepDeadExportFinding {
   readonly code: FirebatCatalogCode;
-  readonly kind: 'dead-export' | 'test-only-export';
+  readonly kind: 'dead-export';
   readonly file: string;
   readonly span: SourceSpan;
   readonly module: string;

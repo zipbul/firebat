@@ -36,7 +36,11 @@
         "application": ["engine", "infrastructure"],
         "engine": [],
         "infrastructure": []
-      }
+      },
+      // `unused-file` is opt-in: declare your reachability roots here (package.json
+      // main/module/exports/bin are auto-detected). Edit to match your project's test
+      // and config conventions. Without `entry`, unused-file detection is held.
+      "entry": ["**/*.test.ts", "**/*.spec.ts", "test/**", "*.config.ts", "scripts/**"]
     },
 
     // Coupling hotspots based on dependency graph.

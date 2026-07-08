@@ -12,6 +12,8 @@ interface DepFixtureOptions {
   readonly layers?: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly ignoreDependencies?: ReadonlyArray<string>;
+  readonly entry?: ReadonlyArray<string>;
+  readonly ignore?: ReadonlyArray<string>;
 }
 
 const gildashAdapter =
@@ -20,10 +22,17 @@ const gildashAdapter =
     withTempGildash(sources, (gildash, tmpDir) =>
       analyzeDependencies(gildash, {
         rootAbs: tmpDir,
-        readFileFn: (p: string) => readFileSync(p, 'utf8'),
+        // Model an installed project: dep manifests under node_modules are readable with no
+        // `bin` (pure libraries), so unused-dependency resolves to a definite verdict instead
+        // of 'unknown' (which the temp fixture — with no real node_modules — would otherwise
+        // yield, holding every candidate). Real project files fall through to the filesystem.
+        readFileFn: (p: string): string =>
+          /\/node_modules\/(@[^/]+\/)?[^/]+\/package\.json$/.test(p) ? '{}' : readFileSync(p, 'utf8'),
         ...(opts.layers === undefined ? {} : { layers: opts.layers }),
         ...(opts.allowedDependencies === undefined ? {} : { allowedDependencies: opts.allowedDependencies }),
         ...(opts.ignoreDependencies === undefined ? {} : { ignoreDependencies: opts.ignoreDependencies }),
+        ...(opts.entry === undefined ? {} : { entry: opts.entry }),
+        ...(opts.ignore === undefined ? {} : { ignore: opts.ignore }),
       }),
     );
 
@@ -38,8 +47,8 @@ describe('golden/dependencies', () => {
 
   // ── kind coverage (dependencies detector W/K) ──────────────────────────────
   rg('dead-export');
-  rg('unused-file');
-  rg('test-only-export');
+  // unused-file is opt-in: the user declares the entry set (here index + spec files as roots).
+  rg('unused-file', { entry: ['**/index.ts', '**/*.spec.ts'] });
   rg('unused-ns-member');
   rg('circular-indirect');
   rg('unused-dependency');

@@ -73,6 +73,16 @@
             "minItems": 1,
             "items": { "type": "string" }
           }
+        },
+        "entry": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional entry-point globs (root-relative). Files matching become reachability roots for unused-file detection."
+        },
+        "ignore": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Globs (root-relative) of files excluded from unused-file reporting."
         }
       },
       "required": ["layers", "allowedDependencies"],

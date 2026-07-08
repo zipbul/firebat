@@ -457,7 +457,7 @@ const mapDeadExports = (deadExports: any[]): any[] =>
 
     return {
       kind,
-      code: kind === 'test-only-export' ? 'DEP_TEST_ONLY_EXPORT' : 'DEP_DEAD_EXPORT',
+      code: 'DEP_DEAD_EXPORT',
       file: module,
       span: ZERO_SPAN,
       module,
@@ -816,6 +816,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         ? {
             dependenciesLayers: options.dependenciesLayers,
             dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
+            dependenciesEntry: options.dependenciesEntry,
+            dependenciesIgnore: options.dependenciesIgnore,
           }
         : {}),
       ...(options.detectors.includes('coupling') && options.couplingConfig
@@ -1007,6 +1009,8 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           ...(options.dependenciesAllowedDependencies !== undefined
             ? { allowedDependencies: options.dependenciesAllowedDependencies }
             : {}),
+          ...(options.dependenciesEntry !== undefined ? { entry: options.dependenciesEntry } : {}),
+          ...(options.dependenciesIgnore !== undefined ? { ignore: options.dependenciesIgnore } : {}),
         }),
     );
     const coupling: ReturnType<typeof analyzeCoupling> = runDetector(

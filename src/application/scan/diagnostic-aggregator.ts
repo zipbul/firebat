@@ -242,15 +242,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Remove the `export` keyword from the symbol declaration. If the symbol is also unused locally, delete it entirely.',
     ],
   },
-  DEP_TEST_ONLY_EXPORT: {
-    cause:
-      'An exported symbol is imported only by test files, meaning production code does not use it but the export exists for testability.',
-    think: [
-      'Read the test files that import this symbol. If they test the symbol directly (unit test of an internal function), consider whether the behavior can be tested through the public API instead.',
-      'If direct access is needed for testing, rename the export to use a `__testing__` prefix or move it to a `__testing__` named export block to signal its purpose.',
-      'If the symbol is a test utility (helper, factory, mock builder), move it to a test utility file instead of exporting from production code.',
-    ],
-  },
   DEP_UNUSED_FILE: {
     cause: 'A source file is not reachable from any entry point in the project, making it effectively dead code.',
     think: [

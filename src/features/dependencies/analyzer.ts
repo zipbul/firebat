@@ -18,7 +18,6 @@ import type {
 } from '../../types';
 
 import { globToRegExp } from '../../shared/glob-regex';
-import { isConfigLikePath, isTestLikePath } from '../../shared/is-test-like-path';
 import { addToSetMap, pushToMultiMap } from '../../shared/multi-map';
 import { resolveAbs } from '../../shared/path-resolve';
 
@@ -67,6 +66,16 @@ interface AnalyzeDependenciesInput {
   readonly workspacePackages?: ReadonlyMap<string, string>;
   /** Glob patterns for dependencies to ignore in unused dependency detection. */
   readonly ignoreDependencies?: ReadonlyArray<string>;
+  /**
+   * Additional entry-point globs (root-relative). Files matching become reachability roots,
+   * augmenting the entrypoints auto-detected from package.json. A user-declared FACT.
+   */
+  readonly entry?: ReadonlyArray<string>;
+  /**
+   * Globs (root-relative) of files excluded from `unused-file` reporting — the user declares
+   * these are not orphans (e.g. framework-loaded files the static graph cannot see). A FACT.
+   */
+  readonly ignore?: ReadonlyArray<string>;
 }
 
 const compileLayerMatchers = (
@@ -164,44 +173,52 @@ const readPackageDependencies = (rootAbs: string, readFn: (p: string) => string)
 const readDeclaredPackages = (rootAbs: string, readFn: (p: string) => string): Set<string> =>
   collectDependencyFields(rootAbs, readFn, ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']);
 
-/** Extract package names referenced in scripts (binary usage like `oxlint`, `knip`, `husky`, etc.). */
-const readScriptBinaries = (rootAbs: string, readFn: (p: string) => string): Set<string> => {
-  try {
-    const parsed = readPackageJson(rootAbs, readFn);
-    const scripts = parsed.scripts;
-    const bins = new Set<string>();
+/**
+ * Whether a declared dep exposes a binary via its installed package.json `bin` field — a
+ * declared contract (fact). Tri-state, because install layout is NOT a fact firebat controls:
+ *   - `'bin'`     manifest read and has a non-empty `bin` → executable package.
+ *   - `'no-bin'`  manifest read and has no/empty `bin`    → pure library.
+ *   - `'unknown'` no manifest readable in the walk        → install-state cannot confirm.
+ *
+ * An executable package can be invoked by a script, a git hook, `bunx`, or a human — none of
+ * which the static import graph observes — so a `'bin'` dep's non-use cannot be proven. We do
+ * NOT parse scripts to guess "is it the executed binary": shell grammar (env prefixes,
+ * `cross-env`, subshells, path/`.bin` invocation, wrappers) does not close, and every missed
+ * form would be a false W. Bin-existence is the closed fact that supersedes it.
+ *
+ * `'unknown'` MUST be treated like `'bin'` (hold): pnpm's non-flat store, Yarn PnP (no
+ * `node_modules` at all), and monorepo hoisting above `rootAbs` all leave the manifest
+ * unreadable here while the dep genuinely ships a binary. Reporting on absence-of-manifest
+ * would smuggle install-state in as evidence for a W — forbidden. Per "닫히지 않으면 보류",
+ * unknown → hold (FN). The manifest is resolved from the workspace dir up to the project root.
+ */
+const readDepBinState = (
+  depRoot: string,
+  rootAbs: string,
+  dep: string,
+  readFn: (p: string) => string,
+): 'bin' | 'no-bin' | 'unknown' => {
+  let dir = depRoot;
 
-    if (!scripts || typeof scripts !== 'object' || Array.isArray(scripts)) {
-      return bins;
-    }
+  for (;;) {
+    try {
+      const bin = readPackageJson(path.join(dir, 'node_modules', dep), readFn).bin;
+      const hasBin =
+        typeof bin === 'string'
+          ? bin.length > 0
+          : Boolean(bin) && typeof bin === 'object' && !Array.isArray(bin) && Object.keys(bin as object).length > 0;
 
-    for (const cmd of Object.values(scripts as Record<string, unknown>)) {
-      if (typeof cmd !== 'string') {
-        continue;
+      return hasBin ? 'bin' : 'no-bin';
+    } catch {
+      if (dir === rootAbs) {
+        return 'unknown';
       }
 
-      // Extract first word of each command segment (split on && | ; ||)
-      for (const segment of cmd.split(/&&|\|\||[;|]/)) {
-        const trimmed = segment.trim();
+      const parent = path.dirname(dir);
 
-        // Skip variable assignments and empty segments
-        if (trimmed.length === 0 || trimmed.includes('=')) {
-          continue;
-        }
-
-        const words = trimmed.split(/\s+/);
-        // Skip prefix commands like bunx, npx, etc.
-        const binary = words[0] === 'bunx' || words[0] === 'npx' ? words[1] : words[0];
-
-        if (binary && binary.length > 0) {
-          bins.add(binary);
-        }
-      }
+      // Walk toward the project root (clamped) so npm-hoisted manifests are still found.
+      dir = parent.length < rootAbs.length ? rootAbs : parent;
     }
-
-    return bins;
-  } catch {
-    return new Set();
   }
 };
 
@@ -610,7 +627,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     let typeRefs: ReturnType<Gildash['searchRelations']> = [];
     let calls: ReturnType<Gildash['searchRelations']> = [];
     let hasImportData = false;
-    // Relation-completeness gates (spec: 전체-인덱싱 전제). dead·test-only·member
+    // Relation-completeness gates (spec: 전체-인덱싱 전제). dead-export·member
     // judgments require imports + re-exports + type-references + calls to all
     // index successfully; if any relation query degrades (GildashError), those
     // "usage = 0" verdicts are held (보류) to avoid FPs from missing edges.
@@ -654,7 +671,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       }
     }
 
-    // dead-export / test-only-export / unused-enum|ns-member are only sound when
+    // dead-export / unused-enum|ns-member are only sound when
     // the full relation index is available. Missing any relation → hold verdicts.
     const relationsComplete = hasReExportData && hasTypeRefData && hasCallData;
 
@@ -664,7 +681,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         usesAll: boolean;
         /** symbol name → set of external consumer file paths (self-references excluded) */
         names: Map<string, Set<string>>;
-        perNameConsumerKinds: Map<string, Set<'test' | 'prod'>>;
       }
 
       const usageByModule = new Map<string, ModuleUsage>();
@@ -682,12 +698,9 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           continue;
         }
 
-        const isTestConsumer = isTestLikePath(consumer);
-        const kind: 'test' | 'prod' = isTestConsumer ? 'test' : 'prod';
         const state = usageByModule.get(target) ?? {
           usesAll: false,
           names: new Map<string, Set<string>>(),
-          perNameConsumerKinds: new Map<string, Set<'test' | 'prod'>>(),
         };
 
         // '*' = namespace import (import * as X). re-export with null dstSymbolName = export * from './mod'.
@@ -696,7 +709,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           state.usesAll = true;
         } else if (rel.dstSymbolName) {
           addToSetMap(state.names, rel.dstSymbolName, consumer);
-          addToSetMap(state.perNameConsumerKinds, rel.dstSymbolName, kind);
         }
         // else: null/undefined dstSymbolName on non-re-export → side-effect import, skip
 
@@ -758,12 +770,21 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // them from this graph, so the verdict is held (spec: 전체-인덱싱 전제).
       const isUnderNestedPackage = (fileAbs: string): boolean => nestedPkgDirs.some(d => fileAbs.startsWith(d));
 
-      // Test files, config files, and scripts are implicit entry points
-      for (const fileAbs of graphKeys) {
-        if (isTestLikePath(fileAbs) || isConfigLikePath(fileAbs)) {
-          entryModules.add(fileAbs);
+      // Reachability roots come ONLY from declared facts: package.json entrypoints (above) and
+      // user-declared `entry` globs. No filename-convention inference (that is a guess-value).
+      const userEntryGlobs = input?.entry ?? [];
+      const entryMatchers = userEntryGlobs.map(globToRegExp);
+
+      if (entryMatchers.length > 0) {
+        for (const fileAbs of graphKeys) {
+          if (entryMatchers.some(re => re.test(toRel(fileAbs)))) {
+            entryModules.add(fileAbs);
+          }
         }
       }
+
+      // User-declared `ignore` globs (root-relative) — files excluded from unused-file reporting.
+      const ignoreMatchers = (input?.ignore ?? []).map(globToRegExp);
 
       const reachable = new Set<string>();
       const queue: string[] = [];
@@ -787,17 +808,32 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         }
       }
 
-      // Collect unreachable files as unused files (only when entry points are defined)
+      // unused-file is OPT-IN: emit only when the user declared `entry` — their assertion that
+      // the entry set is complete. Without it, completeness is unproven (a test/config file
+      // unreachable from package.json is not necessarily dead) → HOLD (FN direction, never a
+      // false-positive flood). package.json entrypoints still seed reachability above.
       const unreachableModules = new Set<string>();
+      const userDeclaredEntry = userEntryGlobs.length > 0;
 
+      // Populate `unreachableModules` whenever reachability is computable (entry roots exist) so
+      // the dead-export pass below can dedup (a file-level orphan must not also surface as
+      // per-symbol dead-export). But EMIT `unused-file` only when the user opted in via `entry`
+      // (their assertion the entry set is complete) — otherwise HOLD (FN, never a false flood).
       if (entryModules.size > 0) {
         for (const moduleAbs of graphKeys) {
-          if (!reachable.has(moduleAbs) && !isTestLikePath(moduleAbs) && !isUnderNestedPackage(moduleAbs)) {
+          if (
+            !reachable.has(moduleAbs) &&
+            !isUnderNestedPackage(moduleAbs) &&
+            !ignoreMatchers.some(re => re.test(toRel(moduleAbs)))
+          ) {
             unreachableModules.add(moduleAbs);
-            unusedFiles.push({
-              kind: 'unused-file',
-              module: toRelativePath(rootAbs, moduleAbs),
-            });
+
+            if (userDeclaredEntry) {
+              unusedFiles.push({
+                kind: 'unused-file',
+                module: toRelativePath(rootAbs, moduleAbs),
+              });
+            }
           }
         }
       }
@@ -806,7 +842,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // Held entirely when the relation index is incomplete (spec: 전체-인덱싱 전제).
       for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
         // Nested-package files: their symbol consumers are external package
-        // consumers (outside the indexed graph) — hold dead/test-only verdicts.
+        // consumers (outside the indexed graph) — hold dead-export verdicts.
         if (symbols.length === 0 || unreachableModules.has(moduleAbs) || isUnderNestedPackage(moduleAbs)) {
           continue;
         }
@@ -818,25 +854,15 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         }
 
         const usedNames = usage?.names ?? new Map<string, Set<string>>();
-        const perNameConsumerKinds = usage?.perNameConsumerKinds ?? new Map<string, Set<'test' | 'prod'>>();
 
         for (const sym of symbols) {
           const relModule = toRelativePath(rootAbs, moduleAbs);
           const symConsumers = usedNames.get(sym.name);
 
+          // Has at least one consumer (test, prod, or otherwise) → not dead. Whether a
+          // consumer "counts" as production use is not decidable from a filename fact, so
+          // no test-only refinement is made (would require a guess-value).
           if (symConsumers && symConsumers.size > 0) {
-            const kinds = perNameConsumerKinds.get(sym.name) ?? new Set<'test' | 'prod'>();
-            const isTestOnly = kinds.size > 0 && !kinds.has('prod');
-
-            if (isTestOnly) {
-              deadExports.push({
-                kind: 'test-only-export',
-                module: relModule,
-                name: sym.name,
-                symbolKind: sym.kind,
-              });
-            }
-
             continue;
           }
 
@@ -1073,7 +1099,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         const pkgDeps = readPackageDependencies(depRoot, readFn);
         const declaredPkgs = readDeclaredPackages(depRoot, readFn);
         const selfName = readPackageName(depRoot, readFn);
-        const scriptBins = readScriptBinaries(depRoot, readFn);
 
         for (const [pkgName, files] of usedPackages) {
           if (pkgName === selfName || shouldIgnore(pkgName)) {
@@ -1098,18 +1123,21 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             continue;
           }
 
-          // Skip packages used as CLI binaries in scripts
-          if (scriptBins.has(declared)) {
+          // @types/* deadness does not close from a single leaf manifest — the ambient/global
+          // inclusion of a type package depends on tsconfig `types`/`typeRoots`, `extends`,
+          // `references`, and triple-slash `/// <reference types>` directives (un-mergeable here),
+          // and ambient-global packages (@types/node, @types/jest) are consumed with no import at
+          // all. Per "닫히지 않으면 보류", hold every @types/* (FN) rather than risk a false W.
+          if (declared.startsWith('@types/')) {
             continue;
           }
 
-          // @types/* — skip if corresponding package is used or is a builtin
-          if (declared.startsWith('@types/')) {
-            const base = declared.slice('@types/'.length).replace('__', '/');
-
-            if (usedPackages.has(base) || isBuiltinModule(base)) {
-              continue;
-            }
+          // A bin-providing dep is invocable outside the static graph (scripts, hooks, bunx,
+          // manual) → non-use not provable → hold. `'unknown'` (manifest unreadable: pnpm/PnP/
+          // hoist-above-root) also holds — absence of install-state is not evidence of no-bin.
+          // Only a confirmed no-bin, unimported dep is reported.
+          if (readDepBinState(depRoot, rootAbs, declared, readFn) !== 'no-bin') {
+            continue;
           }
 
           unusedDeps.push({

@@ -20,6 +20,8 @@ export interface FirebatCliOptions {
   readonly barrelIgnoreGlobs?: ReadonlyArray<string>;
   readonly dependenciesLayers?: ReadonlyArray<{ readonly name: string; readonly glob: string }>;
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
+  readonly dependenciesEntry?: ReadonlyArray<string>;
+  readonly dependenciesIgnore?: ReadonlyArray<string>;
   readonly couplingConfig?: FirebatCouplingConfig;
   readonly exclude?: ReadonlyArray<string>;
   readonly help: boolean;

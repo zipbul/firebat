@@ -2,7 +2,6 @@ export { parseArgs } from './arg-parse';
 export type { FirebatConfig, FirebatCouplingConfig } from './firebat-config';
 export { featureOptions } from './firebat-config';
 export { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from './firebat-config.loader';
-export { isConfigLikePath, isTestLikePath } from './is-test-like-path';
 export type { FirebatLogger } from './logger';
 export { appendFirebatLog, createNoopLogger, createPrettyConsoleLogger } from './logger';
 export { assertTargetsWithinRoot, isWithinRoot, resolveFirebatRootFromCwd } from './root-resolver';

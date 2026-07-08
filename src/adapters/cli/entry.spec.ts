@@ -52,6 +52,7 @@ const {
   resolveBarrelIgnoreGlobsFromFeatures,
   resolveDependenciesLayersFromFeatures,
   resolveDependenciesAllowedDependenciesFromFeatures,
+  resolveDependenciesGlobsFromFeatures,
   resolveMinSizeFromFeatures,
   resolveMaxForwardDepthFromFeatures,
 } = __testing__;
@@ -141,6 +142,31 @@ describe('resolveDependenciesAllowedDependenciesFromFeatures', () => {
     const result = resolveDependenciesAllowedDependenciesFromFeatures({
       dependencies: { allowedDependencies: { domain: [123] } },
     } as never);
+
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('resolveDependenciesGlobsFromFeatures', () => {
+  it('should return undefined when features is undefined', () => {
+    expect(resolveDependenciesGlobsFromFeatures(undefined, 'entry')).toBeUndefined();
+    expect(resolveDependenciesGlobsFromFeatures(undefined, 'ignore')).toBeUndefined();
+  });
+
+  it('should return the entry globs when valid', () => {
+    const result = resolveDependenciesGlobsFromFeatures({ dependencies: { entry: ['src/main.ts'] } } as never, 'entry');
+
+    expect(result).toEqual(['src/main.ts']);
+  });
+
+  it('should return the ignore globs when valid', () => {
+    const result = resolveDependenciesGlobsFromFeatures({ dependencies: { ignore: ['**/*.gen.ts'] } } as never, 'ignore');
+
+    expect(result).toEqual(['**/*.gen.ts']);
+  });
+
+  it('should return undefined when the field is a non-string-array', () => {
+    const result = resolveDependenciesGlobsFromFeatures({ dependencies: { entry: [123] } } as never, 'entry');
 
     expect(result).toBeUndefined();
   });

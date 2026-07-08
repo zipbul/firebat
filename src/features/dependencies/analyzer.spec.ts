@@ -215,6 +215,8 @@ interface UnusedFilesCase {
   name: string;
   graph: Map<string, string[]>;
   main: string;
+  /** User-declared `entry` globs. unused-file is opt-in — absent → HOLD. */
+  entry?: ReadonlyArray<string>;
   expectedUnusedFileModules: ReadonlyArray<string>;
 }
 
@@ -344,6 +346,13 @@ const rootOnlyRead =
       return JSON.stringify(pkg);
     }
 
+    // Model an installed project: every dep manifest is readable with no `bin` (a pure library),
+    // so unused-dependency resolves to a definite 'no-bin' verdict rather than 'unknown' (hold).
+    // Tests that need a bin-providing dep use the dedicated readWithBins helper below.
+    if (/\/node_modules\/(@[^/]+\/)?[^/]+\/package\.json$/.test(p)) {
+      return '{}';
+    }
+
     throw new Error(`ENOENT: ${p}`);
   };
 
@@ -422,6 +431,8 @@ const rootOnlyRead =
     searchRelations?: (q: unknown) => StoredCodeRelation[];
     resolveSymbol?: MockGildashOverrides['resolveSymbol'];
     pkgJson?: Record<string, unknown>;
+    entry?: ReadonlyArray<string>;
+    ignore?: ReadonlyArray<string>;
   }): Promise<Awaited<ReturnType<typeof analyzeDependencies>>> => {
     const g = createMockGildash({
       getImportGraph: async () => params.graph,
@@ -433,6 +444,8 @@ const rootOnlyRead =
     return analyzeDependencies(g, {
       rootAbs: ROOT,
       ...(params.pkgJson === undefined ? {} : { readFileFn: rootOnlyRead(params.pkgJson) }),
+      ...(params.entry === undefined ? {} : { entry: params.entry }),
+      ...(params.ignore === undefined ? {} : { ignore: params.ignore }),
     });
   };
 
@@ -588,6 +601,7 @@ const rootOnlyRead =
       ]),
       exported: [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')],
       pkgJson: { main: './src/main.ts' },
+      entry: ['**/main.ts'], // unused-file is opt-in: the user declares the entry set
     });
 
     expect(result.unusedFiles.length).toBe(1);
@@ -595,7 +609,67 @@ const rootOnlyRead =
     expect(result.deadExports.length).toBe(0);
   });
 
-  it('should detect test-only exports when symbol only imported by test files', async () => {
+  it('should HOLD unused-file entirely when the user declared no `entry` (opt-in)', async () => {
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [],
+      pkgJson: { main: './src/main.ts' },
+      // no `entry` → completeness of the root set is unproven → hold, never flood.
+    });
+
+    expect(result.unusedFiles.length).toBe(0);
+  });
+
+  it('should NOT leak an unreachable orphan file as dead-export when no `entry` is declared', async () => {
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')],
+      pkgJson: { main: './src/main.ts' },
+      // no `entry`: orphan is unreachable from package.json `main` (dedup guard), so its
+      // exports must NOT surface as dead-export, and unused-file is held. Both silent.
+    });
+
+    expect(result.unusedFiles.length).toBe(0);
+    expect(result.deadExports.length).toBe(0);
+  });
+
+  it('should treat a file matched by a user `entry` glob as reachable (not unused-file)', async () => {
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [],
+      pkgJson: { main: './src/main.ts' },
+      entry: ['**/orphan.ts'],
+    });
+
+    // orphan is unreachable from package.json `main`, but the user declared it an entry.
+    expect(result.unusedFiles.length).toBe(0);
+  });
+
+  it('should exclude a file matched by a user `ignore` glob from unused-file', async () => {
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', []],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [],
+      pkgJson: { main: './src/main.ts' },
+      entry: ['**/main.ts'], // opt-in so unused-file is active; orphan is unreachable
+      ignore: ['**/orphan.ts'], // …but the user declared it is not an orphan → suppressed
+    });
+
+    expect(result.unusedFiles.length).toBe(0);
+  });
+
+  it('should not report an export consumed only by a test file as dead (a consumer keeps it live)', async () => {
     const result = await analyzeWithExports({
       graph: new Map([
         ['/project/src/main.ts', ['/project/src/util.ts']],
@@ -607,9 +681,10 @@ const rootOnlyRead =
       pkgJson: { main: './src/main.ts' },
     });
 
-    expect(result.deadExports.length).toBe(1);
-    expect(result.deadExports[0]!.kind).toBe('test-only-export');
-    expect(result.deadExports[0]!.name).toBe('helperFn');
+    // A test-file consumer is still a consumer — helperFn has one, so it is not dead.
+    // Whether that consumer "counts as production" is not decidable from a filename fact,
+    // so no test-only refinement is made (that would require a guess-value).
+    expect(result.deadExports.length).toBe(0);
   });
 
   it('should not report dead export for symbols that are actually imported', async () => {
@@ -913,13 +988,13 @@ const rootOnlyRead =
     expect(result.layerViolations.length).toBe(2);
   });
 
-  it('should handle dead export and test-only export in same module', async () => {
+  it('should report a dead export while an export consumed by a test file stays live', async () => {
     const graph = new Map<string, string[]>([
       ['/project/src/main.ts', ['/project/src/lib.ts']],
       ['/project/src/lib.ts', []],
       ['/project/test/lib.spec.ts', ['/project/src/lib.ts']],
     ]);
-    const exported = [mkSymbol(1, '/project/src/lib.ts', 'deadFn'), mkSymbol(2, '/project/src/lib.ts', 'testOnlyFn')];
+    const exported = [mkSymbol(1, '/project/src/lib.ts', 'deadFn'), mkSymbol(2, '/project/src/lib.ts', 'consumedByTestFn')];
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: (q: unknown) => {
@@ -931,7 +1006,7 @@ const rootOnlyRead =
       },
       searchRelations: (q: unknown) => {
         if ((q as { type?: string }).type === 'imports') {
-          return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'testOnlyFn')];
+          return [mkImport('/project/test/lib.spec.ts', '/project/src/lib.ts', 'consumedByTestFn')];
         }
 
         return [];
@@ -942,10 +1017,11 @@ const rootOnlyRead =
       readFileFn: rootOnlyRead({ main: './src/main.ts' }),
     });
     const dead = result.deadExports.filter(d => d.kind === 'dead-export');
-    const testOnly = result.deadExports.filter(d => d.kind === 'test-only-export');
 
+    // deadFn has no consumer → dead-export. consumedByTestFn has a (test-file) consumer →
+    // it is not dead; a filename does not decide whether a consumer counts as production.
     expectSingleNamed(dead, 'deadFn');
-    expectSingleNamed(testOnly, 'testOnlyFn');
+    expect(result.deadExports.some(d => d.name === 'consumedByTestFn')).toBe(false);
   });
 
   /* ---------- OR: Ordering ---------- */
@@ -981,26 +1057,28 @@ const rootOnlyRead =
 
   const unusedFilesCases: UnusedFilesCase[] = [
     {
-      name: 'reports unreachable non-test file as unused-file',
+      name: 'reports unreachable non-test file as unused-file (entry declared)',
       graph: new Map([
         ['/project/src/index.ts', ['/project/src/used.ts']],
         ['/project/src/used.ts', []],
         ['/project/src/orphan.ts', []],
       ]),
       main: './src/index.ts',
+      entry: ['**/index.ts'],
       expectedUnusedFileModules: ['src/orphan.ts'],
     },
     {
-      name: 'excludes test files from unused-file findings',
+      name: 'a test file listed in `entry` is a reachability root (not unused-file)',
       graph: new Map([
         ['/project/src/index.ts', []],
         ['/project/test/foo.spec.ts', []],
       ]),
       main: './src/index.ts',
+      entry: ['**/index.ts', 'test/**'],
       expectedUnusedFileModules: [],
     },
     {
-      name: 'skips unused-file detection when package.json main points to non-existent file',
+      name: 'HOLDs unused-file when no `entry` is declared (opt-in)',
       graph: new Map([
         ['/project/src/real.ts', []],
         ['/project/src/orphan.ts', []],
@@ -1009,24 +1087,29 @@ const rootOnlyRead =
       expectedUnusedFileModules: [],
     },
     {
-      name: 'returns empty unusedFiles when all files are reachable',
+      name: 'returns empty unusedFiles when all files are reachable (entry declared)',
       graph: new Map([
         ['/project/src/index.ts', ['/project/src/a.ts', '/project/src/b.ts']],
         ['/project/src/a.ts', []],
         ['/project/src/b.ts', []],
       ]),
       main: './src/index.ts',
+      entry: ['**/index.ts'],
       expectedUnusedFileModules: [],
     },
   ];
 
-  it.each(unusedFilesCases)('$name', async ({ graph, main, expectedUnusedFileModules }) => {
+  it.each(unusedFilesCases)('$name', async ({ graph, main, entry, expectedUnusedFileModules }) => {
     const g = createMockGildash({
       getImportGraph: async () => graph,
       searchSymbols: () => [],
       searchRelations: () => [],
     });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main }) });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: rootOnlyRead({ main }),
+      ...(entry === undefined ? {} : { entry }),
+    });
     const actual = result.unusedFiles.map(f => f.module);
 
     expect(actual).toEqual([...expectedUnusedFileModules]);
@@ -1128,14 +1211,28 @@ const rootOnlyRead =
       expectedUnresolved: [],
     },
     {
-      name: 'skips a declared dependency used only as a package.json script binary',
+      // @types/* deadness is not closable without merging tsconfig (extends/references/
+      // triple-slash /// <reference types>), which a single leaf manifest cannot prove →
+      // hold every @types/* (FN). Old code false-W'd @types/node (isBuiltinModule('node')
+      // is false), @types/lodash (base not imported), and @types/jest (ambient globals).
+      name: 'holds every @types/* unconditionally (deadness unclosable)',
       imports: [],
       pkgJson: {
         main: './src/index.ts',
-        devDependencies: { oxlint: '^1.0.0' },
-        scripts: { lint: 'oxlint --fix src' },
+        devDependencies: { '@types/lodash': '^4.0.0', '@types/node': '^20.0.0', '@types/jest': '^29.0.0' },
       },
       expectedUnusedDeps: [],
+      expectedUnresolved: [],
+    },
+    {
+      name: 'reports a non-@types unused dep while still holding @types',
+      imports: [],
+      pkgJson: {
+        main: './src/index.ts',
+        dependencies: { 'dead-lib': '^1.0.0' },
+        devDependencies: { '@types/node': '^20.0.0' },
+      },
+      expectedUnusedDeps: [{ kind: 'unused-dependency', packageName: 'dead-lib' }],
       expectedUnresolved: [],
     },
   ];
@@ -1147,6 +1244,136 @@ const rootOnlyRead =
 
     expect(actualUnusedDeps).toEqual([...expectedUnusedDeps]);
     expect(actualUnresolved).toEqual([...expectedUnresolved]);
+  });
+
+  /* ---------- SB: unused-dependency holds any bin-providing dep (declared `bin` = fact) ---------- */
+
+  describe('unused-dependency holds a dep that provides a binary', () => {
+    // readFileFn that serves the root package.json AND each dep's installed
+    // node_modules/<dep>/package.json (so the analyzer can read its `bin` field).
+    // `undefined` in binsByDep means "manifest readable but no `bin` field" (a pure library).
+    const readWithBins =
+      (rootPkg: unknown, binsByDep: Record<string, unknown>) =>
+      (p: string): string => {
+        if (p === `${ROOT}/package.json`) {
+          return JSON.stringify(rootPkg);
+        }
+
+        for (const [dep, bin] of Object.entries(binsByDep)) {
+          if (p === `${ROOT}/node_modules/${dep}/package.json`) {
+            return JSON.stringify({ name: dep, bin });
+          }
+        }
+
+        throw new Error(`ENOENT: ${p}`);
+      };
+
+    const run = async (rootPkg: unknown, binsByDep: Record<string, unknown> = {}) => {
+      const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+      const g = createMockGildash({
+        getImportGraph: async () => graph,
+        searchSymbols: () => [],
+        searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [] : []),
+      });
+
+      return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: readWithBins(rootPkg, binsByDep) });
+    };
+
+    const unusedNames = (r: Awaited<ReturnType<typeof analyzeDependencies>>): string[] =>
+      r.unusedDeps.filter(d => d.kind === 'unused-dependency').map(d => d.packageName);
+
+    it('holds a bin-provider whose bin name differs from the package name (typescript→tsc)', async () => {
+      const r = await run(
+        { main: './src/index.ts', devDependencies: { typescript: '^5.0.0' } },
+        { typescript: { tsc: './bin/tsc', tsserver: './bin/tsserver' } },
+      );
+
+      expect(unusedNames(r)).toEqual([]);
+    });
+
+    it('holds a bin-provider regardless of HOW it is invoked — even via a path (no false-W)', async () => {
+      // The token approach missed `node_modules/.bin/tsc` (no `/` split) → false-W. Bin-existence
+      // holds it independent of the invocation form the static graph cannot parse.
+      const r = await run(
+        { main: './src/index.ts', devDependencies: { typescript: '^5.0.0' }, scripts: { build: 'node_modules/.bin/tsc -p .' } },
+        { typescript: { tsc: './bin/tsc' } },
+      );
+
+      expect(unusedNames(r)).toEqual([]);
+    });
+
+    it('holds a bin-provider even when it is not referenced anywhere (manual/hook/bunx unobservable)', async () => {
+      const r = await run(
+        { main: './src/index.ts', devDependencies: { 'some-cli': '^1.0.0' }, scripts: {} },
+        { 'some-cli': { 'some-cli': './cli.js' } },
+      );
+
+      expect(unusedNames(r)).toEqual([]);
+    });
+
+    it('holds a string-form bin (any non-empty bin field counts)', async () => {
+      const r = await run(
+        { main: './src/index.ts', devDependencies: { husky: '^9.0.0' } },
+        { husky: './bin.js' },
+      );
+
+      expect(unusedNames(r)).toEqual([]);
+    });
+
+    it('holds a scoped bin-provider', async () => {
+      const r = await run(
+        { main: './src/index.ts', devDependencies: { '@myorg/cli': '^1.0.0' } },
+        { '@myorg/cli': { mycli: './cli.js' } },
+      );
+
+      expect(unusedNames(r)).toEqual([]);
+    });
+
+    it('reports a no-bin library that is not imported (readable manifest, no bin → provably unused)', async () => {
+      const r = await run(
+        { main: './src/index.ts', dependencies: { 'dead-lib': '^1.0.0' }, devDependencies: { typescript: '^5.0.0' } },
+        { 'dead-lib': undefined, typescript: { tsc: './bin/tsc' } },
+      );
+
+      expect(unusedNames(r)).toEqual(['dead-lib']);
+    });
+
+    it('reports a dep with an empty bin object (exposes no command)', async () => {
+      const r = await run(
+        { main: './src/index.ts', dependencies: { 'empty-bin': '^1.0.0' } },
+        { 'empty-bin': {} },
+      );
+
+      expect(unusedNames(r)).toEqual(['empty-bin']);
+    });
+
+    it('HOLDS a dep whose manifest is unreadable (pnpm/Yarn-PnP/hoist-above-root → unknown, not a false-W)', async () => {
+      // No node_modules manifest served at all → readDepBinState returns 'unknown'. Reporting
+      // here would falsely flag every bin-provider under Yarn PnP (no node_modules) or pnpm's
+      // non-flat store. Per "닫히지 않으면 보류", unknown holds.
+      const readNoModules =
+        (rootPkg: unknown) =>
+        (p: string): string => {
+          if (p === `${ROOT}/package.json`) {
+            return JSON.stringify(rootPkg);
+          }
+
+          throw new Error(`ENOENT: ${p}`);
+        };
+      const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
+      const g = createMockGildash({
+        getImportGraph: async () => graph,
+        searchSymbols: () => [],
+        searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [] : []),
+      });
+
+      const r = await analyzeDependencies(g, {
+        rootAbs: ROOT,
+        readFileFn: readNoModules({ main: './src/index.ts', devDependencies: { typescript: '^5.0.0' } }),
+      });
+
+      expect(unusedNames(r)).toEqual([]);
+    });
   });
 
   /* ---------- DE: Duplicate Exports ---------- */
@@ -1251,6 +1478,43 @@ const rootOnlyRead =
     expect(result.unusedDeps.length).toBe(1);
     expect(result.unusedDeps[0]!.kind).toBe('unlisted-dependency');
     expect(result.unusedDeps[0]!.packageName).toBe('lodash');
+  });
+
+  it('resolves a dep manifest hoisted above the workspace root (upward walk to rootAbs)', async () => {
+    // ws1 declares `hoisted-lib`; its manifest is NOT under the workspace node_modules but is
+    // hoisted to the project-root node_modules with NO `bin`. Only if readDepBinState walks
+    // depRoot→rootAbs does it read `no-bin` → report. If the walk stopped at the workspace, it
+    // would be `unknown` → held. Asserting it IS reported proves the walk reaches rootAbs.
+    const graph = new Map<string, string[]>([['/project/packages/ws1/src/index.ts', []]]);
+    const g = createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [] : []),
+    });
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: (p: string) => {
+        if (p === '/project/packages/ws1/package.json') {
+          return JSON.stringify({ name: 'ws1', dependencies: { 'hoisted-lib': '^1.0.0' } });
+        }
+
+        if (p === '/project/node_modules/hoisted-lib/package.json') {
+          return JSON.stringify({ name: 'hoisted-lib' });
+        }
+
+        // workspace-local node_modules miss + everything else (root manifest, etc.)
+        if (/\/node_modules\//.test(p)) {
+          throw new Error(`ENOENT: ${p}`);
+        }
+
+        return JSON.stringify({});
+      },
+      workspacePackages: new Map([['ws1', '/project/packages/ws1']]),
+    });
+
+    expect(result.unusedDeps.map(d => ({ kind: d.kind, packageName: d.packageName }))).toEqual([
+      { kind: 'unused-dependency', packageName: 'hoisted-lib' },
+    ]);
   });
 
   /* ---------- UM: Unused Enum / Namespace Members ---------- */
@@ -1435,7 +1699,7 @@ const rootOnlyRead =
 
   // When `imports` indexes successfully but one of the completeness relations
   // (re-exports / type-references / calls) throws GildashError, the "usage = 0"
-  // family (dead-export / test-only-export / unused-member) must be HELD to avoid
+  // family (dead-export / unused-member) must be HELD to avoid
   // FPs from missing edges — while imports-only findings (unresolved / dep manifest)
   // still proceed.
   const degradedRelationTypes: ReadonlyArray<[string]> = [['re-exports'], ['type-references'], ['calls']];
