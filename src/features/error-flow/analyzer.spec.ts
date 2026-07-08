@@ -368,11 +368,6 @@ describe('error-flow/analyzer', () => {
       ['export const p = new Promise((resolve) => {', '  resolve(42);', '  throw new Error("swallowed");', '});'].join('\n'),
       'promise-constructor-hygiene',
     ],
-    [
-      'swapped params (reject, resolve)',
-      'export const p = new Promise((reject, resolve) => { resolve(42); });',
-      'promise-constructor-hygiene',
-    ],
   ])('should report a finding for %s', async (_label, source, kind) => {
     // Act
     const analysis = await analyzeSingle('/virtual/src/features/report-kind.ts', source);

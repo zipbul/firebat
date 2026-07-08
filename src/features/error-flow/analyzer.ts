@@ -1207,11 +1207,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
     }
 
-    const firstParam = executor.params[0];
-
-    if (firstParam !== undefined && firstParam.type === 'Identifier' && firstParam.name === 'reject') {
-      reportHygiene();
-    }
   };
 
   // unobserved-variable (candidate side): register a `const x = <thenable call/new>` binding whose
