@@ -29,15 +29,20 @@ export const isCloneTarget = (node: Node): boolean => CLONE_TARGET_TYPES.has(nod
 // ─── 결정-존재 floor (익명 인라인 표현식) — CLAUDE.md duplicates 닫힌 규칙 ──────
 //
 // minSize는 "결정을 담기엔 너무 작아 K"라는 결정-존재 floor다 (CLAUDE.md: 문장열 규칙).
-// 이 floor는 **익명 함수 표현식**(arrow / 이름 없는 function expression)에도 적용한다 —
-// 익명 인라인 람다는 명명된 변경지점이 아니라 인라인 코드(문장열의 인라인 등가물)이므로,
+// 이 floor는 **익명 함수 표현식**(arrow / 이름 없는 function expression)과 **계약 타입선언**
+// (interface / type alias)에도 적용한다.
+//   - 익명 인라인 람다는 명명된 변경지점이 아니라 인라인 코드(문장열의 인라인 등가물).
+//   - 계약 타입선언은 행위 없는 순수 구조라, floor 미만의 초소형 shape(`{line;column}` 등)는
+//     독립 모듈이 우연히 수렴하는 보편 어휘다 — 사소한 람다 `(a,b)=>a-b`의 인터페이스 등가물.
+//     이름은 fingerprint에서 alpha-renaming으로 치환되므로 명명 여부가 정보량을 만들지 않는다.
 // 정규형 노드 수가 floor 미만이면 드리프트할 결정을 담기엔 너무 작다. 이는 유사도 임계가
 // 아니라 노드 수 floor이며 매칭 자체는 정규형 완전 일치(이진·닫힘)다.
 //
-// 형태로 판정하는 닫힌 규칙: 익명(이름 없음) 함수 표현식 ∧ size < minSize.
-//   - `(a, b) => a - b`(비교자), `x => x.length > 0`(술어), `n => f(n, k)`(투영) 등
-//     우연히 같은 사소한 인라인 람다를 거른다(독립 결정의 우연한 동형, zero-FP).
-//   - **명명** 선언(function/class/method/type)은 floor가 없다 — 작은 중복 함수도
+// 형태로 판정하는 닫힌 규칙: (익명 함수 표현식 ∨ 계약 타입선언) ∧ size < minSize.
+//   - `(a, b) => a - b`(비교자), `x => x.length > 0`(술어), `n => f(n, k)`(투영),
+//     `interface P { line: number; column: number }`(보편 shape) 등
+//     우연히 같은 초소형 구조를 거른다(독립 결정의 우연한 동형, zero-FP).
+//   - **행위-보유 명명 선언**(function/class/method)은 floor가 없다 — 작은 중복 함수도
 //     주소 지정 가능한 변경지점이므로 잡는다(false negative 방지).
 const isAnonymousFunctionExpression = (node: Node): boolean => {
   if (node.type === 'ArrowFunctionExpression') {
@@ -53,8 +58,11 @@ const isAnonymousFunctionExpression = (node: Node): boolean => {
   return false;
 };
 
+const isContractTypeDeclaration = (node: Node): boolean =>
+  node.type === 'TSInterfaceDeclaration' || node.type === 'TSTypeAliasDeclaration';
+
 export const isBelowDecisionFloor = (node: Node, minSize: number): boolean =>
-  isAnonymousFunctionExpression(node) && countOxcSize(node) < minSize;
+  (isAnonymousFunctionExpression(node) || isContractTypeDeclaration(node)) && countOxcSize(node) < minSize;
 
 // ─── 골격(결정 없음) 판정 — CLAUDE.md duplicates 개념의 닫힌 규칙 ────────────
 //

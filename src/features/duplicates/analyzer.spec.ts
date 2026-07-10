@@ -38,6 +38,8 @@ const { analyzeDuplicates, createEmptyDuplicates } = await import('./analyzer');
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const DUP_OPTS = { minSize: 3, enableAntiUnification: false };
 const AU_OPTS = { minSize: 3, enableAntiUnification: true };
+// 결정-존재 floor 테스트용: 실제 기본 floor(12)에서 판정.
+const FLOOR_OPTS = { minSize: 12, enableAntiUnification: false };
 
 /** Analyze a single-file corpus. */
 const analyzeOne = (
@@ -457,13 +459,13 @@ class Beta {
     expect(itemsFromBad).toHaveLength(0);
   });
 
-  // ── [NE] 22. minSize는 선언 클론을 억제하지 않는다 (floor는 fragment 전용) ──
+  // ── [NE] 22. minSize는 행위-보유 명명 선언(함수)을 억제하지 않는다 ──────────
   //
-  // REDESIGN: minSize는 문장열(fragment)의 결정-존재 floor일 뿐이다. 선언은 크기
-  // 무관하게 중복이면 클론이므로, 아주 작은 동일 함수도 높은 minSize에서 보고된다.
-  // (옛 동작은 corpus-상대 floor로 작은 중복 함수를 숨겼다 — false negative.)
+  // 결정-존재 floor는 문장열·익명 람다·계약 타입선언(interface/type)에 적용된다.
+  // 행위를 담는 명명 함수는 크기 무관하게 주소 지정 가능한 변경지점이므로,
+  // 아주 작은 동일 함수도 높은 minSize에서 보고된다(false negative 방지).
 
-  it('does not suppress declaration clones by minSize (floor is fragment-only)', () => {
+  it('does not suppress behavior-bearing named function clones by minSize', () => {
     const file = parseSource('tiny.ts', TINY_FUNCTION);
     const result = analyzeDuplicates([file, parseSource('tiny2.ts', TINY_FUNCTION)], {
       minSize: 9999,
@@ -481,22 +483,52 @@ class Beta {
 
   it('suppresses below-floor anonymous arrow clones (decision-existence floor applies to inline lambdas)', () => {
     // `(a, b) => a - b` (size≈6) — 두 파일에 우연히 같은 비교자. floor=12 미만 → 비탐지.
-    const a = parseSource('cmp-a.ts', `export const sorted = items.sort((a, b) => a - b);`);
-    const b = parseSource('cmp-b.ts', `export const ordered = values.sort((a, b) => a - b);`);
-    const result = analyzeDuplicates([a, b], { minSize: 12, enableAntiUnification: false });
+    const result = analyzeAB(
+      `export const sorted = items.sort((a, b) => a - b);`,
+      `export const ordered = values.sort((a, b) => a - b);`,
+      FLOOR_OPTS,
+    );
 
     expect(result).toEqual([]);
+  });
+
+  // ── [NE] 22c. 결정-존재 floor 미만의 계약 타입선언(interface/type)은 비탐지 ──
+  //
+  // 초소형 보편 shape(`{line;column}` 등)는 독립 모듈이 우연히 수렴하는 어휘다 —
+  // 사소한 람다 `(a,b)=>a-b`의 인터페이스 등가물. 이름은 fingerprint에서 이미
+  // alpha-renaming되므로 명명 여부는 정보량이 아니다. floor 미만 → K (zero-FP).
+
+  it('suppresses below-floor tiny interface clones (universal-shape coincidence)', () => {
+    // 2멤버 `{line;column}` (size 11 < 12) — 서로 남남인 두 모듈의 우연한 동형.
+    const result = analyzeAB(
+      `interface SourcePosition { line: number; column: number }`,
+      `interface PlainPosition { line: number; column: number }`,
+      FLOOR_OPTS,
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it('suppresses below-floor tiny type-alias clones (same floor as interfaces)', () => {
+    const result = analyzeAB(`type Pos = { line: number; column: number };`, `type Loc = { line: number; column: number };`, FLOOR_OPTS);
+
+    expect(result).toEqual([]);
+  });
+
+  it('still reports an interface contract clone at or above the floor size', () => {
+    // 3멤버 계약(size 15 ≥ 12)은 결정을 담으므로 정상 보고 — floor는 초소형만 거른다.
+    const src = `interface Config { readonly host: string; readonly port: number; readonly timeout: number }`;
+    const exact = expectCloneCount(analyzeAB(src, src, FLOOR_OPTS), 'exact', 1);
+
+    expect(exact[0]!.items.map(i => i.kind)).toEqual(['interface', 'interface']);
   });
 
   it('still reports an anonymous arrow clone at or above the floor size', () => {
     // 본문이 큰 동일 화살표(size ≥ 12)는 결정을 담으므로 floor를 넘겨 정상 보고.
     const body = 'p => { const a = p.x + p.y; const b = a * p.z; return a + b + p.w; }';
-    const a = parseSource('big-a.ts', `export const m = items.map(${body});`);
-    const b = parseSource('big-b.ts', `export const n = values.map(${body});`);
-    const result = analyzeDuplicates([a, b], { minSize: 12, enableAntiUnification: false });
+    const result = analyzeAB(`export const m = items.map(${body});`, `export const n = values.map(${body});`, FLOOR_OPTS);
 
-    expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result.some(g => g.items.length >= 2)).toBe(true);
+    expect(result.filter(g => g.cloneType === 'exact').flatMap(g => g.items).map(i => i.kind)).toEqual(['function', 'function']);
   });
 
   // ── [NE] 23. 단일 함수만 존재 → 그룹 없음 ─────────────────────────────

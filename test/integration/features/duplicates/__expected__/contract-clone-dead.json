@@ -4,8 +4,8 @@
     "findingKind": "structural-clone",
     "items": [
       {
-        "filePath": "/virtual/intra-bundle-dead/src/oxlint-plugin/rules/a.ts",
-        "header": "RuleSpan",
+        "filePath": "/virtual/contract-clone-dead/src/emit/b.ts",
+        "header": "NodeSpan",
         "kind": "interface",
         "span": {
           "end": {
@@ -19,8 +19,8 @@
         }
       },
       {
-        "filePath": "/virtual/intra-bundle-dead/src/oxlint-plugin/rules/b.ts",
-        "header": "NodeSpan",
+        "filePath": "/virtual/contract-clone-dead/src/parse/a.ts",
+        "header": "RuleSpan",
         "kind": "interface",
         "span": {
           "end": {
@@ -38,9 +38,9 @@
       "kind": "identifier",
       "pairs": [
         {
-          "left": "RuleSpan",
+          "left": "NodeSpan",
           "location": "id.name",
-          "right": "NodeSpan"
+          "right": "RuleSpan"
         }
       ]
     }

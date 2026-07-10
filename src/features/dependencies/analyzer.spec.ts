@@ -357,6 +357,22 @@ const rootOnlyRead =
   };
 
   /**
+   * Mock gildash with a fixed import graph, no symbols, and whose only relations are
+   * the given `imports` — the shared arrange shape of every dependency-declaration test
+   * (unused/unlisted-dep, bin-state, hoist, unknown-hold).
+   */
+  const importsGildash = (graph: Map<string, string[]>, imports: ReadonlyArray<StoredCodeRelation> = []): Gildash =>
+    createMockGildash({
+      getImportGraph: async () => graph,
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [...imports] : []),
+    });
+
+  /** Project each unused-dep finding to its comparable core (kind + packageName). */
+  const toKindName = (r: Awaited<ReturnType<typeof analyzeDependencies>>): Array<{ kind: string; packageName: string }> =>
+    r.unusedDeps.map(d => ({ kind: d.kind, packageName: d.packageName }));
+
+  /**
    * Build a mock gildash whose only file is `src/index.ts`, whose `searchRelations`
    * returns the given `imports` for `type: 'imports'`, and run the analyzer against a
    * package.json produced from `pkgJson`. Collapses the shared mock-construction shared
@@ -367,12 +383,7 @@ const rootOnlyRead =
     pkgJson: Record<string, unknown>,
     ignoreDependencies: ReadonlyArray<string> | undefined = [],
   ): Promise<Awaited<ReturnType<typeof analyzeDependencies>>> => {
-    const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [...imports] : []),
-    });
+    const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]), imports);
 
     return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead(pkgJson), ignoreDependencies });
   };
@@ -1239,10 +1250,9 @@ const rootOnlyRead =
 
   it.each(importCases)('$name', async ({ imports, pkgJson, ignoreDependencies, expectedUnusedDeps, expectedUnresolved }) => {
     const result = await analyzeImports(imports, pkgJson, ignoreDependencies);
-    const actualUnusedDeps = result.unusedDeps.map(d => ({ kind: d.kind, packageName: d.packageName }));
     const actualUnresolved = result.unresolvedImports.map(u => ({ specifier: u.specifier, module: u.module }));
 
-    expect(actualUnusedDeps).toEqual([...expectedUnusedDeps]);
+    expect(toKindName(result)).toEqual([...expectedUnusedDeps]);
     expect(actualUnresolved).toEqual([...expectedUnresolved]);
   });
 
@@ -1269,12 +1279,7 @@ const rootOnlyRead =
       };
 
     const run = async (rootPkg: unknown, binsByDep: Record<string, unknown> = {}) => {
-      const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-      const g = createMockGildash({
-        getImportGraph: async () => graph,
-        searchSymbols: () => [],
-        searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [] : []),
-      });
+      const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]));
 
       return analyzeDependencies(g, { rootAbs: ROOT, readFileFn: readWithBins(rootPkg, binsByDep) });
     };
@@ -1360,12 +1365,7 @@ const rootOnlyRead =
 
           throw new Error(`ENOENT: ${p}`);
         };
-      const graph = new Map<string, string[]>([['/project/src/index.ts', []]]);
-      const g = createMockGildash({
-        getImportGraph: async () => graph,
-        searchSymbols: () => [],
-        searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [] : []),
-      });
+      const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]));
 
       const r = await analyzeDependencies(g, {
         rootAbs: ROOT,
@@ -1485,12 +1485,7 @@ const rootOnlyRead =
     // hoisted to the project-root node_modules with NO `bin`. Only if readDepBinState walks
     // depRoot→rootAbs does it read `no-bin` → report. If the walk stopped at the workspace, it
     // would be `unknown` → held. Asserting it IS reported proves the walk reaches rootAbs.
-    const graph = new Map<string, string[]>([['/project/packages/ws1/src/index.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => [],
-      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? [] : []),
-    });
+    const g = importsGildash(new Map<string, string[]>([['/project/packages/ws1/src/index.ts', []]]));
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: (p: string) => {
@@ -1512,9 +1507,7 @@ const rootOnlyRead =
       workspacePackages: new Map([['ws1', '/project/packages/ws1']]),
     });
 
-    expect(result.unusedDeps.map(d => ({ kind: d.kind, packageName: d.packageName }))).toEqual([
-      { kind: 'unused-dependency', packageName: 'hoisted-lib' },
-    ]);
+    expect(toKindName(result)).toEqual([{ kind: 'unused-dependency', packageName: 'hoisted-lib' }]);
   });
 
   /* ---------- UM: Unused Enum / Namespace Members ---------- */

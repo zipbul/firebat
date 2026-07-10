@@ -1,4 +1,4 @@
-// Two plugin-bundle sources sharing a contract — intra-bundle clone is still W.
+// Same contract restated — normal-form identical after alpha-renaming → W.
 export interface NodeSpan {
   start: number;
   end: number;

@@ -236,10 +236,10 @@ describe('isBelowDecisionFloor', () => {
   // 결정-존재 floor는 익명 인라인 표현식에만 적용. floor=12를 기준으로 BVA.
 
   it('should classify a tiny numeric-comparator arrow as below the floor', () => {
-    // `(a, b) => a - b` size≈6 < 12 — 우연히 같은 비교자 (독립 결정의 동형)
+    // `(a, b) => a - b` size 6 < 12 — 우연히 같은 비교자 (독립 결정의 동형)
     const node = firstNodeOfType(`const z = xs.sort((a, b) => a - b);`, 'ArrowFunctionExpression');
 
-    expect(countOxcSize(node)).toBeLessThan(12);
+    expect(countOxcSize(node)).toBe(6);
     expect(isBelowDecisionFloor(node, 12)).toBe(true);
   });
 
@@ -273,7 +273,7 @@ describe('isBelowDecisionFloor', () => {
   });
 
   it('should NOT apply the floor to a tiny NAMED function declaration', () => {
-    // 명명 선언은 작아도 주소 지정 가능한 변경지점 — floor 비대상 (false negative 방지).
+    // 행위-보유 명명 선언(함수)은 작아도 주소 지정 가능한 변경지점 — floor 비대상 (FN 방지).
     const node = firstNodeOfType(`function add(a, b) { return a + b; }`, 'FunctionDeclaration');
 
     expect(countOxcSize(node)).toBeLessThan(12);
@@ -286,9 +286,33 @@ describe('isBelowDecisionFloor', () => {
     expect(isBelowDecisionFloor(node, 12)).toBe(false);
   });
 
-  it('should NOT apply the floor to a tiny type alias', () => {
-    const node = firstNodeOfType(`type T = { a: number };`, 'TSTypeAliasDeclaration');
+  // ── 계약 타입선언(interface/type alias)은 floor 대상 ──────────────────────
+  //
+  // 순수 구조 계약은 행위를 담지 않아, floor 미만의 초소형 shape(`{line;column}` 등)는
+  // 독립 모듈이 우연히 수렴하는 보편 어휘다(사소한 람다 `(a,b)=>a-b`의 인터페이스 등가물).
+  // 이름은 alpha-renaming으로 이미 치환되므로 명명 여부가 정보량을 만들지 않는다.
 
+  it('should apply the floor to a tiny 2-member interface (universal-shape coincidence)', () => {
+    // BVA: 2멤버 `{line;column}` = size 11, 기본 floor 12의 바로 아래 경계.
+    const node = firstNodeOfType(`interface SourcePosition { line: number; column: number }`, 'TSInterfaceDeclaration');
+
+    expect(countOxcSize(node)).toBe(11);
+    expect(isBelowDecisionFloor(node, 12)).toBe(true);
+  });
+
+  it('should apply the floor to a tiny object-literal type alias', () => {
+    const node = firstNodeOfType(`type Pos = { line: number; column: number };`, 'TSTypeAliasDeclaration');
+
+    expect(isBelowDecisionFloor(node, 12)).toBe(true);
+  });
+
+  it('should NOT floor a 3-member interface at minSize 12 (BVA: size 15 ≥ 12)', () => {
+    const node = firstNodeOfType(
+      `interface Config { readonly host: string; readonly port: number; readonly timeout: number }`,
+      'TSInterfaceDeclaration',
+    );
+
+    expect(countOxcSize(node)).toBeGreaterThanOrEqual(12);
     expect(isBelowDecisionFloor(node, 12)).toBe(false);
   });
 

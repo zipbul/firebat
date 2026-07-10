@@ -106,10 +106,11 @@ describe('golden/duplicates', () => {
   rgFrag('fragment-subsumed-dead'); // 선언 클론만 보고, 내부 fragment는 subsume
 
   // ════════════════════════════════════════════════════════════════════════
-  // Cross-bundle 제외 — oxlint-plugin 번들 경계를 가로지르는 그룹은 비대상
-  // (CLAUDE.md: export 표면의 cross-module 중복 = dependencies 영역)
+  // 결정-존재 floor — 계약 타입선언(interface/type alias)
+  // floor 미만의 초소형 보편 shape(`{line;column}`)는 독립 결정의 우연한 동형 → K.
+  // floor 이상의 계약 중복은 파일 위치와 무관하게 W (경로 기반 예외 없음).
   // ════════════════════════════════════════════════════════════════════════
 
-  rg('cross-bundle-keep'); // K: 플러그인 번들 소스 vs 경계 밖 파일 → cross-module 비대상
-  rg('intra-bundle-dead'); // W: 두 파일 모두 플러그인 번들 내부 → 정규형 일치는 그대로 보고
+  rgFrag('tiny-contract-floor-keep'); // K: 2멤버 보편 shape (size 11 < 12) → floor 미만
+  rgFrag('contract-clone-dead'); // W: 4멤버 계약 (size ≥ 12) → 위치 무관 보고
 });
