@@ -1374,4 +1374,90 @@ describe('error-flow/analyzer', () => {
     expect(realFindings.some(f => f.kind === 'empty-catch')).toBe(false);
     expect(emptyFindings.filter(f => f.kind === 'empty-catch').length).toBe(1);
   });
+
+  // ── 명세이름 identity 게이트: 파일 내에서 섀도잉된 전역 이름은 명세 사실로 취급하지 않는다 ──
+  //
+  // CLAUDE.md 공통 원칙: 명세가 정의한 이름은 identity가 확인될 때만 명세 사실이다.
+  // 파일이 같은 이름의 바인딩을 선언하면(클래스·함수·변수·import) 그 이름의 전역 identity가
+  // 닫히지 않으므로 W를 만들지 않는다(보류, FN 방향). 섀도잉이 없으면 모듈 스코프의 전역
+  // 참조는 언어의 이름 해석 규칙으로 닫힌 사실이다 — 기존 W는 그대로 유지된다.
+
+  describe('shadowed spec-name identity gate', () => {
+    it('holds promise-constructor-hygiene when Promise is a local class', async () => {
+      const source = [
+        'class Promise<T> { constructor(fn: (res: (v: T) => void) => void) {} }',
+        'export const p = new Promise<number>(async res => { res(1); });',
+      ].join('\n');
+
+      await expectKindCount(source, 'promise-constructor-hygiene', 0);
+    });
+
+    it('holds throw-non-error for Promise.reject when Promise is locally bound', async () => {
+      const source = [
+        'import { Promise } from "./my-promise";',
+        'export function f() { return Promise.reject("plain string"); }',
+      ].join('\n');
+
+      await expectKindCount(source, 'throw-non-error', 0);
+    });
+
+    it('holds missing-error-cause when Error is a local class', async () => {
+      const source = [
+        'class Error { constructor(public message: string) {} }',
+        'export function f(): void {',
+        '  try {',
+        '    JSON.parse("x");',
+        '  } catch (err) {',
+        '    throw new Error("wrapped");',
+        '  }',
+        '}',
+      ].join('\n');
+
+      await expectKindCount(source, 'missing-error-cause', 0);
+    });
+
+    it('holds throw-non-error for a primitive-wrapper call when String is locally bound', async () => {
+      const source = [
+        'function String(x: unknown): unknown { return x; }',
+        'export function f(x: unknown): void {',
+        '  throw String(x);',
+        '}',
+      ].join('\n');
+
+      await expectKindCount(source, 'throw-non-error', 0);
+    });
+
+    it('holds floating-promises for a discarded new Promise when Promise is a local class', async () => {
+      const source = [
+        'class Promise<T> { constructor(fn: (res: (v: T) => void) => void) {} }',
+        'export function f(): void {',
+        '  new Promise<number>(res => res(1));',
+        '}',
+      ].join('\n');
+
+      await expectKindCount(source, 'floating-promises', 0);
+    });
+
+    it('still reports promise-constructor-hygiene for the unshadowed global Promise (guard)', async () => {
+      const source = 'export const p = new Promise<number>(async res => { res(1); });';
+
+      await expectKindCount(source, 'promise-constructor-hygiene', 1);
+    });
+
+    it('does NOT treat an ambient declare as shadowing (declare creates no runtime binding)', async () => {
+      // `declare const` asserts the GLOBAL exists — it is a spec-fact declaration, not a shadow.
+      const source = [
+        'declare const globalThis: { Promise: PromiseConstructor };',
+        'export const p = new globalThis.Promise<number>(async res => { res(1); });',
+      ].join('\n');
+
+      await expectKindCount(source, 'promise-constructor-hygiene', 1);
+    });
+
+    it('still reports throw-non-error for the unshadowed Promise.reject with a literal (guard)', async () => {
+      const source = 'export function f() { return Promise.reject("plain string"); }';
+
+      await expectKindCount(source, 'throw-non-error', 1);
+    });
+  });
 });

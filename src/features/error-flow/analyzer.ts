@@ -187,6 +187,120 @@ const knownPrimitiveWrappers = new Set(['String', 'Number', 'Boolean', 'Symbol',
 
 const isPrimitiveWrapperName = (name: string): boolean => knownPrimitiveWrappers.has(name);
 
+// ─── 명세이름 identity 게이트 ─────────────────────────────────────────────────
+//
+// CLAUDE.md 공통 원칙: 명세가 정의한 이름(Promise/Error/String…)은 대상의 identity가
+// 확인될 때만 명세 사실로 취급한다. 파일이 같은 이름의 바인딩을 선언하면(변수·함수·클래스·
+// import·파라미터·catch) 그 이름이 전역 빌트인을 가리킨다는 것이 닫히지 않으므로, 그 이름을
+// 근거로 W를 만들지 않는다(보류). 이는 스코프체인 해석의 보수적 폐포다 — 실제로 그 사용처에
+// 닿지 않는 스코프의 섀도잉도 보류시키지만, 오차는 K방향(FN)뿐이라 zero-FP 계약에 안전하고,
+// 전역 빌트인 이름의 재선언은 극히 드물어 비용이 무시된다. 섀도잉이 없으면 모듈 스코프의
+// 전역 참조는 언어의 이름 해석 규칙(정적 스코핑)으로 닫힌 사실이다.
+const specGlobalNames = new Set([
+  'Promise',
+  'Error',
+  'TypeError',
+  'RangeError',
+  'ReferenceError',
+  'SyntaxError',
+  'URIError',
+  'EvalError',
+  'AggregateError',
+  'String',
+  'Number',
+  'Boolean',
+  'Symbol',
+  'BigInt',
+  'globalThis',
+  'window',
+  'self',
+]);
+
+const collectShadowedSpecNames = (program: Node): ReadonlySet<string> => {
+  const shadowed = new Set<string>();
+  const addPattern = (pattern: Node): void => {
+    const names = new Set<string>();
+
+    collectBindingNames(pattern, names);
+
+    for (const name of names) {
+      if (specGlobalNames.has(name)) {
+        shadowed.add(name);
+      }
+    }
+  };
+  const addId = (id: Node | null | undefined): void => {
+    if (id !== null && id !== undefined && id.type === 'Identifier' && specGlobalNames.has(id.name)) {
+      shadowed.add(id.name);
+    }
+  };
+
+  // `declare …` (ambient) creates NO runtime binding — it asserts the global EXISTS, which is a
+  // spec-fact declaration, not a shadow. Skip every ambient declaration subtree.
+  const isAmbient = (node: Node): boolean => (node as Node & { readonly declare?: boolean }).declare === true;
+
+  walkOxcTree(program, node => {
+    switch (node.type) {
+      case 'VariableDeclaration':
+        if (isAmbient(node)) {
+          return false;
+        }
+
+        break;
+      case 'VariableDeclarator':
+        addPattern(node.id);
+        break;
+      case 'FunctionDeclaration':
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression': {
+        if (isAmbient(node)) {
+          return false;
+        }
+
+        addId((node as Node & { readonly id?: Node | null }).id);
+
+        for (const param of (node as Node & { readonly params: ReadonlyArray<Node> }).params) {
+          addPattern(param);
+        }
+
+        break;
+      }
+      case 'ClassDeclaration':
+      case 'ClassExpression':
+      case 'TSEnumDeclaration':
+      case 'TSModuleDeclaration':
+        if (isAmbient(node)) {
+          return false;
+        }
+
+        addId((node as Node & { readonly id?: Node | null }).id);
+        break;
+      case 'ImportDeclaration': {
+        for (const spec of (node as Node & { readonly specifiers: ReadonlyArray<Node> }).specifiers) {
+          addId((spec as Node & { readonly local: Node }).local);
+        }
+
+        break;
+      }
+      case 'CatchClause': {
+        const param = (node as Node & { readonly param: Node | null }).param;
+
+        if (param !== null) {
+          addPattern(param);
+        }
+
+        break;
+      }
+      default:
+        break;
+    }
+
+    return true;
+  });
+
+  return shadowed;
+};
+
 // Unwrap TS type-assertion wrappers so the *runtime* value is judged, not the asserted type:
 // `'x' as unknown as Error` is a string at runtime and still loses the stack trace.
 const unwrapThrowExpression = (node: Node): Node => {
@@ -209,7 +323,7 @@ const unwrapThrowExpression = (node: Node): Node => {
 // member access, calls of unknown type, new, await, conditionals — gets the benefit of the doubt
 // (K). The syntactic floor reports literal-shaped values; the oracle augments it by proving the
 // value's static type is a bare primitive (`throw msg`/`throw o.msg`/`throw g()`).
-const isProvablyNonErrorThrow = (arg: Node, oracle: TypeOracle): boolean => {
+const isProvablyNonErrorThrow = (arg: Node, oracle: TypeOracle, shadowed: ReadonlySet<string>): boolean => {
   const value = unwrapThrowExpression(arg);
 
   // Literals and composite literals are never Error instances.
@@ -222,8 +336,14 @@ const isProvablyNonErrorThrow = (arg: Node, oracle: TypeOracle): boolean => {
     return true;
   }
 
-  // String()/Number()/Boolean()/Symbol()/BigInt() always produce a primitive.
-  if (value.type === 'CallExpression' && value.callee.type === 'Identifier' && isPrimitiveWrapperName(value.callee.name)) {
+  // String()/Number()/Boolean()/Symbol()/BigInt() always produce a primitive — only when the
+  // name still refers to the global (no file-local binding shadows it).
+  if (
+    value.type === 'CallExpression' &&
+    value.callee.type === 'Identifier' &&
+    isPrimitiveWrapperName(value.callee.name) &&
+    !shadowed.has(value.callee.name)
+  ) {
     return true;
   }
 
@@ -231,7 +351,8 @@ const isProvablyNonErrorThrow = (arg: Node, oracle: TypeOracle): boolean => {
 };
 
 // The first argument of a `Promise.reject(X)` call, or null if `expr` is not one.
-const promiseRejectArgument = (expr: Node): Node | null => {
+// `shadowed` gate: a file-local `Promise` binding voids the global identity → not a spec fact.
+const promiseRejectArgument = (expr: Node, shadowed: ReadonlySet<string>): Node | null => {
   if (expr.type !== 'CallExpression') {
     return null;
   }
@@ -242,6 +363,7 @@ const promiseRejectArgument = (expr: Node): Node | null => {
     callee.type !== 'MemberExpression' ||
     callee.object.type !== 'Identifier' ||
     callee.object.name !== 'Promise' ||
+    shadowed.has('Promise') ||
     callee.property.type !== 'Identifier' ||
     callee.property.name !== 'reject'
   ) {
@@ -254,24 +376,28 @@ const promiseRejectArgument = (expr: Node): Node | null => {
 // The error value a statement throws or rejects with: `throw X` or `return Promise.reject(X)` (the
 // async equivalent — the caller receives the rejection, so the cause-preservation rule applies the
 // same way). Returns null for any other statement.
-const throwOrRejectArgument = (node: Node): Node | null => {
+const throwOrRejectArgument = (node: Node, shadowed: ReadonlySet<string>): Node | null => {
   if (node.type === 'ThrowStatement') {
     return node.argument;
   }
 
   if (node.type === 'ReturnStatement' && node.argument !== null) {
-    return promiseRejectArgument(node.argument);
+    return promiseRejectArgument(node.argument, shadowed);
   }
 
   return null;
 };
 
-const isErrorConstructor = (callee: Node): boolean => {
+const isErrorConstructor = (callee: Node, shadowed: ReadonlySet<string>): boolean => {
   if (callee.type !== 'Identifier') {
     return false;
   }
 
   const name = callee.name;
+
+  if (shadowed.has(name)) {
+    return false;
+  }
 
   return (
     name === 'Error' ||
@@ -285,8 +411,8 @@ const isErrorConstructor = (callee: Node): boolean => {
   );
 };
 
-const isPromiseFactoryCall = (expr: Node): boolean => {
-  // Dynamic import expression — always returns a Promise.
+const isPromiseFactoryCall = (expr: Node, shadowed: ReadonlySet<string>): boolean => {
+  // Dynamic import expression — always returns a Promise (a syntax fact, no name involved).
   if (expr.type === 'ImportExpression') {
     return true;
   }
@@ -295,7 +421,7 @@ const isPromiseFactoryCall = (expr: Node): boolean => {
   if (expr.type === 'NewExpression') {
     const callee = expr.callee;
 
-    return callee.type === 'Identifier' && callee.name === 'Promise';
+    return callee.type === 'Identifier' && callee.name === 'Promise' && !shadowed.has('Promise');
   }
 
   if (expr.type !== 'CallExpression') {
@@ -311,7 +437,7 @@ const isPromiseFactoryCall = (expr: Node): boolean => {
   const obj = callee.object;
   const prop = callee.property;
 
-  if (obj.type !== 'Identifier' || obj.name !== 'Promise') {
+  if (obj.type !== 'Identifier' || obj.name !== 'Promise' || shadowed.has('Promise')) {
     return false;
   }
 
@@ -734,6 +860,8 @@ interface CandidateInfo {
 
 const collectFindings = (program: Node, sourceText: string, filePath: string, gildash: Gildash | null): ErrorFlowFinding[] => {
   const findings: ErrorFlowFinding[] = [];
+  // Spec-name identity gate: names shadowed by a file-local binding are not spec facts here.
+  const shadowed = collectShadowedSpecNames(program);
   // Traversal state read by return-await-in-try: are we inside an async function, and inside the
   // *block* of a try that has a catch clause? Maintained by the walker, saved/restored per function.
   let inAsyncFunction = false;
@@ -887,13 +1015,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
           return false;
         }
 
-        const arg = throwOrRejectArgument(node);
+        const arg = throwOrRejectArgument(node, shadowed);
 
         if (arg === null || arg.type !== 'NewExpression') {
           return true;
         }
 
-        if (isErrorConstructor(arg.callee)) {
+        if (isErrorConstructor(arg.callee, shadowed)) {
           report('missing-error-cause', node);
         }
 
@@ -985,7 +1113,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         return false;
       }
 
-      const arg = throwOrRejectArgument(node);
+      const arg = throwOrRejectArgument(node, shadowed);
 
       if (arg === null) {
         return true;
@@ -1017,7 +1145,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         const newExpr = localNewExpressions.get(varName);
 
         if (newExpr !== undefined && newExpr.type === 'NewExpression') {
-          if (isErrorConstructor(newExpr.callee)) {
+          if (isErrorConstructor(newExpr.callee, shadowed)) {
             reportIfErrorLacksCause(newExpr);
           }
         }
@@ -1030,7 +1158,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       }
 
       // Prefer a specific finding for Error constructors without { cause }.
-      if (isErrorConstructor(arg.callee)) {
+      if (isErrorConstructor(arg.callee, shadowed)) {
         reportIfErrorLacksCause(arg);
 
         return true;
@@ -1116,7 +1244,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
   // throw-non-error: flag only when the thrown value is provably not an Error (loses stack/cause).
   const ruleThrowNonError = (node: NodeOfType<'ThrowStatement'>): void => {
-    if (isProvablyNonErrorThrow(node.argument, oracle)) {
+    if (isProvablyNonErrorThrow(node.argument, oracle, shadowed)) {
       report('throw-non-error', node);
     }
   };
@@ -1125,12 +1253,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   // executor param named `reject` (a real rejection becomes a silent resolution).
   const rulePromiseConstructorHygiene = (node: NodeOfType<'NewExpression'>): void => {
     const callee = node.callee;
-    const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise';
+    const isPromiseIdent = callee.type === 'Identifier' && callee.name === 'Promise' && !shadowed.has('Promise');
     const isPromiseMember =
       !isPromiseIdent &&
       callee.type === 'MemberExpression' &&
       callee.object.type === 'Identifier' &&
       (callee.object.name === 'globalThis' || callee.object.name === 'window' || callee.object.name === 'self') &&
+      !shadowed.has(callee.object.name) &&
       callee.property.type === 'Identifier' &&
       callee.property.name === 'Promise';
 
@@ -1243,11 +1372,12 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       method === 'reject' &&
       callee.type === 'MemberExpression' &&
       callee.object.type === 'Identifier' &&
-      callee.object.name === 'Promise'
+      callee.object.name === 'Promise' &&
+      !shadowed.has('Promise')
     ) {
       const first = node.arguments[0];
 
-      if (first !== undefined && isProvablyNonErrorThrow(first, oracle)) {
+      if (first !== undefined && isProvablyNonErrorThrow(first, oracle, shadowed)) {
         report('throw-non-error', node);
       }
     }
@@ -1287,7 +1417,7 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     const target = expr.type === 'ChainExpression' ? expr.expression : expr;
 
     // Promise.* / new Promise / import() created but not observed (syntactic).
-    if (isPromiseFactoryCall(target)) {
+    if (isPromiseFactoryCall(target, shadowed)) {
       report('floating-promises', node);
 
       return;
