@@ -69,9 +69,6 @@ describe('golden/error-flow', () => {
   rg('reject-non-error-dead');
   rg('reject-error-keep');
 
-  // ── no-callback-in-promise (syntactic): node-style callback inside a .then handler ──
-  rg('no-callback-in-promise-dead');
-
   // ── missing-error-cause: cause-preserving throws never flag (incl. FP-A/FP-B regression guards) ──
   rg('missing-error-cause-keep');
 

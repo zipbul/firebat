@@ -110,17 +110,6 @@ Detects error handling anti-patterns. Covers throw non-Error (throw & `Promise.r
 
 </think>
 
-## EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE
-
-**Cause:** A callback-style API is used inside a Promise chain, mixing two async patterns and risking unhandled errors.
-
-<think>
-
-1. Read the callback-style API call. Check if a Promise-based alternative exists (e.g., `fs/promises` instead of `fs`, `util.promisify()` for Node.js callbacks). If so, replace the callback API with the Promise version.
-2. If no Promise alternative exists, wrap the callback in `new Promise((resolve, reject) => { api(args, (err, result) => err ? reject(err) : resolve(result)) })` and await it.
-
-</think>
-
 ## EF_RETURN_AWAIT_IN_TRY
 
 **Cause:** A return statement inside a try block does not await a promise-returning expression, so the catch clause cannot intercept rejections.

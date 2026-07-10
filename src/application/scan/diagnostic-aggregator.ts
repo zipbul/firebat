@@ -202,13 +202,6 @@ export const FIREBAT_CODE_CATALOG = {
       'If the variable is truly unused after assignment, add `await` before the assignment expression, or remove the assignment if the result is not needed.',
     ],
   },
-  EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE: {
-    cause: 'A callback-style API is used inside a Promise chain, mixing two async patterns and risking unhandled errors.',
-    think: [
-      'Read the callback-style API call. Check if a Promise-based alternative exists (e.g., `fs/promises` instead of `fs`, `util.promisify()` for Node.js callbacks). If so, replace the callback API with the Promise version.',
-      'If no Promise alternative exists, wrap the callback in `new Promise((resolve, reject) => { api(args, (err, result) => err ? reject(err) : resolve(result)) })` and await it.',
-    ],
-  },
   EF_EMPTY_CATCH: {
     cause:
       'A catch block with no statements (or an empty `.catch(…)` / `.then(_, …)` rejection handler) silently swallows the caught error — its observability, propagation and cause are all lost.',

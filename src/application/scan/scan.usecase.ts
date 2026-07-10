@@ -279,7 +279,6 @@ const ERROR_FLOW_KIND_TO_CODE: Record<Exclude<ErrorFlowFindingKind, 'tool-unavai
   'catch-or-return': 'EF_UNOBSERVED_PROMISE_CATCH_OR_RETURN',
   'misused-promises': 'EF_UNOBSERVED_PROMISE_MISUSED',
   'unobserved-variable': 'EF_UNOBSERVED_PROMISE_VARIABLE',
-  'no-callback-in-promise': 'EF_UNOBSERVED_PROMISE_CALLBACK_IN_PROMISE',
   'empty-catch': 'EF_EMPTY_CATCH',
 };
 const INDIRECTION_KIND_TO_CODE: Readonly<Record<IndirectionFindingKind, FirebatCatalogCode>> = {

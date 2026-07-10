@@ -93,11 +93,10 @@ describe('features/error-flow/types — structural shape', () => {
       'catch-or-return',
       'misused-promises',
       'unobserved-variable',
-      'no-callback-in-promise',
       'empty-catch',
     ] satisfies import('./types').ErrorFlowFindingKind[];
 
-    expect(kinds.length).toBe(12);
+    expect(kinds.length).toBe(11);
     expect(kinds[0]).toBe('tool-unavailable');
   });
 });

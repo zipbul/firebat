@@ -16,19 +16,6 @@ const noopGildash = {
 const kindsFor = (code: string): readonly string[] =>
   analyzeErrorFlow([parseSource('/virtual/src/sample.ts', code)], { gildash: noopGildash }).map(f => f.kind);
 
-describe('coverage — no-callback-in-promise in the .catch handler branch', () => {
-  it('flags a node-style callback inside a .catch handler (not just .then)', () => {
-    const code = [
-      'declare const fs: { readFile(p: string, cb: (e: unknown, d: unknown) => void): void };',
-      'export function f(p: Promise<void>): Promise<void> {',
-      '  return p.catch(() => { fs.readFile("a", (_e, _d) => {}); });',
-      '}',
-    ].join('\n');
-
-    expect(kindsFor(code).filter(k => k === 'no-callback-in-promise').length).toBe(1);
-  });
-});
-
 describe('coverage — misused-promises array discard paths and the full method sets', () => {
   it('flags a map result discarded by the void operator (isResultDiscarded void branch)', () => {
     const code = 'export function f(a: number[]): void { void a.map(async i => i); }';
@@ -70,19 +57,6 @@ describe('coverage — promise-constructor-hygiene global-object member receiver
     ].join('\n');
 
     expect(kindsFor(code)).toContain('promise-constructor-hygiene');
-  });
-});
-
-describe('coverage — no-callback-in-promise negative branch', () => {
-  it('does NOT flag a node-style method name whose last argument is not a function literal', () => {
-    const code = [
-      'declare const fs: { readFile(p: string): Promise<string> };',
-      'export function f(p: Promise<void>): Promise<string> {',
-      '  return p.then(() => fs.readFile("a"));',
-      '}',
-    ].join('\n');
-
-    expect(kindsFor(code)).not.toContain('no-callback-in-promise');
   });
 });
 

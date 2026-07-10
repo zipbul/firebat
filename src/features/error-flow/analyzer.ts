@@ -576,21 +576,6 @@ const isResultDiscarded = (call: Node, parent: Node | null): boolean => {
   return false;
 };
 
-const nodeStyleCallbackMethods = new Set([
-  'readFile',
-  'writeFile',
-  'readdir',
-  'stat',
-  'unlink',
-  'mkdir',
-  'rmdir',
-  'access',
-  'rename',
-  'copyFile',
-  'exec',
-  'execFile',
-  'spawn',
-]);
 // Array iteration methods misused with an async callback (misused-promises).
 //  - always-W: forEach ignores the result; predicate/comparator methods coerce the returned
 //    (always-truthy) promise, so the async intent is lost regardless of where the value goes.
@@ -598,36 +583,6 @@ const nodeStyleCallbackMethods = new Set([
 //    rejections are observable when that value flows somewhere — only a discarded result loses them.
 const alwaysMisusedArrayMethods = new Set(['forEach', 'filter', 'some', 'every', 'find', 'findIndex', 'sort']);
 const resultMisusedArrayMethods = new Set(['map', 'flatMap', 'reduce', 'reduceRight']);
-
-const containsNodeStyleCallback = (body: Node): boolean => {
-  let found = false;
-
-  walkOxcTree(body, node => {
-    if (node.type === 'CallExpression') {
-      const method = getMemberPropertyName(node.callee);
-
-      if (method !== null && nodeStyleCallbackMethods.has(method)) {
-        const args = node.arguments;
-        const last = args[args.length - 1];
-        const isCallbackArg = last !== undefined && isFunctionLiteral(last);
-
-        if (isCallbackArg) {
-          found = true;
-
-          return false;
-        }
-      }
-    }
-
-    if (isFunctionScope(node)) {
-      return false;
-    }
-
-    return true;
-  });
-
-  return found;
-};
 
 const containsIdentifierUse = (node: Node, name: string): boolean => {
   let found = false;
@@ -1248,22 +1203,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     reportWith('unsafe-finally', node, 'finally callback throws');
   };
 
-  // no-callback-in-promise: a node-style callback API inside a then/catch handler. One finding per
-  // call (a `.then(onOk, onErr)` with such a callback in both handlers is a single misuse).
-  const ruleNoCallbackInPromise = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
-    if (method !== 'then' && method !== 'catch') {
-      return;
-    }
-
-    for (const arg of node.arguments) {
-      if (isFunctionLiteral(arg) && arg.body !== null && containsNodeStyleCallback(arg.body)) {
-        report('no-callback-in-promise', node);
-
-        return;
-      }
-    }
-  };
-
   // misused-promises: an async callback to a sync array method (syntactic fast-path), or a
   // thenable-returning callback in any slot whose contextual type returns void (gildash-gated). The
   // array path takes precedence so `forEach` is reported once; result methods (map/reduce) expect a
@@ -1325,12 +1264,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
     }
   };
 
-  // The five CallExpression-keyed rules, sharing only the computed method name.
+  // The four CallExpression-keyed rules, sharing only the computed method name.
   const ruleCallExpression = (node: NodeOfType<'CallExpression'>, parent: Node | null): void => {
     const method = getMemberPropertyName(node.callee);
 
     ruleUnsafeFinallyCallback(node, method);
-    ruleNoCallbackInPromise(node, method);
     ruleMisusedPromises(node, parent, method);
     ruleRejectNonError(node, method);
     ruleEmptyRejectionHandler(node, method);

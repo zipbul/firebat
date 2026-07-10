@@ -83,24 +83,6 @@ describe('integration/error-flow — RC4 unobserved-variable: binding visibility
   });
 });
 
-describe('integration/error-flow — RC5 emit discipline: one finding per node', () => {
-  it('FN-E: a .then(onOk, onErr) with node-style callbacks in both handlers emits exactly one', async () => {
-    const code = [
-      'declare function go(): Promise<void>;',
-      'declare const fs: { readFile(p: string, cb: (e: unknown, d: unknown) => void): void };',
-      'export function f(): void {',
-      '  go().then(',
-      '    () => { fs.readFile("a", (_e, _d) => {}); },',
-      '    () => { fs.readFile("b", (_e, _d) => {}); },',
-      '  );',
-      '}',
-    ].join('\n');
-    const hits = (await errorFlowKindsFor(code)).filter(k => k === 'no-callback-in-promise');
-
-    expect(hits.length).toBe(1);
-  });
-});
-
 describe('integration/error-flow — RC6 misused-promises: callback return type', () => {
   const flaggedCases: KindCase[] = [
     {

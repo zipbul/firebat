@@ -947,31 +947,12 @@ describe('error-flow/analyzer', () => {
     await expectKindCount(source, 'floating-promises', expected);
   });
 
-  // misused-promises / no-callback-in-promise: single representative pair each.
+  // misused-promises: single representative negative case.
   it.each<[string, string, ErrorFlowFindingKind, number]>([
     [
       'a sync callback in forEach is not misused-promises',
       'export function f() { [1,2].forEach(x => console.log(x)); }',
       'misused-promises',
-      0,
-    ],
-    [
-      'a callback API used inside then is no-callback-in-promise',
-      [
-        'import * as fs from "fs";',
-        'export const p = fetch("/api").then(res => {',
-        '  fs.readFile("data.txt", (err, data) => {',
-        '    console.log(data);',
-        '  });',
-        '});',
-      ].join('\n'),
-      'no-callback-in-promise',
-      1,
-    ],
-    [
-      'no callback API is used is not no-callback-in-promise',
-      ['export const p = fetch("/api").then(res => {', '  return res.json();', '});'].join('\n'),
-      'no-callback-in-promise',
       0,
     ],
   ])('should resolve %s', async (_label, source, kind, expected) => {
