@@ -282,6 +282,18 @@ const collectShadowedSpecNames = (program: Node): ReadonlySet<string> => {
 
         break;
       }
+      case 'TSImportEqualsDeclaration':
+        // `import Promise = require('bluebird')` binds a runtime value — a shadow.
+        addId((node as Node & { readonly id?: Node | null }).id);
+        break;
+      case 'AssignmentExpression': {
+        // `Promise = fake` is not a declaration but mutates what the free name refers to at
+        // runtime — after it, the name's global identity is no longer a closed fact. Hold.
+        const left = (node as Node & { readonly left: Node }).left;
+
+        addId(left);
+        break;
+      }
       case 'CatchClause': {
         const param = (node as Node & { readonly param: Node | null }).param;
 
@@ -1587,7 +1599,8 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return;
     }
 
-    // Fall back to generic traversal (parentheses are already normalized away upstream).
+    // Fall back to generic traversal. (Parenthesized/sequence wrappers make the chain
+    // walkers exit early — a HOLD, never a misfire.)
     descend(node);
   };
 

@@ -1521,10 +1521,48 @@ describe('error-flow/analyzer', () => {
       await expectKindCount(source, 'misused-promises', 0);
     });
 
+    it('holds misused-promises for an ANY-typed receiver even though `any` is assignable to arrays', async () => {
+      // Real-gildash shape: assignability says true (any is assignable to everything) but the
+      // resolved type is `any` — assignability alone proves nothing, the oracle must hold.
+      const source = ['declare const items: any;', 'export function f(): void { items.forEach(async (i: number) => { await i; }); }'].join('\n');
+      const program = [parseSource('/virtual/src/features/any-receiver.ts', source)];
+      const gildash = {
+        isThenableAtSpan: () => null,
+        getContextualCallReturnsAtSpan: () => null,
+        isTypeAssignableToTypeAtSpan: () => true,
+        getExpressionTypeAtSpan: () => ({ text: 'any', flags: 1, isUnion: false, isIntersection: false, isGeneric: false }),
+      } as unknown as Gildash;
+      const findings = analyzeErrorFlow(program, { gildash });
+
+      expect(findings.filter(f => f.kind === 'misused-promises').length).toBe(0);
+    });
+
+    it('reports misused-promises when gildash proves a concrete array receiver type', async () => {
+      const source = ['declare const items: number[];', 'export function f(): void { items.forEach(async (i: number) => { await i; }); }'].join(
+        '\n',
+      );
+      const program = [parseSource('/virtual/src/features/typed-receiver.ts', source)];
+      const gildash = {
+        isThenableAtSpan: () => null,
+        getContextualCallReturnsAtSpan: () => null,
+        isTypeAssignableToTypeAtSpan: () => true,
+        getExpressionTypeAtSpan: () => ({ text: 'number[]', flags: 1 << 19, isUnion: false, isIntersection: false, isGeneric: false }),
+      } as unknown as Gildash;
+      const findings = analyzeErrorFlow(program, { gildash });
+
+      expect(findings.filter(f => f.kind === 'misused-promises').length).toBe(1);
+    });
+
     it('still reports misused-promises for an async callback on an array-literal receiver (syntactic)', async () => {
       const source = 'export function f(): void { [1, 2].forEach(async i => { await i; }); }';
 
       await expectKindCount(source, 'misused-promises', 1);
+    });
+
+    it('treats `import Promise = require(...)` as a shadowing binding (TSImportEquals)', async () => {
+      const source = ['import Promise = require("bluebird");', 'export function f() { return Promise.reject("plain string"); }'].join('\n');
+
+      await expectKindCount(source, 'throw-non-error', 0);
     });
   });
 });

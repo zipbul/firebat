@@ -238,60 +238,62 @@ describe('createTypeOracle — isErrorSubtype', () => {
   });
 });
 
-describe('createTypeOracle — isProvenNonThenable (only true when gildash PROVES not-thenable)', () => {
-  it('true when isThenableAtSpan resolves to false', () => {
-    expect(oracleWith({ isThenableAtSpan: () => false }).isProvenNonThenable(NODE)).toBe(true);
+describe('createTypeOracle — isProvenArray (only true when gildash PROVES Array identity)', () => {
+  // `any`/`unknown` are assignable to EVERYTHING, so bare assignability cannot prove array
+  // identity — the receiver's resolved type must first exclude any/unknown (mirror of the
+  // thenable probe's built-in any-guard). Otherwise an any-typed fluent receiver (query
+  // builders, untyped libs) would "prove" array and fire a false W.
+
+  it('true when assignable AND the resolved type is a concrete object type', () => {
+    const oracle = oracleWith({
+      isTypeAssignableToTypeAtSpan: () => true,
+      getExpressionTypeAtSpan: () => leaf(OBJECT, 'number[]'),
+    });
+
+    expect(oracle.isProvenArray(NODE)).toBe(true);
   });
 
-  it('false when the type IS thenable', () => {
-    expect(oracleWith({ isThenableAtSpan: () => true }).isProvenNonThenable(NODE)).toBe(false);
+  it('false when assignable but the resolved type is `any` (assignability proves nothing)', () => {
+    const oracle = oracleWith({
+      isTypeAssignableToTypeAtSpan: () => true,
+      getExpressionTypeAtSpan: () => leaf(ANY, 'any'),
+    });
+
+    expect(oracle.isProvenArray(NODE)).toBe(false);
   });
 
-  it('false when unresolved (null) — not proven', () => {
-    expect(oracleWith({ isThenableAtSpan: () => null }).isProvenNonThenable(NODE)).toBe(false);
+  it('false when assignable but the resolved type is `unknown`', () => {
+    const oracle = oracleWith({
+      isTypeAssignableToTypeAtSpan: () => true,
+      getExpressionTypeAtSpan: () => leaf(UNKNOWN, 'unknown'),
+    });
+
+    expect(oracle.isProvenArray(NODE)).toBe(false);
+  });
+
+  it('false when assignable but the receiver type cannot be resolved (null)', () => {
+    const oracle = oracleWith({
+      isTypeAssignableToTypeAtSpan: () => true,
+      getExpressionTypeAtSpan: () => null,
+    });
+
+    expect(oracle.isProvenArray(NODE)).toBe(false);
+  });
+
+  it('false when not assignable to ReadonlyArray', () => {
+    const oracle = oracleWith({
+      isTypeAssignableToTypeAtSpan: () => false,
+      getExpressionTypeAtSpan: () => leaf(OBJECT, 'Set<number>'),
+    });
+
+    expect(oracle.isProvenArray(NODE)).toBe(false);
   });
 
   it('false when gildash is absent', () => {
-    expect(createTypeOracle(null, FILE).isProvenNonThenable(NODE)).toBe(false);
+    expect(createTypeOracle(null, FILE).isProvenArray(NODE)).toBe(false);
   });
 
   it('false when the query throws', () => {
-    expect(oracleWith({ isThenableAtSpan: throws }).isProvenNonThenable(NODE)).toBe(false);
-  });
-});
-
-describe('createTypeOracle — isProvenNonArray (only true when gildash PROVES not-Array)', () => {
-  it('true when not assignable to ReadonlyArray (resolved false)', () => {
-    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => false }).isProvenNonArray(NODE)).toBe(true);
-  });
-
-  it('false when assignable to ReadonlyArray (is an array)', () => {
-    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => true }).isProvenNonArray(NODE)).toBe(false);
-  });
-
-  it('false when unresolved (null) — not proven', () => {
-    expect(oracleWith({ isTypeAssignableToTypeAtSpan: () => null }).isProvenNonArray(NODE)).toBe(false);
-  });
-
-  it('false when gildash is absent', () => {
-    expect(createTypeOracle(null, FILE).isProvenNonArray(NODE)).toBe(false);
-  });
-
-  it('false when the query throws', () => {
-    expect(oracleWith({ isTypeAssignableToTypeAtSpan: throws }).isProvenNonArray(NODE)).toBe(false);
-  });
-
-  it('queries assignability to ReadonlyArray<unknown> (side-effect)', () => {
-    const calls: unknown[] = [];
-
-    oracleWith({
-      isTypeAssignableToTypeAtSpan: (f, span, target) => {
-        calls.push({ f, span, target });
-
-        return false;
-      },
-    }).isProvenNonArray(NODE);
-
-    expect(calls).toEqual([{ f: FILE, span: SPAN, target: 'ReadonlyArray<unknown>' }]);
+    expect(oracleWith({ isTypeAssignableToTypeAtSpan: throws, getExpressionTypeAtSpan: () => leaf(OBJECT) }).isProvenArray(NODE)).toBe(false);
   });
 });

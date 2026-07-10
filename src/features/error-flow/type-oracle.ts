@@ -10,6 +10,8 @@ const FLAG_ANY_OR_UNKNOWN = 0x3;
 const FLAG_PRIMITIVE = 0x3ffc;
 // Void (1<<14) and Undefined (1<<15): 0x4000 | 0x8000.
 const FLAG_VOID_OR_UNDEFINED = 0xc000;
+// Never (1<<17) — assignable to everything, so it proves no identity either.
+const FLAG_NEVER = 0x20000;
 
 // A type proves the value is a bare primitive (so, definitely not an Error) only when no part of
 // it could be `any`/`unknown` and every constituent is a primitive. `string | Error` (mixed) and
@@ -54,20 +56,20 @@ export interface TypeOracle {
   expectsVoidReturningCallback(argNode: Node): boolean;
   /** The expression's static type is a subtype of `Error` (a thrown one would carry a stack). Conservative `false` (see isThenable). */
   isErrorSubtype(node: Node): boolean;
-  /** gildash PROVES the expression's type is not a thenable. `false` when thenable, unknown, or gildash absent — so a syntactic rule keeps firing unless the negative is proven. */
-  isProvenNonThenable(node: Node): boolean;
-  /** gildash PROVES the expression's type is not an array (not assignable to `ReadonlyArray`). `false` when array, unknown, or gildash absent. */
-  isProvenNonArray(node: Node): boolean;
-  /** The receiver's static type is provably an Array (assignable to ReadonlyArray<unknown>). Conservative `false`. */
+  /**
+   * The receiver's static type is provably an Array: assignable to `ReadonlyArray<unknown>` AND
+   * the resolved type is not `any`/`unknown`/`never` (those are assignable to everything, so bare
+   * assignability proves no identity — the guard mirrors the thenable probe's built-in any-guard).
+   * Conservative `false` (see isThenable).
+   */
   isProvenArray(node: Node): boolean;
 }
 
 export const createTypeOracle = (gildash: Gildash | null, filePath: string): TypeOracle => {
   const spanOf = (node: Node) => ({ start: node.start, end: node.end });
 
-  // The single thenable probe both isThenable and isProvenNonThenable build on. Returns
-  // gildash's tri-state verdict (`true` thenable, `false` proven non-thenable) or `null`
-  // when gildash is absent / undecided / threw. The two callers read opposite ends of it.
+  // The thenable probe behind isThenable. Returns gildash's tri-state verdict (`true` thenable,
+  // `false` proven non-thenable) or `null` when gildash is absent / undecided / threw.
   const queryThenable = (node: Node): boolean | null => {
     if (gildash === null) {
       return null;
@@ -125,28 +127,20 @@ export const createTypeOracle = (gildash: Gildash | null, filePath: string): Typ
       }
     },
 
-    isProvenNonThenable(node) {
-      // `false` (not null) means gildash resolved the type and it is not thenable.
-      return queryThenable(node) === false;
-    },
-
-    isProvenNonArray(node) {
-      if (gildash === null) {
-        return false;
-      }
-
-      try {
-        return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'ReadonlyArray<unknown>') === false;
-      } catch {
-        return false;
-      }
-    },
     isProvenArray(node) {
       if (gildash === null) {
         return false;
       }
 
       try {
+        // `any`/`unknown`/`never` are assignable to (or from) everything — bare assignability
+        // proves no array identity for them, so resolve the receiver's type first and hold.
+        const type = gildash.getExpressionTypeAtSpan(filePath, spanOf(node));
+
+        if (type === null || (type.flags & (FLAG_ANY_OR_UNKNOWN | FLAG_NEVER)) !== 0) {
+          return false;
+        }
+
         return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'ReadonlyArray<unknown>') === true;
       } catch {
         return false;
