@@ -7,8 +7,8 @@ export function floatingPromise(): void {
   Promise.resolve('ignored');
 }
 
-export function misusedPromises(items: string[]): void {
-  items.forEach(async (item) => {
+export function misusedPromises(): void {
+  ['a', 'b'].forEach(async (item) => {
     await Promise.resolve(item);
   });
 }
@@ -21,7 +21,7 @@ export function preferCatch(): void {
 }
 
 export function preferAwaitToThen(): void {
-  fetchData()
+  Promise.resolve('data')
     .then((data) => {
       return data.toUpperCase();
     })
@@ -32,5 +32,5 @@ export function preferAwaitToThen(): void {
 }
 
 export function catchOrReturn(): void {
-  fetchData().then((data) => console.log(data));
+  Promise.resolve('data').then((data) => console.log(data));
 }

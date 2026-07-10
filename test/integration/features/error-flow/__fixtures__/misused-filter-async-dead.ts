@@ -1,3 +1,3 @@
-export async function f(items: number[]): Promise<unknown[]> {
-  return Promise.all(items.filter(async (i) => i > 0));
+export async function f(): Promise<unknown[]> {
+  return Promise.all([1, 2, 3].filter(async (i) => i > 0));
 }

@@ -511,6 +511,38 @@ const chainHasCatch = (expr: Node): boolean => {
   return false;
 };
 
+// 구문 spec-fact Promise 체인: 루트가 Promise 팩토리(new Promise / Promise.* / import(),
+// 섀도잉 게이트 통과)이고, 루트에서 이 표현식까지의 모든 멤버-호출 hop이 Promise.prototype의
+// 명세 체인 메서드(then/catch/finally — 반환도 명세상 Promise)일 때 true. 이 경우 최종 값이
+// Promise라는 것이 언어 명세만으로 닫힌다(이름 추측 아님). 임의 메서드 hop이 끼면 불명 → false.
+const specChainMethods = new Set(['then', 'catch', 'finally']);
+
+const chainRootIsSpecFactPromise = (expr: Node, shadowed: ReadonlySet<string>): boolean => {
+  let current: Node = expr;
+
+  while (current.type === 'CallExpression') {
+    if (isPromiseFactoryCall(current, shadowed)) {
+      return true;
+    }
+
+    const callee = current.callee;
+
+    if (callee.type !== 'MemberExpression') {
+      return false;
+    }
+
+    const method = getMemberPropertyName(callee);
+
+    if (method === null || !specChainMethods.has(method)) {
+      return false;
+    }
+
+    current = callee.object;
+  }
+
+  return isPromiseFactoryCall(current, shadowed);
+};
+
 // True when the chain contains a `.then(...)` call anywhere — a started-but-incomplete chain
 // whose rejection is unobserved unless a `.catch` also appears (checked separately).
 const chainHasThen = (expr: Node): boolean => {
@@ -1316,8 +1348,9 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
   };
 
   // unsafe-finally (promise form): `.finally(() => { throw … })` masks the original rejection
-  // (a returned value is ignored by Promise.finally, so it is not flagged). Suppressed when gildash
-  // proves the receiver is not a thenable (a custom `.finally`, not Promise.prototype.finally).
+  // (a returned value is ignored by Promise.finally, so it is not flagged). Fires only when the
+  // receiver's promise identity CLOSES — a syntactic spec-fact chain or a gildash thenable proof.
+  // A bare `.finally` NAME on an arbitrary receiver is not identity (custom fluent APIs) — hold.
   const ruleUnsafeFinallyCallback = (node: NodeOfType<'CallExpression'>, method: string | null): void => {
     if (method !== 'finally' || !finallyCallbackThrows(node.arguments[0])) {
       return;
@@ -1325,7 +1358,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
 
     const callee = node.callee;
 
-    if (callee.type === 'MemberExpression' && oracle.isProvenNonThenable(callee.object)) {
+    if (callee.type !== 'MemberExpression') {
+      return;
+    }
+
+    const receiver = callee.object;
+
+    if (!(chainRootIsSpecFactPromise(receiver, shadowed) || oracle.isThenable(receiver))) {
       return;
     }
 
@@ -1344,11 +1383,13 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       const first = node.arguments[0];
       const isAsyncFn = first !== undefined && isFunctionLiteral(first) && first.async === true;
       const callee = node.callee;
-      // Suppress when gildash proves the receiver is not an Array — a like-named method on a custom
-      // type (RxJS, a query builder) may handle the promise itself. Unproven/degraded → fire.
-      const provenNonArray = callee.type === 'MemberExpression' && oracle.isProvenNonArray(callee.object);
+      // The receiver's ARRAY identity must close before the name means Array.prototype.forEach/…:
+      // an ArrayExpression literal receiver (syntax fact) or a gildash array proof. A bare method
+      // NAME on an arbitrary receiver (RxJS, query builders) is not identity — hold.
+      const receiver = callee.type === 'MemberExpression' ? callee.object : null;
+      const arrayFact = receiver !== null && (receiver.type === 'ArrayExpression' || oracle.isProvenArray(receiver));
 
-      if (isAsyncFn && !provenNonArray && (alwaysMisused || isResultDiscarded(node, parent))) {
+      if (isAsyncFn && arrayFact && (alwaysMisused || isResultDiscarded(node, parent))) {
         reportWith('misused-promises', node, `${method} callback is async`);
 
         return;
@@ -1427,9 +1468,11 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
       return;
     }
 
-    if (chainHasThen(target)) {
-      // catch-or-return: a `.then` chain with no `.catch` anywhere — rejection unobserved. Syntactic:
-      // `.then` is itself the thenable signature, so the chain is promise-like by construction.
+    if (chainHasThen(target) && (chainRootIsSpecFactPromise(target, shadowed) || oracle.isThenable(target))) {
+      // catch-or-return: a `.then` chain with no `.catch` anywhere — rejection unobserved. The
+      // chain's promise identity must CLOSE first: a syntactic spec-fact root (new Promise /
+      // Promise.* / import() through spec chain methods) or a gildash thenable proof. A bare
+      // `.then` NAME on an arbitrary receiver is not identity (parser combinators etc.) — hold.
       report('catch-or-return', node);
     } else if (oracle.isThenable(target)) {
       // floating-promises: a discarded bare/method/optional call gildash proves is a promise.

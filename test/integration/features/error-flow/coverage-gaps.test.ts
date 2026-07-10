@@ -18,31 +18,31 @@ const kindsFor = (code: string): readonly string[] =>
 
 describe('coverage — misused-promises array discard paths and the full method sets', () => {
   it('flags a map result discarded by the void operator (isResultDiscarded void branch)', () => {
-    const code = 'export function f(a: number[]): void { void a.map(async i => i); }';
+    const code = 'export function f(): void { void [1, 2].map(async i => i); }';
 
     expect(kindsFor(code)).toContain('misused-promises');
   });
 
   it('flags a map result discarded as a non-final sequence operand (isResultDiscarded sequence branch)', () => {
-    const code = 'export function f(a: number[]): number { return (a.map(async i => i), 0); }';
+    const code = 'export function f(): number { return ([1, 2].map(async i => i), 0); }';
 
     expect(kindsFor(code)).toContain('misused-promises');
   });
 
   it('does NOT flag a map result kept as the final sequence operand', () => {
-    const code = 'export function f(a: number[]): Promise<number>[] { return (0, a.map(async i => i)); }';
+    const code = 'export function f(): Promise<number>[] { return (0, [1, 2].map(async i => i)); }';
 
     expect(kindsFor(code)).not.toContain('misused-promises');
   });
 
   it.each(['some', 'every', 'find', 'findIndex', 'sort'])('flags an async callback to the always-misused method %s', method => {
-    const code = `export function f(a: number[]): void { a.${method}(async x => x as unknown as boolean); }`;
+    const code = `export function f(): void { [1, 2].${method}(async x => x as unknown as boolean); }`;
 
     expect(kindsFor(code)).toContain('misused-promises');
   });
 
   it.each(['reduce', 'reduceRight'])('flags an async callback to the result method %s when the result is discarded', method => {
-    const code = `export function f(a: number[]): void { a.${method}(async (acc, x) => x, 0 as unknown as number); }`;
+    const code = `export function f(): void { [1, 2].${method}(async (acc, x) => x, 0 as unknown as number); }`;
 
     expect(kindsFor(code)).toContain('misused-promises');
   });

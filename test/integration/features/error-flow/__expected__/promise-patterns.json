@@ -30,7 +30,7 @@
     }
   },
   {
-    "evidence": "fetchData()",
+    "evidence": "Promise.resolve('data')",
     "file": "/virtual/promise-patterns.ts",
     "kind": "catch-or-return",
     "span": {
@@ -45,12 +45,12 @@
     }
   },
   {
-    "evidence": "fetchData().then((data) => console.log(data));",
+    "evidence": "Promise.resolve('data').then((data) => console.log(data));",
     "file": "/virtual/promise-patterns.ts",
     "kind": "catch-or-return",
     "span": {
       "end": {
-        "column": 48,
+        "column": 60,
         "line": 35
       },
       "start": {

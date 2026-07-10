@@ -58,6 +58,8 @@ export interface TypeOracle {
   isProvenNonThenable(node: Node): boolean;
   /** gildash PROVES the expression's type is not an array (not assignable to `ReadonlyArray`). `false` when array, unknown, or gildash absent. */
   isProvenNonArray(node: Node): boolean;
+  /** The receiver's static type is provably an Array (assignable to ReadonlyArray<unknown>). Conservative `false`. */
+  isProvenArray(node: Node): boolean;
 }
 
 export const createTypeOracle = (gildash: Gildash | null, filePath: string): TypeOracle => {
@@ -135,6 +137,17 @@ export const createTypeOracle = (gildash: Gildash | null, filePath: string): Typ
 
       try {
         return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'ReadonlyArray<unknown>') === false;
+      } catch {
+        return false;
+      }
+    },
+    isProvenArray(node) {
+      if (gildash === null) {
+        return false;
+      }
+
+      try {
+        return gildash.isTypeAssignableToTypeAtSpan(filePath, spanOf(node), 'ReadonlyArray<unknown>') === true;
       } catch {
         return false;
       }

@@ -1,3 +1,3 @@
-export async function f(items: number[]): Promise<number[]> {
-  return Promise.all(items.map(async (i) => i + 1));
+export async function f(): Promise<number[]> {
+  return Promise.all([1, 2, 3].map(async (i) => i + 1));
 }

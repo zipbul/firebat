@@ -5,7 +5,7 @@
     "kind": "misused-promises",
     "span": {
       "end": {
-        "column": 53,
+        "column": 57,
         "line": 2
       },
       "start": {

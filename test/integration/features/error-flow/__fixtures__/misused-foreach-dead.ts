@@ -1,5 +1,5 @@
-export function f(items: number[]): void {
-  items.forEach(async (i) => {
+export function f(): void {
+  [1, 2, 3].forEach(async (i) => {
     await Promise.resolve(i);
   });
 }

@@ -10,10 +10,10 @@ export async function awaitedFetch() {
   await p;
 }
 
-// catch-or-return (syntactic — the finding THIS golden pins): a .then() chain with no .catch
+// catch-or-return (syntactic — the finding THIS golden pins): a spec-fact Promise chain with a
+// .then and no .catch. (An arbitrary variable receiver needs a gildash proof — unit-tested.)
 export async function thenFetch() {
-  const p = fetch('/api');
-  p.then(r => console.log(r));
+  Promise.resolve('/api').then(r => console.log(r));
 }
 
 // Should NOT flag: returned

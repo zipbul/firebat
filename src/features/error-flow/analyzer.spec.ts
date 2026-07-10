@@ -97,9 +97,8 @@ describe('error-flow/analyzer', () => {
     const filePath = '/virtual/src/adapters/cli/entry.ts';
     const source = [
       'export function f() {',
-      '  doThing().then(() => 1);',
+      '  Promise.resolve(1).then(() => 1);',
       '}',
-      'function doThing() { return Promise.resolve(1); }',
     ].join('\n');
     // Act
     const findings = await analyzeSingle(filePath, source);
@@ -644,75 +643,67 @@ describe('error-flow/analyzer', () => {
   it.each<[string, string, number]>([
     [
       'a then-chain has no catch',
-      ['export function f() {', '  doThing().then(() => 1);', '}', 'function doThing() { return Promise.resolve(1); }'].join(
-        '\n',
-      ),
+      ['export function f() {', '  Promise.resolve(1).then(() => 1);', '}'].join('\n'),
       1,
     ],
     [
       'then-chain is returned',
       [
         'export function f() {',
-        '  return doThing().then(() => 1);',
+        '  return Promise.resolve(1).then(() => 1);',
         '}',
-        'function doThing() { return Promise.resolve(1); }',
-      ].join('\n'),
+        ].join('\n'),
       0,
     ],
     [
       'then-chain is awaited',
       [
         'export async function f() {',
-        '  await doThing().then(() => 1);',
+        '  await Promise.resolve(1).then(() => 1);',
         '}',
-        'function doThing() { return Promise.resolve(1); }',
-      ].join('\n'),
+        ].join('\n'),
       0,
     ],
     [
       'promise chain has catch',
       [
         'export function f() {',
-        '  doThing().then(() => 1).catch(() => 0);',
+        '  Promise.resolve(1).then(() => 1).catch(() => 0);',
         '}',
-        'function doThing() { return Promise.resolve(1); }',
-      ].join('\n'),
+        ].join('\n'),
       0,
     ],
     [
       'then has a rejection handler (2-arg form)',
       [
         'export function f() {',
-        '  doThing().then(',
+        '  Promise.resolve(1).then(',
         '    (v) => v + 1,',
         '    (e) => 0,',
         '  );',
         '}',
-        'function doThing() { return Promise.resolve(1); }',
-      ].join('\n'),
+        ].join('\n'),
       0,
     ],
     [
       'an earlier then in chain has a rejection handler',
       [
         'export function f() {',
-        '  doThing().then(',
+        '  Promise.resolve(1).then(',
         '    (v) => v + 1,',
         '    (e) => 0,',
         '  ).then((v) => v * 2);',
         '}',
-        'function doThing() { return Promise.resolve(1); }',
-      ].join('\n'),
+        ].join('\n'),
       0,
     ],
     [
       'catch comes before then',
       [
         'export function f() {',
-        '  doThing().catch(() => 0).then(() => 1);',
+        '  Promise.resolve(1).catch(() => 0).then(() => 1);',
         '}',
-        'function doThing() { return Promise.resolve(1); }',
-      ].join('\n'),
+        ].join('\n'),
       0,
     ],
   ])('should resolve catch-or-return when %s', async (_label, source, expected) => {
@@ -1458,6 +1449,82 @@ describe('error-flow/analyzer', () => {
       const source = 'export function f() { return Promise.reject("plain string"); }';
 
       await expectKindCount(source, 'throw-non-error', 1);
+    });
+  });
+
+  // ── thenable identity 게이트: 이름만으로는 W를 만들지 않는다 ────────────────
+  //
+  // `.then`/`.finally`/`forEach`는 명세이름이지만 임의 수신자의 프로퍼티명 매칭만으로는
+  // identity가 안 닫힌다(파서 콤비네이터의 `.then` 등 동명 API). W는 두 사실 중 하나가 만든다:
+  //  (a) 구문 spec-fact 체인 — 루트가 Promise 팩토리(new Promise/Promise.*/import(), 섀도잉
+  //      게이트 통과)이고 모든 hop이 명세 메서드(then/catch/finally: 반환도 명세상 Promise).
+  //  (b) gildash 타입 증명 (oracle.isThenable / 배열 증명).
+  //  misused-promises의 구문 사실은 ArrayExpression 리터럴 수신자다.
+
+  describe('thenable identity gate (name alone never fires)', () => {
+    it('holds catch-or-return for an arbitrary unproven receiver `.then` chain', async () => {
+      const source = ['declare const parser: any;', 'export function f(): void {', '  parser.then((r: unknown) => r);', '}'].join('\n');
+
+      await expectKindCount(source, 'catch-or-return', 0);
+    });
+
+    it('still reports catch-or-return for a spec-fact Promise chain (syntactic root)', async () => {
+      const source = 'export function f(): void { Promise.resolve(1).then(v => v + 1); }';
+
+      await expectKindCount(source, 'catch-or-return', 1);
+    });
+
+    it('holds catch-or-return for a spec-fact-looking chain when Promise is shadowed', async () => {
+      const source = [
+        'import { Promise } from "./parser-lib";',
+        'export function f(): void { Promise.resolve(1).then((v: number) => v + 1); }',
+      ].join('\n');
+
+      await expectKindCount(source, 'catch-or-return', 0);
+    });
+
+    it('reports catch-or-return for an arbitrary receiver when gildash proves it thenable', async () => {
+      const source = [
+        'declare const task: { then(cb: (v: number) => void): unknown };',
+        'export function f(): void { task.then(v => v); }',
+      ].join('\n');
+
+      await expectSemanticKindCount(source, () => true, 'catch-or-return', 1);
+    });
+
+    it('holds unsafe-finally for an arbitrary unproven receiver `.finally(throw)`', async () => {
+      const source = [
+        'declare const parser: any;',
+        'export function f(): void {',
+        "  parser.finally(() => { throw new Error('x'); });",
+        '}',
+      ].join('\n');
+
+      await expectKindCount(source, 'unsafe-finally', 0);
+    });
+
+    it('still reports unsafe-finally on a spec-fact Promise chain (syntactic root)', async () => {
+      const source = "export function f(): void { Promise.resolve(1).finally(() => { throw new Error('x'); }); }";
+
+      await expectKindCount(source, 'unsafe-finally', 1);
+    });
+
+    it('reports unsafe-finally for an arbitrary receiver when gildash proves it thenable', async () => {
+      const source = ['declare const p: any;', "export function f(): void { p.finally(() => { throw new Error('x'); }); }"].join('\n');
+
+      await expectSemanticKindCount(source, () => true, 'unsafe-finally', 1);
+    });
+
+    it('holds misused-promises for an async callback on an unproven receiver forEach', async () => {
+      const source = ['declare const items: any;', 'export function f(): void { items.forEach(async (i: number) => { await i; }); }'].join('\n');
+
+      await expectKindCount(source, 'misused-promises', 0);
+    });
+
+    it('still reports misused-promises for an async callback on an array-literal receiver (syntactic)', async () => {
+      const source = 'export function f(): void { [1, 2].forEach(async i => { await i; }); }';
+
+      await expectKindCount(source, 'misused-promises', 1);
     });
   });
 });

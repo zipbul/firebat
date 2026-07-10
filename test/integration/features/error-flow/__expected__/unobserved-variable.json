@@ -1,17 +1,17 @@
 [
   {
-    "kind": "catch-or-return",
+    "evidence": "Promise.resolve('/api').then(r => console.log(r));",
     "file": "/virtual/unobserved-variable.ts",
+    "kind": "catch-or-return",
     "span": {
-      "start": {
-        "line": 16,
-        "column": 2
-      },
       "end": {
-        "line": 16,
-        "column": 30
+        "column": 52,
+        "line": 16
+      },
+      "start": {
+        "column": 2,
+        "line": 16
       }
-    },
-    "evidence": "p.then(r => console.log(r));"
+    }
   }
 ]

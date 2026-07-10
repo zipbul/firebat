@@ -1,3 +1,3 @@
-export function f(items: number[][]): unknown[] {
-  return items.flatMap(async (i) => i);
+export function f(): unknown[] {
+  return [[1], [2]].flatMap(async (i) => i);
 }
