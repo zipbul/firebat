@@ -536,6 +536,148 @@ describe('analyzer', () => {
     expect(chainFindings.length).toBe(0);
   });
 
+  // ── 체인 identity: 이름 문자열이 아니라 바인딩(노드)으로 잇는다 ────────────
+  //
+  // 체인 hop은 callee가 모듈 최상위의 "유일한" 동명 선언으로 해석될 때만 연결한다
+  // (스코프 해석으로 닫힌 사실). 중첩 스코프의 동명 함수는 파일 AST로 이름 해석이
+  // 안 닫히므로 체인에 불참(보류, K방향). 이름-키 clobber는 선언 순서에 따라 가짜
+  // 사이클/깊이를 만들었다 — 결정론 위반.
+
+  describe('chain identity resolves by binding, not by name string', () => {
+    // clobber 재현 소스: outer 안의 지역 `b`(→a 위임)가 모듈 `b`(→leaf 위임)와 동명.
+    // 진짜 모듈 체인은 top→a→b(→leaf) = depth 3, a→b = depth 2.
+    const CLOBBER_SRC = [
+      'function leaf(x: number): number { return x * 2; }',
+      'const b = (x: number): number => leaf(x);',
+      'export function outer(x: number): number {',
+      '  const b = (y: number): number => a(y);',
+      '  return b(x);',
+      '}',
+      'const a = (x: number): number => b(x);',
+      'export const top = (x: number): number => a(x);',
+    ].join('\n');
+
+    it('reports the true module chain despite a same-named nested local (no ghost cycle)', async () => {
+      const program = createProgram('/virtual/clobber.ts', CLOBBER_SRC);
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
+      const chains = findKinds(analysis, 'forward-chain');
+      const byHeader = new Map(chains.map(f => [f.header, f.depth]));
+
+      expect(byHeader.get('a')).toBe(2);
+      expect(byHeader.get('top')).toBe(3);
+    });
+
+    it('is deterministic under declaration reordering (same findings)', async () => {
+      // 같은 코드, 선언 순서만 재배열 — 이름-키 clobber는 마지막 승자라 순서에 민감했다.
+      const reordered = [
+        'export const top = (x: number): number => a(x);',
+        'const a = (x: number): number => b(x);',
+        'export function outer(x: number): number {',
+        '  const b = (y: number): number => a(y);',
+        '  return b(x);',
+        '}',
+        'const b = (x: number): number => leaf(x);',
+        'function leaf(x: number): number { return x * 2; }',
+      ].join('\n');
+      const run = async (src: string) => {
+        const analysis = await analyzeIndirection(
+          createMockGildash(),
+          createProgram('/virtual/order.ts', src),
+          { maxForwardDepth: 1, crossFileMinDepth: 99 },
+          '/virtual',
+        );
+
+        return findKinds(analysis, 'forward-chain')
+          .map(f => `${f.header}:${f.depth}`)
+          .sort();
+      };
+
+      expect(await run(reordered)).toEqual(await run(CLOBBER_SRC));
+    });
+
+    it('does not link a chain hop through a nested local wrapper (unresolvable scope → hold)', async () => {
+      // 모듈에는 depth 1 wrapper만 있고, 깊은 체인은 중첩 지역 이름과의 충돌로만 보인다.
+      const source = [
+        'function leaf(x: number): number { return x + 1; }',
+        'export function host(x: number): number {',
+        '  const v = (y: number): number => w(y);',
+        '  return v(x);',
+        '}',
+        'const w = (x: number): number => leaf(x);',
+        'const v = (x: number): number => leaf(x);',
+      ].join('\n');
+      const program = createProgram('/virtual/nested-local.ts', source);
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
+      const chains = findKinds(analysis, 'forward-chain');
+
+      // 모듈 v→leaf, w→leaf 는 전부 depth 1 — forward-chain(>1) 없음. 지역 v(→w)가
+      // 모듈 v의 키를 오염시키면 v:2 가짜 체인이 생긴다.
+      expect(chains.length).toBe(0);
+    });
+
+    it('rejects a wrapper whose callee is its own parameter (callback slot, not a free function)', async () => {
+      // non-export — export 가드가 아니라 파라미터-callee 게이트(③) 자체를 검증한다.
+      const source = ['const call = (fn: (g: unknown) => unknown) => fn(fn);', 'export const use = call;'].join('\n');
+      const program = createProgram('/virtual/param-callee.ts', source);
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 0, crossFileMinDepth: 99 }, '/virtual');
+
+      expect(findKinds(analysis, 'thin-wrapper').length).toBe(0);
+    });
+
+    it('holds a hop whose callee name is redeclared by a non-function var (value not closed)', async () => {
+      // `function w` + `var w = 5` — 함수 후보는 1개지만 최상위 바인딩은 2개.
+      // 런타임 값이 그 함수라는 것이 닫히지 않으므로 hop 보류 → entry 미보고.
+      const source = [
+        'function leaf(x: number): number { return x; }',
+        'function mid(x: number): number { return leaf(x); }',
+        'function w(x: number): number { return mid(x); }',
+        'var w2 = 5;',
+        'var w = w2;',
+        'const entry = (x: number): number => w(x);',
+      ].join('\n');
+      const program = createProgram('/virtual/var-blocker.ts', source);
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
+      const chains = findKinds(analysis, 'forward-chain');
+
+      // entry→w 는 보류. w 자신(→mid, 유일)은 depth 2 정당 W로 유지.
+      expect(chains.some(f => f.header === 'entry')).toBe(false);
+    });
+
+    it('holds a hop whose callee name has TWO top-level declarations (ambiguous — not unique)', async () => {
+      // `var` 재선언으로 동명 최상위 w가 2개 — entry의 `w` hop은 어느 선언인지 스코프
+      // 해석으로 유일하게 닫히지 않으므로 보류 → entry는 depth 1(미보고). 반면 두 번째
+      // w 자신의 callee(mid)는 유일하게 닫히므로 w:2 체인은 정당한 W로 유지된다.
+      const source = [
+        'var w = function (x: number): number { return leaf(x); };',
+        'var w = function (x: number): number { return mid(x); };',
+        'const mid = (x: number): number => leaf(x);',
+        'const entry = (x: number): number => w(x);',
+        'function leaf(x: number): number { return x; }',
+      ].join('\n');
+      const program = createProgram('/virtual/dup-toplevel.ts', source);
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
+      const chains = findKinds(analysis, 'forward-chain');
+
+      expect(chains.some(f => f.header === 'entry')).toBe(false);
+      expect(chains.map(f => `${f.header}:${f.depth}`)).toEqual(['w:2']);
+    });
+
+    it('holds a hop whose callee name also matches an import binding (redeclare-error source)', async () => {
+      // 유효 TS에선 리디클레어 에러지만 파서는 받는다 — 이름이 import와 최상위 함수
+      // 양쪽에 바인딩되면 유일하게 닫히지 않으므로 hop 보류 (top은 depth 1, 미보고).
+      const source = [
+        "import { b } from './external';",
+        'function b(x: number): number { return leaf(x); }',
+        'const top = (x: number): number => b(x);',
+        'function leaf(x: number): number { return x; }',
+      ].join('\n');
+      const program = createProgram('/virtual/import-collision.ts', source);
+      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
+
+      expect(findKinds(analysis, 'forward-chain').length).toBe(0);
+    });
+  });
+
   describe('type-remap', () => {
     // Each row declares a type alias that is a direct synonym; `header` is the
     // reported alias name.

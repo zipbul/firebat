@@ -189,8 +189,14 @@ const resolveCallee = (callExpression: Node, paramNames: ReadonlySet<string>): C
 
   const callee = callExpression.callee;
 
-  // Free function identifier — allowed, no receiver.
+  // Free function identifier — allowed, no receiver. A callee that is one of the
+  // wrapper's OWN parameters is a callback slot (its identity differs per call
+  // site), not a free function — inlining is meaningless → K (spec ③).
   if (callee.type === 'Identifier') {
+    if (paramNames.has(callee.name)) {
+      return { ok: false, receiver: null };
+    }
+
     return { ok: true, receiver: null };
   }
 
@@ -429,6 +435,116 @@ const collectFunctionNames = (program: Program): CollectedFunctionNames => {
   return { namesByNode, methodNodes, propertyInitNodes };
 };
 
+interface TopLevelBindings {
+  /** Function-valued top-level declarations by name — the only hop TARGETS. */
+  readonly fnsByName: Map<string, Node[]>;
+  /** Count of ALL top-level module bindings per name (functions, non-function
+   * variables, classes, enums, imports) — the UNIQUENESS test. A name is a closed
+   * scope-resolution fact only when the module binds it exactly once AND that one
+   * binding is a function; a redeclare-error source (import + same-named function
+   * still parses) must hold, not pick a winner. */
+  readonly bindingCounts: Map<string, number>;
+}
+
+/**
+ * Module top-level bindings — what a top-level wrapper's Identifier callee can
+ * resolve to (its own params are gated in ③, and a single-call body declares
+ * nothing). Chain hops link ONLY through this index, and only when the name has
+ * exactly ONE top-level binding overall — scope resolution as a closed fact,
+ * replacing the order-sensitive name-string map (which a same-named nested local
+ * could clobber into ghost cycles/depths).
+ */
+const collectTopLevelBindings = (program: Program): TopLevelBindings => {
+  const fnsByName = new Map<string, Node[]>();
+  const bindingCounts = new Map<string, number>();
+  const count = (name: string): void => {
+    bindingCounts.set(name, (bindingCounts.get(name) ?? 0) + 1);
+  };
+  const addFn = (name: string, node: Node): void => {
+    count(name);
+
+    const list = fnsByName.get(name);
+
+    if (list === undefined) {
+      fnsByName.set(name, [node]);
+    } else {
+      list.push(node);
+    }
+  };
+  const addStatement = (stmt: Node): void => {
+    switch (stmt.type) {
+      case 'FunctionDeclaration':
+        if (stmt.id !== null) {
+          addFn(stmt.id.name, stmt);
+        }
+
+        break;
+      case 'VariableDeclaration':
+        for (const decl of stmt.declarations) {
+          if (decl.id.type !== 'Identifier') {
+            continue;
+          }
+
+          if (decl.init !== null && isFunctionNode(decl.init)) {
+            addFn(decl.id.name, decl.init);
+          } else {
+            count(decl.id.name);
+          }
+        }
+
+        break;
+      case 'ClassDeclaration':
+      case 'TSEnumDeclaration':
+      case 'TSModuleDeclaration': {
+        const id = (stmt as Node & { readonly id?: Node | null }).id;
+
+        if (id !== null && id !== undefined && id.type === 'Identifier') {
+          count(id.name);
+        }
+
+        break;
+      }
+      case 'ImportDeclaration':
+        for (const spec of (stmt as Node & { readonly specifiers: ReadonlyArray<Node> }).specifiers) {
+          const local = (spec as Node & { readonly local: Node }).local;
+
+          if (local.type === 'Identifier') {
+            count(local.name);
+          }
+        }
+
+        break;
+      case 'TSImportEqualsDeclaration': {
+        const id = (stmt as Node & { readonly id?: Node | null }).id;
+
+        if (id !== null && id !== undefined && id.type === 'Identifier') {
+          count(id.name);
+        }
+
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
+  for (const stmt of program.body) {
+    if (stmt.type === 'ExportNamedDeclaration' && stmt.declaration !== null) {
+      addStatement(stmt.declaration);
+    } else if (stmt.type === 'ExportDefaultDeclaration') {
+      const decl = stmt.declaration;
+
+      if (decl.type === 'FunctionDeclaration' && decl.id !== null) {
+        addFn(decl.id.name, decl);
+      }
+    } else {
+      addStatement(stmt as Node);
+    }
+  }
+
+  return { fnsByName, bindingCounts };
+};
+
 const addFinding = (
   findings: IndirectionFinding[],
   kind: IndirectionFindingKind,
@@ -447,39 +563,6 @@ const addFinding = (
     depth,
     evidence,
   });
-};
-
-/**
- * Compute the forward-chain depth for `name`. Returns -1 to signal a same-file
- * cycle was reached on this path (spec: same-file cycles are unreported).
- */
-const computeChainDepth = (name: string, calleeByName: Map<string, string | null>, visited: Set<string>): number => {
-  if (visited.has(name)) {
-    // Same-file cycle — infinite recursion bug, not a static indirection layer.
-    return -1;
-  }
-
-  const nextName = calleeByName.get(name);
-
-  if (nextName === null || nextName === undefined || nextName.length === 0) {
-    return 1;
-  }
-
-  if (!calleeByName.has(nextName)) {
-    return 1;
-  }
-
-  visited.add(name);
-
-  const nextDepth = computeChainDepth(nextName, calleeByName, visited);
-
-  visited.delete(name);
-
-  if (nextDepth < 0) {
-    return -1;
-  }
-
-  return 1 + nextDepth;
 };
 
 /* ------------------------------------------------------------------ */
@@ -907,8 +990,11 @@ const analyzeIndirection = async (
 
     const normalizedFilePath = normalizePath(file.filePath);
     const { namesByNode, methodNodes, propertyInitNodes } = collectFunctionNames(file.program);
-    const calleeByName = new Map<string, string | null>();
-    const wrapperNodeByName = new Map<string, Node>();
+    const { fnsByName: topLevelFns, bindingCounts: topLevelBindingCounts } = collectTopLevelBindings(file.program);
+    // Chain state, keyed by NODE identity (a name string is clobbered by same-named
+    // nested locals — order-sensitive ghost cycles/depths). Only top-level wrappers
+    // participate: a nested wrapper's name resolution does not close on the file AST.
+    const chainCalleeByNode = new Map<Node, string | null>();
     const fileExports = collectExportedNames(file.program);
     const fileOverloads = overloadIdx.get(normalizedFilePath) ?? new Set<string>();
 
@@ -961,9 +1047,17 @@ const analyzeIndirection = async (
       }
 
       // Track callee for same-file forward-chain regardless of ②/export — the
-      // chain target #2/#3 does not require the reference-identity proof.
-      calleeByName.set(header, calleeName);
-      wrapperNodeByName.set(header, node);
+      // chain target #2/#3 does not require the reference-identity proof. Hops link
+      // only through an Identifier callee (a member callee's property name is not a
+      // module binding) and only for TOP-LEVEL wrappers (nested scope doesn't close).
+      const isTopLevel = topLevelFns.get(header)?.includes(node) === true;
+
+      if (isTopLevel) {
+        const wrapperCallee = wrapperCall.type === 'CallExpression' ? wrapperCall.callee : null;
+        const chainCallee = wrapperCallee !== null && wrapperCallee.type === 'Identifier' ? wrapperCallee.name : null;
+
+        chainCalleeByNode.set(node, chainCallee);
+      }
 
       // ② export guard: a wrapper whose uses escape the file cannot be proven
       // identity-safe here → thin-wrapper not reportable (cross-module).
@@ -1002,8 +1096,54 @@ const analyzeIndirection = async (
     }).visit(file.program);
 
     if (options.maxForwardDepth >= 1) {
-      for (const [name, node] of wrapperNodeByName.entries()) {
-        const depth = computeChainDepth(name, calleeByName, new Set<string>());
+      // A hop resolves only when the callee name has exactly ONE top-level declaration
+      // (scope resolution closed); ambiguous/absent/nested names end the chain (hold).
+      const resolveHop = (name: string | null): Node | null => {
+        if (name === null || name.length === 0) {
+          return null;
+        }
+
+        // The name must be bound exactly ONCE at module top level (across functions,
+        // variables, classes, enums, imports) and that one binding must be a function.
+        if (topLevelBindingCounts.get(name) !== 1) {
+          return null;
+        }
+
+        const candidates = topLevelFns.get(name);
+
+        if (candidates === undefined || candidates.length !== 1) {
+          return null;
+        }
+
+        return candidates[0] ?? null;
+      };
+      const computeChainDepth = (node: Node, visited: Set<Node>): number => {
+        if (visited.has(node)) {
+          // Same-file cycle — infinite recursion bug, not a static indirection layer.
+          return -1;
+        }
+
+        const nextNode = resolveHop(chainCalleeByNode.get(node) ?? null);
+
+        if (nextNode === null || !chainCalleeByNode.has(nextNode)) {
+          return 1;
+        }
+
+        visited.add(node);
+
+        const nextDepth = computeChainDepth(nextNode, visited);
+
+        visited.delete(node);
+
+        if (nextDepth < 0) {
+          return -1;
+        }
+
+        return 1 + nextDepth;
+      };
+
+      for (const node of chainCalleeByNode.keys()) {
+        const depth = computeChainDepth(node, new Set<Node>());
 
         // depth < 0 → same-file cycle on this path: unreported (spec).
         if (depth < 0 || depth <= options.maxForwardDepth) {
