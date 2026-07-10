@@ -1,12 +1,9 @@
 import type {
-  ArrowFunctionExpression,
   AssignmentExpression,
   BlockStatement,
-  CallExpression,
   ChainExpression,
   ConditionalExpression,
   ExpressionStatement,
-  ForOfStatement,
   IdentifierReference,
   IfStatement,
   LogicalExpression,
@@ -17,21 +14,11 @@ import type {
   TemplateElement,
   TemplateLiteral,
   UnaryExpression,
-  VariableDeclaration,
-  VariableDeclarator,
 } from 'oxc-parser';
 
 import type { NodeValue } from '../types';
 
-import {
-  asRecord,
-  forEachChildNode,
-  isFunctionNode,
-  isNodeRecord,
-  isOxcNode,
-  isOxcNodeArray,
-  walkOxcTree,
-} from './oxc-ast-utils';
+import { asRecord, forEachChildNode, isFunctionNode, isNodeRecord, isOxcNode, isOxcNodeArray } from './oxc-ast-utils';
 
 type AnyNode = Node & Record<string, unknown>;
 
@@ -61,68 +48,7 @@ const returnStatement = (argument: Node): Node => withType('ReturnStatement', { 
 const memberExpression = (object: Node, property: Node, computed: boolean): Node =>
   withType('MemberExpression', { object, property, computed, optional: false });
 
-const forOfStatement = (left: Node, right: Node, body: Node): Node =>
-  withType('ForOfStatement', { left, right, body, await: false });
-
 const whileStatement = (test: Node, bodyNode: Node): Node => withType('WhileStatement', { test, body: bodyNode });
-
-const variableDeclarator = (id: Node, init?: Node): Node => withType('VariableDeclarator', { id, init: init ?? null });
-
-const variableDeclaration = (kind: 'const' | 'let' | 'var', declarations: ReadonlyArray<Node>): Node =>
-  withType('VariableDeclaration', { kind, declarations: [...declarations] });
-
-/** CallExpression의 arguments를 Node 배열로 안전하게 읽는다 (배열이 아니면 빈 배열). */
-const getCallArguments = (call: CallExpression): Node[] => (Array.isArray(call.arguments) ? (call.arguments as Node[]) : []);
-
-const hasReturnStatement = (node: NodeValue): boolean => {
-  if (!isOxcNode(node)) {
-    return false;
-  }
-
-  let found = false;
-
-  walkOxcTree(node, value => {
-    if (found) {
-      return false;
-    }
-
-    if (value.type === 'ReturnStatement') {
-      found = true;
-
-      return false;
-    }
-
-    return true;
-  });
-
-  return found;
-};
-
-const isIdentifierNamed = (node: NodeValue, name: string): boolean => {
-  if (!isOxcNode(node) || node.type !== 'Identifier') {
-    return false;
-  }
-
-  return (node as IdentifierReference).name === name;
-};
-
-const isMemberNamed = (callee: NodeValue, name: string): { object: Node; computed: boolean } | null => {
-  if (!isOxcNode(callee) || callee.type !== 'MemberExpression') {
-    return null;
-  }
-
-  const member = callee as StaticMemberExpression;
-
-  if (member.computed) {
-    return null;
-  }
-
-  if (!isIdentifierNamed(member.property as NodeValue, name)) {
-    return null;
-  }
-
-  return { object: member.object as Node, computed: false };
-};
 
 const toBlock = (value: NodeValue): Node | null => {
   if (!isOxcNode(value)) {
@@ -558,306 +484,6 @@ const normalizeForToWhile = (node: AnyNode): NodeValue | null => {
   return [initNode, whileNode];
 };
 
-const normalizeForEach = (node: AnyNode): NodeValue | null => {
-  if (node.type !== 'ExpressionStatement' || !isNodeRecord(node)) {
-    return null;
-  }
-
-  const expression = (node as ExpressionStatement).expression;
-
-  if (
-    !isOxcNode(expression as NodeValue) ||
-    !isNodeRecord(expression as Node) ||
-    (expression as Node).type !== 'CallExpression'
-  ) {
-    return null;
-  }
-
-  const call = expression as CallExpression;
-  const callee = call.callee as NodeValue;
-  const args = getCallArguments(call);
-  const member = isMemberNamed(callee, 'forEach');
-
-  if (member === null || args.length !== 1) {
-    return null;
-  }
-
-  const callback = args[0];
-
-  if (
-    !isOxcNode(callback as NodeValue) ||
-    !isNodeRecord(callback as Node) ||
-    (callback as Node).type !== 'ArrowFunctionExpression'
-  ) {
-    return null;
-  }
-
-  const afe = callback as ArrowFunctionExpression;
-  const asyncFlag = Boolean(afe.async);
-
-  if (asyncFlag) {
-    return null;
-  }
-
-  const params = Array.isArray(afe.params) ? (afe.params as Node[]) : [];
-
-  if (params.length !== 1 || params[0]?.type !== 'Identifier') {
-    return null;
-  }
-
-  const bodyNode = afe.body as NodeValue;
-
-  if (!isOxcNode(bodyNode)) {
-    return null;
-  }
-
-  if (hasReturnStatement(bodyNode)) {
-    return null;
-  }
-
-  const loopVar = params[0] as Node;
-  const left = variableDeclaration('const', [variableDeclarator(loopVar)]);
-  const bodyBlock = toBlock(bodyNode) ?? block([expressionStatement(bodyNode as Node)]);
-
-  return forOfStatement(left, member.object, bodyBlock);
-};
-
-const normalizeMapFilterBoolean = (node: AnyNode): NodeValue | null => {
-  if (node.type !== 'CallExpression' || !isNodeRecord(node)) {
-    return null;
-  }
-
-  const outerCall = node as CallExpression;
-  const callee = outerCall.callee as NodeValue;
-  const args = getCallArguments(outerCall);
-  const filterMember = isMemberNamed(callee, 'filter');
-
-  if (filterMember === null || args.length !== 1) {
-    return null;
-  }
-
-  if (!isIdentifierNamed(args[0], 'Boolean')) {
-    return null;
-  }
-
-  const mapCall = filterMember.object;
-
-  if (!isOxcNode(mapCall as NodeValue) || !isNodeRecord(mapCall as Node) || (mapCall as Node).type !== 'CallExpression') {
-    return null;
-  }
-
-  const innerCall = mapCall as CallExpression;
-  const mapCallee = innerCall.callee as NodeValue;
-  const mapArgs = getCallArguments(innerCall);
-  const mapMember = isMemberNamed(mapCallee, 'map');
-
-  if (mapMember === null || mapArgs.length !== 1) {
-    return null;
-  }
-
-  const callback = mapArgs[0];
-
-  if (
-    !isOxcNode(callback as NodeValue) ||
-    !isNodeRecord(callback as Node) ||
-    (callback as Node).type !== 'ArrowFunctionExpression'
-  ) {
-    return null;
-  }
-
-  const afe = callback as ArrowFunctionExpression;
-  const params = Array.isArray(afe.params) ? (afe.params as Node[]) : [];
-
-  if (params.length !== 1 || params[0]?.type !== 'Identifier') {
-    return null;
-  }
-
-  const bodyNode = afe.body as NodeValue;
-
-  if (!isOxcNode(bodyNode)) {
-    return null;
-  }
-
-  // Use a synthetic normalized node shape so we can also normalize equivalent loop patterns.
-  return withType('NormalizedMapFilterBoolean', {
-    source: mapMember.object,
-    mapBody: bodyNode,
-  });
-};
-
-interface LoopPushCandidate {
-  readonly right: Node;
-  readonly init: Node;
-}
-
-interface ForOfBodyPair {
-  readonly right: Node;
-  readonly decl: Node;
-  readonly guard: Node;
-}
-
-const extractForOfBodyPair = (node: AnyNode): ForOfBodyPair | null => {
-  if (node.type !== 'ForOfStatement' || !isNodeRecord(node)) {
-    return null;
-  }
-
-  const fos = node as ForOfStatement;
-  const right = fos.right as Node;
-  const bodyValue = fos.body as Node;
-
-  if (!isOxcNode(right as NodeValue) || !isOxcNode(bodyValue as NodeValue) || !isNodeRecord(bodyValue as Node)) {
-    return null;
-  }
-
-  if ((bodyValue as Node).type !== 'BlockStatement') {
-    return null;
-  }
-
-  const body = blockBodyStatements(bodyValue as Node);
-
-  if (body.length !== 2) {
-    return null;
-  }
-
-  const decl = body[0];
-  const guard = body[1];
-
-  if (!isOxcNode(decl as NodeValue) || !isOxcNode(guard as NodeValue)) {
-    return null;
-  }
-
-  return { right, decl: decl as Node, guard: guard as Node };
-};
-
-const extractInitFromVarDecl = (decl: Node): Node | null => {
-  if (!isNodeRecord(decl) || (decl as Node).type !== 'VariableDeclaration') {
-    return null;
-  }
-
-  const vd = decl as VariableDeclaration;
-  const declarations = Array.isArray(vd.declarations) ? (vd.declarations as Node[]) : [];
-
-  if (declarations.length !== 1 || !isOxcNode(declarations[0] as NodeValue) || !isNodeRecord(declarations[0] as Node)) {
-    return null;
-  }
-
-  const declarator = declarations[0] as VariableDeclarator;
-
-  if (declarator.type !== 'VariableDeclarator') {
-    return null;
-  }
-
-  const id = declarator.id as Node;
-  const init = declarator.init as Node | null;
-
-  if (!isOxcNode(id as NodeValue) || (id as Node).type !== 'Identifier' || !isOxcNode(init as NodeValue)) {
-    return null;
-  }
-
-  return init as Node;
-};
-
-interface GuardCallInfo {
-  readonly test: Node;
-  readonly callArg: Node;
-}
-
-const extractGuardCallArg = (guard: Node): GuardCallInfo | null => {
-  if (!isNodeRecord(guard) || (guard as Node).type !== 'IfStatement') {
-    return null;
-  }
-
-  const guardIf = guard as IfStatement;
-  const test = guardIf.test as Node;
-  const consequent = guardIf.consequent as Node;
-  const alternate = guardIf.alternate;
-
-  if (!isOxcNode(test as NodeValue) || alternate != null || !isOxcNode(consequent as NodeValue)) {
-    return null;
-  }
-
-  const only = toBlock(consequent as NodeValue);
-
-  if (only === null || !isNodeRecord(only)) {
-    return null;
-  }
-
-  const consequentBody = blockBodyStatements(only as Node);
-
-  if (consequentBody.length !== 1 || !isOxcNode(consequentBody[0] as NodeValue) || !isNodeRecord(consequentBody[0] as Node)) {
-    return null;
-  }
-
-  const stmt = consequentBody[0] as Node;
-
-  if (stmt.type !== 'ExpressionStatement') {
-    return null;
-  }
-
-  const expr = (stmt as ExpressionStatement).expression as Node;
-
-  if (!isOxcNode(expr as NodeValue) || !isNodeRecord(expr as Node) || (expr as Node).type !== 'CallExpression') {
-    return null;
-  }
-
-  const callArgs = getCallArguments(expr as CallExpression);
-
-  if (callArgs.length !== 1 || callArgs[0]?.type !== 'Identifier') {
-    return null;
-  }
-
-  return { test, callArg: callArgs[0] as Node };
-};
-
-const extractLoopPushCandidate = (node: AnyNode): LoopPushCandidate | null => {
-  const bodyPair = extractForOfBodyPair(node);
-
-  if (bodyPair === null) {
-    return null;
-  }
-
-  const init = extractInitFromVarDecl(bodyPair.decl);
-
-  if (init === null) {
-    return null;
-  }
-
-  const guardInfo = extractGuardCallArg(bodyPair.guard);
-
-  if (guardInfo === null) {
-    return null;
-  }
-
-  if ((guardInfo.test as Node).type !== 'Identifier') {
-    return null;
-  }
-
-  const testName = (guardInfo.test as IdentifierReference).name;
-  const argName = (guardInfo.callArg as IdentifierReference).name;
-
-  if (typeof testName !== 'string' || typeof argName !== 'string' || testName !== argName) {
-    return null;
-  }
-
-  return { right: bodyPair.right, init };
-};
-
-const normalizeLoopPushBoolean = (node: AnyNode): NodeValue | null => {
-  // Recognize: for (const x of items) { const mapped = <expr>; if (mapped) out.push(mapped); }
-  const candidate = extractLoopPushCandidate(node);
-
-  if (candidate === null) {
-    return null;
-  }
-
-  return expressionStatement(
-    withType('NormalizedMapFilterBoolean', {
-      source: candidate.right,
-      mapBody: candidate.init,
-    }),
-  );
-};
-
 let normalizationCache = new WeakMap<Node, NodeValue>();
 const FUNCTION_LIKE_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
@@ -939,24 +565,6 @@ const applyLocalRewrites = (normalized: AnyNode, functionDepth: number): NodeVal
 
   if (forToWhile !== null) {
     return normalizeForFingerprintInternal(forToWhile, functionDepth);
-  }
-
-  const mapFilter = normalizeMapFilterBoolean(normalized);
-
-  if (mapFilter !== null) {
-    return normalizeForFingerprintInternal(mapFilter, functionDepth);
-  }
-
-  const loopPush = normalizeLoopPushBoolean(normalized);
-
-  if (loopPush !== null) {
-    return normalizeForFingerprintInternal(loopPush, functionDepth);
-  }
-
-  const forEach = normalizeForEach(normalized);
-
-  if (forEach !== null) {
-    return normalizeForFingerprintInternal(forEach, functionDepth);
   }
 
   return null;

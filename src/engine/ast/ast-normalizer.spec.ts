@@ -97,31 +97,6 @@ describe('engine/ast/ast-normalizer', () => {
     });
   });
 
-  describe('rule 6: forEach → for-of normalization', () => {
-    it('should normalize arr.forEach to for-of', () => {
-      expectSameNormalized(
-        'export function f(arr) { arr.forEach((x) => { console.log(x); }); }',
-        'export function f(arr) { for (const x of arr) { console.log(x); } }',
-      );
-    });
-
-    it('should not normalize forEach with early return (break semantics differ)', () => {
-      expectDifferentNormalized(
-        'export function f(arr) { arr.forEach((x) => { if (x) return; console.log(x); }); }',
-        'export function f(arr) { for (const x of arr) { if (x) return; console.log(x); } }',
-      );
-    });
-  });
-
-  describe('rule 7: map/filter(Boolean) normalization', () => {
-    it('should normalize arr.map(fn).filter(Boolean) to equivalent form', () => {
-      const codeA = 'export function f(arr) { return arr.map((x) => x.value).filter(Boolean); }';
-      const codeB = 'export function g(items) { return items.map((item) => item.value).filter(Boolean); }';
-
-      expectSameNormalized(codeA, codeB);
-    });
-  });
-
   describe('rule 8: ternary inversion normalization', () => {
     it('should normalize !x ? A : B to x ? B : A', () => {
       expectSameNormalized('export function f(x) { return !x ? 1 : 2; }', 'export function f(x) { return x ? 2 : 1; }');
