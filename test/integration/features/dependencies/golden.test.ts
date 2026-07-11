@@ -67,4 +67,9 @@ describe('golden/dependencies', () => {
   // K: no package.json main and no test/config entry files → zero entry points →
   // unused-file judgment is held (orphan file must NOT be reported).
   rg('unused-file-no-entry');
+
+  // 회귀 잠금(외부 코퍼스 FP)은 unit 테스트로 이관 — 이 detector golden 은 전체 분석 객체를
+  // 비교하므로, 특정 finding 종류(unused/unlisted/unresolved-dependency)만 겨냥하는 FP 재현은
+  // analyzer.spec.ts 의 unit 이 적합하다(#5 type-only·#7 builtin·#8 unresolved·#6 ns-type-member).
+  // #4 default-export 는 gildash 가 default-ness 를 노출해야 닫히므로 gildash 확정 후 착수.
 });

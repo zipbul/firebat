@@ -1261,6 +1261,91 @@ const rootOnlyRead =
     expect(actualUnresolved).toEqual([...expectedUnresolved]);
   });
 
+  it('should hold an unresolved internal import when the target file exists on disk (partial index, not TS)', async () => {
+    // 외부 코퍼스 검증에서 잡힌 FP: `import data from './data.json'` 처럼 대상이 디스크에
+    // 실존하지만 비-TS라 gildash 그래프에 인덱싱되지 않으면 dstFilePath=null 로 온다.
+    // 이는 "해결 실패"가 아니라 "TS 인덱스 밖" — 전체-인덱싱 전제상 보류(FN)여야 하며
+    // unresolved-import 로 보고하면 안 된다. 대상이 어디에도 없을 때만 진짜 unresolved.
+    const imports = [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './data.json' })];
+    const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]), imports);
+    const readFileFn = (p: string): string => {
+      if (p === `${ROOT}/package.json`) {
+        return JSON.stringify({ main: './src/index.ts' });
+      }
+
+      if (p === `${ROOT}/src/data.json`) {
+        return '{}';
+      }
+
+      throw new Error(`ENOENT: ${p}`);
+    };
+
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn });
+
+    expect(result.unresolvedImports).toEqual([]);
+  });
+
+  it('does not flag a bare Node builtin (`path`) as an unlisted dependency (builtinModules fact)', async () => {
+    // 외부 코퍼스 FP: `import { join } from 'path'` — bare Node builtin 은 외부 패키지가 아니다.
+    // Node 는 bare core specifier 를 항상 core 로 해석(동명 npm 패키지보다 우선)하므로
+    // `module.builtinModules` 목록(런타임 사실)에 있으면 unlisted-dependency 가 아니다.
+    const result = await analyzeImports(
+      [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'path' })],
+      { main: './src/index.ts' },
+    );
+
+    expect(result.unusedDeps.filter(d => d.kind === 'unlisted-dependency')).toEqual([]);
+  });
+
+  it('does not flag a dependency consumed only via `import type` (type-references, not imports)', async () => {
+    // 외부 코퍼스 FP: `import type { Foo } from 'type-lib'` 도 type-lib 소비다. gildash 는 이를
+    // 'imports' 가 아니라 'type-references' 관계로 기록하므로, 외부 type-references 도 used-package
+    // 로 세야 type-only import 로만 쓰인 dep 이 unused-dependency 로 오판되지 않는다.
+    const g = createMockGildash({
+      getImportGraph: async () => new Map<string, string[]>([['/project/src/index.ts', []]]),
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'type-references') {
+          return [
+            {
+              type: 'type-references' as StoredCodeRelation['type'],
+              srcFilePath: '/project/src/index.ts',
+              srcSymbolName: null,
+              dstFilePath: null,
+              dstSymbolName: 'Foo',
+              dstProject: null,
+              isExternal: true,
+              specifier: 'type-lib',
+            },
+          ];
+        }
+
+        return [];
+      },
+    });
+
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: rootOnlyRead({ main: './src/index.ts', dependencies: { 'type-lib': '^1.0.0' } }),
+    });
+
+    expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+  });
+
+  it('holds a declared dep whose name is a Node builtin when imported (polyfill intent)', async () => {
+    // `buffer`/`events`/`punycode` 등은 builtinModules 에도 있지만 npm 폴리필로도 선언·사용된다.
+    // 번들러/브라우저 타깃이면 npm 패키지가 로드되므로(타깃 환경은 사실로 안 닫힘), 선언 + import 된
+    // builtin-이름 dep 은 unused 로도 unlisted 로도 보고하면 안 된다 (선언 = 폴리필 의도 사실).
+    const result = await analyzeImports(
+      [mkImport('/project/src/index.ts', null, null, { isExternal: true, specifier: 'buffer' })],
+      { main: './src/index.ts', dependencies: { buffer: '^6.0.0' } },
+    );
+
+    expect(result.unusedDeps).toEqual([]);
+  });
+
   /* ---------- AT: unused-dependency holds ambient-type packages (tsconfig-resolved) ---------- */
 
   describe('unused-dependency holds ambient-type packages', () => {
@@ -1889,6 +1974,27 @@ const rootOnlyRead =
     });
 
     expect(result.unusedMembers.length).toBe(0);
+  });
+
+  it('should hold a type-only namespace member (used via type-references, never called)', async () => {
+    // 외부 코퍼스 검증에서 잡힌 FP: namespace 안의 `type ErrMessage = …` 는 타입 참조로만
+    // 소비되어 호출 관계에 절대 나타나지 않는다. 멤버 검출이 호출만 세므로 타입 멤버는
+    // "미호출 = dead"로 오판된다. 타입 멤버는 call-oracle로 관측 불가 → 보류(FN)여야 한다.
+    // build(값 멤버)는 호출되어 parent-use 증거를 제공하지만, ErrMessage(타입 멤버)는
+    // 어떤 unused-ns-member 로도 보고되면 안 된다.
+    const result = await analyzeMembers({
+      container: mkSymbol(1, '/project/src/ns.ts', 'Ns', 'namespace'),
+      containerFile: '/project/src/ns.ts',
+      importName: 'Ns',
+      calledMembers: ['Ns.build'],
+      members: [
+        { kind: 'namespace', name: 'Ns', memberName: null, isExported: true, span: ROW_SPAN },
+        { kind: 'function', name: 'Ns.build', memberName: 'build', isExported: false, span: ROW_SPAN },
+        { kind: 'type', name: 'Ns.ErrMessage', memberName: 'ErrMessage', isExported: false, span: ROW_SPAN },
+      ],
+    });
+
+    expect(result.unusedMembers.map(m => m.memberName)).toEqual([]);
   });
 
   it('should hold the member verdict when no call to any parent member is observed', async () => {

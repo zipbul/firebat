@@ -1,6 +1,7 @@
 import type { Gildash, SymbolDetail } from '@zipbul/gildash';
 
 import { GildashError, normalizePath } from '@zipbul/gildash';
+import { builtinModules } from 'node:module';
 import * as path from 'node:path';
 import ts from 'typescript';
 
@@ -139,7 +140,20 @@ const extractPackageName = (specifier: string): string | null => {
   return specifier.split('/')[0] ?? null;
 };
 
-const isBuiltinModule = (name: string): boolean => name === 'bun' || name.startsWith('node:') || name.startsWith('bun:');
+// `node:`/`bun:`-prefixed and the bare `bun` specifier are ALWAYS the runtime, never a package —
+// excluded from the external-package set entirely.
+const isPrefixedBuiltin = (name: string): boolean => name === 'bun' || name.startsWith('node:') || name.startsWith('bun:');
+
+// Node exposes its core modules as a runtime FACT via `module.builtinModules` (bare names like
+// `path`/`fs`, no prefix). A BARE builtin name is ambiguous: Node resolves it to core, but a
+// bundler/browser target may resolve a same-named npm polyfill (`buffer`, `events`, `punycode`).
+// So a bare builtin is not reported as an unlisted dependency, but — unlike a prefixed builtin — it
+// is still collected into the external set: if it is DECLARED, the declaration is a fact of intent
+// (the polyfill), so it must count as used (else a declared polyfill would false-W as unused). The
+// target environment is not a readable fact → hold that direction.
+const NODE_BUILTIN_MODULES = new Set(builtinModules);
+
+const isBuiltinModule = (name: string): boolean => isPrefixedBuiltin(name) || NODE_BUILTIN_MODULES.has(name);
 
 /** Read and JSON-parse the package.json under `rootAbs`. Callers wrap this in their own try/catch fallbacks. */
 const readPackageJson = (rootAbs: string, readFn: (p: string) => string): Record<string, unknown> =>
@@ -1327,7 +1341,17 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
         for (const parent of memberParents) {
           // Find members: memberName != null, name starts with ParentName.
-          const members = fileSymbols.filter(s => s.memberName !== null && s.name.startsWith(parent.name + '.'));
+          // Type-only members (`type`/`interface` inside a namespace) are consumed via
+          // type-references, never via calls — the call-oracle cannot observe their use, so they
+          // can never be proven unused. Exclude them from candidacy (hold, FN direction) rather
+          // than flag every type member as dead.
+          const members = fileSymbols.filter(
+            s =>
+              s.memberName !== null &&
+              s.name.startsWith(parent.name + '.') &&
+              s.kind !== 'type' &&
+              s.kind !== 'interface',
+          );
           const prefix = parent.name + '.';
           // Collect every qualified call to `Parent.member`, attributing it to this
           // parent module. A call is attributed when either (a) it is recorded on
@@ -1399,24 +1423,59 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // Phase 2: unused/unlisted dependencies + unresolved imports
       const externalPackages = new Map<string, Set<string>>();
 
+      // A relative specifier whose target exists on disk but is not in the TS graph is outside the
+      // index (a `.json`/`.css`/other non-TS asset gildash did not index), not a broken reference.
+      // Per the whole-indexing premise, hold (FN) instead of reporting unresolved-import.
+      const relativeTargetExists = (rel: Relation): boolean => {
+        const spec = rel.specifier;
+
+        if (typeof spec !== 'string' || !spec.startsWith('.')) {
+          return false;
+        }
+
+        try {
+          readFn(path.resolve(path.dirname(resolveAbs(rootAbs, rel.srcFilePath)), spec));
+
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
       for (const rel of imports) {
         // gildash 0.28 contract: `specifier` is always present on 'imports' relations.
         // Unresolved internal import
         if (rel.isExternal === false && rel.dstFilePath === null) {
-          unresolvedImports.push({
-            kind: 'unresolved-import',
-            module: toRel(resolveAbs(rootAbs, rel.srcFilePath)),
-            specifier: rel.specifier!,
-          });
+          if (!relativeTargetExists(rel)) {
+            unresolvedImports.push({
+              kind: 'unresolved-import',
+              module: toRel(resolveAbs(rootAbs, rel.srcFilePath)),
+              specifier: rel.specifier!,
+            });
+          }
 
           continue;
         }
 
-        // External package import
-        if (rel.isExternal === true) {
-          const pkgName = extractPackageName(rel.specifier!);
+        // External package import. Bare builtin names (`buffer`, `path`) ARE collected (a declared
+        // one is a polyfill fact → must count as used); only prefixed builtins are never packages.
+        if (rel.isExternal === true && typeof rel.specifier === 'string') {
+          const pkgName = extractPackageName(rel.specifier);
 
-          if (pkgName && !isBuiltinModule(pkgName)) {
+          if (pkgName && !isPrefixedBuiltin(pkgName)) {
+            addToSetMap(externalPackages, pkgName, toRel(resolveAbs(rootAbs, rel.srcFilePath)));
+          }
+        }
+      }
+
+      // #5: `import type { … } from 'pkg'` is a real consumption of `pkg`, but gildash records it
+      // as a `type-references` relation, not `imports`. Count external type-references toward the
+      // used-package set so a dep consumed only via a type-only import is not flagged unused.
+      for (const rel of typeRefs) {
+        if (rel.isExternal === true && typeof rel.specifier === 'string') {
+          const pkgName = extractPackageName(rel.specifier);
+
+          if (pkgName && !isPrefixedBuiltin(pkgName)) {
             addToSetMap(externalPackages, pkgName, toRel(resolveAbs(rootAbs, rel.srcFilePath)));
           }
         }
@@ -1429,6 +1488,12 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
       for (const rel of reExports) {
         if (rel.isExternal === true || rel.dstFilePath !== null || !rel.specifier || !rel.srcFilePath) {
+          continue;
+        }
+
+        // Same on-disk-existence hold as imports: `export … from './asset.json'` whose target exists
+        // is outside the TS index, not a broken reference → hold.
+        if (relativeTargetExists(rel)) {
           continue;
         }
 
@@ -1458,7 +1523,10 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             continue;
           }
 
-          if (!declaredPkgs.has(pkgName)) {
+          // A bare builtin name (`path`, `buffer`) imported without a declaration is a Node core
+          // usage, not an unlisted package. (A DECLARED one stays in `usedPackages` above so it is
+          // never flagged unused — the polyfill-intent hold.)
+          if (!declaredPkgs.has(pkgName) && !isBuiltinModule(pkgName)) {
             unusedDeps.push({
               kind: 'unlisted-dependency',
               packageName: pkgName,
