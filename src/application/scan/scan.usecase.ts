@@ -817,6 +817,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
             dependenciesEntry: options.dependenciesEntry,
             dependenciesIgnore: options.dependenciesIgnore,
+            dependenciesIgnoreDeps: options.dependenciesIgnoreDeps,
           }
         : {}),
       ...(options.detectors.includes('coupling') && options.couplingConfig
@@ -1010,6 +1011,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             : {}),
           ...(options.dependenciesEntry !== undefined ? { entry: options.dependenciesEntry } : {}),
           ...(options.dependenciesIgnore !== undefined ? { ignore: options.dependenciesIgnore } : {}),
+          ...(options.dependenciesIgnoreDeps !== undefined ? { ignoreDependencies: options.dependenciesIgnoreDeps } : {}),
         }),
     );
     const coupling: ReturnType<typeof analyzeCoupling> = runDetector(

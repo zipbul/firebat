@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { JsonValue } from '../../shared/json-value';
 import type { FirebatLogger } from '../../shared/logger';
 
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { prepareProjectDb } from '../../application/bootstrap/prepare-db.usecase';
 import { assertKnownOption } from '../../shared/arg-parse';
 import { failWithMessage, toErrorMessage } from '../../shared/error-message';
 import { isPlainObject } from '../../shared/json-guards';
@@ -736,7 +736,7 @@ const runInstallLike = async (mode: 'install' | 'update', argv: readonly string[
     const gitignoreUpdated = await ensureGitignoreHasFirebat(rootAbs);
 
     // DB warm-up (creates .firebat/firebat.sqlite + runs migrations)
-    await getOrmDb({ rootAbs, logger });
+    await prepareProjectDb({ rootAbs, logger });
 
     const installManifestPath = path.join(firebatDir, 'install-manifest.json');
     const manifestOut = {

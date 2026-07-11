@@ -170,6 +170,15 @@ describe('resolveDependenciesGlobsFromFeatures', () => {
 
     expect(result).toBeUndefined();
   });
+
+  it('should return the ignoreDependencies globs when valid', () => {
+    const result = resolveDependenciesGlobsFromFeatures(
+      { dependencies: { ignoreDependencies: ['@commitlint/*'] } } as never,
+      'ignoreDependencies',
+    );
+
+    expect(result).toEqual(['@commitlint/*']);
+  });
 });
 
 describe('resolveMinSizeFromFeatures', () => {

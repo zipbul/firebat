@@ -22,6 +22,7 @@ export interface FirebatCliOptions {
   readonly dependenciesAllowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly dependenciesEntry?: ReadonlyArray<string>;
   readonly dependenciesIgnore?: ReadonlyArray<string>;
+  readonly dependenciesIgnoreDeps?: ReadonlyArray<string>;
   readonly couplingConfig?: FirebatCouplingConfig;
   readonly exclude?: ReadonlyArray<string>;
   readonly help: boolean;

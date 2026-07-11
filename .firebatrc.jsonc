@@ -23,6 +23,9 @@
         { "name": "engine", "glob": "src/engine/**" },
         { "name": "infrastructure", "glob": "src/infrastructure/**" }
       ],
+      // commitlint resolves this preset by STRING (commitlint.config `extends`) — outside
+      // the TS import graph, so the user declares the consumption here (a fact).
+      "ignoreDependencies": ["@commitlint/config-conventional"],
       "allowedDependencies": {
         "adapters": ["application"],
         "application": ["engine", "infrastructure"],

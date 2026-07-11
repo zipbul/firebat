@@ -63,6 +63,8 @@ interface FirebatDependenciesConfig {
   readonly layers: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly entry?: ReadonlyArray<string> | undefined;
+  /** Package globs excluded from unused-dependency (user-declared out-of-graph consumption — a fact). */
+  readonly ignoreDependencies?: ReadonlyArray<string> | undefined;
   readonly ignore?: ReadonlyArray<string> | undefined;
 }
 
@@ -145,6 +147,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
                 allowedDependencies: z.record(z.string(), z.array(z.string())),
                 entry: z.array(z.string()).optional(),
                 ignore: z.array(z.string()).optional(),
+                ignoreDependencies: z.array(z.string()).optional(),
               })
               .strict(),
           ])

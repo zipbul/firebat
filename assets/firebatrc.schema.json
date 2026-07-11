@@ -83,6 +83,11 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Globs (root-relative) of files excluded from unused-file reporting."
+        },
+        "ignoreDependencies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Package-name globs excluded from unused-dependency reporting (declared out-of-graph consumption, e.g. presets loaded by string)."
         }
       },
       "required": ["layers", "allowedDependencies"],
