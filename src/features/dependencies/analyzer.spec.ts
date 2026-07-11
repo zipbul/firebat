@@ -775,6 +775,63 @@ const rootOnlyRead =
     expect(result.deadExports.map(d => d.name)).toContain('deadFn');
   });
 
+  it('holds unused enum/namespace members for a dist-pointing root (public surface unresolved)', async () => {
+    // 홀리스틱 리뷰(codex): #9 는 dead-export 는 보류했지만 멤버는 아니었다. dist 루트의 export
+    // enum 은 공개 API 라, 내부에서 안 불린 멤버도 미인덱싱 외부 소비자가 쓸 수 있어 dead 아님.
+    const containerFile = '/project/src/colors.ts';
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/src/index.ts', [containerFile]],
+          [containerFile, []],
+        ]),
+      searchSymbols: exportedSymbols([mkSymbol(1, containerFile, 'Color', 'enum')]),
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [mkImport('/project/src/index.ts', containerFile, 'Color')];
+        }
+
+        if (type === 'calls') {
+          return [mkCall('/project/src/index.ts', containerFile, 'Color.Red')];
+        }
+
+        return [];
+      },
+      getSymbolsByFile: (f: string) =>
+        f === 'src/colors.ts'
+          ? [
+              { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: ROW_SPAN },
+              { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: ROW_SPAN },
+              { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false, span: ROW_SPAN },
+            ]
+          : [],
+    });
+
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './dist/index.js' }) });
+
+    expect(result.unusedMembers).toEqual([]);
+  });
+
+  it('holds unused-dependency when the type-references query degrades (cannot confirm type-only use)', async () => {
+    // 홀리스틱 리뷰(codex/grok): #5 는 외부 type-references 를 사용 증거로 쓴다. 그 쿼리가 throw 하면
+    // typeUsed 가 불완전해 `import type` 로만 쓰인 dep 이 unused 로 보인다 → 루트의 unused-dependency 보류.
+    const g = createMockGildash({
+      getImportGraph: async () => new Map<string, string[]>([['/project/src/index.ts', []]]),
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) =>
+        (q as { type?: string }).type === 'type-references' ? gildashThrow('type-refs failed') : [],
+    });
+
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: rootOnlyRead({ main: './src/index.ts', dependencies: { 'maybe-type-only': '^1.0.0' } }),
+    });
+
+    expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+  });
+
   it('should report unreachable files as unused-file instead of dead-export', async () => {
     const result = await analyzeWithExports({
       graph: new Map([

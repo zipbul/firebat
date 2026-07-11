@@ -1518,8 +1518,12 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
         const memberParents = symbols.filter(s => s.kind === 'enum' || s.kind === 'namespace');
 
-        // Same external-consumer hold as dead-export for nested-package files.
-        if (memberParents.length === 0 || isUnderNestedPackage(moduleAbs)) {
+        // Hold for nested-package files AND for a dist-pointing root whose public surface is
+        // unresolvable — an exported enum/namespace is then public API whose members may be used by
+        // unindexed external consumers, so an internally-uncalled member cannot be proven unused
+        // (holistic review: #9 held dead-export but not members, leaving `Color.Green` false-W'able
+        // while `Color` is a public export).
+        if (publicSurfaceUnresolved || memberParents.length === 0 || isUnderNestedPackage(moduleAbs)) {
           continue;
         }
 
@@ -1749,6 +1753,14 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
           // Consumed via a value import (usedPackages) OR a type-only import (typeUsed) → not unused.
           if (usedPackages.has(declared) || typeUsed.has(declared)) {
+            continue;
+          }
+
+          // #5 makes external `type-references` part of the used-package evidence. If that query
+          // degraded (`hasTypeRefData` false), `typeUsed` is incomplete, so a dep consumed ONLY via
+          // `import type` would look unused — hold every unused-dependency verdict at this root
+          // (holistic review: relationsComplete gated dead/members but not unused-dependency).
+          if (!hasTypeRefData) {
             continue;
           }
 
