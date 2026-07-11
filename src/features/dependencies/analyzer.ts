@@ -1094,6 +1094,14 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       }
 
       const nestedPkgDirs: string[] = [];
+      // Track the ROOT package's declared entrypoints vs how many resolve into the TS graph. Only
+      // the root package's modules reach the per-symbol dead-export gate below (nested-package files
+      // are held wholesale by `isUnderNestedPackage`), so the "public surface unresolved" signal must
+      // be scoped to the root package alone — aggregating across nested manifests would let a
+      // resolvable sub-package disable the hold for a dist-pointing root (false W), or a dist-pointing
+      // sub-package suppress a genuinely-analyzable root (FN).
+      let rootDeclaredEntrypointCount = 0;
+      let rootResolvedEntrypointCount = 0;
 
       for (const dir of manifestDirs) {
         // Package boundary = a parseable manifest EXISTS — apps (Next 등) often have
@@ -1109,10 +1117,18 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         }
 
         for (const spec of readPackageEntrypoints(dir, readFn)) {
+          if (dir === rootAbs) {
+            rootDeclaredEntrypointCount += 1;
+          }
+
           const resolved = resolveEntrypointToFile(dir, spec, graphKeys);
 
           if (resolved) {
             entryModules.add(resolved);
+
+            if (dir === rootAbs) {
+              rootResolvedEntrypointCount += 1;
+            }
           }
         }
       }
@@ -1126,6 +1142,13 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // user-declared `entry` globs. No filename-convention inference (that is a guess-value).
       const userEntryGlobs = input?.entry ?? [];
       const entryMatchers = userEntryGlobs.map(globToRegExp);
+
+      // The ROOT package declares a public entry surface but NONE of it resolves into the graph
+      // (dist-pointing manifest) and the user did not pin a source `entry`. The public API is then
+      // unidentifiable — its real consumers are external — so no root export can be proven dead. Hold
+      // every dead-export (FN, per "닫히지 않으면 보류"); the user opts back in via an `entry` glob.
+      const publicSurfaceUnresolved =
+        rootDeclaredEntrypointCount > 0 && rootResolvedEntrypointCount === 0 && userEntryGlobs.length === 0;
 
       if (entryMatchers.length > 0) {
         // Match against BOTH the import-graph keys and the symbol index: a tool-loaded
@@ -1200,7 +1223,12 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       for (const [moduleAbs, symbols] of relationsComplete ? exportsByFile : []) {
         // Nested-package files: their symbol consumers are external package
         // consumers (outside the indexed graph) — hold dead-export verdicts.
-        if (symbols.length === 0 || unreachableModules.has(moduleAbs) || isUnderNestedPackage(moduleAbs)) {
+        if (
+          publicSurfaceUnresolved ||
+          symbols.length === 0 ||
+          unreachableModules.has(moduleAbs) ||
+          isUnderNestedPackage(moduleAbs)
+        ) {
           continue;
         }
 

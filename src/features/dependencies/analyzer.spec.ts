@@ -608,6 +608,70 @@ const rootOnlyRead =
     expect(result.deadExports[0]!.module).toBe('src/orphan.ts');
   });
 
+  it('holds dead-export when declared entrypoints resolve only to non-graph output (dist), no user entry', async () => {
+    // 외부 코퍼스 FP: 배포 라이브러리의 main→dist/*.js 는 소스 그래프로 해석되지 않는다 → 공개
+    // 표면 미식별 → 그래프 내 소비자 0인 공개 export 를 dead 로 오판. entry 미선언 시 보류(FN).
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', ['/project/src/orphan.ts']],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')],
+      pkgJson: { main: './dist/index.js' },
+    });
+
+    expect(result.deadExports).toEqual([]);
+  });
+
+  it('reports dead-export again when the user pins a source `entry` even though main points at dist', async () => {
+    // entry glob 선언 시 공개표면이 사실로 확정 → 보류 해제, dead-export 정상 판정(opt-in).
+    const result = await analyzeWithExports({
+      graph: new Map([
+        ['/project/src/main.ts', ['/project/src/orphan.ts']],
+        ['/project/src/orphan.ts', []],
+      ]),
+      exported: [mkSymbol(1, '/project/src/orphan.ts', 'unusedFn')],
+      pkgJson: { main: './dist/index.js' },
+      entry: ['**/main.ts'],
+    });
+
+    expect(result.deadExports.map(d => d.name)).toContain('unusedFn');
+  });
+
+  it('scopes the dist-surface hold to the ROOT package — a dist sub-package does not suppress root dead-exports', async () => {
+    // codex 적대리뷰: 진입점 카운트를 전 매니페스트로 합산하면, 진입점 없는 root + dist main 을
+    // 가진 nested 서브패키지 조합에서 root 의 진짜 dead-export 가 억제된다(FN). 카운트가 root
+    // 전용이면 root 진입점 0 → 억제 안 함 → root 의 deadFn 정상 보고.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/src/orphan.ts', []],
+          ['/project/packages/a/src/index.ts', []],
+        ]),
+      searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/orphan.ts', 'deadFn', 'function')]),
+      searchRelations: () => [],
+    });
+    const readFileFn = (p: string): string => {
+      if (p === `${ROOT}/package.json`) {
+        return JSON.stringify({}); // root declares NO entrypoints
+      }
+
+      if (p === `${ROOT}/packages/a/package.json`) {
+        return JSON.stringify({ main: './dist/index.js' }); // nested sub-package points at dist
+      }
+
+      if (/\/node_modules\/(@[^/]+\/)?[^/]+\/package\.json$/.test(p)) {
+        return '{}';
+      }
+
+      throw new Error(`ENOENT: ${p}`);
+    };
+
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn });
+
+    expect(result.deadExports.map(d => d.name)).toContain('deadFn');
+  });
+
   it('should report unreachable files as unused-file instead of dead-export', async () => {
     const result = await analyzeWithExports({
       graph: new Map([
