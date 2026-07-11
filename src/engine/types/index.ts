@@ -1,9 +1,13 @@
 import type { Node } from 'oxc-parser';
 
-import type { IntegerCFG, NodeId } from '../cfg';
+import type { IntegerCFG } from '../cfg/cfg';
+import type { NodeId } from '../cfg/cfg-types';
 
-export { EdgeType } from '../cfg';
-export type { NodeId } from '../cfg';
+// Intra-engine imports go to the DEFINING file, never through a sibling barrel —
+// barrels are the external surface; routing internal edges through them created
+// barrel-level cycles (types→cfg/index→cfg-builder→ast/index→…→types).
+export { EdgeType } from '../cfg/cfg-types';
+export type { NodeId } from '../cfg/cfg-types';
 
 export interface BitSet {
   add(index: number): void;

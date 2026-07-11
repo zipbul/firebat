@@ -5,7 +5,7 @@ import type { FirebatLogLevel } from './firebat-config';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type FirebatLogFields = Record<string, string | number | boolean | null | undefined>;
+type FirebatLogFields = Record<string, string | number | boolean | null | undefined>;
 
 export interface FirebatLogger {
   readonly level: FirebatLogLevel;

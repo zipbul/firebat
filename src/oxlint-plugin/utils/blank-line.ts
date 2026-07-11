@@ -58,4 +58,4 @@ const blankLineFix =
   (fixer: Fixer): Fix | null =>
     insertBlankLine(sourceCode, prev, next, fixer);
 
-export { blankLineFix, hasBlankLineBetween, insertBlankLine };
+export { blankLineFix, hasBlankLineBetween };

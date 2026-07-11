@@ -116,7 +116,7 @@ const mkImport = (
   srcFilePath: string,
   dstFilePath: string | null,
   dstSymbolName: string | null = null,
-  extra: { isExternal?: boolean; specifier?: string | null; srcSymbolName?: string | null } = {},
+  extra: { isExternal?: boolean; specifier?: string | null; srcSymbolName?: string | null; meta?: Record<string, unknown> } = {},
 ): StoredCodeRelation => ({
   type: 'imports',
   srcFilePath,
@@ -126,6 +126,7 @@ const mkImport = (
   dstProject: null,
   isExternal: extra.isExternal ?? false,
   specifier: extra.specifier ?? null,
+  ...(extra.meta !== undefined ? { meta: extra.meta } : {}),
 });
 
 const mkReExport = (
@@ -704,6 +705,7 @@ const rootOnlyRead =
   it('should not report dead export for symbols that are actually imported', async () => {
     const result = await analyzeWithExports({
       graph: new Map([
+        ['/project/src/consumer.ts', ['/project/src/index.ts']],
         ['/project/src/index.ts', ['/project/src/lib.ts']],
         ['/project/src/lib.ts', []],
       ]),
@@ -1616,6 +1618,7 @@ const rootOnlyRead =
     // export * from './lib' → re-export with null dstSymbolName → usesAll → no dead exports.
     const result = await analyzeWithExports({
       graph: new Map([
+        ['/project/src/consumer.ts', ['/project/src/index.ts']],
         ['/project/src/index.ts', ['/project/src/lib.ts']],
         ['/project/src/lib.ts', []],
       ]),
@@ -1633,6 +1636,7 @@ const rootOnlyRead =
     // index.ts re-exports both, but only usedFn is consumed externally → deadFn re-export is dead.
     const result = await analyzeWithExports({
       graph: new Map([
+        ['/project/src/consumer.ts', ['/project/src/index.ts']],
         ['/project/src/index.ts', ['/project/src/lib.ts']],
         ['/project/src/lib.ts', []],
       ]),
@@ -1647,7 +1651,7 @@ const rootOnlyRead =
         ],
         imports: [mkImport('/project/src/consumer.ts', '/project/src/index.ts', 'usedFn')],
       }),
-      pkgJson: { main: './src/index.ts' },
+      pkgJson: { main: './src/consumer.ts' },
     });
 
     expectSingleNamed(indexDeadExports(result), 'deadFn');
@@ -1657,6 +1661,7 @@ const rootOnlyRead =
     // types.ts does `export type { MyConfig } from './shared/config'` but nobody imports it via types.ts → dead.
     const result = await analyzeWithExports({
       graph: new Map([
+        ['/project/src/app.ts', ['/project/src/types.ts']],
         ['/project/src/types.ts', ['/project/src/shared/config.ts']],
         ['/project/src/shared/config.ts', []],
       ]),
@@ -1664,7 +1669,7 @@ const rootOnlyRead =
       searchRelations: relationsOfType('type-references', [
         mkTypeRef('/project/src/types.ts', '/project/src/shared/config.ts', 'MyConfig', true),
       ]),
-      pkgJson: { main: './src/types.ts' },
+      pkgJson: { main: './src/app.ts' },
     });
     const deadReExports = result.deadExports.filter(d => d.module === 'src/types.ts');
 
@@ -1676,6 +1681,7 @@ const rootOnlyRead =
     // index.ts re-exports orphanFn but nobody imports from index.ts → both index.ts re-export and lib.ts original are dead.
     const result = await analyzeWithExports({
       graph: new Map([
+        ['/project/src/consumer.ts', ['/project/src/index.ts']],
         ['/project/src/index.ts', ['/project/src/lib.ts']],
         ['/project/src/lib.ts', []],
       ]),
@@ -1683,7 +1689,7 @@ const rootOnlyRead =
       searchRelations: relationsOfType('re-exports', [
         mkReExport('/project/src/index.ts', '/project/src/lib.ts', 'orphanFn', 'orphanFn'),
       ]),
-      pkgJson: { main: './src/index.ts' },
+      pkgJson: { main: './src/consumer.ts' },
     });
     const libDead = result.deadExports.filter(d => d.module === 'src/lib.ts');
 
@@ -1869,22 +1875,118 @@ const rootOnlyRead =
     expect(result.unresolvedImports[0]!.module).toBe('src/barrel.ts');
   });
 
+  /* ---------- EN: entry-module exports are an external contract ---------- */
+  //
+  // 진입점(패키지 진입점 ∪ 사용자 entry glob)의 소비자는 정의상 그래프 밖(러너·도구·
+  // 외부 패키지)이다 — 그 파일의 export에 내부 소비자가 없어도 dead가 아니라 외부 계약.
+  // (예: drizzle.config.ts를 entry로 선언하면 drizzle-kit이 문자열로 로드하는 export가
+  // dead-export에서 면제된다.)
+
+  describe('entry-module exports are exempt from dead-export', () => {
+    it('holds dead-export for an export in a user-declared entry module', async () => {
+      const result = await analyzeWithExports({
+        graph: new Map([['/project/tool.config.ts', []]]),
+        exported: [mkSymbol(1, '/project/tool.config.ts', 'toolConfig')],
+        pkgJson: {},
+        entry: ['tool.config.ts'],
+      });
+
+      expect(result.deadExports.length).toBe(0);
+    });
+
+    it('holds dead-export for an entry-glob module ABSENT from the import graph (tool-loaded config)', async () => {
+      // drizzle.config.ts류: 아무도 import하지 않아 import graph에 노드가 없고,
+      // 심볼 인덱스(exportsByFile)에만 존재한다 — entry 매칭은 그래프 키만 돌면 놓친다.
+      const result = await analyzeWithExports({
+        graph: new Map([['/project/src/main.ts', []]]),
+        exported: [mkSymbol(1, '/project/tool.config.ts', 'toolConfig')],
+        pkgJson: { main: './src/main.ts' },
+        entry: ['tool.config.ts'],
+      });
+
+      expect(result.deadExports.length).toBe(0);
+    });
+
+    it('holds dead-export for an export in a package.json entrypoint module', async () => {
+      const result = await analyzeWithExports({
+        graph: new Map([['/project/src/main.ts', []]]),
+        exported: [mkSymbol(1, '/project/src/main.ts', 'runCli')],
+        pkgJson: { main: './src/main.ts' },
+      });
+
+      expect(result.deadExports.length).toBe(0);
+    });
+
+    it('still reports dead-export for a non-entry module (guard)', async () => {
+      // lib은 main이 import해 도달 가능(unused-file 아님)하지만 그 export의 심볼 소비자는 0.
+      const result = await analyzeWithExports({
+        graph: new Map([
+          ['/project/src/main.ts', ['/project/src/lib.ts']],
+          ['/project/src/lib.ts', []],
+        ]),
+        exported: [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')],
+        pkgJson: { main: './src/main.ts' },
+        entry: ['**/main.ts'],
+      });
+
+      expect(result.deadExports.map(d => d.name)).toEqual(['unusedFn']);
+    });
+  });
+
+  /* ---------- DY: dynamic import = whole-namespace consumption ---------- */
+  //
+  // `await import('./lib')`는 런타임 의미론상 모듈 네임스페이스 객체 전체를 받는다 —
+  // namespace `*` import와 동등한 전량 소비. gildash는 meta.isDynamic으로 이를 닫힌
+  // 사실로 구분한다(side-effect import는 meta 없음 — 전량 소비 아님, 스펙 그대로).
+
+  describe('dynamic import consumes the whole module namespace', () => {
+    it('holds dead-export for a module consumed via await import() (meta.isDynamic)', async () => {
+      const result = await analyzeWithExports({
+        graph: new Map([
+          ['/project/src/consumer.ts', ['/project/src/lib.ts']],
+          ['/project/src/lib.ts', []],
+        ]),
+        exported: [mkSymbol(1, '/project/src/lib.ts', 'a'), mkSymbol(2, '/project/src/lib.ts', 'b')],
+        searchRelations: relationsOfType('imports', [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null, { meta: { isDynamic: true } })]),
+        pkgJson: { main: './src/consumer.ts' },
+      });
+
+      expect(result.deadExports.length).toBe(0);
+    });
+
+    it('still reports dead-export for a side-effect-only import (no meta — no consumption)', async () => {
+      const result = await analyzeWithExports({
+        graph: new Map([
+          ['/project/src/consumer.ts', ['/project/src/lib.ts']],
+          ['/project/src/lib.ts', []],
+        ]),
+        exported: [mkSymbol(1, '/project/src/lib.ts', 'a')],
+        searchRelations: relationsOfType('imports', [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null)]),
+        pkgJson: { main: './src/consumer.ts' },
+      });
+
+      expect(result.deadExports.map(d => d.name)).toEqual(['a']);
+    });
+  });
+
   /* ---------- SP: finding spans carry the gildash symbol location ---------- */
   //
   // gildash 심볼에는 span이 있는데 변환 파이프라인이 ZERO_SPAN을 합성해 리포트가
   // 위치를 잃었다(자체 검사에서 실증). 심볼-기반 kind는 심볼 span을 그대로 나른다.
 
   describe('finding spans carry the gildash symbol location', () => {
-    const SYM_SPAN = { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } };
 
     it('dead-export carries the exported symbol span', async () => {
       const result = await analyzeWithExports({
-        graph: new Map([['/project/src/lib.ts', []]]),
+        graph: new Map([
+          ['/project/src/main.ts', ['/project/src/lib.ts']],
+          ['/project/src/lib.ts', []],
+        ]),
         exported: [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')],
-        pkgJson: { main: './src/lib.ts' },
+        pkgJson: { main: './src/main.ts' },
       });
 
-      expect(result.deadExports[0]!.span).toEqual(SYM_SPAN);
+      expect(result.deadExports[0]!.span).toEqual(ROW_SPAN);
     });
 
     it('duplicate-export carries the first surface symbol span', async () => {
@@ -1894,7 +1996,7 @@ const rootOnlyRead =
         resolveSymbol: resolveSymbolToOrigin('helper', 'src/origin.ts'),
       });
 
-      expect(result.duplicateExports[0]!.span).toEqual(SYM_SPAN);
+      expect(result.duplicateExports[0]!.span).toEqual(ROW_SPAN);
     });
 
     it('unused enum member carries the member symbol span', async () => {
@@ -1905,8 +2007,8 @@ const rootOnlyRead =
         importName: 'Color',
         calledMembers: ['Color.Red'],
         members: [
-          { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: SYM_SPAN },
-          { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: SYM_SPAN },
+          { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: ROW_SPAN },
+          { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: ROW_SPAN },
           { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false, span: memberSpan },
         ],
       });

@@ -26,6 +26,19 @@
       // commitlint resolves this preset by STRING (commitlint.config `extends`) — outside
       // the TS import graph, so the user declares the consumption here (a fact).
       "ignoreDependencies": ["@commitlint/config-conventional"],
+      // Reachability roots (a declared fact): package.json entrypoints are automatic;
+      // these cover tool-loaded configs, test corpora and scripts. Entry-module exports
+      // are an external contract (exempt from dead-export).
+      "entry": [
+        "index.ts",
+        "oxlint-plugin.ts",
+        "drizzle.config.ts",
+        "commitlint.config.*",
+        "scripts/**",
+        "test/**",
+        "**/*.spec.ts",
+        "**/*.test.ts"
+      ],
       "allowedDependencies": {
         "adapters": ["application"],
         "application": ["engine", "infrastructure"],

@@ -109,7 +109,7 @@ export const resolveVarIndex = (
  * same varIndex. Falls back to PARAMETER_SCOPE only when the offset is absent
  * from the map (defensive; should not happen once the file is registered).
  */
-export const parameterScopeKey = (binding: BindingName, declScopeByIdLocation: ReadonlyMap<number, string>): string =>
+const parameterScopeKey = (binding: BindingName, declScopeByIdLocation: ReadonlyMap<number, string>): string =>
   declScopeByIdLocation.get(binding.location) ?? PARAMETER_SCOPE;
 
 /**
@@ -809,4 +809,3 @@ export const analyzeFunctionBody = (
   };
 };
 
-export const __testing__ = { extractBindingNames };

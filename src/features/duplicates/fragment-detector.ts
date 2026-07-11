@@ -85,11 +85,11 @@ interface FragmentDetectorOptions {
 }
 
 /** 후보 run 그룹의 판정 — 골든이 "고려 후 거부"를 증명할 수 있게 사유를 노출한다. */
-export type FragmentVerdict =
+type FragmentVerdict =
   | { readonly outcome: 'reported' }
   | { readonly outcome: 'rejected'; readonly reason: 'below-min-size' | 'multiple-live-outs' | 'control-escape' };
 
-export interface FragmentCandidate {
+interface FragmentCandidate {
   readonly sites: number;
   readonly runSize: number;
   readonly verdict: FragmentVerdict;

@@ -1,7 +1,7 @@
 import { normalizePath } from '@zipbul/gildash';
 
 /** 정규식 메타문자를 이스케이프한다. */
-export const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * 최소 glob → RegExp 변환. 경로 매칭의 단일 변경지점.

@@ -717,8 +717,13 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         };
 
         // '*' = namespace import (import * as X). re-export with null dstSymbolName = export * from './mod'.
-        // Side-effect imports and CJS require() also produce null — skip (not usesAll, not named).
-        if (rel.dstSymbolName === '*' || (rel.type === 're-exports' && !rel.dstSymbolName)) {
+        // Dynamic `import('./mod')` receives the WHOLE module-namespace object at runtime —
+        // whole consumption, same as `import *`; gildash marks it as a closed fact via
+        // meta.isDynamic (a side-effect import has no meta and stays non-consuming).
+        // Other null dstSymbolName forms (side-effect import, CJS require) — skip.
+        const isDynamicImport = (rel.meta as { isDynamic?: boolean } | undefined)?.isDynamic === true;
+
+        if (rel.dstSymbolName === '*' || (rel.type === 're-exports' && !rel.dstSymbolName) || isDynamicImport) {
           state.usesAll = true;
         } else if (rel.dstSymbolName) {
           addToSetMap(state.names, rel.dstSymbolName, consumer);
@@ -789,7 +794,12 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       const entryMatchers = userEntryGlobs.map(globToRegExp);
 
       if (entryMatchers.length > 0) {
-        for (const fileAbs of graphKeys) {
+        // Match against BOTH the import-graph keys and the symbol index: a tool-loaded
+        // config (drizzle.config.ts) that nobody imports has no graph node, but its
+        // exports exist in the symbol index and its entry declaration must still land.
+        const entryCandidates = new Set<string>([...graphKeys, ...exportsByFile.keys()]);
+
+        for (const fileAbs of entryCandidates) {
           if (entryMatchers.some(re => re.test(toRel(fileAbs)))) {
             entryModules.add(fileAbs);
           }
@@ -860,6 +870,13 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           continue;
         }
 
+        // Entry modules (package.json entrypoints ∪ user-declared entry globs): their
+        // exports are consumed OUTSIDE the graph by definition (a runner, a tool loading
+        // the file by string, an external package) — an external contract, never dead.
+        if (entryModules.has(moduleAbs)) {
+          continue;
+        }
+
         const usage = usageByModule.get(moduleAbs);
 
         if (usage?.usesAll) {
@@ -899,7 +916,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         changed = false;
 
         for (const [moduleAbs, symbols] of exportsByFile) {
-          if (unreachableModules.has(moduleAbs)) {
+          if (unreachableModules.has(moduleAbs) || entryModules.has(moduleAbs)) {
             continue;
           }
 

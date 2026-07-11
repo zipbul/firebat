@@ -108,4 +108,3 @@ const buildNestingReductionItem = <TKind>(
 };
 
 export { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore };
-export type { FunctionNodeAnalyzer, NestingReductionOpportunity };

@@ -94,7 +94,7 @@ export const expandTargets = async (targets: ReadonlyArray<string>): Promise<str
   return uniqueSorted(expanded);
 };
 
-export const discoverDefaultTargets = async (cwd: string = process.cwd()): Promise<string[]> => {
+const discoverDefaultTargets = async (cwd: string = process.cwd()): Promise<string[]> => {
   const gitAll = runGitLsFiles(cwd);
 
   if (gitAll !== null) {

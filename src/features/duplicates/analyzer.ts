@@ -33,7 +33,6 @@ import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unif
 import { getItemKind, isBelowDecisionFloor, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
 import { detectFragmentClones } from './fragment-detector';
 
-export { isCloneTarget };
 
 // ─── Public Types ─────────────────────────────────────────────────────────────
 

@@ -6,7 +6,7 @@ import { ensureSchema } from './sqlite-schema';
 // Types
 // ---------------------------------------------------------------------------
 
-export interface MemoryRecord {
+interface MemoryRecord {
   readonly projectKey: string;
   readonly memoryKey: string;
   readonly createdAt: number;

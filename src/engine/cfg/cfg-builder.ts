@@ -17,11 +17,12 @@ import type {
   WhileStatement,
 } from 'oxc-parser';
 
-import { evalStaticLiteralValue, evalStaticTruthiness, isFunctionNode, isOxcNode, unwrapExpression } from '../ast';
+import { isFunctionNode, isOxcNode } from '../ast/oxc-ast-utils';
+import { evalStaticLiteralValue, evalStaticTruthiness, unwrapExpression } from '../ast/oxc-expression-utils';
 import { EdgeType, type CfgNodePayload, type LoopTargets, type NodeId, type OxcBuiltFunctionCfg } from '../types';
 import { IntegerCFG } from './cfg';
 
-export interface OxcCFGBuilderOptions {
+interface OxcCFGBuilderOptions {
   readonly inlineSyncIifes?: boolean;
 }
 
