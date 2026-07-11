@@ -458,7 +458,7 @@ const mapDeadExports = (deadExports: any[]): any[] =>
       kind,
       code: 'DEP_DEAD_EXPORT',
       file: module,
-      span: ZERO_SPAN,
+      span: d?.span ?? ZERO_SPAN,
       module,
       name: String(d?.exportName ?? d?.name ?? ''),
     };
@@ -522,7 +522,7 @@ const mapDuplicateExports = (duplicateExports: any[]): any[] =>
       kind: 'duplicate-export',
       code: 'DEP_DUPLICATE_EXPORT',
       file: String(modules[0] ?? ''),
-      span: ZERO_SPAN,
+      span: d?.span ?? ZERO_SPAN,
       name: String(d?.name ?? ''),
       modules,
     };
@@ -536,7 +536,7 @@ const mapUnusedMembers = (unusedMembers: any[]): any[] =>
       kind,
       code: DEP_MEMBER_KIND_TO_CODE[kind] ?? 'DEP_UNUSED_ENUM_MEMBER',
       file: String(m?.module ?? ''),
-      span: ZERO_SPAN,
+      span: m?.span ?? ZERO_SPAN,
       module: String(m?.module ?? ''),
       symbolName: String(m?.symbolName ?? ''),
       memberName: String(m?.memberName ?? ''),

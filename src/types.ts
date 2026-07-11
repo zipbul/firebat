@@ -225,6 +225,8 @@ export interface DependencyDeadExportFinding {
   readonly kind: 'dead-export';
   readonly module: string;
   readonly name: string;
+  /** The exported symbol's source location (from the gildash symbol index). */
+  readonly span: SourceSpan;
   /** Symbol kind from gildash (function, class, type, interface, enum, etc.) */
   readonly symbolKind?: string;
 }
@@ -250,6 +252,8 @@ export interface DependencyDuplicateExportFinding {
   readonly kind: 'duplicate-export';
   readonly name: string;
   readonly modules: ReadonlyArray<string>;
+  /** Source location of the first surface's symbol (matches `modules[0]`). */
+  readonly span: SourceSpan;
 }
 
 export interface DependencyUnusedMemberFinding {
@@ -257,6 +261,8 @@ export interface DependencyUnusedMemberFinding {
   readonly module: string;
   readonly symbolName: string;
   readonly memberName: string;
+  /** The member symbol's source location (from the gildash symbol index). */
+  readonly span: SourceSpan;
 }
 
 interface DependencyExportStats {

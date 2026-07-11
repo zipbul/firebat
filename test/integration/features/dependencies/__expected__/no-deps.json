@@ -7,12 +7,32 @@
       "kind": "dead-export",
       "module": "no-deps.ts",
       "name": "helper",
+      "span": {
+        "end": {
+          "column": 1,
+          "line": 4
+        },
+        "start": {
+          "column": 0,
+          "line": 2
+        }
+      },
       "symbolKind": "function"
     },
     {
       "kind": "dead-export",
       "module": "no-deps.ts",
       "name": "standalone",
+      "span": {
+        "end": {
+          "column": 29,
+          "line": 1
+        },
+        "start": {
+          "column": 0,
+          "line": 1
+        }
+      },
       "symbolKind": "variable"
     }
   ],

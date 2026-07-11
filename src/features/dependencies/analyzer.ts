@@ -15,6 +15,7 @@ import type {
   DependencyUnresolvedImportFinding,
   DependencyDuplicateExportFinding,
   DependencyUnusedMemberFinding,
+  SourceSpan,
 } from '../../types';
 
 import { globToRegExp } from '../../shared/glob-regex';
@@ -370,6 +371,8 @@ interface ExportEntry {
   name: string;
   kind: string;
   detail: SymbolDetail;
+  /** The symbol's source location (from the gildash symbol index). */
+  span: SourceSpan;
 }
 
 type Relation = ReturnType<Gildash['searchRelations']>[number];
@@ -398,7 +401,14 @@ const collectReExportEntries = (
       continue;
     }
 
-    existing.push({ name: rel.srcSymbolName, kind: 're-export', detail: {} as SymbolDetail });
+    existing.push({
+      name: rel.srcSymbolName,
+      kind: 're-export',
+      detail: {} as SymbolDetail,
+      // Re-export surfaces come from relations, which carry no source location
+      // (gildash CodeRelation has no span) — zero span is the honest value here.
+      span: { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } },
+    });
     exportsByFile.set(absFilePath, existing);
   }
 };
@@ -525,7 +535,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     for (const sym of allExported) {
       const absFilePath = resolveAbs(rootAbs, sym.filePath);
 
-      pushToMultiMap(exportsByFile, absFilePath, { name: sym.name, kind: sym.kind, detail: sym.detail });
+      pushToMultiMap(exportsByFile, absFilePath, { name: sym.name, kind: sym.kind, detail: sym.detail, span: sym.span });
     }
 
     // Also collect re-exported symbols (not in searchSymbols({ isExported: true }))
@@ -561,7 +571,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
   if (exportsByFile.size > 0) {
     // Group exports by name across all files
-    const nameToEntries = new Map<string, Array<{ relModule: string; absModule: string }>>();
+    const nameToEntries = new Map<string, Array<{ relModule: string; absModule: string; span: SourceSpan }>>();
 
     for (const [moduleAbs, symbols] of exportsByFile) {
       for (const sym of symbols) {
@@ -570,7 +580,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           continue;
         }
 
-        pushToMultiMap(nameToEntries, sym.name, { relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs });
+        pushToMultiMap(nameToEntries, sym.name, { relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs, span: sym.span });
       }
     }
 
@@ -580,7 +590,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       }
 
       // Use resolveSymbol to group by original source
-      const originToModules = new Map<string, string[]>();
+      const originToModules = new Map<string, Array<{ module: string; span: SourceSpan }>>();
 
       for (const entry of entries) {
         let originKey: string;
@@ -594,20 +604,23 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           originKey = `${entry.relModule}::${name}`;
         }
 
-        pushToMultiMap(originToModules, originKey, entry.relModule);
+        pushToMultiMap(originToModules, originKey, { module: entry.relModule, span: entry.span });
       }
 
-      for (const [, modules] of originToModules) {
+      for (const [, surfaces] of originToModules) {
         // A "surface" is a module: overload signatures (or any repeated declarations)
         // within ONE file are a single surface, not duplication — dedupe by module
         // and require 2+ DISTINCT modules (spec: "2개 이상의 표면에 중복 노출").
-        const distinctModules = [...new Set(modules)];
+        const distinctModules = [...new Set(surfaces.map(sf => sf.module))];
 
         if (distinctModules.length > 1) {
+          const first = surfaces.find(sf => sf.module === distinctModules[0]);
+
           duplicateExports.push({
             kind: 'duplicate-export',
             name,
             modules: distinctModules,
+            span: first?.span ?? { start: { line: 0, column: 0 }, end: { line: 0, column: 0 } },
           });
         }
       }
@@ -871,6 +884,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             module: relModule,
             name: sym.name,
             symbolKind: sym.kind,
+            span: sym.span,
           });
         }
       }
@@ -925,6 +939,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
                 module: toRelativePath(rootAbs, moduleAbs),
                 name: sym.name,
                 symbolKind: sym.kind,
+                span: sym.span,
               });
 
               changed = true;
@@ -1037,6 +1052,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
                 module: relModule,
                 symbolName: parent.name,
                 memberName: member.memberName!,
+                span: member.span,
               });
             }
           }

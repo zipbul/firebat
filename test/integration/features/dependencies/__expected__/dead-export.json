@@ -28,24 +28,64 @@
       "kind": "dead-export",
       "module": "dead-export/lib.ts",
       "name": "deadFn",
+      "span": {
+        "end": {
+          "column": 30,
+          "line": 2
+        },
+        "start": {
+          "column": 0,
+          "line": 2
+        }
+      },
       "symbolKind": "function"
     },
     {
       "kind": "dead-export",
       "module": "dead-export/self-only.ts",
       "name": "helper",
+      "span": {
+        "end": {
+          "column": 30,
+          "line": 1
+        },
+        "start": {
+          "column": 0,
+          "line": 1
+        }
+      },
       "symbolKind": "function"
     },
     {
       "kind": "dead-export",
       "module": "dead-export/prop-barrel.ts",
       "name": "h",
+      "span": {
+        "end": {
+          "column": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "line": 0
+        }
+      },
       "symbolKind": "re-export"
     },
     {
       "kind": "dead-export",
       "module": "dead-export/prop-origin.ts",
       "name": "h",
+      "span": {
+        "end": {
+          "column": 26,
+          "line": 1
+        },
+        "start": {
+          "column": 0,
+          "line": 1
+        }
+      },
       "symbolKind": "function"
     }
   ],

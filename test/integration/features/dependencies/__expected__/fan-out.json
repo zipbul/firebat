@@ -16,6 +16,16 @@
       "kind": "dead-export",
       "module": "fan-out/hub.ts",
       "name": "combined",
+      "span": {
+        "end": {
+          "column": 40,
+          "line": 5
+        },
+        "start": {
+          "column": 0,
+          "line": 5
+        }
+      },
       "symbolKind": "function"
     }
   ],

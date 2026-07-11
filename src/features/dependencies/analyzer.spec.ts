@@ -281,11 +281,14 @@ const relationsByType =
     return rels === undefined ? [] : [...rels];
   };
 
+const ROW_SPAN = { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } };
+
 interface MemberSymbolRow {
   kind: string;
   name: string;
   memberName: string | null;
   isExported: boolean;
+  span: { start: { line: number; column: number }; end: { line: number; column: number } };
 }
 
 /**
@@ -296,9 +299,9 @@ interface MemberSymbolRow {
 const guardsFileSymbols = (filePath: string): ReadonlyArray<MemberSymbolRow> =>
   filePath === 'src/guards.ts'
     ? [
-        { kind: 'namespace', name: 'Guards', memberName: null, isExported: true },
-        { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false },
-        { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false },
+        { kind: 'namespace', name: 'Guards', memberName: null, isExported: true, span: ROW_SPAN },
+        { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false, span: ROW_SPAN },
+        { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false, span: ROW_SPAN },
       ]
     : [];
 
@@ -1520,10 +1523,10 @@ const rootOnlyRead =
       importName: 'Color',
       calledMembers: ['Color.Red'],
       members: [
-        { kind: 'enum', name: 'Color', memberName: null, isExported: true },
-        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
-        { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false },
-        { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false },
+        { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: ROW_SPAN },
+        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: ROW_SPAN },
+        { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false, span: ROW_SPAN },
+        { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false, span: ROW_SPAN },
       ],
       expectedKind: 'unused-enum-member',
       expectedUnusedMemberNames: ['Blue', 'Green'],
@@ -1535,9 +1538,9 @@ const rootOnlyRead =
       importName: 'Guards',
       calledMembers: ['Guards.isString'],
       members: [
-        { kind: 'namespace', name: 'Guards', memberName: null, isExported: true },
-        { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false },
-        { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false },
+        { kind: 'namespace', name: 'Guards', memberName: null, isExported: true, span: ROW_SPAN },
+        { kind: 'function', name: 'Guards.isString', memberName: 'isString', isExported: false, span: ROW_SPAN },
+        { kind: 'function', name: 'Guards.isNumber', memberName: 'isNumber', isExported: false, span: ROW_SPAN },
       ],
       expectedKind: 'unused-ns-member',
       expectedUnusedMemberNames: ['isNumber'],
@@ -1565,9 +1568,9 @@ const rootOnlyRead =
       importName: '*',
       calledMembers: ['Color.Red'],
       members: [
-        { kind: 'enum', name: 'Color', memberName: null, isExported: true },
-        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
-        { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false },
+        { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: ROW_SPAN },
+        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: ROW_SPAN },
+        { kind: 'property', name: 'Color.Blue', memberName: 'Blue', isExported: false, span: ROW_SPAN },
       ],
     });
 
@@ -1582,8 +1585,8 @@ const rootOnlyRead =
       importName: 'Color',
       calledMembers: [],
       members: [
-        { kind: 'enum', name: 'Color', memberName: null, isExported: true },
-        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false },
+        { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: ROW_SPAN },
+        { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: ROW_SPAN },
       ],
     });
 
@@ -1864,5 +1867,52 @@ const rootOnlyRead =
 
     expectSingleMissingUnresolved(result);
     expect(result.unresolvedImports[0]!.module).toBe('src/barrel.ts');
+  });
+
+  /* ---------- SP: finding spans carry the gildash symbol location ---------- */
+  //
+  // gildash 심볼에는 span이 있는데 변환 파이프라인이 ZERO_SPAN을 합성해 리포트가
+  // 위치를 잃었다(자체 검사에서 실증). 심볼-기반 kind는 심볼 span을 그대로 나른다.
+
+  describe('finding spans carry the gildash symbol location', () => {
+    const SYM_SPAN = { start: { line: 1, column: 0 }, end: { line: 1, column: 10 } };
+
+    it('dead-export carries the exported symbol span', async () => {
+      const result = await analyzeWithExports({
+        graph: new Map([['/project/src/lib.ts', []]]),
+        exported: [mkSymbol(1, '/project/src/lib.ts', 'unusedFn')],
+        pkgJson: { main: './src/lib.ts' },
+      });
+
+      expect(result.deadExports[0]!.span).toEqual(SYM_SPAN);
+    });
+
+    it('duplicate-export carries the first surface symbol span', async () => {
+      const result = await analyzeWithExports({
+        graph: new Map([['/project/src/index.ts', []]]),
+        exported: [mkSymbol(1, '/project/src/a.ts', 'helper', 'function'), mkSymbol(2, '/project/src/b.ts', 'helper', 'function')],
+        resolveSymbol: resolveSymbolToOrigin('helper', 'src/origin.ts'),
+      });
+
+      expect(result.duplicateExports[0]!.span).toEqual(SYM_SPAN);
+    });
+
+    it('unused enum member carries the member symbol span', async () => {
+      const memberSpan = { start: { line: 7, column: 2 }, end: { line: 7, column: 5 } };
+      const result = await analyzeMembers({
+        container: mkSymbol(1, '/project/src/colors.ts', 'Color', 'enum'),
+        containerFile: '/project/src/colors.ts',
+        importName: 'Color',
+        calledMembers: ['Color.Red'],
+        members: [
+          { kind: 'enum', name: 'Color', memberName: null, isExported: true, span: SYM_SPAN },
+          { kind: 'property', name: 'Color.Red', memberName: 'Red', isExported: false, span: SYM_SPAN },
+          { kind: 'property', name: 'Color.Green', memberName: 'Green', isExported: false, span: memberSpan },
+        ],
+      });
+      const green = result.unusedMembers.find(m => m.memberName === 'Green');
+
+      expect(green?.span).toEqual(memberSpan);
+    });
   });
 });

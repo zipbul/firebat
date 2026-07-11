@@ -36,6 +36,16 @@
       "kind": "unused-ns-member",
       "memberName": "isNumber",
       "module": "unused-ns-member/guards.ts",
+      "span": {
+        "end": {
+          "column": 76,
+          "line": 3
+        },
+        "start": {
+          "column": 15,
+          "line": 3
+        }
+      },
       "symbolName": "Guards"
     }
   ]

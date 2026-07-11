@@ -15,6 +15,16 @@
       "kind": "dead-export",
       "module": "linear-chain/a.ts",
       "name": "a",
+      "span": {
+        "end": {
+          "column": 27,
+          "line": 3
+        },
+        "start": {
+          "column": 0,
+          "line": 3
+        }
+      },
       "symbolKind": "function"
     }
   ],
