@@ -57,6 +57,8 @@ describe('golden/duplicates', () => {
   rg('single-literal-keep'); // 비대상: 단일 상수값 반복 (상수 추출 영역)
   rg('type-alias-diff-bodies-keep'); // 타입 선언 본문은 결정 그 자체 — 치환 금지
   rg('interface-member-order-keep'); // 멤버 순서 다름 = 정규형 어긋남
+  rg('private-field-divergent-keep'); // K: 다른 #private 필드는 프로퍼티명이라 비치환 → 정규형 어긋남 (외부 코퍼스 FP)
+  rg('private-field-same-dead'); // W: 같은 #private 필드 동일 본문 = 진짜 클론 (수정 과억제 가드)
   rg('lookup-table-diff-content-keep'); // 규칙 데이터의 리터럴은 결정 그 자체 — 치환 금지
   rg('flat-constant-list-keep'); // 비대상: 평탄 스칼라 리스트는 단일 상수 값 (룩업 테이블 아님)
 

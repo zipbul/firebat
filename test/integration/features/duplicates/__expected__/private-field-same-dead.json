@@ -1,0 +1,42 @@
+[
+  {
+    "cloneType": "exact",
+    "findingKind": "exact-clone",
+    "items": [
+      {
+        "filePath": "/virtual/private-field-same-dead.ts",
+        "header": "anonymous",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 9
+          },
+          "start": {
+            "column": 6,
+            "line": 7
+          }
+        }
+      },
+      {
+        "filePath": "/virtual/private-field-same-dead.ts",
+        "header": "anonymous",
+        "kind": "function",
+        "span": {
+          "end": {
+            "column": 3,
+            "line": 13
+          },
+          "start": {
+            "column": 6,
+            "line": 11
+          }
+        }
+      }
+    ],
+    "suggestedParams": {
+      "kind": "identifier",
+      "pairs": []
+    }
+  }
+]
