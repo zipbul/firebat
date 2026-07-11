@@ -521,19 +521,122 @@ const rootOnlyRead =
     expect(bFanIn?.count).toBe(1);
   });
 
-  it('should detect cycles via getCyclePaths with relative paths', async () => {
+  it('reports one cycle per SCC from the value-only import graph', async () => {
     const graph = new Map<string, string[]>([
       ['/project/a.ts', ['/project/b.ts']],
       ['/project/b.ts', ['/project/a.ts']],
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => [['/project/a.ts', '/project/b.ts', '/project/a.ts']],
+      searchRelations: relationsOfType('imports', [
+        mkImport('/project/a.ts', '/project/b.ts', 'x'),
+        mkImport('/project/b.ts', '/project/a.ts', 'y'),
+      ]),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.cycles.length).toBe(1);
-    expect(result.cycles[0]!.path).toEqual(['a.ts', 'b.ts', 'a.ts']);
+    expect(result.cycles[0]!.path).toEqual(['a.ts', 'b.ts']);
+  });
+
+  it('reports ONE cycle for a dense SCC (not one per elementary circuit)', async () => {
+    // K3: a↔b, b↔c, a↔c is a single strongly-connected component. gildash's getCyclePaths would
+    // enumerate every elementary circuit (5 for K3); we report the component once.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/a.ts', ['/project/b.ts', '/project/c.ts']],
+          ['/project/b.ts', ['/project/a.ts', '/project/c.ts']],
+          ['/project/c.ts', ['/project/a.ts', '/project/b.ts']],
+        ]),
+      searchRelations: relationsOfType('imports', [
+        mkImport('/project/a.ts', '/project/b.ts', 'i1'),
+        mkImport('/project/a.ts', '/project/c.ts', 'i2'),
+        mkImport('/project/b.ts', '/project/a.ts', 'i3'),
+        mkImport('/project/b.ts', '/project/c.ts', 'i4'),
+        mkImport('/project/c.ts', '/project/a.ts', 'i5'),
+        mkImport('/project/c.ts', '/project/b.ts', 'i6'),
+      ]),
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.cycles.length).toBe(1);
+  });
+
+  it('reports TWO cycles for two SCCs joined by a bridge (Tarjan must not merge across the bridge)', async () => {
+    // {a↔b} and {c↔d} are distinct SCCs; the bridge b→c must not fold them into one component.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/a.ts', ['/project/b.ts']],
+          ['/project/b.ts', ['/project/a.ts', '/project/c.ts']],
+          ['/project/c.ts', ['/project/d.ts']],
+          ['/project/d.ts', ['/project/c.ts']],
+        ]),
+      searchRelations: relationsOfType('imports', [
+        mkImport('/project/a.ts', '/project/b.ts', 'i1'),
+        mkImport('/project/b.ts', '/project/a.ts', 'i2'),
+        mkImport('/project/b.ts', '/project/c.ts', 'i3'),
+        mkImport('/project/c.ts', '/project/d.ts', 'i4'),
+        mkImport('/project/d.ts', '/project/c.ts', 'i5'),
+      ]),
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.cycles.length).toBe(2);
+    expect(result.cycles.map(c => c.path).sort()).toEqual([
+      ['a.ts', 'b.ts'],
+      ['c.ts', 'd.ts'],
+    ]);
+  });
+
+  it('does not report a cycle formed only by type-only imports (runtime-erased)', async () => {
+    // `import type` is a `type-references` relation, never `imports`, so the value graph has no
+    // edges — a pure-type cycle is not a runtime import cycle.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/a.ts', ['/project/b.ts']],
+          ['/project/b.ts', ['/project/a.ts']],
+        ]),
+      searchRelations: (q: unknown) =>
+        (q as { type?: string }).type === 'type-references'
+          ? [
+              { ...mkImport('/project/a.ts', '/project/b.ts', 'T'), type: 'type-references' as StoredCodeRelation['type'] },
+              { ...mkImport('/project/b.ts', '/project/a.ts', 'U'), type: 'type-references' as StoredCodeRelation['type'] },
+            ]
+          : [],
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.cycles).toEqual([]);
+  });
+
+  it('does not report a mixed cycle whose runtime edges do not close (one hop type-only)', async () => {
+    // a → b is a value import; b → a is type-only. Runtime graph is a → b only → no cycle.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/a.ts', ['/project/b.ts']],
+          ['/project/b.ts', ['/project/a.ts']],
+        ]),
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [mkImport('/project/a.ts', '/project/b.ts', 'v')];
+        }
+
+        if (type === 'type-references') {
+          return [{ ...mkImport('/project/b.ts', '/project/a.ts', 'T'), type: 'type-references' as StoredCodeRelation['type'] }];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.cycles).toEqual([]);
   });
 
   const layerViolationCases: LayerViolationCase[] = [
@@ -824,7 +927,12 @@ const rootOnlyRead =
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => [['/project/a.ts', '/project/b.ts', '/project/c.ts', '/project/a.ts']],
+      searchRelations: relationsOfType('imports', [
+        mkImport('/project/a.ts', '/project/b.ts', 'x'),
+        mkImport('/project/a.ts', '/project/d.ts', 'y'),
+        mkImport('/project/b.ts', '/project/c.ts', 'z'),
+        mkImport('/project/c.ts', '/project/a.ts', 'w'),
+      ]),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
@@ -905,14 +1013,14 @@ const rootOnlyRead =
     expectEmptyDepsGraph(result);
   });
 
-  it('should return empty cycles when getCyclePaths returns Err', async () => {
+  it('should return empty cycles when the imports relation query errors', async () => {
     const graph = new Map<string, string[]>([
       ['/project/a.ts', ['/project/b.ts']],
       ['/project/b.ts', ['/project/a.ts']],
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => gildashThrow('cycle detection failed'),
+      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? gildashThrow('imports query failed') : []),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
@@ -983,16 +1091,17 @@ const rootOnlyRead =
     expectNoFanInOut(result);
   });
 
-  it('should handle self-importing file as self-loop cycle', async () => {
+  it('does not report a self-importing file as a cycle (circular-dependency needs two+ files)', async () => {
+    // spec: "두 파일 이상". A single file importing itself is a degenerate self-loop, not a
+    // circular dependency between modules — a size-1 SCC is never reported.
     const graph = new Map<string, string[]>([['/project/a.ts', ['/project/a.ts']]]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => [['/project/a.ts', '/project/a.ts']],
+      searchRelations: relationsOfType('imports', [mkImport('/project/a.ts', '/project/a.ts', 'x')]),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
-    expect(result.cycles.length).toBe(1);
-    expect(result.cycles[0]!.path).toEqual(['a.ts', 'a.ts']);
+    expect(result.cycles).toEqual([]);
   });
 
   it('should handle graph with all files having zero fan', async () => {
@@ -1035,7 +1144,7 @@ const rootOnlyRead =
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => gildashThrow('cycle error'),
+      searchRelations: (q: unknown) => ((q as { type?: string }).type === 'imports' ? gildashThrow('relations error') : []),
       searchSymbols: () => gildashThrow('search error'),
     });
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
@@ -1053,7 +1162,10 @@ const rootOnlyRead =
     ]);
     const g = createMockGildash({
       getImportGraph: async () => graph,
-      getCyclePaths: async () => [['/project/src/ui/comp.ts', '/project/src/domain/svc.ts', '/project/src/ui/comp.ts']],
+      searchRelations: relationsOfType('imports', [
+        mkImport('/project/src/ui/comp.ts', '/project/src/domain/svc.ts', 'x'),
+        mkImport('/project/src/domain/svc.ts', '/project/src/ui/comp.ts', 'y'),
+      ]),
     });
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,

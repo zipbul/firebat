@@ -647,6 +647,164 @@ const listFanStats = (rootAbs: string, counts: Map<string, number>, limit: numbe
   return sortDependencyFanStats(items).slice(0, limit);
 };
 
+/**
+ * Value-only file→file adjacency from `imports` relations. gildash records `import type` as a
+ * `type-references` relation (never `imports`), so this graph excludes runtime-erased type-only
+ * edges by construction — a cycle here is a real runtime import cycle. Self-imports (a file
+ * importing itself) are dropped: "두 파일 이상" (a same-file loop is a type/runtime bug, not a
+ * circular-dependency). Neighbours are sorted for deterministic downstream traversal.
+ */
+const buildValueAdjacency = (
+  rootAbs: string,
+  importRels: ReadonlyArray<{ readonly srcFilePath: string | null; readonly dstFilePath: string | null; readonly isExternal: boolean }>,
+): Map<string, ReadonlyArray<string>> => {
+  const sets = new Map<string, Set<string>>();
+
+  const ensure = (node: string): Set<string> => {
+    let set = sets.get(node);
+
+    if (set === undefined) {
+      set = new Set<string>();
+      sets.set(node, set);
+    }
+
+    return set;
+  };
+
+  for (const rel of importRels) {
+    if (rel.isExternal !== false || rel.srcFilePath === null || rel.dstFilePath === null) {
+      continue;
+    }
+
+    const from = resolveAbs(rootAbs, rel.srcFilePath);
+    const to = resolveAbs(rootAbs, rel.dstFilePath);
+
+    if (from === to) {
+      continue;
+    }
+
+    ensure(from).add(to);
+    ensure(to);
+  }
+
+  const adj = new Map<string, ReadonlyArray<string>>();
+
+  for (const [node, targets] of sets) {
+    adj.set(node, [...targets].sort());
+  }
+
+  return adj;
+};
+
+/**
+ * Strongly-connected components via iterative Tarjan (iterative to avoid stack overflow on deep
+ * graphs). Deterministic: nodes and neighbours are iterated in sorted order, so SCC membership and
+ * discovery order are corpus-independent for a fixed graph.
+ */
+const tarjanSCCs = (adj: Map<string, ReadonlyArray<string>>): string[][] => {
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const component: string[] = [];
+  const sccs: string[][] = [];
+  let counter = 0;
+
+  for (const root of [...adj.keys()].sort()) {
+    if (index.has(root)) {
+      continue;
+    }
+
+    const frames: Array<{ node: string; next: number }> = [{ node: root, next: 0 }];
+
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1]!;
+      const v = frame.node;
+
+      if (frame.next === 0) {
+        index.set(v, counter);
+        low.set(v, counter);
+        counter += 1;
+        component.push(v);
+        onStack.add(v);
+      }
+
+      const neighbours = adj.get(v) ?? [];
+
+      if (frame.next < neighbours.length) {
+        const w = neighbours[frame.next]!;
+        frame.next += 1;
+
+        if (!index.has(w)) {
+          frames.push({ node: w, next: 0 });
+        } else if (onStack.has(w)) {
+          low.set(v, Math.min(low.get(v)!, index.get(w)!));
+        }
+
+        continue;
+      }
+
+      // v is finished — close its SCC if it is a root, then fold its low-link into the parent.
+      if (low.get(v) === index.get(v)) {
+        const scc: string[] = [];
+
+        for (;;) {
+          const w = component.pop()!;
+          onStack.delete(w);
+          scc.push(w);
+
+          if (w === v) {
+            break;
+          }
+        }
+
+        sccs.push(scc);
+      }
+
+      frames.pop();
+
+      const parent = frames[frames.length - 1];
+
+      if (parent !== undefined) {
+        low.set(parent.node, Math.min(low.get(parent.node)!, low.get(v)!));
+      }
+    }
+  }
+
+  return sccs;
+};
+
+/**
+ * One representative simple cycle within a strongly-connected component, as an edge-following path
+ * (`p[i] → p[i+1]`, and `p[last] → p[0]`). Greedily follows the smallest in-SCC neighbour from the
+ * smallest node until a node repeats — deterministic and O(path) (no recursion). Every node in an
+ * SCC lies on some cycle, so this always terminates on a real cycle.
+ */
+const representativeCycle = (scc: ReadonlyArray<string>, adj: Map<string, ReadonlyArray<string>>): string[] => {
+  const inScc = new Set(scc);
+  const position = new Map<string, number>();
+  const path: string[] = [];
+  let node = [...scc].sort()[0]!;
+
+  for (;;) {
+    const at = position.get(node);
+
+    if (at !== undefined) {
+      return path.slice(at);
+    }
+
+    position.set(node, path.length);
+    path.push(node);
+
+    const next = (adj.get(node) ?? []).find(w => inScc.has(w));
+
+    if (next === undefined) {
+      return [...scc]; // unreachable for a real SCC (size ≥ 2); defensive
+    }
+
+    node = next;
+  }
+};
+
 const buildEdgeCutHints = (
   rootAbs: string,
   cycles: ReadonlyArray<ReadonlyArray<string>>,
@@ -810,18 +968,26 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
   const fanIn = listFanStats(rootAbs, inDegree, 10);
   const fanOut = listFanStats(rootAbs, outDegree, 10);
-  // 3. Cycles via gildash (Tarjan SCC + Johnson's circuits)
-  let cyclePaths: ReadonlyArray<ReadonlyArray<string>> = [];
+  // 3. Cycles — computed on the VALUE-only import graph (`searchRelations({type:'imports'})`), not
+  // gildash's `getImportGraph`/`getCyclePaths`. Those merge runtime-erased `import type` edges (a
+  // pure-type cycle is not a runtime cycle) and enumerate every elementary circuit (N per SCC → one
+  // component reported N times). Instead: build the value-only adjacency, find strongly-connected
+  // components (own iterative Tarjan), and report ONE representative cycle per non-trivial SCC.
+  let importRelations: ReturnType<Gildash['searchRelations']> = [];
 
   try {
-    const cycleResult = await gildash.getCyclePaths(undefined, { maxCycles: 100 });
-
-    cyclePaths = (cycleResult as string[][]).map(p => p.map(toAbs));
+    importRelations = gildash.searchRelations({ type: 'imports' });
   } catch (e) {
     if (!(e instanceof GildashError)) {
       throw e;
     }
   }
+
+  const valueAdjacency = buildValueAdjacency(rootAbs, importRelations);
+  const cyclePaths = tarjanSCCs(valueAdjacency)
+    .filter(scc => scc.length >= 2)
+    .map(scc => representativeCycle(scc, valueAdjacency))
+    .sort((left, right) => left.join('\n').localeCompare(right.join('\n')));
 
   const cycles = cyclePaths.map(p => ({ path: p.map(toRel) }));
   const cuts = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
