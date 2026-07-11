@@ -1334,6 +1334,43 @@ const rootOnlyRead =
     expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
   });
 
+  it('does not flag a type-only import as unlisted when satisfied by an @types-only declaration', async () => {
+    // 삼자리뷰(subagent): `import type { Request } from 'express'` 이 `@types/express` 만 선언된
+    // 경우 — type-only import 의 계약은 @types 로도 충족되고 런타임 로드가 없으므로 express 를
+    // unlisted-dependency 로 보고하면 안 된다. type-references 는 unused 억제에만 기여(unlisted 생성 X).
+    const g = createMockGildash({
+      getImportGraph: async () => new Map<string, string[]>([['/project/src/index.ts', []]]),
+      searchSymbols: () => [],
+      searchRelations: (q: unknown) => {
+        const query = q as { type?: string };
+
+        if (query.type === 'type-references') {
+          return [
+            {
+              type: 'type-references' as StoredCodeRelation['type'],
+              srcFilePath: '/project/src/index.ts',
+              srcSymbolName: null,
+              dstFilePath: null,
+              dstSymbolName: 'Request',
+              dstProject: null,
+              isExternal: true,
+              specifier: 'express',
+            },
+          ];
+        }
+
+        return [];
+      },
+    });
+
+    const result = await analyzeDependencies(g, {
+      rootAbs: ROOT,
+      readFileFn: rootOnlyRead({ main: './src/index.ts', devDependencies: { '@types/express': '^4.0.0' } }),
+    });
+
+    expect(result.unusedDeps).toEqual([]);
+  });
+
   it('holds a declared dep whose name is a Node builtin when imported (polyfill intent)', async () => {
     // `buffer`/`events`/`punycode` 등은 builtinModules 에도 있지만 npm 폴리필로도 선언·사용된다.
     // 번들러/브라우저 타깃이면 npm 패키지가 로드되므로(타깃 환경은 사실로 안 닫힘), 선언 + import 된

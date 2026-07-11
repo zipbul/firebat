@@ -1468,15 +1468,19 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
         }
       }
 
-      // #5: `import type { … } from 'pkg'` is a real consumption of `pkg`, but gildash records it
-      // as a `type-references` relation, not `imports`. Count external type-references toward the
-      // used-package set so a dep consumed only via a type-only import is not flagged unused.
+      // #5: `import type { … } from 'pkg'` is a real consumption of `pkg` (gildash records it as a
+      // `type-references` relation, not `imports`). It feeds used-SUPPRESSION only — NOT unlisted:
+      // a type-only import's contract is also satisfied by `@types/pkg` (which the unlisted check
+      // does not back-map), so folding it into the unlisted-candidate set would false-W a package
+      // that is declared only under `@types/*`. Kept separate for that reason.
+      const typeOnlyExternal = new Map<string, Set<string>>();
+
       for (const rel of typeRefs) {
         if (rel.isExternal === true && typeof rel.specifier === 'string') {
           const pkgName = extractPackageName(rel.specifier);
 
           if (pkgName && !isPrefixedBuiltin(pkgName)) {
-            addToSetMap(externalPackages, pkgName, toRel(resolveAbs(rootAbs, rel.srcFilePath)));
+            addToSetMap(typeOnlyExternal, pkgName, toRel(resolveAbs(rootAbs, rel.srcFilePath)));
           }
         }
       }
@@ -1513,7 +1517,11 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
       const shouldIgnore = (name: string): boolean => ignorePats.some(re => re.test(name));
 
-      const checkDeps = (depRoot: string, usedPackages: Map<string, Set<string>>): void => {
+      const checkDeps = (
+        depRoot: string,
+        usedPackages: Map<string, Set<string>>,
+        typeUsed: ReadonlyMap<string, ReadonlySet<string>>,
+      ): void => {
         const pkgDeps = readPackageDependencies(depRoot, readFn);
         const declaredPkgs = readDeclaredPackages(depRoot, readFn);
         const selfName = readPackageName(depRoot, readFn);
@@ -1545,7 +1553,8 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             continue;
           }
 
-          if (usedPackages.has(declared)) {
+          // Consumed via a value import (usedPackages) OR a type-only import (typeUsed) → not unused.
+          if (usedPackages.has(declared) || typeUsed.has(declared)) {
             continue;
           }
 
@@ -1588,11 +1597,10 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
       if (workspaces && workspaces.size > 0) {
         // Per-workspace analysis: group external imports by workspace
-        for (const [, wsRoot] of workspaces) {
-          const wsRel = toRelativePath(rootAbs, wsRoot);
-          const wsPackages = new Map<string, Set<string>>();
+        const splitByWorkspace = (src: Map<string, Set<string>>, wsRel: string): Map<string, Set<string>> => {
+          const out = new Map<string, Set<string>>();
 
-          for (const [pkgName, files] of externalPackages) {
+          for (const [pkgName, files] of src) {
             const wsFiles = new Set<string>();
 
             for (const f of files) {
@@ -1602,14 +1610,20 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             }
 
             if (wsFiles.size > 0) {
-              wsPackages.set(pkgName, wsFiles);
+              out.set(pkgName, wsFiles);
             }
           }
 
-          checkDeps(wsRoot, wsPackages);
+          return out;
+        };
+
+        for (const [, wsRoot] of workspaces) {
+          const wsRel = toRelativePath(rootAbs, wsRoot);
+
+          checkDeps(wsRoot, splitByWorkspace(externalPackages, wsRel), splitByWorkspace(typeOnlyExternal, wsRel));
         }
       } else {
-        checkDeps(rootAbs, externalPackages);
+        checkDeps(rootAbs, externalPackages, typeOnlyExternal);
       }
     }
   }
