@@ -2,6 +2,7 @@ import type { Gildash, SymbolDetail } from '@zipbul/gildash';
 
 import { GildashError, normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
+import ts from 'typescript';
 
 import type { DependencyLayerRule } from '../../shared/dependency-layer-rule';
 import type {
@@ -63,6 +64,12 @@ interface AnalyzeDependenciesInput {
   readonly layers?: ReadonlyArray<DependencyLayerRule>;
   readonly allowedDependencies?: Readonly<Record<string, ReadonlyArray<string>>>;
   readonly readFileFn?: (path: string) => string;
+  /**
+   * List a directory's entry names (used to enumerate root-level `tsconfig*.json` for ambient-type
+   * resolution). Injected fs-backed in prod; omitted in unit tests → only the explicit `tsconfig.json`
+   * is read. A failing/absent lister yields no extra configs (widen-only — never a false W).
+   */
+  readonly listDirFn?: (dir: string) => ReadonlyArray<string>;
   /** Workspace package map (name → rootAbs) for monorepo support. When provided, unused/unlisted dep analysis runs per workspace. */
   readonly workspacePackages?: ReadonlyMap<string, string>;
   /** Glob patterns for dependencies to ignore in unused dependency detection. */
@@ -230,6 +237,316 @@ const readPackageName = (rootAbs: string, readFn: (p: string) => string): string
     return typeof parsed.name === 'string' ? parsed.name : null;
   } catch {
     return null;
+  }
+};
+
+/* ------------------------------------------------------------------ */
+/*  Ambient type-package resolution (tsconfig `types` + triple-slash)  */
+/* ------------------------------------------------------------------ */
+
+/** The owner package name (root) of a `types`/reference specifier (`foo/sub` → `foo`, `@s/p/x` → `@s/p`). */
+const packageRoot = (spec: string): string => {
+  const segs = spec.split('/');
+
+  return spec.startsWith('@') ? segs.slice(0, 2).join('/') : segs[0]!;
+};
+
+/** DefinitelyTyped scoped-name mangling: `@scope/pkg` → `scope__pkg` (`@types/scope__pkg`). */
+const mangleScoped = (pkg: string): string => (pkg.startsWith('@') ? pkg.slice(1).replace('/', '__') : pkg);
+
+/** Every hold key a `types`/reference entry `spec` contributes (widen-only): itself, its owner root, and the `@types` stub. */
+const ambientKeysFor = (spec: string, out: Set<string>): void => {
+  const root = packageRoot(spec);
+
+  out.add(spec);
+  out.add(root);
+  out.add(`@types/${mangleScoped(root)}`);
+};
+
+/** A `ts.ParseConfigHost` over the injected `readFn` (no real fs; missing file → undefined/false). */
+const makeParseConfigHost = (readFn: (p: string) => string): ts.ParseConfigHost => ({
+  useCaseSensitiveFileNames: true,
+  readDirectory: () => [],
+  fileExists: (p: string): boolean => {
+    try {
+      readFn(p);
+
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  readFile: (p: string): string | undefined => {
+    try {
+      return readFn(p);
+    } catch {
+      return undefined;
+    }
+  },
+});
+
+/**
+ * The `/// <reference types="X" />` (type) and `/// <reference path="Y" />` (path) directives in
+ * `fileAbs`, via TypeScript's own `preProcessFile` — so attribute order, whitespace, BOM, and the
+ * head-only validity rule match the compiler exactly (a hand regex misses `preserve="…" types=…`).
+ * Missing/unreadable/garbage → empty.
+ */
+const extractReferenceDirectives = (
+  readFn: (p: string) => string,
+  fileAbs: string,
+): { typeRefs: string[]; pathRefs: string[] } => {
+  let text: string;
+
+  try {
+    text = readFn(fileAbs);
+  } catch {
+    return { typeRefs: [], pathRefs: [] };
+  }
+
+  try {
+    const info = ts.preProcessFile(text, true, false);
+
+    return {
+      typeRefs: info.typeReferenceDirectives.map(r => r.fileName),
+      pathRefs: info.referencedFiles.map(r => r.fileName),
+    };
+  } catch {
+    return { typeRefs: [], pathRefs: [] };
+  }
+};
+
+/** Collect every `.d.ts`/`.d.mts`/`.d.cts` path anywhere in a package.json `exports` subtree. */
+const collectExportsDts = (node: unknown, out: Set<string>): void => {
+  if (typeof node === 'string') {
+    if (/\.d\.[mc]?ts$/.test(node)) {
+      out.add(node);
+    }
+
+    return;
+  }
+
+  if (node === null || typeof node !== 'object') {
+    return;
+  }
+
+  for (const value of Object.values(node as Record<string, unknown>)) {
+    collectExportsDts(value, out);
+  }
+};
+
+/**
+ * Every candidate entry `.d.ts` relative path for a package: manifest `types`/`typings`, every
+ * `.d.ts` reachable in `exports` (any condition nesting — `exports["."].import.types`, etc.), and
+ * the default `index.d.ts`. Returning ALL candidates is widen-only: scanning an extra `.d.ts` for
+ * reference directives can only add holds, so an over-broad set never causes a false W.
+ */
+const entryDtsRels = (manifest: { types?: unknown; typings?: unknown; exports?: unknown }): string[] => {
+  const rels = new Set<string>();
+
+  if (typeof manifest.types === 'string') {
+    rels.add(manifest.types);
+  }
+
+  if (typeof manifest.typings === 'string') {
+    rels.add(manifest.typings);
+  }
+
+  collectExportsDts(manifest.exports, rels);
+  rels.add('index.d.ts');
+
+  return [...rels];
+};
+
+/**
+ * Resolve a package's candidate entry `.d.ts` absolute paths, walking `node_modules` depRoot→rootAbs.
+ * Empty ONLY when no readable `package.json` is found in the walk (package not installed here).
+ */
+const resolveEntryDtsPaths = (depRoot: string, rootAbs: string, pkg: string, readFn: (p: string) => string): string[] => {
+  let dir = depRoot;
+
+  for (;;) {
+    const pkgDir = path.join(dir, 'node_modules', pkg);
+
+    try {
+      return entryDtsRels(readPackageJson(pkgDir, readFn)).map(rel => path.join(pkgDir, rel));
+    } catch {
+      if (dir === rootAbs) {
+        return [];
+      }
+
+      const parent = path.dirname(dir);
+
+      dir = parent.length < rootAbs.length ? rootAbs : parent;
+    }
+  }
+};
+
+interface AmbientHolds {
+  /** false → the ambient set is not closable at this root → HOLD every unimported dep (per "닫히지 않으면 보류"). */
+  readonly closed: boolean;
+  readonly holds: ReadonlySet<string>;
+}
+
+/** Bound on the `.d.ts` reference-chain BFS; tripping it returns `closed:false` (HOLD), never a partial closed set. */
+const AMBIENT_CHAIN_MAX = 4096;
+
+/**
+ * Packages consumed AMBIENTLY (no `import`) at `depRoot`, so they are never mis-reported as
+ * unused-dependency. Every source is a DECLARED fact, never a name guess:
+ *   (b) tsconfig `compilerOptions.types` — extends-merged, jsonc-safe, subpath-resolved via the
+ *       TypeScript compiler API, following `references` (which TS does NOT merge) and every
+ *       root-level `tsconfig*.json` — plus the owner package root of each entry;
+ *   (c1) `/// <reference types="X" />` in project sources;
+ *   (c2) the same directive (and `reference path` hops) in the entry `.d.ts` of a held / `@types/*`
+ *        package (the `@types/bun` → `bun-types` reference chain), bounded BFS over files.
+ * The caller keeps the unconditional `@types/*` blanket hold (a) separately.
+ * `closed` is false — the caller then holds every unimported dep at this root — when the ambient set
+ * cannot be closed: an unreadable `extends` base, custom `typeRoots` with no explicit `types`, any
+ * non-benign tsconfig diagnostic, or a reference chain exceeding the BFS bound. Never throws (any
+ * failure → `{ closed:false }`, the FN direction — never a false W).
+ */
+const resolveAmbientTypeHolds = (
+  depRoot: string,
+  rootAbs: string,
+  readFn: (p: string) => string,
+  listDir: (dir: string) => ReadonlyArray<string>,
+  projectFiles: ReadonlySet<string>,
+  declaredDeps: ReadonlySet<string>,
+): AmbientHolds => {
+  const host = makeParseConfigHost(readFn);
+  const holds = new Set<string>();
+  const ingested = new Set<string>();
+
+  const ingestTsconfig = (tsconfigPath: string): 'closed' | 'unclosable' | 'absent' => {
+    if (ingested.has(tsconfigPath)) {
+      return 'closed';
+    }
+
+    ingested.add(tsconfigPath);
+
+    if (!host.fileExists(tsconfigPath)) {
+      return 'absent';
+    }
+
+    const read = ts.readConfigFile(tsconfigPath, host.readFile);
+
+    if (read.error !== undefined || read.config === undefined) {
+      return 'unclosable';
+    }
+
+    const parsed = ts.parseJsonConfigFileContent(read.config, host, path.dirname(tsconfigPath));
+
+    // Any diagnostic other than the benign 18003 ("no inputs", expected from the empty
+    // readDirectory) means the config is not fully trustworthy — an unreadable/malformed/circular
+    // `extends` (5083/6053/1005/18000, …) → we cannot prove the ambient set → unclosable.
+    if (parsed.errors.some(e => e.code !== 18003)) {
+      return 'unclosable';
+    }
+
+    // Custom typeRoots with no explicit `types` auto-includes every folder under those roots —
+    // folder names unreachable through readFn → unclosable.
+    if (parsed.options.typeRoots !== undefined && parsed.options.types === undefined) {
+      return 'unclosable';
+    }
+
+    for (const entry of parsed.options.types ?? []) {
+      ambientKeysFor(entry, holds);
+    }
+
+    // TS does not merge a referenced project's `types` into the referencing config — follow each.
+    // A declared reference that we cannot read ('absent'/'unclosable') leaves the ambient set
+    // unprovable → unclosable (per "닫히지 않으면 보류").
+    for (const ref of parsed.projectReferences ?? []) {
+      const refPath = ref.path.endsWith('.json') ? ref.path : path.join(ref.path, 'tsconfig.json');
+
+      if (ingestTsconfig(refPath) !== 'closed') {
+        return 'unclosable';
+      }
+    }
+
+    return 'closed';
+  };
+
+  try {
+    // Primary configs — authoritative for the scanned graph. Their extends/references chain is
+    // followed; an unclosable primary → HOLD every unimported dep at this root.
+    for (const primary of new Set([path.join(depRoot, 'tsconfig.json'), path.join(rootAbs, 'tsconfig.json')])) {
+      if (ingestTsconfig(primary) === 'unclosable') {
+        return { closed: false, holds };
+      }
+    }
+
+    // Sibling root-level `tsconfig*.json` (tsconfig.build.json / tsconfig.node.json / …) are
+    // ADDITIVE widen-only type sources: a clean sibling contributes its `types`; a broken one
+    // contributes nothing (its `types` would not load in reality either) and does NOT force a
+    // root-wide hold. listDir is fs-backed in prod; empty (mock/no-fs) → only the primaries run.
+    for (const dir of new Set([depRoot, rootAbs])) {
+      for (const name of listDir(dir)) {
+        if (/^tsconfig.*\.json$/.test(name)) {
+          ingestTsconfig(path.join(dir, name));
+        }
+      }
+    }
+
+    // (c1) project-source triple-slash type references.
+    for (const fileAbs of projectFiles) {
+      for (const ref of extractReferenceDirectives(readFn, fileAbs).typeRefs) {
+        ambientKeysFor(ref, holds);
+      }
+    }
+
+    // (c2) reference chain over the entry `.d.ts` of held / `@types/*` packages, following both
+    // `reference types` (→ hold + that package's entry) and `reference path` (→ sibling file).
+    // Bounded BFS over FILES; tripping the bound returns unclosable (never a partial closed set).
+    const seenFiles = new Set<string>();
+    const fileQueue: string[] = [];
+
+    for (const held of holds) {
+      fileQueue.push(...resolveEntryDtsPaths(depRoot, rootAbs, packageRoot(held), readFn));
+    }
+
+    // A declared @types package we cannot resolve at all (no readable manifest in the walk) may
+    // carry a `/// <reference types>` chain we would then miss → hold-all rather than risk a false W.
+    for (const typesPkg of [...declaredDeps].filter(d => d.startsWith('@types/'))) {
+      const entries = resolveEntryDtsPaths(depRoot, rootAbs, typesPkg, readFn);
+
+      if (entries.length === 0) {
+        return { closed: false, holds };
+      }
+
+      fileQueue.push(...entries);
+    }
+
+    let guard = 0;
+
+    while (fileQueue.length > 0) {
+      if (guard++ >= AMBIENT_CHAIN_MAX) {
+        return { closed: false, holds };
+      }
+
+      const file = fileQueue.shift()!;
+
+      if (seenFiles.has(file)) {
+        continue;
+      }
+
+      seenFiles.add(file);
+
+      const { typeRefs, pathRefs } = extractReferenceDirectives(readFn, file);
+
+      for (const ref of typeRefs) {
+        ambientKeysFor(ref, holds);
+        fileQueue.push(...resolveEntryDtsPaths(depRoot, rootAbs, packageRoot(ref), readFn));
+      }
+
+      for (const rel of pathRefs) {
+        fileQueue.push(path.resolve(path.dirname(file), rel));
+      }
+    }
+
+    return { closed: true, holds };
+  } catch {
+    return { closed: false, holds };
   }
 };
 
@@ -425,6 +742,9 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // package boundary and hold all dead-export verdicts.
       throw new Error(`ENOENT (no readFileFn): ${p}`);
     });
+  // Directory lister for enumerating root-level `tsconfig*.json` (ambient-type resolution).
+  // Omitted (unit tests) → no extra configs beyond the explicit `tsconfig.json` (widen-only).
+  const listDir = input?.listDirFn ?? ((): ReadonlyArray<string> => []);
   // 1. Import graph
   let graph: Map<string, string[]>;
 
@@ -1147,6 +1467,11 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           }
         }
 
+        // Packages consumed ambiently (no import) — resolved from declared tsconfig `types` +
+        // triple-slash references. When the ambient set is not closable, `closed` is false and we
+        // hold every unimported dep at this root (per "닫히지 않으면 보류"). See resolveAmbientTypeHolds.
+        const ambient = resolveAmbientTypeHolds(depRoot, rootAbs, readFn, listDir, new Set(absGraph.keys()), declaredPkgs);
+
         for (const declared of pkgDeps) {
           if (declared === selfName || shouldIgnore(declared)) {
             continue;
@@ -1156,12 +1481,22 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             continue;
           }
 
-          // @types/* deadness does not close from a single leaf manifest — the ambient/global
-          // inclusion of a type package depends on tsconfig `types`/`typeRoots`, `extends`,
-          // `references`, and triple-slash `/// <reference types>` directives (un-mergeable here),
-          // and ambient-global packages (@types/node, @types/jest) are consumed with no import at
-          // all. Per "닫히지 않으면 보류", hold every @types/* (FN) rather than risk a false W.
+          // (e) Ambient set unclosable (unreadable `extends`, custom `typeRoots` without `types`,
+          // unparseable tsconfig) → cannot prove any unimported dep is unconsumed → hold all.
+          if (!ambient.closed) {
+            continue;
+          }
+
+          // (a) @types/* is auto-included under the default typeRoot (`node_modules/@types`) and
+          // consumed with no import. Held UNCONDITIONALLY — never gated on `types` presence, or a
+          // `types` allowlist that omits an installed @types would become a false W. [guard G1]
           if (declared.startsWith('@types/')) {
+            continue;
+          }
+
+          // (b)+(c) Declared as an ambient type via tsconfig `types` or a triple-slash reference
+          // (incl. the `@types/bun` → `bun-types` reference chain) — consumed with no import.
+          if (ambient.holds.has(declared)) {
             continue;
           }
 

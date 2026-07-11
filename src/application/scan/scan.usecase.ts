@@ -1,5 +1,5 @@
 // MUST: MUST-1
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 
 import type { FirebatCliOptions } from '../..';
@@ -1005,6 +1005,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         analyzeDependencies(gildash, {
           rootAbs: ctx.rootAbs,
           readFileFn: (p: string) => readFileSync(p, 'utf8'),
+          listDirFn: (dir: string) => readdirSync(dir),
           ...(options.dependenciesLayers !== undefined ? { layers: options.dependenciesLayers } : {}),
           ...(options.dependenciesAllowedDependencies !== undefined
             ? { allowedDependencies: options.dependenciesAllowedDependencies }

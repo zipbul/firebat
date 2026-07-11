@@ -1261,6 +1261,318 @@ const rootOnlyRead =
     expect(actualUnresolved).toEqual([...expectedUnresolved]);
   });
 
+  /* ---------- AT: unused-dependency holds ambient-type packages (tsconfig-resolved) ---------- */
+
+  describe('unused-dependency holds ambient-type packages', () => {
+    // A readFn serving root package.json + tsconfig(.json) + installed no-bin manifests.
+    // `tsconfig` is raw text (jsonc allowed). `dtsByPkg` maps `node_modules/<pkg>/index.d.ts`
+    // content so reference-chain (`@types/bun` → `bun-types`) can be exercised.
+    const ambientReadFn =
+      (opts: {
+        deps?: Record<string, string>;
+        tsconfig?: string | null;
+        tsconfigPath?: string;
+        extraFiles?: Record<string, string>;
+        dtsByPkg?: Record<string, string>;
+      }) =>
+      (p: string): string => {
+        if (p === `${ROOT}/package.json`) {
+          return JSON.stringify({ main: './src/index.ts', devDependencies: opts.deps ?? {} });
+        }
+
+        if (opts.tsconfig != null && p === `${ROOT}/${opts.tsconfigPath ?? 'tsconfig.json'}`) {
+          return opts.tsconfig;
+        }
+
+        if (opts.extraFiles && p in opts.extraFiles) {
+          return opts.extraFiles[p]!;
+        }
+
+        const dtsHit = opts.dtsByPkg
+          ? Object.entries(opts.dtsByPkg).find(([pkg]) => p === `${ROOT}/node_modules/${pkg}/index.d.ts`)
+          : undefined;
+
+        if (dtsHit) {
+          return dtsHit[1];
+        }
+
+        if (/\/node_modules\/(@[^/]+\/)?[^/]+\/package\.json$/.test(p)) {
+          // installed, no `bin` → 'no-bin' so the dep is a reportable candidate (not a bin-hold).
+          return /\/(bun-types|@types\/bun)\/package\.json$/.test(p) ? JSON.stringify({ types: './index.d.ts' }) : '{}';
+        }
+
+        throw new Error(`ENOENT: ${p}`);
+      };
+
+    const runAmbient = (
+      readFileFn: (p: string) => string,
+      listDirFn?: (dir: string) => ReadonlyArray<string>,
+    ): Promise<Awaited<ReturnType<typeof analyzeDependencies>>> =>
+      analyzeDependencies(importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]])), {
+        rootAbs: ROOT,
+        readFileFn,
+        ...(listDirFn === undefined ? {} : { listDirFn }),
+      });
+
+    it('holds bun-types when tsconfig compilerOptions.types lists it (jsonc-safe)', async () => {
+      // 외부 코퍼스 FP: `bun-types` 는 import 없이 ambient 전역 제공. tsconfig `types` 에
+      // 나열됐다는 선언된 사실로 보류해야 한다. tsconfig 는 주석 포함 jsonc — plain JSON.parse
+      // 면 파싱 실패로 fix 가 무효화되므로, jsonc 경로가 실제로 동작함을 이 케이스가 실증한다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'bun-types': '^1.0.0' },
+          tsconfig: '{\n  // bun ambient types\n  "compilerOptions": { "types": ["bun-types"] },\n}',
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('holds bun-types via the @types/bun → bun-types reference chain (no import, no `types`)', async () => {
+      // 최신 Bun 스택: `@types/bun` 이 자동포함(default typeRoot)되고 그 entry .d.ts 가
+      // `/// <reference types="bun-types" />` 로 `bun-types` 를 끌어온다. 둘 다 직접 선언한
+      // 레포에서 `bun-types` 는 import 없이 참조체인으로 로드 → 보류해야 한다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { '@types/bun': '^1.0.0', 'bun-types': '^1.0.0' },
+          tsconfig: null,
+          dtsByPkg: { '@types/bun': '/// <reference types="bun-types" />\nexport {};' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('holds the owner package of a subpath `types` entry (`types:["foo/sub"]` → hold `foo`)', async () => {
+      // codex 실증: `types:["foo/sub"]` 가 node_modules/foo/sub.d.ts 를 로드. 선언 dep 은 `foo`
+      // 라 정확문자열만 보류하면 false-W → 패키지 루트까지 보류해야 한다.
+      const result = await runAmbient(
+        ambientReadFn({ deps: { foo: '^1.0.0' }, tsconfig: '{ "compilerOptions": { "types": ["foo/sub"] } }' }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('holds bun-types listed only in an extends base (TS compiler API merges extends)', async () => {
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'bun-types': '^1.0.0' },
+          tsconfig: '{ "extends": "./tsconfig.base.json" }',
+          extraFiles: { [`${ROOT}/tsconfig.base.json`]: '{ "compilerOptions": { "types": ["bun-types"] } }' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('holds a project-source triple-slash reference (`/// <reference types="X" />`)', async () => {
+      // `/// <reference types="some-types" />` 는 명세정의 구문의 명시적 소비 선언 = 사실.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'some-types': '^1.0.0' },
+          tsconfig: null,
+          extraFiles: { '/project/src/index.ts': '/// <reference types="some-types" />\nexport const a = 1;\n' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('reports a plain non-ambient dep with no import/types/reference (TP — no over-hold)', async () => {
+      // 순수 라이브러리 dead-lib: import 0·types 미나열·참조 없음 → 진짜 미사용 = 보고(TP).
+      // v1 이 `bun-types` 를 이 TP 예시로 쓰던 테스트는 참조체인으로 false-W 가 될 수 있어 폐기,
+      // ambient 아닌 dead-lib 로 교체.
+      const result = await runAmbient(ambientReadFn({ deps: { 'dead-lib': '^1.0.0' }, tsconfig: '{}' }));
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual(['dead-lib']);
+    });
+
+    it('keeps the @types/* blanket hold unconditional even when `types` omits it [G1]', async () => {
+      // `types:["node"]` 는 tsc 상 @types 자동포함을 좁히지만, 그걸 흉내내면 미나열 @types 마다
+      // false-W. `@types/lodash` 는 여전히 무조건 보류돼야 한다.
+      const result = await runAmbient(
+        ambientReadFn({ deps: { '@types/lodash': '^4.0.0' }, tsconfig: '{ "compilerOptions": { "types": ["node"] } }' }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('HOLDs every unimported dep at a root whose `extends` base is unreadable (e)', async () => {
+      // 못 읽는 extends → ambient 집합 미닫힘 → 그 root 의 non-import·non-bin dep 전량 HOLD.
+      const result = await runAmbient(
+        ambientReadFn({ deps: { 'dead-lib': '^1.0.0' }, tsconfig: '{ "extends": "./missing-base.json" }' }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('HOLDs every unimported dep when custom typeRoots is set with no explicit `types` (e)', async () => {
+      const result = await runAmbient(
+        ambientReadFn({ deps: { 'dead-lib': '^1.0.0' }, tsconfig: '{ "compilerOptions": { "typeRoots": ["./types"] } }' }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('HOLDs (no crash) when a present tsconfig is unparseable garbage [G2]', async () => {
+      const result = await runAmbient(
+        ambientReadFn({ deps: { 'dead-lib': '^1.0.0' }, tsconfig: '{ this is : not json ]' }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('holds a `preserve="…" types="X"` directive (TS preProcessFile, not a hand regex)', async () => {
+      // codex 실증 FP: `types` 가 첫 속성이 아니면 hand regex 가 놓친다. TS 자체 파서로 처리.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'some-types': '^1.0.0' },
+          tsconfig: null,
+          extraFiles: { '/project/src/index.ts': '/// <reference preserve="true" types="some-types" />\nexport {};\n' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('follows project `references` (TS does not merge referenced `types`)', async () => {
+      // grok HIGH: solution-style root(`files:[]`, `references`)의 참조 config 에만 types 가
+      // 있는 경우 — TS 는 병합하지 않으므로 각 참조 config 를 직접 열어야 한다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'bun-types': '^1.0.0' },
+          tsconfig: '{ "files": [], "references": [{ "path": "./tsconfig.app.json" }] }',
+          extraFiles: { [`${ROOT}/tsconfig.app.json`]: '{ "compilerOptions": { "types": ["bun-types"] } }' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('HOLDs when an extends base is present but malformed (TS1005 → unclosable) [C]', async () => {
+      // codex/subagent LOW: 못 읽는 extends 는 5083/6053 이지만 존재하나 깨진 base 는 1005.
+      // 18003(no-inputs) 외 모든 진단을 unclosable 로 처리 → 신뢰 못 하는 config 는 HOLD.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'dead-lib': '^1.0.0' },
+          tsconfig: '{ "extends": "./base.json" }',
+          extraFiles: { [`${ROOT}/base.json`]: '{ "compilerOptions": { "types": ["bun-types"]' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('resolves a held package entry .d.ts via `exports["."].types` in the reference chain', async () => {
+      // codex #2: entry .d.ts 가 exports 로만 노출되면 index.d.ts 폴백이 참조체인을 끊는다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { '@types/bun': '^1.0.0', 'bun-types': '^1.0.0' },
+          tsconfig: null,
+          extraFiles: {
+            '/project/node_modules/@types/bun/package.json': JSON.stringify({ exports: { '.': { types: './idx.d.ts' } } }),
+            '/project/node_modules/@types/bun/idx.d.ts': '/// <reference types="bun-types" />\nexport {};',
+          },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('resolves entry .d.ts via a condition-first `exports["."].import.types` (dual ESM/CJS shape)', async () => {
+      // codex/grok HIGH: 최신 dual 패키지는 `exports["."].import.types` 처럼 조건이 먼저,
+      // types 가 그 안에 온다. index.d.ts 폴백이면 참조체인이 끊겨 bun-types false-W.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { '@types/bun': '^1.0.0', 'bun-types': '^1.0.0' },
+          tsconfig: null,
+          extraFiles: {
+            '/project/node_modules/@types/bun/package.json': JSON.stringify({
+              exports: {
+                '.': {
+                  import: { types: './dist/index.d.mts', default: './dist/index.mjs' },
+                  require: { types: './dist/index.d.ts', default: './dist/index.cjs' },
+                },
+              },
+            }),
+            '/project/node_modules/@types/bun/dist/index.d.mts': '/// <reference types="bun-types" />\nexport {};',
+          },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('HOLDs when a declared @types package cannot be resolved in node_modules (chain unprovable)', async () => {
+      // grok MED (B): 선언된 @types/* 가 walk 에서 안 읽히면 참조체인을 증명 못 함 → hold-all.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { '@types/bun': '^1.0.0', 'dead-lib': '^1.0.0' },
+          tsconfig: null,
+          extraFiles: { '/project/node_modules/@types/bun/package.json': '' }, // present-but-empty → JSON.parse throws → unreadable
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('HOLDs when a project reference points to a missing config (chain unprovable)', async () => {
+      // codex MED: 선언된 references 대상이 없으면 ambient 집합을 증명 못 함 → hold-all.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'dead-lib': '^1.0.0' },
+          tsconfig: '{ "files": [], "references": [{ "path": "./tsconfig.missing.json" }] }',
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('does not let a broken sibling tsconfig force a root-wide hold (additive-only)', async () => {
+      // grok #3: 형제 tsconfig.eslint.json 가 깨져도 그것 때문에 루트 전체 unused-dep 이
+      // 침묵되면 안 된다 (형제는 additive widen 소스). dead-lib 는 정상 보고돼야 한다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'dead-lib': '^1.0.0' },
+          tsconfig: '{ "compilerOptions": {} }',
+          extraFiles: { [`${ROOT}/tsconfig.eslint.json`]: '{ "compilerOptions": { "types": ["x"]' }, // malformed sibling
+        }),
+        (dir: string) => (dir === ROOT ? ['tsconfig.json', 'tsconfig.eslint.json'] : []),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual(['dead-lib']);
+    });
+
+    it('terminates on a self/cyclic `reference path` chain and still holds the real type ref', async () => {
+      // 파일-BFS 종료 보장: entry .d.ts 가 자기 자신을 path-참조해도 seenFiles 로 멈춰야 하고
+      // (해시 타임아웃 없이), 같은 파일의 types 참조는 정상 보류돼야 한다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { '@types/bun': '^1.0.0', 'bun-types': '^1.0.0' },
+          tsconfig: null,
+          dtsByPkg: { '@types/bun': '/// <reference path="./index.d.ts" />\n/// <reference types="bun-types" />\nexport {};' },
+        }),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+
+    it('enumerates sibling `tsconfig*.json` via listDirFn (types only in tsconfig.build.json)', async () => {
+      // grok HIGH: 루트 tsconfig.json 에 types 가 없고 형제 tsconfig.build.json 에만 있어도
+      // 보류해야 한다. listDirFn(fs-backed in prod)으로 루트 tsconfig*.json 을 열거한다.
+      const result = await runAmbient(
+        ambientReadFn({
+          deps: { 'bun-types': '^1.0.0' },
+          tsconfig: '{ "compilerOptions": {} }',
+          extraFiles: { [`${ROOT}/tsconfig.build.json`]: '{ "compilerOptions": { "types": ["bun-types"] } }' },
+        }),
+        (dir: string) => (dir === ROOT ? ['tsconfig.json', 'tsconfig.build.json'] : []),
+      );
+
+      expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+    });
+  });
+
   /* ---------- SB: unused-dependency holds any bin-providing dep (declared `bin` = fact) ---------- */
 
   describe('unused-dependency holds a dep that provides a binary', () => {
