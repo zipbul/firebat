@@ -572,3 +572,154 @@ describe('engine/waste-detector-oxc — detectWasteOxc', () => {
     expect(detectWasteOxc([f]).some(isRb(label))).toBe(flagged);
   });
 });
+
+// ── mutation-API(BUILTIN_TARGET_MUTATION_APIS) 경로 — 이전에 전혀 미테스트였던 브랜치 ──
+//
+// `Object.assign(v, …)` 류의 첫 인자를 'mutation'으로 분류하는 근거는 자유 식별자
+// `Object`/`Reflect`가 전역 빌트인이라는 identity다. 파일이 같은 이름의 런타임 바인딩을
+// 선언하면(import·변수 등) 그 identity가 닫히지 않으므로 mutation 분류를 보류한다
+// (기본 'escape' 폴백 = 보수) — dead-store W를 만들지 않는다. 헌장: identity 미확인
+// 이름 매칭은 K방향으로만. (수신자 메서드 매칭 v.push는 fresh 수신자가 identity를
+// 닫아주므로 별개 — 이 게이트의 대상이 아니다.)
+describe('engine/waste-detector-oxc — builtin target-mutation APIs (identity gate)', () => {
+  it('reports dead-store for a fresh object mutated only via the global Object.assign (baseline W)', () => {
+    const f = toFile(
+      '/virtual/src/assign-baseline.ts',
+      'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);
+  });
+
+  it('holds when Object is shadowed by an import (custom assign may persist the target)', () => {
+    const f = toFile(
+      '/virtual/src/assign-shadow-import.ts',
+      ['import { Object } from "./my-registry";', 'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }'].join(
+        '\n',
+      ),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('holds when Object is shadowed by a local binding', () => {
+    const f = toFile(
+      '/virtual/src/assign-shadow-local.ts',
+      [
+        'declare const globalRegistry: { store(t: unknown, s: unknown): void };',
+        'export function f(data: Record<string, unknown>): void {',
+        '  const Object = { assign: (t: unknown, s: unknown) => globalRegistry.store(t, s) };',
+        '  const v = {};',
+        '  Object.assign(v, data);',
+        '}',
+      ].join('\n'),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('holds when Reflect is shadowed by an import (Reflect.set path)', () => {
+    const f = toFile(
+      '/virtual/src/reflect-shadow.ts',
+      ['import { Reflect } from "./meta";', 'export function f(): void { const v = {}; Reflect.set(v, "k", 1); }'].join('\n'),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('still reports for the unshadowed Reflect.set (guard)', () => {
+    const f = toFile('/virtual/src/reflect-baseline.ts', 'export function f(): void { const v = {}; Reflect.set(v, "k", 1); }');
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);
+  });
+
+  it('does not treat an ambient declare as shadowing (no runtime binding)', () => {
+    const f = toFile(
+      '/virtual/src/assign-ambient.ts',
+      ['declare const Object: ObjectConstructor;', 'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }'].join(
+        '\n',
+      ),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);
+  });
+
+  it('keeps a fresh-receiver method mutation unaffected by an unrelated Object shadow', () => {
+    // v.push의 identity는 fresh [] 수신자가 닫는다 — Object 섀도잉과 무관하게 W 유지.
+    const f = toFile(
+      '/virtual/src/push-unrelated-shadow.ts',
+      ['import { Object } from "./my-registry";', 'export function f(): void { const v: number[] = []; v.push(1); }'].join('\n'),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);
+  });
+
+  it('holds when the file mutates globalThis.Object (member-write un-confirms the identity)', () => {
+    const f = toFile(
+      '/virtual/src/assign-globalthis-write.ts',
+      [
+        'declare const fake: ObjectConstructor;',
+        '(globalThis as { Object: ObjectConstructor }).Object = fake;',
+        'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+      ].join('\n'),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('holds when the file mutates globalThis["Object"] via a computed string key', () => {
+    const f = toFile(
+      '/virtual/src/assign-computed-write.ts',
+      [
+        'declare const fake: ObjectConstructor;',
+        '(globalThis as Record<string, unknown>)["Object"] = fake;',
+        'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+      ].join('\n'),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('holds when the file reassigns the bare global name (Object = fake)', () => {
+    const f = toFile(
+      '/virtual/src/assign-bare-write.ts',
+      [
+        'declare let Object: ObjectConstructor;',
+        'declare const fake: ObjectConstructor;',
+        'Object = fake;',
+        'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+      ].join('\n'),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('holds when Object is a function parameter name', () => {
+    const f = toFile(
+      '/virtual/src/assign-param-shadow.ts',
+      'export function f(Object: { assign(t: unknown, s: unknown): void }, data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+
+  it('does NOT treat a type-only import as shadowing (no runtime binding)', () => {
+    const f = toFile(
+      '/virtual/src/assign-type-import.ts',
+      ['import type { Object } from "./types";', 'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }'].join(
+        '\n',
+      ),
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);
+  });
+
+  it('falls back to real when a non-target argument is impure (whole call must survive)', () => {
+    const f = toFile(
+      '/virtual/src/assign-impure-arg.ts',
+      'export function f(make: () => Record<string, unknown>): void { const v = {}; Object.assign(v, make()); }',
+    );
+
+    expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
+  });
+});

@@ -1435,6 +1435,16 @@ describe('error-flow/analyzer', () => {
       await expectKindCount(source, 'promise-constructor-hygiene', 1);
     });
 
+    it('holds when the file member-writes the global (globalThis.Promise = fake)', async () => {
+      const source = [
+        'declare const fake: PromiseConstructor;',
+        'globalThis.Promise = fake;',
+        'export const p = new Promise<number>(async res => { res(1); });',
+      ].join('\n');
+
+      await expectKindCount(source, 'promise-constructor-hygiene', 0);
+    });
+
     it('does NOT treat an ambient declare as shadowing (declare creates no runtime binding)', async () => {
       // `declare const` asserts the GLOBAL exists — it is a spec-fact declaration, not a shadow.
       const source = [

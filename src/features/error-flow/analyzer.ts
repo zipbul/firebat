@@ -6,6 +6,7 @@ import type { GildashAnalysisInput } from '../../shared/gildash-analysis-input';
 import type { TypeOracle } from './type-oracle';
 import type { ErrorFlowFinding, ErrorFlowFindingKind } from './types';
 
+import { collectPatternBindingNames, collectShadowedNames } from '../../engine/ast/collect-shadowed-names';
 import { forEachChildNode, forEachChildWithParent, getNodeName, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
 import { createTypeOracle } from './type-oracle';
@@ -84,57 +85,13 @@ const branchConstructTypes = new Set([
 
 const isBranchConstruct = (node: Node): boolean => branchConstructTypes.has(node.type);
 
-// Collect the binding identifiers a parameter pattern introduces — plain `p`, default `p = …`, rest
-// `...p`, and destructured `{ p }` / `[p]` (recursively). Only true binding positions are added; a
-// computed key (`{ [c]: v }`) contributes `v`, never `c`, so an outer reference is never mistaken for
-// a shadow (which would be a false positive).
-const collectBindingNames = (pattern: Node, names: Set<string>): void => {
-  switch (pattern.type) {
-    case 'Identifier':
-      if (typeof pattern.name === 'string') {
-        names.add(pattern.name);
-      }
-
-      break;
-    case 'AssignmentPattern':
-      collectBindingNames(pattern.left, names);
-      break;
-    case 'RestElement':
-      collectBindingNames(pattern.argument, names);
-      break;
-    case 'ArrayPattern':
-      for (const element of pattern.elements) {
-        if (element !== null) {
-          collectBindingNames(element, names);
-        }
-      }
-
-      break;
-    case 'ObjectPattern':
-      for (const property of pattern.properties) {
-        if (property.type === 'RestElement') {
-          collectBindingNames(property.argument, names);
-        } else {
-          collectBindingNames(property.value, names);
-        }
-      }
-
-      break;
-    case 'TSParameterProperty':
-      collectBindingNames(pattern.parameter, names);
-      break;
-    default:
-      break;
-  }
-};
-
 // The names a function binds as parameters — they shadow same-named outer unobserved-variable
 // candidates, so a read of a shadowing param must not mark the outer promise observed.
 const collectParamBindingNames = (params: ReadonlyArray<Node>): Set<string> => {
   const names = new Set<string>();
 
   for (const param of params) {
-    collectBindingNames(param, names);
+    collectPatternBindingNames(param, names);
   }
 
   return names;
@@ -216,102 +173,7 @@ const specGlobalNames = new Set([
   'self',
 ]);
 
-const collectShadowedSpecNames = (program: Node): ReadonlySet<string> => {
-  const shadowed = new Set<string>();
-  const addPattern = (pattern: Node): void => {
-    const names = new Set<string>();
-
-    collectBindingNames(pattern, names);
-
-    for (const name of names) {
-      if (specGlobalNames.has(name)) {
-        shadowed.add(name);
-      }
-    }
-  };
-  const addId = (id: Node | null | undefined): void => {
-    if (id !== null && id !== undefined && id.type === 'Identifier' && specGlobalNames.has(id.name)) {
-      shadowed.add(id.name);
-    }
-  };
-
-  // `declare …` (ambient) creates NO runtime binding — it asserts the global EXISTS, which is a
-  // spec-fact declaration, not a shadow. Skip every ambient declaration subtree.
-  const isAmbient = (node: Node): boolean => (node as Node & { readonly declare?: boolean }).declare === true;
-
-  walkOxcTree(program, node => {
-    switch (node.type) {
-      case 'VariableDeclaration':
-        if (isAmbient(node)) {
-          return false;
-        }
-
-        break;
-      case 'VariableDeclarator':
-        addPattern(node.id);
-        break;
-      case 'FunctionDeclaration':
-      case 'FunctionExpression':
-      case 'ArrowFunctionExpression': {
-        if (isAmbient(node)) {
-          return false;
-        }
-
-        addId((node as Node & { readonly id?: Node | null }).id);
-
-        for (const param of (node as Node & { readonly params: ReadonlyArray<Node> }).params) {
-          addPattern(param);
-        }
-
-        break;
-      }
-      case 'ClassDeclaration':
-      case 'ClassExpression':
-      case 'TSEnumDeclaration':
-      case 'TSModuleDeclaration':
-        if (isAmbient(node)) {
-          return false;
-        }
-
-        addId((node as Node & { readonly id?: Node | null }).id);
-        break;
-      case 'ImportDeclaration': {
-        for (const spec of (node as Node & { readonly specifiers: ReadonlyArray<Node> }).specifiers) {
-          addId((spec as Node & { readonly local: Node }).local);
-        }
-
-        break;
-      }
-      case 'TSImportEqualsDeclaration':
-        // `import Promise = require('bluebird')` binds a runtime value — a shadow.
-        addId((node as Node & { readonly id?: Node | null }).id);
-        break;
-      case 'AssignmentExpression': {
-        // `Promise = fake` is not a declaration but mutates what the free name refers to at
-        // runtime — after it, the name's global identity is no longer a closed fact. Hold.
-        const left = (node as Node & { readonly left: Node }).left;
-
-        addId(left);
-        break;
-      }
-      case 'CatchClause': {
-        const param = (node as Node & { readonly param: Node | null }).param;
-
-        if (param !== null) {
-          addPattern(param);
-        }
-
-        break;
-      }
-      default:
-        break;
-    }
-
-    return true;
-  });
-
-  return shadowed;
-};
+const collectShadowedSpecNames = (program: Node): ReadonlySet<string> => collectShadowedNames(program, specGlobalNames);
 
 // Unwrap TS type-assertion wrappers so the *runtime* value is judged, not the asserted type:
 // `'x' as unknown as Error` is a string at runtime and still loses the stack trace.

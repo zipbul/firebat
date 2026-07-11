@@ -8,6 +8,7 @@ import type { BitSet, DefMeta, ParsedFile } from './types';
 
 import { keepMapBound } from '../shared/multi-map';
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
+import { collectShadowedNames } from './ast/collect-shadowed-names';
 import {
   analyzeFunctionBody,
   bindingKey,
@@ -439,7 +440,13 @@ const BUILTIN_TARGET_MUTATION_APIS = new Set<string>([
   'Reflect.setPrototypeOf',
 ]);
 
-const callExpressionTargetMutationApi = (callee: Node): string | null => {
+// The free identifiers whose GLOBAL identity the mutation-API match depends on. Unlike the
+// receiver-method whitelist above (closed by the fresh-allocation receiver), `Object.assign(v, …)`
+// rests on the free name `Object` being the builtin — a file-level runtime shadow voids that
+// (identity-unconfirmed name matching may act toward K only, never create a W).
+const mutationApiGlobals = new Set(['Object', 'Reflect']);
+
+const callExpressionTargetMutationApi = (callee: Node, shadowedGlobals: ReadonlySet<string>): string | null => {
   if (callee.type !== 'MemberExpression') {
     return null;
   }
@@ -454,7 +461,15 @@ const callExpressionTargetMutationApi = (callee: Node): string | null => {
     return null;
   }
 
-  const name = `${(me.object as { name: string }).name}.${(me.property as { name: string }).name}`;
+  const objectName = (me.object as { name: string }).name;
+
+  // Shadowed global → the name no longer proves the builtin → not a known mutation API
+  // (falls back to the conservative 'escape'/'real' classification at the call sites).
+  if (shadowedGlobals.has(objectName)) {
+    return null;
+  }
+
+  const name = `${objectName}.${(me.property as { name: string }).name}`;
 
   return BUILTIN_TARGET_MUTATION_APIS.has(name) ? name : null;
 };
@@ -496,6 +511,7 @@ const classifyUseInWaste = (
   usage: Node,
   parent: Node | null,
   grandparent: Node | null,
+  shadowedGlobals: ReadonlySet<string>,
   receiverInitKind?: FreshAllocationKind,
   greatGrandparent?: Node | null,
 ): UseKind => {
@@ -561,7 +577,7 @@ const classifyUseInWaste = (
       // side-effects beyond the mutation and we must fall back to 'real'.
       const callee = (parent as { callee: Node }).callee;
 
-      if (callExpressionTargetMutationApi(callee) !== null) {
+      if (callExpressionTargetMutationApi(callee, shadowedGlobals) !== null) {
         if (argIndex === 0) {
           for (let i = 1; i < args.length; i += 1) {
             const other = args[i];
@@ -1212,6 +1228,7 @@ const buildVarHasMeaningfulUse = (
   localIndexByName: Map<string, number>,
   declScopeByIdLocation: ReadonlyMap<number, string>,
   varInitKind: ReadonlyMap<number, FreshAllocationKind> = new Map(),
+  shadowedGlobals: ReadonlySet<string>,
 ): Set<number> => {
   const meaningful = new Set<number>();
   const ctxByLocation = buildIdentifierContextByLocation(functionBodyNodes);
@@ -1247,7 +1264,7 @@ const buildVarHasMeaningfulUse = (
     }
 
     const greatGrandparent = ctx.ancestors.length >= 3 ? ctx.ancestors[ctx.ancestors.length - 3] : null;
-    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, varInitKind.get(idx), greatGrandparent);
+    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, shadowedGlobals, varInitKind.get(idx), greatGrandparent);
 
     if (kind === 'real' || kind === 'escape') {
       meaningful.add(idx);
@@ -1714,6 +1731,7 @@ interface RedundantBindingInput {
   readonly syntacticReads: ReadonlyArray<{ readonly name: string; readonly declScope?: string; readonly location: number }>;
   readonly localIndexByName: Map<string, number>;
   readonly varInitKind: ReadonlyMap<number, FreshAllocationKind>;
+  readonly shadowedGlobals: ReadonlySet<string>;
   readonly skipLocations: ReadonlySet<string> | ReadonlySet<number>;
   readonly skipNames?: ReadonlySet<string>;
   readonly filePath: string;
@@ -1722,7 +1740,7 @@ interface RedundantBindingInput {
 }
 
 const collectRedundantBindingFindings = (input: RedundantBindingInput): void => {
-  const { bodyNodes, defs, defCtxByLocation, syntacticReads, localIndexByName, varInitKind, filePath, lineOffsets, findings } =
+  const { bodyNodes, defs, defCtxByLocation, syntacticReads, localIndexByName, varInitKind, shadowedGlobals, filePath, lineOffsets, findings } =
     input;
   // Per-variable use summary, restricted to reads in the same scope (a read inside a
   // nested function has no entry in defCtxByLocation → recorded as a closure read,
@@ -1753,7 +1771,7 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     }
 
     const greatGrandparent = ctx.ancestors.length >= 3 ? (ctx.ancestors[ctx.ancestors.length - 3] ?? null) : null;
-    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, varInitKind.get(idx), greatGrandparent);
+    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, shadowedGlobals, varInitKind.get(idx), greatGrandparent);
 
     if (kind === 'real' || kind === 'escape') {
       entry.real.push(ctx);
@@ -2073,6 +2091,7 @@ const collectWasteFindingsForFunction = (
   sourceText: string,
   lineOffsets: number[],
   findings: WasteFinding[],
+  shadowedGlobals: ReadonlySet<string>,
 ): void => {
   const localIndexByName = collectLocalVarIndexes(node, filePath, sourceText);
   const parameterBindings = collectParameterBindings(node);
@@ -2199,7 +2218,7 @@ const collectWasteFindingsForFunction = (
   // write (`v.p = ...`), with no real read or escape, is dead. We track by `varIndex`,
   // not `defId`, because the question is whether the *variable* is ever observed; a
   // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
-  const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation, varInitKind);
+  const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation, varInitKind, shadowedGlobals);
   // Case 6/7's safety claim ("mutation is local-only") requires that *every* def of
   // the variable is a fresh allocation. If one branch assigns a fresh `[]` and another
   // aliases an outer reference, the mutation site (`c.push(...)`) reaches both, so
@@ -2331,6 +2350,7 @@ const collectWasteFindingsForFunction = (
     syntacticReads,
     localIndexByName,
     varInitKind,
+    shadowedGlobals,
     skipLocations: parameterLocations,
     filePath,
     lineOffsets,
@@ -2484,6 +2504,7 @@ const collectWasteFindingsForModule = (
   sourceText: string,
   lineOffsets: number[],
   findings: WasteFinding[],
+  shadowedGlobals: ReadonlySet<string>,
 ): void => {
   const programBody = (program as { body: ReadonlyArray<Node> }).body;
 
@@ -2561,7 +2582,7 @@ const collectWasteFindingsForModule = (
     mergeFreshKind(varInitKind, varHasMixedFreshKinds, def.varIndex, kind);
   }
 
-  const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation, varInitKind);
+  const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation, varInitKind, shadowedGlobals);
   // Same "all defs fresh" gate as the function path — required so module-scope
   // `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the fresh def.
   const { varHasOnlyFreshDefs, varHasUserDefinedAccessor } = computeFreshDefSets(defs, defCtxByLocation);
@@ -2676,6 +2697,7 @@ const collectWasteFindingsForModule = (
     syntacticReads,
     localIndexByName,
     varInitKind,
+    shadowedGlobals,
     skipLocations: new Set<number>([...exportExemption.locations, ...namespaceMemberLocations]),
     skipNames: exportExemption.names,
     filePath,
@@ -2707,7 +2729,11 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
       // in scope. Without this pass, top-level `let v=1; v=2; ...`, top-level blocks,
       // and module-scope case 6/7 all escape detection. Function-internal blocks are
       // already covered by the function-scope pass below.
-      collectWasteFindingsForModule(file.program, file.filePath, file.sourceText, lineOffsets, fileFindings);
+      // 명세이름 identity 게이트: Object/Reflect가 파일에서 런타임 바인딩으로 섀도잉되면
+      // mutation-API 이름 매칭을 보류한다 (identity 미확인 이름은 K방향으로만).
+      const shadowedGlobals = collectShadowedNames(file.program, mutationApiGlobals);
+
+      collectWasteFindingsForModule(file.program, file.filePath, file.sourceText, lineOffsets, fileFindings, shadowedGlobals);
 
       const visit = (node: Node | ReadonlyArray<Node> | undefined): void => {
         if (Array.isArray(node)) {
@@ -2726,7 +2752,7 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
         const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
 
         if (isFunctionNode(node) && functionBodyNode !== undefined) {
-          collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, file.sourceText, lineOffsets, fileFindings);
+          collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, file.sourceText, lineOffsets, fileFindings, shadowedGlobals);
         }
 
         forEachChildNode(node, child => visit(child));
