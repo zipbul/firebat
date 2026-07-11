@@ -264,4 +264,14 @@ describe('golden/waste', () => {
   runGolden(import.meta.dir, 'redundant-yield-rhs-keep', program => detectWaste([...program]));
   // K: bare-literal 명명 (정보보존 예외)
   runGolden(import.meta.dir, 'redundant-bare-literal-name-keep', program => detectWaste([...program]));
+
+  // ── 회귀 잠금 (외부 코퍼스 검증에서 잡힌 FP) ───────────────────────────
+  // K: 멤버 쓰기·변조 메서드(`q[0]=x`, `q.shift()`)는 base 읽기 — def-kill 아님 (live)
+  runGolden(import.meta.dir, 'member-mutation-live-keep', program => detectWaste([...program]));
+  // K: 전역 변조(`delete globalThis.Date`) 전 snapshot — 참조 투명성 깨짐 → KEEP
+  runGolden(import.meta.dir, 'global-delete-restore-keep', program => detectWaste([...program]));
+  // W: 지역/파라미터 alias는 개입 호출이 있어도 여전히 redundant (free-vs-local 정밀도 잠금)
+  runGolden(import.meta.dir, 'redundant-local-alias-intervening-call-dead', program => detectWaste([...program]));
+  // K: 소비된 mutator 결과(`return q.push(1)`의 length)는 receiver 상태 관측 → live (dead-store 아님)
+  runGolden(import.meta.dir, 'push-consumed-live-keep', program => detectWaste([...program]));
 });

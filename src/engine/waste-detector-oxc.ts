@@ -275,14 +275,13 @@ const ARRAY_MUTATION_METHODS = new Set<string>([
   'copyWithin',
 ]);
 const MAPSET_MUTATION_METHODS = new Set<string>(['set', 'add', 'delete', 'clear']);
-// Mutation methods that RETURN THE RECEIVER itself: Array sort/reverse/fill/
-// copyWithin return the array; Map.set returns the map; Set.add returns the
-// set. When such a call's result is consumed (not a discarded statement), the
-// receiver's reference/content escapes through the return value — e.g.
-// `arr.sort().join()` reads the sorted array, `return c.set(k,v)` leaks the
-// map. push/pop/shift/unshift/splice/delete/clear return a length/element/
-// boolean/new-array, so consuming their result does NOT leak the receiver.
-const RETURN_SELF_MUTATORS = new Set<string>(['sort', 'reverse', 'fill', 'copyWithin', 'set', 'add']);
+// A CONSUMED mutator result (the call is not a discarded statement) observes the receiver for
+// EVERY recognized mutator: the receiver itself (sort/reverse/fill/copyWithin/set/add), an element
+// extracted from it (pop/shift/splice), or a value derived from its state — length (push/unshift)
+// or membership (delete). Only `clear` returns undefined and leaks nothing. So a consumed non-`clear`
+// mutation leaks the receiver through its return value (`arr.sort().join()`, `return q.shift()`,
+// `return q.push(1)` whose length reflects q) and must be treated as an escape.
+const NON_LEAKING_MUTATOR = 'clear';
 
 type MutationMethodCategory = 'array' | 'mapset';
 
@@ -675,12 +674,12 @@ const classifyUseInWaste = (
               }
             }
 
-            // Return-self mutators (sort/reverse/fill/copyWithin/set/add) return
-            // the receiver. If the call's result is consumed (its parent — our
-            // great-grandparent — is anything other than a discarded
-            // ExpressionStatement), the receiver escapes through that value:
-            // `arr.sort().join()`, `return c.set(k, v)`, `f(arr.reverse())`.
-            if (RETURN_SELF_MUTATORS.has(methodName)) {
+            // If the call's result is consumed (its parent — our great-grandparent — is anything
+            // other than a discarded ExpressionStatement), the receiver escapes through that value.
+            // Every recognized mutator except `clear` returns something derived from the receiver
+            // (identity, an extracted element, or its length/membership), so a consumed non-`clear`
+            // result leaks it: `arr.sort().join()`, `return q.shift()`, `return q.push(1)`.
+            if (methodName !== NON_LEAKING_MUTATOR) {
               const resultConsumed =
                 greatGrandparent !== null && greatGrandparent !== undefined && greatGrandparent.type !== 'ExpressionStatement';
 
@@ -1882,6 +1881,25 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     // declaration and the use, which the separate binding does not carry — inlining would
     // change the type-check result.
     if (sourceGuardedBetween(bodyNodes, names, rhs.end, useCtx.node.start) || useInNarrowedBranch(useCtx, names)) {
+      continue;
+    }
+
+    // An RHS identifier that does not resolve to a LOCAL binding is free/global: its value can be
+    // mutated through a channel `hasReassignmentOfNames` cannot see — `delete globalThis.X`,
+    // `globalThis.X = …`, or a call that reassigns it. Such a binding is a snapshot-before-mutation,
+    // so an intervening effect between decl and use must hold it (else `const R = Date; delete
+    // globalThis.Date; globalThis.Date = R` inlines `Date` after it was deleted). Resolution is
+    // scope-aware (per-usage `resolveVarIndex`, not a bare-name match) so a global shadowed elsewhere
+    // by a same-named local is not mis-read as local (which would be a false W). ONLY the
+    // intervening-effect barrier applies — the loop/closure/this-callee concerns below are member-read
+    // specific and must not suppress a plain redundant free-var alias (e.g. one captured by a closure).
+    const hasFreeRhsName =
+      !readsMember &&
+      syntacticReads.some(
+        read => read.location >= rhs.start && read.location < rhs.end && resolveVarIndex(localIndexByName, read) === undefined,
+      );
+
+    if (hasFreeRhsName && hasSideEffectBetween(bodyNodes, rhs.end, useCtx.node.start)) {
       continue;
     }
 
