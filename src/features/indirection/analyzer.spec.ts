@@ -544,6 +544,20 @@ describe('analyzer', () => {
   // 사이클/깊이를 만들었다 — 결정론 위반.
 
   describe('chain identity resolves by binding, not by name string', () => {
+    // 공용 러너: 파일 하나를 분석해 forward-chain을 `header:depth` 정렬 목록으로 요약한다.
+    const chainSummaries = async (filePath: string, source: string): Promise<string[]> => {
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        createProgram(filePath, source),
+        { maxForwardDepth: 1, crossFileMinDepth: 99 },
+        '/virtual',
+      );
+
+      return findKinds(analysis, 'forward-chain')
+        .map(f => `${f.header}:${f.depth}`)
+        .sort();
+    };
+
     // clobber 재현 소스: outer 안의 지역 `b`(→a 위임)가 모듈 `b`(→leaf 위임)와 동명.
     // 진짜 모듈 체인은 top→a→b(→leaf) = depth 3, a→b = depth 2.
     const CLOBBER_SRC = [
@@ -558,13 +572,7 @@ describe('analyzer', () => {
     ].join('\n');
 
     it('reports the true module chain despite a same-named nested local (no ghost cycle)', async () => {
-      const program = createProgram('/virtual/clobber.ts', CLOBBER_SRC);
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
-      const chains = findKinds(analysis, 'forward-chain');
-      const byHeader = new Map(chains.map(f => [f.header, f.depth]));
-
-      expect(byHeader.get('a')).toBe(2);
-      expect(byHeader.get('top')).toBe(3);
+      expect(await chainSummaries('/virtual/clobber.ts', CLOBBER_SRC)).toEqual(['a:2', 'top:3']);
     });
 
     it('is deterministic under declaration reordering (same findings)', async () => {
@@ -579,24 +587,13 @@ describe('analyzer', () => {
         'const b = (x: number): number => leaf(x);',
         'function leaf(x: number): number { return x * 2; }',
       ].join('\n');
-      const run = async (src: string) => {
-        const analysis = await analyzeIndirection(
-          createMockGildash(),
-          createProgram('/virtual/order.ts', src),
-          { maxForwardDepth: 1, crossFileMinDepth: 99 },
-          '/virtual',
-        );
 
-        return findKinds(analysis, 'forward-chain')
-          .map(f => `${f.header}:${f.depth}`)
-          .sort();
-      };
-
-      expect(await run(reordered)).toEqual(await run(CLOBBER_SRC));
+      expect(await chainSummaries('/virtual/order.ts', reordered)).toEqual(await chainSummaries('/virtual/clobber.ts', CLOBBER_SRC));
     });
 
     it('does not link a chain hop through a nested local wrapper (unresolvable scope → hold)', async () => {
-      // 모듈에는 depth 1 wrapper만 있고, 깊은 체인은 중첩 지역 이름과의 충돌로만 보인다.
+      // 모듈 v→leaf, w→leaf 는 전부 depth 1 — forward-chain(>1) 없음. 지역 v(→w)가
+      // 모듈 v의 키를 오염시키면 v:2 가짜 체인이 생긴다.
       const source = [
         'function leaf(x: number): number { return x + 1; }',
         'export function host(x: number): number {',
@@ -606,13 +603,8 @@ describe('analyzer', () => {
         'const w = (x: number): number => leaf(x);',
         'const v = (x: number): number => leaf(x);',
       ].join('\n');
-      const program = createProgram('/virtual/nested-local.ts', source);
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
-      const chains = findKinds(analysis, 'forward-chain');
 
-      // 모듈 v→leaf, w→leaf 는 전부 depth 1 — forward-chain(>1) 없음. 지역 v(→w)가
-      // 모듈 v의 키를 오염시키면 v:2 가짜 체인이 생긴다.
-      expect(chains.length).toBe(0);
+      expect(await chainSummaries('/virtual/nested-local.ts', source)).toEqual([]);
     });
 
     it('rejects a wrapper whose callee is its own parameter (callback slot, not a free function)', async () => {
@@ -625,8 +617,9 @@ describe('analyzer', () => {
     });
 
     it('holds a hop whose callee name is redeclared by a non-function var (value not closed)', async () => {
-      // `function w` + `var w = 5` — 함수 후보는 1개지만 최상위 바인딩은 2개.
-      // 런타임 값이 그 함수라는 것이 닫히지 않으므로 hop 보류 → entry 미보고.
+      // `function w` + `var w = …` — 함수 후보는 1개지만 최상위 바인딩은 2개.
+      // 런타임 값이 그 함수라는 것이 닫히지 않으므로 entry→w hop 보류(entry 미보고).
+      // mid(→leaf 위임)는 leaf가 wrapper가 아니라 depth 1 — w 체인도 hop이 안 열려 미보고.
       const source = [
         'function leaf(x: number): number { return x; }',
         'function mid(x: number): number { return leaf(x); }',
@@ -635,12 +628,9 @@ describe('analyzer', () => {
         'var w = w2;',
         'const entry = (x: number): number => w(x);',
       ].join('\n');
-      const program = createProgram('/virtual/var-blocker.ts', source);
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
-      const chains = findKinds(analysis, 'forward-chain');
+      const summaries = await chainSummaries('/virtual/var-blocker.ts', source);
 
-      // entry→w 는 보류. w 자신(→mid, 유일)은 depth 2 정당 W로 유지.
-      expect(chains.some(f => f.header === 'entry')).toBe(false);
+      expect(summaries.some(s => s.startsWith('entry:'))).toBe(false);
     });
 
     it('holds a hop whose callee name has TWO top-level declarations (ambiguous — not unique)', async () => {
@@ -654,12 +644,8 @@ describe('analyzer', () => {
         'const entry = (x: number): number => w(x);',
         'function leaf(x: number): number { return x; }',
       ].join('\n');
-      const program = createProgram('/virtual/dup-toplevel.ts', source);
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
-      const chains = findKinds(analysis, 'forward-chain');
 
-      expect(chains.some(f => f.header === 'entry')).toBe(false);
-      expect(chains.map(f => `${f.header}:${f.depth}`)).toEqual(['w:2']);
+      expect(await chainSummaries('/virtual/dup-toplevel.ts', source)).toEqual(['w:2']);
     });
 
     it('holds a hop whose callee name also matches an import binding (redeclare-error source)', async () => {
@@ -671,10 +657,8 @@ describe('analyzer', () => {
         'const top = (x: number): number => b(x);',
         'function leaf(x: number): number { return x; }',
       ].join('\n');
-      const program = createProgram('/virtual/import-collision.ts', source);
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 1, crossFileMinDepth: 99 }, '/virtual');
 
-      expect(findKinds(analysis, 'forward-chain').length).toBe(0);
+      expect(await chainSummaries('/virtual/import-collision.ts', source)).toEqual([]);
     });
   });
 
