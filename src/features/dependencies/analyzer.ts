@@ -864,6 +864,12 @@ interface ExportEntry {
   span: SourceSpan;
 }
 
+/** A default export: local name + `detail.isDefault` (gildash 0.40). Consumers reference it via the `default` slot. */
+const isDefaultExport = (entry: { readonly detail: SymbolDetail }): boolean =>
+  (entry.detail as { isDefault?: boolean } | undefined)?.isDefault === true;
+
+const hasConsumers = (consumers: ReadonlySet<string> | undefined): boolean => consumers !== undefined && consumers.size > 0;
+
 type Relation = ReturnType<Gildash['searchRelations']>[number];
 
 /**
@@ -968,22 +974,24 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
   const fanIn = listFanStats(rootAbs, inDegree, 10);
   const fanOut = listFanStats(rootAbs, outDegree, 10);
-  // 3. Cycles — computed on the VALUE-only import graph (`searchRelations({type:'imports'})`), not
+  // 3. Cycles — computed on the VALUE-only dependency graph (`imports` ∪ value `re-exports`), not
   // gildash's `getImportGraph`/`getCyclePaths`. Those merge runtime-erased `import type` edges (a
   // pure-type cycle is not a runtime cycle) and enumerate every elementary circuit (N per SCC → one
-  // component reported N times). Instead: build the value-only adjacency, find strongly-connected
-  // components (own iterative Tarjan), and report ONE representative cycle per non-trivial SCC.
-  let importRelations: ReturnType<Gildash['searchRelations']> = [];
+  // component reported N times). gildash records both `imports` and `re-exports` as VALUE relations
+  // (type-only `import type`/`export type … from` are excluded from both), so a `export * from`/
+  // `export { x } from` edge that closes a runtime cycle is included. Build the value adjacency, find
+  // strongly-connected components (own iterative Tarjan), and report ONE cycle per non-trivial SCC.
+  let cycleRelations: ReturnType<Gildash['searchRelations']> = [];
 
   try {
-    importRelations = gildash.searchRelations({ type: 'imports' });
+    cycleRelations = [...gildash.searchRelations({ type: 'imports' }), ...gildash.searchRelations({ type: 're-exports' })];
   } catch (e) {
     if (!(e instanceof GildashError)) {
       throw e;
     }
   }
 
-  const valueAdjacency = buildValueAdjacency(rootAbs, importRelations);
+  const valueAdjacency = buildValueAdjacency(rootAbs, cycleRelations);
   const cyclePaths = tarjanSCCs(valueAdjacency)
     .filter(scc => scc.length >= 2)
     .map(scc => representativeCycle(scc, valueAdjacency))
@@ -1415,12 +1423,19 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
         for (const sym of symbols) {
           const relModule = toRelativePath(rootAbs, moduleAbs);
-          const symConsumers = usedNames.get(sym.name);
 
-          // Has at least one consumer (test, prod, or otherwise) → not dead. Whether a
-          // consumer "counts" as production use is not decidable from a filename fact, so
-          // no test-only refinement is made (would require a guess-value).
-          if (symConsumers && symConsumers.size > 0) {
+          // Has at least one consumer (test, prod, or otherwise) → not dead. Whether a consumer
+          // "counts" as production use is not decidable from a filename fact, so no test-only
+          // refinement (would require a guess-value). A DEFAULT export's local name is not how it is
+          // consumed — `import x from './m'` records the edge under the `default` slot, while the
+          // export symbol carries its local name plus `detail.isDefault` (gildash 0.40). So a default
+          // export is live if the `default` slot has a consumer (or its local name, for the
+          // `export { x }; export { x as default }` dual-export case).
+          if (isDefaultExport(sym) && hasConsumers(usedNames.get('default'))) {
+            continue;
+          }
+
+          if (hasConsumers(usedNames.get(sym.name))) {
             continue;
           }
 
@@ -1460,6 +1475,15 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
             const key = `${moduleAbs}::${sym.name}`;
 
             if (deadSet.has(key)) {
+              continue;
+            }
+
+            // A default export live via its `default` slot must not be propagated dead through its
+            // NAMED-slot consumers. For a dual `export { x }; export { x as default }`, `usedNames`
+            // keys the default consumer under `default` and the named consumer under `x`; if the
+            // named consumers are all dead re-exporters but the default slot is live, `x` is still
+            // live (grok review — else a live default false-W's here).
+            if (isDefaultExport(sym) && hasConsumers(usedNames.get('default'))) {
               continue;
             }
 

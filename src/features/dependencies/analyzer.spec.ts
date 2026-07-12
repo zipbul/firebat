@@ -590,6 +590,35 @@ const rootOnlyRead =
     ]);
   });
 
+  it('reports a cycle closed by a value re-export edge (export * / export { x } from)', async () => {
+    // Value re-exports are runtime dependencies — a loop closing through `export … from` is a real
+    // runtime cycle, so the value adjacency must include `re-exports`, not just `imports`.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/a.ts', ['/project/b.ts']],
+          ['/project/b.ts', ['/project/a.ts']],
+        ]),
+      searchRelations: (q: unknown) => {
+        const type = (q as { type?: string }).type;
+
+        if (type === 'imports') {
+          return [mkImport('/project/b.ts', '/project/a.ts', 'x')];
+        }
+
+        if (type === 're-exports') {
+          return [{ ...mkImport('/project/a.ts', '/project/b.ts', null), type: 're-exports' as StoredCodeRelation['type'] }];
+        }
+
+        return [];
+      },
+    });
+    const result = await analyzeDependencies(g, { rootAbs: ROOT });
+
+    expect(result.cycles.length).toBe(1);
+    expect([...result.cycles[0]!.path].sort()).toEqual(['a.ts', 'b.ts']);
+  });
+
   it('does not report a cycle formed only by type-only imports (runtime-erased)', async () => {
     // `import type` is a `type-references` relation, never `imports`, so the value graph has no
     // edges — a pure-type cycle is not a runtime import cycle.
@@ -830,6 +859,43 @@ const rootOnlyRead =
     });
 
     expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
+  });
+
+  it('does not flag a default export consumed via a default import (#4, gildash 0.40 isDefault)', async () => {
+    // `export default function delay` is consumed by `import delay from './util'`. gildash records
+    // the consumer edge under the `default` slot and marks the export symbol `detail.isDefault`, so
+    // the default export is live even though its LOCAL name (`delay`) has no consumer.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/src/main.ts', ['/project/src/util.ts']],
+          ['/project/src/util.ts', []],
+        ]),
+      searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/util.ts', 'delay', 'function', { isDefault: true })]),
+      searchRelations: relationsOfType('imports', [mkImport('/project/src/main.ts', '/project/src/util.ts', 'default')]),
+    });
+
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/main.ts' }) });
+
+    expect(result.deadExports).toEqual([]);
+  });
+
+  it('still flags a default export with no default-slot consumer as dead (guard)', async () => {
+    // A default export whose `default` slot is never imported IS dead — the isDefault handling must
+    // not blanket-suppress. Here main imports a NAMED symbol, not the default.
+    const g = createMockGildash({
+      getImportGraph: async () =>
+        new Map<string, string[]>([
+          ['/project/src/main.ts', ['/project/src/util.ts']],
+          ['/project/src/util.ts', []],
+        ]),
+      searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/util.ts', 'delay', 'function', { isDefault: true })]),
+      searchRelations: relationsOfType('imports', [mkImport('/project/src/main.ts', '/project/src/util.ts', 'somethingElse')]),
+    });
+
+    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/main.ts' }) });
+
+    expect(result.deadExports.map(d => d.name)).toEqual(['delay']);
   });
 
   it('should report unreachable files as unused-file instead of dead-export', async () => {

@@ -75,11 +75,6 @@ interface CyclePresenceCase {
 
 const cyclePresenceCases: CyclePresenceCase[] = [
   {
-    title: 'a module imports itself',
-    files: { '/virtual/deps/self.ts': `import './self';\nexport const value = 1;` },
-    expectedKey: ['self.ts'],
-  },
-  {
     title: 'modules import each other',
     files: {
       '/virtual/deps/a.ts': `import './b';\nexport const alpha = 1;`,
@@ -88,6 +83,8 @@ const cyclePresenceCases: CyclePresenceCase[] = [
     expectedKey: ['a.ts', 'b.ts'],
   },
   {
+    // Value re-export edges (`export * from`/`export { x } from`) are runtime dependencies, so a
+    // loop that closes through them is a real runtime cycle.
     title: 'export-from edges close a cycle',
     files: {
       '/virtual/deps/a.ts': `export * from './b';\nexport const alpha = 1;`,
@@ -96,13 +93,24 @@ const cyclePresenceCases: CyclePresenceCase[] = [
     },
     expectedKey: ['a.ts', 'b.ts', 'c.ts'],
   },
+];
+
+// A "cycle" that closes ONLY through runtime-erased edges is not a runtime import cycle → not
+// reported (FN-direction, never a false W): a single-file self-import (spec "두 파일 이상"), and a
+// loop whose back-edge is `import type` (erased, so the runtime graph does not close the loop).
+const cycleAbsenceCases: CyclePresenceCase[] = [
   {
-    title: 'type-only import edges close a cycle',
+    title: 'a module imports itself (single-file self-loop)',
+    files: { '/virtual/deps/self.ts': `import './self';\nexport const value = 1;` },
+    expectedKey: [],
+  },
+  {
+    title: 'a loop closes only through a type-only import',
     files: {
       '/virtual/deps/a.ts': `import type { Beta } from './b';\nexport const alpha = 1;`,
       '/virtual/deps/b.ts': `import './a';\nexport type Beta = { value: number };`,
     },
-    expectedKey: ['a.ts', 'b.ts'],
+    expectedKey: [],
   },
 ];
 
@@ -178,6 +186,12 @@ describe('integration/dependencies', () => {
     });
   });
 
+  it.each(cycleAbsenceCases)('does not report a cycle when $title', async ({ files }) => {
+    await withDeps(files, dependencies => {
+      expect(dependencies.cycles).toEqual([]);
+    });
+  });
+
   it('should return empty stats when modules do not import each other', async () => {
     await withDeps(
       {
@@ -215,17 +229,38 @@ describe('integration/dependencies', () => {
     });
   });
 
-  it('should detect all cycles when multiple paths converge', async () => {
+  it('does not propagate a dual-exported default dead through its dead named re-exporter', async () => {
+    // `export { x }; export { x as default }`: x is live via the default import in main, but its
+    // named slot is consumed only by a dead re-exporter (barrel). The 2nd-pass dead propagation keys
+    // by local name; without the default-slot guard it would mark the live default `x` dead (false W).
+    const sources = new Map<string, string>([
+      ['/virtual/dx/util.ts', `function x() {\n  return 1;\n}\nexport { x };\nexport { x as default };`],
+      ['/virtual/dx/main.ts', `import x from './util';\nimport './barrel';\nexport const use = x();`],
+      ['/virtual/dx/barrel.ts', `export { x } from './util';`],
+    ]);
+
+    await withDeps(sources, dependencies => {
+      const deadInUtil = dependencies.deadExports.filter(d => d.module.endsWith('util.ts')).map(d => d.name);
+
+      expect(deadInUtil).not.toContain('x');
+    });
+  });
+
+  it('reports one finding when multiple paths converge into a single SCC', async () => {
     const sources = makeCycleSources();
 
     sources.set('/virtual/deps/a.ts', `import './b';\nimport './d';\nexport const alpha = 1;`);
     sources.set('/virtual/deps/d.ts', `import './c';\nexport const delta = 4;`);
 
     await withDeps(sources, dependencies => {
-      const cycleKeys = new Set(dependencies.cycles.map(toCycleKey));
+      // a→b→c→a and a→d→c→a share nodes → a single strongly-connected component {a,b,c,d}. It is
+      // reported ONCE (one representative cycle), not once per elementary circuit.
+      expect(dependencies.cycles.length).toBe(1);
+      expect(dependencies.cycles[0]!.path.length).toBeGreaterThanOrEqual(2);
 
-      expect(cycleKeys.has(['a.ts', 'b.ts', 'c.ts'].sort().join('|'))).toBe(true);
-      expect(cycleKeys.has(['a.ts', 'c.ts', 'd.ts'].sort().join('|'))).toBe(true);
+      for (const entry of dependencies.cycles[0]!.path) {
+        expect(['a.ts', 'b.ts', 'c.ts', 'd.ts']).toContain(path.basename(entry));
+      }
     });
   });
 
