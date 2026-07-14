@@ -16,9 +16,14 @@
     // Detect dead stores / overwrites / wasted assignments.
     "waste": true,
 
-    // Strict directory barrel policy (no export *; no cross-directory deep imports; strict index.ts/x barrels only).
-    // Default ignores are minimal: node_modules/**, dist/**. Add extra ignores here if needed.
-    "barrel": true,
+    // Opt-in strict directory-surface policy: each directory's public surface is
+    // its index.ts (named re-exports only — no `export *`; no cross-directory
+    // deep imports bypassing the surface). Off by default because most projects
+    // don't practice this style. Enable with `true` (or an object with
+    // `ignoreGlobs`) once your directories follow the convention.
+    // Default ignores: node_modules/**, dist/**, test/**, __test__/**,
+    // __tests__/**, **/*.spec.*, **/*.test.*. Add extra ignores here if needed.
+    "barrel": false,
 
     // Run TypeScript typecheck diagnostics.
     "typecheck": true,

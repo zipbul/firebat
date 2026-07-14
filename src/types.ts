@@ -34,13 +34,11 @@ export type FirebatCatalogCode =
   | 'WASTE_DEAD_STORE'
   | 'WASTE_DEAD_STORE_OVERWRITE'
   | 'WASTE_REDUNDANT_BINDING'
-  // barrel (7)
+  // barrel (5)
   | 'BARREL_EXPORT_STAR'
   | 'BARREL_DEEP_IMPORT'
-  | 'BARREL_INDEX_DEEP_IMPORT'
   | 'BARREL_MISSING_INDEX'
   | 'BARREL_INVALID_INDEX_STMT'
-  | 'BARREL_SIDE_EFFECT_IMPORT'
   | 'BARREL_CROSS_MODULE_REEXPORT'
   // nesting (6)
   | 'NESTING_DEEP'
@@ -467,10 +465,8 @@ export interface CollapsibleIfItem {
 export type BarrelFindingKind =
   | 'export-star'
   | 'deep-import'
-  | 'index-deep-import'
   | 'missing-index'
   | 'invalid-index-statement'
-  | 'barrel-side-effect-import'
   | 'cross-module-reexport';
 
 export interface BarrelFinding {

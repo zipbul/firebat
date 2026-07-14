@@ -81,59 +81,46 @@ export const FIREBAT_CODE_CATALOG = {
 
   BARREL_EXPORT_STAR: {
     cause:
-      "An index file uses 'export *' which re-exports everything from a module, making the public surface implicit and unbounded.",
+      'A file uses bare `export * from` which re-exports everything from a module, making the public surface implicit and unbounded.',
     think: [
-      'Read the index file and list every symbol re-exported via `export *`. Grep each symbol to see if it is actually imported by any consumer. If all symbols are consumed, the wildcard is justified — stop, no action needed.',
-      'If unused or internal symbols are exposed, replace `export *` with explicit named re-exports for only the consumed symbols.',
-      'After converting, grep for any newly broken imports across the project and fix them.',
+      'Enumerate every symbol re-exported via `export *` (read the origin module or grep its exports) and convert the statement into explicit named re-exports (`export { … } from`) listing each one.',
+      'If a single namespace name is intended instead of individually-flattened symbols, use `export * as ns from` (which is exempt from this finding) instead of the bare wildcard.',
+      'Never leave the bare `export *` in place — the surface must become either an explicit named re-export list or a single namespace re-export. After converting, grep for any newly broken imports across the project and fix them.',
     ],
   },
   BARREL_DEEP_IMPORT: {
     cause: "A consumer imports directly from a module's internal file, bypassing its barrel (index) entry point.",
     think: [
-      "Read the module's barrel (index.ts). If the needed symbol is already exported there, update the consumer's import path to use the barrel instead of the deep path.",
-      'If the barrel does not export the needed symbol, add a named re-export for it in the barrel, then update the consumer import.',
-      'If the symbol is intentionally internal (not part of the public API), the consumer may need a different abstraction — flag for review rather than exposing it.',
-    ],
-  },
-  BARREL_INDEX_DEEP_IMPORT: {
-    cause: "An index file itself imports from a deep path in another module instead of using that module's barrel.",
-    think: [
-      "Read the target module's barrel. If the needed symbol is already exported, change this index file's import to use the barrel path.",
-      'If the target barrel does not export the symbol, add it as a named re-export in the target barrel, then update this import.',
-      'After updating, grep for other files that deep-import from the same target path — they likely need the same fix.',
+      "Read the module's barrel (index.ts). If the needed symbol is already exported there, route the import through the directory surface instead of the deep path.",
+      'If the barrel does not export the needed symbol, add a named re-export for it in the barrel, then update the consumer import to use the surface.',
+      'If routing through the surface creates a value cycle, fix it with `import type` (if only the type is needed), extracting the shared symbol into its own module, or merging the two modules — never restore the deep import.',
     ],
   },
   BARREL_MISSING_INDEX: {
-    cause: 'A directory with multiple source files has no index.ts barrel file, leaving no single entry point for the module.',
+    cause:
+      'A directory has outside-subtree consumption demand (at least one import resolves into it) but no index.ts barrel file, so that demand has no single entry point.',
     think: [
-      'Grep for imports from individual files in this directory. If external consumers import from 2+ files, the directory is acting as a module and needs a barrel.',
-      'If only one file is imported externally, or files are independent utilities with no shared consumers, a barrel is unnecessary — stop, no action needed.',
-      'Create an index.ts with named re-exports for each symbol that external consumers currently import directly.',
+      'Grep for imports from individual files in this directory to confirm the demand this finding reports — every finding here already has at least one outside-subtree consumer (demand-driven: a directory with zero demand is never flagged).',
+      'Create an index.ts with named re-exports for each symbol that outside-subtree consumers currently import directly, and update those imports to go through the new surface.',
+      'If the directory is not meant to be a module boundary at all, merge its files into the consuming directory or the nearest existing module instead of adding a barrel.',
     ],
   },
   BARREL_INVALID_INDEX_STMT: {
-    cause: 'An index.ts contains statements other than export declarations (e.g., logic, variable declarations, side effects).',
+    cause:
+      "An index.ts contains a statement that is not a named re-export form — including logic, variable/side-effect declarations, and any import (an index file's surface consists only of `export {…} from` / `export type {…} from` / `export * as ns from` statements).",
     think: [
-      'Read the index file and identify each non-export statement (variable declarations, function definitions, logic, side effects).',
-      'Move each piece of logic into a dedicated module file within the same directory. Add a named re-export in the index for any public symbols.',
+      'Read the index file and identify each non-conforming statement (imports, variable declarations, function/class definitions, side effects).',
+      'Move each piece of logic (and any import it needs) into a dedicated module file within the same directory. Add a named re-export in the index for any symbol that must stay public.',
       'Grep for consumers that rely on the barrel import triggering side effects. If any exist, update them to import from the new dedicated module explicitly.',
     ],
   },
-  BARREL_SIDE_EFFECT_IMPORT: {
-    cause:
-      'A barrel file contains a side-effect import (import without specifiers), which executes code when the barrel is imported.',
-    think: [
-      'Read the side-effect import target to identify what it does (polyfill registration, global mutation, module augmentation).',
-      'If the side effect is required for the module to function, move it to an explicit setup file (e.g., `setup.ts`) and have consumers import it directly instead of relying on barrel import order.',
-      'If the side effect is not needed by any consumer, remove the import from the barrel.',
-    ],
-  },
   BARREL_CROSS_MODULE_REEXPORT: {
-    cause: 'A file re-exports a symbol from outside its own module boundary, creating an unnecessary indirection layer.',
+    cause:
+      'A file re-exports a symbol whose origin resolves outside its own directory subtree, creating an unnecessary indirection layer.',
     think: [
-      'Grep for all consumers of this re-export. Redirect each consumer to import directly from the original source module.',
-      'After redirecting all consumers, remove the re-export statement from this file.',
+      "Grep for all consumers of this re-export and redirect each one to the origin module's own public surface (its barrel) — never import the internal file directly.",
+      'If the origin belongs conceptually to this subtree, move it here instead of re-exporting it from afar.',
+      'After redirecting all consumers (or moving the origin), remove the re-export statement from this file.',
     ],
   },
 
@@ -496,6 +483,7 @@ export const FIREBAT_CODE_CATALOG = {
       "Read the import statements of each module in the cycle. Identify the weakest link — the import that contributes least to the module's core purpose (often a type import or a utility function reference).",
       'Break the cycle at the weakest link: extract the shared symbol (type, interface, constant) into a new module that both sides can import from, or invert the dependency by passing the needed value as a parameter.',
       'If the cycle involves only two modules that are tightly intertwined, merge them into a single module — the cycle indicates they are a single cohesive unit.',
+      'A deep import that bypasses a barrel/index surface can hide a cycle from readers without breaking it — never resolve a cycle by deep-importing module internals; fix it with a type-only edge, shared-module extraction, or a module merge instead.',
     ],
   },
   DIAG_GOD_MODULE: {

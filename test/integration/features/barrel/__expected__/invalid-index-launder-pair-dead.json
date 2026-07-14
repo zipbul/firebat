@@ -1,0 +1,47 @@
+[
+  {
+    "evidence": "ImportDeclaration",
+    "file": "/virtual/invalid-index-launder-pair-dead/m/index.ts",
+    "kind": "invalid-index-statement",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  },
+  {
+    "evidence": "ExportNamedDeclaration",
+    "file": "/virtual/invalid-index-launder-pair-dead/m/index.ts",
+    "kind": "invalid-index-statement",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 2
+      },
+      "start": {
+        "column": 0,
+        "line": 2
+      }
+    }
+  },
+  {
+    "evidence": "../foreign",
+    "file": "/virtual/invalid-index-launder-pair-dead/m/index.ts",
+    "kind": "cross-module-reexport",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 2
+      },
+      "start": {
+        "column": 0,
+        "line": 2
+      }
+    }
+  }
+]

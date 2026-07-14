@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "../foreign",
+    "file": "/virtual/cross-module-locally-used-dead/m/a.ts",
+    "kind": "cross-module-reexport",
+    "span": {
+      "end": {
+        "column": 13,
+        "line": 3
+      },
+      "start": {
+        "column": 0,
+        "line": 3
+      }
+    }
+  }
+]

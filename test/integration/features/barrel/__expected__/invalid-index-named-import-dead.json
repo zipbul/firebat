@@ -1,0 +1,32 @@
+[
+  {
+    "evidence": "ImportDeclaration",
+    "file": "/virtual/invalid-index-named-import-dead/m/index.ts",
+    "kind": "invalid-index-statement",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  },
+  {
+    "evidence": "ImportDeclaration",
+    "file": "/virtual/invalid-index-named-import-dead/m/index.ts",
+    "kind": "invalid-index-statement",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 2
+      },
+      "start": {
+        "column": 0,
+        "line": 2
+      }
+    }
+  }
+]

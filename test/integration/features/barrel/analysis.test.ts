@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { analyzeBarrel } from '../../../../src/test-api';
+import { analyzeBarrel, analyzeDependencies } from '../../../../src/test-api';
+import { withTempGildash } from '../../shared/gildash-test-kit';
 import { createProgramFromMap } from '../../shared/test-kit';
 
 const runBarrel = (sources: Map<string, string>) => {
@@ -19,11 +20,6 @@ interface KindCase {
 
 const kindCases: KindCase[] = [
   {
-    title: 'should report missing index when a directory contains source files',
-    expectedKind: 'missing-index',
-    files: { '/virtual/pkg/dir/a.ts': 'export const a = 1;' },
-  },
-  {
     title: 'should report export-star when export * is used',
     expectedKind: 'export-star',
     files: {
@@ -37,15 +33,6 @@ const kindCases: KindCase[] = [
     expectedKind: 'invalid-index-statement',
     files: {
       '/virtual/pkg/a/index.ts': ["import { internal } from './internal';", 'export { internal };'].join('\n'),
-      '/virtual/pkg/a/internal.ts': 'export const internal = 1;\n',
-    },
-  },
-  {
-    title: 'should report barrel-side-effect-import when index.ts contains side-effect imports',
-    expectedKind: 'barrel-side-effect-import',
-    files: {
-      '/virtual/pkg/a/index.ts': ["import './polyfill';", "export { internal } from './internal';"].join('\n'),
-      '/virtual/pkg/a/polyfill.ts': 'globalThis.__polyfilled = true;\n',
       '/virtual/pkg/a/internal.ts': 'export const internal = 1;\n',
     },
   },
@@ -68,11 +55,6 @@ const crossDirImportCases: KindCase[] = [
     expectedKind: 'deep-import',
     files: crossDirFiles('../a/internal'),
   },
-  {
-    title: 'should report index-deep-import when importing /index explicitly from another directory',
-    expectedKind: 'index-deep-import',
-    files: crossDirFiles('../a/index'),
-  },
 ];
 
 describe('integration/barrel', () => {
@@ -92,5 +74,61 @@ describe('integration/barrel', () => {
 
     // Assert
     expect(analysis.length).toBe(0);
+  });
+
+  // ── barrel-surgery (settled definition) — C1: circular-dependency × barrel ──
+  // PLAN-barrel-surgery.md D18 (circular-dependency catalog gains a line about
+  // never resolving a cycle by deep-importing): these lock the underlying
+  // premise — a value cycle CAN be formed entirely through barrel-compliant
+  // routing (directory-surface imports + own-subtree re-exports), so
+  // circular-dependency and barrel are orthogonal detectors that can both fire
+  // (or both stay silent) on the same sources. GREEN today: dependencies'
+  // Tarjan cycle detection and barrel's own-subtree aggregation exemption are
+  // both already-correct, unrelated to the D1–D19 kind surgery.
+
+  describe('barrel-circular-pair — barrel-compliant routing can still form a value cycle', () => {
+    const circularSources = sourcesOf({
+      '/virtual/a/index.ts': "export { implA } from './impl';\n",
+      '/virtual/a/impl.ts': ["import { implB } from '../b';", 'export const implA = () => implB() + 1;'].join('\n'),
+      '/virtual/b/index.ts': "export { implB } from './impl';\n",
+      '/virtual/b/impl.ts': ["import { implA } from '../a';", 'export const implB = () => implA() + 1;'].join('\n'),
+    });
+
+    it('analyzeDependencies reports exactly 1 circular-dependency', async () => {
+      const dependencies = await withTempGildash(circularSources, (gildash, tmpDir) =>
+        analyzeDependencies(gildash, { rootAbs: tmpDir }),
+      );
+
+      expect(dependencies.cycles.length).toBe(1);
+    });
+
+    it('analyzeBarrel over the same sources reports zero findings (compliant)', async () => {
+      const analysis = await runBarrel(circularSources);
+
+      expect(analysis.length).toBe(0);
+    });
+  });
+
+  describe('import-type-escape — converting one cycle leg to `import type` breaks the value cycle', () => {
+    const importTypeEscapeSources = sourcesOf({
+      '/virtual/a/index.ts': "export { implA } from './impl';\n",
+      '/virtual/a/impl.ts': ["import { implB } from '../b';", 'export const implA = () => implB() + 1;'].join('\n'),
+      '/virtual/b/index.ts': "export { implB } from './impl';\n",
+      '/virtual/b/impl.ts': ["import type { implA } from '../a';", 'export const implB: typeof implA = () => 1;'].join('\n'),
+    });
+
+    it('analyzeDependencies reports zero circular-dependency (type-only edge excluded)', async () => {
+      const dependencies = await withTempGildash(importTypeEscapeSources, (gildash, tmpDir) =>
+        analyzeDependencies(gildash, { rootAbs: tmpDir }),
+      );
+
+      expect(dependencies.cycles).toEqual([]);
+    });
+
+    it('analyzeBarrel over the same sources still reports zero findings', async () => {
+      const analysis = await runBarrel(importTypeEscapeSources);
+
+      expect(analysis.length).toBe(0);
+    });
   });
 });

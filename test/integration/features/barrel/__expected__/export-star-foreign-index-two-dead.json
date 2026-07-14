@@ -1,0 +1,31 @@
+[
+  {
+    "file": "/virtual/export-star-foreign-index-two-dead/m/index.ts",
+    "kind": "export-star",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  },
+  {
+    "evidence": "../foreign",
+    "file": "/virtual/export-star-foreign-index-two-dead/m/index.ts",
+    "kind": "cross-module-reexport",
+    "span": {
+      "end": {
+        "column": 27,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

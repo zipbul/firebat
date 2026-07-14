@@ -14,10 +14,12 @@ interface ParsedDefaults {
 
 // Expected default detector list, hardcoded here so the assertion is independent
 // of the production constant (importing it would make the test tautological).
+// barrel is intentionally absent — D15 (PLAN-barrel-surgery.md): it is opt-in,
+// never part of the implicit default set (see src/adapters/cli/entry.spec.ts
+// "D15 — barrel four-state declaration gating").
 const EXPECTED_DEFAULT_DETECTORS: FirebatDetector[] = [
   'duplicates',
   'waste',
-  'barrel',
   'error-flow',
   'format',
   'lint',

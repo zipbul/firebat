@@ -1,0 +1,16 @@
+[
+  {
+    "file": "/virtual/export-star-index-single-dead/m/index.ts",
+    "kind": "export-star",
+    "span": {
+      "end": {
+        "column": 22,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

@@ -96,6 +96,14 @@ const printHelp = (): void => {
   writeStdout(lines.join('\n'));
 };
 
+// D15: barrel is declared active only by features.barrel === true or an
+// object config — everything else (absent, false, or any other value) means
+// "not declared via config" for the purposes of the implicit detector set.
+// (Explicit `--only barrel` selection, handled entirely in resolveOptions
+// below, is the other declaration path and does not go through this table.)
+const isBarrelDeclaredActiveInFeatures = (barrelValue: unknown): boolean =>
+  barrelValue === true || (typeof barrelValue === 'object' && barrelValue !== null);
+
 const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features'] | undefined): ReadonlyArray<FirebatDetector> => {
   const all: ReadonlyArray<FirebatDetector> = [
     'waste',
@@ -117,12 +125,20 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
   ];
 
   if (!features) {
-    return all;
+    return all.filter(detector => detector !== 'barrel');
   }
 
   const disabled = new Set<FirebatDetector>();
 
   for (const detector of all) {
+    if (detector === 'barrel') {
+      if (!isBarrelDeclaredActiveInFeatures((features as Record<string, unknown>).barrel)) {
+        disabled.add(detector);
+      }
+
+      continue;
+    }
+
     if ((features as Record<string, unknown>)[detector] === false) {
       disabled.add(detector);
     }
@@ -346,6 +362,24 @@ const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOve
   };
 };
 
+// D15 precedence: features.barrel === false is a durable declaration of
+// non-participation and always wins, even over an explicit `--only barrel`
+// (a per-invocation flag must not overrule it). Applied AFTER config/CLI
+// merge because `--only` otherwise bypasses cfgDetectors entirely.
+const applyBarrelFalseGate = (
+  detectors: ReadonlyArray<FirebatDetector>,
+  barrelDeclaredFalse: boolean,
+  logger: FirebatLogger,
+): ReadonlyArray<FirebatDetector> => {
+  if (!barrelDeclaredFalse || !detectors.includes('barrel')) {
+    return detectors;
+  }
+
+  logger.warn('barrel policy declared false in config; --only barrel ignored');
+
+  return detectors.filter(detector => detector !== 'barrel');
+};
+
 const resolveOptions = async (
   argv: readonly string[],
   logger: FirebatLogger,
@@ -405,8 +439,10 @@ const resolveOptions = async (
     resolvedConfigPath: loaded.resolvedPath,
   });
   const targets = await resolveExpandedTargets(rootAbs, merged, cfgExclude, logger);
+  const barrelDeclaredFalse = featuresCfg?.barrel === false;
+  const detectors = applyBarrelFalseGate(merged.detectors, barrelDeclaredFalse, logger);
 
-  return { options: { ...merged, targets }, rootAbs };
+  return { options: { ...merged, detectors, targets }, rootAbs };
 };
 
 const runScan = async (

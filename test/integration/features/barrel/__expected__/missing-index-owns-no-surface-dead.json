@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "/virtual/missing-index-owns-no-surface-dead/lib",
+    "file": "/virtual/missing-index-owns-no-surface-dead/lib",
+    "kind": "missing-index",
+    "span": {
+      "end": {
+        "column": 1,
+        "line": 1
+      },
+      "start": {
+        "column": 1,
+        "line": 1
+      }
+    }
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "../foreign",
+    "file": "/virtual/export-star-as-ns-foreign-single-dead/m/a.ts",
+    "kind": "cross-module-reexport",
+    "span": {
+      "end": {
+        "column": 33,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

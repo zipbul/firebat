@@ -183,10 +183,57 @@ const matchStarPattern = (pattern: string, specifier: string): StarMatch | null 
     return null;
   }
 
+  // tsc guard (`matchPatternOrExact`): the wildcard region must have
+  // non-negative length. Without this, an overlapping prefix/suffix (e.g.
+  // pattern `lib/*/util` against specifier `lib/util`) produces a false
+  // match with an empty star via `.slice()`'s start>end clamping.
+  if (specifier.length < prefix.length + suffix.length) {
+    return null;
+  }
+
   const middle = specifier.slice(prefix.length, specifier.length - suffix.length);
 
   return { star: middle };
 };
+
+/** Literal prefix length before the first `*` (or the whole key, for an exact pattern). */
+const literalPrefixLength = (pattern: string): number => {
+  const starIndex = pattern.indexOf('*');
+
+  return starIndex === -1 ? pattern.length : starIndex;
+};
+
+/**
+ * TS `paths` precedence (tsc `tryParsePatterns`): an exact pattern (no `*`)
+ * always beats a wildcard pattern; among wildcard patterns, the one with the
+ * longest matched literal prefix (the text before `*`) wins. Ties break on
+ * DECLARATION order (Object.entries insertion order) — `Array.prototype.sort`
+ * is spec-guaranteed stable, so returning 0 on a tie preserves it. A
+ * lexicographic key-string tie-break would be wrong: it can reorder two
+ * patterns relative to their declaration order (F1).
+ */
+const comparePathPatternPrecedence = ([keyA]: readonly [string, unknown], [keyB]: readonly [string, unknown]): number => {
+  const isExactA = !keyA.includes('*');
+  const isExactB = !keyB.includes('*');
+
+  if (isExactA !== isExactB) {
+    return isExactA ? -1 : 1;
+  }
+
+  if (!isExactA) {
+    const prefixDelta = literalPrefixLength(keyB) - literalPrefixLength(keyA);
+
+    if (prefixDelta !== 0) {
+      return prefixDelta;
+    }
+  }
+
+  return 0;
+};
+
+/** Order `paths` entries by TS precedence — exact keys first, then wildcards by descending literal-prefix length. */
+const sortPathPatternEntries = (paths: TsconfigPaths): ReadonlyArray<[string, ReadonlyArray<string>]> =>
+  Object.entries(paths).sort(comparePathPatternPrecedence);
 
 const applyStarPattern = (pattern: string, star: string): string => {
   if (!pattern.includes('*')) {
@@ -270,8 +317,12 @@ const resolveAlias = async (
     return null;
   }
 
-  const entries = Object.entries(compiled.paths);
+  const entries = sortPathPatternEntries(compiled.paths);
 
+  // tsc's `matchPatternOrExact` selects EXACTLY ONE pattern (the first match
+  // in precedence order) and tries ONLY that pattern's target array. If none
+  // of its substitutions resolve, paths resolution FAILS — there is no
+  // fall-through to a lower-precedence pattern (F1).
   for (const [keyPattern, targets] of entries) {
     const match = matchStarPattern(keyPattern, specifier);
 
@@ -288,6 +339,8 @@ const resolveAlias = async (
         return resolved;
       }
     }
+
+    return null;
   }
 
   return null;
@@ -309,16 +362,18 @@ const createImportResolver = (input: ResolverInput): ImportResolver => {
         return relResolved;
       }
 
-      const wsResolved = resolveWorkspace(specifier, input.workspacePackages, input.fileSet);
-
-      if (wsResolved) {
-        return wsResolved;
-      }
-
+      // F6: tsc consults tsconfig `paths` BEFORE workspace/node_modules
+      // resolution — alias resolution must run first.
       const aliasResolved = await resolveAlias(input.rootAbs, normalizedImporter, specifier, input.fileSet, tsconfigCache);
 
       if (aliasResolved) {
         return aliasResolved;
+      }
+
+      const wsResolved = resolveWorkspace(specifier, input.workspacePackages, input.fileSet);
+
+      if (wsResolved) {
+        return wsResolved;
       }
 
       return null;

@@ -106,9 +106,14 @@ const createWorkspacePackageMap = async (rootAbs: string): Promise<Map<string, s
   const packageJsonPaths = await scanGlobsToAbsolutePaths(patterns, rootAbs, pattern =>
     normalizePath(path.join(pattern, 'package.json')),
   );
+  // scanGlobsToAbsolutePaths documents that dedup/sort/filter is the caller's
+  // job — its own output order follows glob-scan (readdir) order, which is
+  // not a decision fact. Sort deterministically (F7) so map insertion order
+  // never depends on filesystem/glob-scan ordering.
+  const sortedPackageJsonPaths = [...packageJsonPaths].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const map = new Map<string, string>();
 
-  for (const p of packageJsonPaths) {
+  for (const p of sortedPackageJsonPaths) {
     const pkg = await readJsoncFile(p);
     const name = typeof asRecord(pkg)?.name === 'string' ? String(asRecord(pkg)?.name) : '';
 

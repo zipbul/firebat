@@ -12,10 +12,12 @@ import { splitTrimNonEmpty } from './split-lines';
 const DEFAULT_MIN_SIZE: MinSizeOption = 'auto';
 const DEFAULT_MAX_FORWARD_DEPTH = 0;
 const DEFAULT_CROSS_FILE_MIN_DEPTH = 2;
+// barrel is intentionally excluded — D15: it is opt-in (declared via
+// features.barrel true/object, or explicitly selected with --only when the
+// config is silent on it), never part of the implicit default set.
 const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
   'waste',
-  'barrel',
   'error-flow',
   'format',
   'lint',

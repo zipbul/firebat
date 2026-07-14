@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "side-effect-import",
+    "file": "/virtual/invalid-index-sideeffect-dead/m/index.ts",
+    "kind": "invalid-index-statement",
+    "span": {
+      "end": {
+        "column": 17,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

@@ -3,13 +3,13 @@ import type { Node } from 'oxc-parser';
 
 import { normalizePath } from '@zipbul/gildash';
 import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { Visitor } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
 import type { BarrelFinding, SourceSpan } from '../../types';
 
-import { collectLocallyUsedImportNames } from '../../engine/ast/collect-locally-used-import-names';
 import { getLiteralString, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { globToRegExp } from '../../shared/glob-regex';
 import { asRecordOrNull } from '../../shared/json-guards';
@@ -54,6 +54,11 @@ const toNodeSpan = (file: ParsedFile, node: unknown): SourceSpan => {
   return toSpan(file.sourceText, startOffset, endOffset);
 };
 
+const SYNTHETIC_SPAN: SourceSpan = {
+  start: { line: 1, column: 1 },
+  end: { line: 1, column: 1 },
+};
+
 const compileIgnoreMatchers = (globs: ReadonlyArray<string>): ReadonlyArray<RegExp> => {
   return globs
     .map(g => (typeof g === 'string' ? g.trim() : ''))
@@ -72,52 +77,20 @@ const isIgnored = (rootAbs: string, fileAbs: string, matchers: ReadonlyArray<Reg
   return matchers.some(re => re.test(rel));
 };
 
-type ImportLikeKind = 'import' | 'export-named' | 'export-all';
-
-interface ImportLike {
-  readonly kind: ImportLikeKind;
-  readonly specifier: string;
-  readonly span: SourceSpan;
-  readonly rawNode: unknown;
-}
-
-const collectImportLikes = (file: ParsedFile): ReadonlyArray<ImportLike> => {
-  const items: ImportLike[] = [];
-
-  const addItem = (kind: ImportLikeKind, node: Node, source: Node | null | undefined): void => {
-    const spec = getLiteralString(source);
-
-    if (typeof spec === 'string') {
-      items.push({ kind, specifier: spec, span: toNodeSpan(file, node), rawNode: node });
-    }
-  };
-
-  new Visitor({
-    ImportDeclaration(node) {
-      addItem('import', node, node.source);
-    },
-    ExportNamedDeclaration(node) {
-      addItem('export-named', node, node.source);
-    },
-    ExportAllDeclaration(node) {
-      addItem('export-all', node, node.source);
-    },
-  }).visit(file.program);
-
-  return items;
-};
-
-const isExplicitIndexSpecifier = (specifier: string): boolean => {
-  const normalized = normalizePath(specifier);
-
-  return normalized.endsWith('/index') || normalized.endsWith('/index.ts') || normalized === 'index' || normalized === 'index.ts';
-};
-
 const createEmptyBarrel = (): ReadonlyArray<BarrelFinding> => [];
+
+// ─── export-star (D14: `export * as ns from` / `export type * as ns from` exempt) ──
 
 const checkExportStar = (file: ParsedFile, findings: BarrelFinding[]): void => {
   new Visitor({
     ExportAllDeclaration(node) {
+      // D14: the `* as ns` forms gain exactly one enumerable name, satisfying
+      // clause ③ — exempt from export-star (still subject to the origin rule
+      // via cross-module-reexport, handled separately).
+      if (node.exported !== null && node.exported !== undefined) {
+        return;
+      }
+
       findings.push({
         kind: 'export-star',
         file: file.filePath,
@@ -126,6 +99,8 @@ const checkExportStar = (file: ParsedFile, findings: BarrelFinding[]): void => {
     },
   }).visit(file.program);
 };
+
+// ─── index.ts surface strictness (D4/D5/D13/D14) ─────────────────────────────
 
 const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void => {
   if (!isIndexFile(file.filePath)) {
@@ -137,99 +112,168 @@ const checkIndexStrictness = (file: ParsedFile, findings: BarrelFinding[]): void
   }
 
   for (const stmt of file.program.body as ReadonlyArray<Node>) {
+    // D4: ExportAllDeclaration fires export-star only (checkExportStar), never
+    // invalid-index-statement — regardless of the D14 `* as ns` exemption.
+    if (stmt.type === 'ExportAllDeclaration') {
+      continue;
+    }
+
     if (stmt.type === 'ImportDeclaration') {
       const specifiers = stmt.specifiers as ReadonlyArray<Node>;
+      const evidence = specifiers.length === 0 ? 'side-effect-import' : 'ImportDeclaration';
 
-      if (specifiers.length === 0) {
-        const source = getLiteralString(stmt.source as Node | null | undefined);
-
-        findings.push({
-          kind: 'barrel-side-effect-import',
-          file: file.filePath,
-          span: toNodeSpan(file, stmt),
-          ...(typeof source === 'string' ? { evidence: source } : {}),
-        });
-      }
-    } else if (stmt.type === 'ExportNamedDeclaration') {
-      const source = getLiteralString(stmt.source);
-      const declaration = stmt.declaration;
-
-      if (!(typeof source === 'string' && (declaration === null || declaration === undefined))) {
-        findings.push({
-          kind: 'invalid-index-statement',
-          file: file.filePath,
-          span: toNodeSpan(file, stmt),
-        });
-      }
-    } else if (stmt.type === 'ExportAllDeclaration') {
-      // ExportAllDeclaration is separately reported via export-star, but still invalid in barrel.
       findings.push({
         kind: 'invalid-index-statement',
         file: file.filePath,
         span: toNodeSpan(file, stmt),
+        evidence,
       });
-    } else {
-      // Everything else is invalid in a strict index barrel.
+
+      continue;
+    }
+
+    if (stmt.type === 'ExportNamedDeclaration') {
+      // D5/D13: conforming iff it has a source AND no declaration — covers
+      // `export {…} from`, `export type {…} from`, alias/`default as`/`type`
+      // specifier forms. Everything else (sourceless `export { local }`,
+      // `export const x = …`, …) is invalid.
+      const source = getLiteralString(stmt.source);
+      const declaration = stmt.declaration;
+      const conforming = typeof source === 'string' && (declaration === null || declaration === undefined);
+
+      if (conforming) {
+        continue;
+      }
+
       findings.push({
         kind: 'invalid-index-statement',
         file: file.filePath,
         span: toNodeSpan(file, stmt),
         evidence: stmt.type,
       });
-    }
-  }
-};
 
-const checkMissingIndex = (
-  activeFiles: ReadonlyArray<ParsedFile>,
-  fileSet: ReadonlySet<string>,
-  findings: BarrelFinding[],
-): void => {
-  const dirs = new Set<string>();
-
-  for (const file of activeFiles) {
-    const normalized = normalizePath(file.filePath);
-
-    if (!normalized.endsWith('.ts')) {
       continue;
     }
 
-    const dir = normalizePath(path.dirname(normalized));
-
-    dirs.add(dir);
-  }
-
-  for (const dir of dirs) {
-    const indexTs = normalizePath(path.join(dir, 'index.ts'));
-
-    if (fileSet.has(indexTs)) {
-      continue;
-    }
-
+    // Everything else is invalid in a strict index barrel.
     findings.push({
-      kind: 'missing-index',
-      file: dir,
-      span: {
-        start: { line: 1, column: 1 },
-        end: { line: 1, column: 1 },
-      },
-      evidence: dir,
+      kind: 'invalid-index-statement',
+      file: file.filePath,
+      span: toNodeSpan(file, stmt),
+      evidence: stmt.type,
     });
   }
 };
+
+// ─── shared ImportDeclaration resolution pass (D11/D2/D3/D17) ────────────────
+
+interface ImportDeclarationEntry {
+  readonly specifier: string;
+  readonly span: SourceSpan;
+}
+
+/** Collect ImportDeclaration edges only — re-export edges never reach this list (D11). */
+const collectImportDeclarations = (file: ParsedFile): ReadonlyArray<ImportDeclarationEntry> => {
+  const items: ImportDeclarationEntry[] = [];
+
+  new Visitor({
+    ImportDeclaration(node) {
+      const spec = getLiteralString(node.source);
+
+      if (typeof spec === 'string') {
+        items.push({ specifier: spec, span: toNodeSpan(file, node) });
+      }
+    },
+  }).visit(file.program);
+
+  return items;
+};
+
+interface ResolvedImportEdge {
+  readonly file: ParsedFile;
+  readonly importerAbs: string;
+  readonly importerDirAbs: string;
+  readonly span: SourceSpan;
+  readonly targetDirAbs: string;
+  readonly targetIsIndex: boolean;
+}
+
+/** Resolve every ImportDeclaration edge to its internal target (unresolved/external held). */
+const resolveImportEdges = async (
+  activeFiles: ReadonlyArray<ParsedFile>,
+  resolver: ImportResolver,
+  fileSet: ReadonlySet<string>,
+): Promise<ReadonlyArray<ResolvedImportEdge>> => {
+  const edges: ResolvedImportEdge[] = [];
+
+  for (const file of activeFiles) {
+    const importerAbs = normalizePath(file.filePath);
+    const importerDirAbs = normalizePath(path.dirname(importerAbs));
+    const entries = collectImportDeclarations(file);
+
+    for (const entry of entries) {
+      const resolved = await resolver.resolve(importerAbs, entry.specifier);
+
+      if (!resolved) {
+        // Unresolved: treat as external (npm) / held (D8).
+        continue;
+      }
+
+      const targetAbs = normalizePath(resolved);
+
+      if (!fileSet.has(targetAbs)) {
+        continue;
+      }
+
+      edges.push({
+        file,
+        importerAbs,
+        importerDirAbs,
+        span: entry.span,
+        targetDirAbs: normalizePath(path.dirname(targetAbs)),
+        targetIsIndex: isIndexFile(targetAbs),
+      });
+    }
+  }
+
+  return edges;
+};
+
+/** Segment-safe: targetDir is importerDir itself, or a proper ancestor of it. */
+const isSelfOrAncestorDir = (importerDirAbs: string, targetDirAbs: string): boolean =>
+  importerDirAbs === targetDirAbs || importerDirAbs.startsWith(`${targetDirAbs}/`);
 
 const toAllowedBarrelSpecifier = (
   importerFileAbs: string,
   targetDirAbs: string,
   workspacePackages: ReadonlyMap<string, string>,
 ): string | null => {
-  // Prefer workspace package specifier if targetDir is within any workspace package root.
+  // Prefer workspace package specifier if targetDir is within any workspace
+  // package root. With overlapping/nested package roots (e.g. `packages/a`
+  // and `packages/a/nested`, both containing a package.json), more than one
+  // root can contain targetDir — pick the LONGEST (most specific) matching
+  // root deterministically (F7), not the first one encountered in Map
+  // iteration order (readdir / declaration order is not a decision fact).
+  let bestPkgName: string | null = null;
+  let bestPkgRootAbs: string | null = null;
+
   for (const [pkgName, pkgRootAbs] of workspacePackages.entries()) {
     const rel = normalizePath(path.relative(pkgRootAbs, targetDirAbs));
 
-    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
-      return rel.length === 0 ? pkgName : `${pkgName}/${rel}`;
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      continue;
     }
+
+    if (bestPkgRootAbs === null || pkgRootAbs.length > bestPkgRootAbs.length) {
+      bestPkgName = pkgName;
+      bestPkgRootAbs = pkgRootAbs;
+    }
+  }
+
+  if (bestPkgName !== null && bestPkgRootAbs !== null) {
+    const rel = normalizePath(path.relative(bestPkgRootAbs, targetDirAbs));
+
+    return rel.length === 0 ? bestPkgName : `${bestPkgName}/${rel}`;
   }
 
   const rel = normalizePath(path.relative(path.dirname(importerFileAbs), targetDirAbs));
@@ -241,27 +285,71 @@ const toAllowedBarrelSpecifier = (
   return rel;
 };
 
-/** Emit a deep-import finding with a suggested barrel specifier (when one can be computed). */
-const pushDeepImportFinding = (
-  findings: BarrelFinding[],
-  kind: 'deep-import' | 'index-deep-import',
-  filePath: string,
-  span: SourceSpan,
-  importerAbs: string,
-  targetDirAbs: string,
+/** D2 (deep-import gates) + D3/D17 (demand-driven missing-index) over one shared edge list. */
+const computeDeepImportAndMissingIndex = (
+  edges: ReadonlyArray<ResolvedImportEdge>,
+  fileSet: ReadonlySet<string>,
   workspacePackages: ReadonlyMap<string, string>,
-): void => {
-  const suggested = toAllowedBarrelSpecifier(importerAbs, targetDirAbs, workspacePackages);
+): { readonly deepImport: ReadonlyArray<BarrelFinding>; readonly missingIndex: ReadonlyArray<BarrelFinding> } => {
+  const deepImport: BarrelFinding[] = [];
+  const demandDirs = new Set<string>();
 
-  findings.push({
-    kind,
-    file: filePath,
-    span,
-    ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
-  });
+  for (const edge of edges) {
+    // (a) resolved target is an index.ts -> never a finding, never demand.
+    if (edge.targetIsIndex) {
+      continue;
+    }
+
+    // (b)+(c) target dir is the importer's own dir, or an ancestor of it -> K,
+    // and creates no demand (D17: consuming a nested surface via a directory
+    // specifier is legal regardless of ancestor dirs' index state).
+    if (isSelfOrAncestorDir(edge.importerDirAbs, edge.targetDirAbs)) {
+      continue;
+    }
+
+    // (d) target dir must contain an index.ts; otherwise missing-index owns
+    // it. A fileSet miss conflates "not in this scan's file set" with
+    // "absent on disk": with explicit file targets (a changed-files run) an
+    // index.ts can exist on disk while simply not being part of `program`.
+    // Probe disk on a fileSet miss (F4) — virtual-path programs (goldens use
+    // /virtual/...) never exist on disk, so this probe never engages for
+    // them and golden behavior is unchanged. If the index exists on disk,
+    // this dir/edge can't be judged from this scan alone: hold BOTH
+    // missing-index and deep-import for it (FN direction — never demand,
+    // never suggest a deep-import fix that can't be verified).
+    const targetIndexAbs = normalizePath(path.join(edge.targetDirAbs, 'index.ts'));
+
+    if (!fileSet.has(targetIndexAbs)) {
+      if (existsSync(targetIndexAbs)) {
+        continue;
+      }
+
+      demandDirs.add(edge.targetDirAbs);
+
+      continue;
+    }
+
+    const suggested = toAllowedBarrelSpecifier(edge.importerAbs, edge.targetDirAbs, workspacePackages);
+
+    deepImport.push({
+      kind: 'deep-import',
+      file: edge.file.filePath,
+      span: edge.span,
+      ...(suggested ? { evidence: `suggest: ${suggested}` } : {}),
+    });
+  }
+
+  const missingIndex: BarrelFinding[] = [...demandDirs].map(dir => ({
+    kind: 'missing-index',
+    file: dir,
+    span: SYNTHETIC_SPAN,
+    evidence: dir,
+  }));
+
+  return { deepImport, missingIndex };
 };
 
-// ─── cross-module-reexport detection ─────────────────────────────────────────
+// ─── cross-module-reexport detection (D6/D11/D14 clause ④) ──────────────────
 
 interface ImportedBinding {
   readonly source: string; // specifier string (e.g. '../other')
@@ -301,7 +389,7 @@ const isChildPath = (currentFileAbs: string, resolvedTargetAbs: string): boolean
   const currentDir = normalizePath(path.dirname(currentFileAbs));
   const target = normalizePath(resolvedTargetAbs);
 
-  return target.startsWith(currentDir + '/');
+  return target.startsWith(`${currentDir}/`);
 };
 
 /**
@@ -365,7 +453,8 @@ const checkCrossModuleReexport = async (
       continue;
     }
 
-    // 구문 A: ExportNamedDeclaration with source, ExportAllDeclaration
+    // 구문 A: ExportNamedDeclaration with source, ExportAllDeclaration (D14: the
+    // `* as ns` exemption governs export-star only — origin rule ④ still applies).
     if (!skipPatternA) {
       for (const stmt of body) {
         const stmtNode = stmt as Node;
@@ -403,16 +492,13 @@ const checkCrossModuleReexport = async (
       }
     }
 
-    // 구문 B, C: import 바인딩 수집 후 export 분석
+    // 구문 B, C: import 바인딩 수집 후 export 분석 (D6: locallyUsed 예외 없음 — 로컬
+    // 사용 여부와 무관하게 항상 발화)
     const importBindings = collectImportBindings(file);
 
     if (importBindings.size === 0) {
       continue;
     }
-
-    // scope-aware 로컬 사용 판별
-    const importedNames = new Set(importBindings.keys());
-    const locallyUsed = collectLocallyUsedImportNames(file.program, importedNames);
 
     for (const stmt of body) {
       const stmtNode = stmt as Node;
@@ -422,6 +508,12 @@ const checkCrossModuleReexport = async (
         if (stmtNode.source !== null) {
           continue;
         }
+
+        // Contract: one finding per (statement, origin source) — multiple
+        // specifiers sharing the same foreign origin in one statement are
+        // one decision, not one-per-specifier. Different origins in the same
+        // statement still produce distinct findings (tracked per source).
+        const pushedSources = new Set<string>();
 
         for (const spec of stmtNode.specifiers) {
           const localNode = spec.local;
@@ -457,12 +549,13 @@ const checkCrossModuleReexport = async (
             continue;
           }
 
-          // 로컬 사용 있으면 허용
-          if (locallyUsed.has(localName)) {
+          if (pushedSources.has(binding.source)) {
             continue;
           }
 
-          // cross-module reexport → 탐지
+          pushedSources.add(binding.source);
+
+          // cross-module reexport → 탐지 (D6: locallyUsed 예외 삭제)
           findings.push({
             kind: 'cross-module-reexport',
             file: file.filePath,
@@ -503,71 +596,12 @@ const checkCrossModuleReexport = async (
           continue;
         }
 
-        if (locallyUsed.has(identName)) {
-          continue;
-        }
-
         findings.push({
           kind: 'cross-module-reexport',
           file: file.filePath,
           span: toNodeSpan(file, stmt),
           evidence: binding.source,
         });
-      }
-    }
-  }
-};
-
-const checkDeepImports = async (
-  activeFiles: ReadonlyArray<ParsedFile>,
-  resolver: ImportResolver,
-  workspacePackages: ReadonlyMap<string, string>,
-  fileSet: ReadonlySet<string>,
-  findings: BarrelFinding[],
-): Promise<void> => {
-  for (const file of activeFiles) {
-    const importerAbs = normalizePath(file.filePath);
-    const importerDirAbs = normalizePath(path.dirname(importerAbs));
-    const importLikes = collectImportLikes(file);
-
-    for (const entry of importLikes) {
-      const resolved = await resolver.resolve(importerAbs, entry.specifier);
-
-      if (!resolved) {
-        // Unresolved: treat as external (npm) and ignore.
-        continue;
-      }
-
-      if (!fileSet.has(normalizePath(resolved))) {
-        continue;
-      }
-
-      const targetAbs = normalizePath(resolved);
-      const targetDirAbs = normalizePath(path.dirname(targetAbs));
-
-      if (targetDirAbs === importerDirAbs) {
-        // same-directory imports are allowed.
-        continue;
-      }
-
-      // If this import resolves to an index file, it must be imported via directory (not /index).
-      if (isIndexFile(targetAbs) && isExplicitIndexSpecifier(entry.specifier)) {
-        pushDeepImportFinding(
-          findings,
-          'index-deep-import',
-          file.filePath,
-          entry.span,
-          importerAbs,
-          targetDirAbs,
-          workspacePackages,
-        );
-
-        continue;
-      }
-
-      // If it resolves to a non-index file across directories, it is a deep import.
-      if (!isIndexFile(targetAbs)) {
-        pushDeepImportFinding(findings, 'deep-import', file.filePath, entry.span, importerAbs, targetDirAbs, workspacePackages);
       }
     }
   }
@@ -603,9 +637,14 @@ const analyzeBarrel = async (
     checkIndexStrictness(file, findings);
   }
 
-  checkMissingIndex(activeFiles, fileSet, findings);
+  // Single shared resolution pass over ImportDeclaration edges (D11) feeds both
+  // deep-import (D2) and demand-driven missing-index (D3/D17) — no split-brain
+  // double resolve.
+  const edges = await resolveImportEdges(activeFiles, resolver, fileSet);
+  const { deepImport, missingIndex } = computeDeepImportAndMissingIndex(edges, fileSet, workspacePackages);
 
-  await checkDeepImports(activeFiles, resolver, workspacePackages, fileSet, findings);
+  findings.push(...missingIndex, ...deepImport);
+
   await checkCrossModuleReexport(activeFiles, resolver, fileSet, findings, crossModuleFiles);
 
   return findings;

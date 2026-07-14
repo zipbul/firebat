@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "ExportNamedDeclaration",
+    "file": "/virtual/invalid-index-decl-dead/m/index.ts",
+    "kind": "invalid-index-statement",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

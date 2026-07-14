@@ -1,0 +1,17 @@
+[
+  {
+    "evidence": "suggest: ./b",
+    "file": "/virtual/deep-import-into-child-internal-dead/a/main.ts",
+    "kind": "deep-import",
+    "span": {
+      "end": {
+        "column": 33,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]

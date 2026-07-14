@@ -21,8 +21,10 @@ const FILE_B = 'src/b.ts';
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('FIREBAT_CODE_CATALOG', () => {
-  it('should have exactly 73 entries', () => {
-    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(73);
+  // barrel-surgery (PLAN-barrel-surgery.md D1): BARREL_INDEX_DEEP_IMPORT and
+  // BARREL_SIDE_EFFECT_IMPORT catalog codes deleted outright — 73 → 71.
+  it('should have exactly 71 entries', () => {
+    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(71);
   });
 
   it('should have a cause string for every entry', () => {

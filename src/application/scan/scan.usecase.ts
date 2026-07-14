@@ -245,10 +245,8 @@ const WASTE_KIND_TO_CODE: Readonly<Record<WasteKind, FirebatCatalogCode>> = {
 const BARREL_KIND_TO_CODE: Readonly<Record<BarrelFindingKind, FirebatCatalogCode>> = {
   'export-star': 'BARREL_EXPORT_STAR',
   'deep-import': 'BARREL_DEEP_IMPORT',
-  'index-deep-import': 'BARREL_INDEX_DEEP_IMPORT',
   'missing-index': 'BARREL_MISSING_INDEX',
   'invalid-index-statement': 'BARREL_INVALID_INDEX_STMT',
-  'barrel-side-effect-import': 'BARREL_SIDE_EFFECT_IMPORT',
   'cross-module-reexport': 'BARREL_CROSS_MODULE_REEXPORT',
 } as const;
 const NESTING_KIND_TO_CODE: Readonly<Record<NestingKind, FirebatCatalogCode>> = {

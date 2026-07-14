@@ -9,9 +9,32 @@ const __origReport = { ...require(nodePath.resolve(import.meta.dir, '../../repor
 const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 
+// ── D15 gating test state (barrel-surgery) ──────────────────────────────────
+// scanUseCase / loadFirebatConfigFile are mocked below so the D15 gating
+// tests can (a) observe the resolved FirebatCliOptions.detectors that reach
+// scanUseCase and (b) vary the loaded config's `features.barrel` value per
+// test. Defaults below match the original static mocks exactly when the
+// override var is left unset, so every pre-existing test in this file is
+// unaffected.
+let __d15CapturedOptions: { detectors: ReadonlyArray<string> } | undefined;
+let __d15ConfigOverride: { config: unknown; resolvedPath: string | undefined } | null = null;
+
+// Typed getter (not a direct variable read): TS's control-flow narrowing pins
+// `__d15CapturedOptions` to the literal `undefined` across the `await runCli(...)`
+// call below (the mutating assignment lives in a sibling closure — scanUseCase's
+// mock — so TS never widens the narrowed type back to the declared union), which
+// makes later `?.detectors` reads resolve against `never` (TS2339). A function
+// call's return type is always its declared type regardless of caller-side
+// narrowing, so routing reads through this getter sidesteps the bug.
+const getD15CapturedOptions = (): { detectors: ReadonlyArray<string> } | undefined => __d15CapturedOptions;
+
 // Heavy dependencies mocked to prevent side-effects and slow load
 void mock.module(nodePath.resolve(import.meta.dir, '../../application/scan/scan.usecase.ts'), () => ({
-  scanUseCase: mock(async () => ({ analyses: {}, summary: {} })),
+  scanUseCase: mock(async (options: { detectors: ReadonlyArray<string> }) => {
+    __d15CapturedOptions = options;
+
+    return { analyses: {}, catalog: {}, findings: [], meta: {} };
+  }),
 }));
 
 void mock.module(nodePath.resolve(import.meta.dir, '../../shared/root-resolver.ts'), () => ({
@@ -23,7 +46,7 @@ void mock.module(nodePath.resolve(import.meta.dir, '../../shared/target-discover
 }));
 
 void mock.module(nodePath.resolve(import.meta.dir, '../../shared/firebat-config.loader.ts'), () => ({
-  loadFirebatConfigFile: mock(async () => ({ config: null, resolvedPath: undefined })),
+  loadFirebatConfigFile: mock(async () => __d15ConfigOverride ?? { config: null, resolvedPath: undefined }),
   resolveDefaultFirebatRcPath: mock((rootAbs: string) => nodePath.join(rootAbs, '.firebatrc.jsonc')),
 }));
 
@@ -237,6 +260,57 @@ describe('runCli', () => {
     const result = await runCli(['--help']);
 
     expect(result).toBe(0);
+  });
+});
+
+// ── barrel-surgery (settled definition) — C2: D15 four-state declaration gating ──
+// PLAN-barrel-surgery.md D15: declared ⇔ features.barrel is true/object, OR
+// (features.barrel ABSENT and the user passes --only barrel explicitly).
+// Explicit `false` always wins, even under --only. Today's code treats
+// "absent" as active (barrel is in DEFAULT_DETECTORS, resolveEnabledDetectorsFromFeatures
+// only disables on `=== false`) and lets an explicit --only unconditionally
+// win over config (mergeConfigIntoOptions skips the config-derived detector
+// list whenever `explicit.detectors` is true) — so two of these four states
+// are RED until Phase 2 gating lands; the other two already hold today.
+describe('D15 — barrel four-state declaration gating (post-surgery contract)', () => {
+  it('features.barrel absent, no --only → barrel is NOT enabled (RED today: absent currently means active)', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = { config: null, resolvedPath: undefined };
+
+    await runCli([]);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors.includes('barrel')).toBe(false);
+  });
+
+  it('features.barrel absent + explicit --only barrel → barrel IS enabled', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = { config: null, resolvedPath: undefined };
+
+    await runCli(['--only', 'barrel']);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors).toEqual(['barrel']);
+  });
+
+  it('features.barrel === true → barrel IS enabled', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = { config: { features: { barrel: true } } as never, resolvedPath: undefined };
+
+    await runCli([]);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors.includes('barrel')).toBe(true);
+  });
+
+  it('features.barrel === false + explicit --only barrel → barrel is NOT enabled (RED today: --only always wins)', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = { config: { features: { barrel: false } } as never, resolvedPath: undefined };
+
+    await runCli(['--only', 'barrel']);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors.includes('barrel')).toBe(false);
   });
 });
 

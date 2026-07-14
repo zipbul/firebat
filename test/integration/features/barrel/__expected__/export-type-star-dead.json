@@ -1,0 +1,16 @@
+[
+  {
+    "file": "/virtual/export-type-star-dead/m/a.ts",
+    "kind": "export-star",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 1
+      },
+      "start": {
+        "column": 0,
+        "line": 1
+      }
+    }
+  }
+]
