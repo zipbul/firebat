@@ -1,17 +1,19 @@
-import { blankLinesBetweenStatementGroupsRule } from './src/oxlint-plugin/rules/blank-lines-between-statement-groups';
-import { memberOrderingRule } from './src/oxlint-plugin/rules/member-ordering';
-import { noBracketNotationRule } from './src/oxlint-plugin/rules/no-bracket-notation';
-import { noDynamicImportRule } from './src/oxlint-plugin/rules/no-dynamic-import';
-import { noGlobalThisMutationRule } from './src/oxlint-plugin/rules/no-globalthis-mutation';
-import { noInlineObjectTypeRule } from './src/oxlint-plugin/rules/no-inline-object-type';
-import { noTombstoneRule } from './src/oxlint-plugin/rules/no-tombstone';
-import { noUmbrellaTypesRule } from './src/oxlint-plugin/rules/no-umbrella-types';
-import { noUnmodifiedLoopConditionRule } from './src/oxlint-plugin/rules/no-unmodified-loop-condition';
-import { paddingLineBetweenStatementsRule } from './src/oxlint-plugin/rules/padding-line-between-statements';
-import { singleExportedClassRule } from './src/oxlint-plugin/rules/single-exported-class';
-import { testDescribeSutNameRule } from './src/oxlint-plugin/rules/test-describe-sut-name';
-import { testUnitFileMappingRule } from './src/oxlint-plugin/rules/test-unit-file-mapping';
-import { unusedImportsRule } from './src/oxlint-plugin/rules/unused-imports';
+import {
+  blankLinesBetweenStatementGroupsRule,
+  memberOrderingRule,
+  noBracketNotationRule,
+  noDynamicImportRule,
+  noGlobalThisMutationRule,
+  noInlineObjectTypeRule,
+  noTombstoneRule,
+  noUmbrellaTypesRule,
+  noUnmodifiedLoopConditionRule,
+  paddingLineBetweenStatementsRule,
+  singleExportedClassRule,
+  testDescribeSutNameRule,
+  testUnitFileMappingRule,
+  unusedImportsRule,
+} from './src/oxlint-plugin/rules';
 
 const plugin = {
   meta: {

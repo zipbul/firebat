@@ -1,7 +1,6 @@
 import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, RuleContext, TemplateElementValue } from '../types';
 
-import { isJsonObject, toStringList } from '../utils/json-options';
-import { getSourceText } from '../utils/source-text';
+import { getSourceText, isJsonObject, toStringList } from '../utils';
 
 interface NoBracketNotationOptions {
   allow?: string[];

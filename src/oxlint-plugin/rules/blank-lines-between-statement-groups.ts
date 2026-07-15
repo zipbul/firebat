@@ -1,10 +1,13 @@
 import type { AstNode, NodeOrNull, RuleContext } from '../types';
 
-import { blankLineFix, hasBlankLineBetween } from '../utils/blank-line';
-import { matchExpressionStatement } from '../utils/expression-statement';
-import { isIdentifierNamed } from '../utils/identifier';
-import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration';
-import { createStatementBodyVisitor } from '../utils/statement-body-visitor';
+import {
+  blankLineFix,
+  createStatementBodyVisitor,
+  hasBlankLineBetween,
+  isFunctionVariableDeclaration,
+  isIdentifierNamed,
+  matchExpressionStatement,
+} from '../utils';
 
 const blankLinesBetweenStatementGroupsRule = {
   create(context: RuleContext) {

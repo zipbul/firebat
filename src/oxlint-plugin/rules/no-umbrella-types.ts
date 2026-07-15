@@ -1,6 +1,6 @@
 import type { AstNode, JsonValue, NodeOrNull, RuleContext } from '../types';
 
-import { isJsonObject, toStringList } from '../utils/json-options';
+import { isJsonObject, toStringList } from '../utils';
 
 interface NoUmbrellaTypesOptions {
   forbiddenAliases?: string[];

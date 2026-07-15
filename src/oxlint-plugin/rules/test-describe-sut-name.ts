@@ -3,9 +3,7 @@ import { basename } from 'node:path';
 import type { AstNode, RuleContext } from '../types';
 
 import { isNonEmptyString } from '../../shared';
-import { getContextFilename } from '../utils/context-filename';
-import { fileExists } from '../utils/context-fs';
-import { getImplPathFromSpec } from '../utils/test-file-path';
+import { fileExists, getContextFilename, getImplPathFromSpec } from '../utils';
 
 function readText(context: RuleContext, filePath: string): string | null {
   if (typeof context.readFile === 'function') {

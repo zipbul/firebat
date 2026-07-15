@@ -1,6 +1,6 @@
 import type { AstNode, RuleContext } from '../types';
 
-import { isJsonObject } from '../utils/json-options';
+import { isJsonObject } from '../utils';
 
 interface NoInlineObjectTypeOptions {
   allowEmpty?: boolean;

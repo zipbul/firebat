@@ -1,6 +1,6 @@
 import type { AstNode, Fix, Fixer, Range, RuleContext, Variable } from '../types';
 
-import { nodeArray } from '../utils/node-array';
+import { nodeArray } from '../utils';
 
 const COMMA_TOKEN = ',';
 const unusedImportsRule = {

@@ -1,7 +1,6 @@
 import type { AstNode, JsonValue, NodeOrNull, RuleContext } from '../types';
 
-import { isJsonObject, toStringList } from '../utils/json-options';
-import { nodeArray } from '../utils/node-array';
+import { isJsonObject, nodeArray, toStringList } from '../utils';
 
 interface MemberOrderingOptions {
   default?: string[];

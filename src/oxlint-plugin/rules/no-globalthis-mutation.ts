@@ -1,6 +1,6 @@
 import type { AstNode, NodeOrNull, RuleContext } from '../types';
 
-import { isIdentifierNamed } from '../utils/identifier';
+import { isIdentifierNamed } from '../utils';
 
 const noGlobalThisMutationRule = {
   create(context: RuleContext) {

@@ -1,8 +1,7 @@
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
 
 import { addNonEmptyString, isNonEmptyString } from '../../shared';
-import { isAstNodeValue } from '../utils/is-ast-node-value';
-import { getProgramBody } from '../utils/program-body';
+import { getProgramBody, isAstNodeValue } from '../utils';
 
 function isIdentifier(node: AstNode | null | undefined): node is AstNode {
   return node?.type === 'Identifier' && typeof node.name === 'string';
