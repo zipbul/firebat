@@ -119,7 +119,7 @@ export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'no
 
 export type WasteKind = 'dead-store' | 'dead-store-overwrite' | 'redundant-binding';
 
-export interface SourcePosition {
+interface SourcePosition {
   readonly line: number;
   readonly column: number;
 }
@@ -376,7 +376,7 @@ type DependencyFinding =
   | DepDuplicateExportFinding
   | DepUnusedMemberFinding;
 
-export interface FormatFinding {
+interface FormatFinding {
   readonly code: FirebatCatalogCode;
   readonly kind: 'needs-formatting';
   readonly file: string;
@@ -664,7 +664,7 @@ export interface Finding {
   readonly detail?: Readonly<Record<string, unknown>>;
 }
 
-export interface ScanJsonResult {
+interface ScanJsonResult {
   readonly meta: {
     readonly detectors: ReadonlyArray<FirebatDetector>;
     readonly errors?: Readonly<Record<string, string>>;

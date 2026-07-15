@@ -2,7 +2,7 @@ import type { Function as OxcFunction, Node } from 'oxc-parser';
 
 import { buildLineOffsets, getLineColumn, walk } from '@zipbul/gildash';
 
-import type { WasteFinding } from '..';
+import type { WasteFinding } from '../types';
 import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
@@ -1262,7 +1262,14 @@ const buildVarHasMeaningfulUse = (
     }
 
     const greatGrandparent = ctx.ancestors.length >= 3 ? ctx.ancestors[ctx.ancestors.length - 3] : null;
-    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, shadowedGlobals, varInitKind.get(idx), greatGrandparent);
+    const kind = classifyUseInWaste(
+      ctx.node,
+      ctx.parent,
+      ctx.grandparent,
+      shadowedGlobals,
+      varInitKind.get(idx),
+      greatGrandparent,
+    );
 
     if (kind === 'real' || kind === 'escape') {
       meaningful.add(idx);
@@ -1738,8 +1745,18 @@ interface RedundantBindingInput {
 }
 
 const collectRedundantBindingFindings = (input: RedundantBindingInput): void => {
-  const { bodyNodes, defs, defCtxByLocation, syntacticReads, localIndexByName, varInitKind, shadowedGlobals, filePath, lineOffsets, findings } =
-    input;
+  const {
+    bodyNodes,
+    defs,
+    defCtxByLocation,
+    syntacticReads,
+    localIndexByName,
+    varInitKind,
+    shadowedGlobals,
+    filePath,
+    lineOffsets,
+    findings,
+  } = input;
   // Per-variable use summary, restricted to reads in the same scope (a read inside a
   // nested function has no entry in defCtxByLocation → recorded as a closure read,
   // which disqualifies the binding in this increment).
@@ -1769,7 +1786,14 @@ const collectRedundantBindingFindings = (input: RedundantBindingInput): void => 
     }
 
     const greatGrandparent = ctx.ancestors.length >= 3 ? (ctx.ancestors[ctx.ancestors.length - 3] ?? null) : null;
-    const kind = classifyUseInWaste(ctx.node, ctx.parent, ctx.grandparent, shadowedGlobals, varInitKind.get(idx), greatGrandparent);
+    const kind = classifyUseInWaste(
+      ctx.node,
+      ctx.parent,
+      ctx.grandparent,
+      shadowedGlobals,
+      varInitKind.get(idx),
+      greatGrandparent,
+    );
 
     if (kind === 'real' || kind === 'escape') {
       entry.real.push(ctx);
@@ -2235,7 +2259,13 @@ const collectWasteFindingsForFunction = (
   // write (`v.p = ...`), with no real read or escape, is dead. We track by `varIndex`,
   // not `defId`, because the question is whether the *variable* is ever observed; a
   // separate `defId`-keyed pass (`usedDefs`) handles within-variable dead writes.
-  const varHasMeaningfulUse = buildVarHasMeaningfulUse(functionBodyNodes, localIndexByName, declScopeByIdLocation, varInitKind, shadowedGlobals);
+  const varHasMeaningfulUse = buildVarHasMeaningfulUse(
+    functionBodyNodes,
+    localIndexByName,
+    declScopeByIdLocation,
+    varInitKind,
+    shadowedGlobals,
+  );
   // Case 6/7's safety claim ("mutation is local-only") requires that *every* def of
   // the variable is a fresh allocation. If one branch assigns a fresh `[]` and another
   // aliases an outer reference, the mutation site (`c.push(...)`) reaches both, so
@@ -2599,7 +2629,13 @@ const collectWasteFindingsForModule = (
     mergeFreshKind(varInitKind, varHasMixedFreshKinds, def.varIndex, kind);
   }
 
-  const varHasMeaningfulUse = buildVarHasMeaningfulUse(programBody, localIndexByName, declScopeByIdLocation, varInitKind, shadowedGlobals);
+  const varHasMeaningfulUse = buildVarHasMeaningfulUse(
+    programBody,
+    localIndexByName,
+    declScopeByIdLocation,
+    varInitKind,
+    shadowedGlobals,
+  );
   // Same "all defs fresh" gate as the function path — required so module-scope
   // `let c; if (cond) c = []; else c = arg; c.push(1);` keeps the fresh def.
   const { varHasOnlyFreshDefs, varHasUserDefinedAccessor } = computeFreshDefSets(defs, defCtxByLocation);
@@ -2768,7 +2804,15 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
         const functionBodyNode = isFunctionNode(node) ? (fn.body ?? undefined) : undefined;
 
         if (isFunctionNode(node) && functionBodyNode !== undefined) {
-          collectWasteFindingsForFunction(node, functionBodyNode, file.filePath, file.sourceText, lineOffsets, fileFindings, shadowedGlobals);
+          collectWasteFindingsForFunction(
+            node,
+            functionBodyNode,
+            file.filePath,
+            file.sourceText,
+            lineOffsets,
+            fileFindings,
+            shadowedGlobals,
+          );
         }
 
         forEachChildNode(node, child => visit(child));

@@ -1,3 +1,3 @@
-import { main } from './src/cli-main';
+import { main } from './src';
 
 void main();

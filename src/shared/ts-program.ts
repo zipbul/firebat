@@ -5,7 +5,7 @@ import { normalizePath } from '@zipbul/gildash';
 import type { ParsedFile } from '../engine/types';
 import type { FirebatProgramConfig } from '../interfaces';
 
-import { createGildash } from '../store/gildash';
+import { createGildash } from '../store';
 
 const shouldIncludeFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);

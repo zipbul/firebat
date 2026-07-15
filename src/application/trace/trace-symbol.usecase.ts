@@ -4,13 +4,10 @@ import * as path from 'node:path';
 import type { FirebatLogger } from '../../shared';
 import type { SourceSpan } from '../../types';
 
-import { getDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb } from '../../infrastructure/sqlite';
 import { computeToolVersion, resolveRuntimeContextFromCwd, toErrorMessage } from '../../shared';
-import { createArtifactStore } from '../../store/artifact';
-import { createGildash } from '../../store/gildash';
-import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';
-import { computeCacheNamespace } from '../scan/cache-namespace';
-import { computeInputsDigest } from '../scan/inputs-digest';
+import { createArtifactStore, createGildash } from '../../store';
+import { computeCacheNamespace, computeInputsDigest, computeProjectKey, computeTraceArtifactKey } from '../scan';
 
 type TraceNodeKind = 'file' | 'symbol' | 'type' | 'reference' | 'unknown';
 

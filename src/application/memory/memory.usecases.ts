@@ -2,8 +2,8 @@ import * as path from 'node:path';
 
 import type { FirebatLogger, JsonValue } from '../../shared';
 
-import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { type MemoryStore, createMemoryStore } from '../../store/memory';
+import { getDb } from '../../infrastructure/sqlite';
+import { type MemoryStore, createMemoryStore } from '../../store';
 
 // 프로젝트 root 컨텍스트만 필요한 입력 (list / repository 조회 공용).
 interface RootInput {

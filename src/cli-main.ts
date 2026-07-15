@@ -1,7 +1,4 @@
-import { routeFirebatArgv } from './adapters/cli/argv-router';
-import { runCache } from './adapters/cli/cache';
-import { runCli } from './adapters/cli/entry';
-import { runInstall, runUpdate } from './adapters/cli/install';
+import { routeFirebatArgv, runCache, runCli, runInstall, runUpdate } from './adapters/cli';
 import { appendFirebatLog, createPrettyConsoleLogger, resolveFirebatRootFromCwd } from './shared';
 
 const appendErrorLogSafe = async (_subcommand: string | undefined, message: string): Promise<void> => {

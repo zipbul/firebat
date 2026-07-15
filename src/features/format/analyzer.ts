@@ -1,8 +1,8 @@
 import type { ToolAnalysisInput } from '../../shared';
 
 import { createNoopLogger, splitTrimNonEmpty } from '../../shared';
-import { runOxfmt } from '../../tooling/oxfmt/oxfmt-runner';
-import { throwIfToolRunFailed } from '../../tooling/tool-failure';
+import { throwIfToolRunFailed } from '../../tooling';
+import { runOxfmt } from '../../tooling/oxfmt';
 
 const createEmptyFormat = (): ReadonlyArray<string> => [];
 

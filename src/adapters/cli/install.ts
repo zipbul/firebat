@@ -3,7 +3,7 @@ import * as path from 'node:path';
 
 import type { FirebatLogger, JsonValue } from '../../shared';
 
-import { prepareProjectDb } from '../../application/bootstrap/prepare-db.usecase';
+import { prepareProjectDb } from '../../application/bootstrap';
 import { assertKnownOption, failWithMessage, isPlainObject, resolveRuntimeContextFromCwd, toErrorMessage } from '../../shared';
 import { H, hc, isTty, writeStdout } from './cli-output';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';

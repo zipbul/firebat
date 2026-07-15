@@ -2,8 +2,8 @@ import type { ToolAnalysisInput } from '../../shared';
 import type { LintDiagnostic } from '../../types';
 
 import { createNoopLogger, isNonNull } from '../../shared';
-import { runOxlint } from '../../tooling/oxlint/oxlint-runner';
-import { throwIfToolRunFailed } from '../../tooling/tool-failure';
+import { throwIfToolRunFailed } from '../../tooling';
+import { runOxlint } from '../../tooling/oxlint';
 
 const createEmptyLint = (): ReadonlyArray<LintDiagnostic> => [];
 

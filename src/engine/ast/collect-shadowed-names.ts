@@ -178,12 +178,16 @@ export const collectShadowedNames = (program: Node, watched: ReadonlySet<string>
           const member = left as Node & { readonly object: Node; readonly property: Node; readonly computed?: boolean };
           const objectNode = unwrapTsValueWrappers(member.object);
           const isGlobalObject =
-            objectNode.type === 'Identifier' && (objectNode.name === 'globalThis' || objectNode.name === 'window' || objectNode.name === 'self');
+            objectNode.type === 'Identifier' &&
+            (objectNode.name === 'globalThis' || objectNode.name === 'window' || objectNode.name === 'self');
 
           if (isGlobalObject) {
             if (member.computed !== true) {
               addId(member.property);
-            } else if (member.property.type === 'Literal' && typeof (member.property as Node & { readonly value?: unknown }).value === 'string') {
+            } else if (
+              member.property.type === 'Literal' &&
+              typeof (member.property as Node & { readonly value?: unknown }).value === 'string'
+            ) {
               const key = (member.property as Node & { readonly value: string }).value;
 
               if (watched.has(key)) {

@@ -2,7 +2,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 
-import type { FirebatCliOptions } from '../..';
+import type { ErrorFlowFindingKind } from '../../features/error-flow';
+import type { FirebatCliOptions } from '../../interfaces';
+import type { FirebatLogger } from '../../shared';
 import type {
   BarrelFindingKind,
   CouplingKind,
@@ -17,9 +19,7 @@ import type {
   ScopeNarrowingFinding,
   VariableLifetimeFinding,
   WasteKind,
-} from '../..';
-import type { ErrorFlowFindingKind } from '../../features/error-flow';
-import type { FirebatLogger } from '../../shared';
+} from '../../types';
 
 import { computeAutoMinSize } from '../../engine';
 import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow';
@@ -39,7 +39,7 @@ import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../feat
 import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
-import { getDb } from '../../infrastructure/sqlite/firebat.db';
+import { getDb } from '../../infrastructure/sqlite';
 import {
   assertTargetsWithinRoot,
   computeToolVersion,

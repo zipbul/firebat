@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 
-import { EdgeType as CfgEdgeType } from './types/cfg-types';
 import { EdgeType } from './types';
+import { EdgeType as CfgEdgeType } from './types/cfg-types';
 
 // Note: most exports from engine/types.ts are TypeScript interfaces/type aliases
 // that have no runtime value. The numeric values + reverse-mapping are exercised

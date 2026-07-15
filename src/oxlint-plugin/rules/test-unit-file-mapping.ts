@@ -2,13 +2,7 @@ import { basename } from 'node:path';
 
 import type { AstNode, RuleContext } from '../types';
 
-import {
-  fileExists,
-  getContextFilename,
-  getImplPathFromSpec,
-  getProgramBody,
-  isAstNodeValue,
-} from '../utils';
+import { fileExists, getContextFilename, getImplPathFromSpec, getProgramBody, isAstNodeValue } from '../utils';
 
 function isUnitSpecFile(filePath: string): boolean {
   return filePath.endsWith('.spec.ts');

@@ -2,7 +2,7 @@ import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatConfig, FirebatCouplingConfig, FirebatLogger } from '../../shared';
 import type { FirebatDetector, FirebatReport } from '../../types';
 
-import { scanUseCase } from '../../application/scan/scan.usecase';
+import { scanUseCase } from '../../application/scan';
 import { formatReport } from '../../report';
 import {
   appendFirebatLog,

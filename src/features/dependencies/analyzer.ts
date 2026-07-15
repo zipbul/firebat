@@ -654,7 +654,11 @@ const listFanStats = (rootAbs: string, counts: Map<string, number>, limit: numbe
  */
 const buildValueAdjacency = (
   rootAbs: string,
-  importRels: ReadonlyArray<{ readonly srcFilePath: string | null; readonly dstFilePath: string | null; readonly isExternal: boolean }>,
+  importRels: ReadonlyArray<{
+    readonly srcFilePath: string | null;
+    readonly dstFilePath: string | null;
+    readonly isExternal: boolean;
+  }>,
 ): Map<string, ReadonlyArray<string>> => {
   const sets = new Map<string, Set<string>>();
 
@@ -1090,7 +1094,11 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           continue;
         }
 
-        pushToMultiMap(nameToEntries, sym.name, { relModule: toRelativePath(rootAbs, moduleAbs), absModule: moduleAbs, span: sym.span });
+        pushToMultiMap(nameToEntries, sym.name, {
+          relModule: toRelativePath(rootAbs, moduleAbs),
+          absModule: moduleAbs,
+          span: sym.span,
+        });
       }
     }
 
@@ -1567,11 +1575,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           // can never be proven unused. Exclude them from candidacy (hold, FN direction) rather
           // than flag every type member as dead.
           const members = fileSymbols.filter(
-            s =>
-              s.memberName !== null &&
-              s.name.startsWith(parent.name + '.') &&
-              s.kind !== 'type' &&
-              s.kind !== 'interface',
+            s => s.memberName !== null && s.name.startsWith(parent.name + '.') && s.kind !== 'type' && s.kind !== 'interface',
           );
           const prefix = parent.name + '.';
           // Collect every qualified call to `Parent.member`, attributing it to this

@@ -5,7 +5,7 @@ import { GildashError } from '@zipbul/gildash';
 import type { FirebatLogger } from '../../shared';
 
 import { resolveTargets } from '../../shared';
-import { createGildash } from '../../store/gildash';
+import { createGildash } from '../../store';
 
 interface FindPatternInput {
   readonly targets?: ReadonlyArray<string>;

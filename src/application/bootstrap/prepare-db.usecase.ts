@@ -1,6 +1,6 @@
 import type { FirebatLogger } from '../../shared';
 
-import { getOrmDb } from '../../infrastructure/sqlite/firebat.db';
+import { getOrmDb } from '../../infrastructure/sqlite';
 
 interface PrepareProjectDbInput {
   readonly rootAbs: string;
