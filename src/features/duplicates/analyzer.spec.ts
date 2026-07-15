@@ -510,7 +510,11 @@ class Beta {
   });
 
   it('suppresses below-floor tiny type-alias clones (same floor as interfaces)', () => {
-    const result = analyzeAB(`type Pos = { line: number; column: number };`, `type Loc = { line: number; column: number };`, FLOOR_OPTS);
+    const result = analyzeAB(
+      `type Pos = { line: number; column: number };`,
+      `type Loc = { line: number; column: number };`,
+      FLOOR_OPTS,
+    );
 
     expect(result).toEqual([]);
   });
@@ -528,7 +532,12 @@ class Beta {
     const body = 'p => { const a = p.x + p.y; const b = a * p.z; return a + b + p.w; }';
     const result = analyzeAB(`export const m = items.map(${body});`, `export const n = values.map(${body});`, FLOOR_OPTS);
 
-    expect(result.filter(g => g.cloneType === 'exact').flatMap(g => g.items).map(i => i.kind)).toEqual(['function', 'function']);
+    expect(
+      result
+        .filter(g => g.cloneType === 'exact')
+        .flatMap(g => g.items)
+        .map(i => i.kind),
+    ).toEqual(['function', 'function']);
   });
 
   // ── [NE] 23. 단일 함수만 존재 → 그룹 없음 ─────────────────────────────

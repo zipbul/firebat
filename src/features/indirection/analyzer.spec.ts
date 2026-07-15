@@ -588,7 +588,9 @@ describe('analyzer', () => {
         'function leaf(x: number): number { return x * 2; }',
       ].join('\n');
 
-      expect(await chainSummaries('/virtual/order.ts', reordered)).toEqual(await chainSummaries('/virtual/clobber.ts', CLOBBER_SRC));
+      expect(await chainSummaries('/virtual/order.ts', reordered)).toEqual(
+        await chainSummaries('/virtual/clobber.ts', CLOBBER_SRC),
+      );
     });
 
     it('does not link a chain hop through a nested local wrapper (unresolvable scope → hold)', async () => {
@@ -611,7 +613,12 @@ describe('analyzer', () => {
       // non-export — export 가드가 아니라 파라미터-callee 게이트(③) 자체를 검증한다.
       const source = ['const call = (fn: (g: unknown) => unknown) => fn(fn);', 'export const use = call;'].join('\n');
       const program = createProgram('/virtual/param-callee.ts', source);
-      const analysis = await analyzeIndirection(createMockGildash(), program, { maxForwardDepth: 0, crossFileMinDepth: 99 }, '/virtual');
+      const analysis = await analyzeIndirection(
+        createMockGildash(),
+        program,
+        { maxForwardDepth: 0, crossFileMinDepth: 99 },
+        '/virtual',
+      );
 
       expect(findKinds(analysis, 'thin-wrapper').length).toBe(0);
     });

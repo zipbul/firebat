@@ -1196,7 +1196,6 @@ const collectFindings = (program: Node, sourceText: string, filePath: string, gi
         reportHygiene();
       }
     }
-
   };
 
   // unobserved-variable (candidate side): register a `const x = <thenable call/new>` binding whose

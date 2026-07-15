@@ -665,6 +665,7 @@ const buildValueAdjacency = (
 
     if (set === undefined) {
       set = new Set<string>();
+
       sets.set(node, set);
     }
 
@@ -723,7 +724,9 @@ const tarjanSCCs = (adj: Map<string, ReadonlyArray<string>>): string[][] => {
       if (frame.next === 0) {
         index.set(v, counter);
         low.set(v, counter);
+
         counter += 1;
+
         component.push(v);
         onStack.add(v);
       }
@@ -732,6 +735,7 @@ const tarjanSCCs = (adj: Map<string, ReadonlyArray<string>>): string[][] => {
 
       if (frame.next < neighbours.length) {
         const w = neighbours[frame.next]!;
+
         frame.next += 1;
 
         if (!index.has(w)) {
@@ -749,6 +753,7 @@ const tarjanSCCs = (adj: Map<string, ReadonlyArray<string>>): string[][] => {
 
         for (;;) {
           const w = component.pop()!;
+
           onStack.delete(w);
           scc.push(w);
 
@@ -996,7 +1001,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     .filter(scc => scc.length >= 2)
     .map(scc => representativeCycle(scc, valueAdjacency))
     .sort((left, right) => left.join('\n').localeCompare(right.join('\n')));
-
   const cycles = cyclePaths.map(p => ({ path: p.map(toRel) }));
   const cuts = buildEdgeCutHints(rootAbs, cyclePaths, outDegree);
   // 4. Layer violations
@@ -1223,7 +1227,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
           usesAll: false,
           names: new Map<string, Set<string>>(),
         };
-
         // '*' = namespace import (import * as X). re-export with null dstSymbolName = export * from './mod'.
         // Dynamic `import('./mod')` receives the WHOLE module-namespace object at runtime —
         // whole consumption, same as `import *`; gildash marks it as a closed fact via
@@ -1316,7 +1319,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       // user-declared `entry` globs. No filename-convention inference (that is a guess-value).
       const userEntryGlobs = input?.entry ?? [];
       const entryMatchers = userEntryGlobs.map(globToRegExp);
-
       // The ROOT package declares a public entry surface but NONE of it resolves into the graph
       // (dist-pointing manifest) and the user did not pin a source `entry`. The public API is then
       // unidentifiable — its real consumers are external — so no root export can be proven dead. Hold
@@ -1339,7 +1341,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
 
       // User-declared `ignore` globs (root-relative) — files excluded from unused-file reporting.
       const ignoreMatchers = (input?.ignore ?? []).map(globToRegExp);
-
       const reachable = new Set<string>();
       const queue: string[] = [];
 

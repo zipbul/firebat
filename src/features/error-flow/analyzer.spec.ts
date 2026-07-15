@@ -95,11 +95,7 @@ describe('error-flow/analyzer', () => {
   it('should not include natural-language fields in findings', async () => {
     // Arrange
     const filePath = '/virtual/src/adapters/cli/entry.ts';
-    const source = [
-      'export function f() {',
-      '  Promise.resolve(1).then(() => 1);',
-      '}',
-    ].join('\n');
+    const source = ['export function f() {', '  Promise.resolve(1).then(() => 1);', '}'].join('\n');
     // Act
     const findings = await analyzeSingle(filePath, source);
 
@@ -641,48 +637,17 @@ describe('error-flow/analyzer', () => {
 
   // catch-or-return: a then-chain whose rejection is neither caught nor propagated.
   it.each<[string, string, number]>([
-    [
-      'a then-chain has no catch',
-      ['export function f() {', '  Promise.resolve(1).then(() => 1);', '}'].join('\n'),
-      1,
-    ],
-    [
-      'then-chain is returned',
-      [
-        'export function f() {',
-        '  return Promise.resolve(1).then(() => 1);',
-        '}',
-        ].join('\n'),
-      0,
-    ],
-    [
-      'then-chain is awaited',
-      [
-        'export async function f() {',
-        '  await Promise.resolve(1).then(() => 1);',
-        '}',
-        ].join('\n'),
-      0,
-    ],
+    ['a then-chain has no catch', ['export function f() {', '  Promise.resolve(1).then(() => 1);', '}'].join('\n'), 1],
+    ['then-chain is returned', ['export function f() {', '  return Promise.resolve(1).then(() => 1);', '}'].join('\n'), 0],
+    ['then-chain is awaited', ['export async function f() {', '  await Promise.resolve(1).then(() => 1);', '}'].join('\n'), 0],
     [
       'promise chain has catch',
-      [
-        'export function f() {',
-        '  Promise.resolve(1).then(() => 1).catch(() => 0);',
-        '}',
-        ].join('\n'),
+      ['export function f() {', '  Promise.resolve(1).then(() => 1).catch(() => 0);', '}'].join('\n'),
       0,
     ],
     [
       'then has a rejection handler (2-arg form)',
-      [
-        'export function f() {',
-        '  Promise.resolve(1).then(',
-        '    (v) => v + 1,',
-        '    (e) => 0,',
-        '  );',
-        '}',
-        ].join('\n'),
+      ['export function f() {', '  Promise.resolve(1).then(', '    (v) => v + 1,', '    (e) => 0,', '  );', '}'].join('\n'),
       0,
     ],
     [
@@ -694,16 +659,12 @@ describe('error-flow/analyzer', () => {
         '    (e) => 0,',
         '  ).then((v) => v * 2);',
         '}',
-        ].join('\n'),
+      ].join('\n'),
       0,
     ],
     [
       'catch comes before then',
-      [
-        'export function f() {',
-        '  Promise.resolve(1).catch(() => 0).then(() => 1);',
-        '}',
-        ].join('\n'),
+      ['export function f() {', '  Promise.resolve(1).catch(() => 0).then(() => 1);', '}'].join('\n'),
       0,
     ],
   ])('should resolve catch-or-return when %s', async (_label, source, expected) => {
@@ -1473,7 +1434,9 @@ describe('error-flow/analyzer', () => {
 
   describe('thenable identity gate (name alone never fires)', () => {
     it('holds catch-or-return for an arbitrary unproven receiver `.then` chain', async () => {
-      const source = ['declare const parser: any;', 'export function f(): void {', '  parser.then((r: unknown) => r);', '}'].join('\n');
+      const source = ['declare const parser: any;', 'export function f(): void {', '  parser.then((r: unknown) => r);', '}'].join(
+        '\n',
+      );
 
       await expectKindCount(source, 'catch-or-return', 0);
     });
@@ -1520,13 +1483,18 @@ describe('error-flow/analyzer', () => {
     });
 
     it('reports unsafe-finally for an arbitrary receiver when gildash proves it thenable', async () => {
-      const source = ['declare const p: any;', "export function f(): void { p.finally(() => { throw new Error('x'); }); }"].join('\n');
+      const source = ['declare const p: any;', "export function f(): void { p.finally(() => { throw new Error('x'); }); }"].join(
+        '\n',
+      );
 
       await expectSemanticKindCount(source, () => true, 'unsafe-finally', 1);
     });
 
     it('holds misused-promises for an async callback on an unproven receiver forEach', async () => {
-      const source = ['declare const items: any;', 'export function f(): void { items.forEach(async (i: number) => { await i; }); }'].join('\n');
+      const source = [
+        'declare const items: any;',
+        'export function f(): void { items.forEach(async (i: number) => { await i; }); }',
+      ].join('\n');
 
       await expectKindCount(source, 'misused-promises', 0);
     });
@@ -1534,7 +1502,10 @@ describe('error-flow/analyzer', () => {
     it('holds misused-promises for an ANY-typed receiver even though `any` is assignable to arrays', async () => {
       // Real-gildash shape: assignability says true (any is assignable to everything) but the
       // resolved type is `any` — assignability alone proves nothing, the oracle must hold.
-      const source = ['declare const items: any;', 'export function f(): void { items.forEach(async (i: number) => { await i; }); }'].join('\n');
+      const source = [
+        'declare const items: any;',
+        'export function f(): void { items.forEach(async (i: number) => { await i; }); }',
+      ].join('\n');
       const program = [parseSource('/virtual/src/features/any-receiver.ts', source)];
       const gildash = {
         isThenableAtSpan: () => null,
@@ -1548,15 +1519,22 @@ describe('error-flow/analyzer', () => {
     });
 
     it('reports misused-promises when gildash proves a concrete array receiver type', async () => {
-      const source = ['declare const items: number[];', 'export function f(): void { items.forEach(async (i: number) => { await i; }); }'].join(
-        '\n',
-      );
+      const source = [
+        'declare const items: number[];',
+        'export function f(): void { items.forEach(async (i: number) => { await i; }); }',
+      ].join('\n');
       const program = [parseSource('/virtual/src/features/typed-receiver.ts', source)];
       const gildash = {
         isThenableAtSpan: () => null,
         getContextualCallReturnsAtSpan: () => null,
         isTypeAssignableToTypeAtSpan: () => true,
-        getExpressionTypeAtSpan: () => ({ text: 'number[]', flags: 1 << 19, isUnion: false, isIntersection: false, isGeneric: false }),
+        getExpressionTypeAtSpan: () => ({
+          text: 'number[]',
+          flags: 1 << 19,
+          isUnion: false,
+          isIntersection: false,
+          isGeneric: false,
+        }),
       } as unknown as Gildash;
       const findings = analyzeErrorFlow(program, { gildash });
 
@@ -1570,7 +1548,10 @@ describe('error-flow/analyzer', () => {
     });
 
     it('treats `import Promise = require(...)` as a shadowing binding (TSImportEquals)', async () => {
-      const source = ['import Promise = require("bluebird");', 'export function f() { return Promise.reject("plain string"); }'].join('\n');
+      const source = [
+        'import Promise = require("bluebird");',
+        'export function f() { return Promise.reject("plain string"); }',
+      ].join('\n');
 
       await expectKindCount(source, 'throw-non-error', 0);
     });

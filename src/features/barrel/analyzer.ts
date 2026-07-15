@@ -259,7 +259,6 @@ const toAllowedBarrelSpecifier = (
   workspacePackages: ReadonlyMap<string, string>,
 ): string | null => {
   const importerDirAbs = normalizePath(path.dirname(importerFileAbs));
-
   // Prefer workspace package specifier if targetDir is within any workspace
   // package root AND the importer is OUTSIDE that same package root. With
   // overlapping/nested package roots (e.g. `packages/a` and

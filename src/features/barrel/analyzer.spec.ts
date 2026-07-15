@@ -711,7 +711,6 @@ export default X;`,
         toFile(path.join(tmpDir, 'bar/index.ts'), `export * from './internal';`),
         toFile(path.join(tmpDir, 'bar/internal.ts'), `export const z = 1;`),
       ];
-
       const first = await analyzeBarrel(files, { rootAbs: tmpDir });
       const second = await analyzeBarrel(files, { rootAbs: tmpDir });
 

@@ -33,7 +33,6 @@ import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unif
 import { getItemKind, isBelowDecisionFloor, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
 import { detectFragmentClones } from './fragment-detector';
 
-
 // ─── Public Types ─────────────────────────────────────────────────────────────
 
 interface DuplicatesAnalyzerOptions {
@@ -115,7 +114,6 @@ export const analyzeDuplicates = (
 
   return filterSubsumedGroups(result);
 };
-
 
 // ─── 규칙 데이터 클론 ─────────────────────────────────────────────────────────
 

@@ -808,4 +808,3 @@ export const analyzeFunctionBody = (
     defsOfVar,
   };
 };
-

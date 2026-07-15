@@ -457,9 +457,11 @@ interface TopLevelBindings {
 const collectTopLevelBindings = (program: Program): TopLevelBindings => {
   const fnsByName = new Map<string, Node[]>();
   const bindingCounts = new Map<string, number>();
+
   const count = (name: string): void => {
     bindingCounts.set(name, (bindingCounts.get(name) ?? 0) + 1);
   };
+
   const addFn = (name: string, node: Node): void => {
     count(name);
 
@@ -471,6 +473,7 @@ const collectTopLevelBindings = (program: Program): TopLevelBindings => {
       list.push(node);
     }
   };
+
   const addStatement = (stmt: Node): void => {
     switch (stmt.type) {
       case 'FunctionDeclaration':
@@ -1117,6 +1120,7 @@ const analyzeIndirection = async (
 
         return candidates[0] ?? null;
       };
+
       const computeChainDepth = (node: Node, visited: Set<Node>): number => {
         if (visited.has(node)) {
           // Same-file cycle — infinite recursion bug, not a static indirection layer.

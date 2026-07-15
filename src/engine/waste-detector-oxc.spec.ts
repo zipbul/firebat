@@ -594,9 +594,10 @@ describe('engine/waste-detector-oxc — builtin target-mutation APIs (identity g
   it('holds when Object is shadowed by an import (custom assign may persist the target)', () => {
     const f = toFile(
       '/virtual/src/assign-shadow-import.ts',
-      ['import { Object } from "./my-registry";', 'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }'].join(
-        '\n',
-      ),
+      [
+        'import { Object } from "./my-registry";',
+        'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+      ].join('\n'),
     );
 
     expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(false);
@@ -636,9 +637,10 @@ describe('engine/waste-detector-oxc — builtin target-mutation APIs (identity g
   it('does not treat an ambient declare as shadowing (no runtime binding)', () => {
     const f = toFile(
       '/virtual/src/assign-ambient.ts',
-      ['declare const Object: ObjectConstructor;', 'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }'].join(
-        '\n',
-      ),
+      [
+        'declare const Object: ObjectConstructor;',
+        'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+      ].join('\n'),
     );
 
     expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);
@@ -706,9 +708,10 @@ describe('engine/waste-detector-oxc — builtin target-mutation APIs (identity g
   it('does NOT treat a type-only import as shadowing (no runtime binding)', () => {
     const f = toFile(
       '/virtual/src/assign-type-import.ts',
-      ['import type { Object } from "./types";', 'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }'].join(
-        '\n',
-      ),
+      [
+        'import type { Object } from "./types";',
+        'export function f(data: Record<string, unknown>): void { const v = {}; Object.assign(v, data); }',
+      ].join('\n'),
     );
 
     expect(detectWasteOxc([f]).some(isDeadStore('v'))).toBe(true);

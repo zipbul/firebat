@@ -249,7 +249,6 @@ const expectSingleMissingUnresolved = (result: { unresolvedImports: ReadonlyArra
   expect(result.unresolvedImports[0]!.specifier).toBe('./missing');
 };
 
-
 /** A `searchSymbols` mock that returns `exported` only for the `isExported` query. */
 const exportedSymbols =
   (exported: ReadonlyArray<SymbolSearchResult>) =>
@@ -342,23 +341,23 @@ describe('features/dependencies/analyzer — createEmptyDependencies', () => {
 describe('features/dependencies/analyzer — analyzeDependencies', () => {
   const ROOT = '/project';
 
-/** Path-accurate manifest mock: answers only the ROOT package.json, throws otherwise (real-FS semantics). */
-const rootOnlyRead =
-  (pkg: unknown) =>
-  (p: string): string => {
-    if (p === `${ROOT}/package.json`) {
-      return JSON.stringify(pkg);
-    }
+  /** Path-accurate manifest mock: answers only the ROOT package.json, throws otherwise (real-FS semantics). */
+  const rootOnlyRead =
+    (pkg: unknown) =>
+    (p: string): string => {
+      if (p === `${ROOT}/package.json`) {
+        return JSON.stringify(pkg);
+      }
 
-    // Model an installed project: every dep manifest is readable with no `bin` (a pure library),
-    // so unused-dependency resolves to a definite 'no-bin' verdict rather than 'unknown' (hold).
-    // Tests that need a bin-providing dep use the dedicated readWithBins helper below.
-    if (/\/node_modules\/(@[^/]+\/)?[^/]+\/package\.json$/.test(p)) {
-      return '{}';
-    }
+      // Model an installed project: every dep manifest is readable with no `bin` (a pure library),
+      // so unused-dependency resolves to a definite 'no-bin' verdict rather than 'unknown' (hold).
+      // Tests that need a bin-providing dep use the dedicated readWithBins helper below.
+      if (/\/node_modules\/(@[^/]+\/)?[^/]+\/package\.json$/.test(p)) {
+        return '{}';
+      }
 
-    throw new Error(`ENOENT: ${p}`);
-  };
+      throw new Error(`ENOENT: ${p}`);
+    };
 
   /**
    * Mock gildash with a fixed import graph, no symbols, and whose only relations are
@@ -783,6 +782,7 @@ const rootOnlyRead =
       searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/orphan.ts', 'deadFn', 'function')]),
       searchRelations: () => [],
     });
+
     const readFileFn = (p: string): string => {
       if (p === `${ROOT}/package.json`) {
         return JSON.stringify({}); // root declares NO entrypoints
@@ -837,7 +837,6 @@ const rootOnlyRead =
             ]
           : [],
     });
-
     const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './dist/index.js' }) });
 
     expect(result.unusedMembers).toEqual([]);
@@ -852,7 +851,6 @@ const rootOnlyRead =
       searchRelations: (q: unknown) =>
         (q as { type?: string }).type === 'type-references' ? gildashThrow('type-refs failed') : [],
     });
-
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: rootOnlyRead({ main: './src/index.ts', dependencies: { 'maybe-type-only': '^1.0.0' } }),
@@ -874,7 +872,6 @@ const rootOnlyRead =
       searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/util.ts', 'delay', 'function', { isDefault: true })]),
       searchRelations: relationsOfType('imports', [mkImport('/project/src/main.ts', '/project/src/util.ts', 'default')]),
     });
-
     const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/main.ts' }) });
 
     expect(result.deadExports).toEqual([]);
@@ -892,7 +889,6 @@ const rootOnlyRead =
       searchSymbols: exportedSymbols([mkSymbol(1, '/project/src/util.ts', 'delay', 'function', { isDefault: true })]),
       searchRelations: relationsOfType('imports', [mkImport('/project/src/main.ts', '/project/src/util.ts', 'somethingElse')]),
     });
-
     const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({ main: './src/main.ts' }) });
 
     expect(result.deadExports.map(d => d.name)).toEqual(['delay']);
@@ -1567,6 +1563,7 @@ const rootOnlyRead =
     // unresolved-import 로 보고하면 안 된다. 대상이 어디에도 없을 때만 진짜 unresolved.
     const imports = [mkImport('/project/src/index.ts', null, null, { isExternal: false, specifier: './data.json' })];
     const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]), imports);
+
     const readFileFn = (p: string): string => {
       if (p === `${ROOT}/package.json`) {
         return JSON.stringify({ main: './src/index.ts' });
@@ -1624,7 +1621,6 @@ const rootOnlyRead =
         return [];
       },
     });
-
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: rootOnlyRead({ main: './src/index.ts', dependencies: { 'type-lib': '^1.0.0' } }),
@@ -1661,7 +1657,6 @@ const rootOnlyRead =
         return [];
       },
     });
-
     const result = await analyzeDependencies(g, {
       rootAbs: ROOT,
       readFileFn: rootOnlyRead({ main: './src/index.ts', devDependencies: { '@types/express': '^4.0.0' } }),
@@ -1836,9 +1831,7 @@ const rootOnlyRead =
     });
 
     it('HOLDs (no crash) when a present tsconfig is unparseable garbage [G2]', async () => {
-      const result = await runAmbient(
-        ambientReadFn({ deps: { 'dead-lib': '^1.0.0' }, tsconfig: '{ this is : not json ]' }),
-      );
+      const result = await runAmbient(ambientReadFn({ deps: { 'dead-lib': '^1.0.0' }, tsconfig: '{ this is : not json ]' }));
 
       expect(result.unusedDeps.map(d => d.packageName)).toEqual([]);
     });
@@ -2055,10 +2048,7 @@ const rootOnlyRead =
     });
 
     it('holds a string-form bin (any non-empty bin field counts)', async () => {
-      const r = await run(
-        { main: './src/index.ts', devDependencies: { husky: '^9.0.0' } },
-        { husky: './bin.js' },
-      );
+      const r = await run({ main: './src/index.ts', devDependencies: { husky: '^9.0.0' } }, { husky: './bin.js' });
 
       expect(unusedNames(r)).toEqual([]);
     });
@@ -2082,10 +2072,7 @@ const rootOnlyRead =
     });
 
     it('reports a dep with an empty bin object (exposes no command)', async () => {
-      const r = await run(
-        { main: './src/index.ts', dependencies: { 'empty-bin': '^1.0.0' } },
-        { 'empty-bin': {} },
-      );
+      const r = await run({ main: './src/index.ts', dependencies: { 'empty-bin': '^1.0.0' } }, { 'empty-bin': {} });
 
       expect(unusedNames(r)).toEqual(['empty-bin']);
     });
@@ -2103,8 +2090,8 @@ const rootOnlyRead =
 
           throw new Error(`ENOENT: ${p}`);
         };
-      const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]));
 
+      const g = importsGildash(new Map<string, string[]>([['/project/src/index.ts', []]]));
       const r = await analyzeDependencies(g, {
         rootAbs: ROOT,
         readFileFn: readNoModules({ main: './src/index.ts', devDependencies: { typescript: '^5.0.0' } }),
@@ -2701,7 +2688,9 @@ const rootOnlyRead =
           ['/project/src/lib.ts', []],
         ]),
         exported: [mkSymbol(1, '/project/src/lib.ts', 'a'), mkSymbol(2, '/project/src/lib.ts', 'b')],
-        searchRelations: relationsOfType('imports', [mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null, { meta: { isDynamic: true } })]),
+        searchRelations: relationsOfType('imports', [
+          mkImport('/project/src/consumer.ts', '/project/src/lib.ts', null, { meta: { isDynamic: true } }),
+        ]),
         pkgJson: { main: './src/consumer.ts' },
       });
 
@@ -2729,7 +2718,6 @@ const rootOnlyRead =
   // 위치를 잃었다(자체 검사에서 실증). 심볼-기반 kind는 심볼 span을 그대로 나른다.
 
   describe('finding spans carry the gildash symbol location', () => {
-
     it('dead-export carries the exported symbol span', async () => {
       const result = await analyzeWithExports({
         graph: new Map([
@@ -2746,7 +2734,10 @@ const rootOnlyRead =
     it('duplicate-export carries the first surface symbol span', async () => {
       const result = await analyzeWithExports({
         graph: new Map([['/project/src/index.ts', []]]),
-        exported: [mkSymbol(1, '/project/src/a.ts', 'helper', 'function'), mkSymbol(2, '/project/src/b.ts', 'helper', 'function')],
+        exported: [
+          mkSymbol(1, '/project/src/a.ts', 'helper', 'function'),
+          mkSymbol(2, '/project/src/b.ts', 'helper', 'function'),
+        ],
         resolveSymbol: resolveSymbolToOrigin('helper', 'src/origin.ts'),
       });
 

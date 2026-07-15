@@ -8,7 +8,6 @@ const __origConfigLoader = { ...require(nodePath.resolve(import.meta.dir, '../..
 const __origReport = { ...require(nodePath.resolve(import.meta.dir, '../../report.ts')) };
 const __origLogging = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
 const __origPrettyLogger = { ...require(nodePath.resolve(import.meta.dir, '../../shared/logger.ts')) };
-
 // ── D15 gating test state (barrel-surgery) ──────────────────────────────────
 // scanUseCase / loadFirebatConfigFile are mocked below so the D15 gating
 // tests can (a) observe the resolved FirebatCliOptions.detectors that reach

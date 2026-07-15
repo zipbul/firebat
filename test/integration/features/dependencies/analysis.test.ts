@@ -94,7 +94,6 @@ const cyclePresenceCases: CyclePresenceCase[] = [
     expectedKey: ['a.ts', 'b.ts', 'c.ts'],
   },
 ];
-
 // A "cycle" that closes ONLY through runtime-erased edges is not a runtime import cycle → not
 // reported (FN-direction, never a false W): a single-file self-import (spec "두 파일 이상"), and a
 // loop whose back-edge is `import type` (erased, so the runtime graph does not close the loop).

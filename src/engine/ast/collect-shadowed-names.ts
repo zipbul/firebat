@@ -86,6 +86,7 @@ const unwrapTsValueWrappers = (node: Node): Node => {
  */
 export const collectShadowedNames = (program: Node, watched: ReadonlySet<string>): ReadonlySet<string> => {
   const shadowed = new Set<string>();
+
   const addPattern = (pattern: Node): void => {
     const names = new Set<string>();
 
@@ -97,11 +98,13 @@ export const collectShadowedNames = (program: Node, watched: ReadonlySet<string>
       }
     }
   };
+
   const addId = (id: Node | null | undefined): void => {
     if (id !== null && id !== undefined && id.type === 'Identifier' && watched.has(id.name)) {
       shadowed.add(id.name);
     }
   };
+
   const isAmbient = (node: Node): boolean => (node as Node & { readonly declare?: boolean }).declare === true;
 
   walkOxcTree(program, node => {

@@ -438,7 +438,6 @@ const BUILTIN_TARGET_MUTATION_APIS = new Set<string>([
   'Reflect.deleteProperty',
   'Reflect.setPrototypeOf',
 ]);
-
 // The free identifiers whose GLOBAL identity the mutation-API match depends on. Unlike the
 // receiver-method whitelist above (closed by the fresh-allocation receiver), `Object.assign(v, …)`
 // rests on the free name `Object` being the builtin — a file-level runtime shadow voids that
@@ -2742,7 +2741,6 @@ export const detectWasteOxc = (files: ParsedFile[]): WasteFinding[] => {
 
     try {
       const lineOffsets = buildLineOffsets(file.sourceText);
-
       // Module-scope pass: CLAUDE.md says "모든 scope (module / function / block)" are
       // in scope. Without this pass, top-level `let v=1; v=2; ...`, top-level blocks,
       // and module-scope case 6/7 all escape detection. Function-internal blocks are

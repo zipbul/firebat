@@ -294,6 +294,8 @@ describe('createTypeOracle — isProvenArray (only true when gildash PROVES Arra
   });
 
   it('false when the query throws', () => {
-    expect(oracleWith({ isTypeAssignableToTypeAtSpan: throws, getExpressionTypeAtSpan: () => leaf(OBJECT) }).isProvenArray(NODE)).toBe(false);
+    expect(
+      oracleWith({ isTypeAssignableToTypeAtSpan: throws, getExpressionTypeAtSpan: () => leaf(OBJECT) }).isProvenArray(NODE),
+    ).toBe(false);
   });
 });
