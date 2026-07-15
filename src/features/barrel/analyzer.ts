@@ -243,17 +243,34 @@ const resolveImportEdges = async (
 const isSelfOrAncestorDir = (importerDirAbs: string, targetDirAbs: string): boolean =>
   importerDirAbs === targetDirAbs || importerDirAbs.startsWith(`${targetDirAbs}/`);
 
+/**
+ * Cross-package limitation (advisory only): the workspace-package specifier
+ * below is built as `pkgName[/rel]` from the package root alone — it does
+ * NOT consult the target package's package.json `exports` map or any
+ * tsconfig `paths` alias. In repos where `exports` restricts the public
+ * surface (e.g. only `./dist/*`) or where a `paths` alias remaps the
+ * specifier to a different on-disk location (e.g. doubling a `src/`
+ * segment), this suggestion may not be directly resolvable. It is a
+ * same-repo-convention hint, not a resolver-verified specifier.
+ */
 const toAllowedBarrelSpecifier = (
   importerFileAbs: string,
   targetDirAbs: string,
   workspacePackages: ReadonlyMap<string, string>,
 ): string | null => {
+  const importerDirAbs = normalizePath(path.dirname(importerFileAbs));
+
   // Prefer workspace package specifier if targetDir is within any workspace
-  // package root. With overlapping/nested package roots (e.g. `packages/a`
-  // and `packages/a/nested`, both containing a package.json), more than one
-  // root can contain targetDir — pick the LONGEST (most specific) matching
-  // root deterministically (F7), not the first one encountered in Map
-  // iteration order (readdir / declaration order is not a decision fact).
+  // package root AND the importer is OUTSIDE that same package root. With
+  // overlapping/nested package roots (e.g. `packages/a` and
+  // `packages/a/nested`, both containing a package.json), more than one root
+  // can contain targetDir — pick the LONGEST (most specific) matching root
+  // deterministically (F7), not the first one encountered in Map iteration
+  // order (readdir / declaration order is not a decision fact). When the
+  // importer lives inside the SAME package root as the target, the
+  // workspace-package form is a cross-package convention that doesn't apply
+  // intra-package (it may not even round-trip through the package's own
+  // `exports`/tsconfig `paths` alias) — fall through to the relative form.
   let bestPkgName: string | null = null;
   let bestPkgRootAbs: string | null = null;
 
@@ -261,6 +278,11 @@ const toAllowedBarrelSpecifier = (
     const rel = normalizePath(path.relative(pkgRootAbs, targetDirAbs));
 
     if (rel.startsWith('..') || path.isAbsolute(rel)) {
+      continue;
+    }
+
+    // importer is inside (or is) this same package root -> not a cross-package hop.
+    if (isSelfOrAncestorDir(importerDirAbs, pkgRootAbs)) {
       continue;
     }
 

@@ -668,6 +668,32 @@ export default X;`,
 
         expect(result).toEqual([]);
       });
+
+      // Same-package deep-import: importer and target dir are both inside the
+      // SAME workspace package root (packages/lib). `toAllowedBarrelSpecifier`
+      // used to prefer the workspace-package form whenever the target dir was
+      // inside ANY workspace package root, regardless of where the importer
+      // lives — producing `@w/lib/src/b` here, which does not round-trip back
+      // to `packages/lib/src/b` under a typical tsconfig `@w/lib/*` ->
+      // `./packages/lib/src/*` path alias (it would resolve to
+      // `packages/lib/src/src/b`, doubling `src`). Within one package the
+      // correct suggestion is the plain relative directory specifier.
+      it('same-package deep-import suggests a relative specifier, not the workspace-package form', async () => {
+        await writeWorkspaceManifest();
+        await fs.mkdir(path.join(tmpDir, 'packages/lib/src/a'), { recursive: true });
+        await fs.mkdir(path.join(tmpDir, 'packages/lib/src/b'), { recursive: true });
+
+        const files = [
+          toFile(path.join(tmpDir, 'packages/lib/src/a/x.ts'), `import { internal } from '../b/internal';`),
+          toFile(path.join(tmpDir, 'packages/lib/src/b/internal.ts'), `export const internal = 1;`),
+          toFile(path.join(tmpDir, 'packages/lib/src/b/index.ts'), `export { internal } from './internal';`),
+        ];
+        const result = await analyzeBarrel(files, { rootAbs: tmpDir });
+        const deepImports = result.filter(f => f.kind === 'deep-import');
+
+        expect(deepImports.length).toBe(1);
+        expect(deepImports[0]?.evidence).toBe('suggest: ../b');
+      });
     });
 
     // B6 — determinism: running analyzeBarrel twice over the identical parsed
