@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 
+import { EdgeType } from '../types';
 import { IntegerCFG } from './cfg';
-import { EdgeType } from './cfg-types';
 
 interface AdjacencyCase {
   name: string;

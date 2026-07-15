@@ -319,10 +319,10 @@ const runBuild = async (logger: Logger): Promise<void> => {
   const cliNaming = 'firebat.js';
   const cliDistFilePath = `${outdir}/${cliNaming}`;
 
-  logger.trace('Building CLI entrypoint', { entry: 'index.ts', output: cliDistFilePath });
+  logger.trace('Building CLI entrypoint', { entry: 'firebat.ts', output: cliDistFilePath });
 
   const cliBuildResult = await Bun.build({
-    entrypoints: ['index.ts'],
+    entrypoints: ['firebat.ts'],
     outdir,
     target: 'bun',
     minify: true,

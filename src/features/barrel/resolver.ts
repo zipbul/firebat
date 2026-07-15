@@ -382,5 +382,4 @@ const createImportResolver = (input: ResolverInput): ImportResolver => {
 };
 
 export { createImportResolver };
-export { createWorkspacePackageMap } from '../../shared/workspace-packages';
 export type { ImportResolver };

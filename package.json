@@ -1,6 +1,6 @@
 {
   "name": "firebat",
-  "module": "index.ts",
+  "module": "firebat.ts",
   "bin": {
     "firebat": "./dist/firebat.js"
   },
@@ -23,7 +23,7 @@
     "db:generate": "bunx -y drizzle-kit generate --config ./drizzle.config.ts",
     "db:migrate": "bunx -y drizzle-kit migrate --config ./drizzle.config.ts",
     "coverage": "bun test --coverage",
-    "lint": "oxlint src index.ts oxlint-plugin.ts --config .oxlintrc.jsonc --type-aware --tsconfig tsconfig.json",
+    "lint": "oxlint src firebat.ts oxlint-plugin.ts --config .oxlintrc.jsonc --type-aware --tsconfig tsconfig.json",
     "format": "oxfmt . --config .oxfmtrc.jsonc --check",
     "prepare": "husky"
   },

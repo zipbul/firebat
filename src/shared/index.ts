@@ -6,3 +6,4 @@ export { assertTargetsWithinRoot, resolveFirebatRootFromCwd } from './root-resol
 export { resolveRuntimeContextFromCwd, resolveStartDir } from './runtime-context';
 export { createFirebatProgram } from './ts-program';
 export { computeToolVersion } from './tool-version';
+export { createWorkspacePackageMap } from './workspace-packages';

@@ -7,9 +7,6 @@ import type { FirebatProgramConfig } from '../interfaces';
 
 import { createGildash } from '../store/gildash';
 
-// Re-export ParsedFile so external callers (specs) can import it from this module
-export type { ParsedFile };
-
 const shouldIncludeFile = (filePath: string): boolean => {
   const normalized = normalizePath(filePath);
   const segments = normalized.split('/');

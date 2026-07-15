@@ -12,7 +12,7 @@ import type { TemporalCouplingFinding } from '../../types';
 import { normalizeFile } from '../../engine/ast/normalize-file';
 import { addNodeNameIfValid, getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
 import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
-import { EdgeType } from '../../engine/cfg/cfg-types';
+import { EdgeType } from '../../engine/types';
 import { addAndPush } from '../../shared/multi-map';
 
 const createEmptyTemporalCoupling = (): ReadonlyArray<TemporalCouplingFinding> => [];

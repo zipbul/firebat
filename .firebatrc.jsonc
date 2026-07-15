@@ -32,7 +32,7 @@
       // these cover tool-loaded configs, test corpora and scripts. Entry-module exports
       // are an external contract (exempt from dead-export).
       "entry": [
-        "index.ts",
+        "firebat.ts",
         "oxlint-plugin.ts",
         "drizzle.config.ts",
         "commitlint.config.*",

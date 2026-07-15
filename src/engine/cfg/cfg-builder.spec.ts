@@ -6,8 +6,8 @@ import type { NodeRecord, OxcBuiltFunctionCfg } from '../types';
 
 import { isNodeRecord, isOxcNode, isOxcNodeArray } from '../ast/oxc-ast-utils';
 import { parseSource } from '../ast/parse-source';
+import { EdgeType } from '../types';
 import { OxcCFGBuilder } from './cfg-builder';
-import { EdgeType } from './cfg-types';
 
 const getFunctionBody = (fn: Node): NodeRecord => {
   const body = (fn as unknown as Record<string, unknown>)['body'];

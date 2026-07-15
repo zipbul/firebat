@@ -3,7 +3,7 @@ import type { Gildash } from '@zipbul/gildash';
 import { mock, describe, it, expect, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as nodePath from 'node:path';
 
-import type { ParsedFile } from './ts-program';
+import type { ParsedFile } from '../engine/types';
 
 import { emptyBatchParse as defaultBatchParse, expectEmptyAndUncalled } from '../../test/integration/shared/test-kit';
 import { createNoopLogger } from './logger';

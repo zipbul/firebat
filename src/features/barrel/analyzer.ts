@@ -11,9 +11,10 @@ import type { ParsedFile } from '../../engine/types';
 import type { BarrelFinding, SourceSpan } from '../../types';
 
 import { getLiteralString, isOxcNode } from '../../engine/ast/oxc-ast-utils';
+import { createWorkspacePackageMap } from '../../shared';
 import { globToRegExp } from '../../shared/glob-regex';
 import { asRecordOrNull } from '../../shared/json-guards';
-import { createImportResolver, createWorkspacePackageMap, type ImportResolver } from './resolver';
+import { createImportResolver, type ImportResolver } from './resolver';
 
 interface BarrelOptions {
   readonly rootAbs: string;

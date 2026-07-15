@@ -1,4 +1,4 @@
-import { EdgeType, type NodeId } from './cfg-types';
+import { EdgeType, type NodeId } from '../types';
 
 const INITIAL_CAPACITY = 1024;
 

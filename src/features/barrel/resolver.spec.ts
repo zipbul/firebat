@@ -4,7 +4,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { rmrf } from '../../../test/integration/shared/test-kit';
-import { createImportResolver, createWorkspacePackageMap } from './resolver';
+import { createWorkspacePackageMap } from '../../shared';
+import { createImportResolver } from './resolver';
 
 let tmpDir: string;
 
