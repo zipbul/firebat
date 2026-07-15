@@ -1,9 +1,13 @@
-import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types.js';
+import type { AstNode, Fix, Fixer, JsonValue, NodeOrNull, PaddingRule, RuleContext } from '../types';
 
-import { blankLineFix, hasBlankLineBetween } from '../utils/blank-line.js';
-import { isFunctionVariableDeclaration } from '../utils/is-function-variable-declaration.js';
-import { isJsonObject, toStringOrStringList } from '../utils/json-options.js';
-import { createStatementBodyVisitor } from '../utils/statement-body-visitor.js';
+import {
+  blankLineFix,
+  createStatementBodyVisitor,
+  hasBlankLineBetween,
+  isFunctionVariableDeclaration,
+  isJsonObject,
+  toStringOrStringList,
+} from '../utils';
 
 const paddingLineBetweenStatementsRule = {
   create(context: RuleContext) {

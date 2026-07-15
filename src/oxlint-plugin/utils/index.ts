@@ -5,7 +5,7 @@ export { matchExpressionStatement } from './expression-statement';
 export { isIdentifierNamed } from './identifier';
 export { isAstNodeValue } from './is-ast-node-value';
 export { isFunctionVariableDeclaration } from './is-function-variable-declaration';
-export { isJsonObject, toStringList } from './json-options';
+export { isJsonObject, toStringList, toStringOrStringList } from './json-options';
 export { nodeArray } from './node-array';
 export { getProgramBody } from './program-body';
 export { getSourceText } from './source-text';
