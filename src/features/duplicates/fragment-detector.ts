@@ -16,13 +16,15 @@ import { visitorKeys } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { DuplicateGroup, DuplicateItem, ExtractionPlan, SourceSpan } from '../../types';
 
-import { asRecord, collectOxcNodes, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import {
+  asRecord,
   collectBindingNames,
+  collectOxcNodes,
+  countOxcSize,
   createOxcFingerprintRun,
   createOxcFingerprintShapeWithBindings,
-} from '../../engine/ast/oxc-fingerprint';
-import { countOxcSize } from '../../engine/ast/oxc-size-count';
+  isOxcNode,
+} from '../../engine/ast';
 import { resolveSpan } from './clone-targets';
 
 /**

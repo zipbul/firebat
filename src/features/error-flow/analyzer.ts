@@ -6,9 +6,15 @@ import type { GildashAnalysisInput } from '../../shared';
 import type { TypeOracle } from './type-oracle';
 import type { ErrorFlowFinding, ErrorFlowFindingKind } from './types';
 
-import { collectPatternBindingNames, collectShadowedNames } from '../../engine/ast/collect-shadowed-names';
-import { forEachChildNode, forEachChildWithParent, getNodeName, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
-import { spanOfNode } from '../../engine/ast/source-span';
+import {
+  collectPatternBindingNames,
+  collectShadowedNames,
+  forEachChildNode,
+  forEachChildWithParent,
+  getNodeName,
+  spanOfNode,
+  walkOxcTree,
+} from '../../engine/ast';
 import { createTypeOracle } from './type-oracle';
 
 interface PushFindingInput {

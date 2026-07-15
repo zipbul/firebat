@@ -5,9 +5,9 @@ import { buildLineOffsets, getLineColumn } from '@zipbul/gildash';
 import type { ParsedFile } from '../../engine/types';
 import type { NestingItem, NestingKind, SourceSpan } from '../../types';
 
-import { forEachChildNode, getMemberPropertyName, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
-import { resolveFunctionBody } from '../../engine/cfg/control-flow-utils';
-import { collectFunctionItems } from '../../engine/function-items';
+import { collectFunctionItems } from '../../engine';
+import { forEachChildNode, getMemberPropertyName, getNodeHeader, isFunctionNode } from '../../engine/ast';
+import { resolveFunctionBody } from '../../engine/cfg';
 import { isNonNull } from '../../shared';
 
 interface AnalyzeNestingOptions {

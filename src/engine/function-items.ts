@@ -3,9 +3,7 @@ import type { Node } from 'oxc-parser';
 import type { NestingReductionMetrics, SourceSpan } from '../types';
 import type { ParsedFile } from './types';
 
-import { collectFunctionNodesWithParent } from './ast';
-import { getNodeHeader } from './ast/oxc-ast-utils';
-import { spanOfNode } from './ast/source-span';
+import { collectFunctionNodesWithParent, getNodeHeader, spanOfNode } from './ast';
 
 type FunctionNodeAnalyzer<TItem> = (node: Node, filePath: string, sourceText: string, parent: Node | null) => TItem | null;
 

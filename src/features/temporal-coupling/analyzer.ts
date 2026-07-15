@@ -9,9 +9,8 @@ import type { CfgNodePayload, ParsedFile } from '../../engine/types';
 import type { GildashAnalysisInput } from '../../shared';
 import type { TemporalCouplingFinding } from '../../types';
 
-import { normalizeFile } from '../../engine/ast/normalize-file';
-import { addNodeNameIfValid, getNodeName, isOxcNode, walkOxcTree } from '../../engine/ast/oxc-ast-utils';
-import { OxcCFGBuilder } from '../../engine/cfg/cfg-builder';
+import { addNodeNameIfValid, getNodeName, isOxcNode, normalizeFile, walkOxcTree } from '../../engine/ast';
+import { OxcCFGBuilder } from '../../engine/cfg';
 import { EdgeType } from '../../engine/types';
 import { addAndPush } from '../../shared';
 

@@ -2,8 +2,8 @@ import type { Gildash } from '@zipbul/gildash';
 
 import { normalizePath } from '@zipbul/gildash';
 
+import { runWithConcurrency } from '../../engine';
 import { hashString } from '../../engine/hasher';
-import { runWithConcurrency } from '../../engine/promise-pool';
 
 interface ComputeInputsDigestInput {
   readonly targets: ReadonlyArray<string>;

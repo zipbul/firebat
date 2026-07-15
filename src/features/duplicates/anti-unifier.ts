@@ -13,9 +13,7 @@ import type { Node } from 'oxc-parser';
 
 import { visitorKeys } from 'oxc-parser';
 
-import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
-import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
-import { countOxcSize } from '../../engine/ast/oxc-size-count';
+import { asRecord, collectBindingNames, countOxcSize, createOxcFingerprintShapeWithBindings, isOxcNode } from '../../engine/ast';
 import { isNonNull } from '../../shared';
 import { computeLcsAlignment } from './lcs';
 

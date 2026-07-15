@@ -10,25 +10,26 @@ import type {
   VariableLifetimeFinding,
 } from '../../types';
 
-import { normalizeFile } from '../../engine/ast/normalize-file';
 import {
   collectFunctionNodes,
   collectOxcNodes,
   forEachChildNode,
   isFunctionNode,
+  normalizeFile,
   toNodeArray,
-} from '../../engine/ast/oxc-ast-utils';
-import { intersectBitSet } from '../../engine/dataflow/dataflow';
-import { computeLiveness } from '../../engine/dataflow/liveness';
+} from '../../engine/ast';
 import {
   analyzeFunctionBody,
   type BindingName,
   bindingKey,
+  buildDeclScopeMap,
   collectLocalVarIndexes,
   collectParameterBindings,
+  collectVariables,
+  computeLiveness,
+  intersectBitSet,
   resolveVarIndex,
-} from '../../engine/dataflow/reaching-defs';
-import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
+} from '../../engine/dataflow';
 import { isOffsetInAnyRange, keepMapBound, type OffsetRange } from '../../shared';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);

@@ -22,7 +22,7 @@ import type { ErrorFlowFindingKind } from '../../features/error-flow';
 import type { FirebatLogger } from '../../shared';
 
 import { computeAutoMinSize } from '../../engine';
-import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow/gildash-binding-source';
+import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow';
 import { analyzeBarrel, createEmptyBarrel } from '../../features/barrel';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
 import { analyzeCoupling, createEmptyCoupling, pickCouplingKind } from '../../features/coupling';

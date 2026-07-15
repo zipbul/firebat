@@ -7,18 +7,18 @@ import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
 import { keepMapBound } from '../shared';
-import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
-import { collectShadowedNames } from './ast/collect-shadowed-names';
+import { collectOxcNodes, collectShadowedNames, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
 import {
   analyzeFunctionBody,
+  BindingUnresolvedError,
   bindingKey,
+  buildDeclScopeMap,
   collectLocalVarIndexes,
   collectParameterBindings,
   collectVariables,
   densifyKeys,
   resolveVarIndex,
 } from './dataflow';
-import { BindingUnresolvedError, buildDeclScopeMap } from './dataflow/variable-collector';
 
 interface NestedFunctionContext {
   /**

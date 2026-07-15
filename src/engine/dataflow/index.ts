@@ -6,5 +6,8 @@ export {
   densifyKeys,
   resolveVarIndex,
 } from './reaching-defs';
-export type { AnalyzeFunctionBodyOptions } from './reaching-defs';
-export { collectVariables } from './variable-collector';
+export type { AnalyzeFunctionBodyOptions, BindingName } from './reaching-defs';
+export { BindingUnresolvedError, buildDeclScopeMap, collectVariables } from './variable-collector';
+export { intersectBitSet } from './dataflow';
+export { computeLiveness } from './liveness';
+export { getGildashSemanticContext, setGildashSemanticContext } from './gildash-binding-source';

@@ -21,13 +21,14 @@ import type {
 } from '../../types';
 import type { InternalCloneGroup, InternalCloneItem } from './types';
 
-import { collectOxcNodes, getNodeHeader } from '../../engine/ast/oxc-ast-utils';
 import {
+  collectOxcNodes,
+  countOxcSize,
   createOxcFingerprintExact,
   createOxcFingerprintNormalized,
   createOxcFingerprintShape,
-} from '../../engine/ast/oxc-fingerprint';
-import { countOxcSize } from '../../engine/ast/oxc-size-count';
+  getNodeHeader,
+} from '../../engine/ast';
 import { pushToMultiMap } from '../../shared';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
 import { getItemKind, isBelowDecisionFloor, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';

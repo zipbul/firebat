@@ -8,10 +8,7 @@ import type { Node } from 'oxc-parser';
 
 import type { FirebatItemKind, SourceSpan } from '../../types';
 
-import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
-import { getContractMembers } from '../../engine/ast/oxc-fingerprint';
-import { countOxcSize } from '../../engine/ast/oxc-size-count';
-import { spanOfNode } from '../../engine/ast/source-span';
+import { asRecord, countOxcSize, getContractMembers, isOxcNode, spanOfNode } from '../../engine/ast';
 
 const CLONE_TARGET_TYPES = new Set([
   'FunctionDeclaration',

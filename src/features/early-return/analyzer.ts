@@ -3,10 +3,9 @@ import type { Node } from 'oxc-parser';
 import type { ParsedFile } from '../../engine/types';
 import type { EarlyReturnItem, EarlyReturnKind, SourceSpan } from '../../types';
 
-import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
-import { spanOfNode } from '../../engine/ast/source-span';
-import { countBlockStatements, resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
-import { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore } from '../../engine/function-items';
+import { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore } from '../../engine';
+import { forEachChildNode, isFunctionNode, spanOfNode } from '../../engine/ast';
+import { countBlockStatements, resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg';
 import { isNonNull } from '../../shared';
 
 const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
