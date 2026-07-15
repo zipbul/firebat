@@ -1,7 +1,6 @@
-import type { ToolAnalysisInput } from '../../shared/tool-analysis-input';
+import type { ToolAnalysisInput } from '../../shared';
 
-import { createNoopLogger } from '../../shared/logger';
-import { splitTrimNonEmpty } from '../../shared/split-lines';
+import { createNoopLogger, splitTrimNonEmpty } from '../../shared';
 import { runOxfmt } from '../../tooling/oxfmt/oxfmt-runner';
 import { throwIfToolRunFailed } from '../../tooling/tool-failure';
 

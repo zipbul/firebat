@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger } from '../../shared';
 import type { SourceSpan } from '../../types';
 
 import { configArgs } from '../config-args';

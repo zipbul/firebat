@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 
-import { failWithMessage } from '../../shared/error-message';
+import { failWithMessage } from '../../shared';
 
 const OXLINT_RC_JSONC = `{
   "$schema": "./node_modules/oxlint/configuration_schema.json",

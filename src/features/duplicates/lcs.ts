@@ -8,7 +8,7 @@
  * `computeLcsAlignment`는 statement 시퀀스(보통 수십 개) 대상이므로 DP O(mn) 사용.
  */
 
-import { pushToMultiMap } from '../../shared/multi-map';
+import { pushToMultiMap } from '../../shared';
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 

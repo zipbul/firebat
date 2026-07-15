@@ -28,7 +28,7 @@ import {
   createOxcFingerprintShape,
 } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
-import { pushToMultiMap } from '../../shared/multi-map';
+import { pushToMultiMap } from '../../shared';
 import { antiUnify, classifyDiff, type AntiUnificationResult } from './anti-unifier';
 import { getItemKind, isBelowDecisionFloor, isCloneTarget, isDecisionlessSkeleton, resolveSpan } from './clone-targets';
 import { detectFragmentClones } from './fragment-detector';

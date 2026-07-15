@@ -1,8 +1,7 @@
-import type { ToolAnalysisInput } from '../../shared/tool-analysis-input';
+import type { ToolAnalysisInput } from '../../shared';
 import type { LintDiagnostic } from '../../types';
 
-import { createNoopLogger } from '../../shared/logger';
-import { isNonNull } from '../../shared/non-null';
+import { createNoopLogger, isNonNull } from '../../shared';
 import { runOxlint } from '../../tooling/oxlint/oxlint-runner';
 import { throwIfToolRunFailed } from '../../tooling/tool-failure';
 

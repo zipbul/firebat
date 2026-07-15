@@ -1,7 +1,7 @@
-import type { FirebatCouplingConfig } from '../../shared/firebat-config';
+import type { FirebatCouplingConfig } from '../../shared';
 import type { CouplingHotspot, DependencyAnalysis } from '../../types';
 
-import { isNonNull } from '../../shared/non-null';
+import { isNonNull } from '../../shared';
 
 const sortCouplingHotspots = (items: ReadonlyArray<CouplingHotspot>): ReadonlyArray<CouplingHotspot> => {
   return [...items].sort((left, right) => {

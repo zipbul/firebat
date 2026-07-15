@@ -2,9 +2,9 @@ import type { PatternMatch } from '@zipbul/gildash';
 
 import { GildashError } from '@zipbul/gildash';
 
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger } from '../../shared';
 
-import { resolveTargets } from '../../shared/target-discovery';
+import { resolveTargets } from '../../shared';
 import { createGildash } from '../../store/gildash';
 
 interface FindPatternInput {

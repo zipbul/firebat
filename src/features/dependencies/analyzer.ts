@@ -5,7 +5,7 @@ import { builtinModules } from 'node:module';
 import * as path from 'node:path';
 import ts from 'typescript';
 
-import type { DependencyLayerRule } from '../../shared/dependency-layer-rule';
+import type { DependencyLayerRule } from '../../shared';
 import type {
   DependencyAnalysis,
   DependencyDeadExportFinding,
@@ -20,9 +20,7 @@ import type {
   SourceSpan,
 } from '../../types';
 
-import { globToRegExp } from '../../shared/glob-regex';
-import { addToSetMap, pushToMultiMap } from '../../shared/multi-map';
-import { resolveAbs } from '../../shared/path-resolve';
+import { addToSetMap, globToRegExp, pushToMultiMap, resolveAbs } from '../../shared';
 
 const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
   return [...items].sort((left, right) => {

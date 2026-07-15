@@ -1,13 +1,11 @@
 // MUST: MUST-1
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger } from '../../shared';
 import type { SourceSpan } from '../../types';
 
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
-import { toErrorMessage } from '../../shared/error-message';
-import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
-import { computeToolVersion } from '../../shared/tool-version';
+import { computeToolVersion, resolveRuntimeContextFromCwd, toErrorMessage } from '../../shared';
 import { createArtifactStore } from '../../store/artifact';
 import { createGildash } from '../../store/gildash';
 import { computeProjectKey, computeTraceArtifactKey } from '../scan/cache-keys';

@@ -1,6 +1,6 @@
 import type { AstNode, AstNodeValue, NodeOrNull, RuleContext } from '../types';
 
-import { addNonEmptyString } from '../../shared/string-set';
+import { addNonEmptyString } from '../../shared';
 
 const isAstNode = (value: AstNodeValue): value is AstNode => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {

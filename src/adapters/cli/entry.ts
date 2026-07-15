@@ -1,19 +1,21 @@
 import type { FirebatCliOptions } from '../../interfaces';
-import type { FirebatConfig, FirebatCouplingConfig } from '../../shared/firebat-config';
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatConfig, FirebatCouplingConfig, FirebatLogger } from '../../shared';
 import type { FirebatDetector, FirebatReport } from '../../types';
 
 import { scanUseCase } from '../../application/scan/scan.usecase';
 import { formatReport } from '../../report';
-import { parseArgs } from '../../shared/arg-parse';
-import { toErrorMessage } from '../../shared/error-message';
-import { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from '../../shared/firebat-config.loader';
-import { isStringArray } from '../../shared/json-guards';
-import { appendFirebatLog } from '../../shared/logger';
-import { createPrettyConsoleLogger } from '../../shared/logger';
-import { resolveFirebatRootFromCwd } from '../../shared/root-resolver';
-import { resolveStartDir } from '../../shared/runtime-context';
-import { resolveTargets } from '../../shared/target-discovery';
+import {
+  appendFirebatLog,
+  createPrettyConsoleLogger,
+  isStringArray,
+  loadFirebatConfigFile,
+  parseArgs,
+  resolveDefaultFirebatRcPath,
+  resolveFirebatRootFromCwd,
+  resolveStartDir,
+  resolveTargets,
+  toErrorMessage,
+} from '../../shared';
 import { H, hc, isTty, writeStdout } from './cli-output';
 
 interface CliLoggerInput {

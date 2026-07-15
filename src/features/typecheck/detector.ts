@@ -5,11 +5,10 @@ import * as path from 'node:path';
 import ts from 'typescript';
 
 import type { ParsedFile } from '../../engine/types';
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger } from '../../shared';
 import type { SourceSpan, TypecheckItem } from '../../types';
 
-import { createNoopLogger } from '../../shared/logger';
-import { toProjectRelative } from '../../shared/to-project-relative';
+import { createNoopLogger, toProjectRelative } from '../../shared';
 
 const createEmptySpan = (): SourceSpan => ({
   start: { line: 1, column: 1 },

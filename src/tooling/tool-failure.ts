@@ -1,4 +1,4 @@
-import type { FirebatLogger } from '../shared/logger';
+import type { FirebatLogger } from '../shared';
 
 interface ToolFailureInput {
   readonly tool: string;

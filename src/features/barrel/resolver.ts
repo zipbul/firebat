@@ -1,8 +1,7 @@
 import { normalizePath } from '@zipbul/gildash';
 import * as path from 'node:path';
 
-import { isStringArray } from '../../shared/json-guards';
-import { asRecord, readJsoncFile } from '../../shared/workspace-packages';
+import { asRecord, isStringArray, readJsoncFile } from '../../shared';
 
 type TsconfigPaths = Record<string, ReadonlyArray<string>>;
 

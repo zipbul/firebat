@@ -16,7 +16,7 @@ import { visitorKeys } from 'oxc-parser';
 import { asRecord, isOxcNode } from '../../engine/ast/oxc-ast-utils';
 import { collectBindingNames, createOxcFingerprintShapeWithBindings } from '../../engine/ast/oxc-fingerprint';
 import { countOxcSize } from '../../engine/ast/oxc-size-count';
-import { isNonNull } from '../../shared/non-null';
+import { isNonNull } from '../../shared';
 import { computeLcsAlignment } from './lcs';
 
 // ─── Public Types ─────────────────────────────────────────────────────────────

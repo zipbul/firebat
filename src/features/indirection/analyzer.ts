@@ -10,7 +10,7 @@ import type { IndirectionFinding, IndirectionFindingKind, IndirectionParamsInfo 
 
 import { getNodeHeader, isFunctionNode, isOxcNode, walkOxcTreeWithParent } from '../../engine/ast/oxc-ast-utils';
 import { spanOfNode } from '../../engine/ast/source-span';
-import { resolveAbs } from '../../shared/path-resolve';
+import { resolveAbs } from '../../shared';
 
 /* ------------------------------------------------------------------ */
 /*  AST utilities — thin-wrapper body-form gate (①)                    */

@@ -42,16 +42,16 @@ import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite/firebat.db';
 import {
   assertTargetsWithinRoot,
+  computeToolVersion,
   createFirebatProgram,
   featureOptions,
   loadFirebatConfigFile,
-  computeToolVersion,
   resolveRuntimeContextFromCwd,
   resolveStartDir,
+  toErrorMessage,
+  toProjectRelative as toProjectRelativePath,
+  ZERO_SPAN,
 } from '../../shared';
-import { toErrorMessage } from '../../shared/error-message';
-import { ZERO_SPAN } from '../../shared/source-span';
-import { toProjectRelative as toProjectRelativePath } from '../../shared/to-project-relative';
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';

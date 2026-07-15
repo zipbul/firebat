@@ -1,4 +1,4 @@
-import type { FirebatCouplingConfig, FirebatLogLevel } from './shared/firebat-config';
+import type { FirebatCouplingConfig, FirebatLogLevel } from './shared';
 import type { FirebatDetector, MinSizeOption } from './types';
 
 export interface FirebatCliExplicitFlags {

@@ -7,7 +7,7 @@ import { forEachChildNode, isFunctionNode } from '../../engine/ast/oxc-ast-utils
 import { spanOfNode } from '../../engine/ast/source-span';
 import { countBlockStatements, resolveFunctionBody, shouldIncreaseDepth } from '../../engine/cfg/control-flow-utils';
 import { buildNestingReductionItem, collectFunctionItems, computeNestingReductionScore } from '../../engine/function-items';
-import { isNonNull } from '../../shared/non-null';
+import { isNonNull } from '../../shared';
 
 const createEmptyEarlyReturn = (): ReadonlyArray<EarlyReturnItem> => [];
 

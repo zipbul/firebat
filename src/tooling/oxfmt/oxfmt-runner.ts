@@ -1,6 +1,6 @@
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger } from '../../shared';
 
-import { toErrorMessage } from '../../shared/error-message';
+import { toErrorMessage } from '../../shared';
 import { configArgs } from '../config-args';
 import { logExternalToolVersionOnce } from '../external-tool-version';
 import { tryResolveLocalBin } from '../resolve-bin';

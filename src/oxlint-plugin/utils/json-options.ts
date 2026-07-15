@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from '../types';
 
-import { isPlainObject } from '../../shared/json-guards';
+import { isPlainObject } from '../../shared';
 
 // 런타임 판정은 src/shared/json-guards 한 곳에만 둔다. 여기선 플러그인 타입(JsonObject)으로
 // 좁히는 얇은 위임 래퍼 — 파라미터 무변형 단일 호출이라 골격(K)으로 분류돼 중복 보고되지 않는다.

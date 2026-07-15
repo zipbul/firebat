@@ -1,14 +1,10 @@
 import { mkdir, rename } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { JsonValue } from '../../shared/json-value';
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger, JsonValue } from '../../shared';
 
 import { prepareProjectDb } from '../../application/bootstrap/prepare-db.usecase';
-import { assertKnownOption } from '../../shared/arg-parse';
-import { failWithMessage, toErrorMessage } from '../../shared/error-message';
-import { isPlainObject } from '../../shared/json-guards';
-import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { assertKnownOption, failWithMessage, isPlainObject, resolveRuntimeContextFromCwd, toErrorMessage } from '../../shared';
 import { H, hc, isTty, writeStdout } from './cli-output';
 import { syncJsoncTextToTemplateKeys } from './firebatrc-jsonc-sync';
 import { loadFirstExistingText, resolveAssetCandidates } from './install-assets';

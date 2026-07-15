@@ -6,7 +6,7 @@ import type { WasteFinding } from '..';
 import type { AnalyzeFunctionBodyOptions } from './dataflow';
 import type { BitSet, DefMeta, ParsedFile } from './types';
 
-import { keepMapBound } from '../shared/multi-map';
+import { keepMapBound } from '../shared';
 import { collectOxcNodes, forEachChildNode, isFunctionNode, isOxcNode, toNodeArray } from './ast';
 import { collectShadowedNames } from './ast/collect-shadowed-names';
 import {

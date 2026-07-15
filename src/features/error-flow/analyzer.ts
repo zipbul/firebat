@@ -2,7 +2,7 @@ import type { Gildash } from '@zipbul/gildash';
 import type { Node } from 'oxc-parser';
 
 import type { ParsedFile } from '../../engine/types';
-import type { GildashAnalysisInput } from '../../shared/gildash-analysis-input';
+import type { GildashAnalysisInput } from '../../shared';
 import type { TypeOracle } from './type-oracle';
 import type { ErrorFlowFinding, ErrorFlowFindingKind } from './types';
 

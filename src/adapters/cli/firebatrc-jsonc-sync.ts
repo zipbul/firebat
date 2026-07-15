@@ -1,8 +1,6 @@
-import type { JsonObject, JsonValue } from '../../shared/json-value';
-import type { OffsetRange } from '../../shared/offset-range';
+import type { JsonObject, JsonValue, OffsetRange } from '../../shared';
 
-import { toErrorMessage } from '../../shared/error-message';
-import { isPlainObject } from '../../shared/json-guards';
+import { isPlainObject, toErrorMessage } from '../../shared';
 
 interface Edit {
   readonly start: number;

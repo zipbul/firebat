@@ -1,6 +1,6 @@
-import type { FirebatLogger } from '../shared/logger';
+import type { FirebatLogger } from '../shared';
 
-import { toErrorMessage } from '../shared/error-message';
+import { toErrorMessage } from '../shared';
 
 interface ExternalToolVersionInput {
   readonly tool: string;

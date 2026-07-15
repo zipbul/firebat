@@ -1,6 +1,6 @@
 import type { AstNode, AstNodeValue, RuleContext } from '../types';
 
-import { addNonEmptyString, isNonEmptyString } from '../../shared/string-set';
+import { addNonEmptyString, isNonEmptyString } from '../../shared';
 import { isAstNodeValue } from '../utils/is-ast-node-value';
 import { getProgramBody } from '../utils/program-body';
 

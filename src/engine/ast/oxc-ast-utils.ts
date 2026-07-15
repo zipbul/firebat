@@ -5,7 +5,7 @@ import { visitorKeys } from 'oxc-parser';
 
 import type { NodeRecord, NodeValue } from '../types';
 
-import { addNonEmptyString } from '../../shared/string-set';
+import { addNonEmptyString } from '../../shared';
 
 export { isFunctionNode };
 

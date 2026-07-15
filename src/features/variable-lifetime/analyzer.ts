@@ -29,8 +29,7 @@ import {
   resolveVarIndex,
 } from '../../engine/dataflow/reaching-defs';
 import { buildDeclScopeMap, collectVariables } from '../../engine/dataflow/variable-collector';
-import { keepMapBound } from '../../shared/multi-map';
-import { isOffsetInAnyRange, type OffsetRange } from '../../shared/offset-range';
+import { isOffsetInAnyRange, keepMapBound, type OffsetRange } from '../../shared';
 
 const lineColumnAt = (sourceText: string, offset: number) => getLineColumn(buildLineOffsets(sourceText), offset);
 

@@ -8,7 +8,7 @@ import type { NestingItem, NestingKind, SourceSpan } from '../../types';
 import { forEachChildNode, getMemberPropertyName, getNodeHeader, isFunctionNode } from '../../engine/ast/oxc-ast-utils';
 import { resolveFunctionBody } from '../../engine/cfg/control-flow-utils';
 import { collectFunctionItems } from '../../engine/function-items';
-import { isNonNull } from '../../shared/non-null';
+import { isNonNull } from '../../shared';
 
 interface AnalyzeNestingOptions {
   readonly maxCognitiveComplexity: number;

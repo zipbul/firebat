@@ -1,9 +1,9 @@
 import { rm } from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { FirebatLogger } from '../../shared/logger';
+import type { FirebatLogger } from '../../shared';
 
-import { resolveRuntimeContextFromCwd } from '../../shared/runtime-context';
+import { resolveRuntimeContextFromCwd } from '../../shared';
 import { H, hc, isTty, writeStdout } from './cli-output';
 
 const printCacheHelp = (): void => {
