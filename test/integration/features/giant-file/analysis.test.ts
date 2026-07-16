@@ -91,12 +91,12 @@ describe('integration/giant-file', () => {
   });
 });
 
-// ── giant-file surgery (PLAN-giant-file-surgery.md D1/D2) — resolution site ──
+// ── giant-file — resolution site ──────────────────────────────────────────
 // The effective maxLines budget is resolved at scan wiring (scan.usecase.ts,
-// `featureOptions(giantFileCfg)?.maxLines ?? 1000`), not at arg-parse — these
-// tests exercise the real scanUseCase pipeline (via scanDetectorFindings) with
-// an actual .firebatrc.jsonc so the resolved value (and its provenance) is
-// observed end-to-end, not just unit-tested against the analyzer directly.
+// `featureOptions(giantFileCfg)?.maxLines ?? DEFAULT_MAX_LINES`), not at
+// arg-parse — these tests exercise the real scanUseCase pipeline (via
+// scanDetectorFindings) with an actual .firebatrc.jsonc so the resolved value
+// is observed end-to-end, not just unit-tested against the analyzer directly.
 
 interface MaxLinesResolutionCase {
   readonly title: string;
@@ -170,46 +170,5 @@ describe('integration/giant-file — resolution site (maxLines default vs config
 
     // Assert
     expect(list.length).toBe(expectFinding ? 1 : 0);
-  });
-});
-
-// ── giant-file surgery D2 — `metrics.defaulted` provenance (RED until P2) ───
-// RED today: GiantFileMetrics has no `defaulted` field and scan.usecase.ts
-// never sets one, so `list[0]?.metrics?.defaulted` reads `undefined` in every
-// case below (neither `.toBe(true)` nor `.toBe(false)` is satisfied).
-describe('integration/giant-file — metrics.defaulted provenance', () => {
-  it('RED: metrics.defaulted is true when the default budget is used (no config)', async () => {
-    // Act
-    const list = await scanDetectorFindings('giant-file-defaulted-true', 'giant-file', {
-      'src/a.ts': repeatExports(1001, i => `export const x${i} = ${i};`),
-    });
-
-    // Assert
-    expect(list.length).toBeGreaterThan(0);
-    expect(list[0]?.metrics?.defaulted).toBe(true);
-  });
-
-  it('RED: metrics.defaulted is false when maxLines is explicitly configured, even at the same numeric value as the default (1000)', async () => {
-    // Act
-    const list = await scanDetectorFindings('giant-file-defaulted-explicit-1000', 'giant-file', {
-      '.firebatrc.jsonc': '{\n  "features": { "giant-file": { "maxLines": 1000 } }\n}',
-      'src/a.ts': repeatExports(1001, i => `export const x${i} = ${i};`),
-    });
-
-    // Assert
-    expect(list.length).toBeGreaterThan(0);
-    expect(list[0]?.metrics?.defaulted).toBe(false);
-  });
-
-  it('RED: metrics.defaulted is false when maxLines is configured to a non-default value', async () => {
-    // Act
-    const list = await scanDetectorFindings('giant-file-defaulted-explicit-1500', 'giant-file', {
-      '.firebatrc.jsonc': '{\n  "features": { "giant-file": { "maxLines": 1500 } }\n}',
-      'src/a.ts': repeatExports(1501, i => `export const x${i} = ${i};`),
-    });
-
-    // Assert
-    expect(list.length).toBeGreaterThan(0);
-    expect(list[0]?.metrics?.defaulted).toBe(false);
   });
 });

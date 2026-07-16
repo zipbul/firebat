@@ -2,7 +2,7 @@
 
 Detects source files whose line count exceeds the effective line budget — the configured `maxLines`, or the documented default (`DEFAULT_MAX_LINES = 1000`) when none is configured. Active by default; a pure budget-exceedance comparison, not a design-quality claim.
 
-**Finding fields:** `kind, code, file, span, metrics: { lineCount, maxLines, defaulted }`
+**Finding fields:** `kind, code, file, span, metrics: { lineCount, maxLines }`
 
 <catalog>
 

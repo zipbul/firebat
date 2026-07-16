@@ -1068,11 +1068,9 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       createEmptyGiantFile,
       () => {
         const { 'giant-file': giantFileCfg } = config?.features ?? {};
-        const configuredMaxLines = featureOptions(giantFileCfg)?.maxLines;
-        const defaulted = configuredMaxLines === undefined;
-        const maxLines = defaulted ? DEFAULT_MAX_LINES : Number(configuredMaxLines);
+        const maxLines = featureOptions(giantFileCfg)?.maxLines ?? DEFAULT_MAX_LINES;
 
-        return analyzeGiantFile(program, { maxLines, defaulted });
+        return analyzeGiantFile(program, { maxLines });
       },
     );
     // variable-lifetime also needs the gildash binding source — skip on AST-only.

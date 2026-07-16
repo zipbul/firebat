@@ -211,32 +211,4 @@ describe('giant-file/analyzer', () => {
     expect(result.length).toBe(1);
     expect(result[0]?.metrics.lineCount).toBe(6);
   });
-
-  // ── D2: `defaulted` provenance carried from options into the finding ────────
-  // Post-surgery design: analyzeGiantFile receives `{ maxLines, defaulted }`;
-  // direct callers pass `defaulted: false` explicitly. RED today: the analyzer's
-  // options type has no `defaulted` field and never sets `metrics.defaulted`, so
-  // both assertions below read `undefined` off the produced finding.
-
-  it('RED: metrics.defaulted is true verbatim when options.defaulted is true', () => {
-    // Arrange
-    const sourceText = ['a', 'b', 'c', 'd'].join('\n');
-    const files = [file('src/a.ts', sourceText)];
-    // Act
-    const result = analyzeGiantFile(files as any, { maxLines: 3, defaulted: true });
-
-    // Assert
-    expect(result[0]?.metrics.defaulted).toBe(true);
-  });
-
-  it('RED: metrics.defaulted is false verbatim when options.defaulted is false', () => {
-    // Arrange
-    const sourceText = ['a', 'b', 'c', 'd'].join('\n');
-    const files = [file('src/a.ts', sourceText)];
-    // Act
-    const result = analyzeGiantFile(files as any, { maxLines: 3, defaulted: false });
-
-    // Assert
-    expect(result[0]?.metrics.defaulted).toBe(false);
-  });
 });

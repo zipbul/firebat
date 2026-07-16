@@ -10,13 +10,6 @@ const createEmptyGiantFile = (): ReadonlyArray<GiantFileFinding> => [];
 
 interface AnalyzeGiantFileOptions {
   readonly maxLines: number;
-  /**
-   * Provenance of `maxLines` — true when it came from `DEFAULT_MAX_LINES`,
-   * false when the consumer configured it explicitly. Optional for direct
-   * callers that don't track provenance (defaults to `false`); scan wiring
-   * always sets this explicitly.
-   */
-  readonly defaulted?: boolean;
 }
 
 // ECMAScript line-terminator sequences: CRLF (matched first, counted once as a
@@ -46,7 +39,7 @@ const analyzeGiantFile = (
   }
 
   const findings: GiantFileFinding[] = [];
-  const { maxLines, defaulted = false } = options;
+  const { maxLines } = options;
 
   for (const file of files) {
     const lineCount = countLines(file.sourceText);
@@ -64,7 +57,6 @@ const analyzeGiantFile = (
       metrics: {
         lineCount,
         maxLines,
-        defaulted,
       },
     });
   }
