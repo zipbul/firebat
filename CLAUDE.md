@@ -168,3 +168,24 @@ Under a **user-declared directory-surface policy**, reports structures where mod
 - External packages / node_modules consumption — out of judgment
 
 **K examples (non-exhaustive)**: same-directory consumption; consuming an ancestor-directory file (movement within the enclosing module); any consumption through a surface via a directory specifier (type-only included — the consumption itself satisfies the contract); named re-exports of own-subtree origins (child barrel aggregation); a directory with zero outside demand lacking an index (held); an index containing only `export type { … } from` (conforming); unresolvable specifiers (treated as external); files matching user ignore globs; `…/index`-spelled consumption (the same surface is traversed).
+
+## giant-file detector
+
+Under a **user-declared line budget**, reports source files whose **line count exceeds the declared `maxLines`**. Declared ⇔ config `features["giant-file"].maxLines` is a non-negative integer (the value `--only giant-file` cannot itself carry, so selection still requires the configured `maxLines`). **Explicit `false` always wins, even under `--only`**; **fully inactive when no `maxLines` is declared** (`true` / `{}` / absent → inactive) — a line limit becomes a judgment basis only when the user declares the number (same opt-in pattern as layer-violation and barrel); firebat bakes in no default (a tool-picked threshold is a guess-value). An invalid `maxLines` (negative, fractional, non-finite) is rejected, not floored.
+
+**Budget-exceedance (judged by count, distinct from design quality)**: the finding asserts one fact — `lineCount > maxLines` under the declared budget — and makes **no** claim that the file is oversized, incohesive, doing too much, or should be split (a large hand-written schema / lookup table / registry can exceed the budget and be perfectly sound; "is this file too big to be good" is unclosable, and the coupling detector was removed for asserting exactly such magnitude-as-defect verdicts). This magnitude threshold closes where fan-in/instability did not because the count is an unambiguous spec fact and the budget is user-declared: under the declared policy every finding is true, and a file the user does not intend to bound is theirs to exclude (`exclude` glob) or re-budget (higher `maxLines`). The kind name is a label for "over budget", not a quality verdict — catalog/remedy text carry no split/oversized wording.
+
+**Line-count rule (closed)**: `lineCount` = the number of ECMAScript line-terminator sequences in the raw source text (CRLF counted once; LF; CR; U+2028; U+2029), plus one iff the text does not end in a terminator; empty text = 0. Measured from source text directly (no AST — a parse-failed file is still counted, not held). A single long line (a minified or generated one-liner, however many characters) is 1 — an intentional FN (byte width is not a line count; exclude such files by glob).
+
+**Judgment procedure**: within the scan set, `lineCount > maxLines` → W, else K. Binary integer comparison — no gradient, no severity (all files with `lineCount > maxLines` receive the same verdict, whether one line over or tenfold over); `maxLines = 0` flags every non-empty file. Files matching user `exclude` globs produce no finding (K-direction).
+
+**Targets (1 kind, 1 family)**: `giant-file` — an in-scope `.ts` source file whose `lineCount` exceeds the declared `maxLines`. One finding per file.
+
+**Non-targets (other detectors' territory / out of judgment)**:
+- No `maxLines` declared — fully inactive (a default line count is a guess-value)
+- "Is this file cohesive / doing too much / should be split" — a design judgment with no fact anchor (out of judgment)
+- Logical/semantic size, long functions, deep nesting — nesting/duplicates/indirection territory; giant-file measures physical lines at file granularity only
+- `.d.ts` declaration files and non-`.ts` sources (`.tsx`/`.mts`/`.cts`) — outside the scan set
+- Files matching user `exclude` globs — excluded
+
+**K examples (non-exhaustive)**: no `maxLines` declared, or `true`/`{}` with no number (inactive); a file at or under budget; a file matching user `exclude` globs (generated code, data tables, large barrel surfaces); a single-line minified file of any width (counted as 1 line — K under any `maxLines ≥ 1`); a physically small but semantically complex file (a size fact says nothing about complexity).
