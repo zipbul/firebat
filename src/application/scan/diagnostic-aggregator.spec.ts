@@ -11,8 +11,6 @@ const makeNestingHighCC = (file: string) => ({ kind: 'high-cognitive-complexity'
 
 const makeNestingDeep = (file: string) => ({ kind: 'deep-nesting', file });
 
-const makeCoupling = (kind: string) => ({ kind, module: 'src/a.ts', score: 10, signals: [] });
-
 const makeCycle = (path: string[]) => ({ path });
 
 const FILE_A = 'src/a.ts';
@@ -23,8 +21,12 @@ const FILE_B = 'src/b.ts';
 describe('FIREBAT_CODE_CATALOG', () => {
   // barrel-surgery (PLAN-barrel-surgery.md D1): BARREL_INDEX_DEEP_IMPORT and
   // BARREL_SIDE_EFFECT_IMPORT catalog codes deleted outright — 73 → 71.
-  it('should have exactly 71 entries', () => {
-    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(71);
+  // fan-in/fan-out hotspot detector removal: COUPLING_GOD_MODULE/BIDIRECTIONAL/OFF_MAIN_SEQ/UNSTABLE/RIGID
+  // catalog codes deleted outright (no fact-closable verdict) — 71 → 66. The composite
+  // DIAG_GOD_MODULE diagnostic was sourced from those fan-in/fan-out metrics; with them gone it can
+  // never fire, so its catalog entry is removed too (no dead code masquerading as documentation) — 66 → 65.
+  it('should have exactly 65 entries', () => {
+    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(65);
   });
 
   it('should have a cause string for every entry', () => {
@@ -183,36 +185,6 @@ describe('aggregateDiagnostics', () => {
     expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
   });
 
-  // ── DIAG_GOD_MODULE ────────────────────────────────────────────────
-
-  it('should add DIAG_GOD_MODULE when coupling has a god-module kind entry', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        coupling: [makeCoupling('god-module')],
-      },
-    });
-
-    expect(result.catalog.DIAG_GOD_MODULE).toBeDefined();
-  });
-
-  it('should not add DIAG_GOD_MODULE when coupling array is empty', () => {
-    const result = aggregateDiagnostics({
-      analyses: { coupling: [] },
-    });
-
-    expect(result.catalog.DIAG_GOD_MODULE).toBeUndefined();
-  });
-
-  it('should not add DIAG_GOD_MODULE when coupling has non-god-module kinds only', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        coupling: [makeCoupling('bidirectional')],
-      },
-    });
-
-    expect(result.catalog.DIAG_GOD_MODULE).toBeUndefined();
-  });
-
   // ── Empty / no analyses ────────────────────────────────────────────
 
   it('should return empty catalog when analyses is empty object', () => {
@@ -223,19 +195,17 @@ describe('aggregateDiagnostics', () => {
 
   // ── Combined scenarios ─────────────────────────────────────────────
 
-  it('should add all three diagnostic codes when all conditions are met simultaneously', () => {
+  it('should add both diagnostic codes when all conditions are met simultaneously', () => {
     const result = aggregateDiagnostics({
       analyses: {
         waste: [makeWaste(FILE_A)],
         nesting: [makeNestingHighCC(FILE_A)],
         dependencies: { cycles: [makeCycle([FILE_A, FILE_B])] },
-        coupling: [makeCoupling('god-module')],
       },
     });
 
     expect(result.catalog.DIAG_GOD_FUNCTION).toBeDefined();
     expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
-    expect(result.catalog.DIAG_GOD_MODULE).toBeDefined();
   });
 
   it('should add only DIAG_CIRCULAR_DEPENDENCY when waste+cycles present but nesting absent', () => {

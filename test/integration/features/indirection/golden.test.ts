@@ -6,7 +6,7 @@ import { runGolden } from '../../shared/golden-runner';
 import { analyzeIndirectionReal } from './real-gildash';
 
 // Golden runs against a REAL Gildash (analyzeIndirectionReal → withTempGildash),
-// matching the dependencies/coupling goldens. No mock: cross-file resolution,
+// matching the dependencies goldens. No mock: cross-file resolution,
 // export status, overload counting and symbol lookups all exercise production
 // gildash. Finding paths are relativized tmpDir → /virtual so snapshots stay stable.
 describe('golden/indirection', () => {

@@ -10,7 +10,6 @@ import type {
   DependencyAnalysis,
   DependencyDeadExportFinding,
   DependencyEdgeCutHint,
-  DependencyFanStat,
   DependencyLayerViolation,
   DependencyUnusedFileFinding,
   DependencyUnusedDepFinding,
@@ -22,16 +21,6 @@ import type {
 
 import { addToSetMap, globToRegExp, pushToMultiMap, resolveAbs } from '../../shared';
 
-const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): ReadonlyArray<DependencyFanStat> => {
-  return [...items].sort((left, right) => {
-    if (right.count !== left.count) {
-      return right.count - left.count;
-    }
-
-    return left.module.localeCompare(right.module);
-  });
-};
-
 /* ------------------------------------------------------------------ */
 /*  Utilities                                                          */
 /* ------------------------------------------------------------------ */
@@ -39,9 +28,6 @@ const sortDependencyFanStats = (items: ReadonlyArray<DependencyFanStat>): Readon
 const createEmptyDependencies = (): DependencyAnalysis => ({
   cycles: [],
   adjacency: {},
-  exportStats: {},
-  fanIn: [],
-  fanOut: [],
   cuts: [],
   layerViolations: [],
   deadExports: [],
@@ -634,16 +620,8 @@ const resolveEntrypointToFile = (rootAbs: string, spec: string, graphKeys: Reado
 };
 
 /* ------------------------------------------------------------------ */
-/*  Fan stats & edge cut hints                                         */
+/*  Edge cut hints                                                     */
 /* ------------------------------------------------------------------ */
-
-const listFanStats = (rootAbs: string, counts: Map<string, number>, limit: number): ReadonlyArray<DependencyFanStat> => {
-  const items = Array.from(counts.entries())
-    .filter(([, count]) => count > 0)
-    .map(([module, count]) => ({ module: toRelativePath(rootAbs, module), count }));
-
-  return sortDependencyFanStats(items).slice(0, limit);
-};
 
 /**
  * Value-only file→file adjacency from `imports` relations. gildash records `import type` as a
@@ -955,9 +933,8 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     absGraph.set(resolveAbs(rootAbs, from), targets.map(toAbs));
   }
 
-  // 2. Adjacency & fan metrics
+  // 2. Adjacency & out-degree (out-degree drives circular-dependency edge-cut hints)
   const adjacencyOut: Record<string, ReadonlyArray<string>> = {};
-  const inDegree = new Map<string, number>();
   const outDegree = new Map<string, number>();
 
   for (const [from, targets] of absGraph.entries()) {
@@ -967,20 +944,8 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     adjacencyOut[toRelativePath(rootAbs, from)] = uniqueTargets.map(toRel);
 
     outDegree.set(from, uniqueTargets.length);
-
-    if (!inDegree.has(from)) {
-      inDegree.set(from, 0);
-    }
-
-    for (const target of uniqueTargets) {
-      const prev = inDegree.get(target) ?? 0;
-
-      inDegree.set(target, prev + 1);
-    }
   }
 
-  const fanIn = listFanStats(rootAbs, inDegree, 10);
-  const fanOut = listFanStats(rootAbs, outDegree, 10);
   // 3. Cycles — computed on the VALUE-only dependency graph (`imports` ∪ value `re-exports`), not
   // gildash's `getImportGraph`/`getCyclePaths`. Those merge runtime-erased `import type` edges (a
   // pure-type cycle is not a runtime cycle) and enumerate every elementary circuit (N per SCC → one
@@ -1039,8 +1004,7 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
     }
   }
 
-  // 5. Export stats via searchSymbols
-  const exportStats: Record<string, { readonly total: number; readonly abstract: number }> = {};
+  // 5. Collect exported symbols via searchSymbols (feeds duplicate-export detection below)
   const exportsByFile = new Map<string, ExportEntry[]>();
 
   try {
@@ -1062,18 +1026,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
       gildash.searchRelations({ type: 'type-references' }),
       rel => rel.meta?.isReExport === true,
     );
-
-    for (const [filePath, symbols] of exportsByFile) {
-      const total = symbols.length;
-      const abstract = symbols.filter(
-        s =>
-          s.kind === 'interface' ||
-          s.kind === 'type' ||
-          (s.kind === 'class' && s.detail.modifiers?.includes('abstract') === true),
-      ).length;
-
-      exportStats[toRelativePath(rootAbs, filePath)] = { total, abstract };
-    }
   } catch (e) {
     if (!(e instanceof GildashError)) {
       throw e;
@@ -1864,9 +1816,6 @@ const analyzeDependencies = async (gildash: Gildash, input?: AnalyzeDependencies
   return {
     cycles,
     adjacency: adjacencyOut,
-    exportStats,
-    fanIn,
-    fanOut,
     cuts,
     layerViolations,
     deadExports,

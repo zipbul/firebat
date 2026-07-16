@@ -44,17 +44,6 @@ interface FirebatNestingConfig {
   readonly maxDensity?: number | undefined;
 }
 
-interface FirebatCouplingConfig {
-  readonly godModulePercent?: number | undefined;
-  readonly godModuleMin?: number | undefined;
-  readonly rigidPercent?: number | undefined;
-  readonly rigidMin?: number | undefined;
-  readonly distanceThreshold?: number | undefined;
-  readonly unstableInstability?: number | undefined;
-  readonly unstableFanOut?: number | undefined;
-  readonly rigidInstability?: number | undefined;
-}
-
 interface FirebatBarrelConfig {
   readonly ignoreGlobs?: ReadonlyArray<string> | undefined;
 }
@@ -77,7 +66,6 @@ interface FirebatFeaturesConfig {
   readonly lint?: boolean | undefined;
   readonly typecheck?: boolean | undefined;
   readonly dependencies?: FeatureToggle<FirebatDependenciesConfig> | undefined;
-  readonly coupling?: FeatureToggle<FirebatCouplingConfig> | undefined;
   readonly nesting?: FeatureToggle<FirebatNestingConfig> | undefined;
   readonly 'early-return'?: boolean | undefined;
   readonly 'collapsible-if'?: boolean | undefined;
@@ -152,24 +140,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
               .strict(),
           ])
           .optional(),
-        coupling: z
-          .union([
-            z.literal(false),
-            z.literal(true),
-            z
-              .object({
-                godModulePercent: z.number().min(0).max(1).optional(),
-                godModuleMin: z.number().int().nonnegative().optional(),
-                rigidPercent: z.number().min(0).max(1).optional(),
-                rigidMin: z.number().int().nonnegative().optional(),
-                distanceThreshold: z.number().min(0).max(1).optional(),
-                unstableInstability: z.number().min(0).max(1).optional(),
-                unstableFanOut: z.number().int().nonnegative().optional(),
-                rigidInstability: z.number().min(0).max(1).optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
         nesting: z
           .union([
             z.literal(false),
@@ -233,6 +203,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
   })
   .strict();
 
-export type { FirebatConfig, FirebatCouplingConfig, FirebatLogLevel };
+export type { FirebatConfig, FirebatLogLevel };
 
 export { featureOptions, FirebatConfigSchema };

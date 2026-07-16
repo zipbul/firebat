@@ -3,7 +3,6 @@ import type { Gildash, StoredCodeRelation, SymbolSearchResult } from '@zipbul/gi
 import { GildashError } from '@zipbul/gildash';
 import { describe, expect, it } from 'bun:test';
 
-import { expectNoFanInOut } from '../../../test/integration/shared/test-kit';
 import { analyzeDependencies, createEmptyDependencies } from './analyzer';
 
 type Deps = Awaited<ReturnType<typeof analyzeDependencies>>;
@@ -19,12 +18,6 @@ const searchExported =
   <T>(results: T[]) =>
   (q: unknown): T[] =>
     (q as { isExported?: boolean }).isExported ? results : [];
-
-/** Assert the first fan-out entry is `module` with `count` dependents. */
-const expectFirstFanOut = (result: Deps, module: string, count: number): void => {
-  expect(result.fanOut[0]!.module).toBe(module);
-  expect(result.fanOut[0]!.count).toBe(count);
-};
 
 /** Assert exactly one dead export, tagged `dead-export`. */
 const expectSingleDeadExport = (result: Deps): void => {
@@ -181,14 +174,6 @@ interface ImportClassificationCase {
   expectedUnresolved: ReadonlyArray<UnresolvedExpectation>;
 }
 
-interface ExportStatsCase {
-  name: string;
-  exported: ReadonlyArray<SymbolSearchResult>;
-  module: string;
-  expectedTotal: number;
-  expectedAbstract: number;
-}
-
 interface LayerViolationExpectation {
   fromLayer: string;
   toLayer: string;
@@ -316,8 +301,6 @@ describe('features/dependencies/analyzer — createEmptyDependencies', () => {
     expect(Array.isArray(empty.cycles)).toBe(true);
     expect(empty.cycles.length).toBe(0);
     expect(typeof empty.adjacency).toBe('object');
-    expect(Array.isArray(empty.fanIn)).toBe(true);
-    expect(Array.isArray(empty.fanOut)).toBe(true);
     expect(Array.isArray(empty.cuts)).toBe(true);
     expect(Array.isArray(empty.layerViolations)).toBe(true);
     expect(Array.isArray(empty.deadExports)).toBe(true);
@@ -470,7 +453,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expectEmptyDepsGraph(result);
-    expectNoFanInOut(result);
     expect(result.deadExports.length).toBe(0);
   });
 
@@ -482,28 +464,8 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.adjacency['src/b.ts']).toEqual([]);
   });
 
-  it('should compute fanIn and fanOut sorted by count descending', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/a.ts', ['/project/shared.ts', '/project/b.ts']],
-      ['/project/b.ts', ['/project/shared.ts']],
-      ['/project/c.ts', ['/project/shared.ts']],
-      ['/project/shared.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-
-    expect(result.fanIn.length).toBeGreaterThanOrEqual(1);
-    expect(result.fanIn[0]!.module).toBe('shared.ts');
-    expect(result.fanIn[0]!.count).toBe(3);
-
-    expect(result.fanOut.length).toBeGreaterThanOrEqual(1);
-    expectFirstFanOut(result, 'a.ts', 2);
-  });
-
-  it('should deduplicate repeated edges to the same module in adjacency and fan metrics', async () => {
+  it('should deduplicate repeated edges to the same module in adjacency', async () => {
     // a.ts imports b.ts twice (e.g. two import declarations to same module).
-    // Previously fanIn=2 and fanOut=2 were reported because targets.length / per-target
-    // increment counted duplicates.
     const graph = new Map<string, string[]>([
       ['/project/a.ts', ['/project/b.ts', '/project/b.ts']],
       ['/project/b.ts', []],
@@ -512,12 +474,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.adjacency['a.ts']).toEqual(['b.ts']);
-
-    const aFanOut = result.fanOut.find(entry => entry.module === 'a.ts');
-    const bFanIn = result.fanIn.find(entry => entry.module === 'b.ts');
-
-    expect(aFanOut?.count).toBe(1);
-    expect(bFanIn?.count).toBe(1);
   });
 
   it('reports one cycle per SCC from the value-only import graph', async () => {
@@ -1003,40 +959,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     expect(result.deadExports.length).toBe(0);
   });
 
-  const exportStatsCases: ExportStatsCase[] = [
-    {
-      name: 'computes exportStats from searchSymbols (interface + abstract class counted as abstract)',
-      exported: [
-        mkSymbol(1, '/project/src/mod.ts', 'doSomething', 'function'),
-        mkSymbol(2, '/project/src/mod.ts', 'IFoo', 'interface'),
-        mkSymbol(3, '/project/src/mod.ts', 'AbstractBase', 'class', { modifiers: ['abstract'] }),
-      ],
-      module: 'src/mod.ts',
-      expectedTotal: 3,
-      expectedAbstract: 2,
-    },
-    {
-      name: 'counts type alias and interface as abstract in exportStats',
-      exported: [
-        mkSymbol(1, '/project/src/types.ts', 'UserId', 'type'),
-        mkSymbol(2, '/project/src/types.ts', 'IRepo', 'interface'),
-        mkSymbol(3, '/project/src/types.ts', 'helperFn', 'function'),
-      ],
-      module: 'src/types.ts',
-      expectedTotal: 3,
-      expectedAbstract: 2,
-    },
-  ];
-
-  it.each(exportStatsCases)('$name', async ({ exported, module, expectedTotal, expectedAbstract }) => {
-    const graph = new Map<string, string[]>([[`/project/${module}`, []]]);
-    const g = createMockGildash({ getImportGraph: async () => graph, searchSymbols: exportedSymbols(exported) });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT, readFileFn: rootOnlyRead({}) });
-    const stats = result.exportStats[module];
-
-    expect(stats).toEqual({ total: expectedTotal, abstract: expectedAbstract });
-  });
-
   it('should generate edge cut hints for cycles using outDegree', async () => {
     const graph = new Map<string, string[]>([
       ['/project/a.ts', ['/project/b.ts', '/project/d.ts']],
@@ -1116,9 +1038,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.adjacency['a.ts']).toEqual(['b.ts', 'c.ts']);
-    expect(result.fanIn[0]!.module).toBe('d.ts');
-    expect(result.fanIn[0]!.count).toBe(2);
-    expectFirstFanOut(result, 'a.ts', 2);
   });
 
   /* ---------- NE: Negative / Error ---------- */
@@ -1145,17 +1064,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     expect(result.cycles.length).toBe(0);
     expect(Object.keys(result.adjacency).length).toBe(2);
-  });
-
-  it('should skip file exportStats when searchSymbols returns Err', async () => {
-    const graph = new Map<string, string[]>([['/project/src/mod.ts', []]]);
-    const g = createMockGildash({
-      getImportGraph: async () => graph,
-      searchSymbols: () => gildashThrow('search failed'),
-    });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-
-    expect(Object.keys(result.exportStats).length).toBe(0);
   });
 
   it('should produce empty dead exports when searchRelations returns Err', async () => {
@@ -1207,7 +1115,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.adjacency['src/lone.ts']).toEqual([]);
-    expectNoFanInOut(result);
   });
 
   it('does not report a self-importing file as a cycle (circular-dependency needs two+ files)', async () => {
@@ -1221,18 +1128,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     const result = await analyzeDependencies(g, { rootAbs: ROOT });
 
     expect(result.cycles).toEqual([]);
-  });
-
-  it('should handle graph with all files having zero fan', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/a.ts', []],
-      ['/project/b.ts', []],
-      ['/project/c.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-
-    expectNoFanInOut(result);
   });
 
   it('should handle rootAbs normalization with backslashes', async () => {
@@ -1270,7 +1165,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
 
     expect(Object.keys(result.adjacency).length).toBe(2);
     expect(result.cycles.length).toBe(0);
-    expect(Object.keys(result.exportStats).length).toBe(0);
     expect(result.deadExports.length).toBe(0);
   });
 
@@ -1333,35 +1227,6 @@ describe('features/dependencies/analyzer — analyzeDependencies', () => {
     // it is not dead; a filename does not decide whether a consumer counts as production.
     expectSingleNamed(dead, 'deadFn');
     expect(result.deadExports.some(d => d.name === 'consumedByTestFn')).toBe(false);
-  });
-
-  /* ---------- OR: Ordering ---------- */
-
-  it('should produce deterministic fanIn/fanOut ordering', async () => {
-    const graph = new Map<string, string[]>([
-      ['/project/a.ts', ['/project/x.ts', '/project/y.ts', '/project/z.ts']],
-      ['/project/b.ts', ['/project/x.ts', '/project/y.ts']],
-      ['/project/c.ts', ['/project/x.ts']],
-      ['/project/x.ts', []],
-      ['/project/y.ts', []],
-      ['/project/z.ts', []],
-    ]);
-    const g = createMockGildash({ getImportGraph: async () => graph });
-    const result = await analyzeDependencies(g, { rootAbs: ROOT });
-
-    expect(result.fanIn[0]!.module).toBe('x.ts');
-    expect(result.fanIn[0]!.count).toBe(3);
-    expect(result.fanIn[1]!.module).toBe('y.ts');
-    expect(result.fanIn[1]!.count).toBe(2);
-    expect(result.fanIn[2]!.module).toBe('z.ts');
-    expect(result.fanIn[2]!.count).toBe(1);
-
-    expect(result.fanOut[0]!.module).toBe('a.ts');
-    expect(result.fanOut[0]!.count).toBe(3);
-    expect(result.fanOut[1]!.module).toBe('b.ts');
-    expect(result.fanOut[1]!.count).toBe(2);
-    expect(result.fanOut[2]!.module).toBe('c.ts');
-    expect(result.fanOut[2]!.count).toBe(1);
   });
 
   /* ---------- UF: Unused Files + EP: Entry point edge cases ---------- */

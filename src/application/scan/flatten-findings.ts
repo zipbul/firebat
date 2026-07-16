@@ -196,18 +196,6 @@ const labelIndirection: LabelFn = (f, _fn) => {
   return header ? `${header}${depth ? ` (depth: ${depth})` : ''}` : String(f.kind ?? 'indirection');
 };
 
-const labelCoupling: LabelFn = (f, _fn) => {
-  const module = String(f.module ?? f.file ?? '');
-  const signals = f.signals as string[] | undefined;
-  const score = f.score;
-
-  if (module && signals?.length) {
-    return `${module} (${signals.join(', ')}${score !== undefined ? `, score: ${score}` : ''})`;
-  }
-
-  return module || String(f.kind ?? 'coupling');
-};
-
 const labelDependency: LabelFn = (f, _fn) => {
   const kind = String(f.kind ?? '');
 
@@ -313,7 +301,6 @@ const LABEL_BY_CATEGORY: Readonly<Record<string, LabelFn>> = {
   'collapsible-if': labelCollapsibleIf,
   'error-flow': labelErrorFlow,
   indirection: labelIndirection,
-  coupling: labelCoupling,
   dependencies: labelDependency,
   'variable-lifetime': labelVariableLifetime,
   'temporal-coupling': labelTemporalCoupling,
@@ -349,10 +336,6 @@ const extractDetail = (finding: Record<string, unknown>, category: string): Read
 
     // 카테고리별로 planner에도 필요한 필드는 제외 (이미 label에 반영됨)
     if (category === 'nesting' && key === 'header') {
-      continue;
-    }
-
-    if (category === 'coupling' && key === 'module') {
       continue;
     }
 

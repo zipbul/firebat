@@ -290,7 +290,7 @@ export const FIREBAT_CODE_CATALOG = {
       'A function has deeply nested control structures, increasing indentation and making the execution path hard to follow.',
     think: [
       'Read the function and identify the deepest nesting path. Check if the outermost levels are precondition checks (null checks, error checks) that can be converted to early returns/guard clauses to reduce nesting by 1-2 levels.',
-      'Check if other firebat findings (WASTE_DEAD_STORE, COUPLING_GOD_MODULE) co-occur in this function. If so, the nesting is a symptom of the function doing too much — split by responsibility rather than flattening nesting mechanically.',
+      'Check if other firebat findings (e.g., WASTE_DEAD_STORE) co-occur in this function. If so, the nesting is a symptom of the function doing too much — split by responsibility rather than flattening nesting mechanically.',
       'For remaining deep nesting, extract the inner block into a named helper function. The extracted function name should describe what the block does, making the parent function read as a sequence of high-level steps.',
     ],
   },
@@ -387,50 +387,6 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
 
-  COUPLING_GOD_MODULE: {
-    cause: 'A module has both high fan-in and high fan-out, meaning many modules depend on it and it depends on many modules.',
-    think: [
-      'Read the module and list all its exports. Group exports by domain responsibility (e.g., types, utilities, business logic, constants). Each group that has its own set of consumers is a candidate for extraction.',
-      'Grep for each export to identify consumer clusters. If group A is consumed only by modules X and Y, and group B only by modules Z and W, the module serves two unrelated audiences and should be split.',
-      'Extract each responsibility group into its own module. Update all consumer imports. After splitting, verify that the original module is either deleted or reduced to a thin re-export barrel.',
-    ],
-  },
-  COUPLING_BIDIRECTIONAL: {
-    cause: 'Two modules import from each other, creating a circular dependency that prevents independent reasoning about either.',
-    think: [
-      'Read the import statements in both directions. Identify which direction is primary (core logic depends on it) and which is incidental (convenience, type reference, or utility access).',
-      'For the incidental direction: extract the shared symbol into a third module that both can import, or invert the dependency using dependency injection (pass the dependency as a parameter instead of importing).',
-      'If both directions are truly essential (each module needs the other to function), the two modules are a single cohesive unit — merge them into one module.',
-    ],
-  },
-  COUPLING_OFF_MAIN_SEQ: {
-    cause:
-      "A module's instability-abstractness balance places it far from the main sequence, indicating it is either too abstract for its stability or too concrete for how many depend on it.",
-    think: [
-      'Read the module. If it is too concrete (many dependents but no interfaces), add interfaces/contracts for the capabilities it provides so dependents can depend on abstractions instead of implementations.',
-      'If it is too abstract (mostly interfaces but few dependents), the abstractions may be premature — inline them into the modules that use them.',
-      'If the module is a mixed bag, split it: concrete implementations in one module, abstract contracts in another.',
-    ],
-  },
-  COUPLING_UNSTABLE: {
-    cause:
-      'A module has high instability (many outgoing dependencies, few incoming) and high fan-out, making it sensitive to changes in its dependencies.',
-    think: [
-      'Read the module and list all its imports. If it is an orchestrator (composition root, adapter, controller), high fan-out is by design — stop, no action needed.',
-      'If it is not an orchestrator, identify which imports can be replaced with port interfaces. Create interfaces for the volatile dependencies and inject implementations via the composition root.',
-      'After adding interfaces, verify that the module only depends on stable abstractions (ports, types) rather than concrete implementations.',
-    ],
-  },
-  COUPLING_RIGID: {
-    cause:
-      'A module has very low instability (many dependents, few dependencies) and high fan-in, making it extremely costly to change.',
-    think: [
-      'Read the module and its exports. If the module is intentionally stable (core types, shared constants, fundamental utilities), rigidity is by design — stop, no action needed.',
-      'If the module needs to evolve, identify the stable subset that dependents rely on. Extract this subset into a separate module that remains frozen, allowing the rest to change freely.',
-      'If dependents use different subsets of the module, split it by consumer group so that changes affect only the relevant consumers.',
-    ],
-  },
-
   DUP_EXACT: {
     cause: 'Two or more code blocks are character-for-character identical, indicating copy-paste duplication.',
     think: [
@@ -484,15 +440,6 @@ export const FIREBAT_CODE_CATALOG = {
       'Break the cycle at the weakest link: extract the shared symbol (type, interface, constant) into a new module that both sides can import from, or invert the dependency by passing the needed value as a parameter.',
       'If the cycle involves only two modules that are tightly intertwined, merge them into a single module — the cycle indicates they are a single cohesive unit.',
       'A deep import that bypasses a barrel/index surface can hide a cycle from readers without breaking it — never resolve a cycle by deep-importing module internals; fix it with a type-only edge, shared-module extraction, or a module merge instead.',
-    ],
-  },
-  DIAG_GOD_MODULE: {
-    cause:
-      'A module acts as a hub with excessive fan-in and fan-out, coupling a large portion of the codebase through one point.',
-    think: [
-      'Read the module and list all exports. Grep for each export to identify which consumers use it. Group exports by consumer overlap — exports used by the same set of consumers belong together.',
-      'Split the module along consumer group boundaries. Each new module should serve a cohesive set of consumers. Update all import paths.',
-      'After splitting, verify that no new module has both high fan-in and high fan-out. If one does, repeat the analysis on that module.',
     ],
   },
   DIAG_DATA_CLUMP: {
@@ -587,7 +534,7 @@ export const FIREBAT_CODE_CATALOG = {
     think: [
       'Read the file and group its exports (functions, types, constants) by domain responsibility. Each group that has a distinct purpose and its own set of consumers is a candidate for extraction into a separate module.',
       'Extract the largest cohesive group first into a new file in the same directory. Update all imports across the project. Repeat until the original file is under the threshold.',
-      'If the file resists decomposition (every function depends on every other), the tight coupling is the root cause. Address coupling first (break circular dependencies, extract shared types) before splitting the file.',
+      'If the file resists decomposition (every function depends on every other), the tight interdependency is the root cause. Address that first (break circular dependencies, extract shared types) before splitting the file.',
     ],
   },
 
@@ -664,17 +611,6 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
 
     if (entry !== undefined) {
       catalog.DIAG_CIRCULAR_DEPENDENCY = entry;
-    }
-  }
-
-  // DIAG_GOD_MODULE
-  const godModules = asArray<any>(input.analyses['coupling']).filter((c: any) => c?.kind === 'god-module');
-
-  if (godModules.length > 0) {
-    const entry = FIREBAT_CODE_CATALOG.DIAG_GOD_MODULE;
-
-    if (entry !== undefined) {
-      catalog.DIAG_GOD_MODULE = entry;
     }
   }
 

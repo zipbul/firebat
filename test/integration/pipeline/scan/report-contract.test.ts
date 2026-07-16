@@ -9,12 +9,11 @@ import {
   createScanProjectFixture,
   createScanProjectFixtureWithFiles,
   expectBareFindingShape,
-  expectNoExplanationFields,
   findBareFindingByKind,
   withCwd,
   runScanReport,
 } from '../../shared/scan-fixture';
-import { expectNonEmptyString, expectSingleArray, expectSpanShape } from '../../shared/test-kit';
+import { expectNonEmptyString, expectSingleArray } from '../../shared/test-kit';
 
 interface IndirectionContractRow {
   readonly title: string;
@@ -106,70 +105,6 @@ describe('integration/scan/report-contract', () => {
       expect(report.meta.errors).toBeDefined();
       expect(report.meta.errors?.lint ?? '').toContain('oxlint');
       expect(report.analyses.lint).toBeUndefined();
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('should emit coupling as a bare array in analyses', async () => {
-    // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-coupling-array', 'export const a = 1;');
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['dependencies', 'coupling'], logger, [project.srcFileAbs]);
-
-      // Assert
-      expect(Array.isArray(report.analyses.coupling)).toBe(true);
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('should emit coupling hotspots without natural-language fields (why/suggestedRefactor) and with BaseFinding fields', async () => {
-    // Arrange
-    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-coupling-shape', {
-      'src/a.ts': "import { b } from './b';\nexport const a = b + 1;\n",
-      'src/b.ts': "import { a } from './a';\nexport const b = a + 1;\n",
-    });
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['dependencies', 'coupling'], logger, [...project.targetsAbs]);
-
-      // Assert
-      expect(Array.isArray(report.analyses.coupling)).toBe(true);
-      expect((report.analyses.coupling ?? []).length).toBeGreaterThan(0);
-
-      const couplingFindings = report.analyses.coupling as unknown as any[];
-      const allowedKinds = ['god-module', 'bidirectional-coupling', 'off-main-sequence', 'unstable-module', 'rigid-module'];
-      const allowedCodes = [
-        'COUPLING_GOD_MODULE',
-        'COUPLING_BIDIRECTIONAL',
-        'COUPLING_OFF_MAIN_SEQ',
-        'COUPLING_UNSTABLE',
-        'COUPLING_RIGID',
-      ];
-
-      // Every finding shape must match the coupling contract (specific kind/code, not just typeof).
-      for (const item of couplingFindings) {
-        expect(allowedKinds).toContain(item.kind);
-        expect(allowedCodes).toContain(item.code);
-        expect(typeof item.file).toBe('string');
-        expectSpanShape(item);
-        expect(item.filePath).toBeUndefined();
-        expectNoExplanationFields(item);
-      }
-
-      // The fixture has a deliberate 2-node cycle (a.ts ↔ b.ts) so bidirectional-coupling
-      // must be among the findings; this anchors the contract to a real semantic outcome
-      // rather than only the shape of the response.
-      const bidirectional = couplingFindings.filter(f => f.kind === 'bidirectional-coupling');
-
-      expect(bidirectional.length).toBeGreaterThanOrEqual(1);
-      expect(bidirectional[0].code).toBe('COUPLING_BIDIRECTIONAL');
     } finally {
       await project.dispose();
     }

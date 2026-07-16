@@ -90,11 +90,11 @@ Note: `firebat-reviewer` was removed — `verify-plan.sh` is authoritative for C
 ```
 
 <category-priority>
-1. dependencies   2. coupling   3. error-flow
-4. nesting / early-return / collapsible-if   5. waste
-6. barrel / indirection
-7. variable-lifetime / temporal-coupling / giant-file
-8. duplicates   9. lint / format / typecheck
+1. dependencies   2. error-flow
+3. nesting / early-return / collapsible-if   4. waste
+5. barrel / indirection
+6. variable-lifetime / temporal-coupling / giant-file
+7. duplicates   8. lint / format / typecheck
 </category-priority>
 
 <reference-routing>
@@ -110,7 +110,6 @@ Sub-agents fetch per-code reference via `bash .claude/skills/firebat/scripts/ext
 | nesting | `references/nesting.md` |
 | early-return | `references/early-return.md` |
 | collapsible-if | `references/collapsible-if.md` |
-| coupling | `references/coupling.md` |
 | duplicates | `references/duplicates.md` |
 | temporal-coupling | `references/temporal-coupling.md` |
 | variable-lifetime | `references/variable-lifetime.md` |

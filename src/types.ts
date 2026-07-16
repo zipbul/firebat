@@ -8,7 +8,6 @@ export type FirebatDetector =
   | 'lint'
   | 'typecheck'
   | 'dependencies'
-  | 'coupling'
   | 'nesting'
   | 'early-return'
   | 'collapsible-if'
@@ -72,12 +71,6 @@ export type FirebatCatalogCode =
   | 'IND_CROSS_FILE_CHAIN'
   | 'IND_TYPE_REMAP'
   | 'IND_INTERFACE_REWRAP'
-  // coupling (5)
-  | 'COUPLING_GOD_MODULE'
-  | 'COUPLING_BIDIRECTIONAL'
-  | 'COUPLING_OFF_MAIN_SEQ'
-  | 'COUPLING_UNSTABLE'
-  | 'COUPLING_RIGID'
   // dependencies (11)
   | 'DEP_LAYER_VIOLATION'
   | 'DEP_DEAD_EXPORT'
@@ -94,10 +87,9 @@ export type FirebatCatalogCode =
   | 'DUP_FRAGMENT'
   | 'DUP_SHAPE'
   | 'DUP_NORMALIZED'
-  // diagnostics (7)
+  // diagnostics (6)
   | 'DIAG_GOD_FUNCTION'
   | 'DIAG_CIRCULAR_DEPENDENCY'
-  | 'DIAG_GOD_MODULE'
   | 'DIAG_DATA_CLUMP'
   | 'DIAG_SHOTGUN_SURGERY'
   | 'DIAG_OVER_INDIRECTION'
@@ -150,8 +142,6 @@ export interface ErrorFlowFinding {
   readonly evidence: string;
 }
 
-export type CouplingKind = 'god-module' | 'bidirectional-coupling' | 'off-main-sequence' | 'unstable-module' | 'rigid-module';
-
 export interface DuplicateItem {
   readonly kind: FirebatItemKind;
   readonly header: string;
@@ -196,11 +186,6 @@ export interface DuplicateGroup {
 
 interface DependencyCycle {
   readonly path: ReadonlyArray<string>;
-}
-
-export interface DependencyFanStat {
-  readonly module: string;
-  readonly count: number;
 }
 
 export interface DependencyEdgeCutHint {
@@ -263,19 +248,10 @@ export interface DependencyUnusedMemberFinding {
   readonly span: SourceSpan;
 }
 
-interface DependencyExportStats {
-  readonly total: number;
-  readonly abstract: number;
-}
-
 export interface DependencyAnalysis {
   readonly cycles: ReadonlyArray<DependencyCycle>;
   /** Dependency graph adjacency list (module -> direct imports). Keys/values are project-relative paths. */
   readonly adjacency: Readonly<Record<string, ReadonlyArray<string>>>;
-  /** Export counts used for coupling abstractness calculation. Keys are project-relative module paths. */
-  readonly exportStats: Readonly<Record<string, DependencyExportStats>>;
-  readonly fanIn: ReadonlyArray<DependencyFanStat>;
-  readonly fanOut: ReadonlyArray<DependencyFanStat>;
   readonly cuts: ReadonlyArray<DependencyEdgeCutHint>;
   readonly layerViolations: ReadonlyArray<DependencyLayerViolation>;
   readonly deadExports: ReadonlyArray<DependencyDeadExportFinding>;
@@ -381,24 +357,6 @@ interface FormatFinding {
   readonly kind: 'needs-formatting';
   readonly file: string;
   readonly span: SourceSpan;
-}
-
-interface CouplingMetrics {
-  readonly fanIn: number;
-  readonly fanOut: number;
-  readonly instability: number;
-  readonly abstractness: number;
-  readonly distance: number;
-}
-
-export interface CouplingHotspot {
-  readonly module: string;
-  readonly score: number;
-  readonly code?: FirebatCatalogCode;
-  readonly signals: ReadonlyArray<string>;
-  readonly metrics: CouplingMetrics;
-  readonly why: string;
-  readonly suggestedRefactor: string;
 }
 
 interface NestingMetrics {
@@ -618,7 +576,6 @@ export interface FirebatAnalyses {
   readonly lint: ReadonlyArray<LintDiagnostic>;
   readonly typecheck: ReadonlyArray<TypecheckItem>;
   readonly dependencies: ReadonlyArray<DependencyFinding>;
-  readonly coupling: ReadonlyArray<CouplingHotspot>;
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;
   readonly 'collapsible-if': ReadonlyArray<CollapsibleIfItem>;

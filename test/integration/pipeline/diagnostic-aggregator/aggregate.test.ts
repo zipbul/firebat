@@ -55,27 +55,4 @@ describe('integration/diagnostic-aggregator', () => {
     // Assert
     expect(out.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
   });
-
-  it('should emit DIAG_GOD_MODULE when coupling has god-module signal', () => {
-    // Arrange
-    const out = aggregateDiagnostics({
-      analyses: {
-        coupling: [
-          {
-            kind: 'god-module',
-            code: 'COUPLING_GOD_MODULE',
-            file: 'src/mod.ts',
-            span: { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } },
-            module: 'src/mod.ts',
-            score: 1,
-            signals: ['god-module'],
-            metrics: { fanIn: 10, fanOut: 10, instability: 0.5, abstractness: 0.2, distance: 0.3 },
-          },
-        ],
-      },
-    } as any);
-
-    // Assert
-    expect(out.catalog.DIAG_GOD_MODULE).toBeDefined();
-  });
 });

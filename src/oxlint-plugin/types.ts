@@ -139,7 +139,7 @@ export interface RuleContext {
   getDeclaredVariables?: (node: AstNode) => Variable[];
   /**
    * When provided by the host, this is the absolute/relative path of the file being linted.
-   * Kept optional to avoid coupling tests to a specific runtime.
+   * Kept optional to avoid tying tests to a specific runtime.
    */
   filename?: string;
   /** ESLint-compatible filename accessor (optional). */

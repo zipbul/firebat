@@ -1,4 +1,4 @@
-import type { FirebatCouplingConfig, FirebatLogLevel } from './shared';
+import type { FirebatLogLevel } from './shared';
 import type { FirebatDetector, MinSizeOption } from './types';
 
 export interface FirebatCliExplicitFlags {
@@ -23,7 +23,6 @@ export interface FirebatCliOptions {
   readonly dependenciesEntry?: ReadonlyArray<string>;
   readonly dependenciesIgnore?: ReadonlyArray<string>;
   readonly dependenciesIgnoreDeps?: ReadonlyArray<string>;
-  readonly couplingConfig?: FirebatCouplingConfig;
   readonly exclude?: ReadonlyArray<string>;
   readonly help: boolean;
   readonly configPath?: string;

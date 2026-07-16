@@ -13,7 +13,7 @@ Measures complexity. Detects deep nesting, high cognitive complexity, accidental
 <think>
 
 1. Read the function and identify the deepest nesting path. Check if the outermost levels are precondition checks (null checks, error checks) that can be converted to early returns/guard clauses to reduce nesting by 1-2 levels.
-2. Check if other firebat findings (WASTE_DEAD_STORE, COUPLING_GOD_MODULE) co-occur in this function. If so, the nesting is a symptom of the function doing too much — split by responsibility rather than flattening nesting mechanically.
+2. Check if other firebat findings (e.g., WASTE_DEAD_STORE) co-occur in this function. If so, the nesting is a symptom of the function doing too much — split by responsibility rather than flattening nesting mechanically.
 3. For remaining deep nesting, extract the inner block into a named helper function. The extracted function name should describe what the block does, making the parent function read as a sequence of high-level steps.
 
 </think>

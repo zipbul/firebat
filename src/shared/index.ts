@@ -1,7 +1,7 @@
 export { assertKnownOption, parseArgs } from './arg-parse';
 export type { DependencyLayerRule } from './dependency-layer-rule';
 export { failWithMessage, toErrorMessage } from './error-message';
-export type { FirebatConfig, FirebatCouplingConfig, FirebatLogLevel } from './firebat-config';
+export type { FirebatConfig, FirebatLogLevel } from './firebat-config';
 export { featureOptions } from './firebat-config';
 export { loadFirebatConfigFile, resolveDefaultFirebatRcPath } from './firebat-config.loader';
 export type { GildashAnalysisInput } from './gildash-analysis-input';

@@ -7,7 +7,6 @@ import type { FirebatCliOptions } from '../../interfaces';
 import type { FirebatLogger } from '../../shared';
 import type {
   BarrelFindingKind,
-  CouplingKind,
   DuplicateCloneType,
   EarlyReturnKind,
   FirebatCatalogCode,
@@ -25,7 +24,6 @@ import { computeAutoMinSize } from '../../engine';
 import { getGildashSemanticContext, setGildashSemanticContext } from '../../engine/dataflow';
 import { analyzeBarrel, createEmptyBarrel } from '../../features/barrel';
 import { analyzeCollapsibleIf, createEmptyCollapsibleIf } from '../../features/collapsible-if';
-import { analyzeCoupling, createEmptyCoupling, pickCouplingKind } from '../../features/coupling';
 import { analyzeDependencies, createEmptyDependencies } from '../../features/dependencies';
 import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
@@ -286,13 +284,6 @@ const INDIRECTION_KIND_TO_CODE: Readonly<Record<IndirectionFindingKind, FirebatC
   'type-remap': 'IND_TYPE_REMAP',
   'interface-rewrap': 'IND_INTERFACE_REWRAP',
 } as const;
-const COUPLING_KIND_TO_CODE: Readonly<Record<CouplingKind, FirebatCatalogCode>> = {
-  'god-module': 'COUPLING_GOD_MODULE',
-  'bidirectional-coupling': 'COUPLING_BIDIRECTIONAL',
-  'off-main-sequence': 'COUPLING_OFF_MAIN_SEQ',
-  'unstable-module': 'COUPLING_UNSTABLE',
-  'rigid-module': 'COUPLING_RIGID',
-} as const;
 const DEP_MEMBER_KIND_TO_CODE: Record<string, FirebatCatalogCode> = {
   'unused-enum-member': 'DEP_UNUSED_ENUM_MEMBER',
   'unused-ns-export': 'DEP_UNUSED_NS_EXPORT',
@@ -410,24 +401,6 @@ const enrichIndirection = (items: ReadonlyArray<any>, toProjectRelative: ToProje
       header: item?.header,
       depth: item?.depth,
       evidence: item?.evidence,
-    };
-  });
-
-const enrichCoupling = (items: ReadonlyArray<any>): ReadonlyArray<any> =>
-  items.map(item => {
-    const module = String(item?.module ?? '');
-    const signals = Array.isArray(item?.signals) ? (item.signals as string[]) : [];
-    const kind = pickCouplingKind(signals);
-
-    return {
-      kind,
-      code: (COUPLING_KIND_TO_CODE as Record<string, FirebatCatalogCode | undefined>)[kind],
-      file: module,
-      span: ZERO_SPAN,
-      module,
-      score: item?.score,
-      signals,
-      metrics: item?.metrics,
     };
   });
 
@@ -809,7 +782,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       minSize: options.minSize === 'auto' ? 'auto' : String(options.minSize),
       maxForwardDepth: options.maxForwardDepth,
       ...(options.detectors.includes('barrel') ? { barrelIgnoreGlobs: options.barrelIgnoreGlobs ?? [] } : {}),
-      ...(options.detectors.includes('dependencies') || options.detectors.includes('coupling')
+      ...(options.detectors.includes('dependencies')
         ? {
             dependenciesLayers: options.dependenciesLayers,
             dependenciesAllowedDependencies: options.dependenciesAllowedDependencies,
@@ -817,9 +790,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
             dependenciesIgnore: options.dependenciesIgnore,
             dependenciesIgnoreDeps: options.dependenciesIgnoreDeps,
           }
-        : {}),
-      ...(options.detectors.includes('coupling') && options.couplingConfig
-        ? { couplingConfig: options.couplingConfig as Record<string, unknown> }
         : {}),
     });
 
@@ -993,11 +963,10 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           }
         })()
       : Promise.resolve(createEmptyTypecheck());
-    const shouldRunDependencies = options.detectors.includes('dependencies') || options.detectors.includes('coupling');
     const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await runDetectorAsync(
       detectorRunCtx,
       'dependencies',
-      shouldRunDependencies,
+      options.detectors.includes('dependencies'),
       createEmptyDependencies,
       () =>
         analyzeDependencies(gildash, {
@@ -1012,13 +981,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           ...(options.dependenciesIgnore !== undefined ? { ignore: options.dependenciesIgnore } : {}),
           ...(options.dependenciesIgnoreDeps !== undefined ? { ignoreDependencies: options.dependenciesIgnoreDeps } : {}),
         }),
-    );
-    const coupling: ReturnType<typeof analyzeCoupling> = runDetector(
-      detectorRunCtx,
-      'coupling',
-      options.detectors.includes('coupling'),
-      createEmptyCoupling,
-      () => analyzeCoupling(dependencies, options.couplingConfig),
     );
     const nesting: ReturnType<typeof analyzeNesting> = runDetector(
       detectorRunCtx,
@@ -1155,7 +1117,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
       ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
       ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies, toProjectRelative) } : {}),
-      ...(selectedDetectors.has('coupling') ? { coupling: enrichCoupling(coupling) } : {}),
       ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting, toProjectRelative) } : {}),
       ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn, toProjectRelative) } : {}),
       ...(selectedDetectors.has('collapsible-if')

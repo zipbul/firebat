@@ -151,13 +151,13 @@ fi
 # ============================================================
 
 declare -A CAT_PRIORITY=(
-  ["dependencies"]=1 ["coupling"]=2 ["error-flow"]=3
-  ["nesting"]=4 ["early-return"]=4 ["collapsible-if"]=4
-  ["waste"]=5
-  ["barrel"]=6 ["indirection"]=6
-  ["variable-lifetime"]=7 ["temporal-coupling"]=7 ["giant-file"]=7
-  ["duplicates"]=8
-  ["lint"]=9 ["format"]=9 ["typecheck"]=9
+  ["dependencies"]=1 ["error-flow"]=2
+  ["nesting"]=3 ["early-return"]=3 ["collapsible-if"]=3
+  ["waste"]=4
+  ["barrel"]=5 ["indirection"]=5
+  ["variable-lifetime"]=6 ["temporal-coupling"]=6 ["giant-file"]=6
+  ["duplicates"]=7
+  ["lint"]=8 ["format"]=8 ["typecheck"]=8
 )
 
 STEP_CATEGORIES=$(grep -oE '^### Step [0-9]+: [a-z-]+' "$PLAN_FILE" | awk '{print $NF}' || true)
@@ -180,7 +180,7 @@ if [[ "$ORDER_OK" == "true" ]]; then
 else
   set_check "C4" "false" "out-of-order: $ORDER_VIOLATION"
   add_feedback "C4" "Step categories not in priority order: $ORDER_VIOLATION" \
-    "Reorder Steps: dependencies(1) > coupling(2) > error-flow(3) > nesting/early-return/collapsible-if(4) > waste(5) > barrel/indirection(6) > variable-lifetime/temporal-coupling/giant-file(7) > duplicates(8) > lint/format/typecheck(9)"
+    "Reorder Steps: dependencies(1) > error-flow(2) > nesting/early-return/collapsible-if(3) > waste(4) > barrel/indirection(5) > variable-lifetime/temporal-coupling/giant-file(6) > duplicates(7) > lint/format/typecheck(8)"
 fi
 
 # ============================================================

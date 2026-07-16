@@ -27,7 +27,6 @@
         "lint": { "$ref": "#/$defs/emptyToggle" },
         "typecheck": { "$ref": "#/$defs/emptyToggle" },
         "dependencies": { "$ref": "#/$defs/dependenciesToggle" },
-        "coupling": { "$ref": "#/$defs/couplingToggle" },
         "nesting": { "$ref": "#/$defs/nestingToggle" },
         "early-return": { "$ref": "#/$defs/emptyToggle" },
         "error-flow": { "$ref": "#/$defs/emptyToggle" },
@@ -177,52 +176,6 @@
     },
     "nestingToggle": {
       "oneOf": [{ "type": "boolean", "const": false }, { "type": "boolean", "const": true }, { "$ref": "#/$defs/nestingOptions" }]
-    },
-    "couplingOptions": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "godModulePercent": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Fraction of total modules for god-module fanIn/fanOut threshold (default: 0.1)"
-        },
-        "godModuleMin": { "type": "integer", "minimum": 0, "description": "Minimum absolute god-module threshold (default: 10)" },
-        "rigidPercent": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Fraction of total modules for rigid fanIn threshold (default: 0.15)"
-        },
-        "rigidMin": { "type": "integer", "minimum": 0, "description": "Minimum absolute rigid threshold (default: 10)" },
-        "distanceThreshold": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Off-main-sequence distance threshold (default: 0.7)"
-        },
-        "unstableInstability": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Instability threshold for unstable-module (default: 0.8)"
-        },
-        "unstableFanOut": { "type": "integer", "minimum": 0, "description": "FanOut threshold for unstable-module (default: 5)" },
-        "rigidInstability": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Instability upper bound for rigid-module (default: 0.2)"
-        }
-      }
-    },
-    "couplingToggle": {
-      "oneOf": [
-        { "type": "boolean", "const": false },
-        { "type": "boolean", "const": true },
-        { "$ref": "#/$defs/couplingOptions" }
-      ]
     },
     "variableLifetimeToggle": {
       "oneOf": [

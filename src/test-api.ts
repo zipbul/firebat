@@ -13,7 +13,6 @@
 // Features — analyze / detect  (Phase 2 에서 detectors/ 로 이동 예정)
 // ---------------------------------------------------------------------------
 export { analyzeBarrel } from './features/barrel';
-export { analyzeCoupling } from './features/coupling';
 export { analyzeDependencies } from './features/dependencies';
 export { analyzeEarlyReturn } from './features/early-return';
 export { analyzeErrorFlow } from './features/error-flow';

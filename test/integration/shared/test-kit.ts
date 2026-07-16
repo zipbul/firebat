@@ -190,12 +190,6 @@ export const expectEmptyAndUncalled = (result: unknown, mockFn: unknown): void =
   expect(mockFn).not.toHaveBeenCalled();
 };
 
-/** Assert a dependency result has empty fan-in and fan-out lists. */
-export const expectNoFanInOut = (result: { readonly fanIn: { length: number }; readonly fanOut: { length: number } }): void => {
-  expect(result.fanIn.length).toBe(0);
-  expect(result.fanOut.length).toBe(0);
-};
-
 /** Assert `item.span` exists and its start/end line numbers are `number`s. */
 export const expectSpanShape = (item: {
   readonly span: { readonly start: { readonly line: unknown }; readonly end: { readonly line: unknown } };

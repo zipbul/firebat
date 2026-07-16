@@ -3,7 +3,6 @@ import * as path from 'node:path';
 
 import { analyzeDependencies } from '../../../../src/test-api';
 import { withTempGildash } from '../../shared/gildash-test-kit';
-import { expectNoFanInOut } from '../../shared/test-kit';
 
 const toCycleKey = (cycle: { readonly path: ReadonlyArray<string> }): string => {
   const normalized =
@@ -17,12 +16,9 @@ const toCycleKey = (cycle: { readonly path: ReadonlyArray<string> }): string => 
 
 const expectEmptyGraphStats = (dependencies: {
   readonly cycles: ReadonlyArray<unknown>;
-  readonly fanIn: ReadonlyArray<unknown>;
-  readonly fanOut: ReadonlyArray<unknown>;
   readonly cuts: ReadonlyArray<unknown>;
 }): void => {
   expect(dependencies.cycles.length).toBe(0);
-  expectNoFanInOut(dependencies);
   expect(dependencies.cuts.length).toBe(0);
 };
 
@@ -133,13 +129,11 @@ const deadExportCases: DeadExportCase[] = [
 ];
 
 describe('integration/dependencies', () => {
-  it('should detect cycles and fan stats when modules are linked', async () => {
+  it('should detect cycles and edge-cut hints when modules are linked', async () => {
     const sources = makeCycleSources();
 
     await withDeps(sources, dependencies => {
       expect(dependencies.cycles.length).toBeGreaterThan(0);
-      expect(dependencies.fanIn.length).toBeGreaterThan(0);
-      expect(dependencies.fanOut.length).toBeGreaterThan(0);
       expect(dependencies.cuts.length).toBeGreaterThan(0);
     });
   });
@@ -298,6 +292,10 @@ describe('integration/dependencies', () => {
     sources.set('/virtual/deps/app.ts', `import 'react';\nexport const app = 1;`);
     sources.set('/virtual/deps/other.ts', `export const other = 2;`);
 
-    await withDeps(sources, expectNoFanInOut);
+    await withDeps(sources, dependencies => {
+      // 'react' is a non-relative (bare) specifier — it resolves to no file, so app.ts records
+      // no outgoing edge for it (neither file has any relative import, so the graph is empty).
+      expect(dependencies.adjacency).toEqual({});
+    });
   });
 });

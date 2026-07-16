@@ -37,14 +37,6 @@
     }
   ],
   "duplicateExports": [],
-  "exportStats": {
-    "no-deps.ts": {
-      "abstract": 0,
-      "total": 2
-    }
-  },
-  "fanIn": [],
-  "fanOut": [],
   "layerViolations": [],
   "unresolvedImports": [],
   "unusedDeps": [],

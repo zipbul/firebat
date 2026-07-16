@@ -230,26 +230,6 @@ describe('flattenToFindings: detail extraction', () => {
     expect(detail).toHaveProperty('metrics');
     expect(detail).toHaveProperty('signals');
   });
-
-  it('excludes coupling.module from detail (= file field)', () => {
-    const detail = firstFinding({
-      coupling: [
-        {
-          kind: 'god-module',
-          code: 'COUPLING_GOD_MODULE',
-          file: 'src/m.ts',
-          module: 'src/m.ts',
-          span: ZERO_SPAN,
-          score: 0.9,
-          signals: ['god-module'],
-          metrics: { fanIn: 10, fanOut: 10, instability: 0.5, abstractness: 0, distance: 0.5 },
-        } as any,
-      ],
-    }).detail!;
-
-    expect(detail).not.toHaveProperty('module');
-    expect(detail).toHaveProperty('score');
-  });
 });
 
 // ── flattenToFindings: items-type decomposition ─────────────────────────────
@@ -520,25 +500,6 @@ describe('flattenToFindings: labels by category', () => {
         ],
       }).label,
     ).toBe('fn1 → fn2 (depth: 2)');
-  });
-
-  it('coupling label: module + signals + score', () => {
-    expect(
-      firstFinding({
-        coupling: [
-          {
-            kind: 'god-module',
-            code: 'COUPLING_GOD_MODULE',
-            file: 'src/m.ts',
-            module: 'src/m.ts',
-            span: ZERO_SPAN,
-            score: 0.9,
-            signals: ['god-module'],
-            metrics: { fanIn: 10, fanOut: 10, instability: 0.5, abstractness: 0, distance: 0.5 },
-          } as any,
-        ],
-      }).label,
-    ).toBe('src/m.ts (god-module, score: 0.9)');
   });
 
   it('dependency label: layer-violation', () => {
@@ -1001,22 +962,6 @@ describe('flattenToFindings: label fallbacks', () => {
         nesting: [{ kind: 'deep-nesting', code: 'NESTING_DEEP', file: 'a.ts', span: span(1) } as any],
       }).label,
     ).toBe('deep-nesting');
-  });
-
-  it('coupling falls back to module when signals missing', () => {
-    expect(
-      firstFinding({
-        coupling: [
-          {
-            kind: 'god-module',
-            code: 'COUPLING_GOD_MODULE',
-            file: 'src/m.ts',
-            module: 'src/m.ts',
-            span: ZERO_SPAN,
-          } as any,
-        ],
-      }).label,
-    ).toBe('src/m.ts');
   });
 
   it('variable-lifetime falls back to default branch for unknown kind', () => {

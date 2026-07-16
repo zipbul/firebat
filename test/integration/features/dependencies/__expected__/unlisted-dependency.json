@@ -4,9 +4,6 @@
   "cycles": [],
   "deadExports": [],
   "duplicateExports": [],
-  "exportStats": {},
-  "fanIn": [],
-  "fanOut": [],
   "layerViolations": [],
   "unresolvedImports": [],
   "unusedDeps": [

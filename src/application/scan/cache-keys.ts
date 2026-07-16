@@ -28,7 +28,6 @@ interface ComputeScanArtifactKeyInput {
   readonly dependenciesEntry?: ReadonlyArray<string>;
   readonly dependenciesIgnore?: ReadonlyArray<string>;
   readonly dependenciesIgnoreDeps?: ReadonlyArray<string>;
-  readonly couplingConfig?: Record<string, unknown>;
 }
 
 const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
@@ -60,7 +59,6 @@ const computeScanArtifactKey = (input: ComputeScanArtifactKeyInput): string => {
       `dependenciesEntry=${normalizedDependenciesEntry.join(',')}`,
       `dependenciesIgnore=${normalizedDependenciesIgnore.join(',')}`,
       `dependenciesIgnoreDeps=${normalizedDependenciesIgnoreDeps.join(',')}`,
-      `couplingConfig=${input.couplingConfig ? JSON.stringify(Object.entries(input.couplingConfig).sort(byEntryKey)) : ''}`,
     ].join('|'),
   );
 };

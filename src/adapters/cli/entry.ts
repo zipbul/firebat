@@ -1,5 +1,5 @@
 import type { FirebatCliOptions } from '../../interfaces';
-import type { FirebatConfig, FirebatCouplingConfig, FirebatLogger } from '../../shared';
+import type { FirebatConfig, FirebatLogger } from '../../shared';
 import type { FirebatDetector, FirebatReport } from '../../types';
 
 import { scanUseCase } from '../../application/scan';
@@ -76,7 +76,7 @@ const printHelp = (): void => {
     '',
     `    waste, nesting, early-return,`,
     `    indirection, barrel,`,
-    `    error-flow, lint, format, typecheck, dependencies, coupling,`,
+    `    error-flow, lint, format, typecheck, dependencies,`,
     `    temporal-coupling,`,
     `    variable-lifetime,`,
     `    giant-file,`,
@@ -115,7 +115,6 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'lint',
     'typecheck',
     'dependencies',
-    'coupling',
     'nesting',
     'early-return',
     'collapsible-if',
@@ -280,18 +279,6 @@ const resolveCrossFileMinDepthFromFeatures = (features: FirebatConfig['features'
   return indirection.crossFileMinDepth;
 };
 
-const resolveCouplingConfigFromFeatures = (
-  features: FirebatConfig['features'] | undefined,
-): FirebatCouplingConfig | undefined => {
-  const coupling = features?.coupling;
-
-  if (coupling === undefined || coupling === false || coupling === true) {
-    return undefined;
-  }
-
-  return coupling;
-};
-
 const resolveExpandedTargets = async (
   rootAbs: string,
   options: FirebatCliOptions,
@@ -324,7 +311,6 @@ interface ConfigOverrides {
   readonly cfgDependenciesEntry: ReadonlyArray<string> | undefined;
   readonly cfgDependenciesIgnoreDeps: ReadonlyArray<string> | undefined;
   readonly cfgDependenciesIgnore: ReadonlyArray<string> | undefined;
-  readonly cfgCouplingConfig: FirebatCouplingConfig | undefined;
   readonly cfgExclude: ReadonlyArray<string> | undefined;
   readonly resolvedConfigPath: string | undefined;
 }
@@ -358,7 +344,6 @@ const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOve
     ...(overrides.cfgDependenciesEntry !== undefined ? { dependenciesEntry: overrides.cfgDependenciesEntry } : {}),
     ...(overrides.cfgDependenciesIgnoreDeps !== undefined ? { dependenciesIgnoreDeps: overrides.cfgDependenciesIgnoreDeps } : {}),
     ...(overrides.cfgDependenciesIgnore !== undefined ? { dependenciesIgnore: overrides.cfgDependenciesIgnore } : {}),
-    ...(overrides.cfgCouplingConfig !== undefined ? { couplingConfig: overrides.cfgCouplingConfig } : {}),
     ...(overrides.cfgExclude !== undefined && overrides.cfgExclude.length > 0 ? { exclude: overrides.cfgExclude } : {}),
     ...(overrides.resolvedConfigPath !== undefined ? { configPath: overrides.resolvedConfigPath } : {}),
   };
@@ -415,7 +400,6 @@ const resolveOptions = async (
   const cfgDependenciesEntry = resolveDependenciesGlobsFromFeatures(featuresCfg, 'entry');
   const cfgDependenciesIgnoreDeps = resolveDependenciesGlobsFromFeatures(featuresCfg, 'ignoreDependencies');
   const cfgDependenciesIgnore = resolveDependenciesGlobsFromFeatures(featuresCfg, 'ignore');
-  const cfgCouplingConfig = resolveCouplingConfigFromFeatures(featuresCfg);
   const cfgExclude = config?.exclude;
 
   logger.trace('Features resolved from config', {
@@ -436,7 +420,6 @@ const resolveOptions = async (
     cfgDependenciesEntry,
     cfgDependenciesIgnoreDeps,
     cfgDependenciesIgnore,
-    cfgCouplingConfig,
     cfgExclude,
     resolvedConfigPath: loaded.resolvedPath,
   });

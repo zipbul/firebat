@@ -25,7 +25,6 @@ const EXPECTED_DEFAULT_DETECTORS: FirebatDetector[] = [
   'lint',
   'typecheck',
   'dependencies',
-  'coupling',
   'nesting',
   'early-return',
   'collapsible-if',

@@ -1,6 +1,6 @@
 # diagnostics
 
-Composite diagnostic patterns derived from cross-detector analysis. These are not a detector — they identify root causes (god function, circular dependency, god module, data clump, shotgun surgery, over-indirection, mixed abstraction) that explain why multiple detectors fire on the same code.
+Composite diagnostic patterns derived from cross-detector analysis. These are not a detector — they identify root causes (god function, circular dependency, data clump, shotgun surgery, over-indirection, mixed abstraction) that explain why multiple detectors fire on the same code.
 
 **Finding fields:** `code, signals, description`
 
@@ -28,18 +28,6 @@ Composite diagnostic patterns derived from cross-detector analysis. These are no
 2. Break the cycle at the weakest link: extract the shared symbol (type, interface, constant) into a new module that both sides can import from, or invert the dependency by passing the needed value as a parameter.
 3. If the cycle involves only two modules that are tightly intertwined, merge them into a single module — the cycle indicates they are a single cohesive unit.
 4. A deep import that bypasses a barrel/index surface can hide a cycle from readers without breaking it — never resolve a cycle by deep-importing module internals; fix it with a type-only edge, shared-module extraction, or a module merge instead.
-
-</think>
-
-## DIAG_GOD_MODULE
-
-**Cause:** A module acts as a hub with excessive fan-in and fan-out, coupling a large portion of the codebase through one point.
-
-<think>
-
-1. Read the module and list all exports. Grep for each export to identify which consumers use it. Group exports by consumer overlap — exports used by the same set of consumers belong together.
-2. Split the module along consumer group boundaries. Each new module should serve a cohesive set of consumers. Update all import paths.
-3. After splitting, verify that no new module has both high fan-in and high fan-out. If one does, repeat the analysis on that module.
 
 </think>
 

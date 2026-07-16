@@ -1,6 +1,6 @@
 # firebat
 
-TypeScript code-quality scanner. 16 detectors.
+TypeScript code-quality scanner. 15 detectors.
 
 ## Common principles — judgment basis
 
@@ -132,7 +132,7 @@ Reports structures in the whole import graph where **inter-module dependency con
 - Re-export syntax form (`export *`, deep-import, barrel composition, and other styles) — barrel territory. dependencies sees re-exports only as consumption flow, not style
 - Transformation-free delegation layers (thin-wrapper, forwarding-chain) — indirection territory. Delegation is just a graph edge
 - Normal-form duplication of code bodies — duplicates territory. duplicate-export is about export surfaces, not implementation bodies
-- fanIn/fanOut/instability metric hotspots (god-module etc.) — coupling territory. dependencies is the raw metric supplier
+- Fan-in/fan-out/instability hotspot interpretation on top of the import graph — removed outright (magnitude thresholds are unclosable guess-values, not a fact-closable verdict); dependencies computes the raw graph (adjacency, cuts) and stops there — no hotspot layer exists anywhere in firebat
 - Consumption in non-TS files (.js etc.) — firebat is TS-only, out of judgment (judged on the TS import graph only)
 - Runtime reachability / dynamic loading — outside the static import graph
 - Value references of enum/namespace members — uses not observable as calls are out of judgment (hold, FN direction)

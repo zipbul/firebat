@@ -48,9 +48,6 @@
       "entry": ["**/*.test.ts", "**/*.spec.ts", "test/**", "*.config.ts", "scripts/**"]
     },
 
-    // Coupling hotspots based on dependency graph.
-    "coupling": true,
-
     // Nesting/complexity signals (deep control flow).
     "nesting": true,
 
@@ -67,7 +64,7 @@
 
     // --- Phase 1 detectors (IMPROVE.md) ---
 
-    // Time-order dependency / temporal coupling.
+    // Time-order dependency (temporal-coupling).
     "temporal-coupling": true,
 
     // Long-lived variables (optional threshold).

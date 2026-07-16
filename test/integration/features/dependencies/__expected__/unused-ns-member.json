@@ -9,24 +9,6 @@
   "cycles": [],
   "deadExports": [],
   "duplicateExports": [],
-  "exportStats": {
-    "unused-ns-member/guards.ts": {
-      "abstract": 0,
-      "total": 2
-    }
-  },
-  "fanIn": [
-    {
-      "count": 1,
-      "module": "unused-ns-member/guards.ts"
-    }
-  ],
-  "fanOut": [
-    {
-      "count": 1,
-      "module": "unused-ns-member/index.ts"
-    }
-  ],
   "layerViolations": [],
   "unresolvedImports": [],
   "unusedDeps": [],
