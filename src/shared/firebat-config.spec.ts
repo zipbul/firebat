@@ -86,4 +86,33 @@ describe('FirebatConfigSchema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  // giant-file surgery (PLAN-giant-file-surgery.md D7): the dead defensive
+  // `Math.max(0, Math.floor())` clamp is removed in P2 — zod `.int().nonnegative()`
+  // rejection is the contract for invalid maxLines, not silent flooring. These
+  // pins are the guard that must exist (and already pass) BEFORE the clamp unit
+  // test is deleted.
+  it('PIN: [NE] rejects giant-file maxLines negative number', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { maxLines: -1 } },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('PIN: [NE] rejects giant-file maxLines fractional number', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { maxLines: 1.5 } },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('PIN: [NE] rejects giant-file maxLines as a string', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { maxLines: '800' } },
+    });
+
+    expect(result.success).toBe(false);
+  });
 });

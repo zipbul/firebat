@@ -349,22 +349,33 @@ const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOve
   };
 };
 
-// D15 precedence: features.barrel === false is a durable declaration of
-// non-participation and always wins, even over an explicit `--only barrel`
-// (a per-invocation flag must not overrule it). Applied AFTER config/CLI
-// merge because `--only` otherwise bypasses cfgDetectors entirely.
-const applyBarrelFalseGate = (
+// D5 (giant-file surgery, extending D15): a `false`-declared detector's
+// non-participation is durable and always wins, even over an explicit
+// `--only <detector>` (a per-invocation flag must not overrule it). Applied
+// AFTER config/CLI merge because `--only` otherwise bypasses cfgDetectors
+// entirely. The domain is PINNED to exactly {barrel, giant-file} — the two
+// detectors whose committed definitions declare false-wins. NOT generalized
+// to every detector: e.g. `typecheck: false` + occasional `--only typecheck`
+// is a real workflow, and every other detector's semantics are unaffected by
+// this list unless its own definition adopts false-wins.
+const FALSE_WINS_DETECTORS: ReadonlyArray<FirebatDetector> = ['barrel', 'giant-file'];
+
+const applyFalseWinsGate = (
   detectors: ReadonlyArray<FirebatDetector>,
-  barrelDeclaredFalse: boolean,
+  featuresCfg: FirebatConfig['features'] | undefined,
   logger: FirebatLogger,
 ): ReadonlyArray<FirebatDetector> => {
-  if (!barrelDeclaredFalse || !detectors.includes('barrel')) {
-    return detectors;
-  }
+  return FALSE_WINS_DETECTORS.reduce((current, detector) => {
+    const declaredFalse = (featuresCfg as Record<string, unknown> | undefined)?.[detector] === false;
 
-  logger.warn('barrel policy declared false in config; --only barrel ignored');
+    if (!declaredFalse || !current.includes(detector)) {
+      return current;
+    }
 
-  return detectors.filter(detector => detector !== 'barrel');
+    logger.warn(`${detector} policy declared false in config; --only ${detector} ignored`);
+
+    return current.filter(d => d !== detector);
+  }, detectors);
 };
 
 const resolveOptions = async (
@@ -424,8 +435,7 @@ const resolveOptions = async (
     resolvedConfigPath: loaded.resolvedPath,
   });
   const targets = await resolveExpandedTargets(rootAbs, merged, cfgExclude, logger);
-  const barrelDeclaredFalse = featuresCfg?.barrel === false;
-  const detectors = applyBarrelFalseGate(merged.detectors, barrelDeclaredFalse, logger);
+  const detectors = applyFalseWinsGate(merged.detectors, featuresCfg, logger);
 
   return { options: { ...merged, detectors, targets }, rootAbs };
 };

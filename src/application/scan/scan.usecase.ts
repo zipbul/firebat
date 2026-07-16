@@ -29,7 +29,7 @@ import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplica
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { analyzeErrorFlow, createEmptyErrorFlow } from '../../features/error-flow';
 import { analyzeFormat, createEmptyFormat } from '../../features/format';
-import { analyzeGiantFile, createEmptyGiantFile } from '../../features/giant-file';
+import { analyzeGiantFile, createEmptyGiantFile, DEFAULT_MAX_LINES } from '../../features/giant-file';
 import { analyzeIndirection, createEmptyIndirection } from '../../features/indirection';
 import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
@@ -1068,9 +1068,11 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       createEmptyGiantFile,
       () => {
         const { 'giant-file': giantFileCfg } = config?.features ?? {};
-        const resolvedGiantFileMaxLines = featureOptions(giantFileCfg)?.maxLines ?? 1000;
+        const configuredMaxLines = featureOptions(giantFileCfg)?.maxLines;
+        const defaulted = configuredMaxLines === undefined;
+        const maxLines = defaulted ? DEFAULT_MAX_LINES : Number(configuredMaxLines);
 
-        return analyzeGiantFile(program, { maxLines: Number(resolvedGiantFileMaxLines) });
+        return analyzeGiantFile(program, { maxLines, defaulted });
       },
     );
     // variable-lifetime also needs the gildash binding source — skip on AST-only.

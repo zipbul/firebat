@@ -558,6 +558,8 @@ export interface MutationDensityFinding {
 interface GiantFileMetrics {
   readonly lineCount: number;
   readonly maxLines: number;
+  /** Provenance of `maxLines` — true when resolved from `DEFAULT_MAX_LINES`, false when explicitly configured. */
+  readonly defaulted: boolean;
 }
 
 export interface GiantFileFinding {

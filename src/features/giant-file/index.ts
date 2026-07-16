@@ -1,1 +1,1 @@
-export { analyzeGiantFile, createEmptyGiantFile } from './analyzer';
+export { analyzeGiantFile, createEmptyGiantFile, DEFAULT_MAX_LINES } from './analyzer';

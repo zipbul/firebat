@@ -3,11 +3,39 @@ import type { GiantFileFinding } from '../../types';
 
 import { normalizeFile } from '../../engine/ast';
 
+/** Documented default line budget applied when the consumer declares no `maxLines` (or `true`/`{}`). */
+const DEFAULT_MAX_LINES = 1000;
+
 const createEmptyGiantFile = (): ReadonlyArray<GiantFileFinding> => [];
 
 interface AnalyzeGiantFileOptions {
   readonly maxLines: number;
+  /**
+   * Provenance of `maxLines` — true when it came from `DEFAULT_MAX_LINES`,
+   * false when the consumer configured it explicitly. Optional for direct
+   * callers that don't track provenance (defaults to `false`); scan wiring
+   * always sets this explicitly.
+   */
+  readonly defaulted?: boolean;
 }
+
+// ECMAScript line-terminator sequences: CRLF (matched first, counted once as a
+// single terminator), lone LF, lone CR, U+2028 (line separator), U+2029
+// (paragraph separator).
+const LINE_TERMINATOR = /\r\n|[\n\r\u2028\u2029]/g;
+const ENDS_WITH_TERMINATOR = /(?:\r\n|[\n\r\u2028\u2029])$/;
+
+/** Count ECMAScript line-terminator sequences + 1 iff the text does not end in one; empty text = 0. */
+const countLines = (sourceText: string): number => {
+  if (sourceText.length === 0) {
+    return 0;
+  }
+
+  const terminators = sourceText.match(LINE_TERMINATOR)?.length ?? 0;
+  const endsInTerminator = ENDS_WITH_TERMINATOR.test(sourceText);
+
+  return terminators + (endsInTerminator ? 0 : 1);
+};
 
 const analyzeGiantFile = (
   files: ReadonlyArray<ParsedFile>,
@@ -18,15 +46,10 @@ const analyzeGiantFile = (
   }
 
   const findings: GiantFileFinding[] = [];
-  const maxLines = Math.max(0, Math.floor(options.maxLines));
+  const { maxLines, defaulted = false } = options;
 
   for (const file of files) {
-    if (file.errors.length > 0) {
-      continue;
-    }
-
-    const lineCount =
-      file.sourceText.length === 0 ? 0 : file.sourceText.split(/\r?\n/).length - (file.sourceText.endsWith('\n') ? 1 : 0);
+    const lineCount = countLines(file.sourceText);
 
     if (lineCount <= maxLines) {
       continue;
@@ -41,6 +64,7 @@ const analyzeGiantFile = (
       metrics: {
         lineCount,
         maxLines,
+        defaulted,
       },
     });
   }
@@ -48,4 +72,4 @@ const analyzeGiantFile = (
   return findings;
 };
 
-export { analyzeGiantFile, createEmptyGiantFile };
+export { analyzeGiantFile, createEmptyGiantFile, DEFAULT_MAX_LINES };

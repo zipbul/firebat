@@ -105,6 +105,36 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
 
     expect(result).toContain('duplicates');
   });
+
+  // giant-file surgery (PLAN-giant-file-surgery.md ruling): giant-file is
+  // ACTIVE BY DEFAULT — unlike barrel, absence of config does NOT disable it.
+  // These four states are all PINs: giant-file is treated like any other
+  // boolean-gated detector (waste, duplicates, ...) by the existing code —
+  // only `=== false` disables it. What's still missing (RED, tested below via
+  // runCli) is that `false` does not yet win over an explicit `--only giant-file`.
+  it('PIN: giant-file is active when features is undefined', () => {
+    const result = resolveEnabledDetectorsFromFeatures(undefined);
+
+    expect(result).toContain('giant-file');
+  });
+
+  it('PIN: giant-file is active when features["giant-file"] is true', () => {
+    const result = resolveEnabledDetectorsFromFeatures({ 'giant-file': true } as never);
+
+    expect(result).toContain('giant-file');
+  });
+
+  it('PIN: giant-file is active when features["giant-file"] is {}', () => {
+    const result = resolveEnabledDetectorsFromFeatures({ 'giant-file': {} } as never);
+
+    expect(result).toContain('giant-file');
+  });
+
+  it('PIN: giant-file is inactive when features["giant-file"] is false (no --only)', () => {
+    const result = resolveEnabledDetectorsFromFeatures({ 'giant-file': false } as never);
+
+    expect(result).not.toContain('giant-file');
+  });
 });
 
 describe('resolveBarrelIgnoreGlobsFromFeatures', () => {
@@ -310,6 +340,47 @@ describe('D15 — barrel four-state declaration gating (post-surgery contract)',
 
     expect(getD15CapturedOptions()).toBeDefined();
     expect(getD15CapturedOptions()?.detectors.includes('barrel')).toBe(false);
+  });
+});
+
+// ── giant-file surgery (PLAN-giant-file-surgery.md D5) — false-wins gating ──
+// D5 extends barrel's explicit-false gate to a shared gate whose domain is
+// PINNED to exactly {barrel, giant-file}. Today only barrel has this gate
+// (applyBarrelFalseGate), so `false` + `--only giant-file` does NOT yet win —
+// that assertion is RED. The negative controls guard against a P2 mutation
+// that broadens the gate to every detector: typecheck must stay unaffected.
+describe('D5 — giant-file false-wins gating & negative controls (post-surgery contract)', () => {
+  it('features["giant-file"] === false + --only giant-file → giant-file is NOT enabled (RED today: no false-gate for giant-file)', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = { config: { features: { 'giant-file': false } } as never, resolvedPath: undefined };
+
+    await runCli(['--only', 'giant-file']);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors.includes('giant-file')).toBe(false);
+  });
+
+  it('typecheck: false + --only typecheck → typecheck REMAINS enabled (PIN — D5 domain excludes typecheck)', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = { config: { features: { typecheck: false } } as never, resolvedPath: undefined };
+
+    await runCli(['--only', 'typecheck']);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors).toEqual(['typecheck']);
+  });
+
+  it('mixed --only barrel,giant-file,typecheck with all three declared false → only typecheck survives (RED today: giant-file not yet gated)', async () => {
+    __d15CapturedOptions = undefined;
+    __d15ConfigOverride = {
+      config: { features: { barrel: false, 'giant-file': false, typecheck: false } } as never,
+      resolvedPath: undefined,
+    };
+
+    await runCli(['--only', 'barrel,giant-file,typecheck']);
+
+    expect(getD15CapturedOptions()).toBeDefined();
+    expect(getD15CapturedOptions()?.detectors).toEqual(['typecheck']);
   });
 });
 

@@ -199,9 +199,15 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "properties": { "maxLines": { "type": "integer", "minimum": 0 } }
+          "properties": {
+            "maxLines": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Line-count budget (default: 1000, applied when omitted or when the toggle is `true`/`{}`)."
+            }
+          }
         }
       ]
-    },
+    }
   }
 }

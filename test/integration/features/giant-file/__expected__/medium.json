@@ -3,6 +3,7 @@
     "file": "medium.ts",
     "kind": "giant-file",
     "metrics": {
+      "defaulted": false,
       "lineCount": 14,
       "maxLines": 10
     },

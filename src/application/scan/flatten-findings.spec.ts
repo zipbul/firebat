@@ -678,7 +678,12 @@ describe('flattenToFindings: labels by category', () => {
     ).toBe('temporal-coupling: connected');
   });
 
-  it('giant-file label: lineCount + maxLines', () => {
+  // giant-file surgery (PLAN-giant-file-surgery.md D2): the human-facing label
+  // discloses budget provenance — '(max: N, default)' when the budget was
+  // defaulted, '(max: N)' when explicitly configured. `defaulted` is a real,
+  // required field on `GiantFileMetrics`, so these finding objects fully
+  // satisfy `GiantFileFinding` without a cast.
+  it('RED: giant-file label discloses "default" when metrics.defaulted is true', () => {
     expect(
       firstFinding({
         'giant-file': [
@@ -687,11 +692,27 @@ describe('flattenToFindings: labels by category', () => {
             code: 'GIANT_FILE',
             file: 'big.ts',
             span: span(1),
-            metrics: { lineCount: 1234, maxLines: 1000 },
-          } as any,
+            metrics: { lineCount: 1234, maxLines: 1000, defaulted: true },
+          },
         ],
       }).label,
-    ).toBe('1234 lines (max: 1000)');
+    ).toBe('1234 lines (max: 1000, default)');
+  });
+
+  it('PIN: giant-file label has no default disclosure when metrics.defaulted is false', () => {
+    expect(
+      firstFinding({
+        'giant-file': [
+          {
+            kind: 'giant-file',
+            code: 'GIANT_FILE',
+            file: 'big.ts',
+            span: span(1),
+            metrics: { lineCount: 1234, maxLines: 800, defaulted: false },
+          },
+        ],
+      }).label,
+    ).toBe('1234 lines (max: 800)');
   });
 
   it('lint label: [code] msg', () => {

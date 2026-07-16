@@ -264,7 +264,9 @@ const labelGiantFile: LabelFn = (f, _fn) => {
   const metrics = f.metrics as Record<string, unknown> | undefined;
 
   if (metrics?.lineCount !== undefined && metrics?.maxLines !== undefined) {
-    return `${metrics.lineCount} lines (max: ${metrics.maxLines})`;
+    const provenance = metrics.defaulted === true ? ', default' : '';
+
+    return `${metrics.lineCount} lines (max: ${metrics.maxLines}${provenance})`;
   }
 
   return 'giant-file';

@@ -84,7 +84,7 @@ If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be
 | **waste** | Dead stores, unused variables |
 | **duplicates** | Exact and structural code duplicates |
 | **temporal-coupling** | Order-dependent operations |
-| **giant-file** | Files exceeding configurable line count threshold |
+| **giant-file** | Files exceeding the line budget (default 1000; `maxLines` to override, `false` to disable) |
 | **error-flow** | Unsafe error handling patterns |
 
 ### External Tools

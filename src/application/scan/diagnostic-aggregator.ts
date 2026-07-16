@@ -530,11 +530,11 @@ export const FIREBAT_CODE_CATALOG = {
     ],
   },
   GIANT_FILE: {
-    cause: 'A source file exceeds the line threshold, concentrating too many responsibilities in a single file.',
+    cause: "A source file's line count exceeds the configured (or default) line budget.",
     think: [
-      'Read the file and group its exports (functions, types, constants) by domain responsibility. Each group that has a distinct purpose and its own set of consumers is a candidate for extraction into a separate module.',
-      'Extract the largest cohesive group first into a new file in the same directory. Update all imports across the project. Repeat until the original file is under the threshold.',
-      'If the file resists decomposition (every function depends on every other), the tight interdependency is the root cause. Address that first (break circular dependencies, extract shared types) before splitting the file.',
+      'Decide which side of the comparison to adjust: the budget, or the file. Check whether the configured (or default) `maxLines` actually fits this project and this file.',
+      'If the file is intentionally large (generated code, a schema, a registry, a data table), exclude it by glob or raise `maxLines` for this project — no further action needed.',
+      'Otherwise, split or extract the file into separate modules without changing behavior: group its exports by domain, extract the largest cohesive group into a new file, update imports, and repeat until it is under budget.',
     ],
   },
 

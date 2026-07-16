@@ -68,9 +68,9 @@
     "temporal-coupling": true,
 
     // Long-lived variables (optional threshold).
-    "variable-lifetime": { "maxLifetimeLines": 200, "maxLiveVariables": 10, "minFunctionLines": 20 },
+    "variable-lifetime": { "maxLifetimeLines": 200, "maxLiveVariables": 10, "minFunctionLines": 20 }
 
-    // Giant files (optional line threshold).
-    "giant-file": { "maxLines": 800 }
+    // Giant files: active by default (line budget: 1000). Set { maxLines: N }
+    // to override, false to disable.
   }
 }
