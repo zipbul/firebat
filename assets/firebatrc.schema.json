@@ -204,6 +204,11 @@
               "type": "integer",
               "minimum": 0,
               "description": "Line-count budget (default: 1000, applied when omitted or when the toggle is `true`/`{}`)."
+            },
+            "exclude": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Detector-local exclude globs (giant-file only, K-direction). A file whose project-relative path matches any glob here produces no giant-file finding but is still scanned by every other detector — unlike the top-level `exclude`, which drops a file from all detectors. Typical use: exempt spec/test files from the line budget, e.g. [\"**/*.spec.ts\", \"**/*.test.ts\"]."
             }
           }
         }

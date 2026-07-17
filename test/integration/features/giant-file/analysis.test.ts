@@ -172,3 +172,27 @@ describe('integration/giant-file — resolution site (maxLines default vs config
     expect(list.length).toBe(expectFinding ? 1 : 0);
   });
 });
+
+// ── detector-local `exclude` glob (giant-file-only, K-direction) ────────────
+// Distinct from the GLOBAL scan-set `exclude`, which drops a file from every
+// detector: this is the ecosystem test-exemption pattern (eslint overrides),
+// scoped to giant-file alone.
+
+describe('integration/giant-file — detector-local exclude glob', () => {
+  it('RED: excludes an over-budget file matching the glob while keeping a non-excluded sibling', async () => {
+    // Arrange
+    const files: Record<string, string> = {
+      '.firebatrc.jsonc': '{\n  "features": { "giant-file": { "maxLines": 50, "exclude": ["**/*.spec.ts"] } }\n}',
+      'src/a.spec.ts': repeatExports(100, i => `export const x${i} = ${i};`),
+      'src/b.ts': repeatExports(100, i => `export const y${i} = ${i};`),
+    };
+
+    // Act
+    const list = await scanDetectorFindings('giant-file-exclude-1', 'giant-file', files);
+
+    // Assert
+    expect(list.length).toBe(1);
+    expect(list.some((f: any) => String(f.file).includes('a.spec.ts'))).toBe(false);
+    expect(list.some((f: any) => String(f.file).includes('b.ts'))).toBe(true);
+  });
+});

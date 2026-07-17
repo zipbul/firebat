@@ -7,7 +7,12 @@
       "maxLifetimeLines": 200
     },
     "giant-file": {
-      "maxLines": 800
+      "maxLines": 800,
+      // Detector-local exclude (giant-file only, K-direction): the ecosystem
+      // test-exemption convention (eslint overrides pattern) — spec/test files
+      // are exempt from the line budget without dropping them from every
+      // other detector (unlike the global scan-set `exclude` above).
+      "exclude": ["**/*.spec.ts", "**/*.test.ts"]
     },
     "error-flow": true,
     // Strict directory-surface policy (opt-in). This codebase does not practice

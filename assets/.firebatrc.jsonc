@@ -71,6 +71,12 @@
     "variable-lifetime": { "maxLifetimeLines": 200, "maxLiveVariables": 10, "minFunctionLines": 20 }
 
     // Giant files: active by default (line budget: 1000). Set { maxLines: N }
-    // to override, false to disable.
+    // to override, false to disable. Detector-local `exclude` globs exempt
+    // matching files from the line budget alone (they still run through every
+    // other detector) — e.g. { maxLines: 800, exclude: ["**/*.spec.ts",
+    // "**/*.test.ts"] } to exempt test files from the budget, the ecosystem
+    // test-exemption convention (eslint overrides pattern). This is distinct
+    // from a top-level `exclude` array (sibling of `features`), which drops a
+    // file from ALL detectors, not just giant-file.
   }
 }

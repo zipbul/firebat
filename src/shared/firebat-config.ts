@@ -33,6 +33,8 @@ interface FirebatVariableLifetimeConfig {
 
 interface FirebatGiantFileConfig {
   readonly maxLines?: number | undefined;
+  /** Detector-local exclude globs (K-direction only — giant-file alone; isomorphic to barrel's `ignoreGlobs`). */
+  readonly exclude?: ReadonlyArray<string> | undefined;
 }
 
 interface FirebatNestingConfig {
@@ -193,6 +195,7 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
             z
               .object({
                 maxLines: z.number().int().nonnegative().optional(),
+                exclude: z.array(z.string()).optional(),
               })
               .strict(),
           ])

@@ -2,6 +2,8 @@
 
 Detects source files whose line count exceeds the effective line budget — the configured `maxLines`, or the documented default (`DEFAULT_MAX_LINES = 1000`) when none is configured. Active by default; a pure budget-exceedance comparison, not a design-quality claim.
 
+**Config fields:** `features["giant-file"]` accepts `{ maxLines?: number, exclude?: string[] }` (or `true`/`false`). `maxLines` (default 1000) sets the line budget. `exclude` is a **detector-local** glob array (K-direction only, giant-file alone) — a file whose project-relative path matches any glob here produces no giant-file finding, but still runs through every other detector normally. This is distinct from the top-level `exclude` in `.firebatrc.jsonc`, which drops a file from ALL detectors. Use the detector-local form for the ecosystem test-exemption convention (eslint `overrides`-style): e.g. `"giant-file": { "maxLines": 800, "exclude": ["**/*.spec.ts", "**/*.test.ts"] }` exempts spec/test files from the line budget without hiding them from waste/duplicates/dependencies/etc.
+
 **Finding fields:** `kind, code, file, span, metrics: { lineCount, maxLines }`
 
 <catalog>

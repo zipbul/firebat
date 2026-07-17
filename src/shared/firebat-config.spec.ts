@@ -115,4 +115,39 @@ describe('FirebatConfigSchema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  // detector-local giant-file `exclude` glob (K-direction only, isomorphic to
+  // barrel's ignoreGlobs) — ecosystem test-exemption pattern.
+
+  it('RED: [HP] accepts giant-file with maxLines and exclude together', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { maxLines: 800, exclude: ['**/*.spec.ts'] } },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('RED: [HP] accepts giant-file exclude alone (maxLines defaults)', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { exclude: [] } },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('RED: [NE] rejects giant-file exclude as a non-array string', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { exclude: 'x' } },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('RED: [NE] rejects giant-file exclude with non-string elements', () => {
+    const result = FirebatConfigSchema.safeParse({
+      features: { 'giant-file': { exclude: [1] } },
+    });
+
+    expect(result.success).toBe(false);
+  });
 });

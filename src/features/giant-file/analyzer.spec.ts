@@ -211,4 +211,71 @@ describe('giant-file/analyzer', () => {
     expect(result.length).toBe(1);
     expect(result[0]?.metrics.lineCount).toBe(6);
   });
+
+  // ── detector-local `exclude` glob (K-direction only; isomorphic to barrel's
+  // ignoreGlobs) — matches against the same project-relative path the finding
+  // carries (normalizeFile output). maxLines: 0 flags every non-empty file, so
+  // any absence of a finding below is caused by the exclude filter alone.
+
+  it('RED: an over-budget file whose path matches an exclude glob produces no finding', () => {
+    // Arrange
+    const files = [file('src/a.spec.ts', 'x\ny\nz\n')];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0, exclude: ['**/*.spec.ts'] });
+
+    // Assert
+    expect(result.length).toBe(0);
+  });
+
+  it('RED: an over-budget file whose path does NOT match any exclude glob is still flagged', () => {
+    // Arrange
+    const files = [file('src/a.ts', 'x\ny\nz\n')];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0, exclude: ['**/*.spec.ts'] });
+
+    // Assert
+    expect(result.length).toBe(1);
+    expect(result[0]?.kind).toBe('giant-file');
+  });
+
+  it('RED: a root-level app.spec.ts matches **/*.spec.ts (zero-segment globstar pin)', () => {
+    // Arrange — no directory component at all: pins that `**/` matches zero
+    // path segments, not "one or more".
+    const files = [file('app.spec.ts', 'x\ny\nz\n')];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0, exclude: ['**/*.spec.ts'] });
+
+    // Assert
+    expect(result.length).toBe(0);
+  });
+
+  it('PIN: exclude absent leaves over-budget reporting unchanged', () => {
+    // Arrange
+    const files = [file('src/a.ts', 'x\ny\nz\n')];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0 });
+
+    // Assert
+    expect(result.length).toBe(1);
+  });
+
+  it('PIN: an empty exclude array leaves over-budget reporting unchanged', () => {
+    // Arrange
+    const files = [file('src/a.ts', 'x\ny\nz\n')];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 0, exclude: [] });
+
+    // Assert
+    expect(result.length).toBe(1);
+  });
+
+  it('PIN: an under-budget excluded file still produces no finding (trivially)', () => {
+    // Arrange
+    const files = [file('src/a.spec.ts', 'x')];
+    // Act
+    const result = analyzeGiantFile(files as any, { maxLines: 10, exclude: ['**/*.spec.ts'] });
+
+    // Assert
+    expect(result.length).toBe(0);
+  });
 });
