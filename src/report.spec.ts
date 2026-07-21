@@ -138,9 +138,9 @@ describe('formatReport', () => {
     expect(parsed.findings).toHaveLength(3);
   });
 
-  it('output shape exact — only meta, total, findings at root', () => {
+  it('output shape exact — only meta, total, findings, catalog at root', () => {
     const parsed = parseReport({ waste: [] });
 
-    expect(Object.keys(parsed).sort()).toEqual(['findings', 'meta', 'total']);
+    expect(Object.keys(parsed).sort()).toEqual(['catalog', 'findings', 'meta', 'total']);
   });
 });

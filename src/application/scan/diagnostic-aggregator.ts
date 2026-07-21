@@ -533,7 +533,7 @@ export const FIREBAT_CODE_CATALOG = {
     cause: "A source file's line count exceeds the configured (or default) line budget.",
     think: [
       'Decide which side of the comparison to adjust: the budget, or the file. Check whether the configured (or default) `maxLines` actually fits this project and this file.',
-      'If the file is intentionally large (generated code, a schema, a registry, a data table), exclude it by glob or raise `maxLines` for this project — no further action needed.',
+      'If the file is intentionally large (generated code, a schema, a registry, a data table) or exempt by team convention (spec/test files), add a glob to `features["giant-file"].exclude` — the detector-local list: other detectors keep scanning the file, unlike the top-level `exclude` which drops it from every detector — or raise `maxLines` for this project. No further action needed.',
       'Otherwise, split along cohesive seams without changing behavior: group exports that change together, move each group to a file named for what it does, and update imports. Do not shed lines mechanically (numbered continuation files like `analyzer-part2.ts`, grab-bag `utils` dumps) — a rescan surfaces the factual fallout of a careless split (cycles, forwarding shims, duplicated helpers, dead exports) as new findings.',
     ],
   },

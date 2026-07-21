@@ -628,6 +628,8 @@ interface ScanJsonResult {
   };
   readonly total: number;
   readonly findings: ReadonlyArray<Finding>;
+  /** Remedy guidance for every catalog code present in `findings` — the consumer-facing channel. */
+  readonly catalog: FirebatReport['catalog'];
 }
 
 export const toScanResult = (report: FirebatReport): ScanJsonResult => ({
@@ -637,6 +639,7 @@ export const toScanResult = (report: FirebatReport): ScanJsonResult => ({
   },
   total: report.findings.length,
   findings: report.findings,
+  catalog: report.catalog,
 });
 
 export interface NodeHeader {

@@ -54,4 +54,20 @@ describe('FIREBAT_CODE_CATALOG.GIANT_FILE — vocabulary contract', () => {
 
     expect(think.toLowerCase()).toMatch(/rescan/);
   });
+
+  it('think names the DETECTOR-LOCAL exclude precisely (never the ambiguous global glob)', () => {
+    const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
+
+    // The remedy must point at features["giant-file"].exclude — a bare
+    // "exclude it by glob" steers agents to the TOP-LEVEL exclude, which drops
+    // the file from every detector (coverage loss), not just from giant-file.
+    expect(think).toMatch(/features\["giant-file"\]\.exclude/);
+    expect(think.toLowerCase()).toMatch(/other detectors/);
+  });
+
+  it('think names the test-file exemption convention as the canonical exclude use case', () => {
+    const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
+
+    expect(think).toMatch(/spec|test file/i);
+  });
 });

@@ -39,6 +39,18 @@ const scanResultOf = (report: Parameters<typeof toScanResult>[0]): ReturnType<ty
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('toScanResult', () => {
+  it('passes the report catalog through to the scan JSON (the consumer guidance channel)', () => {
+    const report = makeReport();
+    const catalog = { GIANT_FILE: { cause: 'c', think: ['a', 'b'] } } as FirebatReport['catalog'];
+    const result = toScanResult({ ...report, catalog });
+
+    expect(result.catalog).toEqual(catalog);
+  });
+
+  it('passes an empty catalog through unchanged', () => {
+    expect(toScanResult(makeReport()).catalog).toEqual({});
+  });
+
   it('includes errors in meta when meta.errors is non-empty', () => {
     const report = makeReport({ errors: { 'src/a.ts': 'parse error' } });
     const out = toScanResult(report);
@@ -84,7 +96,7 @@ describe('toScanResult', () => {
     expectTotalOne(out);
   });
 
-  it('does not include analyses or catalog in output', () => {
+  it('does not include analyses in output; catalog IS included (the consumer guidance channel)', () => {
     const report: FirebatReport = {
       ...makeReport(),
       catalog: { WASTE_DEAD_STORE: { cause: 'unused variable', think: ['remove it'] } },
@@ -92,7 +104,7 @@ describe('toScanResult', () => {
     const out = toScanResult(report);
 
     expect((out as unknown as Record<string, unknown>).analyses).toBeUndefined();
-    expect((out as unknown as Record<string, unknown>).catalog).toBeUndefined();
+    expect(out.catalog).toEqual(report.catalog);
   });
 
   it('sets total to 0 when no findings', () => {
@@ -111,11 +123,11 @@ describe('toScanResult', () => {
     expect(Object.keys(out.meta.errors!).length).toBe(1);
   });
 
-  it('top-level keys are exactly meta, total, findings (no extras)', () => {
+  it('top-level keys are exactly meta, total, findings, catalog (no extras)', () => {
     const report = makeReport({ errors: { x: 'y' } });
     const out = toScanResult(report);
 
-    expect(Object.keys(out).sort()).toEqual(['findings', 'meta', 'total']);
+    expect(Object.keys(out).sort()).toEqual(['catalog', 'findings', 'meta', 'total']);
   });
 
   it('meta does not include targetCount, minSize, maxForwardDepth, detectorTimings, engine', () => {
