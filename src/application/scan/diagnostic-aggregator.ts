@@ -534,7 +534,7 @@ export const FIREBAT_CODE_CATALOG = {
     think: [
       'Decide which side of the comparison to adjust: the budget, or the file. Check whether the configured (or default) `maxLines` actually fits this project and this file.',
       'If the file is intentionally large (generated code, a schema, a registry, a data table), exclude it by glob or raise `maxLines` for this project — no further action needed.',
-      'Otherwise, split or extract the file into separate modules without changing behavior: group its exports by domain, extract the largest cohesive group into a new file, update imports, and repeat until it is under budget.',
+      'Otherwise, split along cohesive seams without changing behavior: group exports that change together, move each group to a file named for what it does, and update imports. Do not shed lines mechanically (numbered continuation files like `analyzer-part2.ts`, grab-bag `utils` dumps) — a rescan surfaces the factual fallout of a careless split (cycles, forwarding shims, duplicated helpers, dead exports) as new findings.',
     ],
   },
 

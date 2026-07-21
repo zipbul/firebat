@@ -1,55 +1,57 @@
 import { describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 
 import { FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
 
-// ── giant-file surgery (PLAN-giant-file-surgery.md D6) — vocabulary neutralization ──
-// D6 is LOAD-BEARING for the default-budget ruling (D1): the two-prong
-// criterion's prong 1 (pure-comparison verdict) fails without it — with a
-// defect narrative ("too many responsibilities", "oversized", "should be
-// split") still attached, a default budget is exactly coupling's failure mode
-// with better metrics. The catalog entry must read as a pure budget-exceedance
-// fact, and the reference doc subagents actually read must match.
+// ── giant-file catalog contract — vocabulary neutralization + split guidance ──
+// The neutral verdict is LOAD-BEARING for the default-budget ruling: the
+// two-prong criterion's prong 1 (pure-comparison verdict) fails if a defect
+// narrative ("too many responsibilities", "oversized", "should be split") is
+// attached — a default budget would then be exactly the removed coupling
+// detector's failure mode with better metrics. The catalog entry must read as
+// a pure budget-exceedance fact. The catalog text is embedded into scan JSON,
+// so this is the remedy channel every consumer agent sees.
 //
-// RED today: GIANT_FILE.cause/think and giant-file.md still carry the
-// forbidden defect stems (see src/application/scan/diagnostic-aggregator.ts
-// and .claude/skills/firebat/references/giant-file.md).
-//
-// Scope note: the ban is GIANT_FILE-entry-only / this-file-only — "too many"
-// legitimately appears elsewhere (e.g. LIFETIME_LIVENESS_PRESSURE), so this is
-// deliberately NOT a catalog-wide or repo-wide ban.
+// Scope note: the ban is GIANT_FILE-entry-only — "too many" legitimately
+// appears elsewhere (e.g. LIFETIME_LIVENESS_PRESSURE), so this is deliberately
+// NOT a catalog-wide ban. The stems ban INDICATIVE verdict claims about the
+// file; imperative-conditional remedy guidance is a different register and is
+// pinned POSITIVELY below so it cannot be silently simplified away.
 const FORBIDDEN_STEMS = /responsibilit|oversized|too many|should be split|wrong/i;
 
-const GIANT_FILE_REF_PATH = path.resolve(
-  import.meta.dir,
-  '../../../.claude/skills/firebat/references/giant-file.md',
-);
-
-describe('FIREBAT_CODE_CATALOG.GIANT_FILE — D6 vocabulary neutralization (giant-file surgery)', () => {
-  it('RED: cause contains none of the forbidden defect stems', () => {
+describe('FIREBAT_CODE_CATALOG.GIANT_FILE — vocabulary contract', () => {
+  it('cause contains none of the forbidden defect stems', () => {
     expect(FIREBAT_CODE_CATALOG.GIANT_FILE.cause).not.toMatch(FORBIDDEN_STEMS);
   });
 
-  it('RED: think steps contain none of the forbidden defect stems', () => {
+  it('think steps contain none of the forbidden defect stems', () => {
     const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
 
     expect(think).not.toMatch(FORBIDDEN_STEMS);
   });
 
-  it('PIN: think has at least 2 actionable steps', () => {
+  it('think has at least 2 actionable steps', () => {
     expect(FIREBAT_CODE_CATALOG.GIANT_FILE.think.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('RED: cause mentions the line budget (pure budget-exceedance verdict, D6 target wording)', () => {
+  it('cause mentions the line budget (pure budget-exceedance verdict)', () => {
     expect(FIREBAT_CODE_CATALOG.GIANT_FILE.cause.toLowerCase()).toMatch(/budget/);
   });
-});
 
-describe('giant-file.md reference doc — D6 vocabulary neutralization (whole-file scan)', () => {
-  it('RED: the reference doc contains none of the forbidden defect stems anywhere in the file', () => {
-    const markdown = fs.readFileSync(GIANT_FILE_REF_PATH, 'utf8');
+  it('think pins the cohesive-split guidance (cannot be simplified away)', () => {
+    const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
 
-    expect(markdown).not.toMatch(FORBIDDEN_STEMS);
+    expect(think).toMatch(/cohesive seam/i);
+  });
+
+  it('think names the mechanical-split anti-patterns', () => {
+    const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
+
+    expect(think).toMatch(/part2|grab-bag/i);
+  });
+
+  it('think states that a rescan surfaces the fallout of a careless split', () => {
+    const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
+
+    expect(think.toLowerCase()).toMatch(/rescan/);
   });
 });
