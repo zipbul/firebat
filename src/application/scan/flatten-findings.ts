@@ -348,7 +348,7 @@ const extractDetail = (finding: Record<string, unknown>, category: string): Read
 
 // ── Normalizers ──────────────────────────────────────────────────────────────
 
-const normalizeCode = (finding: Record<string, unknown>): string => {
+export const normalizeCode = (finding: Record<string, unknown>): string => {
   // catalogCode가 있으면 우선 (lint/typecheck는 code에 룰명이 들어감)
   const catalogCode = String(finding.catalogCode ?? '');
 

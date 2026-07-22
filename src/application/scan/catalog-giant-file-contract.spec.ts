@@ -16,7 +16,7 @@ import { FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
 // NOT a catalog-wide ban. The stems ban INDICATIVE verdict claims about the
 // file; imperative-conditional remedy guidance is a different register and is
 // pinned POSITIVELY below so it cannot be silently simplified away.
-const FORBIDDEN_STEMS = /responsibilit|oversized|too many|should be split|wrong/i;
+const FORBIDDEN_STEMS = /responsibilit|oversized|too many|should be split|wrong|too large|too big|bloated/i;
 
 describe('FIREBAT_CODE_CATALOG.GIANT_FILE — vocabulary contract', () => {
   it('cause contains none of the forbidden defect stems', () => {
@@ -68,6 +68,6 @@ describe('FIREBAT_CODE_CATALOG.GIANT_FILE — vocabulary contract', () => {
   it('think names the test-file exemption convention as the canonical exclude use case', () => {
     const think = FIREBAT_CODE_CATALOG.GIANT_FILE.think.join(' ');
 
-    expect(think).toMatch(/spec|test file/i);
+    expect(think).toMatch(/\bspec\b|test file/i);
   });
 });

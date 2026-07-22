@@ -148,41 +148,26 @@ describe('aggregateDiagnostics', () => {
   });
 
   // ── DIAG_CIRCULAR_DEPENDENCY ───────────────────────────────────────
+  //
+  // aggregateDiagnostics never synthesizes this code. scan.usecase's
+  // `dependencies` analysis always arrives here (and everywhere in
+  // production) as the enriched flat finding-row array — the same shape
+  // `input.analyses['waste']`/`['nesting']` use — which has no `.cycles`
+  // property, so a raw `{cycles:[...]}` object never actually reaches this
+  // function outside a test feeding it artificially. The former branch that
+  // read `dependencies?.cycles` was therefore dead code and has been removed.
+  // DIAG_CIRCULAR_DEPENDENCY still ships to the report catalog — exclusively
+  // via buildCatalog's seenCodes mechanism in scan.usecase.ts, driven by
+  // mapCycles stamping the real code onto each circular-dependency finding row.
 
-  it('should add DIAG_CIRCULAR_DEPENDENCY when dependencies.cycles is non-empty', () => {
+  it('should never add DIAG_CIRCULAR_DEPENDENCY, even given a raw cycles-shaped dependencies analysis', () => {
     const result = aggregateDiagnostics({
       analyses: {
         dependencies: { cycles: [makeCycle([FILE_A, FILE_B, FILE_A])] },
       },
     });
 
-    expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
-  });
-
-  it('should not add DIAG_CIRCULAR_DEPENDENCY when dependencies key is absent', () => {
-    const result = aggregateDiagnostics({ analyses: {} });
-
     expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeUndefined();
-  });
-
-  it('should not add DIAG_CIRCULAR_DEPENDENCY when dependencies.cycles is empty array', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        dependencies: { cycles: [] },
-      },
-    });
-
-    expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeUndefined();
-  });
-
-  it('should add DIAG_CIRCULAR_DEPENDENCY when exactly one cycle exists', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        dependencies: { cycles: [makeCycle([FILE_A, FILE_B])] },
-      },
-    });
-
-    expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
   });
 
   // ── Empty / no analyses ────────────────────────────────────────────
@@ -191,32 +176,5 @@ describe('aggregateDiagnostics', () => {
     const result = aggregateDiagnostics({ analyses: {} });
 
     expect(Object.keys(result.catalog).length).toBe(0);
-  });
-
-  // ── Combined scenarios ─────────────────────────────────────────────
-
-  it('should add both diagnostic codes when all conditions are met simultaneously', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        waste: [makeWaste(FILE_A)],
-        nesting: [makeNestingHighCC(FILE_A)],
-        dependencies: { cycles: [makeCycle([FILE_A, FILE_B])] },
-      },
-    });
-
-    expect(result.catalog.DIAG_GOD_FUNCTION).toBeDefined();
-    expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
-  });
-
-  it('should add only DIAG_CIRCULAR_DEPENDENCY when waste+cycles present but nesting absent', () => {
-    const result = aggregateDiagnostics({
-      analyses: {
-        waste: [makeWaste(FILE_A)],
-        dependencies: { cycles: [makeCycle([FILE_A, FILE_B])] },
-      },
-    });
-
-    expect(result.catalog.DIAG_GOD_FUNCTION).toBeUndefined();
-    expect(result.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
   });
 });

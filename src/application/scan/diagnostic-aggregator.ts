@@ -532,8 +532,8 @@ export const FIREBAT_CODE_CATALOG = {
   GIANT_FILE: {
     cause: "A source file's line count exceeds the configured (or default) line budget.",
     think: [
-      'Decide which side of the comparison to adjust: the budget, or the file. Check whether the configured (or default) `maxLines` actually fits this project and this file.',
-      'If the file is intentionally large (generated code, a schema, a registry, a data table) or exempt by team convention (spec/test files), add a glob to `features["giant-file"].exclude` — the detector-local list: other detectors keep scanning the file, unlike the top-level `exclude` which drops it from every detector — or raise `maxLines` for this project. No further action needed.',
+      'Decide which side of the comparison to adjust: the budget, or the file. Check whether the configured (or default) `maxLines` actually fits this project and this file — if the budget itself is mis-set for this project, raise (or lower) `maxLines` accordingly.',
+      'If the file is intentionally large (generated code, a schema, a registry, a data table) or exempt by team convention (spec/test files), add a glob to `features["giant-file"].exclude` — the detector-local list: other detectors keep scanning the file, unlike the top-level `exclude` which drops it from every detector — or raise `maxLines` for this project. No further action needed. Exclude globs are matched against the finding\'s project-relative path — an absolute-path glob silently never matches, so write it relative to the project root.',
       'Otherwise, split along cohesive seams without changing behavior: group exports that change together, move each group to a file named for what it does, and update imports. Do not shed lines mechanically (numbered continuation files like `analyzer-part2.ts`, grab-bag `utils` dumps) — a rescan surfaces the factual fallout of a careless split (cycles, forwarding shims, duplicated helpers, dead exports) as new findings.',
     ],
   },
@@ -602,17 +602,13 @@ export const aggregateDiagnostics = (input: DiagnosticAggregatorInput): Diagnost
     }
   }
 
-  // DIAG_CIRCULAR_DEPENDENCY
-  const dependencies = input.analyses['dependencies'] as any;
-  const cycles = Array.isArray(dependencies?.cycles) ? dependencies.cycles : [];
-
-  if (cycles.length > 0) {
-    const entry = FIREBAT_CODE_CATALOG.DIAG_CIRCULAR_DEPENDENCY;
-
-    if (entry !== undefined) {
-      catalog.DIAG_CIRCULAR_DEPENDENCY = entry;
-    }
-  }
+  // DIAG_CIRCULAR_DEPENDENCY is NOT synthesized here: scan.usecase's `dependencies`
+  // analysis is enriched into a flat finding-row array (mapCycles etc. spread
+  // together) before this aggregator ever sees it, so a raw `{cycles:[...]}`
+  // shape never actually arrives in production — that branch was dead code. The
+  // catalog entry still ships correctly via buildCatalog's seenCodes mechanism,
+  // driven by the real DIAG_CIRCULAR_DEPENDENCY code that mapCycles stamps on
+  // each circular-dependency finding row.
 
   return { catalog };
 };

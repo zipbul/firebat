@@ -53,9 +53,9 @@ import {
 import { createArtifactStore, createGildash } from '../../store';
 import { computeProjectKey, computeScanArtifactKey } from './cache-keys';
 import { computeCacheNamespace } from './cache-namespace';
-import { aggregateDiagnostics, FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
+import { FIREBAT_CODE_CATALOG } from './diagnostic-aggregator';
 import { itemFileString } from './finding-item-fields';
-import { buildFunctionRangeMap, flattenToFindings } from './flatten-findings';
+import { buildFunctionRangeMap, flattenToFindings, normalizeCode } from './flatten-findings';
 import { computeInputsDigest } from './inputs-digest';
 import { computeProjectInputsDigest } from './project-inputs-digest';
 
@@ -603,8 +603,12 @@ const addKnownCode = (value: unknown, seenCodes: Set<FirebatCatalogCode>): void 
   }
 };
 
+// item/sub-item의 카탈로그 코드를 뽑는 단일 규약: flatten-findings의 catalogCode-우선
+// normalizeCode를 그대로 재사용한다 — Finding.code를 만드는 규칙과 catalog을 채우는
+// 규칙이 서로 다른 우선순위를 쓰면 lint/typecheck처럼 code(rule/TS 에러코드)와
+// catalogCode('LINT'/'TYPECHECK')가 공존하는 항목이 카탈로그 게이트를 통과하지 못한다.
 const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void => {
-  addKnownCode(item?.code ?? item?.catalogCode, seenCodes);
+  addKnownCode(normalizeCode((item ?? {}) as Record<string, unknown>), seenCodes);
 
   const nested = item?.items;
 
@@ -613,14 +617,14 @@ const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void =
   }
 
   for (const sub of nested) {
-    addKnownCode((sub as Record<string, unknown>)?.code ?? (sub as Record<string, unknown>)?.catalogCode, seenCodes);
+    addKnownCode(normalizeCode((sub ?? {}) as Record<string, unknown>), seenCodes);
   }
 };
 
-const buildCatalog = (input: {
-  readonly analyses: FirebatReport['analyses'];
-  readonly diagnostics: ReturnType<typeof aggregateDiagnostics>;
-}): FirebatReport['catalog'] => {
+// catalog은 오직 실제로 관측된 finding 코드(seenCodes)로만 구성한다 — 대응하는
+// finding row가 하나도 없는 진단(diagnostics.catalog의 합성 코드 등)이 섞여
+// findings[].code 집합과 catalog 키 집합이 어긋나는 것을 막는 단일 변경지점.
+const buildCatalog = (input: { readonly analyses: FirebatReport['analyses'] }): FirebatReport['catalog'] => {
   const seenCodes = new Set<FirebatCatalogCode>();
 
   for (const [, value] of Object.entries(input.analyses)) {
@@ -633,12 +637,10 @@ const buildCatalog = (input: {
     }
   }
 
-  const catalog: Partial<Record<FirebatCatalogCode, any>> = { ...input.diagnostics.catalog };
+  const catalog: Partial<Record<FirebatCatalogCode, any>> = {};
 
   for (const code of seenCodes) {
-    if (!(code in catalog)) {
-      catalog[code] = FIREBAT_CODE_CATALOG[code];
-    }
+    catalog[code] = FIREBAT_CODE_CATALOG[code];
   }
 
   return catalog;
@@ -1136,8 +1138,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         : {}),
       ...(selectedDetectors.has('duplicates') ? { duplicates: enrichDuplicateGroups(duplicatesUnified, toProjectRelative) } : {}),
     };
-    const diagnostics = aggregateDiagnostics({ analyses: analyses as Readonly<Record<string, unknown>> });
-    const catalog = buildCatalog({ analyses, diagnostics });
+    const catalog = buildCatalog({ analyses });
     const functionRangeMap = buildFunctionRangeMap(program, toProjectRelative);
     const findings = flattenToFindings(analyses, functionRangeMap);
     const report: FirebatReport = {

@@ -218,8 +218,38 @@ exit 1
       // Act
       const report = await runScanReport(project, ['lint'], logger, [project.srcFileAbs]);
 
-      // Assert
+      // Assert — scanUseCase always runs lint with fix:true (see analyzeLint's
+      // documented "[HP] returns [] when fix=true" contract), so diagnostics
+      // never reach analyses.lint through this pipeline regardless of what
+      // oxlint reports; the non-zero exit code alone must not be treated as a
+      // tool failure or crash the scan. The LINT catalog-entry contract for a
+      // finding that DOES reach the report is covered separately (see
+      // test/integration/features/lint/report-integration.test.ts).
       expect(report.catalog).toBeDefined();
+      expect(report.meta.errors?.lint).toBeUndefined();
+      expect(report.analyses.lint).toEqual([]);
+    } finally {
+      await project.dispose();
+    }
+  });
+
+  it('should include catalog entry for typecheck with cause and think when typecheck findings exist', async () => {
+    // Arrange
+    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-catalog-includes-typecheck', {
+      'src/a.ts': 'export const a: number = "not-a-number";\n',
+    });
+
+    try {
+      const logger = createLogger();
+      // Act
+      const report = await runScanReport(project, ['typecheck'], logger, [...project.targetsAbs]);
+
+      // Assert
+      expect(Array.isArray(report.analyses.typecheck)).toBe(true);
+      expect((report.analyses.typecheck as any[] | undefined)?.length ?? 0).toBeGreaterThan(0);
+      expect(typeof report.catalog.TYPECHECK?.cause).toBe('string');
+      expect(Array.isArray(report.catalog.TYPECHECK?.think)).toBe(true);
+      expect(report.catalog.TYPECHECK?.think.length ?? 0).toBeGreaterThan(0);
     } finally {
       await project.dispose();
     }
@@ -495,6 +525,55 @@ exit 7
         expect(entry.think.length).toBeGreaterThan(0);
         expect(typeof entry.think[0]).toBe('string');
       }
+    } finally {
+      await project.dispose();
+    }
+  });
+
+  it('should keep catalog keys in exact set-equality with finding codes (no catalog-only entries)', async () => {
+    // Arrange — waste + high-cognitive-complexity nesting co-occurring in the
+    // same file fires the DIAG_GOD_FUNCTION aggregation. No finding row ever
+    // carries that code, so the catalog must not ship it either — every
+    // catalog key must trace back to at least one finding's `code`.
+    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-catalog-set-equality', {
+      'src/a.ts': [
+        'export function godFunction(x: number): number {',
+        '  if (x === 1) return 1;',
+        '  if (x === 2) return 2;',
+        '  if (x === 3) return 3;',
+        '  if (x === 4) return 4;',
+        '  if (x === 5) return 5;',
+        '  if (x === 6) return 6;',
+        '  if (x === 7) return 7;',
+        '  if (x === 8) return 8;',
+        '  if (x === 9) return 9;',
+        '  if (x === 10) return 10;',
+        '  if (x === 11) return 11;',
+        '  if (x === 12) return 12;',
+        '  if (x === 13) return 13;',
+        '  if (x === 14) return 14;',
+        '  if (x === 15) return 15;',
+        '  return 0;',
+        '}',
+        '',
+        'export function deadStore(): number {',
+        '  let value = 1;',
+        '  value = 2;',
+        '  return value;',
+        '}',
+      ].join('\n'),
+    });
+
+    try {
+      const logger = createLogger();
+      // Act
+      const report = await runScanReport(project, ['waste', 'nesting'], logger, [...project.targetsAbs]);
+
+      // Assert
+      const findingCodes = new Set(report.findings.map(f => f.code).filter(Boolean));
+      const catalogCodes = new Set(Object.keys(report.catalog));
+
+      expect(catalogCodes).toEqual(findingCodes);
     } finally {
       await project.dispose();
     }

@@ -35,8 +35,10 @@ describe('integration/diagnostic-aggregator', () => {
     expect(out.catalog.DIAG_GOD_FUNCTION).toBeDefined();
   });
 
-  it('should emit DIAG_CIRCULAR_DEPENDENCY when dependencies.cycles is non-empty', () => {
-    // Arrange
+  it('should never emit DIAG_CIRCULAR_DEPENDENCY — scan.usecase always enriches dependencies into a flat finding-row array with no .cycles property, so the code ships via the catalog seenCodes mechanism instead', () => {
+    // Arrange — a raw {cycles:[...]} shape never actually reaches
+    // aggregateDiagnostics in production (scan.usecase's `dependencies`
+    // analysis is always the enriched flat array by the time it gets here).
     const out = aggregateDiagnostics({
       analyses: {
         dependencies: {
@@ -53,6 +55,6 @@ describe('integration/diagnostic-aggregator', () => {
     } as any);
 
     // Assert
-    expect(out.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeDefined();
+    expect(out.catalog.DIAG_CIRCULAR_DEPENDENCY).toBeUndefined();
   });
 });
