@@ -86,7 +86,7 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
     expect(result.length).toBeGreaterThan(0);
     expect(result).toContain('duplicates');
     expect(result).toContain('waste');
-    expect(result).toContain('lint');
+    expect(result).toContain('nesting');
   });
 
   it('should exclude detectors set to false', () => {
@@ -97,7 +97,7 @@ describe('resolveEnabledDetectorsFromFeatures', () => {
 
     expect(result).not.toContain('duplicates');
     expect(result).not.toContain('waste');
-    expect(result).toContain('lint');
+    expect(result).toContain('nesting');
   });
 
   it('should include all detectors when no feature is false', () => {
@@ -348,7 +348,7 @@ describe('D15 — barrel four-state declaration gating (post-surgery contract)',
 // PINNED to exactly {barrel, giant-file}. Today only barrel has this gate
 // (applyBarrelFalseGate), so `false` + `--only giant-file` does NOT yet win —
 // that assertion is RED. The negative controls guard against a P2 mutation
-// that broadens the gate to every detector: typecheck must stay unaffected.
+// that broadens the gate to every detector: waste must stay unaffected.
 describe('D5 — giant-file false-wins gating & negative controls (post-surgery contract)', () => {
   it('features["giant-file"] === false + --only giant-file → giant-file is NOT enabled (RED today: no false-gate for giant-file)', async () => {
     __d15CapturedOptions = undefined;
@@ -360,27 +360,27 @@ describe('D5 — giant-file false-wins gating & negative controls (post-surgery 
     expect(getD15CapturedOptions()?.detectors.includes('giant-file')).toBe(false);
   });
 
-  it('typecheck: false + --only typecheck → typecheck REMAINS enabled (PIN — D5 domain excludes typecheck)', async () => {
+  it('waste: false + --only waste → waste REMAINS enabled (PIN — D5 domain excludes waste)', async () => {
     __d15CapturedOptions = undefined;
-    __d15ConfigOverride = { config: { features: { typecheck: false } } as never, resolvedPath: undefined };
+    __d15ConfigOverride = { config: { features: { waste: false } } as never, resolvedPath: undefined };
 
-    await runCli(['--only', 'typecheck']);
+    await runCli(['--only', 'waste']);
 
     expect(getD15CapturedOptions()).toBeDefined();
-    expect(getD15CapturedOptions()?.detectors).toEqual(['typecheck']);
+    expect(getD15CapturedOptions()?.detectors).toEqual(['waste']);
   });
 
-  it('mixed --only barrel,giant-file,typecheck with all three declared false → only typecheck survives (RED today: giant-file not yet gated)', async () => {
+  it('mixed --only barrel,giant-file,waste with all three declared false → only waste survives (RED today: giant-file not yet gated)', async () => {
     __d15CapturedOptions = undefined;
     __d15ConfigOverride = {
-      config: { features: { barrel: false, 'giant-file': false, typecheck: false } } as never,
+      config: { features: { barrel: false, 'giant-file': false, waste: false } } as never,
       resolvedPath: undefined,
     };
 
-    await runCli(['--only', 'barrel,giant-file,typecheck']);
+    await runCli(['--only', 'barrel,giant-file,waste']);
 
     expect(getD15CapturedOptions()).toBeDefined();
-    expect(getD15CapturedOptions()?.detectors).toEqual(['typecheck']);
+    expect(getD15CapturedOptions()?.detectors).toEqual(['waste']);
   });
 });
 

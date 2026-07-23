@@ -23,7 +23,7 @@ firebat
 firebat src/app.ts src/utils.ts
 
 # Select detectors and output JSON
-firebat --only waste,lint
+firebat --only waste,nesting
 ```
 
 ## CLI Reference
@@ -53,9 +53,9 @@ firebat scan [targets...] [options]
 | `--log-level <level>` | `info` | error \| warn \| info \| debug \| trace |
 | `--log-stack` | off | Include stack traces in log output |
 
-## Detectors (28)
+## Detectors (12)
 
-All detectors run by default. Use `--only` to select a subset.
+Most detectors run by default (`barrel` is opt-in). Use `--only` to select a subset.
 If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be disabled by setting `features["<detector>"]` to `false`.
 
 ### Code Quality
@@ -87,23 +87,12 @@ If `.firebatrc.jsonc` is present and `--only` is not specified, detectors can be
 | **giant-file** | Files exceeding the line budget (default 1000; `maxLines` to override, `false` to disable) |
 | **error-flow** | Unsafe error handling patterns |
 
-### External Tools
-
-| Detector | Tool | What it finds |
-|----------|------|---------------|
-| **lint** | oxlint | Lint errors and warnings |
-| **format** | oxfmt | Files that need formatting |
-| **typecheck** | tsgo | Type errors and warnings with code frames |
-
 ## Configuration
 
 Create `.firebatrc.jsonc` in your project root:
 
 ```jsonc
 {
-  // Detectors to run (default: all)
-  "detectors": ["waste", "nesting", "lint"],
-
   // Per-feature configuration
   "features": {
     "unknown-proof": {
@@ -123,7 +112,7 @@ src/
   adapters/       Entrypoints & composition root (CLI)
   application/    Use-case orchestration (no direct I/O imports)
   ports/          Interfaces for external I/O
-  infrastructure/ I/O implementations (SQLite, tsgo, oxlint, ast-grep)
+  infrastructure/ I/O implementations (SQLite)
   engine/         Pure computation (AST parsing, CFG, hashing, detection)
   features/       Pure analysis logic per detector
 ```

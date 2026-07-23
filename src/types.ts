@@ -4,9 +4,6 @@ export type FirebatDetector =
   | 'waste'
   | 'barrel'
   | 'error-flow'
-  | 'format'
-  | 'lint'
-  | 'typecheck'
   | 'dependencies'
   | 'nesting'
   | 'early-return'
@@ -101,11 +98,7 @@ export type FirebatCatalogCode =
   | 'LIFETIME_SCOPE_NARROWING'
   | 'LIFETIME_LIVENESS_PRESSURE'
   | 'LIFETIME_MUTATION_DENSITY'
-  | 'GIANT_FILE'
-  // external tools (3)
-  | 'LINT'
-  | 'FORMAT'
-  | 'TYPECHECK';
+  | 'GIANT_FILE';
 
 export type FirebatItemKind = 'function' | 'method' | 'type' | 'interface' | 'node';
 
@@ -352,13 +345,6 @@ type DependencyFinding =
   | DepDuplicateExportFinding
   | DepUnusedMemberFinding;
 
-interface FormatFinding {
-  readonly code: FirebatCatalogCode;
-  readonly kind: 'needs-formatting';
-  readonly file: string;
-  readonly span: SourceSpan;
-}
-
 interface NestingMetrics {
   readonly depth: number;
   readonly cognitiveComplexity: number;
@@ -466,29 +452,6 @@ export interface WasteFinding {
   readonly code?: FirebatCatalogCode;
 }
 
-type TypecheckSeverity = 'error' | 'warning';
-
-type LintSeverity = 'error' | 'warning' | 'info';
-
-export interface LintDiagnostic {
-  readonly file?: string;
-  readonly msg: string;
-  readonly code?: string;
-  readonly severity: LintSeverity;
-  readonly span: SourceSpan;
-  readonly catalogCode?: FirebatCatalogCode;
-}
-
-export interface TypecheckItem {
-  readonly severity: TypecheckSeverity;
-  readonly code: string;
-  readonly msg: string;
-  readonly file: string;
-  readonly span: SourceSpan;
-  readonly codeFrame: string;
-  readonly catalogCode?: FirebatCatalogCode;
-}
-
 export interface CatalogEntry {
   readonly cause: string;
   readonly think: ReadonlyArray<string>;
@@ -572,9 +535,6 @@ export interface FirebatAnalyses {
   readonly waste: ReadonlyArray<WasteFinding>;
   readonly barrel: ReadonlyArray<BarrelFinding>;
   readonly 'error-flow': ReadonlyArray<ErrorFlowFinding>;
-  readonly format: ReadonlyArray<FormatFinding>;
-  readonly lint: ReadonlyArray<LintDiagnostic>;
-  readonly typecheck: ReadonlyArray<TypecheckItem>;
   readonly dependencies: ReadonlyArray<DependencyFinding>;
   readonly nesting: ReadonlyArray<NestingItem>;
   readonly 'early-return': ReadonlyArray<EarlyReturnItem>;

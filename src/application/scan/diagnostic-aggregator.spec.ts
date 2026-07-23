@@ -25,8 +25,11 @@ describe('FIREBAT_CODE_CATALOG', () => {
   // catalog codes deleted outright (no fact-closable verdict) — 71 → 66. The composite
   // DIAG_GOD_MODULE diagnostic was sourced from those fan-in/fan-out metrics; with them gone it can
   // never fire, so its catalog entry is removed too (no dead code masquerading as documentation) — 66 → 65.
-  it('should have exactly 65 entries', () => {
-    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(65);
+  // external-tools removal: lint/format/typecheck are transport of other tools'
+  // verdicts, not firebat judgments — LINT/FORMAT/TYPECHECK catalog codes deleted
+  // outright along with the detectors — 65 → 62.
+  it('should have exactly 62 entries', () => {
+    expect(Object.keys(FIREBAT_CODE_CATALOG).length).toBe(62);
   });
 
   it('should have a cause string for every entry', () => {

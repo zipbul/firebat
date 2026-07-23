@@ -33,7 +33,7 @@ describe('computeProjectKey', () => {
 });
 
 describe('computeScanArtifactKey', () => {
-  const base = { detectors: ['lint', 'waste'], minSize: '10', maxForwardDepth: 3 };
+  const base = { detectors: ['barrel', 'waste'], minSize: '10', maxForwardDepth: 3 };
 
   it('[HP] returns a non-empty hash string', () => {
     const key = computeScanArtifactKey(base);
@@ -42,14 +42,14 @@ describe('computeScanArtifactKey', () => {
   });
 
   it('[HP] detector order does not affect key (sorted internally)', () => {
-    const a = computeScanArtifactKey({ ...base, detectors: ['lint', 'waste'] });
-    const b = computeScanArtifactKey({ ...base, detectors: ['waste', 'lint'] });
+    const a = computeScanArtifactKey({ ...base, detectors: ['barrel', 'waste'] });
+    const b = computeScanArtifactKey({ ...base, detectors: ['waste', 'barrel'] });
 
     expect(a).toBe(b);
   });
 
   it('[HP] different detectors produce different keys', () => {
-    const a = computeScanArtifactKey({ ...base, detectors: ['lint'] });
+    const a = computeScanArtifactKey({ ...base, detectors: ['barrel'] });
     const b = computeScanArtifactKey({ ...base, detectors: ['waste'] });
 
     expect(a).not.toBe(b);

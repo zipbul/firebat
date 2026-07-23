@@ -3,7 +3,6 @@ import { describe, expect, it } from 'bun:test';
 import type { FirebatReport } from '../../../../src/test-api';
 
 import { scanUseCase } from '../../../../src/test-api';
-import { installFakeBin } from '../../shared/external-tool-test-kit';
 import {
   createScanLogger as createLogger,
   createScanProjectFixture,
@@ -65,46 +64,6 @@ describe('integration/scan/report-contract', () => {
       // Assert
       expect(report).toBeDefined();
       expect(typeof (report as FirebatReport).catalog).toBe('object');
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('should capture format failures into meta.errors and not throw when oxfmt is missing', async () => {
-    // Arrange
-    const project = await createScanProjectFixture(
-      'firebat-report-contract-format-error',
-      ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
-    );
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['format', 'waste'], logger, [project.srcFileAbs]);
-
-      // Assert
-      expect(report.meta.errors).toBeDefined();
-      expect(report.meta.errors?.format ?? '').toContain('oxfmt');
-      expect(report.analyses.format).toBeUndefined();
-      expect(Array.isArray(report.analyses.waste)).toBe(true);
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('should capture lint failures into meta.errors and not throw when oxlint is missing', async () => {
-    // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-lint-error', 'export const a = 1;');
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['lint'], logger, [project.srcFileAbs]);
-
-      // Assert
-      expect(report.meta.errors).toBeDefined();
-      expect(report.meta.errors?.lint ?? '').toContain('oxlint');
-      expect(report.analyses.lint).toBeUndefined();
     } finally {
       await project.dispose();
     }
@@ -188,73 +147,6 @@ describe('integration/scan/report-contract', () => {
     }
   });
 
-  it('should include catalog entry for lint even when lint returns many diagnostics', async () => {
-    // Arrange
-    const project = await createScanProjectFixture('firebat-report-contract-catalog-includes-lint', 'export const a = 1;');
-
-    try {
-      await installFakeBin(
-        project.rootAbs,
-        'oxlint',
-        `#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1-}" == "--version" ]]; then
-  echo "oxlint 1.46.0"
-  exit 0
-fi
-
-cat <<'JSON'
-[
-  { "filename": "src/a.ts", "text": "rule-a", "ruleId": "rule-a", "level": "warning", "row": 1, "col": 1 },
-  { "filename": "src/a.ts", "text": "rule-b", "ruleId": "rule-b", "level": "error", "row": 2, "col": 1 }
-]
-JSON
-
-exit 1
-`,
-      );
-
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['lint'], logger, [project.srcFileAbs]);
-
-      // Assert — scanUseCase always runs lint with fix:true (see analyzeLint's
-      // documented "[HP] returns [] when fix=true" contract), so diagnostics
-      // never reach analyses.lint through this pipeline regardless of what
-      // oxlint reports; the non-zero exit code alone must not be treated as a
-      // tool failure or crash the scan. The LINT catalog-entry contract for a
-      // finding that DOES reach the report is covered separately (see
-      // test/integration/features/lint/report-integration.test.ts).
-      expect(report.catalog).toBeDefined();
-      expect(report.meta.errors?.lint).toBeUndefined();
-      expect(report.analyses.lint).toEqual([]);
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('should include catalog entry for typecheck with cause and think when typecheck findings exist', async () => {
-    // Arrange
-    const project = await createScanProjectFixtureWithFiles('firebat-report-contract-catalog-includes-typecheck', {
-      'src/a.ts': 'export const a: number = "not-a-number";\n',
-    });
-
-    try {
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['typecheck'], logger, [...project.targetsAbs]);
-
-      // Assert
-      expect(Array.isArray(report.analyses.typecheck)).toBe(true);
-      expect((report.analyses.typecheck as any[] | undefined)?.length ?? 0).toBeGreaterThan(0);
-      expect(typeof report.catalog.TYPECHECK?.cause).toBe('string');
-      expect(Array.isArray(report.catalog.TYPECHECK?.think)).toBe(true);
-      expect(report.catalog.TYPECHECK?.think.length ?? 0).toBeGreaterThan(0);
-    } finally {
-      await project.dispose();
-    }
-  });
-
   it('should enrich waste findings with file+code and expose them as a bare array', async () => {
     // Arrange — case 1 dead-store-overwrite: initializer is overwritten before read.
     const project = await createScanProjectFixture(
@@ -311,42 +203,6 @@ exit 1
       expect(exportStar?.filePath).toBeUndefined();
       expect(exportStar?.message).toBeUndefined();
       expect(exportStar?.code).toBe('BARREL_EXPORT_STAR');
-    } finally {
-      await project.dispose();
-    }
-  });
-
-  it('should include catalog entry for format even when format returns many paths', async () => {
-    // Arrange
-    const project = await createScanProjectFixture(
-      'firebat-report-contract-catalog-includes-format',
-      ['export function deadStore() {', '  let value = 1;', '  return 0;', '}'].join('\n'),
-    );
-
-    try {
-      await installFakeBin(
-        project.rootAbs,
-        'oxfmt',
-        `#!/usr/bin/env bash
-set -euo pipefail
-if [[ "\${1-}" == "--version" ]]; then
-  echo "oxfmt 0.26.0"
-  exit 0
-fi
-
-echo "src/a.ts"
-echo "src/b.ts"
-echo "src/c.ts"
-exit 7
-`,
-      );
-
-      const logger = createLogger();
-      // Act
-      const report = await runScanReport(project, ['format', 'waste'], logger, [project.srcFileAbs]);
-
-      // Assert
-      expect(report.catalog).toBeDefined();
     } finally {
       await project.dispose();
     }
@@ -486,7 +342,7 @@ exit 7
             targets: [...project.targetsAbs],
             minSize: 0,
             maxForwardDepth: 0,
-            detectors: ['waste', 'barrel', 'error-flow', 'lint', 'format', 'typecheck'],
+            detectors: ['waste', 'barrel', 'error-flow'],
             help: false,
             barrelIgnoreGlobs: [],
           },

@@ -34,7 +34,7 @@
     "no-self-compare": "error",
     "no-loop-func": "error",
     // Switch fall-through is owned by tsc `noFallthroughCasesInSwitch`; off here to
-    // avoid duplicate findings across the typecheck and lint detectors.
+    // avoid duplicate findings across the tsc and oxlint checks.
     "no-fallthrough": "off",
     "typescript/no-empty-object-type": [
       "error",

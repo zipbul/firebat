@@ -5,7 +5,7 @@
  *   1. 카테고리별 배열을 단일 flat list로 변환
  *   2. file-type / items-type 분해 (duplicates, circular-dep → per-item Finding)
  *   3. content-hash ID 생성 (안정적 identity 필드만 사용)
- *   4. 필드 정규화 (code/catalogCode → code, label 통합)
+ *   4. 필드 정규화 (code, label 통합)
  *   5. detail 분리 (fixer 전용 가변 데이터 — span 포함)
  *   6. enclosing function name 주입 (header 없는 카테고리용)
  */
@@ -270,21 +270,6 @@ const labelGiantFile: LabelFn = (f, _fn) => {
   return 'giant-file';
 };
 
-// tool 진단 라벨 ("[<code>] <msg>"). fallback 라벨만 카테고리별로 다름.
-const diagnosticLabel =
-  (fallback: string): LabelFn =>
-  (f, _fn) => {
-    const msg = String(f.msg ?? '');
-    const code = f.code ? String(f.code) : '';
-
-    return code ? `[${code}] ${msg}` : msg || fallback;
-  };
-
-const labelLint: LabelFn = diagnosticLabel('lint');
-const labelTypecheck: LabelFn = diagnosticLabel('typecheck');
-
-const labelFormat: LabelFn = (_f, _fn) => 'needs-formatting';
-
 const labelDuplicateItem = (item: Record<string, unknown>, cloneType: string): string => {
   const header = String(item.header ?? '');
 
@@ -305,31 +290,19 @@ const LABEL_BY_CATEGORY: Readonly<Record<string, LabelFn>> = {
   'variable-lifetime': labelVariableLifetime,
   'temporal-coupling': labelTemporalCoupling,
   'giant-file': labelGiantFile,
-  lint: labelLint,
-  typecheck: labelTypecheck,
-  format: labelFormat,
 };
 // ── Detail extractors ────────────────────────────────────────────────────────
 /**
  * detail: fixer 전용 가변 데이터.
  * span은 보존 (B1) — fixer가 정확한 위치 참조에 필요.
  */
-const COMMON_KEYS = new Set(['kind', 'code', 'file', 'filePath', 'label', 'catalogCode']);
+const COMMON_KEYS = new Set(['kind', 'code', 'file', 'filePath', 'label']);
 
 const extractDetail = (finding: Record<string, unknown>, category: string): Readonly<Record<string, unknown>> | null => {
   const detail: Record<string, unknown> = {};
   let hasContent = false;
-  const hasCatalogCode = Boolean(finding.catalogCode);
 
   for (const [key, value] of Object.entries(finding)) {
-    // lint/typecheck: code는 tool-specific (룰명/TS에러코드)이므로 detail에 보존
-    if (key === 'code' && hasCatalogCode) {
-      detail.ruleCode = value;
-      hasContent = true;
-
-      continue;
-    }
-
     if (COMMON_KEYS.has(key)) {
       continue;
     }
@@ -348,16 +321,7 @@ const extractDetail = (finding: Record<string, unknown>, category: string): Read
 
 // ── Normalizers ──────────────────────────────────────────────────────────────
 
-export const normalizeCode = (finding: Record<string, unknown>): string => {
-  // catalogCode가 있으면 우선 (lint/typecheck는 code에 룰명이 들어감)
-  const catalogCode = String(finding.catalogCode ?? '');
-
-  if (catalogCode) {
-    return catalogCode;
-  }
-
-  return String(finding.code ?? '');
-};
+export const normalizeCode = (finding: Record<string, unknown>): string => String(finding.code ?? '');
 
 const normalizeFile = (finding: Record<string, unknown>): string =>
   String(finding.file ?? finding.filePath ?? finding.module ?? '');

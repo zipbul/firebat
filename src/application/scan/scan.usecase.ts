@@ -1,6 +1,5 @@
 // MUST: MUST-1
 import { readFileSync, readdirSync } from 'node:fs';
-import * as path from 'node:path';
 
 import type { ErrorFlowFindingKind } from '../../features/error-flow';
 import type { FirebatCliOptions } from '../../interfaces';
@@ -28,13 +27,10 @@ import { analyzeDependencies, createEmptyDependencies } from '../../features/dep
 import { analyzeDuplicates, createEmptyDuplicates } from '../../features/duplicates';
 import { analyzeEarlyReturn, createEmptyEarlyReturn } from '../../features/early-return';
 import { analyzeErrorFlow, createEmptyErrorFlow } from '../../features/error-flow';
-import { analyzeFormat, createEmptyFormat } from '../../features/format';
 import { analyzeGiantFile, createEmptyGiantFile, DEFAULT_MAX_LINES } from '../../features/giant-file';
 import { analyzeIndirection, createEmptyIndirection } from '../../features/indirection';
-import { analyzeLint, createEmptyLint } from '../../features/lint';
 import { analyzeNesting, createEmptyNesting, DEFAULT_NESTING_OPTIONS } from '../../features/nesting';
 import { analyzeTemporalCoupling, createEmptyTemporalCoupling } from '../../features/temporal-coupling';
-import { analyzeTypecheck, createEmptyTypecheck } from '../../features/typecheck';
 import { analyzeVariableLifetime, createEmptyVariableLifetime } from '../../features/variable-lifetime';
 import { detectWaste } from '../../features/waste';
 import { getDb } from '../../infrastructure/sqlite';
@@ -120,25 +116,6 @@ const runDetectorAsync = async <T>(
   finishDetector(ctx, detector, t0);
 
   return result;
-};
-
-const resolveToolRcPath = async (rootAbs: string, basename: string): Promise<string | undefined> => {
-  const candidate = path.join(rootAbs, basename);
-  let exists: boolean;
-
-  try {
-    const file = Bun.file(candidate);
-
-    exists = await file.exists();
-  } catch {
-    return undefined;
-  }
-
-  if (!exists) {
-    return undefined;
-  }
-
-  return candidate;
 };
 
 interface LoadCachedReportParams {
@@ -580,33 +557,16 @@ const enrichVariableLifetime = (
     span: f.span,
   }));
 
-const enrichFormat = (files: ReadonlyArray<string>, toProjectRelative: ToProjectRelative): ReadonlyArray<any> =>
-  files.map(filePath => ({
-    kind: 'needs-formatting' as const,
-    code: 'FORMAT' as FirebatCatalogCode,
-    file: enrichFilePath(toProjectRelative, filePath),
-    span: ZERO_SPAN,
-  }));
-
-// tool 진단(lint/typecheck) item에 catalogCode를 찍는 단일 변환.
-const withCatalogCode = (items: ReadonlyArray<any>, catalogCode: FirebatCatalogCode): ReadonlyArray<any> =>
-  items.map(item => ({ ...item, catalogCode }));
-
-const enrichLint = (items: ReadonlyArray<any>): ReadonlyArray<any> => withCatalogCode(items, 'LINT');
-
-const enrichTypecheck = (items: ReadonlyArray<any>): ReadonlyArray<any> => withCatalogCode(items, 'TYPECHECK');
-
-// code/catalogCode 값이 알려진 카탈로그 코드면 집합에 기록하는 단일 결정.
+// code 값이 알려진 카탈로그 코드면 집합에 기록하는 단일 결정.
 const addKnownCode = (value: unknown, seenCodes: Set<FirebatCatalogCode>): void => {
   if (typeof value === 'string' && value in FIREBAT_CODE_CATALOG) {
     seenCodes.add(value as FirebatCatalogCode);
   }
 };
 
-// item/sub-item의 카탈로그 코드를 뽑는 단일 규약: flatten-findings의 catalogCode-우선
-// normalizeCode를 그대로 재사용한다 — Finding.code를 만드는 규칙과 catalog을 채우는
-// 규칙이 서로 다른 우선순위를 쓰면 lint/typecheck처럼 code(rule/TS 에러코드)와
-// catalogCode('LINT'/'TYPECHECK')가 공존하는 항목이 카탈로그 게이트를 통과하지 못한다.
+// item/sub-item의 카탈로그 코드를 뽑는 단일 규약: flatten-findings의 normalizeCode를
+// 그대로 재사용한다 — Finding.code를 만드는 규칙과 catalog을 채우는 규칙이 같은 소스
+// (item.code)를 봐야 두 결과가 어긋나지 않는다.
 const collectItemCodes = (item: any, seenCodes: Set<FirebatCatalogCode>): void => {
   addKnownCode(normalizeCode((item ?? {}) as Record<string, unknown>), seenCodes);
 
@@ -666,7 +626,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   logger.info('Scanning', {
     targetCount: options.targets.length,
     detectorCount: options.detectors.length,
-    fixMode: true,
   });
   logger.trace('Detectors selected', { detectors: options.detectors.join(',') });
 
@@ -713,7 +672,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   // semantic layer to be active.
   const needsSemantic =
     options.detectors.includes('error-flow') ||
-    options.detectors.includes('typecheck') ||
     options.detectors.includes('waste') ||
     options.detectors.includes('variable-lifetime');
   const tIndex0 = nowMs();
@@ -814,69 +772,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       return cached;
     }
 
-    // Note: in fix mode, prefer to run fixable tools before parsing the program
-    // so the report reflects post-fix state.
-    const shouldRunFormat = options.detectors.includes('format');
-    const shouldRunLint = options.detectors.includes('lint');
-
-    logger.debug('Fix mode tools', { shouldRunFormat, shouldRunLint });
-
     type BarrelResult = ReturnType<typeof createEmptyBarrel>;
-
-    type TypecheckResult = ReturnType<typeof createEmptyTypecheck>;
-
-    logger.info('Fix mode: running fixable tools before parse', {
-      format: shouldRunFormat,
-      lint: shouldRunLint,
-    });
-
-    const tFix0 = nowMs();
-    const [oxfmtConfigPath, oxlintConfigPath] = await Promise.all([
-      resolveToolRcPath(ctx.rootAbs, '.oxfmtrc.jsonc'),
-      resolveToolRcPath(ctx.rootAbs, '.oxlintrc.jsonc'),
-    ]);
-    const [fixedFormat, fixedLint] = await Promise.all([
-      shouldRunFormat
-        ? analyzeFormat({
-            targets: options.targets,
-            fix: true,
-            cwd: ctx.rootAbs,
-            resolveMode: 'project-only',
-            ...(oxfmtConfigPath !== undefined ? { configPath: oxfmtConfigPath } : {}),
-            logger,
-          }).catch(err => {
-            metaErrors.format = toErrorMessage(err);
-
-            return null;
-          })
-        : Promise.resolve(createEmptyFormat()),
-      shouldRunLint
-        ? analyzeLint({
-            targets: options.targets,
-            fix: true,
-            cwd: ctx.rootAbs,
-            resolveMode: 'project-only',
-            ...(oxlintConfigPath !== undefined ? { configPath: oxlintConfigPath } : {}),
-            logger,
-          }).catch(err => {
-            metaErrors.lint = toErrorMessage(err);
-
-            return null;
-          })
-        : Promise.resolve(createEmptyLint()),
-    ]);
-    const fixTimings: Record<string, number> = {};
-    const fixDur = Math.round(nowMs() - tFix0);
-
-    if (shouldRunFormat) {
-      fixTimings.format = nowMs() - tFix0;
-    }
-
-    if (shouldRunLint) {
-      fixTimings.lint = nowMs() - tFix0;
-    }
-
-    logger.info('Fix mode: tools complete', { durationMs: fixDur });
 
     const tProgram0 = nowMs();
     const program = await createFirebatProgram({
@@ -928,43 +824,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           return r;
         })()
       : Promise.resolve(createEmptyBarrel());
-    const typecheckPromise: Promise<TypecheckResult | null> = options.detectors.includes('typecheck')
-      ? (async (): Promise<TypecheckResult | null> => {
-          const t0 = nowMs();
-          const detectorKey = 'typecheck';
-
-          logger.info('detector: start', { detector: detectorKey });
-
-          try {
-            const r = await analyzeTypecheck(program, {
-              rootAbs: ctx.rootAbs,
-              logger,
-              ...(semanticAvailable ? { gildash } : {}),
-            });
-
-            detectorTimings.typecheck = nowMs() - t0;
-
-            logger.debug('detector: complete', {
-              detector: detectorKey,
-              durationMs: Math.round(detectorTimings.typecheck),
-            });
-
-            return r;
-          } catch (err) {
-            detectorTimings.typecheck = nowMs() - t0;
-
-            metaErrors.typecheck = toErrorMessage(err);
-
-            logger.debug('detector: failed', {
-              detector: detectorKey,
-              durationMs: Math.round(detectorTimings.typecheck),
-              message: metaErrors.typecheck,
-            });
-
-            return null;
-          }
-        })()
-      : Promise.resolve(createEmptyTypecheck());
     const dependencies: Awaited<ReturnType<typeof analyzeDependencies>> = await runDetectorAsync(
       detectorRunCtx,
       'dependencies',
@@ -1057,9 +916,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
           ctx.rootAbs,
         ),
     );
-    const [barrel, typecheck] = await Promise.all([barrelPromise, typecheckPromise]);
-    const lint = fixedLint;
-    const format = fixedFormat;
+    const barrel = await barrelPromise;
 
     logger.info('Analysis complete', { durationMs: Math.round(nowMs() - tDetectors0) });
 
@@ -1119,9 +976,6 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
       ...(selectedDetectors.has('waste') ? { waste: enrichWaste(waste, toProjectRelative) } : {}),
       ...(selectedDetectors.has('barrel') ? { barrel: enrichBarrel(barrel, toProjectRelative) } : {}),
       ...(selectedDetectors.has('error-flow') ? { 'error-flow': enrichErrorFlow(errorFlow, toProjectRelative) } : {}),
-      ...(selectedDetectors.has('format') && format !== null ? { format: enrichFormat(format, toProjectRelative) } : {}),
-      ...(selectedDetectors.has('lint') && lint !== null ? { lint: enrichLint(lint) } : {}),
-      ...(selectedDetectors.has('typecheck') && typecheck !== null ? { typecheck: enrichTypecheck(typecheck) } : {}),
       ...(selectedDetectors.has('dependencies') ? { dependencies: enrichDependencies(dependencies, toProjectRelative) } : {}),
       ...(selectedDetectors.has('nesting') ? { nesting: enrichNesting(nesting, toProjectRelative) } : {}),
       ...(selectedDetectors.has('early-return') ? { 'early-return': enrichEarlyReturn(earlyReturn, toProjectRelative) } : {}),
@@ -1148,7 +1002,7 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
         minSize: resolvedMinSize,
         maxForwardDepth: options.maxForwardDepth,
         detectors: options.detectors,
-        detectorTimings: { ...detectorTimings, ...fixTimings },
+        detectorTimings,
         ...(Object.keys(metaErrors).length > 0 ? { errors: metaErrors } : {}),
       },
       analyses,
@@ -1177,4 +1031,4 @@ const scanUseCase = async (options: FirebatCliOptions, deps: ScanUseCaseDeps): P
   }
 };
 
-export { resolveToolRcPath, scanUseCase };
+export { scanUseCase };

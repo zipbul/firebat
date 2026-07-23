@@ -19,9 +19,6 @@ const DEFAULT_DETECTORS: ReadonlyArray<FirebatDetector> = [
   'duplicates',
   'waste',
   'error-flow',
-  'format',
-  'lint',
-  'typecheck',
   'dependencies',
   'nesting',
   'early-return',
@@ -92,9 +89,6 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'waste' &&
       selection !== 'barrel' &&
       selection !== 'error-flow' &&
-      selection !== 'format' &&
-      selection !== 'lint' &&
-      selection !== 'typecheck' &&
       selection !== 'dependencies' &&
       selection !== 'nesting' &&
       selection !== 'early-return' &&
@@ -105,7 +99,7 @@ const parseDetectors = (value: string): ReadonlyArray<FirebatDetector> => {
       selection !== 'giant-file'
     ) {
       throw new Error(
-        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel|error-flow|format|lint|typecheck|dependencies|nesting|early-return|collapsible-if|indirection|temporal-coupling|variable-lifetime|giant-file`,
+        `[firebat] Invalid --only: ${selection}. Expected duplicates|waste|barrel|error-flow|dependencies|nesting|early-return|collapsible-if|indirection|temporal-coupling|variable-lifetime|giant-file`,
       );
     }
 

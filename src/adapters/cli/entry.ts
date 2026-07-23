@@ -76,7 +76,7 @@ const printHelp = (): void => {
     '',
     `    waste, nesting, early-return,`,
     `    indirection, barrel,`,
-    `    error-flow, lint, format, typecheck, dependencies,`,
+    `    error-flow, dependencies,`,
     `    temporal-coupling,`,
     `    variable-lifetime,`,
     `    giant-file,`,
@@ -90,7 +90,7 @@ const printHelp = (): void => {
     '',
     `    ${hc('$', H.dim, c)} firebat                              ${hc('# Scan entire project', H.dim, c)}`,
     `    ${hc('$', H.dim, c)} firebat src/app.ts src/utils.ts       ${hc('# Scan specific files', H.dim, c)}`,
-    `    ${hc('$', H.dim, c)} firebat --only waste,lint`,
+    `    ${hc('$', H.dim, c)} firebat --only waste,nesting`,
     `    ${hc('$', H.dim, c)} firebat install                      ${hc('# Set up config files', H.dim, c)}`,
     '',
   ];
@@ -111,9 +111,6 @@ const resolveEnabledDetectorsFromFeatures = (features: FirebatConfig['features']
     'waste',
     'barrel',
     'error-flow',
-    'format',
-    'lint',
-    'typecheck',
     'dependencies',
     'nesting',
     'early-return',
@@ -355,7 +352,7 @@ const mergeConfigIntoOptions = (options: FirebatCliOptions, overrides: ConfigOve
 // AFTER config/CLI merge because `--only` otherwise bypasses cfgDetectors
 // entirely. The domain is PINNED to exactly {barrel, giant-file} — the two
 // detectors whose committed definitions declare false-wins. NOT generalized
-// to every detector: e.g. `typecheck: false` + occasional `--only typecheck`
+// to every detector: e.g. `waste: false` + occasional `--only waste`
 // is a real workflow, and every other detector's semantics are unaffected by
 // this list unless its own definition adopts false-wins.
 const FALSE_WINS_DETECTORS: ReadonlyArray<FirebatDetector> = ['barrel', 'giant-file'];

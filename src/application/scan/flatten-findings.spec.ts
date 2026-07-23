@@ -25,11 +25,6 @@ interface LabelRow {
   readonly expected: string;
 }
 
-const lintDetail = (code: string) =>
-  firstFinding({
-    lint: [{ severity: 'error', catalogCode: 'LINT', code, msg: 'm', file: 'a.ts', span: span(1) } as any],
-  }).detail!;
-
 // ── flattenToFindings: core schema ──────────────────────────────────────────
 
 describe('flattenToFindings: core schema', () => {
@@ -113,24 +108,7 @@ describe('flattenToFindings: core schema', () => {
 // ── flattenToFindings: code normalization ───────────────────────────────────
 
 describe('flattenToFindings: code normalization', () => {
-  it('prefers catalogCode over code when both present', () => {
-    const f = firstFinding({
-      lint: [
-        {
-          severity: 'error',
-          catalogCode: 'LINT',
-          code: 'no-unused-vars',
-          msg: 'x',
-          file: 'src/a.ts',
-          span: span(1),
-        } as any,
-      ],
-    });
-
-    expect(f.code).toBe('LINT');
-  });
-
-  it('uses code when catalogCode is absent', () => {
+  it('uses the code field for the normalized code', () => {
     expect(
       firstFinding({
         waste: [{ kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'a.ts', span: span(1), label: 'x' } as any],
@@ -185,21 +163,18 @@ describe('flattenToFindings: detail extraction', () => {
     expect((detail as any).span).toEqual({ start: { line: 10, column: 5 }, end: { line: 12, column: 30 } });
   });
 
-  it('excludes kind, code, file, filePath, label, catalogCode from detail', () => {
-    const detail = lintDetail('r1');
+  it('excludes kind, code, file, filePath, label from detail', () => {
+    const detail = firstFinding({
+      waste: [
+        { kind: 'dead-store', code: 'WASTE_DEAD_STORE', file: 'a.ts', filePath: 'a.ts', label: 'x', span: span(1) } as any,
+      ],
+    }).detail!;
 
     expect(detail).not.toHaveProperty('kind');
+    expect(detail).not.toHaveProperty('code');
     expect(detail).not.toHaveProperty('file');
     expect(detail).not.toHaveProperty('filePath');
     expect(detail).not.toHaveProperty('label');
-    expect(detail).not.toHaveProperty('catalogCode');
-  });
-
-  it('renames code to ruleCode in detail for findings with catalogCode', () => {
-    const detail = lintDetail('no-unused-vars');
-
-    expect(detail.ruleCode).toBe('no-unused-vars');
-    expect(detail).not.toHaveProperty('code');
   });
 
   it('excludes nesting.header from detail (already in label)', () => {
@@ -697,48 +672,6 @@ describe('flattenToFindings: labels by category', () => {
     ).toBe('1234 lines (max: 800)');
   });
 
-  it('lint label: [code] msg', () => {
-    expect(
-      firstFinding({
-        lint: [
-          {
-            severity: 'error',
-            catalogCode: 'LINT',
-            code: 'no-unused-vars',
-            msg: 'x is unused',
-            file: 'a.ts',
-            span: span(1),
-          } as any,
-        ],
-      }).label,
-    ).toBe('[no-unused-vars] x is unused');
-  });
-
-  it('typecheck label: [code] msg', () => {
-    expect(
-      firstFinding({
-        typecheck: [
-          {
-            severity: 'error',
-            catalogCode: 'TYPECHECK',
-            code: 'TS2322',
-            msg: 'Type not assignable',
-            file: 'a.ts',
-            span: span(1),
-            codeFrame: '',
-          } as any,
-        ],
-      }).label,
-    ).toBe('[TS2322] Type not assignable');
-  });
-
-  it('format label: constant string', () => {
-    expect(
-      firstFinding({
-        format: [{ kind: 'needs-formatting', code: 'FORMAT', file: 'a.ts', span: ZERO_SPAN } as any],
-      }).label,
-    ).toBe('needs-formatting');
-  });
 });
 
 // ── flattenToFindings: function name injection ──────────────────────────────

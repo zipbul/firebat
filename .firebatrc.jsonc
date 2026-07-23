@@ -18,11 +18,8 @@
     // Strict directory-surface policy (opt-in). This codebase does not practice
     // the strict-barrel style — declaring it `true` would be noise, not signal.
     "barrel": false,
-    "format": true,
     "duplicates": { "minSize": "auto" },
-    "lint": true,
     "waste": true,
-    "typecheck": true,
     "dependencies": {
       "layers": [
         { "name": "adapters", "glob": "src/adapters/**" },

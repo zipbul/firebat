@@ -16,20 +16,13 @@ export { analyzeBarrel } from './features/barrel';
 export { analyzeDependencies } from './features/dependencies';
 export { analyzeEarlyReturn } from './features/early-return';
 export { analyzeErrorFlow } from './features/error-flow';
-export { analyzeFormat } from './features/format';
 export { analyzeIndirection } from './features/indirection';
 export { analyzeGiantFile } from './features/giant-file';
-export { analyzeLint } from './features/lint';
 export { analyzeNesting } from './features/nesting';
 export { analyzeTemporalCoupling } from './features/temporal-coupling';
 export { analyzeVariableLifetime } from './features/variable-lifetime';
 export { detectWaste } from './features/waste';
 export { analyzeDuplicates } from './features/duplicates';
-
-// ---------------------------------------------------------------------------
-// Features — test-only internal exports
-// ---------------------------------------------------------------------------
-export { __testing__ as __testing__FormatAnalyzer } from './features/format/analyzer';
 
 // ---------------------------------------------------------------------------
 // Engine  (Phase 3 에서 서브디렉토리화 예정)
@@ -41,19 +34,18 @@ export type { ParsedFile } from './engine/types';
 // ---------------------------------------------------------------------------
 // Types  (Phase 3 에서 shared/ 이동 가능)
 // ---------------------------------------------------------------------------
-export type { DuplicateGroup, TypecheckItem, WasteFinding, FirebatReport } from './types';
+export type { DuplicateGroup, WasteFinding, FirebatReport } from './types';
 
 // ---------------------------------------------------------------------------
 // Application — scan  (Phase 2 에서 pipeline 으로 전환 예정)
 // ---------------------------------------------------------------------------
-export { scanUseCase, resolveToolRcPath } from './application/scan/scan.usecase';
+export { scanUseCase } from './application/scan/scan.usecase';
 export { aggregateDiagnostics } from './application/scan/diagnostic-aggregator';
 
 // ---------------------------------------------------------------------------
 // Infrastructure  (Phase 0/3 에서 교체/이동 예정)
 // ---------------------------------------------------------------------------
 export { createPrettyConsoleLogger } from './shared/logger';
-export { __testing__ as __testing__OxlintRunner } from './tooling/oxlint/oxlint-runner';
 
 // ---------------------------------------------------------------------------
 // Ports  (Phase 3 에서 shared/ 이동 예정)

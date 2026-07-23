@@ -64,9 +64,6 @@ interface FirebatFeaturesConfig {
   readonly waste?: boolean | undefined;
   readonly barrel?: FeatureToggle<FirebatBarrelConfig> | undefined;
   readonly 'error-flow'?: boolean | undefined;
-  readonly format?: boolean | undefined;
-  readonly lint?: boolean | undefined;
-  readonly typecheck?: boolean | undefined;
   readonly dependencies?: FeatureToggle<FirebatDependenciesConfig> | undefined;
   readonly nesting?: FeatureToggle<FirebatNestingConfig> | undefined;
   readonly 'early-return'?: boolean | undefined;
@@ -115,9 +112,6 @@ const FirebatConfigSchema: z.ZodType<FirebatConfig> = z
           ])
           .optional(),
         'error-flow': z.boolean().optional(),
-        format: z.boolean().optional(),
-        lint: z.boolean().optional(),
-        typecheck: z.boolean().optional(),
         dependencies: z
           .union([
             z.literal(false),

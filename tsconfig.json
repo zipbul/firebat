@@ -15,7 +15,7 @@
     "emitDecoratorMetadata": false,
     // Unused locals/params are owned by oxlint's `no-unused-vars` (it honors the
     // `^_` ignore convention; tsc has no ignore pattern). Kept off here to avoid
-    // duplicate findings across the typecheck and lint detectors.
+    // duplicate findings with oxlint.
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false,

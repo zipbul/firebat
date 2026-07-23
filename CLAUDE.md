@@ -1,6 +1,6 @@
 # firebat
 
-TypeScript code-quality scanner. 15 detectors.
+TypeScript code-quality scanner. 12 detectors.
 
 ## Common principles — judgment basis
 
